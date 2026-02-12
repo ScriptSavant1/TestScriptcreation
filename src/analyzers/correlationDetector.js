@@ -209,7 +209,21 @@ class CorrelationDetector {
    */
   extractTestScript(request) {
     if (request.testScript) return request.testScript;
-    if (request.tests) return request.tests;
+
+    // Normalized format: request.tests is an array of {listen, script} event objects
+    if (request.tests && Array.isArray(request.tests)) {
+      const testEvent = request.tests.find(e => e.listen === 'test');
+      if (testEvent && testEvent.script) {
+        if (testEvent.script.exec && Array.isArray(testEvent.script.exec)) {
+          return testEvent.script.exec.join('\n');
+        }
+        if (typeof testEvent.script === 'string') return testEvent.script;
+      }
+      return null;
+    }
+    if (typeof request.tests === 'string') return request.tests;
+
+    // Original Postman format: request.event
     if (request.event) {
       const testEvent = request.event.find(e => e.listen === 'test');
       if (testEvent && testEvent.script && testEvent.script.exec) {
@@ -224,14 +238,15 @@ class CorrelationDetector {
    */
   extractSetVariables(script) {
     const variables = [];
-    if (!script) return variables;
+    if (!script || typeof script !== 'string') return variables;
 
     // Pattern: pm.environment.set("varName", jsonData.field)
-    const pmSetPattern = /pm\.(environment|globals|collectionVariables)\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    // Also matches pm.variables, pm.globals, pm.collectionVariables
+    const pmSetPattern = /pm\.(environment|globals|collectionVariables|variables)\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
     let match;
     while ((match = pmSetPattern.exec(script)) !== null) {
       const varName = match[2];
-      const source = match[3];
+      const source = match[3].trim();
       variables.push({
         name: varName,
         source: source,
@@ -240,11 +255,27 @@ class CorrelationDetector {
       });
     }
 
+    // Pattern: context.set("varName", value)
+    // Common in Salesforce scripts: const context = pm.environment.name ? pm.environment : pm.collectionVariables;
+    const contextSetPattern = /context\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = contextSetPattern.exec(script)) !== null) {
+      const varName = match[1];
+      const source = match[2].trim();
+      if (!variables.find(v => v.name === varName)) {
+        variables.push({
+          name: varName,
+          source: source,
+          extractorType: this.determineExtractorType(source),
+          extractPath: this.extractJsonPath(source)
+        });
+      }
+    }
+
     // Pattern: bru.setVar("varName", response.body.field)
     const bruSetPattern = /bru\.setVar\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
     while ((match = bruSetPattern.exec(script)) !== null) {
       const varName = match[1];
-      const source = match[2];
+      const source = match[2].trim();
       variables.push({
         name: varName,
         source: source,
@@ -274,11 +305,41 @@ class CorrelationDetector {
    * Extract JSON path from source expression
    */
   extractJsonPath(source) {
-    // Try to extract path from jsonData.field1.field2
-    const match = source.match(/(?:jsonData|responseBody)\.(.+)/);
+    // Try to extract path from jsonData.field, json.field, response.field, etc.
+    const match = source.match(/(?:jsonData|responseBody|json|response|data)\.(.+)/);
     if (match) {
-      const path = match[1].replace(/\[["']([^"']+)["']\]/g, '.$1');
-      return `$.${path}`;
+      let pathPart = match[1]
+        .replace(/\[["']([^"']+)["']\]/g, '.$1')   // bracket notation to dot
+        .replace(/\.split\(.*/g, '')                  // strip .split(...) and everything after
+        .replace(/\.pop\(\)/g, '')                    // strip .pop()
+        .replace(/\.shift\(\)/g, '')                  // strip .shift()
+        .replace(/\.trim\(\)/g, '')                   // strip .trim()
+        .replace(/\.toString\(\)/g, '')               // strip .toString()
+        .replace(/\.$/, '')                            // strip trailing dot
+        .trim();
+      if (pathPart) {
+        return `$.${pathPart}`;
+      }
+    }
+
+    // Handle variable name-based inference for common patterns
+    return this.inferPathFromVarName(null, source);
+  }
+
+  /**
+   * Infer a reasonable JSON path from variable name and source expression
+   */
+  inferPathFromVarName(varName, source) {
+    if (varName) {
+      const name = varName.replace(/^_/, '');
+      // Common API response field mappings
+      if (/accessToken/i.test(name)) return '$.access_token';
+      if (/refreshToken/i.test(name)) return '$.refresh_token';
+      if (/endpoint|instanceUrl/i.test(name)) return '$.instance_url';
+      if (/deviceCode/i.test(name)) return '$.device_code';
+      if (/jobId/i.test(name)) return '$.id';
+      if (/userId/i.test(name)) return '$.id';
+      if (/orgId/i.test(name)) return '$.id';
     }
     return '$';
   }

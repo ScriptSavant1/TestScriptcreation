@@ -43,6 +43,7 @@ class AdvancedScriptGenerator {
     this.authConfigs = new Map();
     this.customScripts = new Map();
     this.requestIdCounter = 0;
+    this.usedResponseNames = new Map(); // Track used response variable names for uniqueness
 
     // Build variable map from collection for hardcoding values
     this.variableMap = new Map();
@@ -84,8 +85,15 @@ class AdvancedScriptGenerator {
     const actionSection = this.generateAction();
     const finalizeSection = this.generateFinalize();
 
+    // Generate configuration comment for empty variables that need user input
+    let configComment = '';
+    if (this._emptyConfigVars && this._emptyConfigVars.size > 0) {
+      const vars = [...this._emptyConfigVars].sort();
+      configComment = `\n/**\n * CONFIGURATION REQUIRED:\n * The following collection variables have no value set and may need configuration:\n${vars.map(v => ` *   - ${v}`).join('\n')}\n * \n * Search for empty strings "" to find where these are used.\n */\n`;
+    }
+
     // Combine sections
-    const fullScript = `${this.generateHeader()}
+    const fullScript = `${this.generateHeader()}${configComment}
 
 ${initSection}
 
@@ -152,29 +160,54 @@ ${finalizeSection}
     this.requests.forEach(request => {
       const scripts = {};
 
-      // Parse pre-request script
-      if (request.preRequestScript || request.event?.find(e => e.listen === 'prerequest')) {
-        const script = request.preRequestScript ||
-                      request.event.find(e => e.listen === 'prerequest')?.script?.exec?.join('\n');
-        if (script) {
-          scripts.preRequest = this.scriptParser.parsePreRequestScript(script, request.name);
-        }
+      const preScript = this.extractScriptFromRequest(request, 'prerequest');
+      if (preScript) {
+        scripts.preRequest = this.scriptParser.parsePreRequestScript(preScript, request.name);
       }
 
-      // Parse test/post-response script
-      if (request.testScript || request.tests || request.event?.find(e => e.listen === 'test')) {
-        const script = request.testScript ||
-                      request.tests ||
-                      request.event.find(e => e.listen === 'test')?.script?.exec?.join('\n');
-        if (script) {
-          scripts.test = this.scriptParser.parseTestScript(script, request.name);
-        }
+      const testScript = this.extractScriptFromRequest(request, 'test');
+      if (testScript) {
+        scripts.test = this.scriptParser.parseTestScript(testScript, request.name);
       }
 
       if (scripts.preRequest || scripts.test) {
         this.customScripts.set(request.name, scripts);
       }
     });
+  }
+
+  /**
+   * Extract script string from request in any format (normalized or original Postman)
+   */
+  extractScriptFromRequest(request, listenType) {
+    // Direct string properties
+    if (listenType === 'prerequest' && request.preRequestScript) {
+      return request.preRequestScript;
+    }
+    if (listenType === 'test' && request.testScript) {
+      return request.testScript;
+    }
+
+    // Normalized format: request.tests is array of {listen, script} objects
+    if (request.tests && Array.isArray(request.tests)) {
+      const event = request.tests.find(e => e.listen === listenType);
+      if (event && event.script) {
+        if (event.script.exec && Array.isArray(event.script.exec)) {
+          return event.script.exec.join('\n');
+        }
+        if (typeof event.script === 'string') return event.script;
+      }
+    }
+
+    // Original Postman format: request.event
+    if (request.event && Array.isArray(request.event)) {
+      const event = request.event.find(e => e.listen === listenType);
+      if (event && event.script && event.script.exec) {
+        return event.script.exec.join('\n');
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -232,10 +265,14 @@ ${finalizeSection}
    */
   generateGlobalVariablesInit() {
     const vars = [];
-    
-    // Add correlation variables
+    const seen = new Set();
+
+    // Add correlation variables (deduplicated)
     this.correlations.forEach(corr => {
-      vars.push(`load.global.${corr.name} = null; // For ${corr.type}`);
+      if (!seen.has(corr.name)) {
+        seen.add(corr.name);
+        vars.push(`load.global.${corr.name} = null; // For ${corr.type}`);
+      }
     });
 
     // Add auth variables if not already in auth init
@@ -426,7 +463,15 @@ ${finalizeSection}
    * Generate code for a single request
    */
   generateRequestCode(request, indentLevel = 1) {
-    const safeName = this.sanitizeName(request.name);
+    let safeName = this.sanitizeName(request.name);
+
+    // Ensure unique response variable names across the script
+    const count = this.usedResponseNames.get(safeName) || 0;
+    this.usedResponseNames.set(safeName, count + 1);
+    if (count > 0) {
+      safeName = `${safeName}_${count}`;
+    }
+
     let code = '';
 
     // Add comment
@@ -435,9 +480,7 @@ ${finalizeSection}
       if (request.description) {
         // Handle multi-line descriptions by commenting each line
         const descriptionLines = request.description.split('\n');
-        console.log(`DEBUG: Description has ${descriptionLines.length} lines for request: ${request.name}`);
-        descriptionLines.forEach((line, idx) => {
-          console.log(`  Line ${idx}: "${line.substring(0, 50)}${line.length > 50 ? '...' : ''}"`);
+        descriptionLines.forEach((line) => {
           code += `\n${this.indent(`// ${line}`, indentLevel)}`;
         });
       }
@@ -500,8 +543,7 @@ ${finalizeSection}
     const options = {
       id: ++this.requestIdCounter,
       url: this.replaceParameters(this.getBaseUrl(request.url)),
-      method: request.method,
-      returnBody: true
+      method: request.method
     };
 
     // Add headers only if there are any
@@ -654,21 +696,26 @@ ${finalizeSection}
    */
   generateExtractors(request) {
     const extractors = [];
+    const seenNames = new Set();
 
-    // Find correlations this request produces
+    // Find correlations this request produces (deduplicate by name)
     this.correlations.forEach(corr => {
-      if (corr.producerRequest === request.name) {
+      if (corr.producerRequest === request.name && !seenNames.has(corr.name)) {
+        seenNames.add(corr.name);
         const extractorCode = this.correlationDetector.generateExtractor(corr);
         extractors.push(extractorCode);
       }
     });
 
-    // Add extractors from custom test scripts
+    // Add extractors from custom test scripts (deduplicate by name)
     const customScripts = this.customScripts.get(request.name);
     if (customScripts?.test?.extractors) {
       customScripts.test.extractors.forEach(extractor => {
-        const extractorCode = this.correlationDetector.generateExtractor(extractor);
-        extractors.push(extractorCode);
+        if (!seenNames.has(extractor.name)) {
+          seenNames.add(extractor.name);
+          const extractorCode = this.correlationDetector.generateExtractor(extractor);
+          extractors.push(extractorCode);
+        }
       });
     }
 
@@ -698,15 +745,42 @@ ${finalizeSection}
   replaceParameters(str) {
     if (!str || typeof str !== 'string') return str;
 
-    // Replace {{variable}} with actual hardcoded values from collection/environment
+    // Replace {{variable}} with actual hardcoded values or correlated references
     return str.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
       const trimmedName = varName.trim();
 
       // Check if we have this variable in our collection/environment
       if (this.variableMap.has(trimmedName)) {
         const value = this.variableMap.get(trimmedName);
-        // Return the actual value (properly escaped for string interpolation)
+
         if (typeof value === 'string') {
+          // Empty value — check if dynamic (set by scripts) vs static config
+          if (value === '' || value === null || value === undefined) {
+            if (this.isDynamicVariable(trimmedName)) {
+              return `\${load.global.${trimmedName}}`;
+            }
+            // Track empty variables that may need user configuration
+            if (!this._emptyConfigVars) this._emptyConfigVars = new Set();
+            this._emptyConfigVars.add(trimmedName);
+            // Use empty string (same as Postman behavior) to keep URLs valid
+            return '';
+          }
+
+          // If value itself contains unresolvable {{...}} (e.g. {{vault:key}}), keep as literal
+          if (/\{\{[^}]+\}\}/.test(value)) {
+            // Try to resolve nested vars, but if unresolvable keep as placeholder
+            const resolved = value.replace(/\{\{([^}]+)\}\}/g, (innerMatch, innerVar) => {
+              const inner = innerVar.trim();
+              if (this.variableMap.has(inner)) {
+                const innerVal = this.variableMap.get(inner);
+                return (innerVal === '' || innerVal == null) ? `YOUR_${inner.toUpperCase()}` : String(innerVal);
+              }
+              // Unresolvable — return as a placeholder string
+              return `YOUR_${inner.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
+            });
+            return resolved;
+          }
+
           return value;
         }
         return String(value);
@@ -715,15 +789,26 @@ ${finalizeSection}
       // Check if this is a correlated value (extracted from previous response)
       const correlation = this.correlations.find(c => c.name === trimmedName);
       if (correlation) {
-        // Use extracted value from previous response
         return `\${load.global.${trimmedName}}`;
       }
 
-      // If not found, keep original or use empty string as fallback
-      // This allows manual editing if needed
+      // Not found — keep original for manual review
       console.warn(`Variable "${trimmedName}" not found in collection/environment variables`);
-      return match; // Keep original {{variable}} syntax for manual review
+      return match;
     });
+  }
+
+  /**
+   * Check if a variable is dynamic (set by scripts at runtime, not user-configured)
+   */
+  isDynamicVariable(varName) {
+    // Variables with _ prefix are typically set dynamically by Postman scripts
+    if (varName.startsWith('_')) return true;
+
+    // Check if any correlation sets this variable
+    if (this.correlations.find(c => c.name === varName)) return true;
+
+    return false;
   }
 
   /**
@@ -762,8 +847,15 @@ ${finalizeSection}
     // Replace "{{MULTIPART}}" with actual multipart code
     str = str.replace('"{{MULTIPART}}"', 'new load.MultipartBody([...])');
 
-    // Replace {{code}} patterns with actual code
-    str = str.replace(/"{{([^}]+)}}"/g, '$1');
+    // Strip quotes from extractor code (new load.XXXExtractor(...))
+    // JSON.stringify escapes inner quotes as \", so match those too, then unescape
+    str = str.replace(/"(new load\.\w+Extractor\((?:[^"\\]|\\.)*\))"/g, (match, code) => {
+      return code.replace(/\\"/g, '"');
+    });
+
+    // Only strip quotes for known code patterns (load.*, new load.*)
+    // Leave all other "{{...}}" as quoted strings (unresolvable variable references)
+    str = str.replace(/"{{((?:load\.|new load\.)[^}]+)}}"/g, '$1');
 
     return str;
   }
@@ -775,7 +867,7 @@ ${finalizeSection}
     const grouped = {};
     
     this.requests.forEach(request => {
-      const folder = request.folder || 'default';
+      const folder = request.folder || 'API Requests';
       if (!grouped[folder]) {
         grouped[folder] = [];
       }
@@ -798,7 +890,14 @@ ${finalizeSection}
    * Get correlations this request produces
    */
   getProducedCorrelations(request) {
-    return this.correlations.filter(corr => corr.producerRequest === request.name);
+    const seen = new Set();
+    return this.correlations.filter(corr => {
+      if (corr.producerRequest === request.name && !seen.has(corr.name)) {
+        seen.add(corr.name);
+        return true;
+      }
+      return false;
+    });
   }
 
   /**

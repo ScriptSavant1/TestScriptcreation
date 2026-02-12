@@ -112,10 +112,12 @@ thinkTime:                              # Configuration for think time, to contr
    * Generate scenario.yml
    */
   generateScenarioYml() {
-    return `# Scenario Configuration
-scenario:
-  name: ${this.scriptName}
-  description: Auto-generated from collection
+    return `# All times are defined in seconds
+vusers: 1
+pacing: 5
+rampUp: 0
+duration: 10
+tearDown: 0
 `;
   }
 

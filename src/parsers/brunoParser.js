@@ -292,17 +292,23 @@ class BrunoParser {
     if (typeof url === 'string') {
       return url;
     }
-    
+
     if (typeof url === 'object' && url !== null) {
-      // Postman URL object
+      // Prefer the raw URL — it preserves {{variable}} templates correctly
+      // and avoids double-protocol issues (e.g. https://{{url}} where {{url}} = https://example.com)
+      if (url.raw) {
+        return url.raw;
+      }
+
+      // Fallback: construct from parts
       const protocol = url.protocol || 'https';
       const host = Array.isArray(url.host) ? url.host.join('.') : (url.host || '');
       const path = Array.isArray(url.path) ? url.path.join('/') : (url.path || '');
       const query = url.query ? this.buildQueryString(url.query) : '';
-      
+
       return `${protocol}://${host}/${path}${query}`;
     }
-    
+
     return '';
   }
 
@@ -311,12 +317,17 @@ class BrunoParser {
    */
   buildQueryString(query) {
     if (!Array.isArray(query) || query.length === 0) return '';
-    
+
     const params = query
       .filter(q => !q.disabled)
-      .map(q => `${encodeURIComponent(q.key)}=${encodeURIComponent(q.value || '')}`)
+      .map(q => {
+        // Don't encode template variables {{...}}
+        const key = /\{\{.*?\}\}/.test(q.key) ? q.key : encodeURIComponent(q.key);
+        const value = /\{\{.*?\}\}/.test(q.value || '') ? (q.value || '') : encodeURIComponent(q.value || '');
+        return `${key}=${value}`;
+      })
       .join('&');
-    
+
     return params ? `?${params}` : '';
   }
 
