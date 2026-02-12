@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> - v<%= version %></title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 60px 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 30px;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .upload-area.dragover {
+            background: #f0f2ff;
+            border-color: #764ba2;
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .option {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .option label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .option input[type="checkbox"] {
+            margin-right: 10px;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .option input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 100%;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+        }
+
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .button.secondary {
+            background: #6c757d;
+            margin-top: 10px;
+        }
+
+        .status {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            border: 2px solid #28a745;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+            color: #721c24;
+        }
+
+        .status.processing {
+            background: #d1ecf1;
+            border: 2px solid #17a2b8;
+            color: #0c5460;
+            display: flex;
+            align-items: center;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin-right: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .analysis-results {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 10px;
+        }
+
+        .analysis-results h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .stat:last-child {
+            border-bottom: none;
+        }
+
+        .stat strong {
+            color: #333;
+        }
+
+        .badge {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .footer {
+            background: #f8f9ff;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 <%= title %></h1>
+            <p>Convert Bruno/Postman Collections to DevWeb Scripts</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">Version <%= version %></p>
+        </div>
+
+        <div class="content">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <h2>Drop your collection here</h2>
+                <p style="margin-top: 10px; color: #666;">or click to browse</p>
+                <p style="margin-top: 10px; font-size: 0.9em; color: #999;">Supports .json and .bru files</p>
+                <input type="file" id="fileInput" accept=".json,.bru">
+            </div>
+
+            <div id="fileName" style="margin-bottom: 20px; font-weight: 600; color: #667eea;"></div>
+
+            <h3 style="margin-bottom: 15px;">⚙️ Conversion Options</h3>
+            <div class="options">
+                <div class="option">
+                    <label>
+                        <input type="checkbox" id="useTransactions" checked>
+                        Enable Transactions
+                    </label>
+                </div>
+                <div class="option">
+                    <label>
+                        <input type="checkbox" id="useCorrelation" checked>
+                        Auto Correlation
+                    </label>
+                </div>
+                <div class="option">
+                    <label>
+                        <input type="checkbox" id="useParameterization" checked>
+                        Parameterization
+                    </label>
+                </div>
+                <div class="option">
+                    <label>
+                        <input type="checkbox" id="useAuthentication" checked>
+                        Authentication
+                    </label>
+                </div>
+                <div class="option">
+                    <label>
+                        <input type="checkbox" id="addComments" checked>
+                        Add Comments
+                    </label>
+                </div>
+                <div class="option">
+                    <label style="display: block;">
+                        Think Time (seconds)
+                        <input type="number" id="thinkTime" value="1" min="0" step="0.1">
+                    </label>
+                </div>
+            </div>
+
+            <button class="button" id="analyzeBtn" disabled>📊 Analyze Collection</button>
+            <button class="button" id="convertBtn" disabled>🔄 Convert to DevWeb</button>
+
+            <div class="status" id="status"></div>
+
+            <div class="analysis-results" id="analysisResults">
+                <h3>📊 Analysis Results</h3>
+                <div id="analysisContent"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Created with ❤️ for Performance Engineers</p>
+            <p style="margin-top: 5px;">Bruno to DevWeb Converter © 2025</p>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const convertBtn = document.getElementById('convertBtn');
+        const status = document.getElementById('status');
+        const fileName = document.getElementById('fileName');
+        const analysisResults = document.getElementById('analysisResults');
+
+        // Upload area click
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // File selection
+        fileInput.addEventListener('change', (e) => {
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                fileName.textContent = `Selected: ${selectedFile.name}`;
+                analyzeBtn.disabled = false;
+                convertBtn.disabled = false;
+            }
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                selectedFile = files[0];
+                fileInput.files = files;
+                fileName.textContent = `Selected: ${selectedFile.name}`;
+                analyzeBtn.disabled = false;
+                convertBtn.disabled = false;
+            }
+        });
+
+        // Analyze button
+        analyzeBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            showStatus('processing', 'Analyzing collection...');
+            analysisResults.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('collection', selectedFile);
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    displayAnalysis(result);
+                    showStatus('success', 'Analysis complete!');
+                } else {
+                    showStatus('error', `Error: ${result.error}`);
+                }
+            } catch (error) {
+                showStatus('error', `Failed to analyze: ${error.message}`);
+            }
+        });
+
+        // Convert button
+        convertBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            showStatus('processing', 'Converting to DevWeb script...');
+
+            const formData = new FormData();
+            formData.append('collection', selectedFile);
+            formData.append('useTransactions', document.getElementById('useTransactions').checked);
+            formData.append('useCorrelation', document.getElementById('useCorrelation').checked);
+            formData.append('useParameterization', document.getElementById('useParameterization').checked);
+            formData.append('useAuthentication', document.getElementById('useAuthentication').checked);
+            formData.append('addComments', document.getElementById('addComments').checked);
+            formData.append('thinkTime', document.getElementById('thinkTime').value);
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showStatus('success', `
+                        ✅ Conversion successful!<br><br>
+                        <strong>Statistics:</strong><br>
+                        Requests: ${result.analysis.requests.total}<br>
+                        Correlations: ${result.analysis.correlations.totalCorrelations}<br>
+                        Parameters: ${result.analysis.parameters.totalParameters}<br><br>
+                        <a href="${result.downloadUrl}" class="button" style="display: inline-block; text-decoration: none; margin-top: 10px;">
+                            ⬇️ Download DevWeb Script
+                        </a>
+                    `);
+                } else {
+                    showStatus('error', `Error: ${result.error || 'Conversion failed'}`);
+                }
+            } catch (error) {
+                showStatus('error', `Failed to convert: ${error.message}`);
+            }
+        });
+
+        function showStatus(type, message) {
+            status.className = `status ${type}`;
+            if (type === 'processing') {
+                status.innerHTML = `<div class="spinner"></div><div>${message}</div>`;
+            } else {
+                status.innerHTML = message;
+            }
+            status.style.display = type === 'processing' ? 'flex' : 'block';
+        }
+
+        function displayAnalysis(result) {
+            const content = `
+                <div class="stat">
+                    <span>Collection Type:</span>
+                    <strong><span class="badge">${result.metadata.type}</span></strong>
+                </div>
+                <div class="stat">
+                    <span>Total Requests:</span>
+                    <strong>${result.requests.total}</strong>
+                </div>
+                <div class="stat">
+                    <span>Correlations:</span>
+                    <strong>${result.correlations.totalCorrelations}</strong>
+                </div>
+                <div class="stat">
+                    <span>Parameters:</span>
+                    <strong>${result.parameters.totalParameters}</strong>
+                </div>
+                <div class="stat">
+                    <span>Auth Configs:</span>
+                    <strong>${result.authentication.totalConfigs}</strong>
+                </div>
+            `;
+
+            document.getElementById('analysisContent').innerHTML = content;
+            analysisResults.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

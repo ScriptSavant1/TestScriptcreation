@@ -1,0 +1,217 @@
+# GitLab CI/CD Pipeline for Bruno to DevWeb Converter
+# Automatically converts collections to DevWeb scripts
+
+stages:
+  - validate
+  - convert
+  - test
+  - deploy
+
+variables:
+  COLLECTION_PATH: "collections"
+  OUTPUT_PATH: "devweb-scripts"
+  NODE_VERSION: "18"
+
+# Cache node_modules for faster builds
+cache:
+  paths:
+    - node_modules/
+    - .npm/
+
+# Template for Node.js setup
+.node_template:
+  image: node:${NODE_VERSION}
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+
+# Validate collection files
+validate_collections:
+  extends: .node_template
+  stage: validate
+  script:
+    - echo "🔍 Validating collection files..."
+    - |
+      for file in ${COLLECTION_PATH}/*.json ${COLLECTION_PATH}/*.bru; do
+        if [ -f "$file" ]; then
+          echo "Validating $file"
+          node src/cli.js analyze -i "$file" || exit 1
+        fi
+      done
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# Convert collections to DevWeb scripts
+convert_to_devweb:
+  extends: .node_template
+  stage: convert
+  script:
+    - echo "🔄 Converting collections to DevWeb scripts..."
+    - mkdir -p ${OUTPUT_PATH}
+    - |
+      for file in ${COLLECTION_PATH}/*.json ${COLLECTION_PATH}/*.bru; do
+        if [ -f "$file" ]; then
+          filename=$(basename "$file" | sed 's/\.[^.]*$//')
+          echo "Converting $file to ${OUTPUT_PATH}/${filename}"
+          
+          node src/cli.js convert \
+            -i "$file" \
+            -o "${OUTPUT_PATH}/${filename}" \
+            --think-time ${THINK_TIME:-1} \
+            --log-level ${LOG_LEVEL:-info} \
+            || exit 1
+        fi
+      done
+    - echo "✅ Conversion complete!"
+  artifacts:
+    name: "devweb-scripts-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - ${OUTPUT_PATH}/
+    expire_in: 1 week
+    reports:
+      dotenv: build.env
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - when: manual
+
+# Run syntax validation on generated scripts
+validate_devweb_scripts:
+  extends: .node_template
+  stage: test
+  dependencies:
+    - convert_to_devweb
+  script:
+    - echo "✅ Validating generated DevWeb scripts..."
+    - |
+      for script in ${OUTPUT_PATH}/*/main.js; do
+        if [ -f "$script" ]; then
+          echo "Validating $script"
+          node --check "$script" || exit 1
+        fi
+      done
+    - echo "✅ All scripts validated successfully!"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# Package scripts for deployment
+package_scripts:
+  stage: test
+  image: alpine:latest
+  dependencies:
+    - convert_to_devweb
+  before_script:
+    - apk add --no-cache zip
+  script:
+    - echo "📦 Packaging DevWeb scripts..."
+    - |
+      for dir in ${OUTPUT_PATH}/*/; do
+        if [ -d "$dir" ]; then
+          dirname=$(basename "$dir")
+          cd "$dir"
+          zip -r "../${dirname}.zip" .
+          cd ../..
+        fi
+      done
+    - echo "✅ Packaging complete!"
+  artifacts:
+    name: "devweb-scripts-packaged-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - ${OUTPUT_PATH}/*.zip
+    expire_in: 1 month
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# Deploy to LoadRunner Enterprise (manual step)
+deploy_to_lre:
+  stage: deploy
+  image: curlimages/curl:latest
+  dependencies:
+    - package_scripts
+  script:
+    - echo "🚀 Deploying to LoadRunner Enterprise..."
+    - |
+      if [ -z "$LRE_URL" ] || [ -z "$LRE_API_KEY" ]; then
+        echo "❌ Error: LRE_URL and LRE_API_KEY must be set in CI/CD variables"
+        exit 1
+      fi
+    
+    # Upload scripts to LRE via API
+    - |
+      for zipfile in ${OUTPUT_PATH}/*.zip; do
+        if [ -f "$zipfile" ]; then
+          echo "Uploading $(basename $zipfile) to LRE..."
+          
+          curl -X POST "${LRE_URL}/api/v1/scripts" \
+            -H "Authorization: Bearer ${LRE_API_KEY}" \
+            -H "Content-Type: multipart/form-data" \
+            -F "script=@${zipfile}" \
+            -F "protocol=DevWeb" \
+            --fail || echo "Warning: Failed to upload $zipfile"
+        fi
+      done
+    
+    - echo "✅ Deployment complete!"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  environment:
+    name: production
+    url: $LRE_URL
+
+# Generate and publish documentation
+generate_docs:
+  extends: .node_template
+  stage: deploy
+  dependencies:
+    - convert_to_devweb
+  script:
+    - echo "📚 Generating documentation..."
+    - |
+      cat > ${OUTPUT_PATH}/INDEX.md << 'EOF'
+      # DevWeb Scripts Catalog
+      
+      Generated: $(date)
+      Pipeline: ${CI_PIPELINE_ID}
+      Commit: ${CI_COMMIT_SHA}
+      
+      ## Available Scripts
+      
+      EOF
+    
+    - |
+      for dir in ${OUTPUT_PATH}/*/; do
+        if [ -d "$dir" ]; then
+          dirname=$(basename "$dir")
+          echo "- [${dirname}](${dirname}/README.md)" >> ${OUTPUT_PATH}/INDEX.md
+        fi
+      done
+    
+    - echo "✅ Documentation generated!"
+  artifacts:
+    paths:
+      - ${OUTPUT_PATH}/INDEX.md
+    expire_in: 1 month
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Scheduled job to convert collections weekly
+scheduled_conversion:
+  extends: convert_to_devweb
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+# Cleanup old artifacts (runs monthly)
+cleanup_artifacts:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "🧹 Cleaning up old artifacts..."
+    - find ${OUTPUT_PATH} -type f -mtime +30 -delete
+    - echo "✅ Cleanup complete!"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CLEANUP_JOB == "true"'
+  allow_failure: true

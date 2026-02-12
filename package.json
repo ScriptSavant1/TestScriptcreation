@@ -1,0 +1,50 @@
+{
+  "name": "bruno-devweb-converter",
+  "version": "2.1.0",
+  "description": "Advanced converter for Bruno/Postman collections to LoadRunner Enterprise DevWeb scripts with correlation, parameterization, authentication, and custom script support",
+  "main": "src/index.js",
+  "bin": {
+    "bruno-devweb": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "cli": "node src/cli.js",
+    "web": "node src/web/server.js",
+    "test": "jest",
+    "lint": "eslint src/**/*.js",
+    "build": "npm run lint && npm run test"
+  },
+  "keywords": [
+    "bruno",
+    "postman",
+    "devweb",
+    "loadrunner",
+    "performance-testing",
+    "converter",
+    "automation"
+  ],
+  "author": "Your Organization",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "js-yaml": "^4.1.0",
+    "commander": "^11.1.0",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1",
+    "archiver": "^6.0.1",
+    "uuid": "^9.0.1",
+    "ejs": "^3.1.9"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.54.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/your-org/bruno-devweb-converter.git"
+  }
+}
