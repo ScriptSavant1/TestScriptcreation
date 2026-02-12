@@ -48,11 +48,26 @@ class BrunoDevWebConverter {
       
       console.log(`✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`);
 
+      // Step 1b: Load environment file if provided
+      let environmentVars = null;
+      if (this.options.environmentFile) {
+        console.log(`📖 Loading environment: ${this.options.environmentFile}`);
+        const envContent = await fs.readFile(this.options.environmentFile, 'utf8');
+        const envData = JSON.parse(envContent);
+        environmentVars = {};
+        // Postman environment format: { values: [{ key, value, enabled }] }
+        const values = envData.values || [];
+        values.filter(v => v.enabled !== false).forEach(v => {
+          environmentVars[v.key] = v.value;
+        });
+        console.log(`✓ Loaded ${Object.keys(environmentVars).length} environment variable(s)\n`);
+      }
+
       // Step 2: Generate DevWeb script
       const generator = new AdvancedScriptGenerator(
         requests,
         parser.collection,
-        this.options
+        { ...this.options, environmentVars }
       );
 
       // Step 3: Create output directory

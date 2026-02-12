@@ -22,6 +22,7 @@ program
   .command('convert')
   .description('Convert a collection to DevWeb script')
   .requiredOption('-i, --input <file>', 'Input collection file (.json or .bru)')
+  .option('-e, --environment <file>', 'Postman environment file (.json)')
   .option('-o, --output <dir>', 'Output directory', './devweb-script')
   .option('--no-transactions', 'Disable transaction grouping')
   .option('--no-correlation', 'Disable automatic correlation detection')
@@ -37,6 +38,7 @@ program
     try {
       const converter = new BrunoDevWebConverter({
         inputFile: options.input,
+        environmentFile: options.environment,
         outputDir: options.output,
         useTransactions: options.transactions,
         useCorrelation: options.correlation,

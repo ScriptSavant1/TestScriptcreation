@@ -61,9 +61,16 @@ class AdvancedScriptGenerator {
       });
     }
 
-    // Extract environment variables (if available)
+    // Extract environment variables from collection (if available)
     if (this.collection.environment) {
       Object.entries(this.collection.environment).forEach(([key, value]) => {
+        this.variableMap.set(key, value);
+      });
+    }
+
+    // Merge environment file variables (overrides collection variables, same as Postman)
+    if (this.options.environmentVars) {
+      Object.entries(this.options.environmentVars).forEach(([key, value]) => {
         this.variableMap.set(key, value);
       });
     }
