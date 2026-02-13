@@ -191,6 +191,43 @@ tearDown: 0
   }
 
   /**
+   * Generate CSV data file for environment parameters using actual values
+   */
+  generateEnvironmentDataCSV(parameters) {
+    if (!parameters || parameters.size === 0) {
+      return null;
+    }
+
+    // Filter to only environment parameters (those with envValue)
+    const envParams = new Map();
+    for (const [name, config] of parameters.entries()) {
+      if (config.envValue !== undefined) {
+        envParams.set(name, config);
+      }
+    }
+
+    if (envParams.size === 0) return null;
+
+    const headers = Array.from(envParams.keys());
+    let csv = headers.join(',') + '\n';
+
+    // Single row with actual environment values
+    // Quote values that contain commas, quotes, or newlines
+    const row = headers.map(header => {
+      const param = envParams.get(header);
+      const value = String(param.envValue || '');
+      // CSV quoting: if value contains comma, double-quote, or newline, wrap in quotes
+      if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    });
+    csv += row.join(',') + '\n';
+
+    return csv;
+  }
+
+  /**
    * Generate sample value based on parameter type
    */
   generateSampleValue(param, index) {
@@ -364,13 +401,30 @@ declare namespace load {
         files.parameters = parametersPath;
         console.log('✓ Generated parameters.yml');
 
-        // 5. Generate data.csv with the parameters
-        const csv = this.generateParameterDataCSV(parameters);
-        if (csv) {
-          const csvPath = path.join(outputDir, 'data.csv');
-          fs.writeFileSync(csvPath, csv, 'utf8');
-          files.dataCSV = csvPath;
-          console.log('✓ Generated data.csv');
+        // 5. Generate environment_data.csv with actual env values (if environment params exist)
+        const envCsv = this.generateEnvironmentDataCSV(parameters);
+        if (envCsv) {
+          const envCsvPath = path.join(outputDir, 'environment_data.csv');
+          fs.writeFileSync(envCsvPath, envCsv, 'utf8');
+          files.envDataCSV = envCsvPath;
+          console.log('✓ Generated environment_data.csv');
+        }
+
+        // 6. Generate data.csv for non-environment parameters (if any)
+        const nonEnvParams = new Map();
+        for (const [name, config] of parameters.entries()) {
+          if (config.envValue === undefined) {
+            nonEnvParams.set(name, config);
+          }
+        }
+        if (nonEnvParams.size > 0) {
+          const csv = this.generateParameterDataCSV(nonEnvParams);
+          if (csv) {
+            const csvPath = path.join(outputDir, 'data.csv');
+            fs.writeFileSync(csvPath, csv, 'utf8');
+            files.dataCSV = csvPath;
+            console.log('✓ Generated data.csv');
+          }
         }
       } else {
         console.log('ℹ️  Skipped parameters.yml (not needed - using hardcoded values)');

@@ -47,6 +47,9 @@ class AdvancedScriptGenerator {
 
     // Build variable map from collection for hardcoding values
     this.variableMap = new Map();
+    // Track environment variable names — these will be parameterized via CSV, not hardcoded
+    this.envParamNames = new Set();
+    this.envParamValues = new Map(); // Store env var values for CSV generation
     this.buildVariableMap();
   }
 
@@ -68,9 +71,14 @@ class AdvancedScriptGenerator {
       });
     }
 
-    // Merge environment file variables (overrides collection variables, same as Postman)
+    // Merge environment file variables
+    // When env file is provided, these variables are parameterized via CSV (load.params)
+    // rather than hardcoded into the script
     if (this.options.environmentVars) {
       Object.entries(this.options.environmentVars).forEach(([key, value]) => {
+        this.envParamNames.add(key);
+        this.envParamValues.set(key, value);
+        // Also add to variableMap so replaceParameters() can find them
         this.variableMap.set(key, value);
       });
     }
@@ -145,6 +153,23 @@ ${finalizeSection}
       console.log(`✓ Extracted ${this.parameters.size} parameter(s) for CSV generation`);
     } else {
       console.log('ℹ️  Parameterization disabled - using hardcoded values from collection variables');
+    }
+
+    // Generate CSV parameters for environment variables (when env file is provided)
+    if (this.envParamNames.size > 0) {
+      for (const [key, value] of this.envParamValues.entries()) {
+        this.parameters.set(key, {
+          name: key,
+          type: 'csv',
+          fileName: 'environment_data.csv',
+          columnName: key,
+          nextValue: 'iteration',
+          nextRow: 'sequential',
+          onEnd: 'loop',
+          envValue: value // Store actual value for CSV generation
+        });
+      }
+      console.log(`✓ Parameterized ${this.envParamNames.size} environment variable(s) for CSV`);
     }
 
     // Extract authentication
@@ -594,43 +619,40 @@ ${finalizeSection}
 
   /**
    * Get base URL without query string
+   * Uses manual string splitting to preserve {{variables}} and special characters
    */
   getBaseUrl(url) {
-    try {
-      const urlObj = new URL(url);
-      return urlObj.origin + urlObj.pathname;
-    } catch (e) {
-      // If URL parsing fails, try simple split
-      return url.split('?')[0];
-    }
+    // Don't use new URL() — it encodes {{var}} to %7B%7Bvar%7D%7D
+    const queryStart = url.indexOf('?');
+    return queryStart === -1 ? url : url.substring(0, queryStart);
   }
 
   /**
    * Extract query string parameters from URL
+   * Uses manual parsing to preserve {{variables}} and special characters
    */
   extractQueryString(url) {
-    try {
-      const urlObj = new URL(url);
-      const params = {};
-      urlObj.searchParams.forEach((value, key) => {
-        params[key] = this.replaceParameters(value);
-      });
-      return Object.keys(params).length > 0 ? params : null;
-    } catch (e) {
-      // If URL parsing fails, try manual extraction
-      const queryStart = url.indexOf('?');
-      if (queryStart === -1) return null;
+    const queryStart = url.indexOf('?');
+    if (queryStart === -1) return null;
 
-      const queryString = url.substring(queryStart + 1);
-      const params = {};
-      queryString.split('&').forEach(pair => {
-        const [key, value] = pair.split('=');
-        if (key) {
-          params[decodeURIComponent(key)] = this.replaceParameters(decodeURIComponent(value || ''));
+    const queryString = url.substring(queryStart + 1);
+    const params = {};
+    queryString.split('&').forEach(pair => {
+      const eqIndex = pair.indexOf('=');
+      if (eqIndex === -1) {
+        // Key with no value
+        if (pair) {
+          params[pair] = this.replaceParameters('');
         }
-      });
-      return Object.keys(params).length > 0 ? params : null;
-    }
+      } else {
+        const key = pair.substring(0, eqIndex);
+        const value = pair.substring(eqIndex + 1);
+        if (key) {
+          params[key] = this.replaceParameters(value);
+        }
+      }
+    });
+    return Object.keys(params).length > 0 ? params : null;
   }
 
   /**
@@ -756,6 +778,16 @@ ${finalizeSection}
     return str.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
       const trimmedName = varName.trim();
 
+      // Environment variables → use load.params (parameterized via CSV)
+      if (this.envParamNames.has(trimmedName)) {
+        // Use bracket notation for names with special chars (hyphens, dots, etc.)
+        const isSimpleIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(trimmedName);
+        if (isSimpleIdentifier) {
+          return `\${load.params.${trimmedName}}`;
+        }
+        return `\${load.params["${trimmedName}"]}`;
+      }
+
       // Check if we have this variable in our collection/environment
       if (this.variableMap.has(trimmedName)) {
         const value = this.variableMap.get(trimmedName);
@@ -848,8 +880,15 @@ ${finalizeSection}
     // Convert to formatted JSON, then replace quoted template literals
     let str = JSON.stringify(options, null, 2);
 
-    // Replace "${xxx}" with `${xxx}` (template literal in backticks)
-    str = str.replace(/"(\$\{[^}]+\})"/g, '`$1`');
+    // Convert any JSON string containing ${...} to a backtick template literal
+    // Handles pure expressions like "${load.params.var}" and mixed content like
+    // "https://${load.params.host}/api/${load.params.id}"
+    str = str.replace(/"((?:[^"\\]|\\.)*)"/g, (match, content) => {
+      if (content.includes('${')) {
+        return '`' + content.replace(/\\"/g, '"') + '`';
+      }
+      return match;
+    });
 
     // Replace "{{MULTIPART}}" with actual multipart code
     str = str.replace('"{{MULTIPART}}"', 'new load.MultipartBody([...])');
