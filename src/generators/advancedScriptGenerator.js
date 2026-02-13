@@ -45,16 +45,16 @@ class AdvancedScriptGenerator {
     this.requestIdCounter = 0;
     this.usedResponseNames = new Map(); // Track used response variable names for uniqueness
 
-    // Build variable map from collection for hardcoding values
-    this.variableMap = new Map();
-    // Track environment variable names — these will be parameterized via CSV, not hardcoded
-    this.envParamNames = new Set();
-    this.envParamValues = new Map(); // Store env var values for CSV generation
+    // Variable classification
+    this.variableMap = new Map();        // All variables: name → value
+    this.dynamicVarNames = new Set();    // Variables set by scripts/correlation → load.global
+    this.paramVarNames = new Set();      // Variables to parameterize → load.params
+    this.scriptSetVarNames = new Set();  // Variables detected as set by scripts
     this.buildVariableMap();
   }
 
   /**
-   * Build a map of variables from collection and environment
+   * Build a map of all variables from collection and environment file
    */
   buildVariableMap() {
     // Extract collection variables
@@ -71,17 +71,128 @@ class AdvancedScriptGenerator {
       });
     }
 
-    // Merge environment file variables
-    // When env file is provided, these variables are parameterized via CSV (load.params)
-    // rather than hardcoded into the script
+    // Merge environment file variables (overrides collection variables)
     if (this.options.environmentVars) {
       Object.entries(this.options.environmentVars).forEach(([key, value]) => {
-        this.envParamNames.add(key);
-        this.envParamValues.set(key, value);
-        // Also add to variableMap so replaceParameters() can find them
         this.variableMap.set(key, value);
       });
     }
+
+    // Scan all scripts in the collection to detect variables set at runtime
+    this.detectScriptSetVariables();
+  }
+
+  /**
+   * Scan collection scripts for variables set at runtime
+   * Detects: context.set("varName"), pm.environment.set("varName"),
+   *          pm.collectionVariables.set("varName"), pm.globals.set("varName"),
+   *          pm.variables.set("varName")
+   */
+  detectScriptSetVariables() {
+    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\(\s*["']([^"']+)["']/g;
+
+    const scanItem = (item) => {
+      // Check events (pre-request, test scripts)
+      if (item.event && Array.isArray(item.event)) {
+        item.event.forEach(event => {
+          if (event.script && event.script.exec) {
+            const scriptText = Array.isArray(event.script.exec)
+              ? event.script.exec.join('\n')
+              : event.script.exec;
+            let match;
+            while ((match = setPattern.exec(scriptText)) !== null) {
+              this.scriptSetVarNames.add(match[1]);
+            }
+          }
+        });
+      }
+      // Recurse into folders
+      const items = item.item || item.items;
+      if (Array.isArray(items)) {
+        items.forEach(child => scanItem(child));
+      }
+    };
+
+    scanItem(this.collection);
+  }
+
+  /**
+   * Classify all variables into dynamic (load.global) vs parameterized (load.params)
+   * Must be called AFTER correlation detection and script parsing
+   */
+  classifyVariables() {
+    const credentialPattern = /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
+
+    // 1. Mark correlation targets as dynamic
+    this.correlations.forEach(corr => {
+      this.dynamicVarNames.add(corr.name);
+    });
+
+    // 2. Mark script-set variables as dynamic
+    this.scriptSetVarNames.forEach(name => {
+      this.dynamicVarNames.add(name);
+    });
+
+    // 3. Mark _ prefix + empty value as dynamic (Postman convention for runtime vars)
+    for (const [name, value] of this.variableMap.entries()) {
+      if (name.startsWith('_') && (value === '' || value === null || value === undefined)) {
+        this.dynamicVarNames.add(name);
+      }
+    }
+
+    // 4. Everything else → parameterize via CSV
+    let usernameParam = null;
+    for (const [name] of this.variableMap.entries()) {
+      // Skip dynamic variables
+      if (this.dynamicVarNames.has(name)) continue;
+      // Skip Postman built-in dynamic variables ($randomXxx, $guid, $timestamp)
+      if (name.startsWith('$')) continue;
+
+      this.paramVarNames.add(name);
+
+      // Track username-like param for "same as" linking
+      if (/^(username|user|user_?name|email|login|account)$/i.test(name)) {
+        usernameParam = name;
+      }
+    }
+
+    // 5. Build this.parameters map for CSV generation
+    for (const name of this.paramVarNames) {
+      const value = this.variableMap.get(name);
+      const isCredential = credentialPattern.test(name);
+
+      this.parameters.set(name, {
+        name,
+        type: 'csv',
+        fileName: 'collection_data.csv',
+        columnName: name,
+        nextValue: isCredential ? 'iteration' : 'once',
+        nextRow: 'sequential',
+        onEnd: 'loop',
+        paramValue: value !== undefined && value !== null ? String(value) : ''
+      });
+    }
+
+    // 6. Link password-like params to username (same as)
+    if (usernameParam) {
+      for (const [name, config] of this.parameters.entries()) {
+        if (/^(password|pwd|passwd)$/i.test(name)) {
+          config.nextRow = `same as ${usernameParam}`;
+        }
+      }
+    }
+
+    // 7. Add dynamic variables that need load.global initialization
+    //    (those not already tracked by correlations)
+    this.dynamicVarNames.forEach(name => {
+      const isCorrelation = this.correlations.some(c => c.name === name);
+      if (!isCorrelation) {
+        // These are script-set variables — still need load.global init
+        // but won't have extractors
+      }
+    });
+
+    console.log(`✓ Classified variables: ${this.paramVarNames.size} parameterized, ${this.dynamicVarNames.size} dynamic`);
   }
 
   /**
@@ -100,11 +211,16 @@ class AdvancedScriptGenerator {
     const actionSection = this.generateAction();
     const finalizeSection = this.generateFinalize();
 
-    // Generate configuration comment for empty variables that need user input
+    // Generate comment listing parameterized variables that need values in CSV
     let configComment = '';
-    if (this._emptyConfigVars && this._emptyConfigVars.size > 0) {
-      const vars = [...this._emptyConfigVars].sort();
-      configComment = `\n/**\n * CONFIGURATION REQUIRED:\n * The following collection variables have no value set and may need configuration:\n${vars.map(v => ` *   - ${v}`).join('\n')}\n * \n * Search for empty strings "" to find where these are used.\n */\n`;
+    const emptyParams = [];
+    for (const [name, config] of this.parameters.entries()) {
+      if (!config.paramValue || config.paramValue === '') {
+        emptyParams.push(name);
+      }
+    }
+    if (emptyParams.length > 0) {
+      configComment = `\n/**\n * CONFIGURATION REQUIRED:\n * The following parameters have empty values in collection_data.csv:\n${emptyParams.sort().map(v => ` *   - ${v}`).join('\n')}\n * \n * Please update collection_data.csv with the correct values before running.\n */\n`;
     }
 
     // Combine sections
@@ -139,37 +255,10 @@ ${finalizeSection}
    * Analyze collection for correlations, parameters, and auth
    */
   async analyze() {
-    // Detect correlations
+    // Detect correlations (must run before variable classification)
     if (this.options.useCorrelation) {
       this.correlations = this.correlationDetector.analyzeRequests(this.requests);
       console.log(`✓ Found ${this.correlations.length} correlation(s)`);
-    }
-
-    // Extract parameters (disabled by default - only for CSV-based test data)
-    // For most API scripts, variables are hardcoded from collection/environment
-    // Only enable parameterization if you need CSV-based data-driven testing
-    if (this.options.useParameterization && this.options.generateCSVParameters) {
-      this.parameters = await this.paramEngine.extractParameters(this.collection);
-      console.log(`✓ Extracted ${this.parameters.size} parameter(s) for CSV generation`);
-    } else {
-      console.log('ℹ️  Parameterization disabled - using hardcoded values from collection variables');
-    }
-
-    // Generate CSV parameters for environment variables (when env file is provided)
-    if (this.envParamNames.size > 0) {
-      for (const [key, value] of this.envParamValues.entries()) {
-        this.parameters.set(key, {
-          name: key,
-          type: 'csv',
-          fileName: 'environment_data.csv',
-          columnName: key,
-          nextValue: 'iteration',
-          nextRow: 'sequential',
-          onEnd: 'loop',
-          envValue: value // Store actual value for CSV generation
-        });
-      }
-      console.log(`✓ Parameterized ${this.envParamNames.size} environment variable(s) for CSV`);
     }
 
     // Extract authentication
@@ -178,10 +267,16 @@ ${finalizeSection}
       console.log(`✓ Configured ${this.authConfigs.size} authentication(s)`);
     }
 
-    // Parse custom scripts
+    // Parse custom scripts (must run before variable classification)
     if (this.options.useCustomScripts) {
       this.parseCustomScripts();
       console.log(`✓ Parsed ${this.customScripts.size} custom script(s)`);
+    }
+
+    // Classify all variables into dynamic vs parameterized
+    // Must run AFTER correlations and scripts are detected
+    if (this.options.useParameterization) {
+      this.classifyVariables();
     }
   }
 
@@ -303,7 +398,15 @@ ${finalizeSection}
     this.correlations.forEach(corr => {
       if (!seen.has(corr.name)) {
         seen.add(corr.name);
-        vars.push(`load.global.${corr.name} = null; // For ${corr.type}`);
+        vars.push(`load.global.${corr.name} = null; // Correlated: ${corr.type}`);
+      }
+    });
+
+    // Add script-set dynamic variables not already covered by correlations
+    this.dynamicVarNames.forEach(name => {
+      if (!seen.has(name)) {
+        seen.add(name);
+        vars.push(`load.global.${name} = null; // Set by script at runtime`);
       }
     });
 
@@ -769,18 +872,30 @@ ${finalizeSection}
   }
 
   /**
-   * Replace parameters in string with hardcoded values or extracted values
+   * Replace {{variable}} references with the appropriate DevWeb code:
+   * - Parameterized variables → ${load.params.varName}
+   * - Dynamic/correlated variables → ${load.global.varName}
+   * - Postman built-in dynamic vars → static replacement
+   * - Unknown variables → kept as {{varName}} for manual review
    */
   replaceParameters(str) {
     if (!str || typeof str !== 'string') return str;
 
-    // Replace {{variable}} with actual hardcoded values or correlated references
     return str.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
       const trimmedName = varName.trim();
 
-      // Environment variables → use load.params (parameterized via CSV)
-      if (this.envParamNames.has(trimmedName)) {
-        // Use bracket notation for names with special chars (hyphens, dots, etc.)
+      // Postman built-in dynamic variables ($randomXxx, $guid, $timestamp)
+      if (trimmedName.startsWith('$')) {
+        return this.resolvePostmanDynamicVar(trimmedName);
+      }
+
+      // Dynamic variable → load.global (set by scripts/correlation at runtime)
+      if (this.dynamicVarNames.has(trimmedName)) {
+        return `\${load.global.${trimmedName}}`;
+      }
+
+      // Parameterized variable → load.params (from CSV)
+      if (this.paramVarNames.has(trimmedName)) {
         const isSimpleIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(trimmedName);
         if (isSimpleIdentifier) {
           return `\${load.params.${trimmedName}}`;
@@ -788,47 +903,13 @@ ${finalizeSection}
         return `\${load.params["${trimmedName}"]}`;
       }
 
-      // Check if we have this variable in our collection/environment
+      // Variable exists in map but wasn't classified (parameterization disabled)
       if (this.variableMap.has(trimmedName)) {
         const value = this.variableMap.get(trimmedName);
-
-        if (typeof value === 'string') {
-          // Empty value — check if dynamic (set by scripts) vs static config
-          if (value === '' || value === null || value === undefined) {
-            if (this.isDynamicVariable(trimmedName)) {
-              return `\${load.global.${trimmedName}}`;
-            }
-            // Track empty variables that may need user configuration
-            if (!this._emptyConfigVars) this._emptyConfigVars = new Set();
-            this._emptyConfigVars.add(trimmedName);
-            // Use empty string (same as Postman behavior) to keep URLs valid
-            return '';
-          }
-
-          // If value itself contains unresolvable {{...}} (e.g. {{vault:key}}), keep as literal
-          if (/\{\{[^}]+\}\}/.test(value)) {
-            // Try to resolve nested vars, but if unresolvable keep as placeholder
-            const resolved = value.replace(/\{\{([^}]+)\}\}/g, (innerMatch, innerVar) => {
-              const inner = innerVar.trim();
-              if (this.variableMap.has(inner)) {
-                const innerVal = this.variableMap.get(inner);
-                return (innerVal === '' || innerVal == null) ? `YOUR_${inner.toUpperCase()}` : String(innerVal);
-              }
-              // Unresolvable — return as a placeholder string
-              return `YOUR_${inner.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
-            });
-            return resolved;
-          }
-
-          return value;
+        if (value !== '' && value !== null && value !== undefined) {
+          return String(value);
         }
-        return String(value);
-      }
-
-      // Check if this is a correlated value (extracted from previous response)
-      const correlation = this.correlations.find(c => c.name === trimmedName);
-      if (correlation) {
-        return `\${load.global.${trimmedName}}`;
+        return match; // Keep as-is for manual review
       }
 
       // Not found — keep original for manual review
@@ -838,16 +919,27 @@ ${finalizeSection}
   }
 
   /**
-   * Check if a variable is dynamic (set by scripts at runtime, not user-configured)
+   * Resolve Postman built-in dynamic variables to static values
    */
-  isDynamicVariable(varName) {
-    // Variables with _ prefix are typically set dynamically by Postman scripts
-    if (varName.startsWith('_')) return true;
-
-    // Check if any correlation sets this variable
-    if (this.correlations.find(c => c.name === varName)) return true;
-
-    return false;
+  resolvePostmanDynamicVar(varName) {
+    const dynamicVars = {
+      '$guid': 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx',
+      '$timestamp': 'Date.now()',
+      '$randomInt': 'Math.floor(Math.random() * 1000)',
+      '$randomCompanyName': 'TestCompany',
+      '$randomFirstName': 'John',
+      '$randomLastName': 'Doe',
+      '$randomEmail': 'test@example.com',
+      '$randomUserName': 'testuser',
+      '$randomPhoneNumber': '555-0100',
+      '$randomCity': 'TestCity',
+      '$randomStreetAddress': '123 Test St',
+      '$randomCountry': 'US',
+      '$randomColor': 'blue',
+      '$randomBoolean': 'true',
+      '$randomUUID': 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+    };
+    return dynamicVars[varName] || `TODO_${varName.replace('$', '')}`;
   }
 
   /**
