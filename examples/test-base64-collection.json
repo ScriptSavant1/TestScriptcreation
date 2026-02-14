@@ -1,0 +1,82 @@
+{
+  "info": {
+    "name": "Base64 Test Collection",
+    "_postman_id": "test-b64",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.example.com" },
+    { "key": "apiKey", "value": "sk-test-12345" }
+  ],
+  "item": [
+    {
+      "name": "Upload Document",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/documents",
+          "host": ["{{baseUrl}}"],
+          "path": ["documents"]
+        },
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"fileName\":\"report.pdf\",\"documentId\":\"doc-001\",\"content\":\"JVBERi0xLjQKMSAwIG9iago8PAovVGl0bGUgKP7/AEQAbwBjAHUAbQBlAG4AdAApCi9DcmVhdG9yICj+/wBNAGkAYwByAG8AcwBvAGYAdAAgAFcAbwByAGQpCi9Qcm9kdWNlciAo/v8ATQBpAGMAcgBvAHMAbwBmAHQAIABXAG8AcgBkKQovQ3JlYXRpb25EYXRlIChEOjIwMjQwMTAxMTIwMDAwKQo+PgplbmRvYmoKMiAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMyAwIFIKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFs0IDAgUl0KL0NvdW50IDEKL01lZGlhQm94IFswIDAgNjEyIDc5Ml0KPj4KZW5kb2JqCjQgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAzIDAgUgovQ29udGVudHMgNSAwIFIKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL0xlbmd0aCA0NAo+PgpzdHJlYW0KQlQKL0YxIDEyIFRmCjEwMCA3MDAgVGQKKEhlbGxvIFdvcmxkKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCiUlRU9GCg==\"}"
+        }
+      }
+    },
+    {
+      "name": "Update Document",
+      "request": {
+        "method": "PUT",
+        "url": {
+          "raw": "{{baseUrl}}/documents/doc-001",
+          "host": ["{{baseUrl}}"],
+          "path": ["documents", "doc-001"]
+        },
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"content\":\"JVBERi0xLjQKMSAwIG9iago8PAovVGl0bGUgKP7/AEQAbwBjAHUAbQBlAG4AdAApCi9DcmVhdG9yICj+/wBNAGkAYwByAG8AcwBvAGYAdAAgAFcAbwByAGQpCi9Qcm9kdWNlciAo/v8ATQBpAGMAcgBvAHMAbwBmAHQAIABXAG8AcgBkKQovQ3JlYXRpb25EYXRlIChEOjIwMjQwMTAxMTIwMDAwKQo+PgplbmRvYmoKMiAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMyAwIFIKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFs0IDAgUl0KL0NvdW50IDEKL01lZGlhQm94IFswIDAgNjEyIDc5Ml0KPj4KZW5kb2JqCjQgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAzIDAgUgovQ29udGVudHMgNSAwIFIKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL0xlbmd0aCA0NAo+PgpzdHJlYW0KQlQKL0YxIDEyIFRmCjEwMCA3MDAgVGQKKEhlbGxvIFdvcmxkKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCiUlRU9GCg==\",\"version\":2}"
+        }
+      }
+    },
+    {
+      "name": "Upload Attachment",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/attachments",
+          "host": ["{{baseUrl}}"],
+          "path": ["attachments"]
+        },
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"image.png\",\"fileData\":\"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJgggAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"}"
+        }
+      }
+    },
+    {
+      "name": "Get Document",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/documents/doc-001",
+          "host": ["{{baseUrl}}"],
+          "path": ["documents", "doc-001"]
+        },
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ]
+      }
+    }
+  ]
+}

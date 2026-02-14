@@ -3,6 +3,7 @@
  * Integrates correlation, parameterization, authentication, and transactions
  */
 
+const crypto = require('crypto');
 const CorrelationDetector = require('../analyzers/correlationDetector');
 const ParameterizationEngine = require('../analyzers/parameterizationEngine');
 const AuthenticationHandler = require('../analyzers/authenticationHandler');
@@ -44,6 +45,13 @@ class AdvancedScriptGenerator {
     this.customScripts = new Map();
     this.requestIdCounter = 0;
     this.usedResponseNames = new Map(); // Track used response variable names for uniqueness
+
+    // Large base64 data extraction
+    // Map: hash → { varName, fileName, content, size, usedBy[] }
+    this.extractedDataFiles = new Map();
+    // Map: "requestName::fieldPath" → hash (for lookup during body generation)
+    this.largeValueIndex = new Map();
+    this.BASE64_THRESHOLD = 500; // Min chars to consider for extraction
 
     // Variable classification
     this.variableMap = new Map();        // All variables: name → value
@@ -196,6 +204,132 @@ class AdvancedScriptGenerator {
   }
 
   /**
+   * Check if a string is base64 encoded (allowing whitespace/newlines)
+   */
+  isBase64(str) {
+    if (!str || typeof str !== 'string') return false;
+    const stripped = str.replace(/\s/g, '');
+    if (stripped.length < this.BASE64_THRESHOLD) return false;
+    // Base64 charset: A-Z, a-z, 0-9, +, /, = (padding)
+    return /^[A-Za-z0-9+/=]+$/.test(stripped);
+  }
+
+  /**
+   * Generate a short hash for deduplication
+   */
+  hashContent(content) {
+    return crypto.createHash('md5').update(content).digest('hex').substring(0, 12);
+  }
+
+  /**
+   * Sanitize a string into a safe file/variable name
+   */
+  safeFileName(requestName, fieldPath) {
+    const name = `${requestName}_${fieldPath}`
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .substring(0, 60);
+    return name;
+  }
+
+  /**
+   * Scan all requests for large base64 values in bodies.
+   * Registers them in extractedDataFiles (deduplicated by content hash)
+   * and largeValueIndex (for lookup during body generation).
+   */
+  scanForLargeBase64() {
+    let totalFound = 0;
+    let deduplicated = 0;
+
+    this.requests.forEach(request => {
+      if (!request.body || !['POST', 'PUT', 'PATCH'].includes(request.method)) return;
+
+      if (request.body.mode === 'raw' && request.body.raw) {
+        try {
+          const jsonBody = JSON.parse(request.body.raw);
+          this._scanObjectForBase64(jsonBody, request.name, '', (fieldPath, value) => {
+            const hash = this.hashContent(value);
+            const indexKey = `${request.name}::${fieldPath}`;
+
+            if (this.extractedDataFiles.has(hash)) {
+              // Deduplicate: same content already extracted
+              this.extractedDataFiles.get(hash).usedBy.push(request.name);
+              this.largeValueIndex.set(indexKey, hash);
+              deduplicated++;
+            } else {
+              const varName = this.safeFileName(request.name, fieldPath);
+              const fileName = `${varName}.b64`;
+              this.extractedDataFiles.set(hash, {
+                varName,
+                fileName,
+                content: value,
+                size: value.length,
+                usedBy: [request.name]
+              });
+              this.largeValueIndex.set(indexKey, hash);
+              totalFound++;
+            }
+          });
+        } catch (e) {
+          // Not JSON — check if the entire raw body is base64
+          if (this.isBase64(request.body.raw)) {
+            const hash = this.hashContent(request.body.raw);
+            const indexKey = `${request.name}::__raw__`;
+
+            if (this.extractedDataFiles.has(hash)) {
+              this.extractedDataFiles.get(hash).usedBy.push(request.name);
+              this.largeValueIndex.set(indexKey, hash);
+              deduplicated++;
+            } else {
+              const varName = this.safeFileName(request.name, 'body');
+              const fileName = `${varName}.b64`;
+              this.extractedDataFiles.set(hash, {
+                varName,
+                fileName,
+                content: request.body.raw,
+                size: request.body.raw.length,
+                usedBy: [request.name]
+              });
+              this.largeValueIndex.set(indexKey, hash);
+              totalFound++;
+            }
+          }
+        }
+      }
+    });
+
+    if (totalFound > 0 || deduplicated > 0) {
+      console.log(`✓ Extracted ${totalFound + deduplicated} large values to data/ folder (${totalFound} unique, ${deduplicated} deduplicated)`);
+    }
+  }
+
+  /**
+   * Recursively scan a JSON object for large base64 string values.
+   * Calls onFound(fieldPath, value) for each match.
+   */
+  _scanObjectForBase64(obj, requestName, currentPath, onFound) {
+    if (typeof obj === 'string') {
+      if (this.isBase64(obj)) {
+        onFound(currentPath, obj);
+      }
+      return;
+    }
+    if (Array.isArray(obj)) {
+      obj.forEach((item, index) => {
+        this._scanObjectForBase64(item, requestName, `${currentPath}[${index}]`, onFound);
+      });
+      return;
+    }
+    if (typeof obj === 'object' && obj !== null) {
+      Object.entries(obj).forEach(([key, value]) => {
+        const path = currentPath ? `${currentPath}.${key}` : key;
+        this._scanObjectForBase64(value, requestName, path, onFound);
+      });
+    }
+  }
+
+  /**
    * Generate complete DevWeb script with all advanced features
    */
   async generate(outputDir = null) {
@@ -246,6 +380,22 @@ ${finalizeSection}
         this.parameters,
         this.options.examplesPath
       );
+
+      // Write extracted base64 data files to data/ subfolder
+      if (this.extractedDataFiles.size > 0) {
+        const fs = require('fs');
+        const path = require('path');
+        const dataDir = path.join(outputDir, 'data');
+        if (!fs.existsSync(dataDir)) {
+          fs.mkdirSync(dataDir, { recursive: true });
+        }
+        for (const [hash, fileInfo] of this.extractedDataFiles.entries()) {
+          const filePath = path.join(dataDir, fileInfo.fileName);
+          fs.writeFileSync(filePath, fileInfo.content, 'utf8');
+          console.log(`✓ Extracted: data/${fileInfo.fileName} (${(fileInfo.size / 1024).toFixed(1)} KB, used by ${fileInfo.usedBy.length} request(s))`);
+        }
+        result.extractedDataFiles = Array.from(this.extractedDataFiles.values()).map(f => f.fileName);
+      }
     }
 
     return result;
@@ -278,6 +428,9 @@ ${finalizeSection}
     if (this.options.useParameterization) {
       this.classifyVariables();
     }
+
+    // Scan for large base64 values in request bodies
+    this.scanForLargeBase64();
   }
 
   /**
@@ -374,6 +527,19 @@ ${finalizeSection}
     // Initialize global variables for correlation
     ${this.generateGlobalVariablesInit()}
 `;
+
+    // Load external data files (large base64 values extracted from request bodies)
+    if (this.extractedDataFiles.size > 0) {
+      code += `\n    // Load external data files\n`;
+      code += `    const fs = require("fs");\n`;
+      const seen = new Set();
+      for (const [hash, fileInfo] of this.extractedDataFiles.entries()) {
+        if (!seen.has(fileInfo.varName)) {
+          seen.add(fileInfo.varName);
+          code += `    load.global.${fileInfo.varName} = fs.readFileSync(load.config.script.directory + "/data/${fileInfo.fileName}", "utf8").trim();\n`;
+        }
+      }
+    }
 
     // Add authentication initialization
     if (this.options.useAuthentication && this.authConfigs.size > 0) {
@@ -695,7 +861,7 @@ ${finalizeSection}
 
     // Add body if applicable
     if (['POST', 'PUT', 'PATCH'].includes(request.method) && request.body) {
-      const body = this.generateBody(request.body);
+      const body = this.generateBody(request.body, request.name);
       if (body) {
         options.body = body;
       }
@@ -791,17 +957,26 @@ ${finalizeSection}
   }
 
   /**
-   * Generate request body
+   * Generate request body, extracting large base64 values to external files
    */
-  generateBody(body) {
+  generateBody(body, requestName) {
     if (!body) return null;
 
     switch (body.mode) {
       case 'raw':
         try {
           const jsonBody = JSON.parse(body.raw);
-          return this.replaceParametersInObject(jsonBody);
+          // Replace large base64 values with load.global references before parameter replacement
+          const processedBody = this._replaceLargeBase64InObject(jsonBody, requestName, '');
+          return this.replaceParametersInObject(processedBody);
         } catch (e) {
+          // Not JSON — check if the entire raw body is a large base64 value
+          const rawKey = `${requestName}::__raw__`;
+          if (this.largeValueIndex.has(rawKey)) {
+            const hash = this.largeValueIndex.get(rawKey);
+            const fileInfo = this.extractedDataFiles.get(hash);
+            return `{{load.global.${fileInfo.varName}}}`;
+          }
           return this.replaceParameters(body.raw);
         }
 
@@ -821,6 +996,37 @@ ${finalizeSection}
       default:
         return body.raw || null;
     }
+  }
+
+  /**
+   * Recursively replace large base64 values in a parsed JSON object
+   * with load.global.varName references (as special marker strings)
+   */
+  _replaceLargeBase64InObject(obj, requestName, currentPath) {
+    if (typeof obj === 'string') {
+      const indexKey = `${requestName}::${currentPath}`;
+      if (this.largeValueIndex.has(indexKey)) {
+        const hash = this.largeValueIndex.get(indexKey);
+        const fileInfo = this.extractedDataFiles.get(hash);
+        // Return a marker that formatOptionsObject will convert to a raw variable reference
+        return `{{load.global.${fileInfo.varName}}}`;
+      }
+      return obj;
+    }
+    if (Array.isArray(obj)) {
+      return obj.map((item, index) => {
+        return this._replaceLargeBase64InObject(item, requestName, `${currentPath}[${index}]`);
+      });
+    }
+    if (typeof obj === 'object' && obj !== null) {
+      const result = {};
+      Object.entries(obj).forEach(([key, value]) => {
+        const path = currentPath ? `${currentPath}.${key}` : key;
+        result[key] = this._replaceLargeBase64InObject(value, requestName, path);
+      });
+      return result;
+    }
+    return obj;
   }
 
   /**
@@ -955,7 +1161,12 @@ ${finalizeSection}
     const result = {};
     Object.entries(obj).forEach(([key, value]) => {
       if (typeof value === 'string') {
-        result[key] = this.replaceParameters(value);
+        // Skip strings that are already load.global markers (from base64 extraction)
+        if (/^\{\{load\.global\..+\}\}$/.test(value)) {
+          result[key] = value;
+        } else {
+          result[key] = this.replaceParameters(value);
+        }
       } else if (typeof value === 'object') {
         result[key] = this.replaceParametersInObject(value);
       } else {
