@@ -44,7 +44,7 @@ class AdvancedScriptGenerator {
     this.authConfigs = new Map();
     this.customScripts = new Map();
     this.requestIdCounter = 0;
-    this.usedResponseNames = new Map(); // Track used response variable names for uniqueness
+    this.lastResponseVar = null;  // Track current response variable for cross-method access
 
     // Large base64 data extraction
     // Map: hash → { varName, fileName, content, size, usedBy[] }
@@ -229,8 +229,9 @@ class AdvancedScriptGenerator {
       .replace(/[^a-zA-Z0-9_]/g, '_')
       .replace(/_+/g, '_')
       .replace(/^_|_$/g, '')
+      .replace(/^[0-9]+_?/, '')  // Strip leading digits — JS identifiers cannot start with a number
       .substring(0, 60);
-    return name;
+    return name || 'data_file';
   }
 
   /**
@@ -681,11 +682,11 @@ ${finalizeSection}
         const isCritical = this.isCriticalRequest(request);
         if (isCritical || hasValidation) {
           hasCriticalValidation = true;
-          const reqSafeName = this.sanitizeName(request.name);
+          const respVar = this.lastResponseVar;
           code += `\n`;
           code += `\n    // Check validation for critical request`;
-          code += `\n    if (${reqSafeName}_response.status !== 200 && ${reqSafeName}_response.status !== 201) {`;
-          code += `\n        load.log(\`${request.name} failed with status \${${reqSafeName}_response.status}\`, load.LogLevel.error);`;
+          code += `\n    if (${respVar}.status !== 200 && ${respVar}.status !== 201) {`;
+          code += `\n        load.log(\`${request.name} failed with status \${${respVar}.status}\`, load.LogLevel.error);`;
           code += `\n        ${safeName}.stop(load.TransactionStatus.Failed);`;
           code += `\n        return false; // Abort script execution`;
           code += `\n    }`;
@@ -694,7 +695,7 @@ ${finalizeSection}
           if (hasValidation) {
             customScripts.test.extractors.forEach(extractor => {
               if (extractor.extractorType === 'textcheck' || extractor.extractorType === 'validation') {
-                code += `\n    if (!${reqSafeName}_response.extractors.${extractor.name}) {`;
+                code += `\n    if (!${respVar}.extractors.${extractor.name}) {`;
                 code += `\n        load.log("${request.name} validation failed", load.LogLevel.error);`;
                 code += `\n        ${safeName}.stop(load.TransactionStatus.Failed);`;
                 code += `\n        return false;`;
@@ -761,18 +762,10 @@ ${finalizeSection}
   }
 
   /**
-   * Generate code for a single request
+   * Generate code for a single request.
+   * Returns { code, responseVar } so callers can reference the response variable.
    */
   generateRequestCode(request, indentLevel = 1) {
-    let safeName = this.sanitizeName(request.name);
-
-    // Ensure unique response variable names across the script
-    const count = this.usedResponseNames.get(safeName) || 0;
-    this.usedResponseNames.set(safeName, count + 1);
-    if (count > 0) {
-      safeName = `${safeName}_${count}`;
-    }
-
     let code = '';
 
     // Add comment
@@ -799,20 +792,24 @@ ${finalizeSection}
       code += this.scriptParser.generatePreRequestCode(customScripts.preRequest, indentLevel);
     }
 
-    // Generate WebRequest options
+    // Generate WebRequest options (increments requestIdCounter)
     const options = this.generateRequestOptions(request);
 
-    code += `\n${this.indent(`const ${safeName}_response = new load.WebRequest(${options}).sendSync();`, indentLevel)}`;
+    // Sequential response variable: webResponse_01, webResponse_02, ...
+    const seqNum = String(this.requestIdCounter).padStart(2, '0');
+    const responseVar = `webResponse_${seqNum}`;
+
+    code += `\n${this.indent(`const ${responseVar} = new load.WebRequest(${options}).sendSync();`, indentLevel)}`;
 
     // Add response logging
-    code += `\n${this.indent(`load.log(\`${request.name} - Status: \${${safeName}_response.status}\`, load.LogLevel.${this.options.logLevel});`, indentLevel)}`;
+    code += `\n${this.indent(`load.log(\`${request.name} - Status: \${${responseVar}.status}\`, load.LogLevel.${this.options.logLevel});`, indentLevel)}`;
 
     // Handle correlation - store extracted values
     const produces = this.getProducedCorrelations(request);
     if (produces.length > 0) {
       code += `\n`;
       produces.forEach(corr => {
-        code += `\n${this.indent(`load.global.${corr.name} = ${safeName}_response.extractors.${corr.name};`, indentLevel)}`;
+        code += `\n${this.indent(`load.global.${corr.name} = ${responseVar}.extractors.${corr.name};`, indentLevel)}`;
         if (this.options.addComments) {
           code += ` // Extracted ${corr.type}`;
         }
@@ -821,18 +818,21 @@ ${finalizeSection}
 
     // Add post-response/test script if exists
     if (customScripts?.test) {
-      code += this.scriptParser.generateTestCode(customScripts.test, `${safeName}_response`, indentLevel);
+      code += this.scriptParser.generateTestCode(customScripts.test, responseVar, indentLevel);
 
       // Add validation logic from test script
       if (customScripts.test.extractors && customScripts.test.extractors.length > 0) {
         code += `\n${this.indent(`// Validation checks from test script`, indentLevel)}`;
         customScripts.test.extractors.forEach(extractor => {
-          code += `\n${this.indent(`if (${safeName}_response.extractors.${extractor.name}) {`, indentLevel)}`;
+          code += `\n${this.indent(`if (${responseVar}.extractors.${extractor.name}) {`, indentLevel)}`;
           code += `\n${this.indent(`    load.log("Validation passed: ${extractor.name}", load.LogLevel.info);`, indentLevel)}`;
           code += `\n${this.indent(`}`, indentLevel)}`;
         });
       }
     }
+
+    // Store the response variable name for this request (used by grouped actions)
+    this.lastResponseVar = responseVar;
 
     return code;
   }
