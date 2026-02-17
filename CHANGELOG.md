@@ -5,6 +5,33 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-02-17
+
+### Added
+- **Multi-script generation mode** (`-m multi`): Split large collections by top-level folder into separate self-contained DevWeb scripts for independent LRE scenario design
+- **Large base64 extraction**: Automatically detect base64 values >500 chars in request bodies, extract to external `data/*.b64` files with deduplication via MD5 hash
+- **3-tier variable classification system**: All `{{variables}}` classified as Dynamic (`load.global`), Parameterized Config (`load.params`, nextValue: once), or Parameterized Test Data (`load.params`, nextValue: iteration)
+- **collection_data.csv generation**: Actual parameter values from collection/environment exported to CSV alongside parameters.yml
+- **Environment file override** (`-e environment.json`): Environment values override collection variable values in generated CSV
+- **Cross-folder dependency detection**: Multi-mode warns when variables produced in one folder are consumed in another (e.g., auth tokens)
+- **Sequential response variable naming**: `webResponse_01`, `webResponse_02` pattern instead of long descriptive names
+
+### Changed
+- **scenario.yml format**: Now uses proper DevWeb pacing structure (type/mode/min/max, rampUp, duration, tearDown) instead of simple name/description
+- **Transaction declarations**: Now correctly placed INSIDE the action function at the top, before any request code
+- **URL handling**: Uses template literals with `load.params`/`load.global` instead of string concatenation; manual URL splitting to avoid `new URL()` encoding `{{` to `%7B%7B`
+- **parameters.yml**: Always generated when variables exist; uses `collection_data.csv` as single file for all parameters
+- **Variable naming safety**: Strip leading digits from variable/file names to avoid JS identifier errors (e.g., `5_Upload_Document` → `Upload_Document`)
+
+### Fixed
+- `load.global.*` markers no longer trigger false "variable not found" warnings in `replaceParametersInObject()`
+- Request ID counter now correctly incremented before response variable assignment
+- Duplicate cross-folder dependency warnings eliminated via Set-based deduplication
+
+### Documentation
+- Complete rewrite of all devweb-prompts files (01 through 09) to match current code logic
+- Updated CHANGELOG.md, INSTALLATION.md with new CLI options and features
+
 ## [2.0.0] - 2026-02-08
 
 ### Added

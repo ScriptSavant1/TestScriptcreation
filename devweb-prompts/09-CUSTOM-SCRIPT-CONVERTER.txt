@@ -1,0 +1,608 @@
+================================================================================
+  PROMPT 09: POSTMAN/BRUNO CUSTOM SCRIPT TO DEVWEB CONVERSION
+  (USE FOR COLLECTIONS WITH PRE-REQUEST SCRIPTS AND TEST SCRIPTS)
+================================================================================
+
+This prompt handles conversion of ALL custom JavaScript code found in
+Postman pre-request scripts, test scripts, and Bruno scripts into
+DevWeb-compatible equivalents.
+
+RULE: NEVER skip or ignore custom scripts. ALWAYS convert them.
+If a script cannot be fully converted, convert what you can and mark
+the rest with: // MANUAL: <description of what needs manual conversion>
+
+================================================================================
+  WHERE SCRIPTS ARE FOUND IN POSTMAN COLLECTIONS
+================================================================================
+
+LOCATION 1: Request-level pre-request script
+  item.event[listen==="prerequest"].script.exec[]
+  --> Runs BEFORE the request is sent
+  --> DevWeb: Place code BEFORE the load.WebRequest call
+
+LOCATION 2: Request-level test script
+  item.event[listen==="test"].script.exec[]
+  --> Runs AFTER the response is received
+  --> DevWeb: Place code AFTER the .sendSync() call
+
+LOCATION 3: Folder-level pre-request script
+  item.event[listen==="prerequest"].script.exec[]
+  --> Runs before EVERY request in the folder
+  --> DevWeb: Place at the start of the transaction block
+
+LOCATION 4: Folder-level test script
+  item.event[listen==="test"].script.exec[]
+  --> Runs after EVERY request in the folder
+  --> DevWeb: Place after each request in the transaction
+
+LOCATION 5: Collection-level pre-request script
+  collection.event[listen==="prerequest"].script.exec[]
+  --> Runs before EVERY request in the entire collection
+  --> DevWeb: Place in default settings or at top of action()
+
+LOCATION 6: Collection-level test script
+  collection.event[listen==="test"].script.exec[]
+  --> Runs after EVERY request in the collection
+  --> DevWeb: Place as a helper function called after each request
+
+================================================================================
+  WHERE SCRIPTS ARE FOUND IN BRUNO COLLECTIONS
+================================================================================
+
+  request.script.req   --> Pre-request script (string or array)
+  request.script.res   --> Post-response script (string or array)
+
+  request.vars.req[]   --> Pre-request variable assignments
+    { "name": "timestamp", "value": "Date.now()", "enabled": true }
+
+  request.vars.res[]   --> Post-response variable captures
+    { "name": "token", "value": "res.body.access_token", "enabled": true }
+
+================================================================================
+  CONVERSION TABLE: POSTMAN API --> DEVWEB EQUIVALENT
+================================================================================
+
+  ╔═══════════════════════════════════════════════════════════════════════════╗
+  ║  POSTMAN CODE                       DEVWEB EQUIVALENT                   ║
+  ╠═══════════════════════════════════════════════════════════════════════════╣
+  ║                                                                         ║
+  ║  --- SETTING VARIABLES ---                                              ║
+  ║                                                                         ║
+  ║  pm.environment.set("k", v)      →  load.global.k = v;                 ║
+  ║  pm.globals.set("k", v)          →  load.global.k = v;                 ║
+  ║  pm.collectionVariables.set(k,v) →  load.global.k = v;                 ║
+  ║  pm.variables.set("k", v)        →  load.global.k = v;                 ║
+  ║                                                                         ║
+  ║  --- GETTING VARIABLES ---                                              ║
+  ║                                                                         ║
+  ║  pm.environment.get("k")         →  load.global.k                      ║
+  ║  pm.globals.get("k")             →  load.global.k                      ║
+  ║  pm.collectionVariables.get("k") →  load.global.k                      ║
+  ║  pm.variables.get("k")           →  load.global.k                      ║
+  ║                                                                         ║
+  ║  --- RESPONSE ACCESS ---                                                ║
+  ║                                                                         ║
+  ║  pm.response.json()              →  JSON.parse(resp.body)              ║
+  ║  pm.response.text()              →  resp.body                          ║
+  ║  pm.response.code                →  resp.status                        ║
+  ║  pm.response.status              →  resp.status (number)               ║
+  ║  pm.response.responseTime        →  resp.duration                      ║
+  ║  pm.response.responseSize        →  // Not available in DevWeb         ║
+  ║  pm.response.headers.get("K")    →  // Use BoundaryExtractor on header ║
+  ║                                                                         ║
+  ║  --- REQUEST ACCESS ---                                                 ║
+  ║                                                                         ║
+  ║  pm.request.url                  →  // Not needed (URL is hardcoded)   ║
+  ║  pm.request.headers.get("K")     →  // Not needed (headers set above)  ║
+  ║  pm.request.body.raw             →  // Not needed (body set above)     ║
+  ║                                                                         ║
+  ║  --- ASSERTIONS / TESTS ---                                             ║
+  ║                                                                         ║
+  ║  pm.test("name", fn)             →  // Convert to if-check (see below) ║
+  ║  pm.expect(val).to.equal(exp)    →  if (val !== exp) { log error }     ║
+  ║  pm.expect(val).to.be.true       →  if (!val) { log error }           ║
+  ║  pm.expect(val).to.exist         →  if (!val) { log error }           ║
+  ║  pm.expect(val).to.have.property →  if (!(prop in obj)) { log err }   ║
+  ║  pm.expect(val).to.include(str)  →  if (!val.includes(str)) { err }   ║
+  ║  pm.expect(val).to.be.above(n)   →  if (val <= n) { log error }       ║
+  ║  pm.expect(val).to.be.below(n)   →  if (val >= n) { log error }       ║
+  ║  pm.expect(arr).to.have.length(n)→  if (arr.length !== n) { err }     ║
+  ║  pm.expect(val).to.be.a("string")→  if (typeof val !== "string") {err}║
+  ║  pm.expect(val).to.not.equal(e)  →  if (val === e) { log error }      ║
+  ║  pm.expect(obj).to.deep.equal(e) →  if (JSON.stringify(obj) !==       ║
+  ║                                       JSON.stringify(e)) { err }       ║
+  ║                                                                         ║
+  ║  --- DYNAMIC VARIABLES ---                                              ║
+  ║                                                                         ║
+  ║  {{$timestamp}}                  →  Date.now()                         ║
+  ║  {{$isoTimestamp}}               →  new Date().toISOString()           ║
+  ║  {{$guid}}                       →  load.utils.uuid()                  ║
+  ║  {{$randomInt}}                  →  Math.floor(Math.random() * 1000)   ║
+  ║  pm.variables.replaceIn(str)     →  // Replace inline                  ║
+  ║                                                                         ║
+  ║  --- COOKIES ---                                                        ║
+  ║                                                                         ║
+  ║  pm.cookies.get("name")          →  // Use BoundaryExtractor on header ║
+  ║  pm.cookies.has("name")          →  // Use TextCheckExtractor          ║
+  ║                                                                         ║
+  ║  --- SENDING REQUESTS FROM SCRIPTS ---                                  ║
+  ║                                                                         ║
+  ║  pm.sendRequest(req, cb)         →  // Convert to separate WebRequest  ║
+  ║                                     // (see detailed example below)     ║
+  ║                                                                         ║
+  ║  --- LOGGING ---                                                        ║
+  ║                                                                         ║
+  ║  console.log(msg)                →  load.log(msg, load.LogLevel.debug) ║
+  ║  console.error(msg)              →  load.log(msg, load.LogLevel.error) ║
+  ║  console.warn(msg)               →  load.log(msg, load.LogLevel.warning)║
+  ║                                                                         ║
+  ║  --- ITERATION DATA ---                                                 ║
+  ║                                                                         ║
+  ║  pm.iterationData.get("key")     →  load.params.key (with CSV)        ║
+  ║  pm.iterationData.toJSON()       →  // Not available                   ║
+  ║                                                                         ║
+  ║  --- FLOW CONTROL ---                                                   ║
+  ║                                                                         ║
+  ║  postman.setNextRequest("name")  →  // NOT SUPPORTED in DevWeb        ║
+  ║                                     // Use if/else logic instead       ║
+  ║  postman.setNextRequest(null)    →  return; // exit current action     ║
+  ║                                                                         ║
+  ║  --- SLEEP ---                                                          ║
+  ║                                                                         ║
+  ║  setTimeout(fn, ms)              →  load.sleep(ms/1000);              ║
+  ║                                                                         ║
+  ╚═══════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+  CONVERSION TABLE: BRUNO API --> DEVWEB EQUIVALENT
+================================================================================
+
+  ╔═══════════════════════════════════════════════════════════════════════════╗
+  ║  BRUNO CODE                         DEVWEB EQUIVALENT                   ║
+  ╠═══════════════════════════════════════════════════════════════════════════╣
+  ║                                                                         ║
+  ║  bru.setVar("k", v)             →  load.global.k = v;                 ║
+  ║  bru.getVar("k")                →  load.global.k                      ║
+  ║  bru.setEnvVar("k", v)          →  load.global.k = v;                 ║
+  ║  bru.getEnvVar("k")             →  load.global.k                      ║
+  ║  bru.setNextRequest("name")     →  // NOT SUPPORTED, use if/else      ║
+  ║                                                                         ║
+  ║  req.getUrl()                    →  // Not needed                      ║
+  ║  req.setUrl(url)                 →  // Not supported, hardcode URL     ║
+  ║  req.getMethod()                 →  // Not needed                      ║
+  ║  req.setMethod(m)                →  // Not supported                   ║
+  ║  req.getHeader("key")            →  // Not needed                      ║
+  ║  req.setHeader("key", "val")     →  // Add to headers object directly ║
+  ║  req.getBody()                   →  // Not needed                      ║
+  ║  req.setBody(body)               →  // Modify body object directly    ║
+  ║                                                                         ║
+  ║  res.getStatus()                 →  resp.status                        ║
+  ║  res.getBody()                   →  resp.body                          ║
+  ║  res.getHeader("key")            →  // Use BoundaryExtractor on header ║
+  ║  res.getHeaders()                →  // Not available directly          ║
+  ║  res.getResponseTime()           →  resp.duration                      ║
+  ║                                                                         ║
+  ╚═══════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+  DETAILED CONVERSION EXAMPLES
+================================================================================
+
+EXAMPLE 1: VARIABLE EXTRACTION FROM JSON RESPONSE
+--------------------------------------------------
+
+Postman test script:
+```javascript
+const jsonData = pm.response.json();
+pm.environment.set("accessToken", jsonData.data.tokens.access);
+pm.environment.set("refreshToken", jsonData.data.tokens.refresh);
+pm.environment.set("userId", jsonData.data.user.id);
+pm.environment.set("userName", jsonData.data.user.name);
+```
+
+DevWeb conversion:
+```javascript
+// The entire script becomes EXTRACTORS on the request:
+const loginResponse = new load.WebRequest({
+    // ... request options ...
+    returnBody: true,
+    extractors: [
+        new load.JsonPathExtractor("accessToken", "$.data.tokens.access"),
+        new load.JsonPathExtractor("refreshToken", "$.data.tokens.refresh"),
+        new load.JsonPathExtractor("userId", "$.data.user.id"),
+        new load.JsonPathExtractor("userName", "$.data.user.name")
+    ]
+}).sendSync();
+
+// Store globally after request
+load.global.accessToken = loginResponse.extractors.accessToken;
+load.global.refreshToken = loginResponse.extractors.refreshToken;
+load.global.userId = loginResponse.extractors.userId;
+load.global.userName = loginResponse.extractors.userName;
+```
+
+KEY INSIGHT: pm.response.json() + pm.environment.set() = JsonPathExtractor.
+This is the MOST IMPORTANT conversion pattern. The Postman test script
+tells you EXACTLY what to extract and from where.
+
+
+EXAMPLE 2: COMPLEX ASSERTIONS
+------------------------------
+
+Postman test script:
+```javascript
+pm.test("Status code is 200", function () {
+    pm.expect(pm.response.code).to.equal(200);
+});
+
+pm.test("Response time is less than 5000ms", function () {
+    pm.expect(pm.response.responseTime).to.be.below(5000);
+});
+
+pm.test("Response has user object", function () {
+    const jsonData = pm.response.json();
+    pm.expect(jsonData).to.have.property("user");
+    pm.expect(jsonData.user).to.have.property("id");
+    pm.expect(jsonData.user.name).to.be.a("string");
+    pm.expect(jsonData.user.email).to.include("@");
+});
+
+pm.test("Token is present and valid format", function () {
+    const jsonData = pm.response.json();
+    pm.expect(jsonData.token).to.exist;
+    pm.expect(jsonData.token.length).to.be.above(10);
+});
+```
+
+DevWeb conversion:
+```javascript
+const response = new load.WebRequest({
+    // ... request options ...
+    returnBody: true,
+    extractors: [
+        new load.TextCheckExtractor("hasUserObject", {
+            text: "\"user\":",
+            scope: load.ExtractorScope.Body,
+            failOn: false
+        }),
+        new load.TextCheckExtractor("hasToken", {
+            text: "\"token\":\"",
+            scope: load.ExtractorScope.Body,
+            failOn: false
+        })
+    ]
+}).sendSync();
+
+// Assertion: Status code is 200
+if (response.status !== 200) {
+    load.log("FAIL: Status code is 200 - actual: " + response.status, load.LogLevel.error);
+}
+
+// Assertion: Response time is less than 5000ms
+if (response.duration >= 5000) {
+    load.log("FAIL: Response time exceeds 5000ms - actual: " + response.duration + "ms", load.LogLevel.warning);
+}
+
+// Assertion: Response has user object (checked by TextCheckExtractor above)
+// Assertion: Token is present (checked by TextCheckExtractor above)
+```
+
+
+EXAMPLE 3: PRE-REQUEST SCRIPT WITH DYNAMIC DATA
+-------------------------------------------------
+
+Postman pre-request script:
+```javascript
+const timestamp = Date.now();
+const randomId = Math.floor(Math.random() * 10000);
+const requestId = `REQ-${timestamp}-${randomId}`;
+
+pm.environment.set("requestId", requestId);
+pm.environment.set("timestamp", timestamp.toString());
+
+// Generate HMAC signature
+const crypto = require('crypto-js');
+const secret = pm.environment.get("apiSecret");
+const message = `${timestamp}${requestId}`;
+const signature = crypto.HmacSHA256(message, secret).toString();
+
+pm.environment.set("signature", signature);
+```
+
+DevWeb conversion (placed BEFORE the request):
+```javascript
+// Pre-request: Generate dynamic request data
+const timestamp = Date.now();
+const randomId = Math.floor(Math.random() * 10000);
+const requestId = `REQ-${timestamp}-${randomId}`;
+
+load.global.requestId = requestId;
+load.global.timestamp = timestamp.toString();
+
+// Generate HMAC signature
+// NOTE: CryptoJS not available in DevWeb, using Node.js crypto
+const crypto = require("crypto");
+const secret = "your_api_secret_value";  // Hardcoded from environment
+const message = `${timestamp}${requestId}`;
+const signature = crypto.createHmac("sha256", secret).update(message).digest("hex");
+
+load.global.signature = signature;
+
+// Now the request can use these values:
+const response = new load.WebRequest({
+    // ...
+    headers: {
+        "X-Request-ID": load.global.requestId,
+        "X-Timestamp": load.global.timestamp,
+        "X-Signature": load.global.signature
+    }
+    // ...
+}).sendSync();
+```
+
+
+EXAMPLE 4: pm.sendRequest (SENDING REQUEST WITHIN A SCRIPT)
+-------------------------------------------------------------
+
+Postman pre-request script:
+```javascript
+pm.sendRequest({
+    url: pm.environment.get("baseUrl") + "/auth/refresh",
+    method: "POST",
+    header: {
+        "Content-Type": "application/json"
+    },
+    body: {
+        mode: "raw",
+        raw: JSON.stringify({
+            refresh_token: pm.environment.get("refreshToken")
+        })
+    }
+}, function (err, response) {
+    if (!err) {
+        const jsonData = response.json();
+        pm.environment.set("accessToken", jsonData.access_token);
+    }
+});
+```
+
+DevWeb conversion (becomes a separate WebRequest BEFORE the main request):
+```javascript
+// Converted from pm.sendRequest in pre-request script
+// Token refresh before main request
+const refreshResponse = new load.WebRequest({
+    id: 98,  // Use high ID to distinguish from main requests
+    url: "https://api.example.com/auth/refresh",
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json"
+    },
+    body: {
+        "refresh_token": load.global.refreshToken
+    },
+    returnBody: true,
+    extractors: [
+        new load.JsonPathExtractor("newAccessToken", "$.access_token")
+    ]
+}).sendSync();
+
+if (refreshResponse.status === 200) {
+    load.global.accessToken = refreshResponse.extractors.newAccessToken;
+    load.log("Token refreshed", load.LogLevel.info);
+}
+
+// Now continue with the original main request
+const mainResponse = new load.WebRequest({
+    // ... uses load.global.accessToken ...
+}).sendSync();
+```
+
+
+EXAMPLE 5: CONDITIONAL LOGIC WITH postman.setNextRequest
+----------------------------------------------------------
+
+Postman test script:
+```javascript
+const jsonData = pm.response.json();
+
+if (jsonData.status === "pending") {
+    // Retry the same request
+    postman.setNextRequest("Check Order Status");
+} else if (jsonData.status === "failed") {
+    // Skip to error handling
+    postman.setNextRequest("Handle Error");
+} else {
+    // Continue normally
+    postman.setNextRequest("Process Order");
+}
+```
+
+DevWeb conversion (use if/else flow control):
+```javascript
+const checkStatusResponse = new load.WebRequest({
+    // ... request options ...
+    returnBody: true,
+    extractors: [
+        new load.JsonPathExtractor("orderStatus", "$.status")
+    ]
+}).sendSync();
+
+const orderStatus = checkStatusResponse.extractors.orderStatus;
+
+if (orderStatus === "pending") {
+    // WARNING: DevWeb does not support setNextRequest.
+    // Implementing as a retry loop instead.
+    load.log("Order pending, retrying...", load.LogLevel.info);
+    load.sleep(2);
+
+    // Retry request (same request with new ID)
+    const retryResponse = new load.WebRequest({
+        id: 15,  // Different ID from original
+        url: "https://api.example.com/orders/" + load.global.orderId + "/status",
+        method: "GET",
+        headers: { "Authorization": "Bearer " + load.global.token },
+        returnBody: true
+    }).sendSync();
+
+} else if (orderStatus === "failed") {
+    load.log("Order failed - handling error", load.LogLevel.error);
+    // Handle error inline
+    transaction.stop(load.TransactionStatus.Failed);
+
+} else {
+    load.log("Order status: " + orderStatus + " - proceeding", load.LogLevel.info);
+    // Continue with next request normally
+}
+```
+
+
+EXAMPLE 6: COMPLEX JSON MANIPULATION
+--------------------------------------
+
+Postman pre-request script:
+```javascript
+const items = JSON.parse(pm.environment.get("cartItems"));
+const total = items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+const orderPayload = {
+    items: items.map(item => ({
+        productId: item.id,
+        quantity: item.qty,
+        unitPrice: item.price
+    })),
+    totalAmount: total,
+    currency: "USD",
+    orderDate: new Date().toISOString()
+};
+pm.environment.set("orderPayload", JSON.stringify(orderPayload));
+```
+
+DevWeb conversion:
+```javascript
+// Build order payload from previously extracted cart data
+// NOTE: In DevWeb, build the object directly rather than storing as JSON string
+const items = load.global.cartItems;  // Should be extracted as array from earlier response
+
+let total = 0;
+const orderItems = [];
+if (Array.isArray(items)) {
+    for (const item of items) {
+        total += (item.price || 0) * (item.qty || 1);
+        orderItems.push({
+            productId: item.id,
+            quantity: item.qty,
+            unitPrice: item.price
+        });
+    }
+}
+
+// Use directly in the request body:
+const orderResponse = new load.WebRequest({
+    // ...
+    body: {
+        "items": orderItems,
+        "totalAmount": total,
+        "currency": "USD",
+        "orderDate": new Date().toISOString()
+    }
+    // ...
+}).sendSync();
+```
+
+
+EXAMPLE 7: XML/SOAP RESPONSE HANDLING
+---------------------------------------
+
+Postman test script:
+```javascript
+const xml = pm.response.text();
+const userId = xml.match(/<userId>(\d+)<\/userId>/)[1];
+const authKey = xml.match(/<t_authorization>(.+?)<\/t_authorization>/)[1];
+pm.environment.set("userId", userId);
+pm.environment.set("authKey", authKey);
+```
+
+DevWeb conversion (BoundaryExtractor for XML):
+```javascript
+const soapResponse = new load.WebRequest({
+    // ... SOAP request ...
+    returnBody: true,
+    extractors: [
+        new load.BoundaryExtractor("userId", "<userId>", "</userId>"),
+        new load.BoundaryExtractor("authKey", "<t_authorization>", "</t_authorization>")
+    ]
+}).sendSync();
+
+load.global.userId = soapResponse.extractors.userId;
+load.global.authKey = soapResponse.extractors.authKey;
+```
+
+
+EXAMPLE 8: BASE64 AND ENCODING OPERATIONS
+-------------------------------------------
+
+Postman pre-request script:
+```javascript
+const username = pm.environment.get("username");
+const password = pm.environment.get("password");
+const credentials = btoa(username + ":" + password);
+pm.environment.set("basicAuth", "Basic " + credentials);
+
+// URL encoding
+const encodedParam = encodeURIComponent(pm.environment.get("searchQuery"));
+pm.environment.set("encodedSearch", encodedParam);
+```
+
+DevWeb conversion:
+```javascript
+const username = "actualUsername";  // Hardcoded from environment
+const password = "actualPassword";
+const credentials = load.utils.base64Encode(username + ":" + password);
+load.global.basicAuth = "Basic " + credentials;
+
+// URL encoding works natively in JavaScript
+const encodedParam = encodeURIComponent("search query with spaces");
+load.global.encodedSearch = encodedParam;
+```
+
+================================================================================
+  UNSUPPORTED FEATURES (FLAG FOR MANUAL REVIEW)
+================================================================================
+
+These Postman features have NO direct DevWeb equivalent:
+
+1. pm.visualizer.set()         --> // MANUAL: Visualization not supported in DevWeb
+2. pm.sendRequest() with OAuth --> // MANUAL: Convert to explicit WebRequest with auth
+3. xml2js / xmldom libraries   --> // MANUAL: Use BoundaryExtractor for XML fields
+4. Postman Monitors            --> // MANUAL: Use LoadRunner Controller for scheduling
+5. pm.execution.skipRequest()  --> // MANUAL: Use if/else to conditionally skip
+6. pm.execution.setNextRequest --> // MANUAL: Use if/else flow control
+7. File uploads (formdata)     --> // MANUAL: DevWeb has limited multipart support
+8. WebSocket connections       --> // MANUAL: Use load.WebSocket (if available)
+9. gRPC requests               --> // MANUAL: Not supported in standard DevWeb
+
+When you encounter any of these, generate:
+  // MANUAL: [Feature] is not supported in DevWeb. [Brief description of what needs to happen]
+
+================================================================================
+  KEY PRINCIPLE: SCRIPTS BECOME EXTRACTORS
+================================================================================
+
+The MOST IMPORTANT conversion insight:
+
+  In Postman: You write TEST SCRIPTS to parse responses and save variables
+  In DevWeb:  You declare EXTRACTORS on the request that do the same thing
+
+  Postman script that does this:
+    const json = pm.response.json();
+    pm.environment.set("token", json.access_token);
+
+  Is EQUIVALENT to this DevWeb extractor:
+    extractors: [
+        new load.JsonPathExtractor("token", "$.access_token")
+    ]
+    // Plus: load.global.token = response.extractors.token;
+
+  ALWAYS prefer EXTRACTORS over manual JSON.parse() in DevWeb.
+  Extractors are the DevWeb-native way to capture response data.
+
+================================================================================

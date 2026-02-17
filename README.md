@@ -1,6 +1,6 @@
 # 🚀 Bruno to DevWeb Converter
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://gitlab.com/your-org/bruno-devweb-converter)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](https://gitlab.com/your-org/bruno-devweb-converter)
 [![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -12,21 +12,21 @@
 
 ### 🎯 Core Features
 - ✅ **Multi-Format Support**: Bruno (.bru, .json) and Postman (.json) collections
-- ✅ **Smart Transactions**: Automatic grouping by folders
+- ✅ **Smart Transactions**: Automatic grouping by folders (declared INSIDE action)
 - ✅ **Auto-Correlation**: Intelligent detection of dynamic values
-- ✅ **Parameterization**: Automatic extraction and management
+- ✅ **3-Tier Variable Classification**: Dynamic (`load.global`), Config (`load.params` once), Test Data (`load.params` iteration)
 - ✅ **Authentication**: OAuth 2.0, Basic, Bearer, API Key, AWS Signature v4
 - ✅ **Think Time**: Configurable delays between requests
-- ✅ **Error Handling**: Comprehensive try-catch with transaction status
+- ✅ **Error Handling**: Transaction status with pass/fail tracking
 
 ### 🔧 Advanced Features
 - 🔍 **Correlation Detection**: Automatically identifies tokens, IDs, session values
-- 📊 **Parameter Analysis**: Type detection (email, URL, UUID, etc.)
+- 📊 **Multi-Script Mode** (`-m multi`): Split by top-level folder for independent LRE scenarios
 - 🔐 **Auth Handlers**: Support for all major authentication methods
-- 📝 **Code Comments**: Detailed inline documentation
-- 📈 **Analysis Reports**: Comprehensive conversion statistics
+- 📦 **Large Base64 Extraction**: Auto-detect and extract to external `data/*.b64` files
+- 📝 **Environment Override** (`-e`): Override collection variables with environment file
 - 🌐 **Web UI**: User-friendly interface for non-technical users
-- 🔄 **GitLab CI/CD**: Ready-to-use pipeline configuration
+- 🔄 **Cross-Folder Dependency Detection**: Warns about shared variables across scripts
 
 ---
 
@@ -95,8 +95,14 @@ docker run -v $(pwd)/collections:/app/collections bruno-devweb-converter
 ### Command Line Interface
 
 ```bash
-# Convert a collection
+# Convert a collection (single script, default)
 bruno-devweb convert -i collections/my-api.json -o output/my-script
+
+# Convert with environment file
+bruno-devweb convert -i collections/my-api.json -e environment.json -o output/my-script
+
+# Multi-script mode (one script per top-level folder)
+bruno-devweb convert -i collections/my-api.json -o output/ -m multi
 
 # With custom options
 bruno-devweb convert \
@@ -156,8 +162,10 @@ Then open `http://localhost:3000` in your browser.
 bruno-devweb convert [options]
 
 Options:
-  -i, --input <file>           Input collection file (.json or .bru)
+  -i, --input <file>           Input collection file (.json or .bru) [required]
+  -e, --environment <file>     Postman environment file (.json)
   -o, --output <dir>           Output directory (default: ./devweb-script)
+  -m, --mode <mode>            Script mode: single or multi (default: single)
   --no-transactions            Disable transaction grouping
   --no-correlation             Disable auto-correlation
   --no-parameterization        Disable parameterization
@@ -244,18 +252,18 @@ Extractors are generated for:
 - Headers (`BoundaryExtractor`)
 - HTML content (`HtmlExtractor`)
 
-#### Parameterization
+#### 3-Tier Variable Classification
 
-Automatically extracts:
-- Collection variables
-- Environment variables
-- Request variables
-- Dynamic values in URLs, headers, body
+All `{{variables}}` are classified into:
 
-Supports types:
-- `string`, `number`, `boolean`
-- `email`, `url`, `uuid`
-- `date`, `timestamp`
+| Tier | Access | nextValue | Example |
+|------|--------|-----------|---------|
+| **Dynamic** | `load.global.var` | N/A (extractors) | auth tokens, IDs from responses |
+| **Config** | `load.params.var` | `once` | base URLs, API keys, client IDs |
+| **Test Data** | `load.params.var` | `iteration` | usernames, passwords, emails |
+
+- Config + Test Data stored in `collection_data.csv`
+- Environment file (`-e`) overrides collection variable values
 
 ---
 
@@ -355,54 +363,81 @@ Supports types:
 
 ## 🏗️ Output Structure
 
+### Single Mode (default: `-m single`)
 ```
 devweb-script/
 ├── main.js              # DevWeb script (JavaScript)
-├── config.yml           # Runtime configuration
-├── parameters.yml       # Parameter definitions
-├── package.json         # Node.js package definition
-├── README.md            # Script documentation
-├── ANALYSIS.md          # Detailed analysis report
-└── data/                # Parameter data files
-    ├── username.csv
-    ├── email.csv
-    └── userId.csv
+├── scenario.yml         # Scenario config (vusers, pacing, duration)
+├── rts.yml              # Runtime settings (timeouts, SSL, etc.)
+├── tsconfig.json        # TypeScript compiler configuration
+├── DevWebSdk.d.ts       # Type definitions (from VuGen installation)
+├── parameters.yml       # Parameter definitions (when variables exist)
+├── collection_data.csv  # Actual parameter values from collection
+└── data/                # Large base64 data files (if any)
+    └── Upload_Document_content.b64
+```
+
+### Multi Mode (`-m multi`)
+```
+output/
+├── Auth/                # One folder per top-level collection folder
+│   ├── main.js
+│   ├── scenario.yml
+│   ├── rts.yml
+│   └── ...
+├── BulkV1/
+│   ├── main.js
+│   └── ...
+└── BulkV2/
+    └── ...
 ```
 
 ### Generated DevWeb Script Structure
 
 ```javascript
-/**
- * DevWeb Performance Test Script
- * Auto-generated from collection
- */
-
-// Initialize section
-load.initialize("init", async function() {
-    // Setup global variables
-    // Configure authentication
+load.initialize("Initialize", async function () {
+    // Initialize dynamic variables (correlations)
+    load.global.token = null;
+    load.global.userId = null;
 });
 
-// Action section  
-load.action("Action", async function() {
-    // Transaction 1
-    const Transaction1 = new load.Transaction("Transaction1");
-    Transaction1.start();
-    
-    // Requests with correlation
-    const request1 = new load.WebRequest({...});
-    const response1 = request1.sendSync();
-    load.global.token = response1.extractors.token;
-    
-    Transaction1.stop(load.TransactionStatus.Passed);
-    
-    // Think time
-    load.sleep(1);
+load.action("Action", async function () {
+    // Transaction declarations INSIDE action, at the top
+    let TS01 = new load.Transaction("Authentication");
+    let TS02 = new load.Transaction("Browse Products");
+
+    TS01.start();
+    const webResponse_01 = new load.WebRequest({
+        id: 1,
+        url: `${load.params.baseUrl}/auth/login`,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: {
+            "username": load.params.username,    // from collection_data.csv
+            "password": load.params.password
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("token", "$.access_token")
+        ]
+    }).sendSync();
+
+    load.global.token = webResponse_01.extractors.token;
+    TS01.stop(load.TransactionStatus.Passed);
+    load.thinkTime(1);
+
+    TS02.start();
+    const webResponse_02 = new load.WebRequest({
+        id: 2,
+        url: `${load.params.baseUrl}/products`,
+        method: "GET",
+        headers: { "Authorization": "Bearer " + load.global.token }
+    }).sendSync();
+    TS02.stop(load.TransactionStatus.Passed);
 });
 
-// Finalize section
-load.finalize("finalize", async function() {
-    // Cleanup
+load.finalize("Finalize", async function () {
+    load.log("Finalizing VUser", load.LogLevel.info);
 });
 ```
 
@@ -485,40 +520,36 @@ git push origin main
 ### Output: DevWeb Script
 
 ```javascript
-load.action("Action", async function() {
-    // Transaction: Authentication
-    const Authentication_transaction = new load.Transaction("Authentication");
-    Authentication_transaction.start();
-    
-    try {
-        // Login
-        const Login_request = new load.WebRequest({
-          url: "https://api.shop.com/auth/login",
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          returnBody: true,
-          body: {
-            email: load.params.email,
-            password: load.params.password
-          },
-          extractors: [
+load.action("Action", async function () {
+    // Transaction declarations INSIDE action
+    let TS01 = new load.Transaction("Authentication");
+
+    TS01.start();
+
+    const webResponse_01 = new load.WebRequest({
+        id: 1,
+        url: `${load.params.baseUrl}/auth/login`,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: {
+            "email": load.params.email,
+            "password": load.params.password
+        },
+        returnBody: true,
+        extractors: [
             new load.JsonPathExtractor("authToken", "$.token"),
             new load.JsonPathExtractor("userId", "$.user.id")
-          ]
-        });
-        const Login_response = Login_request.sendSync();
-        
-        load.log(`Login - Status: ${Login_response.status}`, load.LogLevel.info);
-        
-        load.global.authToken = Login_response.extractors.authToken;
-        load.global.userId = Login_response.extractors.userId;
-        
-        Authentication_transaction.stop(load.TransactionStatus.Passed);
-    } catch (error) {
-        load.log(`Transaction Authentication failed: ${error.message}`, load.LogLevel.error);
-        Authentication_transaction.stop(load.TransactionStatus.Failed);
+        ]
+    }).sendSync();
+
+    if (webResponse_01.status === 200) {
+        load.global.authToken = webResponse_01.extractors.authToken;
+        load.global.userId = webResponse_01.extractors.userId;
+        TS01.stop(load.TransactionStatus.Passed);
+    } else {
+        load.log("Login failed: " + webResponse_01.status, load.LogLevel.error);
+        TS01.stop(load.TransactionStatus.Failed);
+        return;
     }
 });
 ```
@@ -586,4 +617,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 **Made with ❤️ for Performance Engineers**
 
-*Version 2.0.0 - Last Updated: February 2026*
+*Version 2.2.0 - Last Updated: February 2026*

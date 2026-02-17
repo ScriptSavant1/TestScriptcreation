@@ -1,0 +1,266 @@
+================================================================================
+  PROMPT 06: MANDATORY FILES (tsconfig.json, rts.yml, DevWebSdk.d.ts)
+================================================================================
+
+These files are ALWAYS required and their content is mostly static.
+Generate them exactly as shown below.
+
+================================================================================
+  FILE 1: tsconfig.json
+================================================================================
+
+Generate this EXACTLY (no modifications needed):
+
+```json
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "preserve",
+    "allowJs": true,
+    "lib": ["es2020"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "es2020"
+  },
+  "files": ["DevWebSdk.d.ts"],
+  "include": ["./*.js"],
+  "exclude": ["*.d.ts"]
+}
+```
+
+This file NEVER changes regardless of the collection being converted.
+
+================================================================================
+  FILE 2: rts.yml (Runtime Settings)
+================================================================================
+
+Generate this as the default configuration:
+
+```yaml
+httpConnection:
+  maxPersistentConnectionsPerHost: 6
+  maxConnectedHosts: 30
+  maxRedirectDepth: 10
+  keepAliveTimeout: 60
+  connectTimeout: 120
+  abruptClose: false
+  requestTimeout: 120
+  canonicalHeaderEntries: true
+
+grpc:
+  connectTimeout: 120
+  keepAliveTime: 0
+  maxRecvMsgSize: 0
+  maxSendMsgSize: 0
+
+proxy:
+  usePAC: false
+  pacAddress: ""
+  useProxy: false
+  proxyServer: ""
+
+ssl:
+  disableHTTP2: false
+  ignoreBadCertificate: false
+  tlsMaxVersion: tls12
+
+replay:
+  simulateNewUser: true
+  saveSnapshots: "always"
+  snapshotBodySizeLimit: 100
+  useCache: false
+
+vuserLogger:
+  errorBufferSize: 4096
+  logMode: full
+  logLevel: trace
+  showInConsole: true
+
+thinkTime:
+  type: "asRecorded"
+  limit: -1
+```
+
+Adjustments based on collection:
+
+- If the collection uses HTTPS with self-signed certs:
+  ssl.ignoreBadCertificate: true
+
+- If the collection has many parallel requests:
+  httpConnection.maxPersistentConnectionsPerHost: 10
+  httpConnection.maxConnectedHosts: 50
+
+- If requests have long response times (file uploads, batch operations):
+  httpConnection.requestTimeout: 300
+  httpConnection.connectTimeout: 180
+
+- For most collections, the default values above are fine.
+
+================================================================================
+  FILE 3: scenario.yml (Scenario Configuration)
+================================================================================
+
+See 05-SCENARIO-YML-GENERATOR.txt for detailed rules.
+
+```yaml
+# All times are defined in seconds
+vusers: 1        #The number of Vusers that will be run during the test
+pacing:          #The period of time to wait between iteration of each Vuser
+  type: delay    #The Pacing type, valid values: delay or interval
+  mode: random   #The Pacing mode, valid values: fixed or random
+  min: 3         #The min and max are valid on mode: random.
+  max: 6         #The min and max determine the range of values
+rampUp: 2        #The number of seconds it will take to start all the Vusers
+duration: 20     #The number of seconds to run Vuser iterations after all the Vusers have started running
+tearDown: 0      #Not used
+```
+
+================================================================================
+  FILE 4: DevWebSdk.d.ts (Type Definitions)
+================================================================================
+
+IMPORTANT: This file is NOT generated - it comes with the DevWeb installation.
+When creating the script folder, note that this file must exist.
+
+If the user needs it, they should copy it from:
+  <VuGen Installation>/dat/devweb/DevWebSdk.d.ts
+
+Or they can create a minimal stub:
+
+```typescript
+// DevWeb SDK Type Definitions
+// This file provides IntelliSense for DevWeb scripts
+// Copy the full version from your VuGen installation
+
+declare namespace load {
+    const config: {
+        user: { userId: number };
+        script: { directory: string };
+    };
+    const global: { [key: string]: any };
+    const params: { [key: string]: string };
+
+    function initialize(name: string, callback: () => Promise<void>): void;
+    function action(name: string, callback: () => Promise<void>): void;
+    function finalize(name: string, callback: () => Promise<void>): void;
+
+    function log(message: string, level?: LogLevel): void;
+    function sleep(seconds: number): void;
+    function thinkTime(seconds: number): void;
+    function exit(exitType: ExitType): void;
+
+    enum LogLevel { trace, debug, info, warning, error }
+    enum ExitType { abort, stop, iteration }
+    enum TransactionStatus { Passed, Failed, Stopped }
+    enum ExtractorScope { Body, Headers, All }
+
+    class WebRequest {
+        constructor(options: any);
+        sendSync(): any;
+        send(): Promise<any>;
+        static defaults: {
+            returnBody: boolean;
+            headers: { [key: string]: string };
+        };
+    }
+
+    class Transaction {
+        constructor(name: string);
+        start(): void;
+        stop(status: TransactionStatus): void;
+    }
+
+    class JsonPathExtractor {
+        constructor(name: string, path: string, multiple?: boolean);
+    }
+
+    class BoundaryExtractor {
+        constructor(name: string, left: string | object, right?: string);
+    }
+
+    class RegexpExtractor {
+        constructor(name: string, pattern: string);
+    }
+
+    class TextCheckExtractor {
+        constructor(name: string, options: object);
+    }
+
+    class CookieExtractor {
+        constructor(name: string, cookieName: string);
+    }
+
+    class AWSAuthentication {
+        constructor(providerType: any, credentials: object);
+    }
+
+    const AWSProviderType: { Static: number };
+
+    function setUserCredentials(credentials: any): void;
+
+    namespace utils {
+        function base64Encode(input: string): string;
+        function uuid(): string;
+    }
+}
+```
+
+NOTE: For production use, always copy the real DevWebSdk.d.ts from the
+VuGen installation. The stub above is only for development/preview purposes.
+
+================================================================================
+  FILE 5: parameters.yml (Conditional - see 07-PARAMETERS-YML-RULES.txt)
+================================================================================
+
+Generated ALWAYS when collection has Tier 2 (config) or Tier 3 (test data)
+variables. See 07-PARAMETERS-YML-RULES.txt for complete rules.
+
+================================================================================
+  FILE 6: collection_data.csv (Conditional - paired with parameters.yml)
+================================================================================
+
+Generated alongside parameters.yml. Contains actual variable values from
+the collection and/or environment file. Single CSV file for ALL parameters.
+
+================================================================================
+  OUTPUT FOLDER STRUCTURE
+================================================================================
+
+Single-mode output (-m single, default):
+
+  MyScriptName/
+    main.js              <-- The DevWeb script (always required)
+    scenario.yml         <-- Scenario configuration with pacing (always required)
+    rts.yml              <-- Runtime settings (always required)
+    tsconfig.json        <-- TypeScript config (always required)
+    DevWebSdk.d.ts       <-- Type definitions (copy from VuGen installation)
+    parameters.yml       <-- Parameter definitions (when variables exist)
+    collection_data.csv  <-- Actual parameter values (when variables exist)
+    data/                <-- Only if large base64 values were extracted
+      Upload_Document_documentContent.b64
+      Create_Record_attachmentData.b64
+
+Multi-mode output (-m multi):
+
+  OutputDir/
+    Auth/                <-- One folder per top-level collection folder
+      main.js
+      scenario.yml
+      rts.yml
+      tsconfig.json
+      DevWebSdk.d.ts
+      parameters.yml
+      collection_data.csv
+      data/
+    BulkV1/
+      main.js
+      scenario.yml
+      ...
+    BulkV2/
+      main.js
+      ...
+
+  Each folder is a self-contained DevWeb script that can be independently
+  uploaded to LoadRunner Enterprise for scenario design.
+
+================================================================================

@@ -1,0 +1,449 @@
+================================================================================
+  PROMPT 03: AUTHENTICATION HANDLER FOR DEVWEB SCRIPTS
+================================================================================
+
+This prompt handles ALL authentication types found in Postman/Bruno collections
+and generates the correct DevWeb code for each.
+
+================================================================================
+  HOW TO DETECT AUTH TYPE IN POSTMAN COLLECTIONS
+================================================================================
+
+Look for the "auth" object in the collection JSON:
+
+1. Collection-level auth:   collection.auth.type
+2. Folder-level auth:       item[].auth.type
+3. Request-level auth:      item[].request.auth.type
+
+Auth types you may find:
+  "bearer"          --> Bearer Token
+  "basic"           --> Basic Authentication
+  "oauth2"          --> OAuth 2.0
+  "apikey"          --> API Key (header or query)
+  "awsv4"           --> AWS Signature v4
+  "digest"          --> Digest Authentication
+  "noauth" / null   --> No Authentication
+  "inherit"         --> Inherits from parent folder/collection
+
+================================================================================
+  AUTH TYPE 1: OAUTH 2.0 - CLIENT CREDENTIALS
+================================================================================
+
+Detection: auth.type === "oauth2" AND grant_type === "client_credentials"
+
+Generate this code in load.initialize():
+
+```javascript
+load.initialize("Initialize", async function () {
+    load.log("Initializing - Fetching OAuth2 token", load.LogLevel.info);
+
+    // OAuth2 Client Credentials Token Request
+    const tokenResponse = new load.WebRequest({
+        id: 1,
+        url: "https://auth.example.com/oauth/token",
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: {
+            "grant_type": "client_credentials",
+            "client_id": "YOUR_CLIENT_ID",
+            "client_secret": "YOUR_CLIENT_SECRET",
+            "scope": "read write"
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("accessToken", "$.access_token"),
+            new load.JsonPathExtractor("tokenType", "$.token_type"),
+            new load.JsonPathExtractor("expiresIn", "$.expires_in")
+        ]
+    }).sendSync();
+
+    if (tokenResponse.status === 200 && tokenResponse.extractors.accessToken) {
+        load.global.accessToken = tokenResponse.extractors.accessToken;
+        load.global.tokenType = tokenResponse.extractors.tokenType || "Bearer";
+        load.log("OAuth2 token obtained successfully", load.LogLevel.info);
+    } else {
+        load.log("CRITICAL: Failed to obtain OAuth2 token: " + tokenResponse.status, load.LogLevel.error);
+        load.exit(load.ExitType.abort);
+    }
+});
+```
+
+Then in load.action(), set the default auth header:
+
+```javascript
+load.action("Action", async function () {
+    load.WebRequest.defaults.headers = {
+        "Authorization": load.global.tokenType + " " + load.global.accessToken,
+        "Accept": "application/json"
+    };
+    // ... requests ...
+});
+```
+
+================================================================================
+  AUTH TYPE 2: OAUTH 2.0 - AUTHORIZATION CODE
+================================================================================
+
+Detection: auth.type === "oauth2" AND grant_type === "authorization_code"
+
+This is a multi-step flow. Generate in load.initialize():
+
+```javascript
+load.initialize("Initialize", async function () {
+    load.log("Initializing - OAuth2 Authorization Code Flow", load.LogLevel.info);
+
+    const state = load.utils.uuid();
+
+    // Step 1: Get Authorization Page
+    const authorizeResponse = new load.WebRequest({
+        id: 1,
+        url: "https://auth.example.com/oauth/authorize",
+        method: "GET",
+        queryString: {
+            "response_type": "code",
+            "client_id": "YOUR_CLIENT_ID",
+            "redirect_uri": "https://your-app.com/callback",
+            "scope": "read write",
+            "state": state
+        },
+        returnBody: true
+    }).sendSync();
+
+    // Step 2: Submit Login Credentials
+    const loginResponse = new load.WebRequest({
+        id: 2,
+        url: "https://auth.example.com/oauth/login",
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: {
+            "username": "testuser",
+            "password": "testpassword"
+        },
+        returnBody: true,
+        extractors: [
+            new load.BoundaryExtractor("authCode", "code=", "&")
+        ]
+    }).sendSync();
+
+    // Step 3: Exchange Code for Token
+    const tokenResponse = new load.WebRequest({
+        id: 3,
+        url: "https://auth.example.com/oauth/token",
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: {
+            "grant_type": "authorization_code",
+            "code": loginResponse.extractors.authCode,
+            "client_id": "YOUR_CLIENT_ID",
+            "client_secret": "YOUR_CLIENT_SECRET",
+            "redirect_uri": "https://your-app.com/callback"
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("accessToken", "$.access_token"),
+            new load.JsonPathExtractor("refreshToken", "$.refresh_token")
+        ]
+    }).sendSync();
+
+    if (tokenResponse.status === 200) {
+        load.global.accessToken = tokenResponse.extractors.accessToken;
+        load.global.refreshToken = tokenResponse.extractors.refreshToken;
+        load.log("OAuth2 authorization code flow completed", load.LogLevel.info);
+    } else {
+        load.log("CRITICAL: OAuth2 flow failed", load.LogLevel.error);
+        load.exit(load.ExitType.abort);
+    }
+});
+```
+
+================================================================================
+  AUTH TYPE 3: OAUTH 2.0 - PASSWORD GRANT (ROPC)
+================================================================================
+
+Detection: auth.type === "oauth2" AND grant_type === "password"
+
+```javascript
+// In load.initialize():
+const tokenResponse = new load.WebRequest({
+    id: 1,
+    url: "https://auth.example.com/oauth/token",
+    method: "POST",
+    headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: {
+        "grant_type": "password",
+        "username": "testuser",
+        "password": "testpassword",
+        "client_id": "YOUR_CLIENT_ID",
+        "client_secret": "YOUR_CLIENT_SECRET",
+        "scope": "read write"
+    },
+    returnBody: true,
+    extractors: [
+        new load.JsonPathExtractor("accessToken", "$.access_token"),
+        new load.JsonPathExtractor("refreshToken", "$.refresh_token")
+    ]
+}).sendSync();
+
+load.global.accessToken = tokenResponse.extractors.accessToken;
+load.global.refreshToken = tokenResponse.extractors.refreshToken;
+```
+
+================================================================================
+  AUTH TYPE 4: BEARER TOKEN (STATIC)
+================================================================================
+
+Detection: auth.type === "bearer"
+
+Find token value: auth.bearer[].value where key === "token"
+
+```javascript
+// In load.initialize():
+load.global.bearerToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+load.global.authHeader = "Bearer " + load.global.bearerToken;
+
+// In load.action() defaults:
+load.WebRequest.defaults.headers = {
+    "Authorization": load.global.authHeader
+};
+```
+
+NOTE: If the bearer token contains a {{variable}} reference that points
+to another request's response, convert it to a correlation instead.
+
+================================================================================
+  AUTH TYPE 5: BASIC AUTHENTICATION
+================================================================================
+
+Detection: auth.type === "basic"
+
+Find values: auth.basic[].value where key === "username" or "password"
+
+```javascript
+// In load.initialize():
+const username = "myUsername";
+const password = "myPassword";
+const basicCredentials = load.utils.base64Encode(username + ":" + password);
+load.global.basicAuthHeader = "Basic " + basicCredentials;
+
+// In load.action() defaults:
+load.WebRequest.defaults.headers = {
+    "Authorization": load.global.basicAuthHeader
+};
+```
+
+If load.utils.base64Encode is not available, use Buffer:
+```javascript
+const basicCredentials = Buffer.from(username + ":" + password).toString("base64");
+```
+
+================================================================================
+  AUTH TYPE 6: API KEY (HEADER)
+================================================================================
+
+Detection: auth.type === "apikey" AND in === "header"
+
+Find values: auth.apikey[].value where key === "key" (header name) and "value"
+
+```javascript
+// In load.initialize():
+load.global.apiKeyHeaderName = "X-API-Key";
+load.global.apiKeyValue = "sk_live_abc123xyz789";
+
+// In load.action() defaults:
+load.WebRequest.defaults.headers = {
+    [load.global.apiKeyHeaderName]: load.global.apiKeyValue
+};
+
+// OR directly on each request:
+headers: {
+    "X-API-Key": "sk_live_abc123xyz789"
+}
+```
+
+================================================================================
+  AUTH TYPE 7: API KEY (QUERY PARAMETER)
+================================================================================
+
+Detection: auth.type === "apikey" AND in === "query"
+
+```javascript
+// Store globally
+load.global.apiKeyParam = "api_key";
+load.global.apiKeyValue = "sk_live_abc123xyz789";
+
+// Add to every request's queryString:
+queryString: {
+    "api_key": "sk_live_abc123xyz789",
+    // ... other query params
+}
+```
+
+================================================================================
+  AUTH TYPE 8: AWS SIGNATURE V4
+================================================================================
+
+Detection: auth.type === "awsv4"
+
+```javascript
+// In load.initialize():
+load.setUserCredentials(new load.AWSAuthentication(
+    load.AWSProviderType.Static,
+    {
+        accessKeyID: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        sessionToken: ""  // Optional
+    }
+));
+
+load.global.awsRegion = "us-east-1";
+load.global.awsService = "execute-api";
+
+// On each request, add:
+const response = new load.WebRequest({
+    id: 1,
+    url: "https://api.example.com/items",
+    method: "GET",
+    awsSigning: {
+        region: load.global.awsRegion,
+        service: load.global.awsService
+    }
+}).sendSync();
+```
+
+================================================================================
+  AUTH TYPE 9: DIGEST AUTHENTICATION
+================================================================================
+
+Detection: auth.type === "digest"
+
+```javascript
+// In load.initialize():
+load.setUserCredentials({
+    username: "digestUser",
+    password: "digestPassword",
+    realm: "",       // Optional: specific realm
+    host: "*"        // Apply to all hosts
+});
+```
+
+================================================================================
+  AUTH TYPE 10: NTLM AUTHENTICATION
+================================================================================
+
+Detection: auth.type === "ntlm"
+
+```javascript
+// In load.initialize():
+load.setUserCredentials({
+    username: "DOMAIN\\username",
+    password: "password",
+    host: "*"
+});
+```
+
+================================================================================
+  AUTH INHERITANCE RULES
+================================================================================
+
+Postman collections have auth inheritance:
+
+  Collection auth: Bearer Token
+    Folder 1 auth: (inherit from collection) --> Use Bearer Token
+      Request 1 auth: (inherit from folder) --> Use Bearer Token
+      Request 2 auth: Basic Auth --> Use Basic Auth (override)
+    Folder 2 auth: API Key --> Use API Key (override)
+      Request 3 auth: (inherit from folder) --> Use API Key
+      Request 4 auth: No Auth --> No authentication
+
+Resolution order:
+  1. If request has its own auth (not "inherit") --> use request auth
+  2. Else if parent folder has auth (not "inherit") --> use folder auth
+  3. Else use collection-level auth
+
+In DevWeb:
+  - Set the most common auth in load.WebRequest.defaults.headers
+  - Override per-request when a specific request uses different auth
+
+```javascript
+// Set default auth (most common, e.g., Bearer)
+load.WebRequest.defaults.headers = {
+    "Authorization": "Bearer " + load.global.accessToken
+};
+
+// Override for a specific request that uses Basic auth
+const specialResponse = new load.WebRequest({
+    id: 5,
+    url: "https://api.example.com/legacy-endpoint",
+    method: "GET",
+    headers: {
+        "Authorization": "Basic " + load.global.basicAuthHeader
+        // This overrides the default Bearer auth for this request only
+    }
+}).sendSync();
+
+// Override for a request with no auth
+const publicResponse = new load.WebRequest({
+    id: 6,
+    url: "https://api.example.com/public/health",
+    method: "GET",
+    headers: {
+        // Explicitly set headers WITHOUT Authorization
+        "Accept": "application/json"
+    }
+}).sendSync();
+```
+
+================================================================================
+  TOKEN REFRESH PATTERN
+================================================================================
+
+If the collection includes a token refresh request, generate this pattern:
+
+```javascript
+// Helper function at the top of the script (before load.initialize)
+async function refreshToken() {
+    const refreshResponse = new load.WebRequest({
+        id: 98,
+        url: "https://auth.example.com/oauth/token",
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: {
+            "grant_type": "refresh_token",
+            "refresh_token": load.global.refreshToken,
+            "client_id": "YOUR_CLIENT_ID"
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("newAccessToken", "$.access_token"),
+            new load.JsonPathExtractor("newRefreshToken", "$.refresh_token")
+        ]
+    }).sendSync();
+
+    if (refreshResponse.status === 200) {
+        load.global.accessToken = refreshResponse.extractors.newAccessToken;
+        if (refreshResponse.extractors.newRefreshToken) {
+            load.global.refreshToken = refreshResponse.extractors.newRefreshToken;
+        }
+        load.WebRequest.defaults.headers["Authorization"] =
+            "Bearer " + load.global.accessToken;
+        load.log("Token refreshed successfully", load.LogLevel.info);
+    } else {
+        load.log("Token refresh failed: " + refreshResponse.status, load.LogLevel.error);
+    }
+}
+
+// Call before action or when you get a 401:
+// if (response.status === 401) { await refreshToken(); }
+```
+
+================================================================================

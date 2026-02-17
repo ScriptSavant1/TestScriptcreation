@@ -1,8 +1,8 @@
 # 🎯 Project Summary
 
-## Bruno to DevWeb Converter v2.0
+## Bruno to DevWeb Converter v2.2
 
-**Complete, production-ready framework for converting Bruno/Postman collections to LoadRunner Enterprise DevWeb scripts with advanced correlation, parameterization, and authentication support.**
+**Complete, production-ready framework for converting Bruno/Postman collections to LoadRunner Enterprise DevWeb scripts with 3-tier variable classification, multi-script mode, intelligent correlation, and authentication support.**
 
 ---
 
@@ -102,19 +102,20 @@ bruno-devweb-converter/
 - User/Order/Entity IDs → JsonPathExtractor("userId", "$.user.id")
 ```
 
-### 2. Smart Parameterization
+### 2. 3-Tier Variable Classification
 ```yaml
-# Automatically generates:
+# parameters.yml - auto-generated with correct nextValue:
 parameters:
-  baseUrl:
-    type: url
-    value: https://api.example.com
-  userEmail:
-    type: email
-    value: user@example.com
-  apiKey:
-    type: string
-    value: YOUR_API_KEY
+  - name: baseUrl
+    type: csv
+    fileName: collection_data.csv
+    columnName: baseUrl
+    nextValue: once        # Config: same for all iterations
+  - name: username
+    type: csv
+    fileName: collection_data.csv
+    columnName: username
+    nextValue: iteration   # Test data: different per vuser
 ```
 
 ### 3. Multi-Auth Support
@@ -145,7 +146,14 @@ Collection
 
 ### Convert a Collection
 ```bash
+# Single script (default)
 bruno-devweb convert -i collection.json -o my-script
+
+# With environment file
+bruno-devweb convert -i collection.json -e environment.json -o my-script
+
+# Multi-script mode (one per top-level folder)
+bruno-devweb convert -i collection.json -o output/ -m multi
 ```
 
 ### Start Web UI
@@ -162,48 +170,51 @@ bruno-devweb analyze -i collection.json
 
 ## 📊 Generated Output
 
-### File Structure
+### File Structure (Single Mode)
 ```
 my-script/
-├── main.js          # DevWeb script
-├── config.yml       # Configuration
-├── parameters.yml   # Parameters
-├── README.md        # Script documentation
-├── ANALYSIS.md      # Analysis report
-├── package.json     # Node.js package
-└── data/            # Parameter data files
-    ├── username.csv
-    └── userId.csv
+├── main.js              # DevWeb script
+├── scenario.yml         # Scenario config (vusers, pacing, duration)
+├── rts.yml              # Runtime settings
+├── tsconfig.json        # TypeScript config
+├── DevWebSdk.d.ts       # Type definitions
+├── parameters.yml       # Parameter definitions (when variables exist)
+├── collection_data.csv  # Actual parameter values
+└── data/                # Large base64 data files (if any)
+    └── Upload_Document_content.b64
 ```
 
 ### DevWeb Script Structure
 ```javascript
-// Initialize
-load.initialize("init", async function() {
-    // Setup global variables
-    // Configure authentication
+load.initialize("Initialize", async function () {
+    load.global.token = null;  // Dynamic variables initialized as null
 });
 
-// Action with Transactions
-load.action("Action", async function() {
-    const T1 = new load.Transaction("Transaction1");
-    T1.start();
-    
-    try {
-        // Requests with correlation
-        const request1 = new load.WebRequest({...});
-        const response1 = request1.sendSync();
-        load.global.token = response1.extractors.token;
-        
-        T1.stop(load.TransactionStatus.Passed);
-    } catch (error) {
-        T1.stop(load.TransactionStatus.Failed);
-    }
+load.action("Action", async function () {
+    // Transaction declarations INSIDE action, at the top
+    let TS01 = new load.Transaction("Authentication");
+
+    TS01.start();
+    const webResponse_01 = new load.WebRequest({
+        id: 1,
+        url: `${load.params.baseUrl}/login`,      // Tier 2 config
+        method: "POST",
+        body: {
+            "username": load.params.username,       // Tier 3 test data
+            "password": load.params.password
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("token", "$.access_token")
+        ]
+    }).sendSync();
+
+    load.global.token = webResponse_01.extractors.token;  // Tier 1 dynamic
+    TS01.stop(load.TransactionStatus.Passed);
 });
 
-// Finalize
-load.finalize("finalize", async function() {
-    // Cleanup
+load.finalize("Finalize", async function () {
+    load.log("Done", load.LogLevel.info);
 });
 ```
 
@@ -368,4 +379,4 @@ devweb run main.js
 
 *Made with ❤️ for Performance Engineers*
 
-*Version 2.0.0 - February 2026*
+*Version 2.2.0 - February 2026*

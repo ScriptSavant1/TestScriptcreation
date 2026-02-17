@@ -1,0 +1,438 @@
+================================================================================
+  PROMPT 08: COLLECTION PARSING RULES (Postman & Bruno)
+================================================================================
+
+This prompt explains how to parse Postman v2.1 and Bruno collection JSON
+files to extract all the information needed for DevWeb script generation.
+
+================================================================================
+  POSTMAN COLLECTION v2.1 STRUCTURE
+================================================================================
+
+Top-level structure:
+```json
+{
+  "info": {
+    "name": "Collection Name",
+    "description": "Collection description",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [ ... ],         // Folders and requests
+  "auth": { ... },         // Collection-level authentication
+  "variable": [ ... ],     // Collection variables
+  "event": [ ... ]         // Collection-level scripts
+}
+```
+
+================================================================================
+  EXTRACTING COLLECTION INFO
+================================================================================
+
+Collection Name:     info.name
+Collection Desc:     info.description
+Schema Version:      info.schema (should contain "v2.1")
+
+Collection Variables (used to resolve {{varName}}):
+```json
+"variable": [
+  { "key": "baseUrl", "value": "https://api.example.com" },
+  { "key": "clientId", "value": "abc123" },
+  { "key": "apiVersion", "value": "v2" }
+]
+```
+
+Extract these as key-value pairs. Use them to replace {{varName}} in
+requests with actual hardcoded values.
+
+================================================================================
+  EXTRACTING FOLDERS (BECOME TRANSACTIONS)
+================================================================================
+
+Items can be folders (contain sub-items) or requests:
+
+FOLDER (has "item" array):
+```json
+{
+  "name": "Authentication",
+  "item": [
+    { "name": "Login", "request": { ... } },
+    { "name": "Refresh Token", "request": { ... } }
+  ],
+  "auth": { ... },         // Optional folder-level auth
+  "event": [ ... ]         // Optional folder-level scripts
+}
+```
+
+REQUEST (has "request" object):
+```json
+{
+  "name": "Get Users",
+  "request": { ... },
+  "response": [ ... ],
+  "event": [ ... ]
+}
+```
+
+Detection: If item has "item" property --> it's a FOLDER
+           If item has "request" property --> it's a REQUEST
+
+Nested folders: Folders can contain sub-folders. Flatten them:
+  Folder A / Sub-Folder B / Request C
+  Transaction name: "FolderA_SubFolderB"
+
+================================================================================
+  EXTRACTING REQUEST DETAILS
+================================================================================
+
+Each request object contains:
+
+```json
+{
+  "request": {
+    "method": "POST",
+    "header": [
+      { "key": "Content-Type", "value": "application/json", "disabled": false },
+      { "key": "Authorization", "value": "Bearer {{token}}", "disabled": false }
+    ],
+    "url": {
+      "raw": "{{baseUrl}}/api/users?page=1&limit=50",
+      "host": ["{{baseUrl}}"],
+      "path": ["api", "users"],
+      "query": [
+        { "key": "page", "value": "1", "disabled": false },
+        { "key": "limit", "value": "50", "disabled": false }
+      ],
+      "variable": [
+        { "key": "userId", "value": "123" }
+      ]
+    },
+    "body": { ... },
+    "auth": { ... },
+    "description": "Optional request description"
+  }
+}
+```
+
+EXTRACT:
+  Method:       request.method (GET, POST, PUT, PATCH, DELETE)
+  URL:          request.url.raw (resolve {{variables}} using collection vars)
+  Headers:      request.header[] (skip disabled: true)
+  Query Params: request.url.query[] (skip disabled: true)
+  Path Vars:    request.url.variable[]
+  Body:         request.body (see body section below)
+  Auth:         request.auth (see auth section below)
+  Description:  request.description
+
+================================================================================
+  EXTRACTING REQUEST BODY
+================================================================================
+
+Body modes in Postman:
+
+MODE 1: raw (JSON)
+```json
+"body": {
+  "mode": "raw",
+  "raw": "{\"name\":\"John\",\"email\":\"john@example.com\"}",
+  "options": {
+    "raw": { "language": "json" }
+  }
+}
+```
+DevWeb: body: JSON.parse(rawString) --> use as JS object
+        header: "Content-Type": "application/json"
+
+MODE 2: raw (XML/SOAP/Text)
+```json
+"body": {
+  "mode": "raw",
+  "raw": "<?xml version=\"1.0\"?><root>...</root>",
+  "options": {
+    "raw": { "language": "xml" }
+  }
+}
+```
+DevWeb: body: `<raw string as template literal>`
+        header: "Content-Type": "text/xml" or "application/xml"
+
+MODE 3: urlencoded
+```json
+"body": {
+  "mode": "urlencoded",
+  "urlencoded": [
+    { "key": "grant_type", "value": "client_credentials", "disabled": false },
+    { "key": "client_id", "value": "{{clientId}}", "disabled": false }
+  ]
+}
+```
+DevWeb: body: { "grant_type": "client_credentials", "client_id": "actual_value" }
+        header: "Content-Type": "application/x-www-form-urlencoded"
+
+MODE 4: formdata (multipart)
+```json
+"body": {
+  "mode": "formdata",
+  "formdata": [
+    { "key": "file", "type": "file", "src": "path/to/file" },
+    { "key": "name", "type": "text", "value": "myfile.pdf" }
+  ]
+}
+```
+DevWeb: Currently limited support - convert text fields to body object
+        Note: File uploads need manual handling in DevWeb
+
+MODE 5: graphql
+```json
+"body": {
+  "mode": "graphql",
+  "graphql": {
+    "query": "query { users { id name } }",
+    "variables": "{\"limit\": 10}"
+  }
+}
+```
+DevWeb: body: JSON.stringify({ query: "...", variables: {...} })
+        header: "Content-Type": "application/json"
+
+================================================================================
+  EXTRACTING AUTHENTICATION
+================================================================================
+
+Auth object structure:
+```json
+"auth": {
+  "type": "bearer",
+  "bearer": [
+    { "key": "token", "value": "{{accessToken}}", "type": "string" }
+  ]
+}
+```
+
+```json
+"auth": {
+  "type": "basic",
+  "basic": [
+    { "key": "username", "value": "myuser", "type": "string" },
+    { "key": "password", "value": "mypass", "type": "string" }
+  ]
+}
+```
+
+```json
+"auth": {
+  "type": "oauth2",
+  "oauth2": [
+    { "key": "accessTokenUrl", "value": "https://auth.example.com/token" },
+    { "key": "clientId", "value": "abc123" },
+    { "key": "clientSecret", "value": "secret" },
+    { "key": "scope", "value": "read write" },
+    { "key": "grant_type", "value": "client_credentials" }
+  ]
+}
+```
+
+```json
+"auth": {
+  "type": "apikey",
+  "apikey": [
+    { "key": "key", "value": "X-API-Key", "type": "string" },
+    { "key": "value", "value": "sk_live_abc123", "type": "string" },
+    { "key": "in", "value": "header", "type": "string" }
+  ]
+}
+```
+
+```json
+"auth": {
+  "type": "awsv4",
+  "awsv4": [
+    { "key": "accessKey", "value": "AKIAIOSFODNN7EXAMPLE" },
+    { "key": "secretKey", "value": "wJalrXUtnFEMI/K7MDENG..." },
+    { "key": "region", "value": "us-east-1" },
+    { "key": "service", "value": "execute-api" }
+  ]
+}
+```
+
+================================================================================
+  EXTRACTING SCRIPTS (Pre-request & Test)
+================================================================================
+
+Scripts are in the "event" array:
+
+```json
+"event": [
+  {
+    "listen": "prerequest",
+    "script": {
+      "exec": [
+        "// Pre-request script lines",
+        "const timestamp = Date.now();",
+        "pm.environment.set('timestamp', timestamp);"
+      ],
+      "type": "text/javascript"
+    }
+  },
+  {
+    "listen": "test",
+    "script": {
+      "exec": [
+        "// Test/post-request script lines",
+        "const jsonData = pm.response.json();",
+        "pm.environment.set('userId', jsonData.user.id);",
+        "pm.test('Status is 200', function() {",
+        "    pm.expect(pm.response.code).to.equal(200);",
+        "});"
+      ],
+      "type": "text/javascript"
+    }
+  }
+]
+```
+
+Pre-request script (listen: "prerequest"):
+  --> Convert to code placed BEFORE the WebRequest
+  --> Replace pm.* APIs with DevWeb equivalents (see prompt 02)
+
+Test script (listen: "test"):
+  --> Convert to code placed AFTER the WebRequest
+  --> Variable extractions become extractors on the WebRequest
+  --> Assertions become if-checks after the response
+
+================================================================================
+  EXTRACTING ENVIRONMENT VARIABLES
+================================================================================
+
+Postman environment files are separate JSON:
+```json
+{
+  "name": "Production",
+  "values": [
+    { "key": "baseUrl", "value": "https://api.prod.example.com", "enabled": true },
+    { "key": "clientId", "value": "prod_client_123", "enabled": true },
+    { "key": "apiKey", "value": "sk_live_abc123", "enabled": true }
+  ]
+}
+```
+
+Merge these with collection variables. Environment values override
+collection variables when the same key exists.
+
+Use all resolved values to replace {{varName}} with actual values.
+
+================================================================================
+  BRUNO COLLECTION FORMAT
+================================================================================
+
+Bruno collections can be JSON exports:
+```json
+{
+  "name": "My Bruno Collection",
+  "items": [
+    {
+      "name": "Get Users",
+      "type": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.example.com/users",
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "params": {
+          "query": [
+            { "name": "page", "value": "1", "enabled": true }
+          ]
+        },
+        "body": {
+          "mode": "json",
+          "json": "{\"key\": \"value\"}"
+        },
+        "auth": {
+          "mode": "bearer",
+          "bearer": { "token": "{{accessToken}}" }
+        },
+        "script": {
+          "req": "// pre-request script",
+          "res": "// post-response script"
+        },
+        "vars": {
+          "req": [
+            { "name": "timestamp", "value": "Date.now()", "enabled": true }
+          ],
+          "res": [
+            { "name": "userId", "value": "res.body.id", "enabled": true }
+          ]
+        }
+      }
+    }
+  ],
+  "environments": [
+    {
+      "name": "Production",
+      "variables": [
+        { "name": "baseUrl", "value": "https://api.example.com", "enabled": true }
+      ]
+    }
+  ]
+}
+```
+
+Bruno-specific parsing:
+  - request.params.query[] --> query parameters
+  - request.body.mode: "json" | "xml" | "formUrlEncoded" | "multipartForm"
+  - request.script.req --> pre-request script
+  - request.script.res --> post-response script
+  - request.vars.req[] --> pre-request variable assignments
+  - request.vars.res[] --> post-response variable captures (THESE ARE CORRELATIONS!)
+
+Bruno variable APIs:
+  bru.setVar("name", value)      --> load.global.name = value
+  bru.getVar("name")             --> load.global.name
+  bru.setEnvVar("name", value)   --> load.global.name = value
+  bru.getEnvVar("name")          --> load.global.name
+  req.getUrl()                   --> (not needed in DevWeb)
+  req.setHeader("key", "value")  --> add to headers object
+  res.getBody()                  --> response.body (with returnBody: true)
+  res.getStatus()                --> response.status
+
+================================================================================
+  VARIABLE RESOLUTION ORDER
+================================================================================
+
+When you encounter {{variableName}}:
+
+  1. Check environment variables --> hardcode the value
+  2. Check collection variables --> hardcode the value
+  3. Check if it's set in a pre-request/test script of an earlier request
+     --> This is a CORRELATION, use load.global.variableName
+  4. Check if it's a Postman dynamic variable:
+     {{$timestamp}} --> Date.now()
+     {{$guid}}      --> load.utils.uuid()
+     {{$randomInt}} --> Math.floor(Math.random() * 1000)
+  5. If not found anywhere --> Add a TODO comment:
+     // TODO: Replace <variableName> with actual value
+
+================================================================================
+  COMPLETE PARSING CHECKLIST
+================================================================================
+
+  [ ] Extract collection name and description
+  [ ] Extract all collection variables (key-value pairs)
+  [ ] Extract all environment variables (if provided)
+  [ ] Build variable resolution map (merge collection + environment)
+  [ ] Identify folder structure (map to transactions)
+  [ ] For each request:
+      [ ] Extract method (GET/POST/PUT/PATCH/DELETE)
+      [ ] Extract and resolve URL (replace {{vars}} with actual values)
+      [ ] Extract headers (skip disabled ones)
+      [ ] Extract query parameters (skip disabled ones)
+      [ ] Extract body (determine type: JSON/form/raw/GraphQL)
+      [ ] Extract auth type and credentials
+      [ ] Extract pre-request scripts
+      [ ] Extract test/post-response scripts
+      [ ] Identify variable sets (correlations to extract)
+      [ ] Identify variable gets (correlations to consume)
+  [ ] Determine request execution order
+  [ ] Map correlations (which request produces what, who consumes it)
+
+================================================================================

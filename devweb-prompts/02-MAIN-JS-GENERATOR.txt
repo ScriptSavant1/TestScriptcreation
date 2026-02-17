@@ -1,0 +1,657 @@
+================================================================================
+  PROMPT 02: DETAILED main.js GENERATION RULES
+  (USE FOR COMPLEX COLLECTIONS OR WHEN MASTER PROMPT ALONE IS INSUFFICIENT)
+================================================================================
+
+This prompt contains detailed rules for generating the main.js DevWeb script,
+including request construction, URL handling, folder mapping, response
+validation, error handling, and advanced patterns.
+
+================================================================================
+  COMPLETE main.js TEMPLATE WITH ALL PATTERNS
+================================================================================
+
+```javascript
+// ============================================================================
+// DevWeb Script: <COLLECTION_NAME>
+// Generated from: Postman/Bruno collection
+// Description: <COLLECTION_DESCRIPTION>
+//
+// Correlation Summary:
+//   token     : Req#01 (Login)  -> $.access_token     -> Req#02,03,04 headers
+//   userId    : Req#01 (Login)  -> $.user.id           -> Req#03 body
+//   productId : Req#02 (Search) -> $.data[0].id        -> Req#03 body
+//   orderId   : Req#03 (Create) -> $.id                -> Req#04 URL
+// ============================================================================
+
+// ============================================================================
+// INITIALIZE - runs once per virtual user at start
+// ============================================================================
+load.initialize("Initialize", async function () {
+    load.log("Initializing VUser: " + load.config.user.userId, load.LogLevel.info);
+
+    // ---- Initialize dynamic variables (correlations) ----
+    load.global.token = null;
+    load.global.userId = null;
+    load.global.productId = null;
+    load.global.orderId = null;
+
+    // ---- Load extracted base64 data files (if any) ----
+    // const fs = require("fs");
+    // load.global.documentContent = fs.readFileSync(
+    //     load.config.script.directory + "/data/Upload_Document_documentContent.b64", "utf8"
+    // ).trim();
+
+    // ---- Authentication Setup (if needed) ----
+    // For OAuth2: fetch token here (see 03-AUTHENTICATION-HANDLER.txt)
+    // For Basic Auth: encode credentials here
+    // For Bearer: set static token here
+    // For API Key: store key value here
+});
+
+// ============================================================================
+// ACTION - main test loop, runs repeatedly for each iteration
+// ============================================================================
+load.action("Action", async function () {
+
+    // ---- Default Request Settings ----
+    load.WebRequest.defaults.returnBody = false;
+    load.WebRequest.defaults.headers = {
+        "Accept": "application/json"
+        // Set common auth header for all requests:
+        // "Authorization": "Bearer " + load.global.accessToken
+    };
+
+    // ================================================================
+    // CRITICAL: Transaction declarations go INSIDE the action function
+    // at the TOP, before any request code.
+    // ================================================================
+    let TS01 = new load.Transaction("Authentication");
+    let TS02 = new load.Transaction("Browse Products");
+    let TS03 = new load.Transaction("Create Order");
+    let TS04 = new load.Transaction("Verify Order");
+
+    // ================================================================
+    // TS01 - Authentication
+    // ================================================================
+    TS01.start();
+
+    // -- Pre-request script code goes HERE (before WebRequest) --
+
+    const webResponse_01 = new load.WebRequest({
+        id: 1,
+        url: `${load.params.baseUrl}/auth/login`,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: {
+            "email": load.params.email,          // PARAMETERIZED: from collection_data.csv
+            "password": load.params.password      // PARAMETERIZED: from collection_data.csv
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("token", "$.access_token"),
+            new load.JsonPathExtractor("userId", "$.user.id")
+        ]
+    }).sendSync();
+
+    // -- Test script code goes HERE (after .sendSync()) --
+
+    // Store correlations + validate
+    if (webResponse_01.status === 200) {
+        load.global.token = webResponse_01.extractors.token;
+        load.global.userId = webResponse_01.extractors.userId;
+        load.log("Login OK, token: " + load.global.token.substring(0, 15) + "...", load.LogLevel.info);
+        TS01.stop(load.TransactionStatus.Passed);
+    } else {
+        load.log("CRITICAL: Login failed: " + webResponse_01.status, load.LogLevel.error);
+        TS01.stop(load.TransactionStatus.Failed);
+        return;  // Exit action - cannot continue without auth
+    }
+
+    load.thinkTime(2);
+
+    // ================================================================
+    // TS02 - Browse Products
+    // ================================================================
+    TS02.start();
+
+    const webResponse_02 = new load.WebRequest({
+        id: 2,
+        url: `${load.params.baseUrl}/products`,
+        method: "GET",
+        headers: {
+            "Authorization": "Bearer " + load.global.token    // DYNAMIC (correlation)
+        },
+        queryString: {
+            "category": "electronics",
+            "page": "1",
+            "limit": "20"
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("productId", "$.data[0].id")
+        ]
+    }).sendSync();
+
+    if (webResponse_02.status === 200) {
+        load.global.productId = webResponse_02.extractors.productId;
+        load.log("Product: " + load.global.productId, load.LogLevel.info);
+        TS02.stop(load.TransactionStatus.Passed);
+    } else {
+        load.log("Search failed: " + webResponse_02.status, load.LogLevel.error);
+        TS02.stop(load.TransactionStatus.Failed);
+    }
+
+    load.thinkTime(1);
+
+    // ================================================================
+    // TS03 - Create Order
+    // ================================================================
+    TS03.start();
+
+    const webResponse_03 = new load.WebRequest({
+        id: 3,
+        url: `${load.params.baseUrl}/orders`,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + load.global.token    // DYNAMIC (correlation)
+        },
+        body: {
+            "userId": load.global.userId,                      // DYNAMIC (correlation)
+            "productId": load.global.productId,                // DYNAMIC (correlation)
+            "quantity": 1
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("orderId", "$.id")
+        ]
+    }).sendSync();
+
+    if (webResponse_03.status === 200 || webResponse_03.status === 201) {
+        load.global.orderId = webResponse_03.extractors.orderId;
+        load.log("Order: " + load.global.orderId, load.LogLevel.info);
+        TS03.stop(load.TransactionStatus.Passed);
+    } else {
+        load.log("Order failed: " + webResponse_03.status, load.LogLevel.error);
+        TS03.stop(load.TransactionStatus.Failed);
+    }
+
+    load.thinkTime(1);
+
+    // ================================================================
+    // TS04 - Verify Order
+    // ================================================================
+    TS04.start();
+
+    const webResponse_04 = new load.WebRequest({
+        id: 4,
+        url: `${load.params.baseUrl}/orders/${load.global.orderId}`,   // DYNAMIC in URL
+        method: "GET",
+        headers: {
+            "Authorization": "Bearer " + load.global.token
+        },
+        returnBody: true
+    }).sendSync();
+
+    if (webResponse_04.status === 200) {
+        TS04.stop(load.TransactionStatus.Passed);
+    } else {
+        TS04.stop(load.TransactionStatus.Failed);
+    }
+});
+
+// ============================================================================
+// FINALIZE - runs once per virtual user at end
+// ============================================================================
+load.finalize("Finalize", async function () {
+    load.log("Finalizing VUser: " + load.config.user.userId, load.LogLevel.info);
+});
+```
+
+================================================================================
+  RESPONSE VARIABLE NAMING CONVENTION
+================================================================================
+
+Response variables use SEQUENTIAL numbering, NOT descriptive names:
+
+  CORRECT:  const webResponse_01 = new load.WebRequest({...}).sendSync();
+  CORRECT:  const webResponse_02 = new load.WebRequest({...}).sendSync();
+  CORRECT:  const webResponse_03 = new load.WebRequest({...}).sendSync();
+
+  WRONG:    const loginResponse = ...
+  WRONG:    const getUsersResponse = ...
+  WRONG:    const Registration_Initialize_response = ...
+
+Rules:
+  - Format: webResponse_XX (zero-padded, sequential starting from 01)
+  - Numbering matches the request id field
+  - Same counter spans ALL requests in the action section
+  - Short, consistent, avoids long/ugly variable names
+
+================================================================================
+  3-TIER VARIABLE USAGE IN REQUESTS
+================================================================================
+
+Every {{variable}} in the collection maps to one of three tiers:
+
+TIER 1 - DYNAMIC (load.global.varName):
+  - Correlations (values extracted from responses)
+  - Variables set by scripts (context.set(), pm.environment.set())
+  - Initialized as null in load.initialize()
+  - Stored after extraction: load.global.token = resp.extractors.token
+
+TIER 2 - PARAMETERIZED CONFIG (load.params.varName, nextValue: once):
+  - URLs, endpoints, API keys, client IDs, redirect URLs
+  - Read once per test run from collection_data.csv
+  - Same value for all iterations
+
+TIER 3 - PARAMETERIZED TEST DATA (load.params.varName, nextValue: iteration):
+  - Credentials: username, password, email, account
+  - Changes per iteration (different user per vuser)
+
+In request code, use the appropriate reference:
+  url: `${load.params.baseUrl}/api/endpoint`          // Tier 2
+  "Authorization": "Bearer " + load.global.token       // Tier 1
+  "username": load.params.username                     // Tier 3
+
+================================================================================
+  REQUEST CONSTRUCTION BY HTTP METHOD
+================================================================================
+
+GET:
+  - No body property
+  - Query params in queryString: { }
+  - Set returnBody: true if you need response data
+
+  const webResponse_01 = new load.WebRequest({
+      id: 1,
+      url: `${load.params.baseUrl}/items`,
+      method: "GET",
+      headers: { "Authorization": "Bearer " + load.global.token },
+      queryString: { "page": "1", "limit": "50", "sort": "name" },
+      returnBody: true
+  }).sendSync();
+
+POST (JSON):
+  - body as JavaScript object (NOT JSON.stringify)
+  - Content-Type: application/json
+
+  const webResponse_02 = new load.WebRequest({
+      id: 2,
+      url: `${load.params.baseUrl}/items`,
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + load.global.token
+      },
+      body: {
+          "name": "Item",
+          "price": 29.99,
+          "tags": ["test"],
+          "metadata": { "source": "loadtest" }
+      },
+      returnBody: true
+  }).sendSync();
+
+POST (Form URL-Encoded):
+  - body as key-value object (same as JSON syntax)
+  - Content-Type: application/x-www-form-urlencoded
+
+  const webResponse_03 = new load.WebRequest({
+      id: 3,
+      url: `${load.params.baseUrl}/oauth/token`,
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: {
+          "grant_type": "client_credentials",
+          "client_id": load.params.clientId,
+          "client_secret": load.params.clientSecret
+      },
+      returnBody: true
+  }).sendSync();
+
+POST (Raw XML / SOAP):
+  - body as template literal (backtick string)
+  - Use ${load.global.xxx} for dynamic values inside XML
+  - Content-Type: text/xml or application/xml
+
+  const webResponse_04 = new load.WebRequest({
+      id: 4,
+      url: `${load.params.baseUrl}/soap/service`,
+      method: "POST",
+      headers: {
+          "Content-Type": "text/xml; charset=utf-8",
+          "SOAPAction": "http://example.com/GetUser"
+      },
+      body: `<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+        <GetUserRequest>
+            <userId>${load.global.userId}</userId>
+        </GetUserRequest>
+    </soap:Body>
+</soap:Envelope>`,
+      returnBody: true,
+      extractors: [
+          new load.BoundaryExtractor("userName", "<name>", "</name>")
+      ]
+  }).sendSync();
+
+POST (GraphQL):
+  - body as JSON.stringify of query object
+  - Content-Type: application/json
+
+  const webResponse_05 = new load.WebRequest({
+      id: 5,
+      url: `${load.params.baseUrl}/graphql`,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+          query: `query GetUser($id: ID!) {
+              user(id: $id) { id name email }
+          }`,
+          variables: { "id": load.global.userId }
+      }),
+      returnBody: true
+  }).sendSync();
+
+PUT:  Same as POST but method: "PUT" (full resource update)
+PATCH: Same as POST but method: "PATCH" (partial update)
+DELETE: Usually no body, may need auth headers
+
+  const webResponse_06 = new load.WebRequest({
+      id: 6,
+      url: `${load.params.baseUrl}/items/${load.global.itemId}`,
+      method: "DELETE",
+      headers: { "Authorization": "Bearer " + load.global.token }
+  }).sendSync();
+
+================================================================================
+  URL HANDLING RULES
+================================================================================
+
+CRITICAL: Never use new URL() to parse URLs containing {{variables}}.
+The URL constructor encodes {{ to %7B%7B which breaks template variables.
+Use manual string splitting (url.split('?')) to preserve variables.
+
+When the collection URL contains {{variables}}, use template literals:
+
+RULE 1: PARAMETERIZED variable (value from collection_data.csv):
+  {{baseUrl}}/api/users
+  --> `${load.params.baseUrl}/api/users`
+
+RULE 2: DYNAMIC variable (extracted from previous response):
+  {{baseUrl}}/users/{{userId}}/orders
+  --> `${load.params.baseUrl}/users/${load.global.userId}/orders`
+
+RULE 3: Path parameter (Postman :param syntax):
+  /users/:id/profile
+  --> `${load.params.baseUrl}/users/${load.global.id}/profile`
+
+RULE 4: Mixed URL (parameterized + dynamic parts):
+  {{baseUrl}}/api/{{apiVersion}}/orders/{{orderId}}/items
+  --> `${load.params.baseUrl}/api/${load.params.apiVersion}/orders/${load.global.orderId}/items`
+
+RULE 5: Query string in URL (separate into queryString property):
+  {{baseUrl}}/search?q={{searchTerm}}&page=1
+  -->
+  url: `${load.params.baseUrl}/search`,
+  queryString: {
+      "q": load.global.searchTerm,  // DYNAMIC
+      "page": "1"                    // STATIC literal
+  }
+
+================================================================================
+  LARGE BASE64 VALUE HANDLING
+================================================================================
+
+When request bodies contain large base64-encoded values (>500 characters):
+
+1. Extract the base64 value to an external file: data/<requestName>_<fieldPath>.b64
+2. Load the file in initialize() using fs.readFileSync
+3. Reference in request body via load.global.<varName>
+4. Deduplicate: identical base64 content across requests shares one file
+
+Example:
+  // In initialize():
+  const fs = require("fs");
+  load.global.documentContent = fs.readFileSync(
+      load.config.script.directory + "/data/Upload_Document_documentContent.b64", "utf8"
+  ).trim();
+
+  // In request body:
+  body: {
+      "documentId": load.global.docId,
+      "content": load.global.documentContent    // Large base64 loaded from file
+  }
+
+File naming rules:
+  - Strip leading digits from request name (avoid invalid JS identifiers)
+  - Replace special chars with underscores
+  - Truncate to 60 chars max
+  - Example: "5 - Upload Document" + "content" → "Upload_Document_content.b64"
+
+================================================================================
+  FOLDER-TO-TRANSACTION MAPPING
+================================================================================
+
+CRITICAL: Transaction declarations go INSIDE the action function, at the TOP,
+before any request code. NEVER declare transactions outside the action.
+
+Collection structure:                    DevWeb transactions:
+
+Folder: "Authentication"                 // Inside action():
+  - POST Login                           let TS01 = new load.Transaction("Authentication");
+  - POST Refresh Token                   let TS02 = new load.Transaction("User Management");
+                                         // ... all declarations first ...
+Folder: "User Management"
+  - GET List Users                       TS01.start();
+  - POST Create User                        // POST Login
+  - PUT Update User                          // POST Refresh Token
+  - DELETE Remove User                   TS01.stop(load.TransactionStatus.Passed);
+
+                                         TS02.start();
+                                             // GET List Users ... etc
+                                         TS02.stop(load.TransactionStatus.Passed);
+
+If NO folders exist:                     Create ONE transaction per request:
+  - GET Health Check                     let TS01 = new load.Transaction("Health Check");
+  - POST Login                           let TS02 = new load.Transaction("Login");
+  - GET Users                            let TS03 = new load.Transaction("Get Users");
+
+Nested folders:                          Use LAST segment only (short for reports):
+  Folder: "API"                          let TS01 = new load.Transaction("Authentication");
+    Sub: "Authentication"                let TS02 = new load.Transaction("Users");
+    Sub: "Users"
+  Folder: "API/v1/Query"                let TS03 = new load.Transaction("Query");
+  Folder: "API/v2/Query"                let TS04 = new load.Transaction("Query_1");  // duplicate handled
+
+================================================================================
+  RESPONSE VALIDATION PATTERNS
+================================================================================
+
+PATTERN 1: Basic status check (most requests)
+```javascript
+if (webResponse_01.status === 200) {
+    TS01.stop(load.TransactionStatus.Passed);
+} else {
+    load.log("Request failed: " + webResponse_01.status, load.LogLevel.error);
+    TS01.stop(load.TransactionStatus.Failed);
+}
+```
+
+PATTERN 2: Critical request with abort (login, token fetch)
+```javascript
+if (webResponse_01.status !== 200) {
+    load.log("CRITICAL: Login failed, aborting iteration", load.LogLevel.error);
+    TS01.stop(load.TransactionStatus.Failed);
+    return;  // EXIT the entire action function
+}
+```
+
+PATTERN 3: POST creation (accept 200 or 201)
+```javascript
+if (webResponse_03.status === 200 || webResponse_03.status === 201) {
+    load.global.createdId = webResponse_03.extractors.id;
+    TS03.stop(load.TransactionStatus.Passed);
+} else {
+    TS03.stop(load.TransactionStatus.Failed);
+}
+```
+
+PATTERN 4: DELETE (accept 200 or 204)
+```javascript
+if (webResponse_06.status === 200 || webResponse_06.status === 204) {
+    TS04.stop(load.TransactionStatus.Passed);
+} else {
+    TS04.stop(load.TransactionStatus.Failed);
+}
+```
+
+PATTERN 5: With correlation storage
+```javascript
+const webResponse_01 = new load.WebRequest({ ... extractors: [...] }).sendSync();
+
+if (webResponse_01.status === 200) {
+    load.global.token = webResponse_01.extractors.token;
+    load.global.userId = webResponse_01.extractors.userId;
+    load.log("Extracted token and userId", load.LogLevel.info);
+    TS01.stop(load.TransactionStatus.Passed);
+} else {
+    load.log("Failed: " + webResponse_01.status, load.LogLevel.error);
+    TS01.stop(load.TransactionStatus.Failed);
+}
+```
+
+================================================================================
+  REQUEST ID ASSIGNMENT
+================================================================================
+
+Each request MUST have a unique integer ID. Numbering rules:
+
+  initialize() requests:  Start from 1 (e.g., token fetch = 1)
+  action() requests:      Continue sequence (2, 3, 4, 5, ...)
+  finalize() requests:    Use high numbers (99, 100)
+  Helper requests:        Use 90+ range (pm.sendRequest conversions)
+
+  Example for 12-request collection:
+    initialize: OAuth token = id: 1
+    action: Request 1 = id: 2, Request 2 = id: 3, ... Request 10 = id: 11
+    finalize: Logout = id: 12
+
+================================================================================
+  NAMING CONVENTIONS
+================================================================================
+
+Response variables:   Sequential numbering (NOT descriptive names)
+  webResponse_01, webResponse_02, webResponse_03, webResponse_04...
+
+Extractor names:      Match the data field being extracted
+  "authToken", "userId", "sessionId", "orderId", "csrfToken", "productName"
+
+Transaction variables: TS01, TS02, TS03... (uppercase, zero-padded, sequential)
+Transaction names:    Last segment of folder path, short and readable for perf reports
+  "Authentication", "User Management", "Product Search", "Checkout"
+  Duplicates get _1, _2 suffix: "Query", "Query_1"
+
+Global variables:     camelCase on load.global
+  load.global.authToken, load.global.userId, load.global.orderId
+
+================================================================================
+  RETURNBODY RULES
+================================================================================
+
+Set returnBody: true when:
+  - The request has extractors (MUST be true to extract)
+  - You need to log or inspect the response body
+  - The test script accesses pm.response.json() or pm.response.text()
+  - The request produces correlations
+
+Set returnBody: false (or omit) when:
+  - You only need the status code
+  - No extractors, no body inspection needed
+  - Static resource requests (CSS, JS, images)
+
+DEFAULT: load.WebRequest.defaults.returnBody = false;
+Override per-request when needed.
+
+================================================================================
+  HEADER MANAGEMENT
+================================================================================
+
+COMMON HEADERS (set once in defaults):
+```javascript
+load.WebRequest.defaults.headers = {
+    "Accept": "application/json",
+    "Authorization": "Bearer " + load.global.token
+};
+```
+
+PER-REQUEST HEADERS (override when different):
+```javascript
+// This request needs different Content-Type
+const webResponse_04 = new load.WebRequest({
+    headers: {
+        "Content-Type": "text/xml",
+        "SOAPAction": "http://example.com/Action",
+        "Authorization": "Bearer " + load.global.token  // Must repeat auth if overriding
+    }
+}).sendSync();
+```
+
+IMPORTANT: When you set headers on a specific request, it REPLACES the
+defaults for that request. So if you override headers, you must include
+the Authorization header again.
+
+DISABLED HEADERS: If a Postman header has "disabled": true, skip it entirely.
+
+================================================================================
+  THINK TIME PLACEMENT
+================================================================================
+
+Add load.thinkTime() between TRANSACTIONS (not between every request):
+
+  TS01.stop(Passed);
+  load.thinkTime(2);    // <-- Between transaction 1 and 2
+  TS02.start();
+
+  TS02.stop(Passed);
+  load.thinkTime(1);    // <-- Between transaction 2 and 3
+  TS03.start();
+
+Within a transaction (between related requests), use shorter pauses:
+  // Request 1: Search
+  load.thinkTime(0.5);  // Brief pause
+  // Request 2: Get details of search result
+
+Typical values:
+  Between major flows (login -> browse): 2-3 seconds
+  Between related actions (search -> detail): 0.5-1 second
+  After checkout/submit: 1-2 seconds
+
+================================================================================
+  HANDLING DISABLED REQUESTS
+================================================================================
+
+If a Postman request has "disabled": true, comment it out:
+
+```javascript
+// DISABLED: Request "Legacy Endpoint" is disabled in collection
+// const webResponse_05 = new load.WebRequest({
+//     id: 5,
+//     url: `${load.params.baseUrl}/legacy`,
+//     method: "GET"
+// }).sendSync();
+```
+
+================================================================================
+  HANDLING EMPTY FOLDERS
+================================================================================
+
+If a folder has no requests, skip the transaction entirely.
+Do not generate empty transaction start/stop pairs.
+
+================================================================================
