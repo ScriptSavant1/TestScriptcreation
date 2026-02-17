@@ -33,9 +33,19 @@ class BrunoDevWebConverter {
   }
 
   /**
-   * Main conversion method
+   * Main conversion method — dispatches to single or multi mode
    */
   async convert() {
+    if (this.options.mode === 'multi') {
+      return this.convertMulti();
+    }
+    return this.convertSingle();
+  }
+
+  /**
+   * Single-mode conversion (original behavior — one script for entire collection)
+   */
+  async convertSingle() {
     console.log('🚀 Bruno to DevWeb Converter v2.0');
     console.log('=====================================\n');
 
@@ -45,23 +55,11 @@ class BrunoDevWebConverter {
       const parser = new BrunoParser(this.options.inputFile);
       const requests = await parser.parse();
       const metadata = parser.getMetadata();
-      
+
       console.log(`✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`);
 
       // Step 1b: Load environment file if provided
-      let environmentVars = null;
-      if (this.options.environmentFile) {
-        console.log(`📖 Loading environment: ${this.options.environmentFile}`);
-        const envContent = await fs.readFile(this.options.environmentFile, 'utf8');
-        const envData = JSON.parse(envContent);
-        environmentVars = {};
-        // Postman environment format: { values: [{ key, value, enabled }] }
-        const values = envData.values || [];
-        values.filter(v => v.enabled !== false).forEach(v => {
-          environmentVars[v.key] = v.value;
-        });
-        console.log(`✓ Loaded ${Object.keys(environmentVars).length} environment variable(s)\n`);
-      }
+      const environmentVars = await this.loadEnvironmentFile();
 
       // Step 2: Generate DevWeb script
       const generator = new AdvancedScriptGenerator(
@@ -120,7 +118,7 @@ class BrunoDevWebConverter {
     } catch (error) {
       console.error('\n❌ Conversion failed:', error.message);
       console.error(error.stack);
-      
+
       this.results = {
         success: false,
         error: error.message
@@ -128,6 +126,240 @@ class BrunoDevWebConverter {
 
       throw error;
     }
+  }
+
+  /**
+   * Multi-mode conversion — one script per top-level folder
+   */
+  async convertMulti() {
+    console.log('🚀 Bruno to DevWeb Converter v2.0 (Multi-Script Mode)');
+    console.log('=======================================================\n');
+
+    try {
+      // Step 1: Parse collection
+      console.log(`📖 Parsing collection: ${this.options.inputFile}`);
+      const parser = new BrunoParser(this.options.inputFile);
+      const requests = await parser.parse();
+      const metadata = parser.getMetadata();
+      console.log(`✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`);
+
+      // Step 2: Load environment file if provided
+      const environmentVars = await this.loadEnvironmentFile();
+
+      // Step 3: Group requests by top-level folder
+      const folderGroups = this.groupByTopLevelFolder(requests);
+      const folderNames = Object.keys(folderGroups);
+
+      if (folderNames.length <= 1 && folderNames[0] === '_Root') {
+        console.log('⚠  No folders found in collection. Falling back to single-script mode.\n');
+        return this.convertSingle();
+      }
+
+      console.log(`📂 Found ${folderNames.length} top-level folder(s):`);
+      folderNames.forEach(name => {
+        console.log(`   - ${name} (${folderGroups[name].length} requests)`);
+      });
+      console.log();
+
+      // Step 4: Detect cross-folder correlations
+      const crossFolderWarnings = this.detectCrossFolderDependencies(requests, folderGroups);
+
+      // Step 5: Generate script for each top-level folder
+      await fs.mkdir(this.options.outputDir, { recursive: true });
+      const scriptSummaries = [];
+
+      for (const folderName of folderNames) {
+        const folderRequests = folderGroups[folderName];
+        const safeFolderName = folderName.replace(/[<>:"/\\|?*]/g, '_');
+        const scriptOutputDir = path.join(this.options.outputDir, safeFolderName);
+
+        console.log(`\n${'─'.repeat(60)}`);
+        console.log(`📝 Generating script: ${folderName}/ (${folderRequests.length} requests)`);
+        console.log(`${'─'.repeat(60)}`);
+
+        await fs.mkdir(scriptOutputDir, { recursive: true });
+
+        // Create generator with only this folder's requests
+        const generator = new AdvancedScriptGenerator(
+          folderRequests,
+          parser.collection,
+          { ...this.options, environmentVars }
+        );
+
+        // Generate script and mandatory files
+        const { script, analysis } = await generator.generate(scriptOutputDir);
+
+        // Write main.js
+        const mainScriptPath = path.join(scriptOutputDir, 'main.js');
+        await fs.writeFile(mainScriptPath, script, 'utf8');
+        console.log(`✓ Generated main.js`);
+
+        // Write cross-folder dependency comments if any
+        const folderWarnings = crossFolderWarnings.filter(w => w.consumerFolder === folderName);
+        if (folderWarnings.length > 0) {
+          const depComment = this.generateDependencyComment(folderWarnings);
+          // Prepend dependency comment to the script
+          const scriptWithDeps = depComment + script;
+          await fs.writeFile(mainScriptPath, scriptWithDeps, 'utf8');
+        }
+
+        scriptSummaries.push({
+          folder: folderName,
+          outputDir: scriptOutputDir,
+          requests: folderRequests.length,
+          correlations: analysis.correlations.totalCorrelations,
+          parameters: analysis.parameters.totalParameters
+        });
+      }
+
+      // Step 6: Print cross-folder warnings (deduplicated)
+      if (crossFolderWarnings.length > 0) {
+        // Deduplicate for console output
+        const seen = new Set();
+        const uniqueWarnings = crossFolderWarnings.filter(w => {
+          const key = `${w.variable}::${w.producerFolder}::${w.consumerFolder}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        console.log(`\n${'─'.repeat(60)}`);
+        console.log('⚠  Cross-Folder Dependencies Detected:');
+        console.log(`${'─'.repeat(60)}`);
+        uniqueWarnings.forEach(w => {
+          console.log(`   ${w.variable}: ${w.producerFolder}/ → ${w.consumerFolder}/`);
+          console.log(`     Producer: "${w.producerRequest}"`);
+        });
+        console.log('\n   In LRE, each script runs with its own vusers.');
+        console.log('   Consider: include auth requests in each script, or parameterize shared tokens.');
+      }
+
+      // Deduplicate warnings for result summary
+      const uniqueWarningStrings = [...new Set(
+        crossFolderWarnings.map(w => `${w.variable}: ${w.producerFolder}/ → ${w.consumerFolder}/`)
+      )];
+
+      this.results = {
+        success: true,
+        outputDir: this.options.outputDir,
+        scripts: scriptSummaries,
+        totalRequests: requests.length,
+        crossFolderWarnings: uniqueWarningStrings,
+        metadata
+      };
+
+      console.log(`\n✨ Multi-script conversion completed! Generated ${scriptSummaries.length} scripts.`);
+      console.log(`📁 Output directory: ${this.options.outputDir}\n`);
+
+      return this.results;
+
+    } catch (error) {
+      console.error('\n❌ Conversion failed:', error.message);
+      console.error(error.stack);
+      this.results = { success: false, error: error.message };
+      throw error;
+    }
+  }
+
+  /**
+   * Load environment file if provided
+   */
+  async loadEnvironmentFile() {
+    if (!this.options.environmentFile) return null;
+
+    console.log(`📖 Loading environment: ${this.options.environmentFile}`);
+    const envContent = await fs.readFile(this.options.environmentFile, 'utf8');
+    const envData = JSON.parse(envContent);
+    const environmentVars = {};
+    const values = envData.values || [];
+    values.filter(v => v.enabled !== false).forEach(v => {
+      environmentVars[v.key] = v.value;
+    });
+    console.log(`✓ Loaded ${Object.keys(environmentVars).length} environment variable(s)\n`);
+    return environmentVars;
+  }
+
+  /**
+   * Group requests by top-level folder.
+   * "Auth/Headless/Login" → top-level = "Auth"
+   * Requests with no folder → "_Root"
+   */
+  groupByTopLevelFolder(requests) {
+    const groups = {};
+
+    requests.forEach(request => {
+      const folder = request.folder || '';
+      const topLevel = folder ? folder.split('/')[0] : '_Root';
+
+      if (!groups[topLevel]) {
+        groups[topLevel] = [];
+      }
+      groups[topLevel].push(request);
+    });
+
+    return groups;
+  }
+
+  /**
+   * Detect variables that are produced in one top-level folder and consumed in another.
+   * These are cross-script dependencies that need manual resolution in LRE.
+   */
+  detectCrossFolderDependencies(requests, folderGroups) {
+    const warnings = [];
+
+    // Build a map of which folder each request belongs to
+    const requestFolderMap = new Map();
+    requests.forEach(r => {
+      const topLevel = r.folder ? r.folder.split('/')[0] : '_Root';
+      requestFolderMap.set(r.name, topLevel);
+    });
+
+    // Run a quick correlation analysis across ALL requests
+    const CorrelationDetector = require('./analyzers/correlationDetector');
+    const detector = new CorrelationDetector();
+    const allCorrelations = detector.analyzeRequests(requests);
+
+    // Check which correlations cross folder boundaries
+    allCorrelations.forEach(corr => {
+      const producerFolder = requestFolderMap.get(corr.producerRequest);
+      const consumerFolder = requestFolderMap.get(corr.consumerRequest);
+
+      if (producerFolder && consumerFolder && producerFolder !== consumerFolder) {
+        warnings.push({
+          variable: corr.name,
+          producerFolder,
+          consumerFolder,
+          producerRequest: corr.producerRequest,
+          consumerRequest: corr.consumerRequest
+        });
+      }
+    });
+
+    return warnings;
+  }
+
+  /**
+   * Generate a comment block for cross-folder dependencies (deduplicated)
+   */
+  generateDependencyComment(warnings) {
+    // Deduplicate by variable + producerFolder
+    const seen = new Set();
+    const unique = warnings.filter(w => {
+      const key = `${w.variable}::${w.producerFolder}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    let comment = `/**\n * ⚠  CROSS-FOLDER DEPENDENCIES:\n * This script uses variables produced by other scripts:\n`;
+    unique.forEach(w => {
+      comment += ` *   - ${w.variable}: produced in "${w.producerFolder}/" by "${w.producerRequest}"\n`;
+    });
+    comment += ` * \n * In LRE, each script runs independently. Options:\n`;
+    comment += ` *   1. Duplicate the producer request(s) into this script's init section\n`;
+    comment += ` *   2. Parameterize the values via CSV (pre-generated tokens)\n`;
+    comment += ` */\n`;
+    return comment;
   }
 
   /**
