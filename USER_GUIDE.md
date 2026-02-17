@@ -54,7 +54,7 @@ docker pull your-org/bruno-devweb-converter:latest
    ```bash
    cd my-script
    ls -la
-   # main.js  config.yml  parameters.yml  README.md  ANALYSIS.md
+   # main.js  scenario.yml  rts.yml  tsconfig.json  parameters.yml  collection_data.csv
    ```
 
 4. **Test the script**:
@@ -84,11 +84,23 @@ bruno-devweb convert \
   --log-level debug
 ```
 
+**With Environment File**:
+```bash
+bruno-devweb convert -i my-api.json -e environment.json -o my-script
+```
+
+**Multi-Script Mode** (one script per top-level folder):
+```bash
+bruno-devweb convert -i my-api.json -o output/ -m multi
+```
+
 **All Options**:
 ```bash
 bruno-devweb convert \
   --input collections/my-api.json \
+  --environment environment.json \
   --output devweb-scripts/my-api \
+  --mode single \
   --no-transactions \
   --no-correlation \
   --no-parameterization \
@@ -195,91 +207,74 @@ If automatic detection misses a correlation:
    }
    ```
 
-### 2. Parameterization
+### 2. 3-Tier Variable Classification
 
-#### Using Parameters
+All `{{variables}}` in collections are classified into 3 tiers:
 
-**Generated parameters.yml**:
+| Tier | Access | nextValue | When to use |
+|------|--------|-----------|-------------|
+| **Dynamic** | `load.global.var` | N/A | Correlations, script-set values |
+| **Config** | `load.params.var` | `once` | URLs, API keys, client IDs |
+| **Test Data** | `load.params.var` | `iteration` | Usernames, passwords, emails |
+
+#### Generated parameters.yml:
 ```yaml
 parameters:
-  baseUrl:
-    type: url
-    value: https://api.example.com
-    description: Base URL for API requests
-    source: url
-  
-  username:
-    type: email
-    value: user@example.com
-    description: User email for login
-    source: body
-  
-  password:
-    type: string
-    value: secret123
-    description: User password
-    source: body
+  - name: baseUrl
+    type: csv
+    fileName: collection_data.csv
+    columnName: baseUrl
+    nextValue: once           # Config: same for all iterations
+    nextRow: sequential
+    onEnd: loop
+
+  - name: username
+    type: csv
+    fileName: collection_data.csv
+    columnName: username
+    nextValue: iteration      # Test data: different per vuser
+    nextRow: sequential
+    onEnd: loop
+
+  - name: password
+    type: csv
+    fileName: collection_data.csv
+    columnName: password
+    nextValue: iteration
+    nextRow: same as username  # Keep credential pairs linked
+    onEnd: loop
 ```
 
-**In Generated Script**:
+#### Generated collection_data.csv:
+```csv
+baseUrl,username,password
+https://api.example.com,testuser1,Pass@123
+```
+
+#### In Generated Script:
 ```javascript
-const Login_request = new load.WebRequest({
-  url: `${load.params.baseUrl}/auth/login`,
-  body: {
-    username: load.params.username,
-    password: load.params.password
-  }
-});
+const webResponse_01 = new load.WebRequest({
+    id: 1,
+    url: `${load.params.baseUrl}/auth/login`,   // Tier 2: config
+    method: "POST",
+    body: {
+        "username": load.params.username,         // Tier 3: test data
+        "password": load.params.password          // Tier 3: test data
+    },
+    extractors: [
+        new load.JsonPathExtractor("token", "$.access_token")
+    ]
+}).sendSync();
+
+load.global.token = webResponse_01.extractors.token;  // Tier 1: dynamic
 ```
 
-#### Adding Custom Parameters
-
-1. **Edit parameters.yml**:
-   ```yaml
-   parameters:
-     customParam:
-       type: string
-       value: myCustomValue
-       description: My custom parameter
-       source: custom
-   ```
-
-2. **Use in script**:
-   ```javascript
-   headers: {
-     "X-Custom": load.params.customParam
-   }
-   ```
-
-#### Parameter Data Files
-
-Generated data files in `data/` directory:
-
-**data/username.csv**:
-```csv
-username
-user1@example.com
-user2@example.com
-user3@example.com
+#### Environment File Override:
+Use `-e environment.json` to override collection variable values:
+```bash
+bruno-devweb convert -i collection.json -e production.json -o prod-script
 ```
-
-**data/userId.csv**:
-```csv
-userId
-1001
-1002
-1003
-```
-
-**Using Data Files**:
-Update `config.yml`:
-```yaml
-parameters:
-  username:
-    file: data/username.csv
-    selection: sequential
-    update: iteration
-```
+Environment values replace collection variable values in the generated CSV.
 
 ### 3. Authentication
 
@@ -399,39 +394,38 @@ My API
     └── Get Order
 ```
 
-**Generated Transactions**:
+**Generated Transactions** (declared INSIDE action, at the top):
 ```javascript
-// Transaction: Authentication
-const Authentication_transaction = new load.Transaction("Authentication");
-Authentication_transaction.start();
-try {
-    // Login request
-    // Logout request
-    Authentication_transaction.stop(load.TransactionStatus.Passed);
-} catch (error) {
-    Authentication_transaction.stop(load.TransactionStatus.Failed);
-}
+load.action("Action", async function () {
+    // All transaction declarations at the top of action
+    let TS01 = new load.Transaction("Authentication");
+    let TS02 = new load.Transaction("Users");
+    let TS03 = new load.Transaction("Orders");
 
-// Transaction: Users
-const Users_transaction = new load.Transaction("Users");
-// ...
+    // TS01 - Authentication
+    TS01.start();
+    const webResponse_01 = new load.WebRequest({...}).sendSync();
+    TS01.stop(load.TransactionStatus.Passed);
+
+    load.thinkTime(1);
+
+    // TS02 - Users
+    TS02.start();
+    const webResponse_02 = new load.WebRequest({...}).sendSync();
+    const webResponse_03 = new load.WebRequest({...}).sendSync();
+    TS02.stop(load.TransactionStatus.Passed);
+});
 ```
 
-#### Custom Transaction Boundaries
+#### Multi-Script Mode
 
-To modify transaction boundaries, edit the generated script:
-
-```javascript
-// Combine multiple folders into one transaction
-const MainFlow_transaction = new load.Transaction("MainFlow");
-MainFlow_transaction.start();
-
-// Login
-// Get User
-// Create Order
-
-MainFlow_transaction.stop(load.TransactionStatus.Passed);
+For large collections with many top-level folders, use `-m multi`:
+```bash
+bruno-devweb convert -i collection.json -o output/ -m multi
 ```
+
+Each top-level folder becomes a separate, self-contained DevWeb script folder
+that can be independently uploaded to LoadRunner Enterprise.
 
 ---
 
@@ -774,4 +768,4 @@ bruno-devweb analyze -i collection.json
 
 ---
 
-*Version 2.0.0 - Last Updated: February 2026*
+*Version 2.2.0 - Last Updated: February 2026*

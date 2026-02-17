@@ -38,11 +38,13 @@
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  Output Generation                           │
-│  - main.js                                                   │
-│  - config.yml                                                │
-│  - parameters.yml                                            │
-│  - data files                                                │
-│  - documentation                                             │
+│  - main.js           (DevWeb script)                         │
+│  - scenario.yml      (vusers, pacing, duration)              │
+│  - rts.yml           (runtime settings)                      │
+│  - tsconfig.json     (TypeScript config)                     │
+│  - parameters.yml    (when variables exist)                  │
+│  - collection_data.csv (actual parameter values)             │
+│  - data/*.b64        (extracted large base64 values)         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -154,13 +156,22 @@ detectParameterType(value) {
 }
 ```
 
+**3-Tier Variable Classification** (in `classifyVariables()`):
+```
+Priority order:
+1. Scripts set variable (context.set/pm.*.set) → DYNAMIC (load.global)
+2. Correlation target → DYNAMIC (load.global)
+3. _ prefix + empty value → DYNAMIC (load.global)
+4. $ prefix → SKIP (Postman built-in)
+5. Credential name pattern → PARAM TEST DATA (load.params, nextValue: iteration)
+6. Everything else → PARAM CONFIG (load.params, nextValue: once)
+```
+
 **Data File Generation**:
-Generates CSV files for each parameter type:
+All parameterized values stored in single `collection_data.csv`:
 ```csv
-email
-user1@example.com
-user2@example.com
-user3@example.com
+baseUrl,clientId,username,password
+https://api.example.com,abc123,testuser1,Pass@123
 ```
 
 #### AuthenticationHandler (`src/analyzers/authenticationHandler.js`)
@@ -254,19 +265,26 @@ const oauth2Token_request = new load.WebRequest({
 
 **Code Structure**:
 ```javascript
-// Generated script structure
-load.initialize("init", async function() {...});
-load.action("Action", async function() {
-  // Transaction 1
-  const T1 = new load.Transaction("T1");
-  T1.start();
-  try {
-    // Requests
-  } catch (error) {
-    T1.stop(load.TransactionStatus.Failed);
-  }
+load.initialize("Initialize", async function () {
+    load.global.token = null;  // Dynamic variables
 });
-load.finalize("finalize", async function() {...});
+load.action("Action", async function () {
+    // Transactions declared INSIDE action, at top
+    let TS01 = new load.Transaction("Authentication");
+
+    TS01.start();
+    const webResponse_01 = new load.WebRequest({
+        id: 1,
+        url: `${load.params.baseUrl}/login`,
+        method: "POST",
+        body: { "username": load.params.username },
+        returnBody: true,
+        extractors: [new load.JsonPathExtractor("token", "$.access_token")]
+    }).sendSync();
+    load.global.token = webResponse_01.extractors.token;
+    TS01.stop(load.TransactionStatus.Passed);
+});
+load.finalize("Finalize", async function () {...});
 ```
 
 ---
@@ -320,10 +338,12 @@ Parse Collection
       Write Output Files
             │
             ├─► main.js
-            ├─► config.yml
-            ├─► parameters.yml
-            ├─► data/*.csv
-            └─► documentation
+            ├─► scenario.yml (pacing, vusers, duration)
+            ├─► rts.yml
+            ├─► tsconfig.json
+            ├─► parameters.yml (when variables exist)
+            ├─► collection_data.csv
+            └─► data/*.b64 (extracted large base64)
 ```
 
 ---
@@ -574,41 +594,32 @@ createParser(type) {
 
 ## Configuration Reference
 
-### config.yml Schema
+### scenario.yml Schema
 
 ```yaml
-general:
-  scriptName: string          # Script name
-  logLevel: string           # error|warning|info|debug
-  description: string        # Script description
-
-runtime:
-  iterations: number         # Number of iterations
-  pacing: number            # Pacing in seconds
-  thinkTime: number         # Think time between requests
-
-features:
-  transactions: boolean      # Enable transactions
-  correlation: boolean       # Enable correlation
-  parameterization: boolean # Enable parameterization
-  authentication: boolean   # Enable authentication
-
-statistics:
-  totalRequests: number     # Total requests
-  correlations: number      # Correlations detected
-  parameters: number        # Parameters extracted
-  authConfigs: number       # Auth configs found
+# All times are defined in seconds
+vusers: 1            # Number of Vusers
+pacing:
+  type: delay        # delay or interval
+  mode: random       # fixed or random
+  min: 3
+  max: 6
+rampUp: 2            # Seconds to start all Vusers
+duration: 20         # Seconds to run after ramp-up
+tearDown: 0          # Not used
 ```
 
 ### parameters.yml Schema
 
 ```yaml
 parameters:
-  paramName:
-    type: string|number|email|url|uuid
-    value: any
-    description: string
-    source: collection|request|environment
+  - name: varName            # Variable name (load.params.varName)
+    type: csv                # Always csv
+    fileName: collection_data.csv  # Single file for all params
+    columnName: varName      # CSV column header
+    nextValue: once|iteration  # once=config, iteration=test data
+    nextRow: sequential|same as <param>
+    onEnd: loop
 ```
 
 ---
@@ -671,5 +682,5 @@ bruno-devweb web [options]
 
 ---
 
-**Last Updated**: February 2026  
-**Version**: 2.0.0
+**Last Updated**: February 2026
+**Version**: 2.2.0

@@ -376,8 +376,14 @@ After successful installation:
 ## 🎯 Quick Start Commands
 
 ```bash
-# Convert a collection
+# Convert a collection (single script, default)
 bruno-devweb convert -i collection.json -o output/
+
+# Convert with environment file (overrides collection variable values)
+bruno-devweb convert -i collection.json -e environment.json -o output/
+
+# Multi-script mode (one script per top-level folder)
+bruno-devweb convert -i collection.json -o output/ -m multi
 
 # Analyze a collection (no conversion)
 bruno-devweb analyze -i collection.json
@@ -391,6 +397,23 @@ bruno-devweb --help
 # Show version
 bruno-devweb --version
 ```
+
+### CLI Options Reference
+
+| Option | Description |
+|--------|-------------|
+| `-i, --input <file>` | Input collection file (.json or .bru) - **required** |
+| `-e, --environment <file>` | Postman environment file (.json) |
+| `-o, --output <dir>` | Output directory (default: `./devweb-script`) |
+| `-m, --mode <mode>` | `single` (one script) or `multi` (one per folder) |
+| `-t, --think-time <seconds>` | Think time between requests (default: 1) |
+| `--no-transactions` | Disable transaction grouping |
+| `--no-correlation` | Disable automatic correlation detection |
+| `--no-parameterization` | Disable parameterization |
+| `--no-authentication` | Disable authentication handling |
+| `--no-comments` | Disable code comments |
+| `--log-level <level>` | Log level: error/warning/info/debug |
+| `--fail-on-error` | Stop execution on first error |
 
 ---
 
