@@ -388,22 +388,22 @@ node src/cli.js convert -i BrunoCollection.json -o ./output
 node src/cli.js convert -i BrunoCollection.json -m multi -o ./scripts
 
 # ---- BRUNO SINGLE YAML FILE ----
-node src/cli.js convert -i MySalesforceAPIs.yml -o ./output
-node src/cli.js convert -i MySalesforceAPIs.yml -e environment.json -o ./output
-node src/cli.js convert -i MySalesforceAPIs.yml -m multi -o ./scripts
+node src/cli.js convert -i MyCollection.yml -o ./output
+node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
+node src/cli.js convert -i MyCollection.yml -m multi -o ./scripts
 
 # ---- BRUNO YAML FOLDER (distributed format) ----
-node src/cli.js convert -i "MySalesforceAPIs/" -o ./output
-node src/cli.js convert -i "MySalesforceAPIs/" -e environment.json -o ./output
-node src/cli.js convert -i "MySalesforceAPIs/" -m multi -o ./scripts
+node src/cli.js convert -i "MyCollection/" -o ./output
+node src/cli.js convert -i "MyCollection/" -e environment.json -o ./output
+node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
 
 # ---- SINGLE .BRU FILE ----
 node src/cli.js convert -i Login.bru -o ./output
 
 # ---- ANALYZE (any format) ----
 node src/cli.js analyze -i collection.json
-node src/cli.js analyze -i MySalesforceAPIs.yml
-node src/cli.js analyze -i "MySalesforceAPIs/"
+node src/cli.js analyze -i MyCollection.yml
+node src/cli.js analyze -i "MyCollection/"
 ```
 
 ### After global install (`npm link`):
@@ -411,8 +411,8 @@ node src/cli.js analyze -i "MySalesforceAPIs/"
 ```bash
 # Same commands with the global prefix:
 bruno-devweb convert -i collection.json -o output/
-bruno-devweb convert -i MySalesforceAPIs.yml -e environment.json -o output/
-bruno-devweb convert -i "MySalesforceAPIs/" -m multi -o scripts/
+bruno-devweb convert -i MyCollection.yml -e environment.json -o output/
+bruno-devweb convert -i "MyCollection/" -m multi -o scripts/
 bruno-devweb analyze -i collection.json
 bruno-devweb web --port 3000
 ```
