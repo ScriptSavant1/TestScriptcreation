@@ -375,45 +375,64 @@ After successful installation:
 
 ## 🎯 Quick Start Commands
 
+### Using `node src/cli.js` (no global install needed):
+
 ```bash
-# Convert a collection (single script, default)
+# ---- POSTMAN COLLECTIONS ----
+node src/cli.js convert -i collection.postman_collection.json -o ./output
+node src/cli.js convert -i collection.json -e environment.json -o ./output
+node src/cli.js convert -i collection.json -m multi -o ./scripts
+
+# ---- BRUNO JSON EXPORT ----
+node src/cli.js convert -i BrunoCollection.json -o ./output
+node src/cli.js convert -i BrunoCollection.json -m multi -o ./scripts
+
+# ---- BRUNO SINGLE YAML FILE ----
+node src/cli.js convert -i MySalesforceAPIs.yml -o ./output
+node src/cli.js convert -i MySalesforceAPIs.yml -e environment.json -o ./output
+node src/cli.js convert -i MySalesforceAPIs.yml -m multi -o ./scripts
+
+# ---- BRUNO YAML FOLDER (distributed format) ----
+node src/cli.js convert -i "MySalesforceAPIs/" -o ./output
+node src/cli.js convert -i "MySalesforceAPIs/" -e environment.json -o ./output
+node src/cli.js convert -i "MySalesforceAPIs/" -m multi -o ./scripts
+
+# ---- SINGLE .BRU FILE ----
+node src/cli.js convert -i Login.bru -o ./output
+
+# ---- ANALYZE (any format) ----
+node src/cli.js analyze -i collection.json
+node src/cli.js analyze -i MySalesforceAPIs.yml
+node src/cli.js analyze -i "MySalesforceAPIs/"
+```
+
+### After global install (`npm link`):
+
+```bash
+# Same commands with the global prefix:
 bruno-devweb convert -i collection.json -o output/
-
-# Convert with environment file (overrides collection variable values)
-bruno-devweb convert -i collection.json -e environment.json -o output/
-
-# Multi-script mode (one script per top-level folder)
-bruno-devweb convert -i collection.json -o output/ -m multi
-
-# Analyze a collection (no conversion)
+bruno-devweb convert -i MySalesforceAPIs.yml -e environment.json -o output/
+bruno-devweb convert -i "MySalesforceAPIs/" -m multi -o scripts/
 bruno-devweb analyze -i collection.json
-
-# Start web UI
 bruno-devweb web --port 3000
-
-# Get help
-bruno-devweb --help
-
-# Show version
-bruno-devweb --version
 ```
 
 ### CLI Options Reference
 
 | Option | Description |
 |--------|-------------|
-| `-i, --input <file>` | Input collection file (.json or .bru) - **required** |
-| `-e, --environment <file>` | Postman environment file (.json) |
+| `-i, --input <path>` | Input: `.json`, `.yml`, `.bru`, or folder path — **required** |
+| `-e, --environment <file>` | Environment JSON file — overrides collection variable values in CSV |
 | `-o, --output <dir>` | Output directory (default: `./devweb-script`) |
-| `-m, --mode <mode>` | `single` (one script) or `multi` (one per folder) |
-| `-t, --think-time <seconds>` | Think time between requests (default: 1) |
-| `--no-transactions` | Disable transaction grouping |
+| `-m, --mode <mode>` | `single` (one script, default) or `multi` (one per top-level folder) |
+| `-t, --think-time <seconds>` | Think time between transactions (default: 2) |
+| `--no-transactions` | Disable transaction wrapping |
 | `--no-correlation` | Disable automatic correlation detection |
-| `--no-parameterization` | Disable parameterization |
-| `--no-authentication` | Disable authentication handling |
-| `--no-comments` | Disable code comments |
-| `--log-level <level>` | Log level: error/warning/info/debug |
-| `--fail-on-error` | Stop execution on first error |
+| `--no-parameterization` | Disable variable parameterization |
+| `--no-authentication` | Disable auth code generation |
+| `--no-comments` | Strip explanatory comments from output |
+| `--log-level <level>` | Logging: `error`, `warn`, `info`, `debug` |
+| `--fail-on-error` | Exit with non-zero code on any conversion error |
 
 ---
 

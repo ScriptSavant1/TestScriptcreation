@@ -13,8 +13,9 @@ This package contains everything you need to convert API collections to DevWeb p
 ### Core Components
 
 1. **Collection Parsers** (`src/parsers/`)
-   - BrunoParser: Handles .bru and JSON formats
-   - PostmanParser: Handles Postman collections
+   - BrunoParser: Handles `.bru`, Bruno JSON, Bruno Single YAML (`.yml`), Bruno YAML Folder (directory)
+   - PostmanParser: Handles Postman Collection v2.1 JSON
+   - ParserFactory: Auto-detects format from file extension and content
 
 2. **Analysis Engine** (`src/analyzers/`)
    - CorrelationDetector: Automatic correlation detection
@@ -146,14 +147,32 @@ Collection
 
 ### Convert a Collection
 ```bash
-# Single script (default)
-bruno-devweb convert -i collection.json -o my-script
+# Postman JSON (single or multi mode)
+node src/cli.js convert -i collection.json -o ./output
+node src/cli.js convert -i collection.json -m multi -o ./scripts
 
-# With environment file
-bruno-devweb convert -i collection.json -e environment.json -o my-script
+# Bruno Single YAML file
+node src/cli.js convert -i MySalesforceAPIs.yml -o ./output
+node src/cli.js convert -i MySalesforceAPIs.yml -m multi -o ./scripts
 
-# Multi-script mode (one per top-level folder)
-bruno-devweb convert -i collection.json -o output/ -m multi
+# Bruno YAML folder (distributed format)
+node src/cli.js convert -i "MySalesforceAPIs/" -o ./output
+node src/cli.js convert -i "MySalesforceAPIs/" -m multi -o ./scripts
+
+# Bruno JSON export
+node src/cli.js convert -i BrunoCollection.json -o ./output
+
+# Single .bru file
+node src/cli.js convert -i Login.bru -o ./output
+
+# With environment file (overrides collection variable values)
+node src/cli.js convert -i MySalesforceAPIs.yml -e environment.json -o ./output
+```
+
+After global install (`npm link` or `npm install -g`):
+```bash
+bruno-devweb convert -i collection.json -o output/
+bruno-devweb convert -i "MySalesforceAPIs/" -m multi -o scripts/
 ```
 
 ### Start Web UI
@@ -274,9 +293,10 @@ Enable developers to create performance tests without DevWeb expertise.
 - **Test Coverage**: Coming soon
 
 ### Supported Features
-- ✅ Collection formats: 2 (Bruno, Postman)
-- ✅ Auth types: 6 (OAuth2, Basic, Bearer, API Key, AWS, Digest)
-- ✅ Extractor types: 5 (JSON, Boundary, Regex, HTML, Cookie)
+- ✅ Collection formats: 5 (Postman JSON, Bruno JSON, Bruno Single YAML, Bruno YAML Folder, Single .bru)
+- ✅ Auth types: 7 (OAuth2 client_credentials/auth_code/password, Basic, Bearer, API Key, AWS v4, Digest, NTLM)
+- ✅ Extractor types: 4 (JsonPath, Boundary, Regexp, TextCheck)
+- ✅ Variable tiers: 3 (Dynamic load.global, Config load.params once, Test Data load.params iteration)
 - ✅ Parameter types: 7 (string, number, email, url, uuid, date, boolean)
 
 ---

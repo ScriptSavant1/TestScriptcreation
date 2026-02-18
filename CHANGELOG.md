@@ -5,6 +5,23 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-02-18
+
+### Added
+- **Bruno YAML folder-based format support**: Full parsing of distributed Bruno collection directories (contains `opencollection.yml`, `folder.yml`, request `*.yml` files, and `.bru` files mixed)
+- **Bruno collection-level headers extraction**: `request.headers[]` from the Bruno YAML root section are merged into `load.WebRequest.defaults.headers` for all requests
+- **Bruno before-request script header extraction**: `req.getHeaders().add({ key, value })` patterns in root-level `request.scripts[type=before-request]` are auto-detected and merged into defaults headers
+- **Bruno collection-level auth support**: `request.auth` (OAuth2, bearer, basic, apikey) from the YAML root generates a commented-out token-fetch block in `load.initialize()` — ready to uncomment and enable
+- **`generateCollectionAuthBlock()` method**: New method in `advancedScriptGenerator.js` that emits properly-resolved OAuth2 token fetch code with variable expressions already in `load.params`/`load.global` form
+- **Complete prompt file coverage**: All 10 devweb-prompts files (00–09) and USAGE-GUIDE.txt are now fully up to date with all format support, correct rts.yml (all 10 sections), and Bruno YAML collection-level feature documentation
+
+### Fixed
+- **Truncated `rts.yml`**: Prompt file `06-MANDATORY-FILES.txt` now includes the COMPLETE rts.yml with all 10 sections: `httpConnection`, `grpc`, `proxy` (9 properties including proxyDomain, proxyUser, proxyPassword, proxyAuthenticationType, excludedHosts), `ssl`, `replay` (8 properties including enableDynatrace, resourceHttpErrorAsWarning, enableIntegratedAuthentication, multiIP), `vts` (7 properties), `encryption`, `vuserLogger`, `flow`, `thinkTime`
+
+### Changed
+- `parseBrunoYamlCollection()` in `brunoParser.js`: Now extracts `collectionHeaders` and `collectionAuth` from the root `request:` section and stores them on the collection object
+- `generateAction()` in `advancedScriptGenerator.js`: Merges collection-level headers (browser baseline + collection headers) into the `defaults.headers` block
+
 ## [2.2.0] - 2026-02-17
 
 ### Added

@@ -11,7 +11,7 @@
 ## ✨ Features
 
 ### 🎯 Core Features
-- ✅ **Multi-Format Support**: Bruno (.bru, .json) and Postman (.json) collections
+- ✅ **5 Input Formats**: Postman JSON, Bruno JSON, Bruno Single YAML, Bruno YAML Folder, Single `.bru` file
 - ✅ **Smart Transactions**: Automatic grouping by folders (declared INSIDE action)
 - ✅ **Auto-Correlation**: Intelligent detection of dynamic values
 - ✅ **3-Tier Variable Classification**: Dynamic (`load.global`), Config (`load.params` once), Test Data (`load.params` iteration)
@@ -27,6 +27,21 @@
 - 📝 **Environment Override** (`-e`): Override collection variables with environment file
 - 🌐 **Web UI**: User-friendly interface for non-technical users
 - 🔄 **Cross-Folder Dependency Detection**: Warns about shared variables across scripts
+- 🏷️ **Collection-Level Headers/Auth**: Bruno YAML `request.headers`, `request.auth`, and before-request scripts merged into defaults
+
+---
+
+## 📋 Supported Input Formats
+
+| Format | Extension | Export Instructions |
+|---|---|---|
+| **Postman Collection v2.1** | `.json` | Postman → Collection → ⋯ → Export → Collection v2.1 |
+| **Bruno JSON** | `.json` | Bruno → Collection → ⋯ → Export → JSON |
+| **Bruno Single YAML** | `.yml` | Bruno → Collection → ⋯ → Export → YAML (bundled single file) |
+| **Bruno YAML Folder** | directory | Copy/export the whole Bruno collection folder (contains `opencollection.yml`, `folder.yml`, `*.bru` files) |
+| **Single Bruno Request** | `.bru` | Any individual `.bru` file from a Bruno project |
+
+The converter **auto-detects** the format based on file extension and content.
 
 ---
 
@@ -94,28 +109,43 @@ docker run -v $(pwd)/collections:/app/collections bruno-devweb-converter
 
 ### Command Line Interface
 
+#### Direct (from project root, no global install needed):
+
 ```bash
-# Convert a collection (single script, default)
-bruno-devweb convert -i collections/my-api.json -o output/my-script
+# Postman collection
+node src/cli.js convert -i collection.postman_collection.json -o ./output
 
-# Convert with environment file
-bruno-devweb convert -i collections/my-api.json -e environment.json -o output/my-script
+# Bruno JSON export
+node src/cli.js convert -i BrunoCollection.json -o ./output
 
-# Multi-script mode (one script per top-level folder)
-bruno-devweb convert -i collections/my-api.json -o output/ -m multi
+# Bruno single YAML file
+node src/cli.js convert -i MySalesforceAPIs.yml -o ./output
 
-# With custom options
-bruno-devweb convert \
-  -i collections/my-api.json \
-  -o output/my-script \
-  --think-time 2 \
-  --no-correlation \
-  --log-level debug
+# Bruno YAML folder (distributed format)
+node src/cli.js convert -i "MySalesforceAPIs/" -o ./output
 
-# Analyze without converting
-bruno-devweb analyze -i collections/my-api.json
+# Single .bru request file
+node src/cli.js convert -i Login.bru -o ./output
 
-# Start web UI
+# With environment file override
+node src/cli.js convert -i MySalesforceAPIs.yml -e environment.json -o ./output
+
+# Multi-script mode (one DevWeb script per top-level folder)
+node src/cli.js convert -i MySalesforceAPIs.yml -m multi -o ./scripts
+node src/cli.js convert -i "MySalesforceAPIs/" -m multi -o ./scripts
+
+# Analyze collection (no files written)
+node src/cli.js analyze -i collection.json
+```
+
+#### After global install (`npm install -g` or `npm link`):
+
+```bash
+# Same commands, shorter prefix:
+bruno-devweb convert -i collection.json -o output/
+bruno-devweb convert -i MySalesforceAPIs.yml -e environment.json -o output/
+bruno-devweb convert -i "MySalesforceAPIs/" -m multi -o scripts/
+bruno-devweb analyze -i collection.json
 bruno-devweb web --port 3000
 ```
 
@@ -159,22 +189,59 @@ Then open `http://localhost:3000` in your browser.
 #### `convert` - Convert collection to DevWeb script
 
 ```bash
+node src/cli.js convert [options]
+# or after global install:
 bruno-devweb convert [options]
 
 Options:
-  -i, --input <file>           Input collection file (.json or .bru) [required]
-  -e, --environment <file>     Postman environment file (.json)
+  -i, --input <path>           Input: .json, .yml, .bru, or folder path [required]
+  -e, --environment <file>     Environment JSON file (overrides collection variable values)
   -o, --output <dir>           Output directory (default: ./devweb-script)
   -m, --mode <mode>            Script mode: single or multi (default: single)
   --no-transactions            Disable transaction grouping
   --no-correlation             Disable auto-correlation
   --no-parameterization        Disable parameterization
   --no-authentication          Disable authentication handling
-  -t, --think-time <seconds>   Think time between requests (default: 1)
+  -t, --think-time <seconds>   Think time between transactions (default: 2)
   --no-comments                Disable code comments
   --log-level <level>          Log level: error|warning|info|debug (default: info)
   --fail-on-error              Stop execution on first error
   -h, --help                   Display help
+```
+
+#### All Formats — Full Command Examples
+
+```bash
+# ---- POSTMAN COLLECTIONS ----
+node src/cli.js convert -i collection.postman_collection.json -o ./output
+node src/cli.js convert -i collection.json -e environment.json -o ./output
+node src/cli.js convert -i collection.json -m multi -o ./scripts
+node src/cli.js convert -i collection.json -t 3 --no-comments -o ./output
+
+# ---- BRUNO JSON EXPORT ----
+node src/cli.js convert -i BrunoCollection.json -o ./output
+node src/cli.js convert -i BrunoCollection.json -e environment.json -o ./output
+node src/cli.js convert -i BrunoCollection.json -m multi -o ./scripts
+
+# ---- BRUNO SINGLE YAML FILE ----
+node src/cli.js convert -i MySalesforceAPIs.yml -o ./output
+node src/cli.js convert -i MySalesforceAPIs.yml -e environment.json -o ./output
+node src/cli.js convert -i MySalesforceAPIs.yml -m multi -o ./scripts
+
+# ---- BRUNO YAML FOLDER (distributed format) ----
+node src/cli.js convert -i "MySalesforceAPIs/" -o ./output
+node src/cli.js convert -i MySalesforceAPIs -o ./output          # trailing slash optional
+node src/cli.js convert -i "MySalesforceAPIs/" -e environment.json -o ./output
+node src/cli.js convert -i "MySalesforceAPIs/" -m multi -o ./scripts
+
+# ---- SINGLE .BRU FILE ----
+node src/cli.js convert -i Login.bru -o ./output
+node src/cli.js convert -i Login.bru -e environment.json -o ./output
+
+# ---- ANALYZE (any format, no files written) ----
+node src/cli.js analyze -i collection.json
+node src/cli.js analyze -i MySalesforceAPIs.yml
+node src/cli.js analyze -i "MySalesforceAPIs/"
 ```
 
 #### `analyze` - Analyze collection without converting

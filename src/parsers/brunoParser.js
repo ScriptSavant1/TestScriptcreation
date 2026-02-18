@@ -1,10 +1,11 @@
 /**
  * Enhanced Bruno Collection Parser
- * Supports both .bru and JSON formats
+ * Supports .bru, JSON, and Bruno YAML folder-based formats
  */
 
 const fs = require('fs').promises;
 const path = require('path');
+const yaml = require('js-yaml');
 
 class BrunoParser {
   constructor(collectionPath) {
@@ -19,14 +20,27 @@ class BrunoParser {
 
   /**
    * Parse Bruno collection
+   * Supports: .json (Postman/Bruno JSON), .bru (Bruno text), directory or .yml (Bruno YAML folder)
    */
   async parse() {
-    const ext = path.extname(this.collectionPath);
-    
+    // Check if path is a directory → Bruno YAML folder format
+    try {
+      const stat = await fs.stat(this.collectionPath);
+      if (stat.isDirectory()) {
+        return await this.parseBrunoYamlCollection();
+      }
+    } catch (e) {
+      // Not a stat-able path, fall through to file parsing
+    }
+
+    const ext = path.extname(this.collectionPath).toLowerCase();
+
     if (ext === '.json') {
       return await this.parseJSON();
     } else if (ext === '.bru') {
       return await this.parseBru();
+    } else if (ext === '.yml' || ext === '.yaml') {
+      return await this.parseBrunoYamlCollection();
     } else {
       // Try to auto-detect
       const content = await fs.readFile(this.collectionPath, 'utf8');
@@ -217,6 +231,342 @@ class BrunoParser {
         break;
     }
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Bruno YAML folder-based format support
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Parse a Bruno YAML folder-based collection.
+   * Input can be:
+   *   - A directory containing opencollection.yml
+   *   - The path to opencollection.yml itself
+   *   - Any .yml file inside the collection (will walk up to find root)
+   */
+  async parseBrunoYamlCollection() {
+    let collectionDir;
+    let collectionFile = null;
+
+    const stat = await fs.stat(this.collectionPath);
+    if (stat.isDirectory()) {
+      collectionDir = this.collectionPath;
+      const candidate = path.join(collectionDir, 'opencollection.yml');
+      try { await fs.access(candidate); collectionFile = candidate; } catch (e) { /* no root file */ }
+    } else {
+      collectionFile = this.collectionPath;
+      collectionDir = path.dirname(this.collectionPath);
+
+      // If not the root file, look for opencollection.yml in the same directory
+      if (path.basename(this.collectionPath) !== 'opencollection.yml') {
+        const sibling = path.join(collectionDir, 'opencollection.yml');
+        try { await fs.access(sibling); collectionFile = sibling; } catch (e) { /* use given file */ }
+      }
+    }
+
+    // Parse root collection metadata
+    let rootData = {};
+    if (collectionFile) {
+      const rootContent = await fs.readFile(collectionFile, 'utf8');
+      rootData = yaml.load(rootContent) || {};
+    }
+
+    this.metadata.type = 'bruno-yaml';
+    this.metadata.name = rootData.info?.name || path.basename(collectionDir);
+    this.metadata.version = rootData.opencollection || '1.0.0';
+
+    // Build Postman-compatible variable array (key/value) from Bruno variables array (name/value)
+    const collectionVariables = (rootData.request?.variables || []).map(v => ({
+      key: v.name,
+      value: v.value || ''
+    }));
+
+    // Build Postman-compatible events from root collection scripts
+    const collectionEvents = (rootData.request?.scripts || []).map(s => ({
+      listen: s.type === 'after-response' ? 'test' : 'prerequest',
+      script: { exec: (s.code || '').split(/\r?\n/) }
+    }));
+
+    // Extract collection-level headers (apply to every request, e.g. PRIVATE-TOKEN)
+    // Bruno YAML: request.headers[].name / .value
+    const collectionHeaders = (rootData.request?.headers || [])
+      .filter(h => !h.disabled && h.name && h.value !== undefined)
+      .map(h => ({ key: h.name, value: String(h.value) }));
+
+    // Also extract headers added via before-request scripts:
+    //   req.getHeaders().add({key: 'X-Foo', value: 'bar'})
+    const addHeaderPattern = /req\.getHeaders\(\)\.add\(\s*\{[^}]*key\s*:\s*['"]([^'"]+)['"][^}]*value\s*:\s*['"]([^'"]+)['"][^}]*\}\s*\)/g;
+    for (const script of (rootData.request?.scripts || [])) {
+      if (script.type === 'before-request') {
+        let m;
+        while ((m = addHeaderPattern.exec(script.code || '')) !== null) {
+          // Only add if not already in collectionHeaders
+          if (!collectionHeaders.find(h => h.key === m[1])) {
+            collectionHeaders.push({ key: m[1], value: m[2] });
+          }
+        }
+      }
+    }
+
+    // Extract collection-level auth (OAuth2 / API Key / Bearer / etc.)
+    const collectionAuth = rootData.request?.auth || null;
+
+    // Initialize collection object — item[] populated after walk/traverse
+    this.collection = {
+      info: { name: this.metadata.name },
+      variable: collectionVariables,
+      event: collectionEvents,
+      collectionHeaders,   // <-- headers that apply to every request
+      collectionAuth,      // <-- OAuth2/auth config at collection level
+      item: []
+    };
+
+    // Detect format:
+    //   Bundled single-file  → root YAML has an `items` array (all requests embedded inline)
+    //   Distributed folder   → no `items` in root file; each request is a separate .yml file
+    const requests = [];
+    if (rootData.items && Array.isArray(rootData.items)) {
+      // Bundled format: traverse the inline items tree
+      this.metadata.type = 'bruno-yaml-bundled';
+      this.traverseBrunoYamlItems(rootData.items, requests, '');
+    } else {
+      // Distributed format: walk the directory
+      await this.walkBrunoYamlDir(collectionDir, requests, '');
+    }
+
+    // Populate collection.item so generator's detectScriptSetVariables() can find scripts
+    this.collection.item = requests.map(req => ({
+      name: req.name,
+      event: req.tests,
+      request: { method: req.method, url: req.url }
+    }));
+
+    return requests;
+  }
+
+  /**
+   * Traverse a bundled Bruno YAML items array (single-file format).
+   *
+   * The actual Bruno single-YAML export uses info.type to identify item kind:
+   *   Folder:  { info: { name, type: 'folder', seq }, items: [...], ... }
+   *   Request: { info: { name, type: 'http',   seq }, http: {...}, runtime?, settings? }
+   *
+   * Some spec variants use a top-level `type` field instead of `info.type` —
+   * both are handled.
+   */
+  traverseBrunoYamlItems(items, requests, parentFolder) {
+    if (!Array.isArray(items)) return;
+
+    // Sort by sequence number — prefer info.seq, fall back to top-level seq
+    const sorted = [...items].sort((a, b) => {
+      const aSeq = a.info?.seq ?? a.seq ?? 999;
+      const bSeq = b.info?.seq ?? b.seq ?? 999;
+      return aSeq - bSeq;
+    });
+
+    for (const item of sorted) {
+      // Determine item type — check info.type first, then top-level type
+      const itemType = item.info?.type || item.type;
+      const itemName = item.info?.name || item.name || '';
+
+      if (itemType === 'folder') {
+        const folderName = parentFolder ? `${parentFolder}/${itemName}` : itemName;
+        if (item.items) {
+          this.traverseBrunoYamlItems(item.items, requests, folderName);
+        }
+      } else if (itemType === 'http' || item.http) {
+        // Request item — structure mirrors individual .yml files
+        // Pass the whole item; normalizeBrunoYamlRequest handles info.name/info.seq fallbacks
+        requests.push(this.normalizeBrunoYamlRequest(item, parentFolder));
+      }
+    }
+  }
+
+  /**
+   * Recursively walk a Bruno YAML directory.
+   * Reads request .yml files (info.type: http) and recurses into subdirectories.
+   * Requests within a directory are ordered by info.seq; subdirectories by their folder.yml seq.
+   */
+  async walkBrunoYamlDir(dirPath, requests, parentFolder) {
+    let entries;
+    try {
+      entries = await fs.readdir(dirPath, { withFileTypes: true });
+    } catch (e) {
+      return; // Unreadable directory — skip
+    }
+
+    const ignoredDirs = new Set(['node_modules', '.git', '.bruno']);
+
+    const requestFiles = entries.filter(e =>
+      e.isFile() &&
+      e.name.endsWith('.yml') &&
+      e.name !== 'folder.yml' &&
+      e.name !== 'opencollection.yml'
+    );
+
+    const subdirs = entries.filter(e =>
+      e.isDirectory() && !ignoredDirs.has(e.name)
+    );
+
+    // ── Read and sort request files in this directory ───────────────────────
+    const reqEntries = [];
+    for (const file of requestFiles) {
+      const filePath = path.join(dirPath, file.name);
+      try {
+        const content = await fs.readFile(filePath, 'utf8');
+        const data = yaml.load(content);
+        if (data && data.info && data.info.type === 'http') {
+          reqEntries.push({ data });
+        }
+      } catch (e) {
+        // Skip unparseable files
+      }
+    }
+    reqEntries.sort((a, b) => (a.data.info?.seq || 999) - (b.data.info?.seq || 999));
+
+    for (const { data } of reqEntries) {
+      requests.push(this.normalizeBrunoYamlRequest(data, parentFolder));
+    }
+
+    // ── Read folder metadata for subdirectories ──────────────────────────────
+    const subfolderMeta = new Map();
+    for (const subdir of subdirs) {
+      const folderYmlPath = path.join(dirPath, subdir.name, 'folder.yml');
+      let meta = { name: subdir.name, seq: 999 };
+      try {
+        const folderContent = await fs.readFile(folderYmlPath, 'utf8');
+        const folderData = yaml.load(folderContent) || {};
+        meta = {
+          name: folderData.info?.name || subdir.name,
+          seq: folderData.info?.seq ?? 999
+        };
+      } catch (e) { /* no folder.yml — use directory name */ }
+      subfolderMeta.set(subdir.name, meta);
+    }
+
+    // Sort subdirectories by sequence number, then recurse
+    const sortedSubdirs = [...subdirs].sort((a, b) => {
+      const aSeq = subfolderMeta.get(a.name)?.seq ?? 999;
+      const bSeq = subfolderMeta.get(b.name)?.seq ?? 999;
+      return aSeq - bSeq;
+    });
+
+    for (const subdir of sortedSubdirs) {
+      const meta = subfolderMeta.get(subdir.name);
+      const folderName = parentFolder ? `${parentFolder}/${meta.name}` : meta.name;
+      await this.walkBrunoYamlDir(path.join(dirPath, subdir.name), requests, folderName);
+    }
+  }
+
+  /**
+   * Normalize a Bruno YAML request object to the standard format expected by the generator.
+   */
+  normalizeBrunoYamlRequest(data, folderName) {
+    const http = data.http || {};
+    const info = data.info || {};
+
+    // `info` may be absent in bundled format — fall back to item-level name/seq
+    const name = info.name || data.name || 'Unnamed Request';
+    const seq  = info.seq  ?? data.seq  ?? 0;
+
+    // Headers: Bruno YAML uses `name` field; generator expects `key`
+    const headers = (http.headers || []).map(h => ({
+      key: h.name,
+      value: h.value || '',
+      disabled: h.disabled || false,
+      description: h.description || ''
+    }));
+
+    return {
+      name,
+      folder: folderName,
+      depth: folderName ? folderName.split('/').length : 0,
+      method: (http.method || 'GET').toUpperCase(),
+      url: http.url || '',
+      headers,
+      body: this.normalizeBrunoYamlBody(http.body),
+      auth: null, // Bruno YAML auth is at collection/folder level — handled via variables
+      description: data.docs || '',
+      tests: this.normalizeBrunoYamlScripts(data.runtime?.scripts),
+      variables: {},
+      id: this.generateId(),
+      seq
+    };
+  }
+
+  /**
+   * Normalize Bruno YAML body to Postman-compatible format.
+   */
+  normalizeBrunoYamlBody(body) {
+    if (!body) return null;
+
+    switch (body.type) {
+      case 'json':
+        return {
+          mode: 'raw',
+          raw: typeof body.data === 'string' ? body.data : JSON.stringify(body.data, null, 2),
+          urlencoded: [],
+          formdata: [],
+          options: { raw: { language: 'json' } }
+        };
+
+      case 'form-urlencoded':
+        return {
+          mode: 'urlencoded',
+          raw: '',
+          urlencoded: (body.data || []).map(item => ({
+            key: item.name,
+            value: item.value || '',
+            disabled: item.disabled || false
+          })),
+          formdata: []
+        };
+
+      case 'multipart-form':
+      case 'formdata':
+        return {
+          mode: 'formdata',
+          raw: '',
+          urlencoded: [],
+          formdata: (body.data || []).map(item => ({
+            key: item.name,
+            value: item.value || '',
+            disabled: item.disabled || false,
+            type: item.type || 'text'
+          }))
+        };
+
+      case 'text':
+      case 'xml':
+      case 'graphql':
+        return {
+          mode: 'raw',
+          raw: typeof body.data === 'string' ? body.data : '',
+          urlencoded: [],
+          formdata: []
+        };
+
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Normalize Bruno YAML runtime scripts to Postman-compatible event format.
+   * Bruno: [{type: 'after-response', code: '...'}]
+   * Postman: [{listen: 'test', script: {exec: [...]}}]
+   */
+  normalizeBrunoYamlScripts(scripts) {
+    if (!Array.isArray(scripts)) return [];
+
+    return scripts.map(s => ({
+      listen: s.type === 'after-response' ? 'test' : 'prerequest',
+      script: {
+        exec: (s.code || '').split(/\r?\n/)
+      }
+    }));
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   /**
    * Extract all requests from collection
