@@ -1,9 +1,23 @@
 ================================================================================
-  PROMPT 08: COLLECTION PARSING RULES (Postman & Bruno)
+  PROMPT 08: COLLECTION PARSING RULES (Postman & Bruno — ALL FORMATS)
 ================================================================================
 
-This prompt explains how to parse Postman v2.1 and Bruno collection JSON
-files to extract all the information needed for DevWeb script generation.
+This prompt explains how to parse ALL supported collection formats to extract
+all the information needed for DevWeb script generation.
+
+SUPPORTED FORMATS:
+  1. Postman Collection v2.1 JSON
+  2. Bruno JSON export
+  3. Bruno Single YAML (.yml) — bundled single-file export
+  4. Bruno YAML folder-based — directory with opencollection.yml
+  5. Single .bru file — Bruno native text format
+
+FORMAT DETECTION:
+  - File ends with .json AND contains "schema" URL → Postman v2.1
+  - File ends with .json AND has top-level "items" array (no schema) → Bruno JSON
+  - File ends with .yml / .yaml → Bruno Single YAML (bundled)
+  - Path is a directory (or points to opencollection.yml) → Bruno YAML folder-based
+  - File ends with .bru → Single Bruno request
 
 ================================================================================
   POSTMAN COLLECTION v2.1 STRUCTURE
@@ -413,26 +427,292 @@ When you encounter {{variableName}}:
      // TODO: Replace <variableName> with actual value
 
 ================================================================================
-  COMPLETE PARSING CHECKLIST
+  BRUNO SINGLE YAML FORMAT (bundled .yml export)
 ================================================================================
 
+Bruno's "Single YAML (YAML)" export produces a single .yml file with ALL
+requests embedded inline. Structure:
+
+```yaml
+opencollection: 1.0.0
+info:
+  name: Salesforce Platform APIs
+config:
+  proxy: {}
+items:                        # ← all folders and requests inline
+  - info:
+      name: Auth
+      type: folder
+      seq: 1
+    items:
+      - info:
+          name: Client Credentials
+          type: http
+          seq: 1
+        http:
+          method: POST
+          url: "{{url}}{{site}}/services/oauth2/token"
+          headers:
+            - name: Content-Type
+              value: application/x-www-form-urlencoded
+          body:
+            type: form-urlencoded
+            data:
+              - name: grant_type
+                value: client_credentials
+              - name: client_id
+                value: "{{clientId}}"
+        runtime:
+          scripts:
+            - type: after-response
+              code: |
+                context.set("_accessToken", res.getBody().access_token);
+        settings:
+          encodeUrl: true
+          followRedirects: true
+request:                      # ← collection-level global settings
+  headers:
+    - name: PRIVATE-TOKEN
+      value: glpat-REPLACE_WITH_YOUR_TOKEN
+  auth:
+    type: oauth2
+    flow: client_credentials
+    accessTokenUrl: "{{url}}{{site}}/services/oauth2/token"
+    credentials:
+      clientId: "{{clientId}}"
+      clientSecret: "{{clientSecret}}"
+      placement: body
+  variables:
+    - name: url
+      value: https://login.salesforce.com
+    - name: version
+      value: "64.0"
+    - name: username
+      value: ""
+    - name: clientId
+      value: ""
+  scripts:
+    - type: before-request
+      code: "req.getHeaders().add({key: 'Sforce-Call-Options', value: 'client=pm'});"
+bundled: true
+```
+
+ITEM TYPE DETECTION (items[]):
+  - item.info.type === "folder"  → it's a folder; recurse into item.items[]
+  - item.info.type === "http"    → it's a request; parse item.http
+  - Ordering: sort by item.info.seq (ascending)
+
+REQUEST FIELDS (item.http):
+  - item.http.method            → HTTP method
+  - item.http.url               → URL (may contain {{variable}})
+  - item.http.headers[].name    → header key (NOT .key — Bruno uses .name here)
+  - item.http.headers[].value   → header value
+  - item.http.body              → see Body Types below
+  - item.info.name              → request name
+  - item.info.seq               → sequence number
+
+SCRIPTS (item.runtime.scripts[]):
+  - type: "after-response"      → post-response (test) script
+  - type: "before-request"      → pre-request script
+  - code                        → script body string
+
+BODY TYPES (item.http.body):
+  type: json          → body.data (string or object) → mode: raw, JSON
+  type: form-urlencoded → body.data[].name / .value → mode: urlencoded
+  type: multipart-form → body.data[].name / .value → mode: formdata
+  type: text / xml    → body.data (raw string) → mode: raw
+  type: graphql       → body.query + body.variables → JSON stringify
+
+================================================================================
+  BRUNO SINGLE YAML — COLLECTION-LEVEL "request:" SECTION
+================================================================================
+
+The root-level "request:" key contains GLOBAL settings applied to ALL requests.
+This is equivalent to collection-level settings in Postman.
+
+  request.headers[]
+    Each header: { name: "Header-Name", value: "value" }
+    → Add ALL these headers to load.WebRequest.defaults.headers
+    → They apply to every request in the collection
+
+    Example:
+      request.headers:
+        - name: PRIVATE-TOKEN
+          value: glpat-REPLACE_WITH_YOUR_TOKEN
+    →
+      load.WebRequest.defaults.headers = {
+          ...,
+          "PRIVATE-TOKEN": "glpat-REPLACE_WITH_YOUR_TOKEN"
+      };
+
+  request.auth
+    OAuth2 / Bearer / API Key config for the entire collection.
+    → Generate a COMMENTED-OUT token fetch block in load.initialize()
+    → Developers uncomment it when they want automatic token fetch
+
+    OAuth2 client_credentials example:
+      request.auth:
+        type: oauth2
+        flow: client_credentials
+        accessTokenUrl: "{{url}}{{site}}/services/oauth2/token"
+        credentials:
+          clientId: "{{clientId}}"
+          clientSecret: "{{clientSecret}}"
+          placement: body
+    →
+      // OAuth2 Client Credentials flow detected.
+      // Uncomment to fetch a bearer token during initialization:
+      //
+      // const tokenResp = await new load.WebRequest({
+      //   method: "POST",
+      //   url: `${load.params.url}${load.params.site}/services/oauth2/token`,
+      //   body: {
+      //     type: "form",
+      //     formData: {
+      //       grant_type: "client_credentials",
+      //       client_id: `${load.params.clientId}`,
+      //       client_secret: `${load.params.clientSecret}`
+      //     }
+      //   }
+      // }).send();
+      // const tokenJson = JSON.parse(tokenResp.body);
+      // load.global._accessToken = tokenJson.access_token;
+      // load.WebRequest.defaults.headers["Authorization"] = `Bearer ${load.global._accessToken}`;
+
+  request.variables[]
+    Each variable: { name: "varName", value: "actualValue" }
+    → Treated as collection variables → classify into dynamic / parameterized
+    → Same logic as Postman collection.variable[]
+
+  request.scripts[]
+    Each script: { type: "before-request" | "after-response", code: "..." }
+    before-request scripts:
+      → Scan for req.getHeaders().add({key: K, value: V})
+      → Merge detected headers into load.WebRequest.defaults.headers
+      → Other code: add as comments in initialize() or action()
+
+================================================================================
+  BRUNO YAML FOLDER-BASED FORMAT (ZIP export, extracted)
+================================================================================
+
+Bruno's "Bruno collection (ZIP)" export creates a directory structure:
+
+  MyCollection/
+    opencollection.yml          (root metadata: name, variables, scripts, auth)
+    Auth/
+      folder.yml                (folder name, seq)
+      Login.yml                 (individual request)
+      Refresh Token.yml
+    Products/
+      folder.yml
+      Get Products.yml
+    Orders/
+      folder.yml
+      Create Order.yml
+      Subfolders/
+        folder.yml
+        Nested Request.yml
+
+opencollection.yml:
+```yaml
+opencollection: 1.0.0
+info:
+  name: My API Collection
+request:
+  headers:
+    - name: X-Api-Key
+      value: sk_live_abc123
+  auth:
+    type: oauth2
+    flow: client_credentials
+    accessTokenUrl: "{{baseUrl}}/oauth/token"
+    credentials:
+      clientId: "{{clientId}}"
+      clientSecret: "{{clientSecret}}"
+  variables:
+    - name: baseUrl
+      value: https://api.example.com
+    - name: version
+      value: v2
+  scripts:
+    - type: before-request
+      code: "req.getHeaders().add({key: 'X-Trace-Id', value: 'load-test'});"
+```
+
+folder.yml (in each subfolder):
+```yaml
+info:
+  name: Authentication     # Display name for the folder
+  seq: 1                   # Sort order within parent
+```
+
+Individual request .yml (e.g., Login.yml):
+```yaml
+info:
+  name: Login
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: '{"username": "{{username}}", "password": "{{password}}"}'
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |
+        const body = res.getBody();
+        context.set("_accessToken", body.access_token);
+
+settings:
+  encodeUrl: true
+  timeout: 30
+  followRedirects: true
+  maxRedirects: 5
+```
+
+PARSING RULES FOR FOLDER FORMAT:
+  - opencollection.yml → collection metadata, variables, headers, auth, scripts
+  - folder.yml → folder display name and sequence number
+  - *.yml files (not folder.yml, not opencollection.yml, info.type === "http")
+    → individual request files
+  - Sort requests within a directory by info.seq
+  - Sort subdirectories by folder.yml info.seq
+  - Full folder path becomes the transaction name (last segment used in LRE)
+
+================================================================================
+  COMPLETE PARSING CHECKLIST (ALL FORMATS)
+================================================================================
+
+  [ ] Detect collection format (Postman JSON / Bruno JSON / Bruno YAML / .bru)
   [ ] Extract collection name and description
+  [ ] Extract collection-level headers (request.headers[] for Bruno YAML)
+  [ ] Extract collection-level auth (request.auth for Bruno YAML)
   [ ] Extract all collection variables (key-value pairs)
   [ ] Extract all environment variables (if provided)
   [ ] Build variable resolution map (merge collection + environment)
   [ ] Identify folder structure (map to transactions)
+  [ ] Apply collection headers to load.WebRequest.defaults.headers
+  [ ] Generate commented-out auth block in initialize() for OAuth2
   [ ] For each request:
       [ ] Extract method (GET/POST/PUT/PATCH/DELETE)
       [ ] Extract and resolve URL (replace {{vars}} with actual values)
       [ ] Extract headers (skip disabled ones)
+            Bruno YAML uses headers[].name (not .key)
       [ ] Extract query parameters (skip disabled ones)
       [ ] Extract body (determine type: JSON/form/raw/GraphQL)
       [ ] Extract auth type and credentials
-      [ ] Extract pre-request scripts
-      [ ] Extract test/post-response scripts
-      [ ] Identify variable sets (correlations to extract)
-      [ ] Identify variable gets (correlations to consume)
-  [ ] Determine request execution order
+      [ ] Extract pre-request scripts (before-request)
+      [ ] Extract test/post-response scripts (after-response)
+      [ ] Identify variable sets → correlations to extract
+      [ ] Identify variable gets → correlations to consume
+  [ ] Determine request execution order (seq-based for Bruno YAML)
   [ ] Map correlations (which request produces what, who consumes it)
 
 ================================================================================

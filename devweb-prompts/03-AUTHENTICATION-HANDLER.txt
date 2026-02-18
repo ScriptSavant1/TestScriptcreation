@@ -402,6 +402,79 @@ const publicResponse = new load.WebRequest({
 ```
 
 ================================================================================
+  BRUNO YAML COLLECTION-LEVEL AUTH DETECTION
+================================================================================
+
+Bruno YAML format (single .yml or folder-based) can define auth at the root
+level in a `request:` section. This is different from request-level auth.
+
+Detection in Bruno YAML root:
+```yaml
+request:
+  auth:
+    mode: oauth2       # or: bearer, basic, apikey, none
+    oauth2:
+      grantType: client_credentials   # or: authorization_code, password
+      tokenUrl: "{{baseUrl}}/oauth2/token"
+      clientId: "{{clientId}}"
+      clientSecret: "{{clientSecret}}"
+      scope: "api full"
+```
+
+HANDLING RULE: Bruno YAML collection-level OAuth2 generates a COMMENTED-OUT
+auth block in load.initialize(). This gives the script engineer the code they
+need to enable with minimal editing, showing the exact variables already resolved.
+
+Generated output (commented by default — uncomment to enable):
+```javascript
+load.initialize("Initialize", async function () {
+    load.log("Initializing VUser: " + load.config.user.userId, load.LogLevel.info);
+
+    // ---- Initialize dynamic variables ----
+    load.global._accessToken = null;
+
+    // ---- COLLECTION-LEVEL OAUTH2 AUTH ----
+    // Uncomment the block below to fetch an OAuth2 token before each VUser starts.
+    // This is extracted from the collection-level request.auth configuration.
+    //
+    // const tokenResp = await new load.WebRequest({
+    //     id: 1,
+    //     method: "POST",
+    //     url: `${load.params.baseUrl}/oauth2/token`,
+    //     headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    //     body: {
+    //         grant_type: "client_credentials",
+    //         client_id: `${load.params.clientId}`,
+    //         client_secret: `${load.params.clientSecret}`,
+    //         scope: "api full"
+    //     },
+    //     returnBody: true,
+    //     extractors: [new load.JsonPathExtractor("_accessToken", "$.access_token")]
+    // }).send();
+    // if (tokenResp.status === 200) {
+    //     load.global._accessToken = tokenResp.extractors._accessToken;
+    //     load.WebRequest.defaults.headers["Authorization"] = `Bearer ${load.global._accessToken}`;
+    //     load.log("OAuth2 token obtained", load.LogLevel.info);
+    // } else {
+    //     load.log("OAuth2 token request FAILED: " + tokenResp.status, load.LogLevel.error);
+    //     load.exit(load.ExitType.abort);
+    // }
+});
+```
+
+The variables in the commented block use `replaceParameters()` to resolve
+{{variable}} references: if `clientId` is in load.params (Tier 2/3), it
+becomes `` `${load.params.clientId}` ``; if it's in load.global (Tier 1),
+it becomes `` `${load.global.clientId}` ``.
+
+SUPPORTED BRUNO AUTH MODES:
+  mode: oauth2         --> Generate commented OAuth2 block (client_credentials or password)
+  mode: bearer         --> Set load.global.bearerToken in initialize() + default header
+  mode: basic          --> base64 encode credentials + set default Authorization header
+  mode: apikey         --> Set API key header in defaults.headers
+  mode: none           --> No auth code generated
+
+================================================================================
   TOKEN REFRESH PATTERN
 ================================================================================
 

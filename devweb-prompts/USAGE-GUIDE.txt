@@ -1,7 +1,7 @@
 ================================================================================
-  USAGE GUIDE: AI-POWERED POSTMAN TO VUGEN DEVWEB CONVERTER
+  USAGE GUIDE: AI-POWERED POSTMAN/BRUNO TO VUGEN DEVWEB CONVERTER
 ================================================================================
-  Version: 2.2 (3-tier variable classification, multi-mode, base64 extraction)
+  Version: 3.0 (multi-format: Postman JSON, Bruno JSON, Bruno YAML, .bru)
   Approach: Pure Prompt-Based (No Code, No Project Setup)
   Compatible: GitLab Duo | GitHub Copilot | Claude | ChatGPT | Any AI Agent
 ================================================================================
@@ -54,9 +54,13 @@ TABLE OF CONTENTS
 ================================================================================
 
   YOU NEED:
-  [x] Postman collection exported as JSON (v2.1 format)
-      OR Bruno collection exported as JSON
-  [x] (Optional) Postman environment JSON file
+  [x] Your API collection in ONE of these supported formats:
+      - Postman Collection v2.1 JSON (.json)
+      - Bruno JSON export (.json)
+      - Bruno Single YAML export (.yml) ← "Single YAML (YAML)" option in Bruno
+      - Bruno YAML folder export (directory) ← "Bruno collection (ZIP)" extracted
+      - Single .bru request file
+  [x] (Optional) Postman/Bruno environment JSON file
   [x] The prompt files from the "devweb-prompts" folder
   [x] Access to any AI coding assistant:
       - GitLab Duo
@@ -67,16 +71,24 @@ TABLE OF CONTENTS
 
   HOW TO EXPORT FROM POSTMAN:
   1. Open Postman
-  2. Right-click your collection
-  3. Click "Export"
-  4. Choose "Collection v2.1"
-  5. Save the .json file
+  2. Right-click your collection → "Export"
+  3. Choose "Collection v2.1" → save .json file
+
+  HOW TO EXPORT FROM BRUNO:
+  Method A — Single YAML (recommended for AI prompt approach):
+  1. Open Bruno → right-click collection → "Export Collection"
+  2. Choose "Single YAML (YAML)" → saves as one .yml file
+  3. Upload this .yml file to the AI
+
+  Method B — ZIP folder (for the Node.js converter):
+  1. Open Bruno → right-click collection → "Export Collection"
+  2. Choose "Bruno collection (ZIP)" → saves as .zip
+  3. Extract the ZIP → pass the extracted folder to the converter
 
   HOW TO EXPORT ENVIRONMENT FROM POSTMAN:
   1. Go to Environments tab
-  2. Click the three dots (...) next to your environment
-  3. Click "Export"
-  4. Save the .json file
+  2. Click the three dots (...) next to your environment → "Export"
+  3. Save the .json file
 
 
 ================================================================================
@@ -231,9 +243,19 @@ TABLE OF CONTENTS
   |                             | + collection.json                        |
   |                             | (7 files total)                          |
   +-----------------------------+------------------------------------------+
-  | Bruno collection            | 01-MASTER-PROMPT.txt                     |
-  | (instead of Postman)        | 08-COLLECTION-PARSING-RULES.txt          |
+  | Bruno collection (JSON)     | 01-MASTER-PROMPT.txt                     |
+  |                             | 08-COLLECTION-PARSING-RULES.txt          |
   |                             | + bruno-collection.json                  |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Bruno Single YAML (.yml)    | 01-MASTER-PROMPT.txt                     |
+  |                             | 08-COLLECTION-PARSING-RULES.txt          |
+  |                             | + collection.yml                         |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Bruno YAML folder-based     | 01-MASTER-PROMPT.txt                     |
+  | (ZIP extracted)             | 08-COLLECTION-PARSING-RULES.txt          |
+  |                             | + paste folder contents or describe       |
   |                             | (3 files total)                          |
   +-----------------------------+------------------------------------------+
 
@@ -715,8 +737,27 @@ TABLE OF CONTENTS
      relevant additional prompt file (see Section 7).
 
   Q: Can I convert Bruno collections too?
-  A: Yes! Upload 08-COLLECTION-PARSING-RULES.txt along with
-     01-MASTER-PROMPT.txt and your Bruno collection JSON.
+  A: Yes! Bruno is fully supported in all its export formats:
+     - Bruno JSON export (.json): Upload 01 + 08 + your .json file
+     - Bruno Single YAML (.yml): Upload 01 + 08 + your .yml file
+     - Bruno YAML folder (ZIP extracted): Use the Node.js converter
+       with the folder path: node src/cli.js convert -i MyFolder/ -o output/
+     - Single .bru file: Upload 01 + 08 + your .bru file
+
+  Q: What is the difference between Bruno Single YAML and Bruno ZIP folder?
+  A: Both contain the same data but in different structures.
+     - "Single YAML (YAML)": Everything in one .yml file with an "items"
+       array. Best for sharing with AI assistants.
+     - "Bruno collection (ZIP)": A directory tree where each request is
+       its own .yml file. Best for the Node.js converter tool.
+     Both are fully supported and produce identical DevWeb output.
+
+  Q: Does the Node.js converter support all Bruno formats?
+  A: Yes. Pass any of these to -i / --input:
+     - .json file   → Postman v2.1 or Bruno JSON
+     - .yml file    → Bruno Single YAML (bundled)
+     - folder path  → Bruno YAML folder-based (distributed)
+     - .bru file    → Single Bruno request
 
   Q: Do I need the original converter project (Node.js code)?
   A: No! These prompts are completely standalone.

@@ -548,10 +548,103 @@ ${finalizeSection}
       code += this.indent(this.authHandler.generateInitializationCode(), 1);
     }
 
+    // Add collection-level OAuth2 / auth config from Bruno YAML request.auth
+    const collAuth = this.collection.collectionAuth;
+    if (collAuth && collAuth.type) {
+      code += this.generateCollectionAuthBlock(collAuth);
+    }
+
     code += `\n    load.log("✓ Initialization complete", load.LogLevel.info);
 });`;
 
     return code;
+  }
+
+  /**
+   * Generate a commented auth block for collection-level OAuth2/auth config.
+   * Emits real token-fetch code (commented out) so developers can activate it.
+   */
+  generateCollectionAuthBlock(auth) {
+    const type = (auth.type || '').toLowerCase();
+    const flow = (auth.flow || '').toLowerCase();
+    let block = `\n    // ── Collection-level Auth (from Bruno request.auth) ──────────────────\n`;
+
+    if (type === 'oauth2') {
+      const tokenUrl  = this.replaceParameters(auth.accessTokenUrl || auth.tokenUrl || '{{url}}/oauth2/token');
+      const clientId  = this.replaceParameters(auth.credentials?.clientId  || auth.clientId  || '{{clientId}}');
+      const clientSecret = this.replaceParameters(auth.credentials?.clientSecret || auth.clientSecret || '{{clientSecret}}');
+      const placement = auth.credentials?.placement || 'body';
+
+      if (flow === 'client_credentials') {
+        block += `    // OAuth2 Client Credentials flow detected.
+    // Uncomment and adapt the block below to fetch a bearer token during initialization.
+    //
+    // const tokenResp = await new load.WebRequest({
+    //   method: "POST",
+    //   url: \`${tokenUrl}\`,
+    //   body: {
+    //     type: "form",
+    //     formData: {
+    //       grant_type: "client_credentials",
+    //       client_id: \`${clientId}\`,
+    //       client_secret: \`${clientSecret}\`
+    //     }
+    //   }${placement === 'header' ? `,
+    //   // Alternatively pass credentials via Basic Auth header:
+    //   // headers: { Authorization: "Basic " + Buffer.from(\`${clientId}:\${${clientSecret}}\`).toString("base64") }` : ''}
+    // }).send();
+    // const tokenJson = JSON.parse(tokenResp.body);
+    // load.global._accessToken = tokenJson.access_token;
+    // load.WebRequest.defaults.headers["Authorization"] = \`Bearer \${load.global._accessToken}\`;\n`;
+      } else if (flow === 'password') {
+        const username = this.replaceParameters(auth.credentials?.username || '{{username}}');
+        const password = this.replaceParameters(auth.credentials?.password || '{{password}}');
+        block += `    // OAuth2 Password flow detected.
+    // Uncomment and adapt the block below to fetch a bearer token during initialization.
+    //
+    // const tokenResp = await new load.WebRequest({
+    //   method: "POST",
+    //   url: \`${tokenUrl}\`,
+    //   body: {
+    //     type: "form",
+    //     formData: {
+    //       grant_type: "password",
+    //       client_id: \`${clientId}\`,
+    //       client_secret: \`${clientSecret}\`,
+    //       username: \`${username}\`,
+    //       password: \`${password}\`
+    //     }
+    //   }
+    // }).send();
+    // const tokenJson = JSON.parse(tokenResp.body);
+    // load.global._accessToken = tokenJson.access_token;
+    // load.WebRequest.defaults.headers["Authorization"] = \`Bearer \${load.global._accessToken}\`;\n`;
+      } else {
+        block += `    // OAuth2 flow: "${auth.flow}" — configure token retrieval manually.\n`;
+        if (auth.accessTokenUrl || auth.tokenUrl) {
+          block += `    // Token URL: ${auth.accessTokenUrl || auth.tokenUrl}\n`;
+        }
+      }
+    } else if (type === 'apikey') {
+      const key   = auth.key   || 'X-API-Key';
+      const value = this.replaceParameters(auth.value || '{{apiKey}}');
+      const addTo = (auth.addTo || 'header').toLowerCase();
+      if (addTo === 'header') {
+        block += `    // API Key auth — already applied via collection default headers if listed there.\n`;
+        block += `    // load.WebRequest.defaults.headers["${key}"] = \`${value}\`;\n`;
+      } else {
+        block += `    // API Key in query param "${key}" — add to each request URL as needed.\n`;
+      }
+    } else if (type === 'bearer') {
+      const token = this.replaceParameters(auth.token || '{{_accessToken}}');
+      block += `    // Bearer token auth.\n`;
+      block += `    // load.WebRequest.defaults.headers["Authorization"] = \`Bearer ${token}\`;\n`;
+    } else {
+      block += `    // Auth type "${auth.type}" — configure manually.\n`;
+    }
+
+    block += `    // ─────────────────────────────────────────────────────────────────────\n`;
+    return block;
   }
 
   /**
@@ -589,15 +682,30 @@ ${finalizeSection}
    * Generate action section
    */
   generateAction() {
+    // Build the defaults.headers object — browser baseline + collection-level headers
+    const collectionHeaders = this.collection.collectionHeaders || [];
+    const extraHeaderLines = collectionHeaders.map(h => {
+      const valueExpr = this.replaceParameters(h.value);
+      // If replaceParameters added template expressions, wrap in backtick string
+      const needsTemplate = valueExpr.includes('${');
+      const quotedValue = needsTemplate ? `\`${valueExpr}\`` : `"${valueExpr}"`;
+      return `        "${h.key}": ${quotedValue}`;
+    });
+
+    const headerBlock = [
+      `        "accept-encoding": "gzip, deflate, br"`,
+      `        "accept-language": "en-US,en;q=0.9"`,
+      `        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"`,
+      ...extraHeaderLines
+    ].join(',\n');
+
     let code = `load.action("Action", async function() {
     load.log("▶️  Starting action - Iteration " + load.config.runtime.iteration, load.LogLevel.info);
 
     // Set default request options
     load.WebRequest.defaults.returnBody = false;
     load.WebRequest.defaults.headers = {
-        "accept-encoding": "gzip, deflate, br",
-        "accept-language": "en-US,en;q=0.9",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+${headerBlock}
     };
 `;
 

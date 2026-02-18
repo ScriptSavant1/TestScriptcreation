@@ -609,6 +609,57 @@ the Authorization header again.
 DISABLED HEADERS: If a Postman header has "disabled": true, skip it entirely.
 
 ================================================================================
+  COLLECTION-LEVEL HEADERS (BRUNO YAML FORMAT)
+================================================================================
+
+Bruno YAML collections can define headers at the collection/root level in the
+`request:` section. These headers apply to ALL requests and MUST be merged
+into load.WebRequest.defaults.headers.
+
+Example Bruno YAML root-level `request:` section:
+```yaml
+request:
+  headers:
+    - name: PRIVATE-TOKEN
+      value: "{{gitlabToken}}"
+    - name: Sforce-Call-Options
+      value: "client=MyApp"
+  auth:
+    mode: oauth2
+    oauth2:
+      grantType: client_credentials
+      tokenUrl: "{{baseUrl}}/oauth2/token"
+      clientId: "{{clientId}}"
+      clientSecret: "{{clientSecret}}"
+  scripts:
+    - type: before-request
+      code: |
+        req.getHeaders().add({ key: "X-Trace-Id", value: "load-test" });
+```
+
+EXTRACTION:
+  1. `request.headers[]` → merge directly into defaults.headers
+  2. `request.scripts[type=before-request]` with `req.getHeaders().add(...)` → merge into defaults.headers
+  3. `request.auth` → generate commented-out auth block (see 03-AUTHENTICATION-HANDLER.txt)
+
+Generated defaults.headers with collection-level headers:
+```javascript
+load.WebRequest.defaults.headers = {
+    // Browser baseline
+    "accept-encoding": "gzip, deflate, br",
+    "accept-language": "en-US,en;q=0.9",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    // Collection-level headers (from request.headers and before-request scripts)
+    "PRIVATE-TOKEN": `${load.params.gitlabToken}`,     // collection header
+    "Sforce-Call-Options": "client=MyApp",              // collection header
+    "X-Trace-Id": "load-test"                           // from before-request script
+};
+```
+
+REGEX PATTERN for extracting `req.getHeaders().add()` from scripts:
+  /req\.getHeaders\(\)\.add\(\s*\{[^}]*key\s*:\s*['"]([^'"]+)['"][^}]*value\s*:\s*['"]([^'"]+)['"][^}]*\}\s*\)/g
+
+================================================================================
   THINK TIME PLACEMENT
 ================================================================================
 
