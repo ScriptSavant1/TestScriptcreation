@@ -436,7 +436,7 @@ requests embedded inline. Structure:
 ```yaml
 opencollection: 1.0.0
 info:
-  name: Salesforce Platform APIs
+  name: My API Collection
 config:
   proxy: {}
 items:                        # ← all folders and requests inline
@@ -451,7 +451,7 @@ items:                        # ← all folders and requests inline
           seq: 1
         http:
           method: POST
-          url: "{{url}}{{site}}/services/oauth2/token"
+          url: "{{baseUrl}}/oauth2/token"
           headers:
             - name: Content-Type
               value: application/x-www-form-urlencoded
@@ -472,28 +472,28 @@ items:                        # ← all folders and requests inline
           followRedirects: true
 request:                      # ← collection-level global settings
   headers:
-    - name: PRIVATE-TOKEN
-      value: glpat-REPLACE_WITH_YOUR_TOKEN
+    - name: X-Api-Key
+      value: "{{apiKey}}"
   auth:
     type: oauth2
     flow: client_credentials
-    accessTokenUrl: "{{url}}{{site}}/services/oauth2/token"
+    accessTokenUrl: "{{baseUrl}}/oauth2/token"
     credentials:
       clientId: "{{clientId}}"
       clientSecret: "{{clientSecret}}"
       placement: body
   variables:
-    - name: url
-      value: https://login.salesforce.com
+    - name: baseUrl
+      value: https://api.example.com
     - name: version
-      value: "64.0"
+      value: "1.0"
     - name: username
       value: ""
     - name: clientId
       value: ""
   scripts:
     - type: before-request
-      code: "req.getHeaders().add({key: 'Sforce-Call-Options', value: 'client=pm'});"
+      code: "req.getHeaders().add({key: 'X-App-Name', value: 'my-app'});"
 bundled: true
 ```
 
@@ -537,12 +537,15 @@ This is equivalent to collection-level settings in Postman.
 
     Example:
       request.headers:
-        - name: PRIVATE-TOKEN
-          value: glpat-REPLACE_WITH_YOUR_TOKEN
+        - name: X-Api-Key
+          value: "{{apiKey}}"
+        - name: X-App-Name
+          value: my-app
     →
       load.WebRequest.defaults.headers = {
           ...,
-          "PRIVATE-TOKEN": "glpat-REPLACE_WITH_YOUR_TOKEN"
+          "X-Api-Key": `${load.params.apiKey}`,
+          "X-App-Name": "my-app"
       };
 
   request.auth
@@ -554,7 +557,7 @@ This is equivalent to collection-level settings in Postman.
       request.auth:
         type: oauth2
         flow: client_credentials
-        accessTokenUrl: "{{url}}{{site}}/services/oauth2/token"
+        accessTokenUrl: "{{baseUrl}}/oauth2/token"
         credentials:
           clientId: "{{clientId}}"
           clientSecret: "{{clientSecret}}"
@@ -565,7 +568,7 @@ This is equivalent to collection-level settings in Postman.
       //
       // const tokenResp = await new load.WebRequest({
       //   method: "POST",
-      //   url: `${load.params.url}${load.params.site}/services/oauth2/token`,
+      //   url: `${load.params.baseUrl}/oauth2/token`,
       //   body: {
       //     type: "form",
       //     formData: {

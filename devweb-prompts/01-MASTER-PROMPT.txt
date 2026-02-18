@@ -222,8 +222,8 @@ load.action("Action", async function () {
         "accept-language": "en-US,en;q=0.9",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         // Collection-level headers from Bruno request.headers[] or request.scripts[]
-        // e.g.:  "PRIVATE-TOKEN": "glpat-xxxx",
-        //        "Sforce-Call-Options": "client=pm"
+        // e.g.:  "X-Api-Key": `${load.params.apiKey}`,
+        //        "X-App-Name": "my-app"
     };
 
     // === TRANSACTION DECLARATIONS (inside action, at the top) ===
@@ -497,7 +497,7 @@ STEP 1: PARSE THE COLLECTION
   BRUNO YAML COLLECTION-LEVEL FEATURES:
   The root "request:" section applies globally to all requests:
     request.headers[]         → merged into load.WebRequest.defaults.headers
-                                 e.g., PRIVATE-TOKEN, X-Api-Key
+                                 e.g., X-Api-Key, X-App-Name, X-Tenant-Id
     request.auth              → OAuth2/Bearer/API Key auth config
                                  → generate commented-out token fetch block in initialize()
     request.variables[]       → collection variables (name/value) → CSV parameters

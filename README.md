@@ -119,20 +119,20 @@ node src/cli.js convert -i collection.postman_collection.json -o ./output
 node src/cli.js convert -i BrunoCollection.json -o ./output
 
 # Bruno single YAML file
-node src/cli.js convert -i MySalesforceAPIs.yml -o ./output
+node src/cli.js convert -i MyCollection.yml -o ./output
 
 # Bruno YAML folder (distributed format)
-node src/cli.js convert -i "MySalesforceAPIs/" -o ./output
+node src/cli.js convert -i "MyCollection/" -o ./output
 
 # Single .bru request file
 node src/cli.js convert -i Login.bru -o ./output
 
 # With environment file override
-node src/cli.js convert -i MySalesforceAPIs.yml -e environment.json -o ./output
+node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
 
 # Multi-script mode (one DevWeb script per top-level folder)
-node src/cli.js convert -i MySalesforceAPIs.yml -m multi -o ./scripts
-node src/cli.js convert -i "MySalesforceAPIs/" -m multi -o ./scripts
+node src/cli.js convert -i MyCollection.yml -m multi -o ./scripts
+node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
 
 # Analyze collection (no files written)
 node src/cli.js analyze -i collection.json
@@ -143,8 +143,8 @@ node src/cli.js analyze -i collection.json
 ```bash
 # Same commands, shorter prefix:
 bruno-devweb convert -i collection.json -o output/
-bruno-devweb convert -i MySalesforceAPIs.yml -e environment.json -o output/
-bruno-devweb convert -i "MySalesforceAPIs/" -m multi -o scripts/
+bruno-devweb convert -i MyCollection.yml -e environment.json -o output/
+bruno-devweb convert -i "MyCollection/" -m multi -o scripts/
 bruno-devweb analyze -i collection.json
 bruno-devweb web --port 3000
 ```
@@ -224,15 +224,15 @@ node src/cli.js convert -i BrunoCollection.json -e environment.json -o ./output
 node src/cli.js convert -i BrunoCollection.json -m multi -o ./scripts
 
 # ---- BRUNO SINGLE YAML FILE ----
-node src/cli.js convert -i MySalesforceAPIs.yml -o ./output
-node src/cli.js convert -i MySalesforceAPIs.yml -e environment.json -o ./output
-node src/cli.js convert -i MySalesforceAPIs.yml -m multi -o ./scripts
+node src/cli.js convert -i MyCollection.yml -o ./output
+node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
+node src/cli.js convert -i MyCollection.yml -m multi -o ./scripts
 
 # ---- BRUNO YAML FOLDER (distributed format) ----
-node src/cli.js convert -i "MySalesforceAPIs/" -o ./output
-node src/cli.js convert -i MySalesforceAPIs -o ./output          # trailing slash optional
-node src/cli.js convert -i "MySalesforceAPIs/" -e environment.json -o ./output
-node src/cli.js convert -i "MySalesforceAPIs/" -m multi -o ./scripts
+node src/cli.js convert -i "MyCollection/" -o ./output
+node src/cli.js convert -i MyCollection -o ./output              # trailing slash optional
+node src/cli.js convert -i "MyCollection/" -e environment.json -o ./output
+node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
 
 # ---- SINGLE .BRU FILE ----
 node src/cli.js convert -i Login.bru -o ./output
@@ -240,8 +240,8 @@ node src/cli.js convert -i Login.bru -e environment.json -o ./output
 
 # ---- ANALYZE (any format, no files written) ----
 node src/cli.js analyze -i collection.json
-node src/cli.js analyze -i MySalesforceAPIs.yml
-node src/cli.js analyze -i "MySalesforceAPIs/"
+node src/cli.js analyze -i MyCollection.yml
+node src/cli.js analyze -i "MyCollection/"
 ```
 
 #### `analyze` - Analyze collection without converting

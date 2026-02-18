@@ -620,10 +620,10 @@ Example Bruno YAML root-level `request:` section:
 ```yaml
 request:
   headers:
-    - name: PRIVATE-TOKEN
-      value: "{{gitlabToken}}"
-    - name: Sforce-Call-Options
-      value: "client=MyApp"
+    - name: X-Api-Key
+      value: "{{apiKey}}"
+    - name: X-App-Name
+      value: "my-app"
   auth:
     mode: oauth2
     oauth2:
@@ -650,8 +650,8 @@ load.WebRequest.defaults.headers = {
     "accept-language": "en-US,en;q=0.9",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     // Collection-level headers (from request.headers and before-request scripts)
-    "PRIVATE-TOKEN": `${load.params.gitlabToken}`,     // collection header
-    "Sforce-Call-Options": "client=MyApp",              // collection header
+    "X-Api-Key": `${load.params.apiKey}`,               // collection header (parameterized)
+    "X-App-Name": "my-app",                             // collection header (static)
     "X-Trace-Id": "load-test"                           // from before-request script
 };
 ```

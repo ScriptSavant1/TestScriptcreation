@@ -30,7 +30,7 @@
      b) Your collection file             -- One of:
           - MyCollection.postman_collection.json  (Postman v2.1)
           - MyCollection.json                      (Bruno JSON)
-          - MySalesforceAPIs.yml                   (Bruno Single YAML)
+          - MyCollection.yml                       (Bruno Single YAML)
           - (paste folder contents)                (Bruno YAML folder)
      c) (Optional) Environment JSON      -- If you have Postman environment variables
 
@@ -77,17 +77,17 @@
     Structure: { "name": ..., "items": [...], "environments": [...] }
 
   FORMAT 3: Bruno Single YAML (Bundled)
-    File: MySalesforceAPIs.yml (or any .yml file)
+    File: MyCollection.yml (or any .yml file)
     Export from Bruno: Collection → Export → "Single YAML (YAML)"
     Contains: opencollection header, inline items[] array, request: section
     Key sections:
-      request.headers   → applied to ALL requests (e.g., PRIVATE-TOKEN)
+      request.headers   → applied to ALL requests (e.g., X-Api-Key, X-Tenant-Id)
       request.auth      → collection-level OAuth2/auth config
       request.variables → collection variables → CSV parameters
       request.scripts   → before-request scripts (auto-converted to defaults.headers)
 
   FORMAT 4: Bruno YAML Folder-based
-    Path: MySalesforceAPIs/  (a directory)
+    Path: MyCollection/  (a directory)
     Export from Bruno: Collection → Export → "Bruno collection (ZIP)" → extract
     Structure:
       MyCollection/

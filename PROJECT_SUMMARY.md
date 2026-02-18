@@ -152,12 +152,12 @@ node src/cli.js convert -i collection.json -o ./output
 node src/cli.js convert -i collection.json -m multi -o ./scripts
 
 # Bruno Single YAML file
-node src/cli.js convert -i MySalesforceAPIs.yml -o ./output
-node src/cli.js convert -i MySalesforceAPIs.yml -m multi -o ./scripts
+node src/cli.js convert -i MyCollection.yml -o ./output
+node src/cli.js convert -i MyCollection.yml -m multi -o ./scripts
 
 # Bruno YAML folder (distributed format)
-node src/cli.js convert -i "MySalesforceAPIs/" -o ./output
-node src/cli.js convert -i "MySalesforceAPIs/" -m multi -o ./scripts
+node src/cli.js convert -i "MyCollection/" -o ./output
+node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
 
 # Bruno JSON export
 node src/cli.js convert -i BrunoCollection.json -o ./output
@@ -166,13 +166,13 @@ node src/cli.js convert -i BrunoCollection.json -o ./output
 node src/cli.js convert -i Login.bru -o ./output
 
 # With environment file (overrides collection variable values)
-node src/cli.js convert -i MySalesforceAPIs.yml -e environment.json -o ./output
+node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
 ```
 
 After global install (`npm link` or `npm install -g`):
 ```bash
 bruno-devweb convert -i collection.json -o output/
-bruno-devweb convert -i "MySalesforceAPIs/" -m multi -o scripts/
+bruno-devweb convert -i "MyCollection/" -m multi -o scripts/
 ```
 
 ### Start Web UI
