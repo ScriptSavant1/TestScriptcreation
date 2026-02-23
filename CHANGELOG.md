@@ -5,6 +5,18 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-02-23
+
+### Fixed
+- **`load.thinkTime()` → `load.sleep()`**: The transaction-grouped code path in `advancedScriptGenerator.js` incorrectly emitted `load.thinkTime()` which does not exist as a standalone DevWeb function. Changed to `load.sleep()`. The sequential code path already used `load.sleep()` — both paths are now consistent.
+- **Fallback `DevWebSdk.d.ts`**: Removed `export function thinkTime(...)` declaration; replaced with correct `export function sleepAsync(seconds: number): Promise<void>`.
+
+### Added
+- **Docker packaging** (`Dockerfile`): Multi-stage Alpine build. Stage 1 installs production deps via `npm ci --omit=dev`. Stage 2 copies only `src/` and uses a direct symlink for the CLI binary. Excludes all examples, prompts, and documentation — image is minimal.
+- **`.dockerignore`**: Excludes `devweb-prompts/`, `examples/`, `devweb-examples-code/`, `output/`, `node_modules/`, all markdown and install files from the Docker build context.
+- **Rewritten `.gitlab-ci.yml`**: Builds and publishes the Docker image to GitLab Container Registry. Two jobs: `build-release` (triggers on `v*.*.*` tags → publishes `:VERSION` + `:latest`) and `build-snapshot` (triggers on `main`/`Dev` branch → publishes `:snapshot`). Both jobs tagged `linux` to run on Linux runners only.
+- **Cross-platform consumer pipeline examples** documented in `.gitlab-ci.yml` comments: Linux runner (Docker image, zero setup) and Windows runner (shell executor + `npm ci`) patterns.
+
 ## [2.2.1] - 2026-02-18
 
 ### Added

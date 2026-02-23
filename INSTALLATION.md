@@ -1,6 +1,6 @@
 # 📦 Installation Guide
 
-Complete installation guide for **Bruno to DevWeb Converter v2.1.0** on all platforms.
+Complete installation guide for **Bruno to DevWeb Converter v2.1.1** on all platforms.
 
 ---
 
@@ -113,6 +113,58 @@ mkdir -p uploads output examples/collections
 
 # 4. Test installation
 bruno-devweb --version
+```
+
+---
+
+---
+
+## 🐳 Docker — Zero-Install (Best for GitLab CI/CD)
+
+No Node.js installation required. The converter runs inside a pre-built Linux container.
+
+### **Linux Runner — Use Registry Image Directly**
+
+```yaml
+# In your team's .gitlab-ci.yml
+convert:
+  image: registry.gitlab.com/your-org/bruno-devweb-converter:latest
+  tags: [linux]
+  script:
+    - bruno-devweb convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
+```
+
+### **Linux Machine — Run Locally with Docker**
+
+```bash
+docker run --rm \
+  -v $(pwd):/workspace \
+  registry.gitlab.com/your-org/bruno-devweb-converter:latest \
+  convert -i my-collection.json -o output/
+```
+
+### **Windows Runner — Shell Executor (Node.js required on runner)**
+
+```yaml
+convert:
+  tags: [windows]
+  before_script:
+    - git clone https://gitlab.com/your-org/bruno-devweb-converter.git $env:TEMP\bdw
+    - npm ci --prefix $env:TEMP\bdw --omit=dev
+  script:
+    - node $env:TEMP\bdw\src\cli.js convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
+```
+
+### **Build Image Locally from Source**
+
+```bash
+cd bruno-devweb-converter
+docker build -t bruno-devweb-converter:local .
+docker run --rm -v $(pwd):/workspace bruno-devweb-converter:local convert -i my-collection.json -o output/
 ```
 
 ---
@@ -438,4 +490,4 @@ bruno-devweb web --port 3000
 
 **Happy Testing! 🎉**
 
-*Version 2.1.0 - February 2026*
+*Version 2.1.1 - February 2026*

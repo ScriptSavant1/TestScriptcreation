@@ -207,7 +207,7 @@ user3,Pass3@123,user3@example.com,1707584901236
 
 ### **Better Script Structure**
 - Matches DevWeb examples exactly
-- Proper `load.thinkTime()` usage
+- Proper `load.sleep()` usage for think time between requests
 - Cleaner code generation
 
 ### **Enhanced Analysis Reports**

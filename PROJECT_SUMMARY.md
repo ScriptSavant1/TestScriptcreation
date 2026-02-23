@@ -1,6 +1,6 @@
 # 🎯 Project Summary
 
-## Bruno to DevWeb Converter v2.2
+## Bruno to DevWeb Converter v2.1.1
 
 **Complete, production-ready framework for converting Bruno/Postman collections to LoadRunner Enterprise DevWeb scripts with 3-tier variable classification, multi-script mode, intelligent correlation, and authentication support.**
 
@@ -29,9 +29,9 @@ This package contains everything you need to convert API collections to DevWeb p
    - CLI (`src/cli.js`): Command-line interface
    - Web UI (`src/web/`): Browser-based interface
 
-5. **Integration**
-   - GitLab CI/CD (`.gitlab-ci.yml`): Complete pipeline
-   - Docker support (coming soon)
+5. **Integration & Packaging**
+   - Docker image (`Dockerfile`): Pre-built Linux image published to GitLab Container Registry
+   - GitLab CI/CD (`.gitlab-ci.yml`): Auto-builds and pushes Docker image on version tags
 
 ### Documentation
 
@@ -58,8 +58,10 @@ bruno-devweb-converter/
 ├── 📄 CHANGELOG.md                 # Version history
 ├── 📄 LICENSE                      # MIT License
 ├── 📄 package.json                 # Node.js package definition
-├── 🔧 .gitlab-ci.yml               # GitLab CI/CD pipeline
-├── 🔧 install.sh                   # Quick installation script
+├── 🐳 Dockerfile                   # Docker image definition
+├── 🐳 .dockerignore                # Docker build exclusions
+├── 🔧 .gitlab-ci.yml               # GitLab CI/CD — builds and pushes Docker image
+├── 🔧 install.sh                   # Quick installation script (local use)
 │
 ├── 📁 src/                         # Source code
 │   ├── 📄 index.js                 # Main converter class
@@ -239,29 +241,40 @@ load.finalize("Finalize", async function () {
 
 ---
 
-## 🔄 GitLab CI/CD Integration
+## 🐳 Docker & GitLab CI/CD
 
-### Pipeline Stages
-1. **Validate** - Check collection syntax
-2. **Convert** - Generate DevWeb scripts
-3. **Test** - Validate generated scripts
-4. **Package** - Create ZIP archives
-5. **Deploy** - Upload to LRE (manual)
+### Using the Pre-Built Docker Image
 
-### Setup
-```bash
-# Add to GitLab repository
-cp .gitlab-ci.yml /path/to/your/repo/
-git add .gitlab-ci.yml
-git commit -m "Add DevWeb conversion pipeline"
-git push
+The converter is packaged as a Docker image. Teams include it in their pipelines — no installation needed.
+
+**Linux runner:**
+```yaml
+convert:
+  image: registry.gitlab.com/your-org/bruno-devweb-converter:latest
+  tags: [linux]
+  script:
+    - bruno-devweb convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
 ```
 
-### CI/CD Variables
-- `LRE_URL`: LoadRunner Enterprise URL
-- `LRE_API_KEY`: API authentication key
-- `THINK_TIME`: Default think time (optional)
-- `LOG_LEVEL`: Logging level (optional)
+**Windows runner (shell executor):**
+```yaml
+convert:
+  tags: [windows]
+  before_script:
+    - git clone https://gitlab.com/your-org/bruno-devweb-converter.git $env:TEMP\bdw
+    - npm ci --prefix $env:TEMP\bdw --omit=dev
+  script:
+    - node $env:TEMP\bdw\src\cli.js convert -i my-collection.json -o output/
+```
+
+### Publishing a New Release
+```bash
+git tag v2.1.1
+git push origin v2.1.1
+# CI auto-builds :2.1.1 and :latest
+```
 
 ---
 
@@ -399,4 +412,4 @@ devweb run main.js
 
 *Made with ❤️ for Performance Engineers*
 
-*Version 2.2.0 - February 2026*
+*Version 2.1.1 - February 2026*
