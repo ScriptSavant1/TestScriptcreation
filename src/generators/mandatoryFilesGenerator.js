@@ -268,7 +268,7 @@ declare namespace load {
 
   // Timing
   export function sleep(seconds: number): void;
-  export function thinkTime(seconds: number): void;
+  export function sleepAsync(seconds: number): Promise<void>;
 
   // Transactions
   export enum TransactionStatus { Passed, Failed, Stopped }

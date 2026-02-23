@@ -1,6 +1,6 @@
 {
   "name": "bruno-devweb-converter",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Advanced converter for Bruno/Postman collections to LoadRunner Enterprise DevWeb scripts with correlation, parameterization, authentication, and custom script support",
   "main": "src/index.js",
   "bin": {
