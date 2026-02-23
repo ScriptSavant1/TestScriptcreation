@@ -1,6 +1,6 @@
 # 🚀 Bruno to DevWeb Converter
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](https://gitlab.com/your-org/bruno-devweb-converter)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://gitlab.com/your-org/bruno-devweb-converter)
 [![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -91,11 +91,23 @@ npm install
 npm link
 ```
 
-### 🐳 Docker Installation
+### 🐳 Docker — Zero-Install (Recommended for CI/CD)
 
+The converter is published as a Docker image to the GitLab Container Registry.
+No Node.js installation needed on the runner.
+
+**Linux runner (pull and run directly):**
+```bash
+docker run --rm \
+  -v $(pwd):/workspace \
+  registry.gitlab.com/your-org/bruno-devweb-converter:latest \
+  convert -i my-collection.json -o output/
+```
+
+**Build image locally from source:**
 ```bash
 docker build -t bruno-devweb-converter .
-docker run -v $(pwd)/collections:/app/collections bruno-devweb-converter
+docker run --rm -v $(pwd):/workspace bruno-devweb-converter convert -i my-collection.json -o output/
 ```
 
 ### 📚 Installation Resources
@@ -491,7 +503,7 @@ load.action("Action", async function () {
 
     load.global.token = webResponse_01.extractors.token;
     TS01.stop(load.TransactionStatus.Passed);
-    load.thinkTime(1);
+    load.sleep(1);
 
     TS02.start();
     const webResponse_02 = new load.WebRequest({
@@ -512,46 +524,42 @@ load.finalize("Finalize", async function () {
 
 ## 🔄 GitLab CI/CD Integration
 
-### Setup
+### How Teams Use the Docker Image in Their Pipelines
 
-1. **Add Collections to Repository:**
-   ```bash
-   mkdir collections
-   cp your-collection.json collections/
-   git add collections/
-   git commit -m "Add API collection"
-   git push
-   ```
+The converter is packaged as a Docker image. Other teams include it in their own GitLab pipelines — no installation required.
 
-2. **Configure CI/CD Variables:**
-   - `LRE_URL`: LoadRunner Enterprise URL
-   - `LRE_API_KEY`: API key for authentication
-   - `THINK_TIME`: Default think time (optional)
-   - `LOG_LEVEL`: Logging level (optional)
+**Linux runner (zero setup):**
+```yaml
+convert:
+  image: registry.gitlab.com/your-org/bruno-devweb-converter:latest
+  tags: [linux]
+  script:
+    - bruno-devweb convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
+```
 
-3. **Pipeline Stages:**
-   ```
-   validate → convert → test → package → deploy
-   ```
+**Windows runner (shell executor, Node.js must be installed):**
+```yaml
+convert:
+  tags: [windows]
+  before_script:
+    - git clone https://gitlab.com/your-org/bruno-devweb-converter.git $env:TEMP\bdw
+    - npm ci --prefix $env:TEMP\bdw --omit=dev
+  script:
+    - node $env:TEMP\bdw\src\cli.js convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
+```
 
-### Pipeline Configuration
+### Publishing a New Image Version
 
-The `.gitlab-ci.yml` includes:
-- ✅ Collection validation
-- ✅ Automatic conversion
-- ✅ Script validation
-- ✅ Packaging as ZIP
-- ✅ Manual deployment to LRE
-- ✅ Documentation generation
-
-### Triggering Conversion
+The repo's own `.gitlab-ci.yml` auto-builds and pushes the image when you tag a release:
 
 ```bash
-# Manual trigger
-git push origin main
-
-# Or trigger via GitLab UI
-# CI/CD > Pipelines > Run Pipeline
+git tag v2.1.1
+git push origin v2.1.1
+# CI builds :2.1.1 and :latest automatically
 ```
 
 ---
@@ -684,4 +692,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 **Made with ❤️ for Performance Engineers**
 
-*Version 2.2.0 - Last Updated: February 2026*
+*Version 2.1.1 - Last Updated: February 2026*

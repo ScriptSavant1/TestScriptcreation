@@ -34,9 +34,12 @@ npm install
 npm link
 ```
 
-**Option 3: Using Docker**
+**Option 3: Using Docker (Recommended for CI/CD)**
 ```bash
-docker pull your-org/bruno-devweb-converter:latest
+# Linux — run directly from registry, no Node.js needed:
+docker run --rm -v $(pwd):/workspace \
+  registry.gitlab.com/your-org/bruno-devweb-converter:latest \
+  convert -i my-collection.json -o output/
 ```
 
 ### First Conversion
@@ -407,7 +410,7 @@ load.action("Action", async function () {
     const webResponse_01 = new load.WebRequest({...}).sendSync();
     TS01.stop(load.TransactionStatus.Passed);
 
-    load.thinkTime(1);
+    load.sleep(1);
 
     // TS02 - Users
     TS02.start();
@@ -474,58 +477,57 @@ Open browser: `http://localhost:3000`
 
 ## GitLab Integration
 
-### Setup Repository
+### Using the Docker Image in Your Team's Pipeline
 
-```bash
-# Initialize repository
-git init
-git remote add origin https://gitlab.com/your-org/api-tests.git
+The converter is published as a Docker image. Include it in your team's pipeline — no installation required.
 
-# Add collections
-mkdir collections
-cp my-api.json collections/
-
-# Add .gitlab-ci.yml
-cp .gitlab-ci.yml ./
-
-# Commit and push
-git add .
-git commit -m "Initial commit"
-git push -u origin main
+**Linux runner (zero setup, recommended):**
+```yaml
+# In your team's .gitlab-ci.yml
+convert:
+  image: registry.gitlab.com/your-org/bruno-devweb-converter:latest
+  tags: [linux]
+  script:
+    - bruno-devweb convert -i my-collection.json -o output/
+    - bruno-devweb convert -i MyCollection.yml -m multi -o scripts/
+  artifacts:
+    paths: [output/]
+    expire_in: 1 week
 ```
 
-### Configure CI/CD Variables
-
-In GitLab: **Settings → CI/CD → Variables**
-
-Required variables:
-- `LRE_URL`: https://lre.yourcompany.com
-- `LRE_API_KEY`: your-api-key-here
-
-Optional variables:
-- `THINK_TIME`: 2
-- `LOG_LEVEL`: info
-
-### Pipeline Execution
-
-**Manual Trigger**:
-```bash
-git add collections/updated-api.json
-git commit -m "Update API collection"
-git push origin main
+**Windows runner (shell executor):**
+```yaml
+convert:
+  tags: [windows]
+  before_script:
+    - git clone https://gitlab.com/your-org/bruno-devweb-converter.git $env:TEMP\bdw
+    - npm ci --prefix $env:TEMP\bdw --omit=dev
+  script:
+    - node $env:TEMP\bdw\src\cli.js convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
 ```
 
-**Pipeline Stages**:
-1. ✅ **Validate**: Check collection syntax
-2. ✅ **Convert**: Generate DevWeb scripts
-3. ✅ **Test**: Validate generated scripts
-4. ✅ **Package**: Create ZIP archives
-5. 🔵 **Deploy**: Upload to LRE (manual)
+### CLI Options in Pipeline Scripts
 
-**View Results**:
-- Go to CI/CD → Pipelines
-- Click on pipeline
-- Download artifacts
+```yaml
+script:
+  # Basic conversion
+  - bruno-devweb convert -i collection.json -o output/
+
+  # With environment override and multi-mode
+  - bruno-devweb convert -i collection.json -e prod.json -m multi -o scripts/
+
+  # With custom think time and log level
+  - bruno-devweb convert -i collection.json -t 2 --log-level debug -o output/
+```
+
+### Pipeline Runner Requirements
+
+| Runner OS | Approach | Requirement |
+|-----------|----------|-------------|
+| Linux | Use `image:` with Docker | Runner must support Docker |
+| Windows | Clone repo + `npm ci` | Node.js >= 14 on runner |
 
 ---
 
@@ -768,4 +770,4 @@ bruno-devweb analyze -i collection.json
 
 ---
 
-*Version 2.2.0 - Last Updated: February 2026*
+*Version 2.1.1 - Last Updated: February 2026*
