@@ -815,7 +815,7 @@ ${headerBlock}
 
         // Add think time between requests (except after last one)
         if (reqIndex < requests.length - 1 && this.options.thinkTime > 0) {
-          code += `\n    load.thinkTime(${this.options.thinkTime});`;
+          code += `\n    load.sleep(${this.options.thinkTime});`;
         }
         code += `\n`;
       });
