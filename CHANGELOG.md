@@ -5,6 +5,46 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-02-24
+
+### Fixed
+- **`devweb-prompts/01-MASTER-PROMPT.txt`**: Replaced truncated `rts.yml` (only 3 sections: httpConnection, ssl, replay) with the complete 10-section version matching the actual generator output. AI using only the master prompt will now produce correct, complete `rts.yml` files.
+- **`devweb-prompts/06-MANDATORY-FILES.txt`**: Added complete VuGen Web HTTP/HTML section with all 10 VUGEN FILE templates (`Action.c`, `vuser_init.c`, `vuser_end.c`, `globals.h`, `[ScriptName].usr`, `default.cfg`, `default.usp`, `ParameterFile.prm`, `collection_data.dat`, `ScriptUploadMetadata.xml`), exact C code patterns with rules, and DevWeb vs Web HTTP/HTML comparison table.
+- **`devweb-prompts/00-README-START-HERE.txt`**: Updated version to 3.1 with dual-protocol output. STEP 4 now shows both output file sets; CLI commands, advanced usage, and tips updated for `--protocol web-http`.
+- **`devweb-prompts/USAGE-GUIDE.txt`**: Updated to v3.1. Added dual-protocol output tables, Templates G & H (VuGen Web HTTP/HTML), Issues 7–10 (rts.yml incomplete, ParameterFile.prm XML vs INI, `%7B` URL-encoding bug, correlation placed after request), 8 new FAQ entries. Fixed "Files You Never Need to Upload" section — `06-MANDATORY-FILES.txt` is now correctly listed as needed for VuGen web-http output (it was incorrectly listed as never needed).
+- **`README.md`**: `ParameterFile.prm` output file description corrected from `(XML)` to `(VuGen INI format)`.
+- **`CHANGELOG.md`** (this file): `ParameterFile.prm` description in v2.3.0 corrected from "XML parameter definitions" to "VuGen INI format (`[parameter:name]` sections, NOT XML)" with correct field names (`GenerateNewVal`, not `UpdateValueOn`).
+
+---
+
+## [2.3.0] - 2026-02-23
+
+### Added
+- **VuGen Web HTTP/HTML (C) protocol support** (`--protocol web-http`): New generator `WebHttpScriptGenerator` produces classic LoadRunner C-based scripts from the same input collection, with no changes to parsers or analyzers.
+- **`src/generators/webHttpScriptGenerator.js`**: Generates `Action.c`, `vuser_init.c`, `vuser_end.c`, `globals.h`. Reuses all 4 analyzers unchanged. Key behaviors:
+  - `web_reg_save_param_json/regexp/boundary()` emitted **before** the producing request (VuGen requirement)
+  - `web_url()` for GET/HEAD; `web_custom_request()` for POST/PUT/PATCH/DELETE
+  - `{varName}` LR parameter syntax for all variables (no `load.global`/`load.params` split — VuGen uses one namespace)
+  - `lr_start_transaction()` / `lr_end_transaction()` grouped by folder; `lr_think_time()` between groups
+- **`src/generators/webHttpMandatoryFilesGenerator.js`**: Generates all 6 required VuGen configuration files:
+  - `[ScriptName].usr` — VuGen metadata INI with `ActiveTypes=QTWeb`, `AdditionalTypes=QTWeb`, `DevelopTool=Vugen`, `ParamLeftBrace={`, all mandatory sections (`[VuserProfiles]`, `[CfgFiles]`, `[ExtraFiles]`, `[Interpreters]`, `[Modified/Recorded/Replayed Actions]`, `[TransactionsOrder]`, `[Transactions]`)
+  - `default.cfg` — runtime settings (think time, iterations, log, WEB section)
+  - `default.usp` — run logic profile (init/run/end groups)
+  - `ParameterFile.prm` — **VuGen INI format** (`[parameter:name]` sections, NOT XML): `GenerateNewVal="Once"` for config params, `GenerateNewVal="EachIteration"` for credentials; `ColumnName` must match exact column header in `collection_data.dat`
+  - `collection_data.dat` — CSV with actual parameter values from collection/environment
+  - `ScriptUploadMetadata.xml` — LRE upload manifest listing all action and general files
+- **`--protocol` CLI flag**: `--protocol devweb` (default, unchanged) or `--protocol web-http` (VuGen C). Works with all input formats and both `-m single` and `-m multi`.
+- **Web UI protocol selector**: Radio buttons on the upload form for "DevWeb (JavaScript)" and "Web HTTP/HTML (C)"; convert button label updates to reflect selection.
+
+### Fixed
+- **VuGen `.usr` file**: Added all missing required fields (`AdditionalTypes=QTWeb`, `DevelopTool=Vugen`, `ParamLeftBrace`, `ParamRightBrace`, `[VuserProfiles]`, `[CfgFiles]`, `[ExtraFiles]`, `[Interpreters]`, `[Modified/Recorded/Replayed Actions]`, `[TransactionsOrder]`) that caused VuGen to reject the script with "unsupported protocol" error.
+
+### Changed
+- `src/index.js`: Factory-selects generator class based on `options.protocol`. DevWeb path unchanged; web-http path skips `main.js`, `config.yml`, `README.md`, `package.json`, `ANALYSIS.md` (not applicable to C scripts).
+- `src/web/server.js`: Passes `protocol` field from form body to converter.
+
+---
+
 ## [2.1.1] - 2026-02-23
 
 ### Fixed
