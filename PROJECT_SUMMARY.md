@@ -1,8 +1,8 @@
 # 🎯 Project Summary
 
-## Bruno to DevWeb Converter v2.1.1
+## Bruno to DevWeb Converter v2.3.1
 
-**Complete, production-ready framework for converting Bruno/Postman collections to LoadRunner Enterprise DevWeb scripts with 3-tier variable classification, multi-script mode, intelligent correlation, and authentication support.**
+**Complete, production-ready framework for converting Bruno/Postman collections to LoadRunner Enterprise performance test scripts — supports both DevWeb (JavaScript) and VuGen Web HTTP/HTML (C) output protocols, with 3-tier variable classification, multi-script mode, intelligent correlation, and authentication support.**
 
 ---
 
@@ -22,8 +22,11 @@ This package contains everything you need to convert API collections to DevWeb p
    - ParameterizationEngine: Smart parameter extraction
    - AuthenticationHandler: Multi-auth support
 
-3. **Script Generator** (`src/generators/`)
-   - AdvancedScriptGenerator: Complete DevWeb script generation
+3. **Script Generators** (`src/generators/`)
+   - AdvancedScriptGenerator: DevWeb JavaScript script generation
+   - WebHttpScriptGenerator: VuGen Web HTTP/HTML C script generation
+   - MandatoryFilesGenerator: DevWeb support files (scenario.yml, parameters.yml, etc.)
+   - WebHttpMandatoryFilesGenerator: VuGen config files (*.usr, default.cfg, ParameterFile.prm, etc.)
 
 4. **User Interfaces**
    - CLI (`src/cli.js`): Command-line interface
@@ -77,7 +80,10 @@ bruno-devweb-converter/
 │   │   └── authenticationHandler.js  # Auth configuration
 │   │
 │   ├── 📁 generators/              # Code generators
-│   │   └── advancedScriptGenerator.js # DevWeb script generator
+│   │   ├── advancedScriptGenerator.js      # DevWeb (JS) script generator
+│   │   ├── webHttpScriptGenerator.js       # VuGen Web HTTP/HTML (C) generator
+│   │   ├── mandatoryFilesGenerator.js      # DevWeb support files
+│   │   └── webHttpMandatoryFilesGenerator.js # VuGen config files
 │   │
 │   └── 📁 web/                     # Web UI
 │       ├── server.js               # Express server
@@ -138,6 +144,13 @@ Collection
 └── Orders → Transaction("Orders")
 ```
 
+### 5. Dual Output Protocol
+```
+--protocol devweb    → DevWeb JavaScript script (main.js, scenario.yml, ...)
+--protocol web-http  → VuGen Web HTTP/HTML C script (Action.c, *.usr, ...)
+```
+Both protocols share the same parsers and analysis engines. Same input → same correlation/parameterization logic → different output language.
+
 ---
 
 ## 🚀 Quick Start
@@ -148,6 +161,8 @@ Collection
 ```
 
 ### Convert a Collection
+
+**DevWeb (JavaScript) — default:**
 ```bash
 # Postman JSON (single or multi mode)
 node src/cli.js convert -i collection.json -o ./output
@@ -171,10 +186,19 @@ node src/cli.js convert -i Login.bru -o ./output
 node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
 ```
 
+**VuGen Web HTTP/HTML (C) — add `--protocol web-http`:**
+```bash
+node src/cli.js convert -i collection.json --protocol web-http -o ./output
+node src/cli.js convert -i collection.json --protocol web-http -m multi -o ./scripts
+node src/cli.js convert -i MyCollection.yml --protocol web-http -e environment.json -o ./output
+```
+
 After global install (`npm link` or `npm install -g`):
 ```bash
 bruno-devweb convert -i collection.json -o output/
 bruno-devweb convert -i "MyCollection/" -m multi -o scripts/
+bruno-devweb convert -i collection.json --protocol web-http -o output/
+bruno-devweb convert -i "MyCollection/" --protocol web-http -m multi -o scripts/
 ```
 
 ### Start Web UI
@@ -191,10 +215,10 @@ bruno-devweb analyze -i collection.json
 
 ## 📊 Generated Output
 
-### File Structure (Single Mode)
+### DevWeb Output (Single Mode) — default
 ```
 my-script/
-├── main.js              # DevWeb script
+├── main.js              # DevWeb script (JavaScript)
 ├── scenario.yml         # Scenario config (vusers, pacing, duration)
 ├── rts.yml              # Runtime settings
 ├── tsconfig.json        # TypeScript config
@@ -203,6 +227,21 @@ my-script/
 ├── collection_data.csv  # Actual parameter values
 └── data/                # Large base64 data files (if any)
     └── Upload_Document_content.b64
+```
+
+### VuGen Web HTTP/HTML Output (Single Mode) — `--protocol web-http`
+```
+my-vugen-script/
+├── Action.c             # Main test logic (C)
+├── vuser_init.c         # Init lifecycle (C)
+├── vuser_end.c          # End lifecycle (C)
+├── globals.h            # Standard #include block
+├── MyScript.usr         # VuGen metadata (INI) — open this in VuGen
+├── default.cfg          # Runtime settings (INI)
+├── default.usp          # Run logic profile (INI)
+├── ParameterFile.prm    # Parameter definitions (VuGen INI format)
+├── collection_data.dat  # Parameter values (CSV)
+└── ScriptUploadMetadata.xml  # LRE upload manifest
 ```
 
 ### DevWeb Script Structure
@@ -271,9 +310,9 @@ convert:
 
 ### Publishing a New Release
 ```bash
-git tag v2.1.1
-git push origin v2.1.1
-# CI auto-builds :2.1.1 and :latest
+git tag v2.3.0
+git push origin v2.3.0
+# CI auto-builds :2.3.0 and :latest
 ```
 
 ---
@@ -300,13 +339,14 @@ Enable developers to create performance tests without DevWeb expertise.
 ## 📈 Statistics
 
 ### Code Metrics
-- **Total Files**: 20+
-- **Lines of Code**: 5,000+
-- **Documentation**: 3,000+ lines
+- **Total Files**: 25+
+- **Lines of Code**: 6,000+
+- **Documentation**: 3,500+ lines
 - **Test Coverage**: Coming soon
 
 ### Supported Features
 - ✅ Collection formats: 5 (Postman JSON, Bruno JSON, Bruno Single YAML, Bruno YAML Folder, Single .bru)
+- ✅ Output protocols: 2 (DevWeb JavaScript, VuGen Web HTTP/HTML C)
 - ✅ Auth types: 7 (OAuth2 client_credentials/auth_code/password, Basic, Bearer, API Key, AWS v4, Digest, NTLM)
 - ✅ Extractor types: 4 (JsonPath, Boundary, Regexp, TextCheck)
 - ✅ Variable tiers: 3 (Dynamic load.global, Config load.params once, Test Data load.params iteration)
@@ -398,12 +438,20 @@ Ready to convert your first collection?
 # 1. Install
 ./install.sh
 
-# 2. Convert
+# 2. Convert — DevWeb (JavaScript)
 bruno-devweb convert -i examples/sample-ecommerce-api.json -o test-script
 
-# 3. Run
+# 3. Run DevWeb script
 cd test-script
 devweb run main.js
+
+# --- OR ---
+
+# 2. Convert — VuGen Web HTTP/HTML (C)
+bruno-devweb convert -i examples/sample-ecommerce-api.json --protocol web-http -o test-vugen
+
+# 3. Open in VuGen
+# Open test-vugen/sample-ecommerce-api.usr in VuGen
 ```
 
 **That's it! You're ready to create performance tests from API collections!** 🚀
@@ -412,4 +460,4 @@ devweb run main.js
 
 *Made with ❤️ for Performance Engineers*
 
-*Version 2.1.1 - February 2026*
+*Version 2.3.1 - February 2026*

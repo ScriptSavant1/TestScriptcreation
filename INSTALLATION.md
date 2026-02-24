@@ -452,6 +452,11 @@ node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
 # ---- SINGLE .BRU FILE ----
 node src/cli.js convert -i Login.bru -o ./output
 
+# ---- VuGen WEB HTTP/HTML (C) — add --protocol web-http ----
+node src/cli.js convert -i collection.json --protocol web-http -o ./output
+node src/cli.js convert -i MyCollection.yml --protocol web-http -e environment.json -o ./output
+node src/cli.js convert -i "MyCollection/" --protocol web-http -m multi -o ./scripts
+
 # ---- ANALYZE (any format) ----
 node src/cli.js analyze -i collection.json
 node src/cli.js analyze -i MyCollection.yml
@@ -465,6 +470,8 @@ node src/cli.js analyze -i "MyCollection/"
 bruno-devweb convert -i collection.json -o output/
 bruno-devweb convert -i MyCollection.yml -e environment.json -o output/
 bruno-devweb convert -i "MyCollection/" -m multi -o scripts/
+bruno-devweb convert -i collection.json --protocol web-http -o output/
+bruno-devweb convert -i "MyCollection/" --protocol web-http -m multi -o scripts/
 bruno-devweb analyze -i collection.json
 bruno-devweb web --port 3000
 ```
@@ -477,7 +484,8 @@ bruno-devweb web --port 3000
 | `-e, --environment <file>` | Environment JSON file — overrides collection variable values in CSV |
 | `-o, --output <dir>` | Output directory (default: `./devweb-script`) |
 | `-m, --mode <mode>` | `single` (one script, default) or `multi` (one per top-level folder) |
-| `-t, --think-time <seconds>` | Think time between transactions (default: 2) |
+| `--protocol <protocol>` | Output protocol: `devweb` (JavaScript, default) or `web-http` (VuGen C) |
+| `-t, --think-time <seconds>` | Think time between transactions (default: 1) |
 | `--no-transactions` | Disable transaction wrapping |
 | `--no-correlation` | Disable automatic correlation detection |
 | `--no-parameterization` | Disable variable parameterization |
@@ -490,4 +498,4 @@ bruno-devweb web --port 3000
 
 **Happy Testing! 🎉**
 
-*Version 2.1.1 - February 2026*
+*Version 2.3.1 - February 2026*

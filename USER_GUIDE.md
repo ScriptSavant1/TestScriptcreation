@@ -44,6 +44,8 @@ docker run --rm -v $(pwd):/workspace \
 
 ### First Conversion
 
+#### DevWeb (JavaScript) — Default
+
 1. **Prepare your collection**:
    - Export from Bruno or Postman
    - Save as .json or .bru file
@@ -64,6 +66,30 @@ docker run --rm -v $(pwd):/workspace \
    ```bash
    devweb run main.js
    ```
+
+#### VuGen Web HTTP/HTML (C) — add `--protocol web-http`
+
+1. **Run conversion with protocol flag**:
+   ```bash
+   bruno-devweb convert -i my-collection.json --protocol web-http -o my-vugen-script
+   ```
+
+2. **Review output**:
+   ```bash
+   cd my-vugen-script
+   ls -la
+   # Action.c  vuser_init.c  vuser_end.c  globals.h
+   # MyScript.usr  default.cfg  default.usp
+   # ParameterFile.prm  collection_data.dat  ScriptUploadMetadata.xml
+   ```
+
+3. **Open in VuGen**:
+   - File → Open → Select `MyScript.usr`
+   - Or drag the `.usr` file into the VuGen window
+
+4. **Upload to LoadRunner Enterprise (LRE)**:
+   - All 10 files are packaged in the ZIP download from the Web UI
+   - Or upload the entire script folder from VuGen → Upload to LRE
 
 ---
 
@@ -97,6 +123,18 @@ bruno-devweb convert -i my-api.json -e environment.json -o my-script
 bruno-devweb convert -i my-api.json -o output/ -m multi
 ```
 
+**VuGen Web HTTP/HTML (C) Protocol**:
+```bash
+# Single mode — generates Action.c, vuser_init.c, vuser_end.c, globals.h + config files
+bruno-devweb convert -i my-api.json --protocol web-http -o output/
+
+# Multi mode — one self-contained VuGen script per top-level folder
+bruno-devweb convert -i my-api.json --protocol web-http -m multi -o scripts/
+
+# With environment file
+bruno-devweb convert -i MyCollection.yml --protocol web-http -e environment.json -o output/
+```
+
 **All Options**:
 ```bash
 bruno-devweb convert \
@@ -104,6 +142,7 @@ bruno-devweb convert \
   --environment environment.json \
   --output devweb-scripts/my-api \
   --mode single \
+  --protocol devweb \
   --no-transactions \
   --no-correlation \
   --no-parameterization \
@@ -430,6 +469,53 @@ bruno-devweb convert -i collection.json -o output/ -m multi
 Each top-level folder becomes a separate, self-contained DevWeb script folder
 that can be independently uploaded to LoadRunner Enterprise.
 
+### 5. Output Protocols
+
+#### DevWeb (JavaScript) — default
+
+```
+my-script/
+├── main.js              # DevWeb script (JavaScript)
+├── scenario.yml         # Scenario config
+├── rts.yml              # Runtime settings
+├── tsconfig.json        # TypeScript config
+├── DevWebSdk.d.ts       # Type definitions
+├── parameters.yml       # Parameter definitions
+└── collection_data.csv  # Parameter values
+```
+
+Variables use `${load.params.varName}` and `${load.global.varName}` syntax.
+
+#### VuGen Web HTTP/HTML (C) — `--protocol web-http`
+
+```
+my-vugen-script/
+├── Action.c             # Main test logic (C)
+├── vuser_init.c         # Init lifecycle (C)
+├── vuser_end.c          # End lifecycle (C)
+├── globals.h            # Standard includes
+├── MyScript.usr         # VuGen metadata — open this to load the script
+├── default.cfg          # Runtime settings (INI)
+├── default.usp          # Run logic profile (INI)
+├── ParameterFile.prm    # Parameter definitions (VuGen INI format)
+├── collection_data.dat  # Parameter values (CSV)
+└── ScriptUploadMetadata.xml  # LRE upload manifest
+```
+
+Variables use `{varName}` syntax (LR parameter syntax — same for both config and correlated values).
+
+**Key differences vs DevWeb:**
+
+| Aspect | DevWeb | Web HTTP/HTML |
+|--------|--------|---------------|
+| Language | JavaScript | C |
+| GET request | `new load.WebRequest({method:"GET",...})` | `web_url("name","URL=...",LAST)` |
+| POST request | `new load.WebRequest({method:"POST",...})` | `web_custom_request("name","Method=POST",...,LAST)` |
+| Variable syntax | `${load.params.var}` / `${load.global.var}` | `{varName}` |
+| Think time | `load.sleep(1)` | `lr_think_time(1)` |
+| Transaction | `T.start()` / `T.stop()` | `lr_start_transaction()` / `lr_end_transaction()` |
+| JSON correlation | `new load.JsonPathExtractor()` | `web_reg_save_param_json()` |
+
 ---
 
 ## Web UI Guide
@@ -690,6 +776,13 @@ bruno-devweb convert \
 ### Q: What collection formats are supported?
 **A**: Bruno (.bru and .json) and Postman (.json) formats.
 
+### Q: Which output protocol should I choose?
+**A**:
+- **DevWeb (JavaScript)** — for LoadRunner Enterprise DevWeb scripts (modern, recommended)
+- **Web HTTP/HTML (C)** — for classic VuGen Web HTTP/HTML C-based scripts, or when your LRE license only covers Web HTTP/HTML
+
+Use `--protocol devweb` (default) or `--protocol web-http` to select.
+
 ### Q: Can I convert multiple collections at once?
 **A**: Yes, using a shell script:
 ```bash
@@ -770,4 +863,4 @@ bruno-devweb analyze -i collection.json
 
 ---
 
-*Version 2.1.1 - Last Updated: February 2026*
+*Version 2.3.1 - Last Updated: February 2026*

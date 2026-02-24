@@ -1,7 +1,8 @@
 ================================================================================
-  USAGE GUIDE: AI-POWERED POSTMAN/BRUNO TO VUGEN DEVWEB CONVERTER
+  USAGE GUIDE: AI-POWERED POSTMAN/BRUNO TO VUGEN SCRIPT CONVERTER
 ================================================================================
-  Version: 3.0 (multi-format: Postman JSON, Bruno JSON, Bruno YAML, .bru)
+  Version: 3.1 (multi-format: Postman JSON, Bruno JSON, Bruno YAML, .bru)
+           Dual-protocol: DevWeb (JavaScript) | VuGen Web HTTP/HTML (C)
   Approach: Pure Prompt-Based (No Code, No Project Setup)
   Compatible: GitLab Duo | GitHub Copilot | Claude | ChatGPT | Any AI Agent
 ================================================================================
@@ -34,17 +35,35 @@ TABLE OF CONTENTS
   The AI reads the instructions and generates complete DevWeb script files.
 
   WHAT DOES THE AI GENERATE?
+
+  For DevWeb (JavaScript) — default:
   +---------------------+------------------------------------------------------+
   | File                | Purpose                                              |
   +---------------------+------------------------------------------------------+
   | main.js             | The load test script (all requests/logic)            |
   | scenario.yml        | Scenario config (vusers, pacing, duration, rampUp)   |
-  | rts.yml             | Runtime settings (timeouts, SSL, etc.)               |
+  | rts.yml             | Runtime settings (ALL 10 sections)                   |
   | tsconfig.json       | TypeScript compiler configuration                    |
   | parameters.yml      | Parameter definitions (when variables exist)         |
   | collection_data.csv | Actual variable values from collection/environment   |
   | data/*.b64          | Extracted large base64 values (if found)             |
   +---------------------+------------------------------------------------------+
+
+  For VuGen Web HTTP/HTML (C) — specify protocol=web-http:
+  +---------------------------+--------------------------------------------------+
+  | File                      | Purpose                                          |
+  +---------------------------+--------------------------------------------------+
+  | Action.c                  | Main C script (requests, transactions)           |
+  | vuser_init.c              | VuGen init lifecycle (runs once per vuser)       |
+  | vuser_end.c               | VuGen end lifecycle (cleanup)                    |
+  | globals.h                 | Standard includes + parameter reference comments |
+  | [ScriptName].usr          | VuGen script metadata (INI) — required for VuGen |
+  | default.cfg               | Runtime settings (INI)                           |
+  | default.usp               | Run logic profile (INI)                          |
+  | ParameterFile.prm         | Parameter definitions (VuGen INI format)         |
+  | collection_data.dat       | Parameter values (CSV with header row)           |
+  | ScriptUploadMetadata.xml  | LRE upload manifest                              |
+  +---------------------------+--------------------------------------------------+
 
   NO CODE REQUIRED. NO PROJECT SETUP. JUST PROMPTS + AI.
 
@@ -282,11 +301,24 @@ TABLE OF CONTENTS
                                           (DONE!)        (DONE!)
 
 
-  FILES YOU NEVER NEED TO UPLOAD:
-    - 00-README-START-HERE.txt  (this is for humans, not AI)
+  FILES YOU NEVER NEED TO UPLOAD (for DevWeb JavaScript output):
+    - 00-README-START-HERE.txt       (this is for humans, not AI)
     - 05-SCENARIO-YML-GENERATOR.txt  (covered in master prompt)
-    - 06-MANDATORY-FILES.txt  (covered in master prompt)
-    - USAGE-GUIDE.txt  (this document)
+    - 06-MANDATORY-FILES.txt         (covered in master prompt for DevWeb)
+    - USAGE-GUIDE.txt                (this document)
+
+  UPLOAD 06-MANDATORY-FILES.txt when generating VuGen Web HTTP/HTML (C) output:
+    - It contains all exact C file templates: Action.c, vuser_init.c,
+      vuser_end.c, globals.h, .usr INI, default.cfg, default.usp,
+      ParameterFile.prm (INI format), collection_data.dat,
+      ScriptUploadMetadata.xml
+
+  NEW IN v3.1 (dual-protocol):
+    - 06-MANDATORY-FILES.txt now includes ALL VuGen Web HTTP/HTML C file templates
+      (Action.c, vuser_init.c, vuser_end.c, globals.h, .usr, default.cfg,
+       default.usp, ParameterFile.prm INI format, collection_data.dat,
+       ScriptUploadMetadata.xml)
+    - Upload 06 when generating VuGen Web HTTP/HTML scripts
 
   NEW IN v2.0:
     - 09-CUSTOM-SCRIPT-CONVERTER.txt  (Postman/Bruno script translation)
@@ -464,6 +496,67 @@ TABLE OF CONTENTS
   -----------------------------------------------------------------------
 
 
+  TEMPLATE G: VUGEN WEB HTTP/HTML (C) - SIMPLE COLLECTION
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + 06-MANDATORY-FILES.txt + MyCollection.json
+
+  Type this message:
+
+    "I am attaching prompt instruction files and a Postman/Bruno collection.
+
+    Please generate VuGen Web HTTP/HTML (C-based) LoadRunner script files,
+    NOT DevWeb JavaScript files.
+
+    Read the mandatory files prompt (06) for the exact C code patterns,
+    file formats, and parameter syntax to use.
+
+    Generate ALL 10 required files:
+    1. Action.c             (C script with lr_start_transaction, web_url, web_custom_request)
+    2. vuser_init.c         (VuGen init lifecycle)
+    3. vuser_end.c          (VuGen end lifecycle)
+    4. globals.h            (includes + parameter inventory comments)
+    5. [ScriptName].usr     (VuGen metadata INI)
+    6. default.cfg          (runtime settings INI)
+    7. default.usp          (run logic profile INI)
+    8. ParameterFile.prm    (INI format with [parameter:name] sections)
+    9. collection_data.dat  (CSV with header row + values)
+    10. ScriptUploadMetadata.xml
+
+    Use {varName} syntax for all parameters (NOT ${load.params.varName}).
+    Place web_reg_save_param_json() BEFORE the request that produces the value."
+
+  -----------------------------------------------------------------------
+
+
+  TEMPLATE H: VUGEN WEB HTTP/HTML (C) - WITH AUTH AND CORRELATIONS
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + 03-AUTHENTICATION-HANDLER.txt
+          + 04-CORRELATION-EXTRACTOR.txt + 06-MANDATORY-FILES.txt
+          + MyCollection.json
+
+  Type this message:
+
+    "I am attaching prompt instruction files and an API collection.
+
+    This collection uses OAuth2 authentication and has chained requests
+    (values from one response are used in subsequent requests).
+
+    Generate VuGen Web HTTP/HTML (C-based) LoadRunner script files.
+
+    Please:
+    1. Read all prompt files carefully
+    2. Detect all dynamic values (tokens, IDs) that flow between requests
+    3. Use web_reg_save_param_json() BEFORE the request that produces each value
+    4. Use {varName} syntax for all parameters and correlation references
+    5. Group requests into lr_start_transaction / lr_end_transaction blocks by folder
+
+    Generate ALL 10 required files (Action.c, vuser_init.c, vuser_end.c,
+    globals.h, ScriptName.usr, default.cfg, default.usp, ParameterFile.prm,
+    collection_data.dat, ScriptUploadMetadata.xml)"
+
+  -----------------------------------------------------------------------
+
+
 ================================================================================
   7. HANDLING AI OUTPUT ISSUES (TROUBLESHOOTING)
 ================================================================================
@@ -569,6 +662,59 @@ TABLE OF CONTENTS
     - If it comes from a previous response, use load.global.variableName
     - If unknown, add a // TODO comment
     List any variables you could not resolve."
+
+
+  ISSUE 7: rts.yml is incomplete (missing sections)
+  -----------------------------------------------------------------------
+  rts.yml has only 3 sections (httpConnection, ssl, replay) instead of 10.
+
+  Send this follow-up:
+    "The rts.yml is incomplete. It must have ALL 10 sections.
+    Please regenerate it with: httpConnection, grpc, proxy, ssl, replay,
+    vts, encryption, vuserLogger, flow, thinkTime — with all properties.
+    Do not abbreviate or skip any section."
+
+  Attach: 06-MANDATORY-FILES.txt
+
+
+  ISSUE 8: VuGen Web HTTP/HTML — ParameterFile.prm is in XML format
+  -----------------------------------------------------------------------
+  The generated ParameterFile.prm uses <ParamList> XML tags instead of
+  VuGen INI [parameter:name] sections.
+
+  Send this follow-up:
+    "The ParameterFile.prm is in the wrong format. VuGen uses INI format,
+    NOT XML. Each parameter needs a [parameter:name] section with:
+    ColumnName='name', GenerateNewVal='Once' or 'EachIteration',
+    SelectNextRow='Sequential', Table='collection_data.dat', Type='Table'.
+    The ColumnName must exactly match the column header in collection_data.dat.
+    Please regenerate in correct INI format."
+
+  Attach: 06-MANDATORY-FILES.txt
+
+
+  ISSUE 9: VuGen Web HTTP/HTML — {varName} is URL-encoded to %7BvarName%7D
+  -----------------------------------------------------------------------
+  Parameters appear as %7BclientId%7D instead of {clientId} in bodies.
+
+  Send this follow-up:
+    "The parameter references in the request body are URL-encoded.
+    {clientId} should appear literally as {clientId} in the Body string —
+    LR will substitute the value at runtime. Do NOT URL-encode the {braces}.
+    Please fix all Body= parameters that contain {varName} references."
+
+
+  ISSUE 10: VuGen Web HTTP/HTML — correlation not placed before request
+  -----------------------------------------------------------------------
+  web_reg_save_param_json() or web_reg_save_param() appears AFTER the
+  request that produces the value.
+
+  Send this follow-up:
+    "The web_reg_save_param_json() call for {tokenName} must be placed
+    BEFORE the web_custom_request() that returns the token — VuGen
+    registers the extraction rule before the request is sent.
+    Please move all correlation registrations to just before their
+    producing request."
 
 
 ================================================================================
@@ -770,6 +916,46 @@ TABLE OF CONTENTS
   Q: Can I customize the prompts?
   A: Yes! The prompt files are plain text. Edit them to add your
      organization-specific patterns, API conventions, or naming rules.
+
+  Q: Which output protocol should I choose — DevWeb or Web HTTP/HTML?
+  A: It depends on your LoadRunner setup:
+     - DevWeb (JavaScript): Use for OpenText LoadRunner 24.x+ / LRE Cloud.
+       Modern, async JS engine. Best for REST/JSON APIs.
+     - Web HTTP/HTML (C): Use for classic VuGen C-based scripts, on-premise LRE,
+       or when your organization standardizes on Web protocol scripts.
+       Same as recording with VuGen Web (HTTP/HTML) protocol.
+
+  Q: Can I use VuGen Web HTTP/HTML scripts in LoadRunner Enterprise (LRE)?
+  A: Yes. Open the generated folder in VuGen, validate/replay, then upload
+     via LRE directly. The ScriptUploadMetadata.xml handles the upload manifest.
+
+  Q: What is the difference between collection_data.dat and collection_data.csv?
+  A: Same format (comma-separated with header), different file extensions.
+     DevWeb uses .csv (collection_data.csv), VuGen Web HTTP/HTML uses .dat
+     (collection_data.dat). Both are referenced in ParameterFile.prm or
+     parameters.yml respectively.
+
+  Q: Why does ParameterFile.prm use INI format instead of XML?
+  A: VuGen's internal format for ParameterFile.prm is INI-style [parameter:name]
+     sections, which is what VuGen generates when you use "Replace with Parameter"
+     from the GUI. This is the correct format that VuGen reads natively.
+
+  Q: How are LR parameters different from DevWeb parameters?
+  A: In Web HTTP/HTML (C), ALL variables use {varName} syntax — config params,
+     test data, and correlation values all use the same {braces} notation.
+     LR resolves them at runtime from ParameterFile.prm or as captured
+     correlation values. There is no load.global / load.params split.
+
+  Q: How do I add more test users for data-driven testing (C scripts)?
+  A: Edit collection_data.dat and add one row per test user. The ParameterFile.prm
+     entries with GenerateNewVal="EachIteration" will pick up a new row each
+     iteration. Column order must match the header row.
+
+  Q: The .usr file can't be opened in VuGen — "unsupported protocol" error.
+  A: Check that MajorVersion=26, MinorVersion=1, ActiveTypes=QTWeb, and
+     AdditionalTypes=QTWeb are all set correctly in [ScriptName].usr.
+     VuGen version 25.x uses MajorVersion=25, MinorVersion=3.
+     Adjust to match your installed VuGen version.
 
 
 ================================================================================

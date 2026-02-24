@@ -245,6 +245,18 @@
 
             <div id="fileName" style="margin-bottom: 20px; font-weight: 600; color: #667eea;"></div>
 
+            <h3 style="margin-bottom: 15px;">🔌 Output Protocol</h3>
+            <div style="display: flex; gap: 15px; margin-bottom: 25px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; background: #f8f9ff; padding: 12px 20px; border-radius: 10px; font-weight: 500; border: 2px solid transparent; transition: border-color 0.2s;" id="protoDevwebLabel">
+                    <input type="radio" name="protocol" id="protoDevweb" value="devweb" checked onchange="updateConvertBtn()">
+                    DevWeb (JavaScript)
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; background: #f8f9ff; padding: 12px 20px; border-radius: 10px; font-weight: 500; border: 2px solid transparent; transition: border-color 0.2s;" id="protoWebHttpLabel">
+                    <input type="radio" name="protocol" id="protoWebHttp" value="web-http" onchange="updateConvertBtn()">
+                    Web HTTP/HTML (C)
+                </label>
+            </div>
+
             <h3 style="margin-bottom: 15px;">⚙️ Conversion Options</h3>
             <div class="options">
                 <div class="option">
@@ -286,7 +298,7 @@
             </div>
 
             <button class="button" id="analyzeBtn" disabled>📊 Analyze Collection</button>
-            <button class="button" id="convertBtn" disabled>🔄 Convert to DevWeb</button>
+            <button class="button" id="convertBtn" disabled>🔄 Convert to DevWeb (JavaScript)</button>
 
             <div class="status" id="status"></div>
 
@@ -379,11 +391,24 @@
             }
         });
 
+        function getSelectedProtocol() {
+            return document.querySelector('input[name="protocol"]:checked').value;
+        }
+
+        function updateConvertBtn() {
+            const proto = getSelectedProtocol();
+            convertBtn.textContent = proto === 'web-http'
+                ? '🔄 Convert to Web HTTP/HTML (C)'
+                : '🔄 Convert to DevWeb (JavaScript)';
+        }
+
         // Convert button
         convertBtn.addEventListener('click', async () => {
             if (!selectedFile) return;
 
-            showStatus('processing', 'Converting to DevWeb script...');
+            const proto = getSelectedProtocol();
+            const protoLabel = proto === 'web-http' ? 'Web HTTP/HTML (C)' : 'DevWeb (JavaScript)';
+            showStatus('processing', `Converting to ${protoLabel} script...`);
 
             const formData = new FormData();
             formData.append('collection', selectedFile);
@@ -393,6 +418,7 @@
             formData.append('useAuthentication', document.getElementById('useAuthentication').checked);
             formData.append('addComments', document.getElementById('addComments').checked);
             formData.append('thinkTime', document.getElementById('thinkTime').value);
+            formData.append('protocol', proto);
 
             try {
                 const response = await fetch('/convert', {
@@ -403,6 +429,7 @@
                 const result = await response.json();
 
                 if (response.ok && result.success) {
+                    const downloadLabel = proto === 'web-http' ? 'Download VuGen Script' : 'Download DevWeb Script';
                     showStatus('success', `
                         ✅ Conversion successful!<br><br>
                         <strong>Statistics:</strong><br>
@@ -410,7 +437,7 @@
                         Correlations: ${result.analysis.correlations.totalCorrelations}<br>
                         Parameters: ${result.analysis.parameters.totalParameters}<br><br>
                         <a href="${result.downloadUrl}" class="button" style="display: inline-block; text-decoration: none; margin-top: 10px;">
-                            ⬇️ Download DevWeb Script
+                            ⬇️ ${downloadLabel}
                         </a>
                     `);
                 } else {

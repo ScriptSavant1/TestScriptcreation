@@ -592,23 +592,79 @@ duration: 20     #The number of seconds to run Vuser iterations after all the Vu
 tearDown: 0      #Not used
 ```
 
-rts.yml:
+rts.yml (COMPLETE - all 10 sections MUST be generated):
 ```yaml
-httpConnection:
-  maxPersistentConnectionsPerHost: 6
-  maxConnectedHosts: 30
-  maxRedirectDepth: 10
-  keepAliveTimeout: 60
-  connectTimeout: 120
-  requestTimeout: 120
+# Runtime Settings Configuration for DevWeb
+httpConnection:                         # Configuration for the Net Loader component
+  maxPersistentConnectionsPerHost: 6    # The maximum number of connections per host a Vuser can open simultaneously (browser emulation).
+  maxConnectedHosts: 30                 # The maximum number of connected hosts per Vuser at any time.
+  maxRedirectDepth: 10                  # The maximum number of redirects when sending a request.
+  keepAliveTimeout: 60                  # Specifies the keep-alive period (in seconds) for an active network connection.
+  connectTimeout: 120                   # Specifies the maximum amount of time (in seconds) a dial will wait for a "connect" to complete.
+  abruptClose: false                    # If true, SO_LINGER is set to 0. The socket will not enter TIME_WAIT state, and can be used immediately.
+  requestTimeout: 120                   # Specifies the timeout (in seconds) to wait for an HTTP request to complete.
+  canonicalHeaderEntries: true          # use canonical keys for http request header entries
+
+grpc:                                   # Configuration for gRPC protocol
+  connectTimeout: 120                   # Specifies the maximum amount of time (in seconds) to wait for connection to be established.
+  keepAliveTime: 0                      # If specified, the maximum idle time in seconds, after which a keepalive probe is sent.
+  maxRecvMsgSize: 0                     # Specifies the maximum message size in bytes the gRPC client can receive. Set 0 for using default value of 4MB.
+  maxSendMsgSize: 0                     # Specifies the maximum message size in bytes the gRPC client can send. Set 0 for using default value.
+
+proxy:                                  # Configuration for Proxy server
+  usePAC: false                         # Indicates whether to use proxy automatic configuration script during send requests.
+  pacAddress: ""                        # Automatic configuration script address. Format: "http://pacaddress".
+  useProxy: false                       # Indicates whether to use proxy during send requests.
+  proxyServer: ""                       # Proxy server to use. Format: "server:port".
+  proxyDomain: ""                       # Proxy server authentication domain.
+  proxyUser: ""                         # Proxy server authentication user name.
+  proxyPassword: ""                     # Proxy server authentication password.
+  proxyAuthenticationType: ""           # Proxy server authentication type. Possible values are ["basic", "ntlm"].
+  excludedHosts: []                     # Proxy hosts exception list. Use regular expressions, for example ['prefix.*', '.*.domain'].
+
 ssl:
-  ignoreBadCertificate: false
-  tlsMaxVersion: tls12
+  disableHTTP2: false                   # If true, HTTP/2 will be disabled
+  ignoreBadCertificate: false           # If true, SSL accepts any certificate presented by the server and any hostname in that certificate.
+  tlsMaxVersion: tls12                  # Maximum SSL/TLS version that is acceptable. Possible values are [tls10, tls11, tls12, tls13]. Default maximum version is tls12.
+
 replay:
-  simulateNewUser: true
-  saveSnapshots: "always"
-  useCache: false
+  simulateNewUser: true                 # If true, simulates a new Vuser in each iteration (relevant for closing connections).
+  saveSnapshots: "always"               # Specify when to save a snapshot file for WebRequest. Possible values are ["always", "error", "never"].
+  snapshotBodySizeLimit: 100            # Limits the snapshot body size (in KB). Set -1 for no limit.
+  useCache: false                       # If true, resources response is cached, based on response headers.
+  enableDynatrace: false                # Enable Dynatrace AppMon monitoring.
+  resourceHttpErrorAsWarning: true      # If true, the log level WARNING is logged, if an issue occurs when obtaining the resource. If false, log level ERROR is logged.
+  enableIntegratedAuthentication: false # Enable Kerberos-based authentication. When the server proposes authentication schemes, use Negotiate preference to other schemes.
+  multiIP: "none"                       # Select the way IPs are allocated to Vusers. none - disable the automatic IPs distribution. roundrobin - the IPs are
+                                        # allocated in a cyclic manner, random - the IPs are allocated randomly.
+
+vts:                                    # Configuration for VTS proxy server
+  useProxy: false                       # If true, uses proxy for VTS requests.
+  proxyServer: ""                       # Proxy server to use. Format: "server:port".
+  proxyUser: ""                         # Proxy server authentication user name.
+  proxyPassword: ""                     # Proxy server authentication password.
+  portInQueryString: false              # If true, the port number will be added to the query string and the requests will be sent on httpPort or httpsPort respectively.
+  httpPort: 80                          # if "portInQueryString" is set to true this is the port all the http requests will be sent on.
+  httpsPort: 443                        # if "portInQueryString" is set to true this is the port all the https requests will be sent on.
+  ignoreBadCertificate: false           # If true, SSL accepts any certificate presented by the vts server and any hostname in that certificate.
+
+encryption:
+  keyLocation: ""                       # Location of the file containing the key used for data decryption. Format: "folder/keyFile.txt".
+
+vuserLogger:                            # Configuration for Vuser logger
+  errorBufferSize: 4096                 # The maximum buffer size for each Vuser logger.
+  logMode: full                         # Specify when to create the log file. Possible values are [full, error, none].
+  logLevel: trace                       # The log level for Vuser logger. Possible values are [error, warning, info, debug, trace].
+  showInConsole: true                   # If true, all the Vuser logging is printed to the console.
+
+flow:                                   # Flow Control definition, please refer to documentation for more details.
+  enabled: false
+
+thinkTime:                              # Configuration for think time, to control how the Vuser uses think time during script execution.
+  type: "asRecorded"                    # Specifies the think time type. Possible values are: [ignore, asRecorded, multiply, randomPercentage].
+  limit: -1                             # Limits the recorded think time (in seconds) during execution. Set -1 for disabling think time limit.
 ```
+IMPORTANT: ALWAYS generate ALL 10 sections above. Do NOT abbreviate or skip any section.
 
 parameters.yml (when variables exist):
 ```yaml
