@@ -53,6 +53,13 @@ class WebHttpScriptGenerator {
     this.paramVarNames = new Set();    // Static params from collection → {varName}
     this.scriptSetVarNames = new Set();
 
+    // Large base64 data extraction (mirrors advancedScriptGenerator pattern for VuGen)
+    // VuGen C uses BodyFilePath= instead of Body= for large data files.
+    // BodyFilePath= reads the file at runtime and performs {param} substitution within it.
+    this.extractedDataFiles = new Map(); // hash → { varName, fileName, content, size, usedBy[] }
+    this.largeValueIndex = new Map();    // "requestName::__raw__|__json__" → hash
+    this.BASE64_THRESHOLD = 500;
+
     // Transaction names collected during generateGroupedRequests() — passed to .usr file
     this.transactionNames = [];
 
@@ -176,11 +183,22 @@ class WebHttpScriptGenerator {
     fs.writeFileSync(path.join(outputDir, 'vuser_end.c'), vuserEndC, 'utf8');
     fs.writeFileSync(path.join(outputDir, 'globals.h'), globalsH, 'utf8');
 
-    // 6. Generate config/metadata files (ParameterFile.prm now includes all params)
-    await this.mandatoryFilesGen.generateAll(outputDir, this.parameters, this.transactionNames);
+    // 6. Write extracted base64/body data files to data/ subfolder
+    if (this.extractedDataFiles.size > 0) {
+      const dataDir = path.join(outputDir, 'data');
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      for (const [, fileInfo] of this.extractedDataFiles.entries()) {
+        fs.writeFileSync(path.join(dataDir, fileInfo.fileName), fileInfo.content, 'utf8');
+        console.log(`✓ Extracted: data/${fileInfo.fileName} (${(fileInfo.size / 1024).toFixed(1)} KB, used by ${fileInfo.usedBy.length} request(s))`);
+      }
+    }
+
+    // 7. Generate config/metadata files — pass data file names so they appear in .usr and ScriptUploadMetadata.xml
+    const dataFileNames = Array.from(this.extractedDataFiles.values()).map(f => f.fileName);
+    await this.mandatoryFilesGen.generateAll(outputDir, this.parameters, this.transactionNames, dataFileNames);
 
     const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
-    console.log(`✓ Generated Web HTTP/HTML script: ${outputDir}`);
+    console.log(`✓ Generated Web HTTP/HTML script "${scriptName}": ${outputDir}`);
 
     return {
       script: actionC,
@@ -190,7 +208,8 @@ class WebHttpScriptGenerator {
         parameters: { totalParameters: this.parameters.size },
         authentication: { totalConfigs: 0 }
       },
-      mandatoryFiles: true
+      mandatoryFiles: true,
+      extractedDataFiles: dataFileNames
     };
   }
 
@@ -221,6 +240,9 @@ class WebHttpScriptGenerator {
     if (this.options.useParameterization) {
       this.classifyVariables();
     }
+
+    // Large base64 extraction — scan after parameterization so replaceParameters() works
+    this.scanForLargeBase64();
   }
 
   // ─── C Source File Generation ────────────────────────────────────────────────
@@ -302,9 +324,9 @@ ${corrList}
 
     // Pick the first URL-like parameter to log at startup (helps confirm config loaded)
     let urlParamLog = '';
-    for (const [name, config] of this.parameters.entries()) {
+    for (const [name] of this.parameters.entries()) {
       if (/^(url|baseUrl|base_url|host|endpoint|server)$/i.test(name)) {
-        urlParamLog = `\n    lr_log_message("  Base URL : %s", lr_eval_string("{${name}}"));`;
+        urlParamLog = `\n    lr_output_message("  Base URL : %s", lr_eval_string("{${name}}"));`;
         break;
       }
     }
@@ -322,14 +344,17 @@ ${corrList}
  *  WHAT TO ADD HERE (per VuGen best practices):
  *    1. Validate that mandatory parameters are populated.
  *    2. Perform one-time authentication (OAuth token fetch, session login).
- *       Store the result via lr_save_string() or a global char array.
+ *       web_reg_save_param_json() MUST come BEFORE the token request.
  *    3. Load any per-Vuser configuration that must happen before Action().
  * ------------------------------------------------------------------------------- */
 
 vuser_init()
 {
-    lr_log_message("[init] Vuser %d starting — ${scriptName}", lr_get_vuser_id());
-    lr_log_message("  Parameters loaded : ${paramCount} static, ${corrCount} correlation target(s)");${urlParamLog}
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("[init] Vuser %d starting — ${scriptName}", vusr_id);
+    lr_output_message("  Parameters loaded : ${paramCount} static, ${corrCount} correlation target(s)");${urlParamLog}
 
     /* ------------------------------------------------------------------
      * Validate critical parameters.
@@ -344,10 +369,15 @@ vuser_init()
 
     /* ------------------------------------------------------------------
      * One-time authentication example (OAuth2 client_credentials).
+     * NOTE: web_reg_save_param_json MUST come BEFORE web_custom_request.
      * Uncomment, adapt the URL/body, and ensure {clientId}/{clientSecret}
      * are set in collection_data.dat before running.
      * ------------------------------------------------------------------ */
     /*
+    web_reg_save_param_json("_accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
     web_custom_request("OAuth2_Token_Fetch",
         "URL={url}/services/oauth2/token",
         "Method=POST",
@@ -358,11 +388,10 @@ vuser_init()
         "EncType=application/x-www-form-urlencoded",
         "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}",
         LAST);
-
-    web_reg_save_param_json("_accessToken",
-        "QueryString=$.access_token",
-        "Ord=1",
-        LAST);
+    if (strcmp(lr_eval_string("{_accessToken}"), "") == 0) {
+        lr_error_message("[init] FATAL: OAuth2 token is empty — check credentials in collection_data.dat");
+        return -1;
+    }
     */
 
     return 0;
@@ -387,7 +416,10 @@ vuser_init()
 
 vuser_end()
 {
-    lr_log_message("[end] Vuser %d finished — ${scriptName}", lr_get_vuser_id());
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("[end] Vuser %d finished — ${scriptName}", vusr_id);
 
     /* ------------------------------------------------------------------
      * Logout example — uncomment and adapt the URL as needed.
@@ -668,7 +700,7 @@ Action()
   }
 
   generateWebCustomRequest(request, url, method, contentType, indent) {
-    const body = this.generateBodyForC(request);
+    const bodyResult = this.generateBodyForC(request);
 
     let code = `${indent}web_custom_request("${this.sanitizeCName(request.name)}",\n`;
     code += `${indent}    "URL=${url}",\n`;
@@ -681,8 +713,11 @@ Action()
     if (contentType) {
       code += `${indent}    "EncType=${contentType}",\n`;
     }
-    if (body) {
-      code += `${indent}    "Body=${body}",\n`;
+    if (bodyResult?.bodyFile) {
+      // Large base64 body — VuGen reads file at runtime, substitutes {params} within it
+      code += `${indent}    "BodyFilePath=${bodyResult.bodyFile}",\n`;
+    } else if (bodyResult?.body) {
+      code += `${indent}    "Body=${bodyResult.body}",\n`;
     }
 
     code += `${indent}    LAST);\n`;
@@ -714,19 +749,42 @@ Action()
     return this.replaceParameters(fullUrl);
   }
 
+  /**
+   * Generate body for a C web_custom_request call.
+   * Returns:
+   *   { body: string }     — inline "Body=..." attribute value
+   *   { bodyFile: string } — "BodyFilePath=..." for large base64 or large JSON bodies
+   *   null                 — no body (formdata / empty)
+   *
+   * VuGen's BodyFilePath= reads the file at runtime and performs {param} substitution
+   * within it, so {varName} LR parameter references work inside body files.
+   */
   generateBodyForC(request) {
     if (!request.body) return null;
 
     const { mode, raw, urlencoded, formdata } = request.body;
 
     if (mode === 'raw' && raw) {
-      // Try to parse as JSON object, then re-serialize with escaped quotes
+      // Case 1: Entire raw body was detected as large base64 — use BodyFilePath
+      const rawKey = `${request.name}::__raw__`;
+      if (this.largeValueIndex.has(rawKey)) {
+        const fileInfo = this.extractedDataFiles.get(this.largeValueIndex.get(rawKey));
+        return { bodyFile: `data/${fileInfo.fileName}` };
+      }
+
+      // Case 2: JSON body with embedded large base64 field(s) — use BodyFilePath
+      const jsonKey = `${request.name}::__json__`;
+      if (this.largeValueIndex.has(jsonKey)) {
+        const fileInfo = this.extractedDataFiles.get(this.largeValueIndex.get(jsonKey));
+        return { bodyFile: `data/${fileInfo.fileName}` };
+      }
+
+      // Normal case: inline body
       try {
         const parsed = JSON.parse(raw);
-        return this.jsonToCString(parsed);
+        return { body: this.jsonToCString(parsed) };
       } catch {
-        // Not JSON — treat as raw string
-        return this.escapeCBodyString(this.replaceParameters(raw));
+        return { body: this.escapeCBodyString(this.replaceParameters(raw)) };
       }
     }
 
@@ -734,12 +792,14 @@ Action()
       const parts = urlencoded
         .filter(p => !p.disabled && p.key)
         .map(p => `${encodeURIComponent(p.key)}=${this.vuGenEncodeValue(p.value || '')}`);
-      return parts.join('&');
+      return { body: parts.join('&') };
     }
 
     if (mode === 'formdata' && formdata) {
-      // Multipart not directly representable in web_custom_request Body=
-      // Return comment placeholder
+      // Multipart/form-data cannot be represented in web_custom_request Body=.
+      // VuGen Web HTTP/HTML does not support multipart uploads via the C API body string.
+      // The request is generated without a body — adapt manually in Action.c if needed.
+      console.warn(`  ⚠  "${request.name}": multipart/form-data body cannot be represented in web_custom_request Body= — request generated without body. Convert to raw JSON or urlencoded manually in Action.c.`);
       return null;
     }
 
@@ -872,6 +932,137 @@ Action()
     return encodeURIComponent(withParams)
       .replace(/%7B/gi, '{')
       .replace(/%7D/gi, '}');
+  }
+
+  // ─── Large Base64 Extraction ─────────────────────────────────────────────────
+
+  /**
+   * Check if a string is a large base64-encoded value.
+   * Must be >= BASE64_THRESHOLD chars and contain only base64 characters.
+   */
+  isBase64(str) {
+    if (!str || typeof str !== 'string') return false;
+    const stripped = str.replace(/\s/g, '');
+    if (stripped.length < this.BASE64_THRESHOLD) return false;
+    return /^[A-Za-z0-9+/=]+$/.test(stripped);
+  }
+
+  /**
+   * Generate a short MD5 hash prefix for deduplication (12 hex chars).
+   */
+  hashContent(content) {
+    return crypto.createHash('md5').update(content).digest('hex').substring(0, 12);
+  }
+
+  /**
+   * Generate a safe file name for an extracted data file.
+   */
+  safeDataFileName(requestName, suffix) {
+    return this.sanitizeCName(requestName) + '_' + suffix;
+  }
+
+  /**
+   * Scan all POST/PUT/PATCH requests for large base64 values in raw bodies.
+   *
+   * Two cases handled:
+   *   1. Entire raw body is base64 → extracted to data/requestName_body.b64
+   *      Action.c uses: "BodyFilePath=data/requestName_body.b64"
+   *
+   *   2. JSON body contains embedded base64 field(s) → entire processed JSON written
+   *      to data/requestName_body.dat with {varName} LR param syntax preserved.
+   *      Action.c uses: "BodyFilePath=data/requestName_body.dat"
+   *      VuGen substitutes {param} references within BodyFilePath files at runtime.
+   *
+   * Identical content across requests is deduplicated via MD5 hash.
+   */
+  scanForLargeBase64() {
+    let totalFound = 0;
+    let deduplicated = 0;
+
+    this.requests.forEach(request => {
+      if (!request.body) return;
+      const method = (request.method || 'GET').toUpperCase();
+      if (!['POST', 'PUT', 'PATCH'].includes(method)) return;
+
+      const { mode, raw } = request.body;
+      if (mode !== 'raw' || !raw) return;
+
+      // Case 1: Entire raw body is large base64
+      if (this.isBase64(raw)) {
+        const hash = this.hashContent(raw);
+        const indexKey = `${request.name}::__raw__`;
+        if (this.extractedDataFiles.has(hash)) {
+          this.extractedDataFiles.get(hash).usedBy.push(request.name);
+          this.largeValueIndex.set(indexKey, hash);
+          deduplicated++;
+        } else {
+          const varName = this.safeDataFileName(request.name, 'body');
+          const fileName = `${varName}.b64`;
+          this.extractedDataFiles.set(hash, {
+            varName, fileName, content: raw, size: raw.length, usedBy: [request.name]
+          });
+          this.largeValueIndex.set(indexKey, hash);
+          totalFound++;
+        }
+        return; // Don't also check as JSON
+      }
+
+      // Case 2: JSON body with embedded large base64 field(s)
+      try {
+        const parsed = JSON.parse(raw);
+        let hasLargeBase64 = false;
+        this._scanObjectForBase64(parsed, request.name, '', () => { hasLargeBase64 = true; });
+
+        if (hasLargeBase64) {
+          // Write entire processed JSON (with {varName} LR params for non-base64 fields)
+          const processedContent = this.replaceParameters(raw);
+          const hash = this.hashContent(raw); // hash original for deduplication
+          const indexKey = `${request.name}::__json__`;
+          if (this.extractedDataFiles.has(hash)) {
+            this.extractedDataFiles.get(hash).usedBy.push(request.name);
+            this.largeValueIndex.set(indexKey, hash);
+            deduplicated++;
+          } else {
+            const varName = this.safeDataFileName(request.name, 'body');
+            const fileName = `${varName}.dat`;
+            this.extractedDataFiles.set(hash, {
+              varName, fileName, content: processedContent, size: processedContent.length, usedBy: [request.name]
+            });
+            this.largeValueIndex.set(indexKey, hash);
+            totalFound++;
+          }
+        }
+      } catch {
+        // Not JSON — already handled by isBase64 check above
+      }
+    });
+
+    if (totalFound > 0 || deduplicated > 0) {
+      console.log(`✓ Extracted ${totalFound + deduplicated} large body/base64 value(s) to data/ folder (${totalFound} unique, ${deduplicated} deduplicated)`);
+    }
+  }
+
+  /**
+   * Recursively scan a parsed JSON object for large base64 string values.
+   * Calls onFound(fieldPath, value) for each match found.
+   */
+  _scanObjectForBase64(obj, requestName, currentPath, onFound) {
+    if (typeof obj === 'string') {
+      if (this.isBase64(obj)) onFound(currentPath, obj);
+      return;
+    }
+    if (Array.isArray(obj)) {
+      obj.forEach((item, i) =>
+        this._scanObjectForBase64(item, requestName, `${currentPath}[${i}]`, onFound)
+      );
+      return;
+    }
+    if (typeof obj === 'object' && obj !== null) {
+      Object.entries(obj).forEach(([key, value]) => {
+        const p = currentPath ? `${currentPath}.${key}` : key;
+        this._scanObjectForBase64(value, requestName, p, onFound);
+      });
+    }
   }
 
   // ─── Utilities ────────────────────────────────────────────────────────────────

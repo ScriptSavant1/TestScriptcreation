@@ -5,6 +5,41 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2026-02-24
+
+### Added
+- **`devweb-prompts/11-WEB-HTTP-AUTH-HANDLER.txt`** (new file): VuGen Web HTTP/HTML authentication patterns in C — equivalent of `03-AUTHENTICATION-HANDLER.txt` for C protocol. Covers: OAuth2 client_credentials & password grant in `vuser_init.c`, login endpoint pattern, static Bearer, Basic Auth via `web_set_user()`, API Key header/query, auth inheritance rules, token refresh pattern, complete example with parameter validation, and DevWeb vs Web HTTP/HTML auth comparison table.
+- **`devweb-prompts/10-WEB-HTTP-ACTION-GENERATOR.txt`**: Added in v2.3.1; now referenced from all navigation files.
+- **`devweb-prompts/USAGE-GUIDE-DEVWEB.txt`** (new file): Self-contained DevWeb (JavaScript) user guide — which prompt files to upload, 6 detailed copy-paste AI chat templates (A–F), variable classification quick reference, and DevWeb-specific troubleshooting. Users targeting DevWeb output no longer need to read the combined USAGE-GUIDE.txt.
+- **`devweb-prompts/USAGE-GUIDE-WEB-HTTP.txt`** (new file): Self-contained VuGen Web HTTP/HTML (C) user guide — which prompt files to upload, 6 detailed copy-paste AI chat templates (G–L), VuGen C parameter syntax, large base64 body (`BodyFilePath=`) explanation, correlation quick reference, and VuGen-specific troubleshooting. Users targeting VuGen output no longer need to read the combined USAGE-GUIDE.txt.
+- **`devweb-prompts/00-README-START-HERE.txt`**: Added "QUICK PROTOCOL SELECTOR" box at the top directing users to the appropriate protocol-specific guide.
+- **`src/generators/webHttpScriptGenerator.js`**: `generateBodyForC()` now emits a `console.warn` for `multipart/form-data` requests (previously returned `null` silently, hiding the limitation from the user).
+
+### Changed
+- **`devweb-prompts/00-README-START-HERE.txt`**: Added `10-WEB-HTTP-ACTION-GENERATOR.txt` and `11-WEB-HTTP-AUTH-HANDLER.txt` to the PROMPT FILES INCLUDED listing. Updated Advanced Usage web-http upload examples (Basic: `01 + 06 + 10`; With auth: `01 + 06 + 10 + 11`; With correlations: `01 + 04 + 06 + 10`). Added Tip 11 about using file 11 for OAuth2/auth collections.
+- **`devweb-prompts/USAGE-GUIDE.txt`**: Section 5 decision table now includes two web-http rows (simple: 4 files; auth+correlations: 6 files). Templates G and H updated to reference files 10 and 11 respectively with more specific AI instructions. "FILES YOU NEVER NEED TO UPLOAD" section updated to clearly separate DevWeb-only files from web-http required files.
+- **`devweb-prompts/01-MASTER-PROMPT.txt`**: Added header note clarifying this file covers DevWeb (JS) output only, and directing users to files 10, 11, and 06 for VuGen Web HTTP/HTML (C) output.
+- **`devweb-prompts/07-PARAMETERS-YML-RULES.txt`**: Added scope note at top mapping DevWeb parameter concepts to VuGen Web HTTP/HTML equivalents (`nextValue: once` → `GenerateNewVal="Once"`, `nextValue: iteration` → `GenerateNewVal="EachIteration"`, `load.params` → `{varName}`, `load.global` → `{_varName}`). Added `ParameterFile.prm` side-by-side comparison section and common mistakes 6 and 7 for web-http.
+- **`package.json`**: Version bumped from `2.3.1` to `2.3.3` to match CHANGELOG.
+
+### Fixed
+- **`src/generators/webHttpScriptGenerator.js`** — Critical VuGen runtime error: Replaced non-existent `lr_get_vuser_id()` function (caused "Unresolved symbol" during VuGen replay) with the correct `lr_whoami(int*, char**, int*)` API in both `generateVuserInitC()` and `generateVuserEndC()`. Added required C89 variable declarations (`int vusr_id, scid; char *vusr_group;`) at the top of each function. Changed `lr_log_message()` → `lr_output_message()` for all vuser lifecycle messages (ensures output always appears in VuGen Output window regardless of log settings). Fixed wrong order in commented OAuth2 example block: `web_reg_save_param_json()` now appears before `web_custom_request()` as required by VuGen.
+- **`devweb-prompts/06-MANDATORY-FILES.txt`**, **`10-WEB-HTTP-ACTION-GENERATOR.txt`**, **`11-WEB-HTTP-AUTH-HANDLER.txt`**: All occurrences of `lr_get_vuser_id()` replaced with the correct `lr_whoami()` pattern with variable declarations. All `lr_log_message()` calls in lifecycle templates replaced with `lr_output_message()`.
+- **`output/*/vuser_init.c`** and **`output/*/vuser_end.c`** (28 files across 14 folders): Regenerated with correct `lr_whoami()` API, correct C string literals (closing `"` restored on format string arguments), and `lr_output_message()` throughout.
+
+---
+
+## [2.3.2] - 2026-02-24
+
+### Fixed
+- **`default.usp` — Root cause of transactions not executing during VuGen replay**: The run logic profile was missing the full MercIniTree hierarchy that VuGen requires to parse the vuser lifecycle. Added: `MercIniTreeSectionName=` in all root sections, `MercIniTreeSons=` linking parents to children, `RunLogicActionType=` (VuserInit / VuserRun / VuserEnd / VuserErrorHandler) in all sections, child subsections `[RunLogicInitRoot:vuser_init]`, `[RunLogicRunRoot:Action]`, `[RunLogicEndRoot:vuser_end]`, and the complete `[RunLogicErrorHandlerRoot]` + child. Without these fields VuGen silently skips transaction execution.
+- **`default.cfg` — Missing required settings**: Added `automatic_nested_transactions=1` (enables nested transaction support), `Limit=1` in `[ThinkTime]`, `RandomMin=60` / `RandomMax=90` in `[Iterations]`, `MsgClassData=0` / `MsgClassParameters=0` / `MsgClassFull=0` in `[Log]`, `MaxConnections=0` in `[WEB]`.
+- **`[ScriptName].usr` — Missing metadata fields**: Added `LastModifyVer=26.1.0.0`, `DFERebrandFlag=Done`, `LastCodeGenerationVer=26.1.0.0`, `DisableRegenerate=0`, `[StateManagement]\nLastReplayStatus=0`, and `[ActiveReplay]\nLastReplayedRunName=\nActiveRunName=` — all required for VuGen to correctly track script state.
+- **`devweb-prompts/06-MANDATORY-FILES.txt`**: All three VuGen template fixes above applied to the prompt file as well, so AI-generated scripts will also produce correct VuGen-compatible files.
+- **Large base64 body handling** (`webHttpScriptGenerator.js`): Requests with large base64-encoded bodies (>500 chars) are now extracted to a `data/` subfolder and referenced via `"BodyFilePath=data/filename.b64"` (entire base64 body) or `"BodyFilePath=data/filename.dat"` (JSON body with embedded base64 field). Deduplication via MD5 hash. Data files registered in `[ExtraFiles]` in `.usr` and in `<GeneralFiles>` in `ScriptUploadMetadata.xml`.
+
+---
+
 ## [2.3.1] - 2026-02-24
 
 ### Fixed
