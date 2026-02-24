@@ -277,6 +277,20 @@ TABLE OF CONTENTS
   |                             | + paste folder contents or describe       |
   |                             | (3 files total)                          |
   +-----------------------------+------------------------------------------+
+  | VuGen Web HTTP/HTML C       | 01-MASTER-PROMPT.txt                     |
+  | (simple, no auth)           | 06-MANDATORY-FILES.txt                   |
+  |                             | 10-WEB-HTTP-ACTION-GENERATOR.txt         |
+  |                             | + collection.json                        |
+  |                             | (4 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | VuGen Web HTTP/HTML C       | 01-MASTER-PROMPT.txt                     |
+  | (with auth + correlations)  | 04-CORRELATION-EXTRACTOR.txt             |
+  |                             | 06-MANDATORY-FILES.txt                   |
+  |                             | 10-WEB-HTTP-ACTION-GENERATOR.txt         |
+  |                             | 11-WEB-HTTP-AUTH-HANDLER.txt             |
+  |                             | + collection.json                        |
+  |                             | (6 files total)                          |
+  +-----------------------------+------------------------------------------+
 
   VISUAL FLOWCHART:
 
@@ -302,23 +316,31 @@ TABLE OF CONTENTS
 
 
   FILES YOU NEVER NEED TO UPLOAD (for DevWeb JavaScript output):
-    - 00-README-START-HERE.txt       (this is for humans, not AI)
-    - 05-SCENARIO-YML-GENERATOR.txt  (covered in master prompt)
-    - 06-MANDATORY-FILES.txt         (covered in master prompt for DevWeb)
-    - USAGE-GUIDE.txt                (this document)
+    - 00-README-START-HERE.txt         (this is for humans, not AI)
+    - 05-SCENARIO-YML-GENERATOR.txt    (covered in master prompt)
+    - 06-MANDATORY-FILES.txt           (covered in master prompt for DevWeb)
+    - 10-WEB-HTTP-ACTION-GENERATOR.txt (only for VuGen Web HTTP/HTML C output)
+    - 11-WEB-HTTP-AUTH-HANDLER.txt     (only for VuGen Web HTTP/HTML C output)
+    - USAGE-GUIDE.txt                  (this document)
 
-  UPLOAD 06-MANDATORY-FILES.txt when generating VuGen Web HTTP/HTML (C) output:
-    - It contains all exact C file templates: Action.c, vuser_init.c,
-      vuser_end.c, globals.h, .usr INI, default.cfg, default.usp,
-      ParameterFile.prm (INI format), collection_data.dat,
-      ScriptUploadMetadata.xml
+  FILES TO UPLOAD FOR VuGen Web HTTP/HTML (C) output:
+    - 06-MANDATORY-FILES.txt           (config file templates: .usr, default.cfg,
+                                        default.usp INI, ParameterFile.prm INI,
+                                        collection_data.dat, ScriptUploadMetadata.xml)
+    - 10-WEB-HTTP-ACTION-GENERATOR.txt (C code rules: web_url, web_custom_request,
+                                        web_add_header, web_reg_save_param_*,
+                                        {varName} syntax, transaction structure)
+    - 11-WEB-HTTP-AUTH-HANDLER.txt     (when collection has OAuth2/auth — C patterns
+                                        for vuser_init.c token fetch)
 
   NEW IN v3.1 (dual-protocol):
-    - 06-MANDATORY-FILES.txt now includes ALL VuGen Web HTTP/HTML C file templates
-      (Action.c, vuser_init.c, vuser_end.c, globals.h, .usr, default.cfg,
-       default.usp, ParameterFile.prm INI format, collection_data.dat,
-       ScriptUploadMetadata.xml)
-    - Upload 06 when generating VuGen Web HTTP/HTML scripts
+    - 10-WEB-HTTP-ACTION-GENERATOR.txt — C code generation rules for Action.c,
+      vuser_init.c, vuser_end.c, globals.h (equivalent of 02-MAIN-JS-GENERATOR
+      but for VuGen Web HTTP/HTML C protocol)
+    - 11-WEB-HTTP-AUTH-HANDLER.txt — VuGen Web HTTP/HTML auth patterns in C
+      (OAuth2, Basic, Bearer, API Key for vuser_init.c)
+    - 06-MANDATORY-FILES.txt now includes the complete default.usp MercIniTree format
+      required for VuGen to execute transactions during replay
 
   NEW IN v2.0:
     - 09-CUSTOM-SCRIPT-CONVERTER.txt  (Postman/Bruno script translation)
@@ -498,7 +520,8 @@ TABLE OF CONTENTS
 
   TEMPLATE G: VUGEN WEB HTTP/HTML (C) - SIMPLE COLLECTION
   -----------------------------------------------------------------------
-  Attach: 01-MASTER-PROMPT.txt + 06-MANDATORY-FILES.txt + MyCollection.json
+  Attach: 01-MASTER-PROMPT.txt + 06-MANDATORY-FILES.txt
+          + 10-WEB-HTTP-ACTION-GENERATOR.txt + MyCollection.json
 
   Type this message:
 
@@ -507,32 +530,35 @@ TABLE OF CONTENTS
     Please generate VuGen Web HTTP/HTML (C-based) LoadRunner script files,
     NOT DevWeb JavaScript files.
 
-    Read the mandatory files prompt (06) for the exact C code patterns,
-    file formats, and parameter syntax to use.
+    Read prompt 10 for the C code patterns (web_url, web_custom_request,
+    web_add_header, web_reg_save_param_*, {varName} syntax).
+    Read prompt 06 for the exact config file formats (.usr, default.cfg,
+    default.usp INI, ParameterFile.prm INI, ScriptUploadMetadata.xml).
 
-    Generate ALL 10 required files:
+    Generate ALL required files:
     1. Action.c             (C script with lr_start_transaction, web_url, web_custom_request)
     2. vuser_init.c         (VuGen init lifecycle)
     3. vuser_end.c          (VuGen end lifecycle)
-    4. globals.h            (includes + parameter inventory comments)
+    4. globals.h            (standard includes + parameter inventory comments)
     5. [ScriptName].usr     (VuGen metadata INI)
     6. default.cfg          (runtime settings INI)
-    7. default.usp          (run logic profile INI)
-    8. ParameterFile.prm    (INI format with [parameter:name] sections)
+    7. default.usp          (run logic profile INI — full MercIniTree format)
+    8. ParameterFile.prm    (INI format with [parameter:name] sections, NOT XML)
     9. collection_data.dat  (CSV with header row + values)
     10. ScriptUploadMetadata.xml
 
     Use {varName} syntax for all parameters (NOT ${load.params.varName}).
-    Place web_reg_save_param_json() BEFORE the request that produces the value."
+    Place web_reg_save_param_json() BEFORE the request that produces the value.
+    Always add web_set_sockets_option('SSL_VERSION', 'AUTO') as first line of Action()."
 
   -----------------------------------------------------------------------
 
 
   TEMPLATE H: VUGEN WEB HTTP/HTML (C) - WITH AUTH AND CORRELATIONS
   -----------------------------------------------------------------------
-  Attach: 01-MASTER-PROMPT.txt + 03-AUTHENTICATION-HANDLER.txt
-          + 04-CORRELATION-EXTRACTOR.txt + 06-MANDATORY-FILES.txt
-          + MyCollection.json
+  Attach: 01-MASTER-PROMPT.txt + 04-CORRELATION-EXTRACTOR.txt
+          + 06-MANDATORY-FILES.txt + 10-WEB-HTTP-ACTION-GENERATOR.txt
+          + 11-WEB-HTTP-AUTH-HANDLER.txt + MyCollection.json
 
   Type this message:
 
@@ -545,14 +571,19 @@ TABLE OF CONTENTS
 
     Please:
     1. Read all prompt files carefully
-    2. Detect all dynamic values (tokens, IDs) that flow between requests
-    3. Use web_reg_save_param_json() BEFORE the request that produces each value
-    4. Use {varName} syntax for all parameters and correlation references
-    5. Group requests into lr_start_transaction / lr_end_transaction blocks by folder
+    2. Run the 2-pass correlation algorithm (from prompt 04) to detect all
+       dynamic values (tokens, IDs) that flow between requests
+    3. Put the OAuth2 token fetch in vuser_init.c (see prompt 11 for exact C patterns)
+    4. Use web_reg_save_param_json() BEFORE the request that produces each value
+    5. Use {varName} syntax for all parameters and correlation references
+    6. Use _ prefix for correlated variables: {_accessToken}, {_userId}, {_orderId}
+    7. Group requests into lr_start_transaction / lr_end_transaction blocks by folder
 
-    Generate ALL 10 required files (Action.c, vuser_init.c, vuser_end.c,
-    globals.h, ScriptName.usr, default.cfg, default.usp, ParameterFile.prm,
-    collection_data.dat, ScriptUploadMetadata.xml)"
+    Generate ALL required files:
+    Action.c (with web_set_sockets_option SSL_VERSION AUTO as first line),
+    vuser_init.c (OAuth2 token fetch using web_reg_save_param_json + web_custom_request),
+    vuser_end.c, globals.h, [ScriptName].usr, default.cfg, default.usp (full MercIniTree),
+    ParameterFile.prm (INI format — NOT XML), collection_data.dat, ScriptUploadMetadata.xml"
 
   -----------------------------------------------------------------------
 

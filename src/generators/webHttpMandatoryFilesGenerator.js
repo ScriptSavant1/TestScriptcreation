@@ -5,7 +5,7 @@
  *   [ScriptName].usr  — VuGen metadata (INI)
  *   default.cfg       — Runtime settings (INI)
  *   default.usp       — Run logic profile (INI)
- *   ParameterFile.prm — Parameter definitions (XML)
+ *   ParameterFile.prm — Parameter definitions (VuGen INI format)
  *   collection_data.dat — Parameter values (CSV)
  *   ScriptUploadMetadata.xml — LRE upload manifest (XML)
  */
@@ -24,7 +24,14 @@ class WebHttpMandatoryFilesGenerator {
    * @param {Map}    parameters     - Map of name → {name, nextValue, paramValue, ...}
    * @param {string[]} [transactionNames] - Optional list of LR transaction names
    */
-  async generateAll(outputDir, parameters, transactionNames = []) {
+  /**
+   * @param {string}   outputDir        - Output directory path
+   * @param {Map}      parameters       - Map of name → {name, nextValue, paramValue, ...}
+   * @param {string[]} transactionNames - LR transaction names (for .usr [TransactionsOrder])
+   * @param {string[]} dataFiles        - Extracted data file names (e.g. ['Upload_body.b64'])
+   *                                      Written into [ExtraFiles] and ScriptUploadMetadata.xml
+   */
+  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = []) {
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -32,7 +39,7 @@ class WebHttpMandatoryFilesGenerator {
     const safeScriptName = this.sanitizeName(this.scriptName);
 
     this.writeFile(outputDir, `${safeScriptName}.usr`,
-      this.generateUsrFile(safeScriptName, transactionNames));
+      this.generateUsrFile(safeScriptName, transactionNames, dataFiles));
     this.writeFile(outputDir, 'default.cfg',
       this.generateDefaultCfg());
     this.writeFile(outputDir, 'default.usp',
@@ -42,7 +49,7 @@ class WebHttpMandatoryFilesGenerator {
     this.writeFile(outputDir, 'collection_data.dat',
       this.generateCollectionDataDat(parameters));
     this.writeFile(outputDir, 'ScriptUploadMetadata.xml',
-      this.generateScriptUploadMetadata(safeScriptName));
+      this.generateScriptUploadMetadata(safeScriptName, dataFiles));
 
     console.log(`✓ Generated VuGen config files (${safeScriptName}.usr, default.cfg, default.usp, ParameterFile.prm, collection_data.dat, ScriptUploadMetadata.xml)`);
   }
@@ -61,13 +68,18 @@ class WebHttpMandatoryFilesGenerator {
 
   // ─── [ScriptName].usr (INI) ──────────────────────────────────────────────────
 
-  generateUsrFile(scriptName, transactionNames = []) {
+  generateUsrFile(scriptName, transactionNames = [], dataFiles = []) {
     const txOrder = transactionNames.length > 0
       ? `\n[TransactionsOrder]\nOrder="${transactionNames.join('__*delimiter*__')}"\n`
       : '';
 
     const txSection = transactionNames.length > 0
       ? `\n[Transactions]\n${transactionNames.map(n => `${n}=`).join('\n')}\n`
+      : '';
+
+    // Data files use Windows backslash paths (VuGen INI convention)
+    const extraDataFiles = dataFiles.length > 0
+      ? dataFiles.map(f => `data\\${f}=`).join('\n') + '\n'
       : '';
 
     return `[General]
@@ -85,6 +97,10 @@ ActiveTypes=QTWeb
 GenerateTypes=QTWeb
 AdditionalTypes=QTWeb
 DevelopTool=Vugen
+LastModifyVer=26.1.0.0
+DFERebrandFlag=Done
+LastCodeGenerationVer=26.1.0.0
+DisableRegenerate=0
 ParamLeftBrace={
 ParamRightBrace=}
 ScriptLanguage=C
@@ -107,7 +123,7 @@ Default Profile=default.cfg
 
 [ExtraFiles]
 globals.h=
-
+${extraDataFiles}
 [Modified Actions]
 vuser_init=0
 Action=1
@@ -127,6 +143,13 @@ vuser_end=0
 vuser_init=cci
 Action=cci
 vuser_end=cci
+
+[StateManagement]
+LastReplayStatus=0
+
+[ActiveReplay]
+LastReplayedRunName=
+ActiveRunName=
 ${txOrder}${txSection}`;
   }
 
@@ -136,6 +159,7 @@ ${txOrder}${txSection}`;
     return `[General]
 XlBridgeTimeout=120
 DefaultRunLogic=default.usp
+automatic_nested_transactions=1
 AutomaticTransactions=1
 Encoding=ANSI
 
@@ -143,14 +167,20 @@ Encoding=ANSI
 Options=NOTHINK
 Factor=1
 LimitFlag=0
+Limit=1
 
 [Iterations]
 NumOfIterations=1
 IterationPace=IterationASAP
 StartEvery=60
+RandomMin=60
+RandomMax=90
 
 [Log]
 LogOptions=LogBrief
+MsgClassData=0
+MsgClassParameters=0
+MsgClassFull=0
 
 [WEB]
 SearchForImages=1
@@ -158,36 +188,93 @@ HttpVer=1.1
 KeepAlive=Yes
 EnableChecks=0
 AnalogMode=0
+MaxConnections=0
 `;
   }
 
   // ─── default.usp (INI) ───────────────────────────────────────────────────────
 
   generateDefaultUsp() {
+    // This is the exact MercIniTree format VuGen expects.
+    // Missing MercIniTreeSectionName, MercIniTreeSons, RunLogicActionType,
+    // and child subsections causes VuGen to fail parsing the run logic,
+    // which prevents transactions from being executed during replay.
     return `[Profile Actions]
 MercIniTreeFather=""
+MercIniTreeSectionName="Profile Actions"
 Profile Actions name=vuser_init,Action,vuser_end
 
-[RunLogicInitRoot]
-Name="Init"
-RunLogicActionOrder="vuser_init"
-RunLogicNumOfIterations="1"
-RunLogicObjectKind="Group"
-RunLogicRunMode="Sequential"
-
-[RunLogicRunRoot]
-Name="Run"
-RunLogicActionOrder="Action"
-RunLogicNumOfIterations="1"
-RunLogicObjectKind="Group"
-RunLogicRunMode="Sequential"
-
 [RunLogicEndRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicEndRoot"
+MercIniTreeSons="vuser_end"
 Name="End"
 RunLogicActionOrder="vuser_end"
+RunLogicActionType="VuserEnd"
 RunLogicNumOfIterations="1"
 RunLogicObjectKind="Group"
 RunLogicRunMode="Sequential"
+
+[RunLogicEndRoot:vuser_end]
+MercIniTreeFather="RunLogicEndRoot"
+MercIniTreeSectionName="vuser_end"
+Name="vuser_end"
+RunLogicActionType="VuserEnd"
+RunLogicObjectKind="Action"
+
+[RunLogicErrorHandlerRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicErrorHandlerRoot"
+MercIniTreeSons="vuser_errorhandler"
+Name="ErrorHandler"
+RunLogicActionOrder="vuser_errorhandler"
+RunLogicActionType="VuserErrorHandler"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicErrorHandlerRoot:vuser_errorhandler]
+MercIniTreeFather="RunLogicErrorHandlerRoot"
+MercIniTreeSectionName="vuser_errorhandler"
+Name="vuser_errorhandler"
+RunLogicActionType="VuserErrorHandler"
+RunLogicObjectKind="Action"
+
+[RunLogicInitRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicInitRoot"
+MercIniTreeSons="vuser_init"
+Name="Init"
+RunLogicActionOrder="vuser_init"
+RunLogicActionType="VuserInit"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicInitRoot:vuser_init]
+MercIniTreeFather="RunLogicInitRoot"
+MercIniTreeSectionName="vuser_init"
+Name="vuser_init"
+RunLogicActionType="VuserInit"
+RunLogicObjectKind="Action"
+
+[RunLogicRunRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicRunRoot"
+MercIniTreeSons="Action"
+Name="Run"
+RunLogicActionOrder="Action"
+RunLogicActionType="VuserRun"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicRunRoot:Action]
+MercIniTreeFather="RunLogicRunRoot"
+MercIniTreeSectionName="Action"
+Name="Action"
+RunLogicActionType="VuserRun"
+RunLogicObjectKind="Action"
 `;
   }
 
@@ -270,7 +357,12 @@ RunLogicRunMode="Sequential"
 
   // ─── ScriptUploadMetadata.xml ────────────────────────────────────────────────
 
-  generateScriptUploadMetadata(scriptName) {
+  generateScriptUploadMetadata(scriptName, dataFiles = []) {
+    // Data files use forward-slash paths in XML (cross-platform)
+    const dataFileEntries = dataFiles.length > 0
+      ? dataFiles.map(f => `    <FileEntry Name="data/${this.xmlEscape(f)}" Filter="4" />`).join('\n') + '\n'
+      : '';
+
     return `<?xml version="1.0" encoding="utf-8"?>
 <VugenScriptMetadata>
   <ScriptName>${this.xmlEscape(scriptName)}</ScriptName>
@@ -287,7 +379,7 @@ RunLogicRunMode="Sequential"
     <FileEntry Name="default.usp" Filter="4" />
     <FileEntry Name="ParameterFile.prm" Filter="4" />
     <FileEntry Name="collection_data.dat" Filter="4" />
-  </GeneralFiles>
+${dataFileEntries}  </GeneralFiles>
 </VugenScriptMetadata>
 `;
   }

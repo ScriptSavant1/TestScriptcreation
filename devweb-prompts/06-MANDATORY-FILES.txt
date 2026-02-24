@@ -451,21 +451,33 @@ web_custom_request("Token Request",
 ```c
 vuser_init()
 {
-    int userId;
-    userId = lr_get_vuser_id();
-    lr_output_message("VUser %d initializing — base URL: %s", userId,
+    /* lr_whoami() is the correct VuGen function for user ID.              */
+    /* lr_get_vuser_id() does NOT exist — it causes "Unresolved symbol".   */
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("VUser %d initializing — base URL: %s", vusr_id,
                       lr_eval_string("{url}"));
 
-    // TODO: Add OAuth2 token fetch here if authentication is session-scoped
-    // web_add_header("Content-Type", "application/x-www-form-urlencoded");
-    // web_reg_save_param_json("accessToken", "QueryString=$.access_token", "Ord=1", LAST);
-    // web_custom_request("GetToken",
-    //     "URL={url}/oauth/token",
-    //     "Method=POST",
-    //     "EncType=application/x-www-form-urlencoded",
-    //     "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}",
-    //     LAST);
-    // lr_output_message("Token acquired: %s", lr_eval_string("{accessToken}"));
+    /* TODO: Add OAuth2 token fetch if authentication is session-scoped.   */
+    /* IMPORTANT: web_reg_save_param_json MUST come BEFORE web_custom_request. */
+    /*
+    web_reg_save_param_json("_accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
+    web_custom_request("GetToken",
+        "URL={url}/oauth/token",
+        "Method=POST",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Mode=HTML",
+        "EncType=application/x-www-form-urlencoded",
+        "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}",
+        LAST);
+    lr_output_message("Token acquired: %s", lr_eval_string("{_accessToken}"));
+    */
 
     return 0;
 }
@@ -485,7 +497,10 @@ vuser_end()
     //     "EncType=application/json",
     //     "Body={}",
     //     LAST);
-    lr_output_message("VUser %d finalized.", lr_get_vuser_id());
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("VUser %d finalized.", vusr_id);
     return 0;
 }
 ```
@@ -543,6 +558,10 @@ ActiveTypes=QTWeb
 GenerateTypes=QTWeb
 AdditionalTypes=QTWeb
 DevelopTool=Vugen
+LastModifyVer=26.1.0.0
+DFERebrandFlag=Done
+LastCodeGenerationVer=26.1.0.0
+DisableRegenerate=0
 ParamLeftBrace={
 ParamRightBrace=}
 ScriptLanguage=C
@@ -586,6 +605,13 @@ vuser_init=cci
 Action=cci
 vuser_end=cci
 
+[StateManagement]
+LastReplayStatus=0
+
+[ActiveReplay]
+LastReplayedRunName=
+ActiveRunName=
+
 [TransactionsOrder]
 Order="T01_Authentication__*delimiter*__T02_Users"
 
@@ -608,6 +634,7 @@ NOTES:
 [General]
 XlBridgeTimeout=120
 DefaultRunLogic=default.usp
+automatic_nested_transactions=1
 AutomaticTransactions=1
 Encoding=ANSI
 
@@ -615,14 +642,20 @@ Encoding=ANSI
 Options=NOTHINK
 Factor=1
 LimitFlag=0
+Limit=1
 
 [Iterations]
 NumOfIterations=1
 IterationPace=IterationASAP
 StartEvery=60
+RandomMin=60
+RandomMax=90
 
 [Log]
 LogOptions=LogBrief
+MsgClassData=0
+MsgClassParameters=0
+MsgClassFull=0
 
 [WEB]
 SearchForImages=1
@@ -630,37 +663,94 @@ HttpVer=1.1
 KeepAlive=Yes
 EnableChecks=0
 AnalogMode=0
+MaxConnections=0
 ```
 
 ================================================================================
   VUGEN FILE 7: default.usp (run logic profile INI)
 ================================================================================
 
+CRITICAL: VuGen requires the full MercIniTree format with section names, tree hierarchy
+attributes, action types, and child subsections for EACH root. Missing any of these fields
+causes VuGen to fail parsing run logic — transactions WILL NOT EXECUTE during replay.
+
 ```ini
 [Profile Actions]
 MercIniTreeFather=""
+MercIniTreeSectionName="Profile Actions"
 Profile Actions name=vuser_init,Action,vuser_end
 
-[RunLogicInitRoot]
-Name="Init"
-RunLogicActionOrder="vuser_init"
-RunLogicNumOfIterations="1"
-RunLogicObjectKind="Group"
-RunLogicRunMode="Sequential"
-
-[RunLogicRunRoot]
-Name="Run"
-RunLogicActionOrder="Action"
-RunLogicNumOfIterations="1"
-RunLogicObjectKind="Group"
-RunLogicRunMode="Sequential"
-
 [RunLogicEndRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicEndRoot"
+MercIniTreeSons="vuser_end"
 Name="End"
 RunLogicActionOrder="vuser_end"
+RunLogicActionType="VuserEnd"
 RunLogicNumOfIterations="1"
 RunLogicObjectKind="Group"
 RunLogicRunMode="Sequential"
+
+[RunLogicEndRoot:vuser_end]
+MercIniTreeFather="RunLogicEndRoot"
+MercIniTreeSectionName="vuser_end"
+Name="vuser_end"
+RunLogicActionType="VuserEnd"
+RunLogicObjectKind="Action"
+
+[RunLogicErrorHandlerRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicErrorHandlerRoot"
+MercIniTreeSons="vuser_errorhandler"
+Name="ErrorHandler"
+RunLogicActionOrder="vuser_errorhandler"
+RunLogicActionType="VuserErrorHandler"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicErrorHandlerRoot:vuser_errorhandler]
+MercIniTreeFather="RunLogicErrorHandlerRoot"
+MercIniTreeSectionName="vuser_errorhandler"
+Name="vuser_errorhandler"
+RunLogicActionType="VuserErrorHandler"
+RunLogicObjectKind="Action"
+
+[RunLogicInitRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicInitRoot"
+MercIniTreeSons="vuser_init"
+Name="Init"
+RunLogicActionOrder="vuser_init"
+RunLogicActionType="VuserInit"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicInitRoot:vuser_init]
+MercIniTreeFather="RunLogicInitRoot"
+MercIniTreeSectionName="vuser_init"
+Name="vuser_init"
+RunLogicActionType="VuserInit"
+RunLogicObjectKind="Action"
+
+[RunLogicRunRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicRunRoot"
+MercIniTreeSons="Action"
+Name="Run"
+RunLogicActionOrder="Action"
+RunLogicActionType="VuserRun"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicRunRoot:Action]
+MercIniTreeFather="RunLogicRunRoot"
+MercIniTreeSectionName="Action"
+Name="Action"
+RunLogicActionType="VuserRun"
+RunLogicObjectKind="Action"
 ```
 
 ================================================================================

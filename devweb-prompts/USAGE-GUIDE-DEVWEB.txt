@@ -1,0 +1,469 @@
+================================================================================
+  DEVWEB (JAVASCRIPT) USER GUIDE
+  Postman / Bruno → LoadRunner DevWeb Script Converter
+================================================================================
+
+  Protocol:   DevWeb (JavaScript) — default output
+  Output:     main.js, scenario.yml, rts.yml, tsconfig.json,
+              parameters.yml, collection_data.csv, DevWebSdk.d.ts
+  CLI flag:   (none — DevWeb is the default)
+  Web UI:     Protocol = "DevWeb (JavaScript)" (default selection)
+
+  FOR VUGEN WEB HTTP/HTML (C) OUTPUT: See USAGE-GUIDE-WEB-HTTP.txt
+  COMBINED REFERENCE:                 See USAGE-GUIDE.txt
+
+================================================================================
+  SECTION 1 — WHAT GETS GENERATED
+================================================================================
+
+  Every DevWeb conversion produces:
+
+  ALWAYS GENERATED:
+    main.js              — All requests + transactions (async/await, DevWeb SDK)
+    scenario.yml         — Vuser count, pacing, ramp-up, duration
+    rts.yml              — Runtime settings (HTTP, SSL, proxy, think time) - 10 sections
+    tsconfig.json        — TypeScript config for DevWeb SDK type-checking
+    DevWebSdk.d.ts       — SDK type definitions (copy from VuGen installation)
+
+  GENERATED WHEN VARIABLES EXIST:
+    parameters.yml       — Parameter definitions (type, nextValue, nextRow)
+    collection_data.csv  — Parameter values (header row + data row)
+
+  GENERATED WHEN LARGE BASE64 BODIES EXIST (>500 chars):
+    data/<name>.b64      — Extracted base64 body (loaded via fs.readFileSync)
+
+  OUTPUT STRUCTURE in main.js:
+    load.initialize() {
+      load.global.tokenVar = null;          // Tier 1: dynamic (from correlations)
+      // Optional: read base64 data files
+    }
+    load.action() {
+      let T01 = new load.Transaction("T01_FolderName");
+      T01.start();
+      // web_reg_save_param_* equivalents: JsonPathExtractor, BoundaryExtractor, etc.
+      let response = await new load.WebRequest({...}).send();
+      T01.stop(load.TransactionStatus.Passed);
+      load.sleep(1);
+    }
+
+================================================================================
+  SECTION 2 — PREREQUISITES
+================================================================================
+
+  YOU NEED:
+  1. An AI tool (GitLab Duo, GitHub Copilot, Claude, ChatGPT, or any AI agent)
+  2. Your collection file in ONE of these formats:
+       - Postman export: Collection v2.1 (.json)
+       - Bruno JSON:     collection.json  (items[] array, no schema URL)
+       - Bruno YAML:     opencollection.yml  or  single-request.yml
+       - Bruno folder:   Drag the entire /collection folder
+       - Single .bru:    One Bruno request file
+  3. (Optional) A Postman environment file (.json) for variable values
+
+  SUPPORTED INPUT FORMATS:
+  ┌─────────────────────┬───────────────────────────────────┐
+  │ Format              │ How to get it                     │
+  ├─────────────────────┼───────────────────────────────────┤
+  │ Postman v2.1 JSON   │ Export → Collection v2.1          │
+  │ Bruno JSON          │ Export → JSON (from Bruno app)    │
+  │ Bruno YAML folder   │ Use the collection folder as-is   │
+  │ Single YAML .yml    │ Any Bruno .yml request file       │
+  │ Single .bru file    │ Any Bruno .bru request file       │
+  └─────────────────────┴───────────────────────────────────┘
+
+================================================================================
+  SECTION 3 — WHICH PROMPT FILES TO UPLOAD
+================================================================================
+
+  Always upload 01-MASTER-PROMPT.txt first. Then add files based on complexity:
+
+  ┌─────────────────────────────────────────────┬────────────────────────────┐
+  │ Your Collection Has...                      │ Upload These Files         │
+  ├─────────────────────────────────────────────┼────────────────────────────┤
+  │ Simple requests, no auth                    │ 01 + 06 + 07               │
+  │ With OAuth2, Bearer, Basic, or API key auth │ 01 + 03 + 06 + 07          │
+  │ With dynamic tokens / correlations          │ 01 + 04 + 06 + 07          │
+  │ Auth + correlations                         │ 01 + 03 + 04 + 06 + 07     │
+  │ Full complex collection                     │ 01+02+03+04+06+07+08       │
+  │ Postman pre-request / test scripts          │ Add 09 to any of the above │
+  │ Bruno YAML or multi-folder collection       │ Add 08 to any of the above │
+  └─────────────────────────────────────────────┴────────────────────────────┘
+
+  FILE DESCRIPTIONS:
+    01-MASTER-PROMPT.txt          Core logic — ALWAYS upload first
+    02-MAIN-JS-GENERATOR.txt      Detailed main.js rules (complex collections)
+    03-AUTHENTICATION-HANDLER.txt OAuth2, Bearer, Basic, API key patterns
+    04-CORRELATION-EXTRACTOR.txt  2-pass correlation algorithm
+    05-SCENARIO-YML-GENERATOR.txt Scenario config rules
+    06-MANDATORY-FILES.txt        Exact templates for ALL config files
+    07-PARAMETERS-YML-RULES.txt   Variable classification rules (CRITICAL)
+    08-COLLECTION-PARSING-RULES.txt Multi-format input parsing rules
+    09-CUSTOM-SCRIPT-CONVERTER.txt Postman pre-request/test script conversion
+
+  FILES YOU NEVER NEED FOR DEVWEB:
+    10-WEB-HTTP-ACTION-GENERATOR.txt  (VuGen C only)
+    11-WEB-HTTP-AUTH-HANDLER.txt      (VuGen C only)
+    USAGE-GUIDE-WEB-HTTP.txt          (VuGen C only)
+
+================================================================================
+  SECTION 4 — COPY-PASTE AI CHAT TEMPLATES
+================================================================================
+
+  HOW TO USE: Upload the prompt file(s) listed, then upload your collection
+  file, then paste the matching template below. Replace [BRACKETED] values.
+
+--------------------------------------------------------------------------------
+  TEMPLATE A — Simple Postman collection, no auth
+--------------------------------------------------------------------------------
+
+  Upload: 01-MASTER-PROMPT.txt + 06-MANDATORY-FILES.txt +
+          07-PARAMETERS-YML-RULES.txt + your collection .json
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my Postman collection.
+
+  Please convert this Postman collection to a LoadRunner DevWeb (JavaScript)
+  script following ALL rules in the uploaded prompt files.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Requests: approximately [N] requests
+    - Base URL: [https://api.example.com]
+    - No authentication needed
+
+  Generate ALL output files:
+    1. main.js         — all requests with transactions and think time
+    2. scenario.yml    — 1 vuser, sequential, 1 iteration (sensible defaults)
+    3. rts.yml         — complete 10-section runtime settings
+    4. tsconfig.json   — standard DevWeb TypeScript config
+    5. parameters.yml  — if any variables exist (MANDATORY even if just baseUrl)
+    6. collection_data.csv — matching CSV with parameter values from collection
+
+  CRITICAL RULES (from prompt files):
+    - Apply the 3-tier variable classification table BEFORE writing any code
+    - Dynamic values (tokens, IDs) → load.global.varName = null in initialize()
+    - Config params (URLs, keys) → load.params.varName in CSV (nextValue: once)
+    - Test data (credentials) → load.params.varName in CSV (nextValue: iteration)
+    - password must use nextRow: "same as username" if both exist
+    - parameters.yml and collection_data.csv must be in sync (matching columns)
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE B — Bruno YAML collection + environment file
+--------------------------------------------------------------------------------
+
+  Upload: 01-MASTER-PROMPT.txt + 06-MANDATORY-FILES.txt +
+          07-PARAMETERS-YML-RULES.txt + 08-COLLECTION-PARSING-RULES.txt +
+          your opencollection.yml (or .bru files) + your environment .json
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files, my Bruno YAML collection, and my
+  environment file.
+
+  Please convert this Bruno collection to a LoadRunner DevWeb (JavaScript)
+  script following ALL rules in the uploaded prompt files.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Format: Bruno YAML (opencollection.yml)
+    - Requests: approximately [N] requests across [N] folders
+    - Environment file included: [environment-name].json
+
+  Use the environment file values to populate collection_data.csv.
+  The environment file OVERRIDES any variable values from the collection.
+
+  Bruno YAML specifics to handle:
+    - item.info.type determines "folder" vs "http" (NOT top-level item.type)
+    - item.info.seq is the ordering field (sort ascending)
+    - headers use item.headers[].name (NOT .key)
+    - collection-level request.headers → apply to ALL requests
+    - collection-level request.auth → generate commented OAuth2 block
+
+  Generate ALL 7 output files (main.js, scenario.yml, rts.yml, tsconfig.json,
+  parameters.yml, collection_data.csv, and DevWebSdk.d.ts stub comment).
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE C — Collection with OAuth2 authentication
+--------------------------------------------------------------------------------
+
+  Upload: 01-MASTER-PROMPT.txt + 03-AUTHENTICATION-HANDLER.txt +
+          06-MANDATORY-FILES.txt + 07-PARAMETERS-YML-RULES.txt +
+          your collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my collection.
+
+  Please convert this collection to a LoadRunner DevWeb (JavaScript) script
+  following ALL rules in the uploaded prompt files.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Authentication: [OAuth2 client_credentials / OAuth2 password / Bearer token]
+    - Token endpoint: [https://auth.example.com/oauth2/token]
+    - Client ID variable: [clientId]
+    - Client Secret variable: [clientSecret]
+    - Token used in: [Authorization header as Bearer / X-Auth-Token header]
+
+  Authentication requirements:
+    - Fetch OAuth2 token ONCE in load.initialize() (not repeated in action)
+    - Store token as load.global.accessToken (dynamic variable)
+    - All subsequent requests use the token via load.global.accessToken
+    - Add commented-out token refresh block if refresh_token is also returned
+    - clientId and clientSecret are STATIC params (load.params, nextValue: once)
+    - username/password (if used) are TEST DATA (nextValue: iteration)
+
+  Generate ALL output files including complete parameters.yml and
+  collection_data.csv with correct variable classifications.
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE D — Collection with dynamic correlations
+--------------------------------------------------------------------------------
+
+  Upload: 01-MASTER-PROMPT.txt + 04-CORRELATION-EXTRACTOR.txt +
+          06-MANDATORY-FILES.txt + 07-PARAMETERS-YML-RULES.txt +
+          your collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my collection.
+
+  Please convert this collection to a LoadRunner DevWeb (JavaScript) script
+  with FULL correlation support, following ALL rules in the uploaded files.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Dynamic values to correlate: [list any known ones, e.g., orderId, sessionId]
+    - Test scripts (pm.environment.set calls): [yes/no]
+
+  Correlation requirements (CRITICAL):
+    - Run the 2-pass correlation algorithm BEFORE writing any code
+    - PASS 1: For each request, identify what dynamic values IT PRODUCES
+      (check test scripts for pm.*.set(), context.set(), bru.setVar() calls;
+       check URL patterns for /login, /auth, /token, /create endpoints)
+    - PASS 2: For each request, identify which dynamic values IT CONSUMES
+      (check URL, headers, body, query params for {{variable}} references)
+    - Build correlation map: producerRequest → variable → consumerRequest(s)
+
+    - All correlation targets → load.global.varName = null in initialize()
+    - Extractors (JsonPathExtractor, BoundaryExtractor, RegexpExtractor) added
+      to the request that PRODUCES the value
+    - Consumers use load.global.varName in their URL/headers/body
+
+  Generate ALL output files. In parameters.yml, correlation targets must NOT
+  appear — they are dynamic values managed entirely by extractors at runtime.
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE E — Large collection, multi-script mode
+--------------------------------------------------------------------------------
+
+  Upload: 01-MASTER-PROMPT.txt + 06-MANDATORY-FILES.txt +
+          07-PARAMETERS-YML-RULES.txt + your collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my collection.
+
+  Please convert this collection to LoadRunner DevWeb (JavaScript) scripts
+  using MULTI-SCRIPT MODE (-m multi): one main.js per top-level folder.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Top-level folders: [list them, e.g., Auth, Products, Orders, Users]
+    - Shared variables: [list any variables used across multiple folders]
+
+  Multi-mode rules:
+    - Generate one complete script per top-level folder
+    - Each folder script is self-contained: its own initialize(), action(), finalize()
+    - Shared correlation targets (e.g., auth token from folder 1 used in folder 2):
+      → Use load.params for pre-fetched tokens OR note manual integration needed
+    - Each script gets its own parameters.yml and collection_data.csv
+    - Folder script names: main_[FolderName].js (sanitized, lowercase)
+
+  Generate ALL scripts. For each folder, produce:
+    main_[FolderName].js, scenario.yml, rts.yml, tsconfig.json,
+    parameters.yml (if needed), collection_data.csv (if needed)
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE F — Fix or regenerate a specific section
+--------------------------------------------------------------------------------
+
+  Upload: relevant prompt files + your original collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have a previously generated DevWeb script that needs a specific fix.
+
+  PROBLEM:
+    [Describe the exact problem, e.g.:
+     "parameters.yml is missing the 'password' entry"
+     "load.global.accessToken is not initialized in initialize()"
+     "rts.yml only has 3 sections instead of the required 10"
+     "correlation for orderId is placed AFTER the request that produces it"]
+
+  Context:
+    - Affected file: [main.js / parameters.yml / rts.yml]
+    - Variable in question: [varName]
+    - Expected behaviour: [what it should do]
+
+  Please regenerate ONLY the affected file(s) with the correct content.
+  Follow ALL rules in the uploaded prompt files.
+  ─────────────────────────────────────────────────────────────────────────────
+
+================================================================================
+  SECTION 5 — VARIABLE CLASSIFICATION QUICK REFERENCE
+================================================================================
+
+  The 3-tier system is THE most important rule. Apply it BEFORE writing code.
+
+  ┌───────────┬─────────────────────────┬────────────────┬──────────────────┐
+  │ Tier      │ Syntax in main.js       │ In params.yml? │ Examples         │
+  ├───────────┼─────────────────────────┼────────────────┼──────────────────┤
+  │ 1 DYNAMIC │ load.global.varName     │ NO (extractor) │ accessToken,     │
+  │           │ (set by extractors or   │                │ userId, orderId,  │
+  │           │  initialize() block)    │                │ sessionId, csrf  │
+  ├───────────┼─────────────────────────┼────────────────┼──────────────────┤
+  │ 2 CONFIG  │ load.params.varName     │ YES            │ baseUrl,         │
+  │           │ nextValue: once         │ (nextValue:    │ clientId,        │
+  │           │ (same value all iters)  │  once)         │ apiKey, version  │
+  ├───────────┼─────────────────────────┼────────────────┼──────────────────┤
+  │ 3 DATA    │ load.params.varName     │ YES            │ username,        │
+  │           │ nextValue: iteration    │ (nextValue:    │ password, email, │
+  │           │ (new value each iter)   │  iteration)    │ accountId        │
+  └───────────┴─────────────────────────┴────────────────┴──────────────────┘
+
+  DETECTION PRIORITY (apply in order):
+    1. Variable SET by pm.*.set() / context.set() / bru.setVar() → DYNAMIC (Tier 1)
+    2. Correlation target (used in extractor) → DYNAMIC (Tier 1)
+    3. Name starts with "_" AND empty value → DYNAMIC (Tier 1)
+    4. Name starts with "$" (Postman built-in like $timestamp) → SKIP entirely
+    5. Name matches credential pattern (username/password/email/account) → DATA (Tier 3)
+    6. Everything else → CONFIG (Tier 2)
+
+  CRITICAL PAIRING RULE:
+    If both 'username' AND 'password' exist as Tier 3 parameters:
+    password must have:  nextRow: "same as username"
+    This keeps user/password pairs together across iterations.
+
+  CODE EXAMPLES:
+    // Tier 1 — initialized to null, populated by extractor at runtime
+    load.global.accessToken = null;
+    // ...in action():
+    load.global.accessToken = response.extractors.accessToken;
+
+    // Tier 2 — read from CSV once at test start
+    const url = `${load.params.baseUrl}/api/v1`;
+
+    // Tier 3 — new row each iteration
+    body: JSON.stringify({ username: load.params.username, password: load.params.password })
+
+================================================================================
+  SECTION 6 — DEVWEB-SPECIFIC TROUBLESHOOTING
+================================================================================
+
+  ISSUE 1: {{variable}} appears as %7B%7B in URLs
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  URL becomes https://api.example.com/%7B%7BbaseUrl%7D%7D
+  CAUSE:    AI used new URL() constructor which URL-encodes double braces
+  FIX:      "Do NOT use new URL() to parse URLs containing {{variables}}.
+             Use string template literals directly:
+               const url = `${load.params.baseUrl}/path/${load.params.id}`;
+             Or manual string splitting:
+               const [base, query] = url.split('?');"
+
+  ISSUE 2: Dynamic token appears in parameters.yml
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  parameters.yml contains an entry for 'accessToken' or 'userId'
+  CAUSE:    AI classified a Tier 1 dynamic variable as Tier 2 or 3
+  FIX:      "Remove 'accessToken' (and any correlation target) from parameters.yml.
+             Dynamic values are NEVER in parameters.yml.
+             In main.js: load.global.accessToken = null; in initialize()
+             In action(): use a JsonPathExtractor to populate it from the response."
+
+  ISSUE 3: rts.yml has fewer than 10 sections
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  rts.yml only contains httpConnection, ssl, replay (3 sections)
+  CAUSE:    AI generated incomplete rts.yml
+  FIX:      "Regenerate rts.yml with ALL 10 required sections:
+               httpConnection, grpc, proxy, ssl, replay, vts, encryption,
+               vuserLogger, flow, thinkTime
+             Use the exact template from 06-MANDATORY-FILES.txt."
+
+  ISSUE 4: Correlation extractor placed AFTER the producing request
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  JsonPathExtractor for 'accessToken' is on the response AFTER the
+            login call, but load.global.accessToken is never updated before
+            being used in the next request
+  CAUSE:    Incorrect extractor placement
+  FIX:      "The extractor must be ATTACHED to the response of the PRODUCER request.
+             Correct pattern:
+               const loginResp = await new load.WebRequest({...}).send();
+               load.global.accessToken = loginResp.extractors.accessToken;
+             The extractor definition goes in the WebRequest that receives the token,
+             NOT as a separate statement before or after the request."
+
+  ISSUE 5: password not linked to username
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  Different users' credentials get mixed (user1/password2)
+  CAUSE:    password parameter uses nextRow: sequential instead of same as username
+  FIX:      "In parameters.yml, the password entry MUST have:
+               nextRow: 'same as username'
+             This ensures password always advances with its matching username."
+
+  ISSUE 6: Large base64 body hardcoded inline in main.js
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  main.js contains a 10KB+ base64 string inside the body: property
+  CAUSE:    AI did not extract large data to a file
+  FIX:      "Extract the base64 content to: data/[RequestName]_body.b64
+             In initialize():
+               load.global.[RequestName]Body = fs.readFileSync(
+                 load.config.script.directory + '/data/[RequestName]_body.b64',
+                 'utf8').trim();
+             In the request:
+               body: load.global.[RequestName]Body"
+
+================================================================================
+  SECTION 7 — FILES YOU NEVER NEED FOR DEVWEB
+================================================================================
+
+  These files are ONLY for VuGen Web HTTP/HTML (C) output.
+  Never upload them when generating DevWeb JavaScript scripts:
+
+    10-WEB-HTTP-ACTION-GENERATOR.txt  → VuGen C code rules (Action.c)
+    11-WEB-HTTP-AUTH-HANDLER.txt      → VuGen C auth patterns (vuser_init.c)
+    USAGE-GUIDE-WEB-HTTP.txt          → VuGen user guide
+
+  These DevWeb files have NO equivalent in VuGen Web HTTP/HTML:
+    main.js, scenario.yml, rts.yml, tsconfig.json, parameters.yml,
+    collection_data.csv, DevWebSdk.d.ts, load.WebRequest, load.global,
+    load.params, load.Transaction, load.sleep, load.JsonPathExtractor
+
+================================================================================
+  QUICK COMMAND REFERENCE
+================================================================================
+
+  CLI (code-based converter):
+    Default DevWeb output:
+      node src/cli.js convert -i collection.json -o ./output/
+      node src/cli.js convert -i collection.yml -o ./output/
+      node src/cli.js convert -i collection.json -e environment.json -o ./output/
+      node src/cli.js convert -i collection.json -m multi -o ./output/
+
+  Web UI:
+      node src/web/server.js   (open http://localhost:3000)
+      Protocol radio: select "DevWeb (JavaScript)"
+
+  Analyze without generating:
+      node src/cli.js analyze -i collection.json
+
+================================================================================
+  END OF DEVWEB USER GUIDE
+  For VuGen Web HTTP/HTML (C): See USAGE-GUIDE-WEB-HTTP.txt
+  Full combined reference:     See USAGE-GUIDE.txt
+================================================================================
