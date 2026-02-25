@@ -63,6 +63,11 @@ class WebHttpScriptGenerator {
     // Transaction names collected during generateGroupedRequests() — passed to .usr file
     this.transactionNames = [];
 
+    // Snapshot counter — increments for every web_url/web_custom_request in Action.c.
+    // VuGen uses "Snapshot=tN.inf" to record/display the response for each request.
+    // The counter is sequential across the entire script: t1, t2, t3, ...
+    this.snapshotCounter = 0;
+
     this.buildVariableMap();
   }
 
@@ -681,25 +686,30 @@ Action()
     const url = this.buildUrl(request);
     const contentType = this.getContentType(request);
 
+    // Each request gets the next snapshot file: t1.inf, t2.inf, t3.inf, ...
+    // VuGen records the response body in this file during replay for viewing in the UI.
+    const snapshot = `t${++this.snapshotCounter}.inf`;
+
     if (method === 'GET' || method === 'HEAD') {
-      return this.generateWebUrl(request, url, indent);
+      return this.generateWebUrl(request, url, snapshot, indent);
     } else {
-      return this.generateWebCustomRequest(request, url, method, contentType, indent);
+      return this.generateWebCustomRequest(request, url, method, contentType, snapshot, indent);
     }
   }
 
-  generateWebUrl(request, url, indent) {
+  generateWebUrl(request, url, snapshot, indent) {
     let code = `${indent}web_url("${this.sanitizeCName(request.name)}",\n`;
     code += `${indent}    "URL=${url}",\n`;
     code += `${indent}    "Resource=0",\n`;
     code += `${indent}    "RecContentType=application/json",\n`;
     code += `${indent}    "Referer=",\n`;
+    code += `${indent}    "Snapshot=${snapshot}",\n`;
     code += `${indent}    "Mode=HTML",\n`;
     code += `${indent}    LAST);\n`;
     return code;
   }
 
-  generateWebCustomRequest(request, url, method, contentType, indent) {
+  generateWebCustomRequest(request, url, method, contentType, snapshot, indent) {
     const bodyResult = this.generateBodyForC(request);
 
     let code = `${indent}web_custom_request("${this.sanitizeCName(request.name)}",\n`;
@@ -708,6 +718,7 @@ Action()
     code += `${indent}    "Resource=0",\n`;
     code += `${indent}    "RecContentType=application/json",\n`;
     code += `${indent}    "Referer=",\n`;
+    code += `${indent}    "Snapshot=${snapshot}",\n`;
     code += `${indent}    "Mode=HTML",\n`;
 
     if (contentType) {

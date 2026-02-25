@@ -53,7 +53,7 @@
         web_add_header("Content-Type", "application/json");
         web_custom_request("Login",
             "URL={baseUrl}/auth/login", "Method=POST", "Resource=0",
-            "RecContentType=application/json", "Referer=", "Mode=HTML",
+            "RecContentType=application/json", "Referer=", "Snapshot=t1.inf", "Mode=HTML",
             "EncType=application/json",
             "Body={\"username\":\"{username}\",\"password\":\"{password}\"}",
             LAST);
@@ -371,6 +371,16 @@
     {username}         — test data parameter (changes per iteration)
     {_accessToken}     — correlated value (populated by web_reg_save_param_json)
 
+  SNAPSHOT PARAMETER (REQUIRED IN EVERY REQUEST):
+    "Snapshot=t1.inf"  — must appear BEFORE "Mode=HTML" in every web_url()
+                         and web_custom_request() call
+    The counter is sequential across the ENTIRE Action.c script:
+      First request  → "Snapshot=t1.inf"
+      Second request → "Snapshot=t2.inf"
+      Third request  → "Snapshot=t3.inf"  ...and so on
+    VuGen uses these .inf files to display response snapshots in its UI.
+    Omitting Snapshot= is a common mistake — always include it.
+
   VARIABLE CLASSIFICATION (applied identically to DevWeb, different output):
   ┌────────────┬────────────────────────────────┬───────────────────────────┐
   │ Type       │ In ParameterFile.prm           │ Examples                  │
@@ -426,6 +436,11 @@
       web_custom_request("RequestName",
           "URL={baseUrl}/upload",
           "Method=POST",
+          "Resource=0",
+          "RecContentType=application/json",
+          "Referer=",
+          "Snapshot=tN.inf",
+          "Mode=HTML",
           "EncType=application/octet-stream",
           "BodyFilePath=data/RequestName_body.b64",
           LAST);
@@ -436,6 +451,11 @@
       web_custom_request("RequestName",
           "URL={baseUrl}/create",
           "Method=POST",
+          "Resource=0",
+          "RecContentType=application/json",
+          "Referer=",
+          "Snapshot=tN.inf",
+          "Mode=HTML",
           "EncType=application/json",
           "BodyFilePath=data/RequestName_body.dat",
           LAST);
@@ -579,6 +599,24 @@
              There is NO persistent default header mechanism in VuGen C.
              Wrong:  set header once, then make 5 requests (only 1st gets it)
              Correct: set header immediately before each of the 5 requests."
+
+  ISSUE 9: Snapshot= missing from web_url / web_custom_request
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  VuGen cannot show response snapshots in the Output window / Tree view;
+            script may fail validation; response viewer shows no data
+  CAUSE:    AI omitted "Snapshot=tN.inf" from web_url() / web_custom_request() calls
+  FIX:      "Add \"Snapshot=tN.inf\" immediately BEFORE \"Mode=HTML\" in every request.
+             The N counter starts at 1 and increments for every request in Action.c:
+               web_url(\"Get_Products\",
+                   \"URL={baseUrl}/products\",
+                   \"Resource=0\",
+                   \"RecContentType=application/json\",
+                   \"Referer=\",
+                   \"Snapshot=t1.inf\",
+                   \"Mode=HTML\",
+                   LAST);
+             Requests in vuser_init.c also need their own snapshot counter (t1, t2...
+             independent of Action.c counter — each action file has its own sequence)."
 
 ================================================================================
   SECTION 9 — FILES YOU NEVER NEED FOR VUGEN WEB HTTP/HTML

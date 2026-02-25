@@ -336,6 +336,7 @@ Action()
         "Resource=0",
         "RecContentType=application/json",
         "Referer=",
+        "Snapshot=t1.inf",
         "Mode=HTML",
         "EncType=application/x-www-form-urlencoded",
         "Body=grant_type=password&client_id={clientId}&client_secret={clientSecret}&username={username}&password={password}",
@@ -355,6 +356,7 @@ Action()
         "Resource=0",
         "RecContentType=application/json",
         "Referer=",
+        "Snapshot=t2.inf",
         "Mode=HTML",
         LAST);
 
@@ -372,6 +374,8 @@ RULES for Action.c:
 - `web_add_header()` applies to the NEXT request only — call before each request that needs headers
 - `{varName}` is VuGen parameter syntax — replaces `{{varName}}` from collection
 - `{accessToken}` for correlation targets (also use {varName} — LR stores correlations as params)
+- `"Snapshot=tN.inf"` is REQUIRED in EVERY web_url() and web_custom_request() — place it
+  immediately before `"Mode=HTML"`. N increments globally: t1, t2, t3... across the whole script
 - GET requests → `web_url()`, all other methods → `web_custom_request()`
 - `lr_think_time(1)` after each transaction end
 - Function ends with `return 0;`
@@ -412,6 +416,7 @@ web_url("Request Name",
     "Resource=0",
     "RecContentType=application/json",
     "Referer=",
+    "Snapshot=t1.inf",
     "Mode=HTML",
     LAST);
 ```
@@ -424,6 +429,7 @@ web_custom_request("Request Name",
     "Resource=0",
     "RecContentType=application/json",
     "Referer=",
+    "Snapshot=t2.inf",
     "Mode=HTML",
     "EncType=application/json",
     "Body={\"username\":\"{username}\",\"password\":\"{password}\"}",
@@ -438,11 +444,16 @@ web_custom_request("Token Request",
     "Resource=0",
     "RecContentType=application/json",
     "Referer=",
+    "Snapshot=t3.inf",
     "Mode=HTML",
     "EncType=application/x-www-form-urlencoded",
     "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}",
     LAST);
 ```
+
+NOTE: "Snapshot=tN.inf" is REQUIRED in every web_url() and web_custom_request() call.
+N starts at 1 and increments globally across all requests in Action.c (t1, t2, t3...).
+Place it immediately BEFORE "Mode=HTML".
 
 ================================================================================
   VUGEN FILE 2: vuser_init.c
@@ -472,6 +483,7 @@ vuser_init()
         "Resource=0",
         "RecContentType=application/json",
         "Referer=",
+        "Snapshot=t1.inf",
         "Mode=HTML",
         "EncType=application/x-www-form-urlencoded",
         "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}",

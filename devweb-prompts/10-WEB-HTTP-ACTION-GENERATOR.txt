@@ -197,6 +197,7 @@ Action()
         "Resource=0",
         "RecContentType=application/json",
         "Referer=",
+        "Snapshot=t1.inf",
         "Mode=HTML",
         LAST);
     lr_output_message("Get_Users - completed");
@@ -214,6 +215,7 @@ Action()
         "Resource=0",
         "RecContentType=application/json",
         "Referer=",
+        "Snapshot=t2.inf",
         "Mode=HTML",
         "EncType=application/json",
         "Body={\"username\":\"{username}\",\"email\":\"{email}\"}",
@@ -233,6 +235,12 @@ RULES:
 3. `lr_think_time(N)` between requests inside a group, and between transaction groups
 4. `lr_output_message("RequestName - completed")` after EVERY request
 5. Request names in web_url/web_custom_request must be valid C identifiers (spaces → underscores)
+6. `"Snapshot=tN.inf"` — REQUIRED in EVERY web_url() and web_custom_request() call.
+   Counter starts at 1 and increments globally across the entire Action.c script.
+   Place it immediately BEFORE "Mode=HTML":
+     "Referer=",
+     "Snapshot=t1.inf",
+     "Mode=HTML",
 
 ================================================================================
   WEB_URL() — GET and HEAD requests
@@ -246,6 +254,7 @@ web_url("[safe_request_name]",
     "Resource=0",
     "RecContentType=application/json",
     "Referer=",
+    "Snapshot=tN.inf",
     "Mode=HTML",
     LAST);
 ```
@@ -253,6 +262,7 @@ web_url("[safe_request_name]",
 - No Method= attribute (web_url always implies GET)
 - No Body= attribute
 - URL may contain {varName} LR parameter references
+- `"Snapshot=tN.inf"` — N is a sequential integer starting at 1 across the whole script
 
 ================================================================================
   WEB_CUSTOM_REQUEST() — POST, PUT, PATCH, DELETE
@@ -267,6 +277,7 @@ web_custom_request("[safe_request_name]",
     "Resource=0",
     "RecContentType=application/json",
     "Referer=",
+    "Snapshot=tN.inf",
     "Mode=HTML",
     "EncType=application/json",           /* Content-Type of the request body */
     "Body={\"key\":\"{value}\"}",         /* JSON: escape " as \" */
@@ -293,6 +304,7 @@ LARGE BASE64 BODIES (>500 chars):
       "Resource=0",
       "RecContentType=application/json",
       "Referer=",
+      "Snapshot=tN.inf",
       "Mode=HTML",
       "EncType=application/octet-stream",
       "BodyFilePath=data/Upload_Document_body.b64",
@@ -572,6 +584,7 @@ Action()
         "Resource=0",
         "RecContentType=application/json",
         "Referer=",
+        "Snapshot=t1.inf",
         "Mode=HTML",
         "EncType=application/json",
         "Body={\"username\":\"{username}\",\"password\":\"{password}\"}",
@@ -591,6 +604,7 @@ Action()
         "Resource=0",
         "RecContentType=application/json",
         "Referer=",
+        "Snapshot=t2.inf",
         "Mode=HTML",
         LAST);
     lr_output_message("List_Products - completed");
@@ -609,6 +623,7 @@ Action()
         "Resource=0",
         "RecContentType=application/json",
         "Referer=",
+        "Snapshot=t3.inf",
         "Mode=HTML",
         "EncType=application/json",
         "Body={\"name\":\"Test Product\",\"price\":99.99}",
@@ -665,6 +680,9 @@ For the complete ParameterFile.prm format see 06-MANDATORY-FILES.txt VUGEN FILE 
 5. DO NOT use LR_PASS or LR_FAIL — use LR_AUTO in lr_end_transaction()
 6. DO NOT use web_url() for POST/PUT/PATCH/DELETE — use web_custom_request()
 7. DO NOT escape {varName} braces in URL= or Body= — they are LR param syntax
+8. DO NOT omit "Snapshot=tN.inf" — every web_url() and web_custom_request() call
+   MUST include it immediately before "Mode=HTML". The counter starts at 1 and
+   increments globally for every request in the entire Action.c script (t1, t2, t3...)
 8. DO NOT put inline Body= content exceeding ~4000 chars — use BodyFilePath= instead
 9. DO NOT use C++ comments (//) — use C comments (/* ... */)
 10. DO NOT forget lr_output_message() after each request — required for logging

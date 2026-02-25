@@ -5,6 +5,18 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] - 2026-02-25
+
+### Added
+- **`Snapshot=tN.inf` parameter** in all VuGen Web HTTP/HTML requests: Every `web_url()` and `web_custom_request()` call now includes `"Snapshot=tN.inf"` immediately before `"Mode=HTML"`. The counter `N` starts at `1` and increments globally across the entire `Action.c` script (t1, t2, t3...). VuGen uses these `.inf` files to display response content in the script tree/Output window. Previously generated scripts without this parameter could not show response snapshots in VuGen's UI.
+  - **`src/generators/webHttpScriptGenerator.js`**: Added `this.snapshotCounter = 0` to constructor. `generateWebFunction()` now increments and passes the snapshot string to `generateWebUrl()` and `generateWebCustomRequest()`. Both methods insert `"Snapshot=tN.inf"` before `"Mode=HTML"`.
+  - **`devweb-prompts/10-WEB-HTTP-ACTION-GENERATOR.txt`**: All examples updated (structural, canonical `web_url`, canonical `web_custom_request`, large base64, complete script). Added Rule 6 and Mistake 8 about the Snapshot requirement.
+  - **`devweb-prompts/06-MANDATORY-FILES.txt`**: All `web_url`/`web_custom_request` examples updated; added snapshot rule note.
+  - **`devweb-prompts/USAGE-GUIDE-WEB-HTTP.txt`**: Added "SNAPSHOT PARAMETER" section in Quick Reference; all code examples updated; added Issue 9 in troubleshooting.
+- **`package.json`**: Version bumped to `2.3.4`.
+
+---
+
 ## [2.3.3] - 2026-02-24
 
 ### Added
