@@ -172,14 +172,18 @@ class AdvancedScriptGenerator {
   }
 
   /**
-   * Scan collection scripts for variables set at runtime
-   * Detects: context.set("varName"), pm.environment.set("varName"),
-   *          pm.collectionVariables.set("varName"), pm.globals.set("varName"),
-   *          pm.variables.set("varName")
+   * Scan collection scripts for variables set at runtime.
+   * Covers ALL Postman and Bruno runtime variable setter APIs.
+   *
+   * Postman: pm.environment.set(), pm.globals.set(), pm.collectionVariables.set(),
+   *          pm.variables.set(), context.set()
+   * Bruno:   bru.setEnv() — PRIMARY, bru.setEnvVar(), bru.setVar()
+   *          env.set() — Bruno 1.x legacy, vars.set() — Bruno legacy
    */
   detectScriptSetVariables() {
-    // Covers: pm.*.set(), context.set(), bru.setVar(), bru.setEnvVar()
-    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\(\s*["']([^"']+)["']|bru\.(?:setVar|setEnvVar)\(\s*["']([^"']+)["']/g;
+    // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
+    // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
+    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
 
     const scanItem = (item) => {
       // Check events (pre-request, test scripts)
@@ -191,8 +195,8 @@ class AdvancedScriptGenerator {
               : event.script.exec;
             let match;
             while ((match = setPattern.exec(scriptText)) !== null) {
-              // match[1] = pm.*/context capture, match[2] = bru.setVar capture
-              const varName = match[1] || match[2];
+              // group 1 = pm.*/context, group 2 = bru.set*, group 3 = env/vars legacy
+              const varName = match[1] || match[2] || match[3];
               if (varName) this.scriptSetVarNames.add(varName);
             }
           }

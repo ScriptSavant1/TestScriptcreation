@@ -153,8 +153,9 @@ class WebHttpScriptGenerator {
   }
 
   detectScriptSetVariables() {
-    // Covers: pm.*.set(), context.set(), bru.setVar(), bru.setEnvVar()
-    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\(\s*["']([^"']+)["']|bru\.(?:setVar|setEnvVar)\(\s*["']([^"']+)["']/g;
+    // All Postman + Bruno runtime variable setter APIs — groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
+    // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
+    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
     const scan = (item) => {
       // Support both raw collection (item.event) and normalized request (item.tests)
       const events = item.event || item.tests || [];
@@ -164,7 +165,7 @@ class WebHttpScriptGenerator {
             const text = Array.isArray(ev.script.exec) ? ev.script.exec.join('\n') : ev.script.exec;
             let m;
             while ((m = setPattern.exec(text)) !== null) {
-              const varName = m[1] || m[2];
+              const varName = m[1] || m[2] || m[3];
               if (varName) this.scriptSetVarNames.add(varName);
             }
           }
@@ -182,7 +183,7 @@ class WebHttpScriptGenerator {
           const text = Array.isArray(ev.script.exec) ? ev.script.exec.join('\n') : ev.script.exec;
           let m;
           while ((m = setPattern.exec(text)) !== null) {
-            const varName = m[1] || m[2];
+            const varName = m[1] || m[2] || m[3];
             if (varName) this.scriptSetVarNames.add(varName);
           }
         }
@@ -996,6 +997,31 @@ ${jwtSetup}${autoHeaderBlock}
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
           break;
+
+        case 'header': {
+          // Extract from response header — web_reg_save_param with Search=Headers
+          // extractPath holds the header name (e.g. "x-csrf-token")
+          const headerName = corr.extractPath || corrBase;
+          code += `${indent}web_reg_save_param("${corr.name}",\n`;
+          code += `${indent}    "LB=${this.escapeCString(headerName)}: ",\n`;
+          code += `${indent}    "RB=\\r\\n",\n`;
+          code += `${indent}    "Search=Headers",\n`;
+          code += `${indent}    "Ord=1",\n`;
+          code += `${indent}    LAST);\n`;
+          break;
+        }
+
+        case 'cookie': {
+          // Extract from response cookie
+          const cookieName = corr.extractPath || corrBase;
+          code += `${indent}web_reg_save_param("${corr.name}",\n`;
+          code += `${indent}    "LB=${this.escapeCString(cookieName)}=",\n`;
+          code += `${indent}    "RB=;",\n`;
+          code += `${indent}    "Search=Headers",\n`;
+          code += `${indent}    "Ord=1",\n`;
+          code += `${indent}    LAST);\n`;
+          break;
+        }
 
         case 'boundary':
         case 'csrf':
