@@ -565,57 +565,160 @@ ${finalizeSection}
   /**
    * Generate script header
    */
+  /**
+   * Analyse headers across all requests and classify them.
+   *
+   * Returns { staticGlobal, authGlobal, perRequestKeys }:
+   *   staticGlobal  — static-value headers present in ≥70% of requests (put in module-level defaults)
+   *   authGlobal    — dynamic-token headers present in ≥70% of requests (put at start of action())
+   *   perRequestKeys — headers that vary per request or contain per-request UUID vars
+   *
+   * Rules:
+   *   - Browser baseline headers (accept-*) are always staticGlobal.
+   *   - Headers containing a perRequestVar (UUID/nonce) are always perRequest.
+   *   - Correlation target vars (load.global.X) → authGlobal if common, perRequest if rare.
+   *   - Pure static params → staticGlobal if common.
+   */
+  analyzeCommonHeaders() {
+    const headerFreq  = new Map(); // key → { staticCount, values: Map<value, count> }
+    const totalRequests = this.requests.length || 1;
+
+    this.requests.forEach(req => {
+      (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
+        if (!headerFreq.has(h.key)) headerFreq.set(h.key, { count: 0, values: new Map() });
+        const entry = headerFreq.get(h.key);
+        entry.count++;
+        const raw = String(h.value);
+        entry.values.set(raw, (entry.values.get(raw) || 0) + 1);
+      });
+    });
+
+    const staticGlobal  = new Map();  // key → replaceParameters(value) expression
+    const authGlobal    = new Map();  // key → replaceParameters(value) expression
+    const perRequestKeys = new Set(); // keys that are per-request
+
+    const THRESHOLD = 0.7;
+
+    headerFreq.forEach((entry, key) => {
+      const freq = entry.count / totalRequests;
+      if (freq < THRESHOLD) return; // not common enough — per-request
+
+      // Find the dominant value (most-used)
+      let dominantRaw = '';
+      let dominantCount = 0;
+      entry.values.forEach((cnt, val) => { if (cnt > dominantCount) { dominantRaw = val; dominantCount = cnt; } });
+
+      // Check if this header uses a per-request dynamic var (UUID/nonce)
+      const isPerRequestVar = this.perRequestVars && Array.from(this.perRequestVars.keys())
+        .some(v => dominantRaw.includes(`{{${v}}}`));
+      if (isPerRequestVar) { perRequestKeys.add(key); return; }
+
+      const valueExpr = this.replaceParameters(dominantRaw);
+      const needsTpl  = valueExpr.includes('${');
+      const quoted    = needsTpl ? `\`${valueExpr}\`` : `"${valueExpr}"`;
+
+      // Dynamic vars (load.global.X) → authGlobal (set after token is fetched)
+      if (valueExpr.includes('load.global.') || valueExpr.includes('Bearer')) {
+        authGlobal.set(key, quoted);
+      } else {
+        staticGlobal.set(key, quoted);
+      }
+    });
+
+    return { staticGlobal, authGlobal, perRequestKeys };
+  }
+
   generateHeader() {
     const timestamp = new Date().toISOString();
     const collectionName = this.collection.info?.name || this.collection.name || 'Unknown';
-    
+
+    const { staticGlobal, authGlobal } = this.analyzeCommonHeaders();
+
+    // ── Module-level declarations ────────────────────────────────────────────
+    // These run ONCE when the script loads — before any lifecycle function.
+
+    const jwtRequire = this.hasJwt
+      ? `// JWT Helper — fast token generation using Node.js built-in crypto (no npm install)\nconst { getJwtToken } = require('./jwt-helper.js');\n`
+      : '';
+
+    const certSetup = this.hasJwt
+      ? `// Transport certificate for mutual TLS authentication\nload.setUserCertificate('./transport.pem', './transport.pem');\n\n`
+      : '';
+
+    // Static browser baseline + static collection headers
+    const collectionHeaders = this.collection.collectionHeaders || [];
+    const collectionHeaderLines = collectionHeaders
+      .filter(h => h.key && h.value && !h.disabled)
+      .map(h => {
+        const v = this.replaceParameters(h.value);
+        const q = v.includes('${') ? `\`${v}\`` : `"${v}"`;
+        return `    "${h.key}": ${q}`;
+      });
+
+    // Merge browser defaults + detected static globals + collection headers
+    const staticHeaderLines = [
+      `    "accept-encoding": "gzip, deflate, br"`,
+      `    "accept-language": "en-US,en;q=0.9"`,
+      `    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"`,
+      ...Array.from(staticGlobal.entries())
+            .filter(([k]) => !['accept-encoding','accept-language','user-agent'].includes(k.toLowerCase()))
+            .map(([k, v]) => `    "${k}": ${v}`),
+      ...collectionHeaderLines
+    ].join(',\n');
+
+    // Auth/dynamic global headers — set in action() AFTER token is available
+    // NOTE: authGlobal headers (Authorization, etc.) contain load.global.X references
+    // that are null at module-load time. They are applied at the START of action()
+    // after the token has been fetched — see the Object.assign block in generateAction().
+    const authDefaultsBlock = '';  // empty at module level — applied in action() start
+
+    // Store for use in action() (avoid recomputing)
+    this._authGlobalHeaders   = authGlobal;
+    this._staticGlobalHeaders = staticGlobal;
+    this._perRequestHeaderKeys = this.analyzeCommonHeaders().perRequestKeys;
+
     return `/**
  * DevWeb Performance Test Script
  * Auto-generated from: ${collectionName}
  * Generated on: ${timestamp}
- * 
+ *
  * Features enabled:
  * - Transactions: ${this.options.useTransactions}
  * - Correlation: ${this.options.useCorrelation}
  * - Parameterization: ${this.options.useParameterization}
  * - Authentication: ${this.options.useAuthentication}
- * 
+ *
  * Statistics:
  * - Total Requests: ${this.requests.length}
  * - Correlations: ${this.correlations.length}
  * - Parameters: ${this.parameters.size}
  * - Think Time: ${this.options.thinkTime}s
  */
-`;
+
+${jwtRequire}${certSetup}// ── Default request options (applied to ALL requests) ────────────────────
+load.WebRequest.defaults.returnBody = false;
+load.WebRequest.defaults.headers = {
+${staticHeaderLines}
+};
+${authDefaultsBlock}`;
   }
 
   /**
    * Generate initialize section
    */
   generateInitialize() {
-    // JWT block — emitted when jsrsasign/JWT signing detected in pre-request scripts.
-    // Uses jwt-helper.js (copied from project root to script folder).
-    // Token is refreshed in action() via jwtLib.isExpiring() — see below.
+    // JWT initialization — only when JWT signing detected.
+    // cert + require declared at module level; only token fetch here.
     const jwtBlock = this.hasJwt ? `
-    // ── JWT Token ───────────────────────────────────────────────────────────────
-    // TODO: Configure algorithm, key path, and payload to match your API spec.
-    // jwt-helper.js uses Node.js built-in crypto — no npm install required.
-    // const jwtLib = require('./jwt-helper');
-    // load.global.jwtToken = jwtLib.generate({
-    //   algorithm: 'RS256',       // PS256, RS256, HS256, ES256 — check your API spec
-    //   keyPath:   './transport.pem',  // replace with your actual PEM key file path
-    //   payload: {
-    //     sub: load.params.clientId, // TODO: set actual subject/claims
-    //     iat: Math.floor(Date.now() / 1000),
-    //     exp: Math.floor(Date.now() / 1000) + 600   // 10 minutes
-    //   }
-    // });
-    // ──────────────────────────────────────────────────────────────────────────\n` : '';
+    load.global.jwt_token = getJwtToken(load.params);
+    load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000); // refresh at 9 min
+    load.log('JWT token generated', load.LogLevel.info);
+` : '';
 
     let code = `load.initialize('Initialize', async function() {
     load.log('Initializing Vuser ' + load.config.user.userId, load.LogLevel.${this.options.logLevel});
 ${jwtBlock}
-    // Initialize global variables for correlation
+    // Dynamic variables — populated at runtime from API responses
     ${this.generateGlobalVariablesInit()}
 `;
 
@@ -744,70 +847,61 @@ ${jwtBlock}
     const vars = [];
     const seen = new Set();
 
+    // Known JavaScript library names that appear in Postman globals but are NOT
+    // LR runtime variables — they hold library source code loaded via eval().
+    // These must be excluded from load.global.X initialization.
+    const LIBRARY_NAMES = new Set([
+      'jsrsasign', 'KJUR', 'kjur', 'CryptoJS', 'cryptojs',
+      'jsonwebtoken', 'jose', 'forge', 'jsbn', 'rsa'
+    ]);
+
     // Add correlation variables (deduplicated)
     this.correlations.forEach(corr => {
-      if (!seen.has(corr.name)) {
+      if (!seen.has(corr.name) && !LIBRARY_NAMES.has(corr.name)) {
         seen.add(corr.name);
         vars.push(`load.global.${corr.name} = null; // Correlated: ${corr.type}`);
       }
     });
 
-    // Add script-set dynamic variables not already covered by correlations
+    // Add script-set dynamic variables not already covered by correlations.
+    // Skip JWT output vars — they are set by getJwtToken() earlier in initialize().
+    const jwtOutputVars = new Set(this.jwtVarNames || []);
     this.dynamicVarNames.forEach(name => {
-      if (!seen.has(name)) {
+      if (!seen.has(name) && !LIBRARY_NAMES.has(name) && !jwtOutputVars.has(name)) {
         seen.add(name);
-        vars.push(`load.global.${name} = null; // Set by script at runtime`);
+        vars.push(`load.global.${name} = null;`);
       }
     });
 
-    // Add auth variables if not already in auth init
-    if (this.authConfigs.size > 0) {
-      vars.push('// Auth tokens will be set during authentication');
-    }
-
-    return vars.length > 0 ? vars.join('\n    ') : '// No global variables needed';
+    return vars.length > 0 ? vars.join('\n    ') : '// No dynamic variables';
   }
 
   /**
    * Generate action section
    */
   generateAction() {
-    // Build the defaults.headers object — browser baseline + collection-level headers
-    const collectionHeaders = this.collection.collectionHeaders || [];
-    const extraHeaderLines = collectionHeaders.map(h => {
-      const valueExpr = this.replaceParameters(h.value);
-      // If replaceParameters added template expressions, wrap in backtick string
-      const needsTemplate = valueExpr.includes('${');
-      const quotedValue = needsTemplate ? `\`${valueExpr}\`` : `"${valueExpr}"`;
-      return `        "${h.key}": ${quotedValue}`;
-    });
+    // JWT auto-refresh — uses getJwtToken from module-level require.
+    // Also re-syncs dynamic auth headers in defaults after token refresh.
+    const authHeaderUpdate = this._authGlobalHeaders && this._authGlobalHeaders.size > 0
+      ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${
+          Array.from(this._authGlobalHeaders.entries()).map(([k,v]) => `            "${k}": ${v}`).join(',\n')
+        }\n        });`
+      : '';
 
-    const headerBlock = [
-      `        "accept-encoding": "gzip, deflate, br"`,
-      `        "accept-language": "en-US,en;q=0.9"`,
-      `        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"`,
-      ...extraHeaderLines
-    ].join(',\n');
-
-    // JWT refresh check — runs every action iteration. Regenerates token if expiring soon.
-    // Uncomment when jwt-helper.js is configured in initialize().
     const jwtRefreshBlock = this.hasJwt ? `
-    // ── JWT refresh (every iteration, checks if token expires within 60 s) ────
-    // if (load.global.jwtToken && jwtLib.isExpiring(load.global.jwtToken, 60)) {
-    //   load.global.jwtToken = jwtLib.generate({ /* same options as initialize */ });
-    //   load.log('JWT refreshed', load.LogLevel.info);
-    // }
-    // ─────────────────────────────────────────────────────────────────────────\n` : '';
+    // Auto-refresh JWT token if expired (for long-running tests)
+    if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
+        load.global.jwt_token = getJwtToken(load.params);
+        load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
+        load.log('JWT token refreshed', load.LogLevel.info);${authHeaderUpdate}
+    }
+` : (authHeaderUpdate ? `\n    // Refresh dynamic auth headers\n    Object.assign(load.WebRequest.defaults.headers, {\n${
+    Array.from((this._authGlobalHeaders || new Map()).entries()).map(([k,v]) => `        "${k}": ${v}`).join(',\n')
+  }\n    });\n` : '');
 
     let code = `load.action('Action', async function() {
     load.log('Action iteration ' + load.config.runtime.iteration, load.LogLevel.info);
 ${jwtRefreshBlock}
-
-    // Set default request options
-    load.WebRequest.defaults.returnBody = false;
-    load.WebRequest.defaults.headers = {
-${headerBlock}
-    };
 `;
 
     if (this.options.groupByFolder && this.options.useTransactions) {
@@ -1155,21 +1249,32 @@ ${headerBlock}
   }
 
   /**
-   * Generate headers with auth injection and deduplication.
+   * Generate per-request headers, skipping anything already in global defaults.
    *
-   * Deduplication rule: If the request's headers array already has an explicit
-   * "Authorization" entry, use that value and SKIP the auth section injection.
-   * This prevents duplicate Authorization headers when both sections define it
-   * (common in Postman collections that have both auth.bearer AND header Authorization).
+   * Global defaults (set in module-level load.WebRequest.defaults.headers):
+   *   - staticGlobal: static headers common to most requests (accept-*, user-agent, x-client-id, etc.)
+   *   - authGlobal:   dynamic auth headers (Authorization) updated at start of action()
+   *
+   * Only headers UNIQUE to this request or DIFFERENT from defaults are emitted here.
+   * This keeps individual requests clean and avoids duplication.
    */
   generateHeaders(request) {
     const headers = {};
 
-    // Build headers from explicit headers array
+    // Determine which header keys are already in global defaults — skip those
+    const globalKeys = new Set([
+      'accept-encoding', 'accept-language', 'user-agent',
+      ...(this._authGlobalHeaders ? Array.from(this._authGlobalHeaders.keys()) : []),
+      ...(this._staticGlobalHeaders ? Array.from(this._staticGlobalHeaders.keys()) : [])
+    ].map(k => k.toLowerCase()));
+
+    // Build headers from explicit headers array — only non-global ones
     if (request.headers && Array.isArray(request.headers) && request.headers.length > 0) {
       request.headers
         .filter(h => !h.disabled && h.key && h.value)
         .forEach(h => {
+          // Skip headers already handled by global defaults (case-insensitive)
+          if (globalKeys.has(h.key.toLowerCase())) return;
           headers[h.key] = this.replaceParameters(h.value);
         });
     }

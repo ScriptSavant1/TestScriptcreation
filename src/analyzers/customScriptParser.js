@@ -507,34 +507,64 @@ class CustomScriptParser {
    *   'timestamp' → Date.now()           — emit Date.now().toString() in DevWeb
    *   'nonce'     → CryptoJS/custom      — emit crypto.randomBytes(16).toString('hex') in DevWeb
    */
+  /**
+   * Header names that indicate a CSRF / anti-forgery token.
+   * Matches the CSRF_HEADER_NAMES set from VuGen Script Studio.
+   */
+  static isCsrfHeaderName(headerKey) {
+    if (!headerKey) return false;
+    const k = headerKey.toLowerCase();
+    const KNOWN = new Set([
+      'x-csrf-token','x-xsrf-token','x-csrftoken','csrf-token',
+      'x-xsrf-header','x-csrf-header','x-anti-forgery-token',
+      'x-request-verification-token','__requestverificationtoken',
+      'x-antiforgery','requestverificationtoken'
+    ]);
+    if (KNOWN.has(k)) return true;
+    return /csrf|xsrf|antiforg|request.?verif/i.test(k);
+  }
+
   static detectPerRequestDynamicVars(script) {
     if (!script || typeof script !== 'string') return [];
 
     const results = [];
 
     // Pattern: pm.variables.set('varName', <generationExpression>)
-    // Also: pm.environment.set / pm.globals.set with dynamic RHS
+    // Also: pm.environment.set / pm.globals.set / bru.setVar with dynamic RHS
     const setPattern = /pm\.(?:variables|environment|globals|collectionVariables)\.set\s*\(\s*['"]([^'"]+)['"]\s*,\s*([^)]+)\)/g;
     const bruPattern = /bru\.(?:setVar|setEnvVar)\s*\(\s*['"]([^'"]+)['"]\s*,\s*([^)]+)\)/g;
 
     const classify = (varName, rhs) => {
       const r = rhs.trim();
-      // UUID generation patterns
+
+      // UUID generation patterns — gen_uuid() in VuGen, crypto.randomUUID() in DevWeb
       if (/crypto\.randomUUID\s*\(|uuidv4\s*\(|uuid\s*\(|generateUUID\s*\(/i.test(r)) {
         return { varName, generationType: 'uuid' };
       }
-      // Nonce / random bytes
-      if (/crypto\.randomBytes\s*\(|randomBytes\s*\(/i.test(r)) {
-        return { varName, generationType: 'nonce' };
+
+      // CSRF / hex token patterns — gen_csrf_token() in VuGen, randomBytes in DevWeb
+      if (/crypto\.randomBytes\s*\(|randomBytes\s*\(/.test(r)) {
+        return { varName, generationType: 'hex32' };
       }
-      // Math.random() based
+      if (/CryptoJS\.lib\.WordArray\.random|CryptoJS\.enc\./i.test(r)) {
+        return { varName, generationType: 'csrf' };   // CryptoJS random → CSRF token
+      }
+
+      // High-entropy hex (64+ chars) — gen_hex64() in VuGen
+      if (/\.toString\s*\(\s*16\s*\)|\.toString\s*\(\s*'hex'\s*\)|hex.*random|random.*hex/i.test(r)) {
+        return { varName, generationType: 'hex64' };
+      }
+
+      // Math.random() based — gen_uuid() in VuGen (best match), crypto.randomUUID in DevWeb
       if (/Math\.random\s*\(/.test(r) && !r.includes('pm.') && !r.includes('load.')) {
         return { varName, generationType: 'random' };
       }
+
       // Timestamp based
       if (/Date\.now\s*\(|new Date\s*\(/.test(r) && !r.includes('pm.') && !r.includes('load.')) {
         return { varName, generationType: 'timestamp' };
       }
+
       return null;
     };
 

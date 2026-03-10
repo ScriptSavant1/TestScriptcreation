@@ -242,25 +242,20 @@ tearDown: 0      #Not used
   // ─── DevWeb Mandatory Files ───────────────────────────────────────────────────
 
   /**
-   * Copy a file to the output directory.
-   * Checks locations in order: project root, then any altSources paths (relative to project root).
-   * altSources is used for files like jwt-helper.js which live in src/analyzers/.
-   * Returns true on success, false if not found anywhere.
+   * Copy a file from the project root to the output directory.
+   * jwt-helper.js, jsrsasign.js, DevWebSdk.d.ts, and transport.pem all live
+   * in the project root — place them there before running the converter.
+   * Returns true on success, false if source not found (logs warning, does NOT generate a stub).
    */
-  copyFromProjectRoot(outputDir, filename, altSources = []) {
+  copyFromProjectRoot(outputDir, filename) {
+    const src  = path.join(PROJECT_ROOT, filename);
     const dest = path.join(outputDir, filename);
-    const candidates = [
-      path.join(PROJECT_ROOT, filename),
-      ...altSources.map(s => path.join(PROJECT_ROOT, s))
-    ];
     try {
-      for (const src of candidates) {
-        if (fs.existsSync(src)) {
-          fs.copyFileSync(src, dest);
-          return true;
-        }
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, dest);
+        return true;
       }
-      console.warn(`  ⚠  ${filename} not found (searched: ${candidates.join(', ')}). Add it to project root and re-run.`);
+      console.warn(`  ⚠  ${filename} not found in project root (${PROJECT_ROOT}). Place it there and re-run.`);
       return false;
     } catch (err) {
       console.error(`  ✗  Failed to copy ${filename}: ${err.message}`);
@@ -570,13 +565,14 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
     this.copyFromProjectRoot(outputDir, 'DevWebSdk.d.ts');
     console.log('✓ Copied DevWebSdk.d.ts');
 
-    // 10. Copy jwt-helper.js + transport.pem from project root when JWT is used
+    // 10. Copy jwt-helper.js + transport.pem from project root when JWT is used.
+    //     These files MUST be placed in the project root by the user.
+    //     jwt-helper.js is the DevWeb-specific JWT helper (uses Node.js built-in crypto).
     if (hasJwt) {
-      // jwt-helper.js: check project root first, fall back to src/analyzers/ (where it's developed)
-      this.copyFromProjectRoot(outputDir, 'jwt-helper.js', ['src/analyzers/jwt-helper.js']);
-      console.log('✓ Copied jwt-helper.js');
+      this.copyFromProjectRoot(outputDir, 'jwt-helper.js');
+      console.log('✓ Copied jwt-helper.js  (place jwt-helper.js in project root if missing)');
       this.copyFromProjectRoot(outputDir, 'transport.pem');
-      console.log('✓ Copied transport.pem (replace with your actual private key)');
+      console.log('✓ Copied transport.pem  (replace with your actual private key)');
     }
 
     return files;

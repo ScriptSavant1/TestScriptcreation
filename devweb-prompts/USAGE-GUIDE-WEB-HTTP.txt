@@ -30,7 +30,7 @@
 
   VUGEN CONFIGURATION FILES (required for VuGen to load and replay):
     [ScriptName].usr         — VuGen metadata INI (protocol, actions, params)
-    default.cfg              — Runtime settings INI (think time, HTTP, log)
+    default.cfg              — Runtime settings INI (9 sections, 163 lines — complete VuGen 26.1 canonical config)
     default.usp              — Run logic profile INI (MercIniTree format)
     ParameterFile.prm        — Parameter definitions INI (NOT XML!)
     collection_data.dat      — Parameter values CSV (header + data rows)
