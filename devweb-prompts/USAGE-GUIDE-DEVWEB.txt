@@ -87,6 +87,7 @@
   │ Full complex collection                     │ 01+02+03+04+06+07+08       │
   │ Postman pre-request / test scripts          │ Add 09 to any of the above │
   │ Bruno YAML or multi-folder collection       │ Add 08 to any of the above │
+  │ With JWT auth (jsrsasign/jsonwebtoken)      │ 01 + 03 + 06 + 07 + collection │
   └─────────────────────────────────────────────┴────────────────────────────┘
 
   FILE DESCRIPTIONS:
@@ -427,6 +428,26 @@
                  'utf8').trim();
              In the request:
                body: load.global.[RequestName]Body"
+
+  ISSUE 7: JWT token appearing in parameters.yml
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  parameters.yml contains a jwt_token entry
+  CAUSE:    AI classified the JWT token variable as a static parameter
+  FIX:      "JWT token variables are ALWAYS Tier 1 dynamic (load.global), never
+             parameterized. Any variable set by pm.environment.set() in a
+             pre-request script that uses jsrsasign or JWT signing must be
+             removed from parameters.yml and initialized as:
+               load.global.jwtToken = null;  // in Initialize
+             Then populated via jwt-lib.js in the Initialize block (commented out
+             — user must configure and uncomment)."
+
+  ISSUE 8: jwt-lib.js not found when running script in VuGen
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  Error: Cannot find module './jwt-lib'
+  CAUSE:    jwt-lib.js was not copied to the script folder
+  FIX:      "Copy jwt-lib.js from the project root to the DevWeb script folder.
+             It should appear alongside main.js, rts.yml, etc.
+             Also ensure it's listed in [ManuallyExtraFiles] in [ScriptName].usr."
 
 ================================================================================
   SECTION 7 — FILES YOU NEVER NEED FOR DEVWEB

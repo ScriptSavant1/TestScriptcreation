@@ -110,6 +110,7 @@
   │ Auth + correlations                         │ 04 + 06 + 07 + 10 + 11     │
   │ Full complex collection                     │ 04+06+07+08+10+11          │
   │ Bruno YAML or multi-folder collection       │ Add 08 to any of the above │
+  │ With JWT auth (jsrsasign)                   │ 06 + 07 + 10 + 11 + collection │
   └─────────────────────────────────────────────┴────────────────────────────┘
 
   FILE DESCRIPTIONS:
@@ -617,6 +618,19 @@
                    LAST);
              Requests in vuser_init.c also need their own snapshot counter (t1, t2...
              independent of Action.c counter — each action file has its own sequence)."
+
+  ISSUE 10: JWT token generation failing in VuGen C script
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  VuGen cannot execute JWT generation; {jwtToken} is empty
+  CAUSE:    VuGen C cannot run JavaScript natively — pre-request JWT scripts
+            are not executable in the C runtime
+  FIX:      "Use the generate_jwt.js pre-generator (in output folder):
+               1. Edit generate_jwt.js: fill in algorithm, keyPath, payload
+               2. Run: node generate_jwt.js
+               3. Copy the output token to collection_data.dat → jwtToken column
+               4. Ensure ParameterFile.prm has jwtToken with GenerateNewVal='Once'
+               5. In Action.c: web_add_header('Authorization', 'Bearer {jwtToken}')
+             For tests longer than token lifetime: regenerate before each run."
 
 ================================================================================
   SECTION 9 — FILES YOU NEVER NEED FOR VUGEN WEB HTTP/HTML

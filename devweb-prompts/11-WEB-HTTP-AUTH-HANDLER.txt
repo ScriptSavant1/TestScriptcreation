@@ -523,6 +523,54 @@ web_url("Get_Orders", ...);
 ```
 
 ================================================================================
+  JWT AUTHENTICATION (VuGen Web HTTP/HTML)
+================================================================================
+
+DETECTION: Same patterns as DevWeb — scan pre-request scripts for jsrsasign/JWT.
+
+VuGen C CANNOT execute JavaScript natively. When JWT is detected:
+
+OUTPUT FILES (added to output folder automatically):
+  jsrsasign.js     → listed in [ManuallyExtraFiles] in .usr (upload with script)
+  generate_jwt.js  → standalone Node.js script for pre-generating token
+  tranport.pem     → placeholder PEM file (user replaces with real key)
+  All 3 in [ManuallyExtraFiles] and ScriptUploadMetadata.xml <GeneralFiles>
+
+vuser_init.c JWT NOTE BLOCK (auto-generated when JWT detected):
+  /* -----------------------------------------------------------------------
+   * JWT DETECTED — Pre-request scripts use JWT signing (jsrsasign.js).
+   *
+   * VuGen C cannot execute JavaScript natively. Options:
+   *   A) Pre-generate: node generate_jwt.js  (output → jwtToken column in
+   *      collection_data.dat), then re-run test.
+   *   B) Call a token endpoint (uncomment OAuth2 block below and adapt URL).
+   *
+   * jsrsasign.js and tranport.pem are in [ManuallyExtraFiles] for LRE upload.
+   * ----------------------------------------------------------------------- */
+
+PARAMETER SETUP for pre-generated JWT token:
+  ParameterFile.prm:
+    [parameter:jwtToken]
+    GenerateNewVal="Once"
+    ColumnName="jwtToken"
+    Table="collection_data.dat"
+    ...
+
+  In Action.c — use token: web_add_header("Authorization", "Bearer {jwtToken}");
+
+generate_jwt.js USAGE:
+  node generate_jwt.js         → prints signed JWT to stdout
+  Copy output to collection_data.dat → jwtToken column
+  Uses jwt-lib.js internally (same library as DevWeb scripts)
+  TODO placeholders inside: algorithm, keyPath, payload — user must fill in
+
+CRITICAL RULES:
+  - jwtToken is a static parameter in VuGen (GenerateNewVal="Once")
+  - NOT a dynamic correlation target — pre-generated before test
+  - jsrsasign.js in ExtraFiles = bundled for LRE upload reference only
+  - For long tests: regenerate token and update collection_data.dat before each run
+
+================================================================================
   DEVWEB (JS) VS WEB HTTP/HTML (C) — AUTH COMPARISON
 ================================================================================
 

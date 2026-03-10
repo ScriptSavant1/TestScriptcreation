@@ -433,6 +433,59 @@ class CustomScriptParser {
     this.warnings = [];
     this.unsupportedFeatures.clear();
   }
+
+  /**
+   * Scan a script string (pre-request or test) for JWT generation patterns.
+   * Used by generators to decide whether to add jwt-lib.js / jsrsasign.js
+   * to the script's extra files and emit the appropriate boilerplate.
+   *
+   * @param  {string} script - Raw script text
+   * @returns {{ isJwt: boolean, library: string, outputVars: string[], algorithm: string }}
+   *
+   * Detected libraries:
+   *   jsrsasign  — KJUR.jws.JWS.sign() / require('jsrsasign') / eval(jsrsasign)
+   *   jsonwebtoken — require('jsonwebtoken') + sign()
+   *   jose       — require('jose')
+   *   crypto     — Node.js built-in sign via crypto (manual JWT)
+   */
+  static detectJwtUsage(script) {
+    if (!script || typeof script !== 'string') {
+      return { isJwt: false, library: null, outputVars: [], algorithm: 'RS256' };
+    }
+
+    // ── Library fingerprints ────────────────────────────────────────────────
+    const isJsrsasign = /jsrsasign|KJUR\.jws\.JWS\.sign\s*\(|kjur/i.test(script);
+    const isJsonwebtoken = /require\s*\(\s*['"]jsonwebtoken['"]\s*\)/.test(script) &&
+                           /\.sign\s*\(/.test(script);
+    const isJose = /require\s*\(\s*['"]jose['"]\s*\)/.test(script);
+    const isManualCrypto = /crypto\.sign\s*\(|createSign\s*\(/.test(script) &&
+                           /base64url|header\.payload/.test(script);
+
+    const isJwt = isJsrsasign || isJsonwebtoken || isJose || isManualCrypto;
+    if (!isJwt) return { isJwt: false, library: null, outputVars: [], algorithm: 'RS256' };
+
+    // ── Determine library ───────────────────────────────────────────────────
+    let library = 'unknown';
+    if (isJsrsasign)    library = 'jsrsasign';
+    else if (isJsonwebtoken) library = 'jsonwebtoken';
+    else if (isJose)    library = 'jose';
+    else if (isManualCrypto) library = 'crypto';
+
+    // ── Extract algorithm ───────────────────────────────────────────────────
+    const algMatch = script.match(/['"]alg['"]\s*:\s*['"]([A-Z0-9]+)['"]/i) ||
+                     script.match(/algorithm\s*[:=]\s*['"]([A-Z0-9]+)['"]/i);
+    const algorithm = algMatch ? algMatch[1].toUpperCase() : 'RS256';
+
+    // ── Extract output variable names (variables set after JWT is generated) ─
+    const setPattern = /(?:pm\.environment|pm\.globals|pm\.collectionVariables|pm\.variables)\.set\s*\(\s*['"]([^'"]+)['"]/g;
+    const bruPattern = /bru\.(?:setVar|setEnvVar)\s*\(\s*['"]([^'"]+)['"]/g;
+    const outputVars = [];
+    let m;
+    while ((m = setPattern.exec(script)) !== null) outputVars.push(m[1]);
+    while ((m = bruPattern.exec(script))  !== null) outputVars.push(m[1]);
+
+    return { isJwt: true, library, outputVars, algorithm };
+  }
 }
 
 module.exports = CustomScriptParser;

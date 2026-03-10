@@ -253,6 +253,36 @@ Generated alongside parameters.yml. Contains actual variable values from
 the collection and/or environment file. Single CSV file for ALL parameters.
 
 ================================================================================
+  DEVWEB EXTRA FILES (from project root — auto-copied to each script folder)
+================================================================================
+
+DEVWEB EXTRA FILES (from project root — auto-copied to each script folder):
+  [ScriptName].usr    — DevWeb metadata INI (Type=DevWeb, Main=main.js)
+  default.cfg         — DevWeb runtime config (Encoding=UTF8, LogExtended)
+  default.usp         — DevWeb run logic (Main action only + ErrorHandler)
+  ScriptUploadMetadata.xml — LRE upload manifest (Protocol=DevWeb)
+  DevWebSdk.d.ts      — COPIED from project root (never generated/stubbed)
+  jwt-lib.js          — COPIED from project root (when JWT detected)
+  tranport.pem        — COPIED from project root (placeholder private key)
+
+[ManuallyExtraFiles] in [ScriptName].usr (when JWT detected):
+  jwt-lib.js=
+  tranport.pem=
+
+DevWeb .usr critical fields (differs from VuGen Web HTTP .usr):
+  Type=DevWeb          (NOT Type=Multi)
+  RunType=DevWeb       (NOT RunType=cci)
+  ScriptLanguage=JavaScript (NOT C)
+  ActiveTypes=DevWeb   (NOT QTWeb)
+  [Actions] Main=main.js (NOT vuser_init/Action/vuser_end)
+  [ManuallyExtraFiles] for jwt-lib.js, tranport.pem (NOT [ExtraFiles])
+
+DevWeb default.usp differs from VuGen:
+  - Only [RunLogicRunRoot:Main] child (no vuser_init/vuser_end children)
+  - Has [RunLogicErrorHandlerRoot] + [RunLogicErrorHandlerRoot:vuser_errorhandler]
+  - [RunLogicInitRoot] and [RunLogicEndRoot] have MercIniTreeSons="" (empty)
+
+================================================================================
   OUTPUT FOLDER STRUCTURE — DEVWEB (--protocol devweb, default)
 ================================================================================
 

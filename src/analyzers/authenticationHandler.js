@@ -6,6 +6,7 @@
 class AuthenticationHandler {
   constructor() {
     this.authConfigs = new Map();
+    this.dynamicVarNames = new Set(); // populated by setDynamicVarNames() before code gen
     this.authTypes = {
       OAUTH2: 'oauth2',
       BASIC: 'basic',
@@ -16,6 +17,16 @@ class AuthenticationHandler {
       HAWK: 'hawk',
       NTLM: 'ntlm'
     };
+  }
+
+  /**
+   * Tell the auth handler which variables are dynamic (load.global) vs static (load.params).
+   * Call this after classifyVariables() in the generator, before generateInitializationCode().
+   */
+  setDynamicVarNames(dynamicVarNames) {
+    this.dynamicVarNames = dynamicVarNames instanceof Set
+      ? dynamicVarNames
+      : new Set(dynamicVarNames || []);
   }
 
   /**
@@ -356,17 +367,23 @@ ${JSON.stringify(authConfig.config, null, 2)
   }
 
   /**
-   * Parameterize value for code generation
+   * Parameterize a value for code generation.
+   * - Dynamic variables (correlation targets, script-set) → load.global.varName
+   * - Static parameters                                   → load.params.varName
+   * - Plain string literals                               → "value"
    */
   parameterize(value) {
     if (!value) return '""';
-    
-    // Check if it's already a variable reference
+
     if (typeof value === 'string' && /\{\{.*?\}\}|\$\{.*?\}/.test(value)) {
       const varName = value.replace(/\{\{|\}\}|\$\{|\}/g, '').trim();
+      // Prefer load.global for any variable the generator classified as dynamic
+      if (this.dynamicVarNames.has(varName)) {
+        return `load.global.${varName}`;
+      }
       return `load.params.${varName}`;
     }
-    
+
     return `"${value}"`;
   }
 

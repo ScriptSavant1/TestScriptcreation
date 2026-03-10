@@ -58,6 +58,11 @@ class AdvancedScriptGenerator {
     this.dynamicVarNames = new Set();    // Variables set by scripts/correlation → load.global
     this.paramVarNames = new Set();      // Variables to parameterize → load.params
     this.scriptSetVarNames = new Set();  // Variables detected as set by scripts
+
+    // JWT detection — populated by detectJwtUsage() during analyze()
+    this.hasJwt     = false;
+    this.jwtVarNames = [];   // token variable names set by JWT pre-request scripts
+
     this.buildVariableMap();
   }
 
@@ -97,7 +102,8 @@ class AdvancedScriptGenerator {
    *          pm.variables.set("varName")
    */
   detectScriptSetVariables() {
-    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\(\s*["']([^"']+)["']/g;
+    // Covers: pm.*.set(), context.set(), bru.setVar(), bru.setEnvVar()
+    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\(\s*["']([^"']+)["']|bru\.(?:setVar|setEnvVar)\(\s*["']([^"']+)["']/g;
 
     const scanItem = (item) => {
       // Check events (pre-request, test scripts)
@@ -109,7 +115,9 @@ class AdvancedScriptGenerator {
               : event.script.exec;
             let match;
             while ((match = setPattern.exec(scriptText)) !== null) {
-              this.scriptSetVarNames.add(match[1]);
+              // match[1] = pm.*/context capture, match[2] = bru.setVar capture
+              const varName = match[1] || match[2];
+              if (varName) this.scriptSetVarNames.add(varName);
             }
           }
         });
@@ -121,6 +129,40 @@ class AdvancedScriptGenerator {
       }
     };
 
+    scanItem(this.collection);
+  }
+
+  /**
+   * Scan all request pre-request scripts for JWT generation patterns (jsrsasign, jsonwebtoken, etc.).
+   * Sets this.hasJwt = true and populates this.jwtVarNames when JWT signing is detected.
+   * JWT output variables are added to scriptSetVarNames so classifyVariables() marks them dynamic.
+   */
+  detectJwtUsage() {
+    const CustomScriptParser = require('../analyzers/customScriptParser');
+    const scanItem = (item) => {
+      // Scan the item's own pre-request script
+      if (item.event && Array.isArray(item.event)) {
+        item.event.forEach(event => {
+          if (event.listen !== 'prerequest') return;
+          const exec = event.script?.exec;
+          const text = Array.isArray(exec) ? exec.join('\n') : (exec || '');
+          if (!text) return;
+
+          const result = CustomScriptParser.detectJwtUsage(text);
+          if (result.isJwt) {
+            this.hasJwt = true;
+            result.outputVars.forEach(v => {
+              this.jwtVarNames.push(v);
+              this.scriptSetVarNames.add(v); // ensure they're Tier 1 dynamic
+            });
+            console.log(`  ✓ JWT detected (library: ${result.library}, algorithm: ${result.algorithm})`);
+          }
+        });
+      }
+      // Recurse
+      const items = item.item || item.items;
+      if (Array.isArray(items)) items.forEach(child => scanItem(child));
+    };
     scanItem(this.collection);
   }
 
@@ -379,7 +421,10 @@ ${finalizeSection}
       result.mandatoryFiles = await this.mandatoryFilesGen.generateAll(
         outputDir,
         this.parameters,
-        this.options.examplesPath
+        {
+          transactionNames: this.transactionNames || [],
+          hasJwt:           this.hasJwt || false
+        }
       );
 
       // Write extracted base64 data files to data/ subfolder
@@ -429,6 +474,13 @@ ${finalizeSection}
     if (this.options.useParameterization) {
       this.classifyVariables();
     }
+
+    // Share dynamic var knowledge with auth handler so it emits load.global.X
+    // for correlated/script-set tokens instead of incorrectly using load.params.X
+    this.authHandler.setDynamicVarNames(this.dynamicVarNames);
+
+    // Detect JWT usage in pre-request scripts (sets this.hasJwt and this.jwtVarNames)
+    this.detectJwtUsage();
 
     // Scan for large base64 values in request bodies
     this.scanForLargeBase64();
@@ -522,9 +574,28 @@ ${finalizeSection}
    * Generate initialize section
    */
   generateInitialize() {
-    let code = `load.initialize("init", async function() {
-    load.log("🚀 Initializing Vuser " + load.config.user.userId, load.LogLevel.${this.options.logLevel});
-    
+    // JWT block — emitted when jsrsasign/JWT signing detected in pre-request scripts.
+    // Uses jwt-lib.js (copied from project root to script folder).
+    // Token is refreshed in action() via jwtLib.isExpiring() — see below.
+    const jwtBlock = this.hasJwt ? `
+    // ── JWT Token ───────────────────────────────────────────────────────────────
+    // TODO: Configure algorithm, key path, and payload to match your API spec.
+    // jwt-lib.js uses Node.js built-in crypto — no npm install required.
+    // const jwtLib = require('./jwt-lib');
+    // load.global.jwtToken = jwtLib.generate({
+    //   algorithm: 'RS256',       // PS256, RS256, HS256, ES256 — check your API spec
+    //   keyPath:   './tranport.pem',  // replace with your actual PEM key file path
+    //   payload: {
+    //     sub: load.params.clientId, // TODO: set actual subject/claims
+    //     iat: Math.floor(Date.now() / 1000),
+    //     exp: Math.floor(Date.now() / 1000) + 600   // 10 minutes
+    //   }
+    // });
+    // ──────────────────────────────────────────────────────────────────────────\n` : '';
+
+    let code = `load.initialize('Initialize', async function() {
+    load.log('Initializing Vuser ' + load.config.user.userId, load.LogLevel.${this.options.logLevel});
+${jwtBlock}
     // Initialize global variables for correlation
     ${this.generateGlobalVariablesInit()}
 `;
@@ -699,8 +770,19 @@ ${finalizeSection}
       ...extraHeaderLines
     ].join(',\n');
 
-    let code = `load.action("Action", async function() {
-    load.log("▶️  Starting action - Iteration " + load.config.runtime.iteration, load.LogLevel.info);
+    // JWT refresh check — runs every action iteration. Regenerates token if expiring soon.
+    // Uncomment when jwt-lib.js is configured in initialize().
+    const jwtRefreshBlock = this.hasJwt ? `
+    // ── JWT refresh (every iteration, checks if token expires within 60 s) ────
+    // if (load.global.jwtToken && jwtLib.isExpiring(load.global.jwtToken, 60)) {
+    //   load.global.jwtToken = jwtLib.generate({ /* same options as initialize */ });
+    //   load.log('JWT refreshed', load.LogLevel.info);
+    // }
+    // ─────────────────────────────────────────────────────────────────────────\n` : '';
+
+    let code = `load.action('Action', async function() {
+    load.log('Action iteration ' + load.config.runtime.iteration, load.LogLevel.info);
+${jwtRefreshBlock}
 
     // Set default request options
     load.WebRequest.defaults.returnBody = false;
@@ -1374,8 +1456,8 @@ ${headerBlock}
    * Generate finalize section
    */
   generateFinalize() {
-    return `load.finalize("finalize", async function() {
-    load.log("🏁 Finalizing Vuser " + load.config.user.userId, load.LogLevel.info);
+    return `load.finalize('Finalize', async function() {
+    load.log('Finalizing Vuser ' + load.config.user.userId, load.LogLevel.info);
     
     // Cleanup code here if needed
     
