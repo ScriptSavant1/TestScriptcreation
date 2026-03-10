@@ -1,7 +1,9 @@
-# Bruno to DevWeb Converter — Project Summary v2.4.0
+# Bruno to DevWeb Converter — Project Summary v2.5.0
 
 **Production-ready framework for converting Bruno/Postman API collections to LoadRunner Enterprise
-performance test scripts. Supports DevWeb (JavaScript) and VuGen Web HTTP/HTML (C) output.**
+performance test scripts. Supports DevWeb (JavaScript) and VuGen Web HTTP/HTML (C) output.
+Fully compatible with both Postman and Bruno collections — all runtime APIs, response patterns,
+authentication types, JWT, proxy, headers, correlations, and CSRF/UUID generation.**
 
 ---
 

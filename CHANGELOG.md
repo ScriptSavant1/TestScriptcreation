@@ -5,6 +5,121 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-03-10
+
+### Added — Complete Bruno + Postman API Coverage for Correlation Detection
+
+Full implementation of all Bruno runtime variable setter APIs, response access patterns,
+header/cookie extractor generation for both DevWeb and VuGen Web HTTP/HTML.
+
+#### Bruno Setter APIs — ALL now detected (correlationDetector + both generators)
+
+| API | Scope | Status |
+|-----|-------|--------|
+| `bru.setEnv("x", v)` | Env (old alias) | ✅ v2.4.9 |
+| `bru.setEnvVar("x", v)` | Env (primary) | ✅ v2.4.9 |
+| `bru.setVar("x", v)` | Collection / Request | ✅ v2.4.9 |
+| `bru.setGlobalVar("x", v)` | Global | ✅ **NEW v2.5.0** |
+| `bru.setNextEnvVar("x", v)` | Next environment | ✅ **NEW v2.5.0** |
+| `env.set("x", v)` | Legacy 1.x | ✅ v2.4.9 |
+| `vars.set("x", v)` | Legacy | ✅ v2.4.9 |
+| `pm.environment.set("x", v)` | Postman compat | ✅ |
+
+#### Bruno Response Access Patterns — ALL now detected
+
+| Pattern | Result | Type |
+|---------|--------|------|
+| `res.body.access_token` | `$.access_token` | json |
+| `res.body.user.id` | `$.user.id` | json |
+| `res.body?.data?.token` | `$.data.token` | json |
+| `body?.access_token` | `$.access_token` | json |
+| `res.headers["x-csrf-token"]` | `x-csrf-token` | **header** |
+| `res.headers.authorization` | `authorization` | **header** |
+| `res.cookies["session_id"]` | `session_id` | **cookie** |
+| `pm.response.json().field` | `$.field` | json |
+
+#### Header & Cookie Extractor Generation
+
+**DevWeb JavaScript** (`load.BoundaryExtractor` with header scope):
+```javascript
+new load.BoundaryExtractor("csrf_token", "x-csrf-token: ", "\r\n", load.ExtractorScope.Headers)
+new load.BoundaryExtractor("session_id", "session_id=", ";", load.ExtractorScope.Headers)
+```
+
+**VuGen Web HTTP/HTML C** (`web_reg_save_param` with `Search=Headers`):
+```c
+web_reg_save_param("csrf_token", "LB=x-csrf-token: ", "RB=\r\n", "Search=Headers", "Ord=1", LAST);
+web_reg_save_param("session_id", "LB=session_id=", "RB=;", "Search=Headers", "Ord=1", LAST);
+```
+
+#### Indirect Variable Resolution
+
+The `extractSetVariables()` method now resolves indirect assignments:
+```javascript
+// Indirect body alias
+var respBody = res.body;
+bru.setEnvVar("refresh_token", respBody.refresh_token);  // → $.refresh_token  ✓
+
+// Indirect with property chain
+let body2 = pm.response.json();
+bru.setEnvVar("token", body2.data.access_token);         // → $.data.access_token  ✓
+```
+
+#### New Helper Methods in `correlationDetector.js`
+- `extractHeaderName(source)` — extracts HTTP header name from `res.headers["name"]` etc.
+- `extractCookieName(source)` — extracts cookie name from `res.cookies["name"]` etc.
+
+### Changed
+- `package.json` version: `2.4.9` → `2.5.0`
+
+---
+
+## [2.4.9] - 2026-03-10
+
+### Fixed — Bruno Collection Compatibility (Full Runtime API Support)
+
+**Root cause**: Bruno test/post-response scripts use different APIs to set environment variables compared to Postman. The correlation detector only recognised Postman patterns, so variables like `access_token` set via `bru.setEnv()` were invisible to the extractor.
+
+**All Bruno setter APIs now recognised** in `correlationDetector.js`, `advancedScriptGenerator.js`, and `webHttpScriptGenerator.js`:
+
+| API | Type | Notes |
+|-----|------|-------|
+| `bru.setEnv("var", value)` | **Primary Bruno** (modern) | Was missing — root cause of bug |
+| `bru.setEnvVar("var", value)` | Bruno alias | Was missing |
+| `bru.setVar("var", value)` | Bruno collection-scoped | Already present |
+| `env.set("var", value)` | Bruno 1.x legacy | Was missing |
+| `vars.set("var", value)` | Bruno legacy | Was missing |
+| `pm.environment.set()` etc. | Postman | Already present |
+
+**JSON path extraction for Bruno body patterns** in `extractJsonPath()`:
+- `body?.access_token` → `$.access_token`  (Bruno optional chaining)
+- `res.body?.data?.token` → `$.data.token`
+- `response.body?.field` → `$.field`
+
+**Indirect variable resolution** in `extractSetVariables()`:
+```javascript
+let id = body?.access_token;       // local var map: id → body?.access_token
+bru.setEnv("access_token", id);   // resolves id → $.access_token  ✓
+```
+```javascript
+let body2 = pm.response.json();   // local var map: body2 → pm.response.json()
+env.set("refresh_token", body2.refresh_token);  // resolves → $.refresh_token  ✓
+```
+
+### Bruno Export Formats Supported
+| Format | Works | Notes |
+|--------|-------|-------|
+| Bruno → Export as Postman v2.1 JSON | ✅ | `info.schema` URL present, same as Postman |
+| Bruno → Export as Bruno JSON | ✅ | `items[]` array, no schema |
+| Bruno YAML folder (opencollection.yml) | ✅ | Directory input |
+| Single .bru file | ✅ | Request-level script parsing |
+| Environment as .bru file | ✅ | Parsed as key-value pairs |
+
+### Changed
+- `package.json` version: `2.4.8` → `2.4.9`
+
+---
+
 ## [2.4.8] - 2026-03-10
 
 ### Added — Proxy Auto-Detection (both protocols)
