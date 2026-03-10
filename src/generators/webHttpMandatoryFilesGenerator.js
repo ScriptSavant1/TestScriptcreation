@@ -31,7 +31,14 @@ class WebHttpMandatoryFilesGenerator {
    * @param {string[]} dataFiles        - Extracted data file names (e.g. ['Upload_body.b64'])
    *                                      Written into [ExtraFiles] and ScriptUploadMetadata.xml
    */
-  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = []) {
+  /**
+   * @param {string}   outputDir
+   * @param {Map}      parameters
+   * @param {string[]} transactionNames
+   * @param {string[]} dataFiles        - Large body data files extracted to data/ subfolder
+   * @param {boolean}  hasJwt           - If true, add jsrsasign.js + generate_jwt.js to [ManuallyExtraFiles]
+   */
+  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = [], hasJwt = false) {
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -39,7 +46,7 @@ class WebHttpMandatoryFilesGenerator {
     const safeScriptName = this.sanitizeName(this.scriptName);
 
     this.writeFile(outputDir, `${safeScriptName}.usr`,
-      this.generateUsrFile(safeScriptName, transactionNames, dataFiles));
+      this.generateUsrFile(safeScriptName, transactionNames, dataFiles, hasJwt));
     this.writeFile(outputDir, 'default.cfg',
       this.generateDefaultCfg());
     this.writeFile(outputDir, 'default.usp',
@@ -49,7 +56,7 @@ class WebHttpMandatoryFilesGenerator {
     this.writeFile(outputDir, 'collection_data.dat',
       this.generateCollectionDataDat(parameters));
     this.writeFile(outputDir, 'ScriptUploadMetadata.xml',
-      this.generateScriptUploadMetadata(safeScriptName, dataFiles));
+      this.generateScriptUploadMetadata(safeScriptName, dataFiles, hasJwt));
 
     console.log(`✓ Generated VuGen config files (${safeScriptName}.usr, default.cfg, default.usp, ParameterFile.prm, collection_data.dat, ScriptUploadMetadata.xml)`);
   }
@@ -68,7 +75,7 @@ class WebHttpMandatoryFilesGenerator {
 
   // ─── [ScriptName].usr (INI) ──────────────────────────────────────────────────
 
-  generateUsrFile(scriptName, transactionNames = [], dataFiles = []) {
+  generateUsrFile(scriptName, transactionNames = [], dataFiles = [], hasJwt = false) {
     const txOrder = transactionNames.length > 0
       ? `\n[TransactionsOrder]\nOrder="${transactionNames.join('__*delimiter*__')}"\n`
       : '';
@@ -150,7 +157,7 @@ LastReplayStatus=0
 [ActiveReplay]
 LastReplayedRunName=
 ActiveRunName=
-${txOrder}${txSection}`;
+${txOrder}${txSection}${hasJwt ? '\n[ManuallyExtraFiles]\njsrsasign.js=\ngenerate_jwt.js=\ntranport.pem=\n' : ''}`;
   }
 
   // ─── default.cfg (INI) ───────────────────────────────────────────────────────
@@ -357,10 +364,15 @@ RunLogicObjectKind="Action"
 
   // ─── ScriptUploadMetadata.xml ────────────────────────────────────────────────
 
-  generateScriptUploadMetadata(scriptName, dataFiles = []) {
+  generateScriptUploadMetadata(scriptName, dataFiles = [], hasJwt = false) {
     // Data files use forward-slash paths in XML (cross-platform)
     const dataFileEntries = dataFiles.length > 0
       ? dataFiles.map(f => `    <FileEntry Name="data/${this.xmlEscape(f)}" Filter="4" />`).join('\n') + '\n'
+      : '';
+
+    // JWT helper files bundled with the script for LRE upload
+    const jwtEntries = hasJwt
+      ? `    <FileEntry Name="jsrsasign.js" Filter="2" />\n    <FileEntry Name="generate_jwt.js" Filter="2" />\n    <FileEntry Name="tranport.pem" Filter="2" />\n`
       : '';
 
     return `<?xml version="1.0" encoding="utf-8"?>
@@ -379,7 +391,7 @@ RunLogicObjectKind="Action"
     <FileEntry Name="default.usp" Filter="4" />
     <FileEntry Name="ParameterFile.prm" Filter="4" />
     <FileEntry Name="collection_data.dat" Filter="4" />
-${dataFileEntries}  </GeneralFiles>
+${jwtEntries}${dataFileEntries}  </GeneralFiles>
 </VugenScriptMetadata>
 `;
   }

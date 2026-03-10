@@ -439,12 +439,17 @@ class CorrelationDetector {
       });
     }
 
-    // 3. Check URL for variables (in path and query params)
-    try {
-      const url = new URL(request.url, 'http://dummy.com');
+    // 3. Check URL for variables (path + query).
+    //    NEVER use new URL() here — it encodes {{variable}} → %7B%7Bvariable%7D%7D,
+    //    which breaks all template-variable matching. Always split manually.
+    {
+      const rawUrl = request.url || '';
+      const qIdx   = rawUrl.indexOf('?');
+      const rawPath  = qIdx >= 0 ? rawUrl.substring(0, qIdx) : rawUrl;
+      const rawQuery = qIdx >= 0 ? rawUrl.substring(qIdx + 1) : '';
 
-      // Check path for variables
-      const pathVars = this.findVariablesInString(url.pathname);
+      // Check path segment for {{varName}} / ${varName} references
+      const pathVars = this.findVariablesInString(rawPath);
       pathVars.forEach(varName => {
         if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
           consumed.push({
@@ -456,33 +461,34 @@ class CorrelationDetector {
         }
       });
 
-      // Check query parameters
-      url.searchParams.forEach((value, key) => {
-        if (this.isVariablePattern(value)) {
-          const varName = this.extractVariableName(value);
-          if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
-            consumed.push({
-              name: varName,
-              type: 'query',
-              location: 'queryString',
-              path: key
-            });
+      // Check query string for variables — split on & then on = to get values
+      if (rawQuery) {
+        rawQuery.split('&').forEach(pair => {
+          const eqIdx = pair.indexOf('=');
+          const value = eqIdx >= 0 ? pair.substring(eqIdx + 1) : pair;
+          if (this.isVariablePattern(value)) {
+            const varName = this.extractVariableName(value);
+            if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
+              const key = eqIdx >= 0 ? pair.substring(0, eqIdx) : '';
+              consumed.push({
+                name: varName,
+                type: 'query',
+                location: 'queryString',
+                path: key
+              });
+            }
           }
-        }
-      });
-    } catch (e) {
-      // URL parsing failed, try simple pattern matching
-      const urlVars = this.findVariablesInString(request.url);
-      urlVars.forEach(varName => {
-        if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
-          consumed.push({
-            name: varName,
-            type: 'url',
-            location: 'url',
-            path: 'url'
+        });
+
+        // Also scan the full query string for any template variables embedded inline
+        const queryVars = this.findVariablesInString(rawQuery);
+        queryVars.forEach(varName => {
+          if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
+              consumed.push({ name: varName, type: 'url', location: 'url', path: 'url' });
+            }
           });
         }
-      });
+      }
     }
 
     // 4. Check request body for variables

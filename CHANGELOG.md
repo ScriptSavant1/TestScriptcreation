@@ -5,6 +5,30 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-03-09
+
+### Added
+- **DevWeb mandatory file generation** — `mandatoryFilesGenerator.js` now produces the complete DevWeb project file set (matching `DevWeb2` reference): `[ScriptName].usr` (Type=DevWeb, ScriptLanguage=JavaScript, [ManuallyExtraFiles]), `default.cfg` (Encoding=UTF8, LogExtended, no [WEB] section), `default.usp` (Main action only + ErrorHandler sections), `ScriptUploadMetadata.xml` (Protocol=DevWeb, main.js ActionFiles).
+- **Canonical `rts.yml`** — Updated to match `DevWeb2` reference: adds `dns:` section, `ssl.enableHTTP3: false`, `replay.enableIntegratedAuthentication: true`, `openTelemetry:` section, `userArguments: {}`.
+- **`copyFromProjectRoot()`** in `mandatoryFilesGenerator.js` — copies `DevWebSdk.d.ts`, `jwt-lib.js`, `tranport.pem` from project root. Removed stub generator. DevWebSdk.d.ts is never synthesized — always copied.
+- **JWT Authentication — DevWeb**: `customScriptParser.detectJwtUsage()` fingerprints jsrsasign/jsonwebtoken/jose patterns. When detected: `jwt-lib.js` + `tranport.pem` copied from project root; commented-out `jwtLib.generate()` block added to `initialize()`; commented-out `isExpiring()` refresh block added to `action()`; `[ManuallyExtraFiles]` added to `.usr`.
+- **JWT Authentication — VuGen Web HTTP/HTML**: When JWT detected: `generate_jwt.js` written to output folder (standalone Node.js pre-generator); `jsrsasign.js`, `generate_jwt.js`, `tranport.pem` added to `[ManuallyExtraFiles]`; JWT note block added to `vuser_init.c`.
+- **`authenticationHandler.setDynamicVarNames()`** — generators call this after `classifyVariables()` so auth code generation correctly emits `load.global.X` for correlated/script-set tokens instead of `load.params.X`.
+- **`advancedScriptGenerator.detectJwtUsage()`** — scans all pre-request scripts; populates `this.hasJwt` and `this.jwtVarNames`; JWT output vars always Tier 1 dynamic.
+- Prompt files updated: `03-AUTHENTICATION-HANDLER.txt`, `11-WEB-HTTP-AUTH-HANDLER.txt`, `06-MANDATORY-FILES.txt`, `USAGE-GUIDE-DEVWEB.txt`, `USAGE-GUIDE-WEB-HTTP.txt`.
+
+### Fixed
+- **`correlationDetector.js` `~line 444`** — Critical: `new URL(url)` encoded `{{variable}}` → `%7B%7B...%7D%7D`, breaking all consumer URL matching. Replaced with manual string splitting.
+- **`advancedScriptGenerator.js` `detectScriptSetVariables()`** — Added `bru.setVar()` / `bru.setEnvVar()` to the scan pattern. Bruno pre-request variables were being parameterized incorrectly.
+- **`authenticationHandler.js` `parameterize()`** — Checks `dynamicVarNames` before choosing `load.global.X` vs `load.params.X` for `{{variable}}` references.
+- **`advancedScriptGenerator.js`** — `load.initialize('Initialize', ...)`, `load.action('Action', ...)`, `load.finalize('Finalize', ...)` now match DevWeb2 canonical naming (was `"init"`, `"Action"`, `"finalize"`).
+- **`mandatoryFilesGenerator.js` `generateAll()`** — Accepts `options` object `{ transactionNames, hasJwt }` as 3rd param (string back-compat retained).
+
+### Changed
+- `package.json` version: `2.3.4` → `2.4.0`
+
+---
+
 ## [2.3.4] - 2026-02-25
 
 ### Added
