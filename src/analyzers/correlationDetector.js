@@ -234,95 +234,239 @@ class CorrelationDetector {
   }
 
   /**
-   * Extract variable assignments from test script
+   * Extract variable assignments from test/post-response script.
+   *
+   * Supports both Postman and Bruno runtime APIs:
+   *
+   *  Postman:  pm.environment.set(), pm.globals.set(), pm.collectionVariables.set(),
+   *            pm.variables.set(), context.set()
+   *
+   *  Bruno:    bru.setEnv()     ← PRIMARY env setter in Bruno
+   *            bru.setEnvVar()  ← alias
+   *            bru.setVar()     ← collection-scoped variable
+   *            env.set()        ← Bruno 1.x legacy API
+   *            vars.set()       ← Bruno legacy API
+   *
+   * Also handles INDIRECT assignment pattern common in Bruno scripts:
+   *   let id = body?.access_token;
+   *   bru.setEnv("access_token", id);   ← traces `id` back to `body?.access_token`
    */
   extractSetVariables(script) {
     const variables = [];
     if (!script || typeof script !== 'string') return variables;
 
-    // Pattern: pm.environment.set("varName", jsonData.field)
-    // Also matches pm.variables, pm.globals, pm.collectionVariables
-    const pmSetPattern = /pm\.(environment|globals|collectionVariables|variables)\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
-    let match;
-    while ((match = pmSetPattern.exec(script)) !== null) {
-      const varName = match[2];
-      const source = match[3].trim();
-      variables.push({
-        name: varName,
-        source: source,
-        extractorType: this.determineExtractorType(source),
-        extractPath: this.extractJsonPath(source)
-      });
+    // ── Step 0: Build a local variable map for indirect-assignment resolution ──
+    // Handles: let id = body?.access_token;  →  id → "body?.access_token"
+    // Also:    const token = json.data.token;  →  token → "json.data.token"
+    const localVarMap = new Map();
+    const assignPattern = /(?:let|const|var)\s+(\w+)\s*=\s*([^;{\n]+)/g;
+    let am;
+    while ((am = assignPattern.exec(script)) !== null) {
+      localVarMap.set(am[1].trim(), am[2].trim());
     }
 
-    // Pattern: context.set("varName", value)
-    // Common in Salesforce scripts: const context = pm.environment.name ? pm.environment : pm.collectionVariables;
-    const contextSetPattern = /context\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
-    while ((match = contextSetPattern.exec(script)) !== null) {
-      const varName = match[1];
-      const source = match[2].trim();
-      if (!variables.find(v => v.name === varName)) {
-        variables.push({
-          name: varName,
-          source: source,
-          extractorType: this.determineExtractorType(source),
-          extractPath: this.extractJsonPath(source)
-        });
+    // Resolve a source expression using the local variable map.
+    // Handles two cases:
+    //   1. Simple variable:  bru.setEnv("x", id)          — resolves `id` to `body?.access_token`
+    //   2. Property chain:   env.set("x", body2.field)     — resolves `body2` prefix to its source
+    //                        (e.g. body2 = pm.response.json()) → pm.response.json().field
+    const resolveSource = (src) => {
+      const trimmed = src.trim().replace(/;$/, '');
+
+      // Case 1: bare variable name → look up in localVarMap
+      if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(trimmed) && localVarMap.has(trimmed)) {
+        return localVarMap.get(trimmed);
       }
-    }
 
-    // Pattern: bru.setVar("varName", response.body.field)
-    const bruSetPattern = /bru\.setVar\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
-    while ((match = bruSetPattern.exec(script)) !== null) {
-      const varName = match[1];
-      const source = match[2].trim();
-      variables.push({
-        name: varName,
-        source: source,
-        extractorType: this.determineExtractorType(source),
-        extractPath: this.extractJsonPath(source)
-      });
-    }
+      // Case 2: varName.field or varName?.field — resolve the prefix
+      const dotIdx = trimmed.search(/\??\./);
+      if (dotIdx > 0) {
+        const prefix = trimmed.substring(0, dotIdx).replace(/\?$/, '');
+        const rest   = trimmed.substring(dotIdx).replace(/^\./, '');
+        if (localVarMap.has(prefix)) {
+          return `${localVarMap.get(prefix)}.${rest}`;
+        }
+      }
+
+      return trimmed;
+    };
+
+    const addVar = (varName, rawSource) => {
+      if (!varName) return;
+      const source = resolveSource(rawSource);
+      const extractorType = this.determineExtractorType(source);
+
+      // Choose the right path extractor based on source type
+      let extractPath;
+      if (extractorType === 'header') {
+        extractPath = this.extractHeaderName(source);
+      } else if (extractorType === 'cookie') {
+        extractPath = this.extractCookieName(source);
+      } else {
+        extractPath = this.extractJsonPath(source);
+      }
+
+      if (!variables.find(v => v.name === varName)) {
+        variables.push({ name: varName, source, extractorType, extractPath });
+      }
+    };
+
+    let match;
+
+    // ── Postman: pm.*.set("varName", source) ──────────────────────────────────
+    const pmSetPattern = /pm\.(environment|globals|collectionVariables|variables)\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = pmSetPattern.exec(script)) !== null) addVar(match[2], match[3]);
+
+    // ── Postman: context.set("varName", value) ────────────────────────────────
+    const contextSetPattern = /context\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = contextSetPattern.exec(script)) !== null) addVar(match[1], match[2]);
+
+    // ── Bruno: bru.setEnv() — OLD ALIAS (still widely used) ──────────────────
+    const bruSetEnvPattern = /bru\.setEnv\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = bruSetEnvPattern.exec(script)) !== null) addVar(match[1], match[2]);
+
+    // ── Bruno: bru.setEnvVar() — PRIMARY modern env setter ───────────────────
+    const bruSetEnvVarPattern = /bru\.setEnvVar\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = bruSetEnvVarPattern.exec(script)) !== null) addVar(match[1], match[2]);
+
+    // ── Bruno: bru.setVar() — collection / request-scoped ────────────────────
+    const bruSetVarPattern = /bru\.setVar\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = bruSetVarPattern.exec(script)) !== null) addVar(match[1], match[2]);
+
+    // ── Bruno: bru.setGlobalVar() — global scope ─────────────────────────────
+    const bruSetGlobalPattern = /bru\.setGlobalVar\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = bruSetGlobalPattern.exec(script)) !== null) addVar(match[1], match[2]);
+
+    // ── Bruno: bru.setNextEnvVar() — set in next environment ─────────────────
+    const bruSetNextPattern = /bru\.setNextEnvVar\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = bruSetNextPattern.exec(script)) !== null) addVar(match[1], match[2]);
+
+    // ── Bruno 1.x legacy: env.set() and vars.set() ───────────────────────────
+    const envSetPattern = /(?:^|[^a-zA-Z0-9_])env\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = envSetPattern.exec(script)) !== null) addVar(match[1], match[2]);
+    const varsSetPattern = /(?:^|[^a-zA-Z0-9_])vars\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = varsSetPattern.exec(script)) !== null) addVar(match[1], match[2]);
 
     return variables;
   }
 
   /**
-   * Determine extractor type from source expression
+   * Determine extractor type from source expression.
+   *
+   * Priority order (specific → general):
+   *   1. res.headers.* / pm.response.headers.*  → 'header'
+   *   2. res.cookies.* / pm.cookies.*           → 'cookie'
+   *   3. res.body.* / body?.* / jsonData.*      → 'json'
+   *   4. default                                 → 'json'
    */
   determineExtractorType(source) {
-    if (source.includes('jsonData') || source.includes('response.body') || source.includes('JSON.parse')) {
-      return 'json';
-    } else if (source.includes('header') || source.includes('getResponseHeader')) {
-      return 'header';
-    } else if (source.includes('cookie')) {
-      return 'cookie';
-    }
-    return 'json'; // default
+    if (!source) return 'json';
+
+    // ── Header detection (must check BEFORE body to avoid false match on "headers") ──
+    if (/(?:res|response|pm\.response)\.headers|getResponseHeader|pm\.response\.headers/.test(source)) return 'header';
+
+    // ── Cookie detection ──────────────────────────────────────────────────────
+    if (/(?:res|response)\.cookies|pm\.cookies/.test(source)) return 'cookie';
+
+    // ── JSON body detection (Bruno and Postman patterns) ──────────────────────
+    if (/res\.body|body\??\.|jsonData|responseBody|JSON\.parse|json\.|pm\.response\.json|res\.json/.test(source)) return 'json';
+    if (source.includes('response.body') || source.includes('pm.response')) return 'json';
+
+    // ── Legacy keyword detection ──────────────────────────────────────────────
+    if (/\bheader\b/.test(source)) return 'header';
+    if (/\bcookie\b/.test(source)) return 'cookie';
+
+    return 'json';
   }
 
   /**
-   * Extract JSON path from source expression
+   * Extract HTTP header name from a source expression.
+   * e.g. res.headers["x-csrf-token"]  → "x-csrf-token"
+   *      res.headers.authorization     → "authorization"
+   *      pm.response.headers.get("X-Token") → "X-Token"
+   */
+  extractHeaderName(source) {
+    if (!source) return null;
+    // bracket notation: res.headers["name"] or response.headers["name"]
+    const bracketMatch = source.match(/headers\s*\[["']([^"']+)["']\]/);
+    if (bracketMatch) return bracketMatch[1];
+    // .get() notation: pm.response.headers.get("Name")
+    const getMatch = source.match(/headers\.get\s*\(["']([^"']+)["']\)/);
+    if (getMatch) return getMatch[1];
+    // dot notation: res.headers.authorization
+    const dotMatch = source.match(/headers\??\.([\w-]+)/);
+    if (dotMatch) return dotMatch[1];
+    return null;
+  }
+
+  /**
+   * Extract cookie name from a source expression.
+   * e.g. res.cookies["session_id"]  → "session_id"
+   *      pm.cookies.get("csrf")     → "csrf"
+   */
+  extractCookieName(source) {
+    if (!source) return null;
+    const bracketMatch = source.match(/cookies\s*\[["']([^"']+)["']\]/);
+    if (bracketMatch) return bracketMatch[1];
+    const getMatch = source.match(/cookies\.get\s*\(["']([^"']+)["']\)/);
+    if (getMatch) return getMatch[1];
+    const dotMatch = source.match(/cookies\??\.([\w_-]+)/);
+    if (dotMatch) return dotMatch[1];
+    return null;
+  }
+
+  /**
+   * Extract JSON path from source expression.
+   *
+   * Handles all variants:
+   *   Bruno direct:    res.body.access_token      → $.access_token
+   *   Bruno optional:  body?.access_token         → $.access_token
+   *   Bruno nested:    res.body?.data?.token      → $.data.token
+   *   Bruno bracket:   res.body["field"]          → $.field
+   *   Postman:         jsonData.field, json.data.token
+   *   Modern:          pm.response.json().field
    */
   extractJsonPath(source) {
-    // Try to extract path from jsonData.field, json.field, response.field, etc.
-    const match = source.match(/(?:jsonData|responseBody|json|response|data)\.(.+)/);
-    if (match) {
-      let pathPart = match[1]
-        .replace(/\[["']([^"']+)["']\]/g, '.$1')   // bracket notation to dot
-        .replace(/\.split\(.*/g, '')                  // strip .split(...) and everything after
-        .replace(/\.pop\(\)/g, '')                    // strip .pop()
-        .replace(/\.shift\(\)/g, '')                  // strip .shift()
-        .replace(/\.trim\(\)/g, '')                   // strip .trim()
-        .replace(/\.toString\(\)/g, '')               // strip .toString()
-        .replace(/\.$/, '')                            // strip trailing dot
-        .trim();
-      if (pathPart) {
-        return `$.${pathPart}`;
-      }
+    if (!source) return null;
+
+    const cleanPath = (p) => p
+      .replace(/\?\./g, '.')                      // optional chaining
+      .replace(/\[["']([^"']+)["']\]/g, '.$1')   // bracket to dot
+      .replace(/\.split\(.*/g, '')
+      .replace(/\.(pop|shift|trim|toString|toLowerCase|toUpperCase)\(\)/g, '')
+      .replace(/\.$/, '')
+      .trim();
+
+    // ── Bruno: res.body.field or res.body?.field or response.body.field ───────
+    const resBodyMatch = source.match(/(?:res|response)\.body\??\.?([\w$[\]?.]+[^;,)\s]*)/);
+    if (resBodyMatch) {
+      const path = cleanPath(resBodyMatch[1]);
+      if (path && path !== 'body') return `$.${path}`;
+      // Just res.body with no field → fallback to root (caller provides hint)
     }
 
-    // Handle variable name-based inference for common patterns
+    // ── Bruno: body?.field or body.field (local variable) ────────────────────
+    const bodyVarMatch = source.match(/^body\??\.?([\w$[\]?.]+[^;,)\s]*)/);
+    if (bodyVarMatch) {
+      const path = cleanPath(bodyVarMatch[1]);
+      return path ? `$.${path}` : null;
+    }
+
+    // ── Postman: pm.response.json().field ────────────────────────────────────
+    const pmJsonMatch = source.match(/pm\.response\.json\s*\(\s*\)\s*\??\.([\w$[\]?.]+)/);
+    if (pmJsonMatch) {
+      const path = cleanPath(pmJsonMatch[1]);
+      return path ? `$.${path}` : null;
+    }
+
+    // ── Postman/Generic: jsonData.field, json.field, response.field, data.field
+    const genericMatch = source.match(/(?:jsonData|responseBody|json|response|data)\??\.(.+)/);
+    if (genericMatch) {
+      const path = cleanPath(genericMatch[1]);
+      if (path) return `$.${path}`;
+    }
+
+    // ── Fallback: infer from variable name ────────────────────────────────────
     return this.inferPathFromVarName(null, source);
   }
 
@@ -648,13 +792,18 @@ class CorrelationDetector {
         const failOn = options.failOn !== undefined ? options.failOn : false;
         return `new load.TextCheckExtractor("${correlation.name}", { text: "${text}", scope: ${scope}, failOn: ${failOn} })`;
 
-      case 'header':
-        return `new load.BoundaryExtractor("${correlation.name}", "${correlation.extractPath}: ", "\\r\\n")`;
+      case 'header': {
+        // extractPath holds the HTTP header name (e.g. "x-csrf-token")
+        const headerName = correlation.extractPath || correlation.name.replace(/^_/, '');
+        return `new load.BoundaryExtractor("${correlation.name}", "${headerName}: ", "\\r\\n", load.ExtractorScope.Headers)`;
+      }
 
-      case 'cookie':
-        // For cookies like LWSSO_COOKIE_KEY
-        const cookieName = correlation.extractPath || correlation.name;
-        return `new load.CookieExtractor("${correlation.name}", "${cookieName}")`;
+      case 'cookie': {
+        // extractPath holds the cookie name (e.g. "session_id")
+        const cookieName = correlation.extractPath || correlation.name.replace(/^_/, '');
+        // DevWeb: use BoundaryExtractor on Headers searching Set-Cookie
+        return `new load.BoundaryExtractor("${correlation.name}", "${cookieName}=", ";", load.ExtractorScope.Headers)`;
+      }
 
       default:
         return `new load.JsonPathExtractor("${correlation.name}", "$.${correlation.name}")`;
