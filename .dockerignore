@@ -1,0 +1,39 @@
+# Development / documentation — not needed in the image
+devweb-prompts/
+examples/
+devweb-examples-code/
+output/
+
+# Node.js — rebuilt inside Docker
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Test & lint
+*.test.js
+jest.config.*
+.eslintrc*
+.eslintignore
+
+# Markdown docs
+*.md
+CHANGELOG.md
+RELEASE_*.md
+BUGFIX*.md
+HOTFIX*.md
+
+# Misc
+*.jpeg
+*.jpg
+*.png
+*.bat
+*.ps1
+install.sh
+INSTALL_COMPARISON.md
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+.gitlab-ci.yml

@@ -58,7 +58,88 @@ class AdvancedScriptGenerator {
     this.dynamicVarNames = new Set();    // Variables set by scripts/correlation → load.global
     this.paramVarNames = new Set();      // Variables to parameterize → load.params
     this.scriptSetVarNames = new Set();  // Variables detected as set by scripts
+
+    // JWT detection — populated by detectJwtUsage() during analyze()
+    this.hasJwt     = false;
+    this.jwtVarNames = [];   // token variable names set by JWT pre-request scripts
+
+    // Per-request dynamic variables — generated fresh before each request (e.g. UUID, nonce).
+    // Map: varName → { generationType: 'uuid'|'random'|'timestamp'|'nonce', requestNames: string[] }
+    // These are NOT static params and NOT response correlations — they are inline-generated.
+    this.perRequestVars = new Map();
+
     this.buildVariableMap();
+  }
+
+  /**
+   * Detect proxy configuration from collection variables or environment.
+   *
+   * Looks for variables named:
+   *   proxy, proxyUrl, proxy_url, http_proxy, HTTP_PROXY, https_proxy, HTTPS_PROXY,
+   *   proxyServer, proxy_server, proxyHost + proxyPort (separate)
+   *
+   * Supported formats:
+   *   Full URL:   http://user:pass@host:8080   or   http://host:8080
+   *   host:port:  userproxy.corp.net:8080
+   *   Separate:   proxyHost = host, proxyPort = 8080
+   *
+   * @returns {{ enabled:true, host:string, port:number, username:string, password:string }|null}
+   */
+  detectProxyConfig() {
+    const urlVarNames  = ['proxy','proxyUrl','proxy_url','proxyURI','proxy_uri',
+                          'http_proxy','HTTP_PROXY','https_proxy','HTTPS_PROXY',
+                          'proxyServer','proxy_server','httpProxy','httpsProxy'];
+    const hostVarNames = ['proxyHost','proxy_host','proxyHostname'];
+    const portVarNames = ['proxyPort','proxy_port'];
+    const userVarNames = ['proxyUser','proxy_user','proxyUsername','proxy_username','proxyUserName'];
+    const passVarNames = ['proxyPassword','proxy_password','proxyPass','proxy_pass'];
+
+    const get = (names) => {
+      for (const n of names) {
+        const v = this.variableMap.get(n);
+        if (v && String(v).trim()) return String(v).trim();
+      }
+      return '';
+    };
+
+    // Try full URL first
+    for (const name of urlVarNames) {
+      const raw = this.variableMap.get(name);
+      if (!raw || !String(raw).trim()) continue;
+      const val = String(raw).trim();
+      try {
+        const urlStr = val.startsWith('http') ? val : `http://${val}`;
+        const u = new URL(urlStr);
+        const host     = u.hostname;
+        const port     = u.port ? parseInt(u.port) : 8080;
+        const username = decodeURIComponent(u.username || '') || get(userVarNames);
+        const password = decodeURIComponent(u.password || '') || get(passVarNames);
+        if (host) {
+          console.log(`  ✓ Proxy detected: ${host}:${port}${username ? ' (authenticated)' : ''}`);
+          return { enabled: true, host, port, username, password };
+        }
+      } catch {
+        // Might be bare host:port
+        if (val.includes(':')) {
+          const [host, rawPort] = val.split(':');
+          const port = parseInt(rawPort) || 8080;
+          if (host && host.includes('.')) {
+            console.log(`  ✓ Proxy detected: ${host}:${port}`);
+            return { enabled: true, host, port, username: get(userVarNames), password: get(passVarNames) };
+          }
+        }
+      }
+    }
+
+    // Try separate host + port variables
+    const host = get(hostVarNames);
+    if (host) {
+      const port = parseInt(get(portVarNames)) || 8080;
+      console.log(`  ✓ Proxy detected: ${host}:${port}`);
+      return { enabled: true, host, port, username: get(userVarNames), password: get(passVarNames) };
+    }
+
+    return null;  // no proxy found
   }
 
   /**
@@ -91,13 +172,18 @@ class AdvancedScriptGenerator {
   }
 
   /**
-   * Scan collection scripts for variables set at runtime
-   * Detects: context.set("varName"), pm.environment.set("varName"),
-   *          pm.collectionVariables.set("varName"), pm.globals.set("varName"),
-   *          pm.variables.set("varName")
+   * Scan collection scripts for variables set at runtime.
+   * Covers ALL Postman and Bruno runtime variable setter APIs.
+   *
+   * Postman: pm.environment.set(), pm.globals.set(), pm.collectionVariables.set(),
+   *          pm.variables.set(), context.set()
+   * Bruno:   bru.setEnv() — PRIMARY, bru.setEnvVar(), bru.setVar()
+   *          env.set() — Bruno 1.x legacy, vars.set() — Bruno legacy
    */
   detectScriptSetVariables() {
-    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\(\s*["']([^"']+)["']/g;
+    // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
+    // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
+    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
 
     const scanItem = (item) => {
       // Check events (pre-request, test scripts)
@@ -109,7 +195,9 @@ class AdvancedScriptGenerator {
               : event.script.exec;
             let match;
             while ((match = setPattern.exec(scriptText)) !== null) {
-              this.scriptSetVarNames.add(match[1]);
+              // group 1 = pm.*/context, group 2 = bru.set*, group 3 = env/vars legacy
+              const varName = match[1] || match[2] || match[3];
+              if (varName) this.scriptSetVarNames.add(varName);
             }
           }
         });
@@ -121,6 +209,54 @@ class AdvancedScriptGenerator {
       }
     };
 
+    scanItem(this.collection);
+  }
+
+  /**
+   * Scan all request pre-request scripts for JWT generation patterns (jsrsasign, jsonwebtoken, etc.).
+   * Sets this.hasJwt = true and populates this.jwtVarNames when JWT signing is detected.
+   * JWT output variables are added to scriptSetVarNames so classifyVariables() marks them dynamic.
+   */
+  detectJwtUsage() {
+    const CustomScriptParser = require('../analyzers/customScriptParser');
+    const scanItem = (item) => {
+      // Scan the item's own pre-request script
+      if (item.event && Array.isArray(item.event)) {
+        item.event.forEach(event => {
+          if (event.listen !== 'prerequest') return;
+          const exec = event.script?.exec;
+          const text = Array.isArray(exec) ? exec.join('\n') : (exec || '');
+          if (!text) return;
+
+          const result = CustomScriptParser.detectJwtUsage(text);
+          if (result.isJwt) {
+            this.hasJwt = true;
+            result.outputVars.forEach(v => {
+              this.jwtVarNames.push(v);
+              this.scriptSetVarNames.add(v); // ensure they're Tier 1 dynamic
+            });
+            console.log(`  ✓ JWT detected (library: ${result.library}, algorithm: ${result.algorithm})`);
+          }
+
+          // Per-request dynamic var detection (UUID/nonce/random generated per request)
+          const perReqVars = CustomScriptParser.detectPerRequestDynamicVars(text);
+          perReqVars.forEach(({ varName, generationType }) => {
+            if (!this.perRequestVars.has(varName)) {
+              this.perRequestVars.set(varName, { generationType, requestNames: [] });
+              // Per-request vars are Tier 1 dynamic — never parameterize them
+              this.scriptSetVarNames.add(varName);
+            }
+            // Tag which request this var is generated for
+            if (item.name) {
+              this.perRequestVars.get(varName).requestNames.push(item.name);
+            }
+          });
+        });
+      }
+      // Recurse
+      const items = item.item || item.items;
+      if (Array.isArray(items)) items.forEach(child => scanItem(child));
+    };
     scanItem(this.collection);
   }
 
@@ -379,7 +515,11 @@ ${finalizeSection}
       result.mandatoryFiles = await this.mandatoryFilesGen.generateAll(
         outputDir,
         this.parameters,
-        this.options.examplesPath
+        {
+          transactionNames: this.transactionNames || [],
+          hasJwt:           this.hasJwt || false,
+          proxy:            this.detectProxyConfig()
+        }
       );
 
       // Write extracted base64 data files to data/ subfolder
@@ -429,6 +569,13 @@ ${finalizeSection}
     if (this.options.useParameterization) {
       this.classifyVariables();
     }
+
+    // Share dynamic var knowledge with auth handler so it emits load.global.X
+    // for correlated/script-set tokens instead of incorrectly using load.params.X
+    this.authHandler.setDynamicVarNames(this.dynamicVarNames);
+
+    // Detect JWT usage in pre-request scripts (sets this.hasJwt and this.jwtVarNames)
+    this.detectJwtUsage();
 
     // Scan for large base64 values in request bodies
     this.scanForLargeBase64();
@@ -494,38 +641,160 @@ ${finalizeSection}
   /**
    * Generate script header
    */
+  /**
+   * Analyse headers across all requests and classify them.
+   *
+   * Returns { staticGlobal, authGlobal, perRequestKeys }:
+   *   staticGlobal  — static-value headers present in ≥70% of requests (put in module-level defaults)
+   *   authGlobal    — dynamic-token headers present in ≥70% of requests (put at start of action())
+   *   perRequestKeys — headers that vary per request or contain per-request UUID vars
+   *
+   * Rules:
+   *   - Browser baseline headers (accept-*) are always staticGlobal.
+   *   - Headers containing a perRequestVar (UUID/nonce) are always perRequest.
+   *   - Correlation target vars (load.global.X) → authGlobal if common, perRequest if rare.
+   *   - Pure static params → staticGlobal if common.
+   */
+  analyzeCommonHeaders() {
+    const headerFreq  = new Map(); // key → { staticCount, values: Map<value, count> }
+    const totalRequests = this.requests.length || 1;
+
+    this.requests.forEach(req => {
+      (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
+        if (!headerFreq.has(h.key)) headerFreq.set(h.key, { count: 0, values: new Map() });
+        const entry = headerFreq.get(h.key);
+        entry.count++;
+        const raw = String(h.value);
+        entry.values.set(raw, (entry.values.get(raw) || 0) + 1);
+      });
+    });
+
+    const staticGlobal  = new Map();  // key → replaceParameters(value) expression
+    const authGlobal    = new Map();  // key → replaceParameters(value) expression
+    const perRequestKeys = new Set(); // keys that are per-request
+
+    const THRESHOLD = 0.7;
+
+    headerFreq.forEach((entry, key) => {
+      const freq = entry.count / totalRequests;
+      if (freq < THRESHOLD) return; // not common enough — per-request
+
+      // Find the dominant value (most-used)
+      let dominantRaw = '';
+      let dominantCount = 0;
+      entry.values.forEach((cnt, val) => { if (cnt > dominantCount) { dominantRaw = val; dominantCount = cnt; } });
+
+      // Check if this header uses a per-request dynamic var (UUID/nonce)
+      const isPerRequestVar = this.perRequestVars && Array.from(this.perRequestVars.keys())
+        .some(v => dominantRaw.includes(`{{${v}}}`));
+      if (isPerRequestVar) { perRequestKeys.add(key); return; }
+
+      const valueExpr = this.replaceParameters(dominantRaw);
+      const needsTpl  = valueExpr.includes('${');
+      const quoted    = needsTpl ? `\`${valueExpr}\`` : `"${valueExpr}"`;
+
+      // Dynamic vars (load.global.X) → authGlobal (set after token is fetched)
+      if (valueExpr.includes('load.global.') || valueExpr.includes('Bearer')) {
+        authGlobal.set(key, quoted);
+      } else {
+        staticGlobal.set(key, quoted);
+      }
+    });
+
+    return { staticGlobal, authGlobal, perRequestKeys };
+  }
+
   generateHeader() {
     const timestamp = new Date().toISOString();
     const collectionName = this.collection.info?.name || this.collection.name || 'Unknown';
-    
+
+    const { staticGlobal, authGlobal } = this.analyzeCommonHeaders();
+
+    // ── Module-level declarations ────────────────────────────────────────────
+    // These run ONCE when the script loads — before any lifecycle function.
+
+    const jwtRequire = this.hasJwt
+      ? `// JWT Helper — fast token generation using Node.js built-in crypto (no npm install)\nconst { getJwtToken } = require('./jwt-helper.js');\n`
+      : '';
+
+    const certSetup = this.hasJwt
+      ? `// Transport certificate for mutual TLS authentication\nload.setUserCertificate('./transport.pem', './transport.pem');\n\n`
+      : '';
+
+    // Static browser baseline + static collection headers
+    const collectionHeaders = this.collection.collectionHeaders || [];
+    const collectionHeaderLines = collectionHeaders
+      .filter(h => h.key && h.value && !h.disabled)
+      .map(h => {
+        const v = this.replaceParameters(h.value);
+        const q = v.includes('${') ? `\`${v}\`` : `"${v}"`;
+        return `    "${h.key}": ${q}`;
+      });
+
+    // Merge browser defaults + detected static globals + collection headers
+    const staticHeaderLines = [
+      `    "accept-encoding": "gzip, deflate, br"`,
+      `    "accept-language": "en-US,en;q=0.9"`,
+      `    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"`,
+      ...Array.from(staticGlobal.entries())
+            .filter(([k]) => !['accept-encoding','accept-language','user-agent'].includes(k.toLowerCase()))
+            .map(([k, v]) => `    "${k}": ${v}`),
+      ...collectionHeaderLines
+    ].join(',\n');
+
+    // Auth/dynamic global headers — set in action() AFTER token is available
+    // NOTE: authGlobal headers (Authorization, etc.) contain load.global.X references
+    // that are null at module-load time. They are applied at the START of action()
+    // after the token has been fetched — see the Object.assign block in generateAction().
+    const authDefaultsBlock = '';  // empty at module level — applied in action() start
+
+    // Store for use in action() (avoid recomputing)
+    this._authGlobalHeaders   = authGlobal;
+    this._staticGlobalHeaders = staticGlobal;
+    this._perRequestHeaderKeys = this.analyzeCommonHeaders().perRequestKeys;
+
     return `/**
  * DevWeb Performance Test Script
  * Auto-generated from: ${collectionName}
  * Generated on: ${timestamp}
- * 
+ *
  * Features enabled:
  * - Transactions: ${this.options.useTransactions}
  * - Correlation: ${this.options.useCorrelation}
  * - Parameterization: ${this.options.useParameterization}
  * - Authentication: ${this.options.useAuthentication}
- * 
+ *
  * Statistics:
  * - Total Requests: ${this.requests.length}
  * - Correlations: ${this.correlations.length}
  * - Parameters: ${this.parameters.size}
  * - Think Time: ${this.options.thinkTime}s
  */
-`;
+
+${jwtRequire}${certSetup}// ── Default request options (applied to ALL requests) ────────────────────
+load.WebRequest.defaults.returnBody = false;
+load.WebRequest.defaults.headers = {
+${staticHeaderLines}
+};
+${authDefaultsBlock}`;
   }
 
   /**
    * Generate initialize section
    */
   generateInitialize() {
-    let code = `load.initialize("init", async function() {
-    load.log("🚀 Initializing Vuser " + load.config.user.userId, load.LogLevel.${this.options.logLevel});
-    
-    // Initialize global variables for correlation
+    // JWT initialization — only when JWT signing detected.
+    // cert + require declared at module level; only token fetch here.
+    const jwtBlock = this.hasJwt ? `
+    load.global.jwt_token = getJwtToken(load.params);
+    load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000); // refresh at 9 min
+    load.log('JWT token generated', load.LogLevel.info);
+` : '';
+
+    let code = `load.initialize('Initialize', async function() {
+    load.log('Initializing Vuser ' + load.config.user.userId, load.LogLevel.${this.options.logLevel});
+${jwtBlock}
+    // Dynamic variables — populated at runtime from API responses
     ${this.generateGlobalVariablesInit()}
 `;
 
@@ -654,59 +923,61 @@ ${finalizeSection}
     const vars = [];
     const seen = new Set();
 
+    // Known JavaScript library names that appear in Postman globals but are NOT
+    // LR runtime variables — they hold library source code loaded via eval().
+    // These must be excluded from load.global.X initialization.
+    const LIBRARY_NAMES = new Set([
+      'jsrsasign', 'KJUR', 'kjur', 'CryptoJS', 'cryptojs',
+      'jsonwebtoken', 'jose', 'forge', 'jsbn', 'rsa'
+    ]);
+
     // Add correlation variables (deduplicated)
     this.correlations.forEach(corr => {
-      if (!seen.has(corr.name)) {
+      if (!seen.has(corr.name) && !LIBRARY_NAMES.has(corr.name)) {
         seen.add(corr.name);
         vars.push(`load.global.${corr.name} = null; // Correlated: ${corr.type}`);
       }
     });
 
-    // Add script-set dynamic variables not already covered by correlations
+    // Add script-set dynamic variables not already covered by correlations.
+    // Skip JWT output vars — they are set by getJwtToken() earlier in initialize().
+    const jwtOutputVars = new Set(this.jwtVarNames || []);
     this.dynamicVarNames.forEach(name => {
-      if (!seen.has(name)) {
+      if (!seen.has(name) && !LIBRARY_NAMES.has(name) && !jwtOutputVars.has(name)) {
         seen.add(name);
-        vars.push(`load.global.${name} = null; // Set by script at runtime`);
+        vars.push(`load.global.${name} = null;`);
       }
     });
 
-    // Add auth variables if not already in auth init
-    if (this.authConfigs.size > 0) {
-      vars.push('// Auth tokens will be set during authentication');
-    }
-
-    return vars.length > 0 ? vars.join('\n    ') : '// No global variables needed';
+    return vars.length > 0 ? vars.join('\n    ') : '// No dynamic variables';
   }
 
   /**
    * Generate action section
    */
   generateAction() {
-    // Build the defaults.headers object — browser baseline + collection-level headers
-    const collectionHeaders = this.collection.collectionHeaders || [];
-    const extraHeaderLines = collectionHeaders.map(h => {
-      const valueExpr = this.replaceParameters(h.value);
-      // If replaceParameters added template expressions, wrap in backtick string
-      const needsTemplate = valueExpr.includes('${');
-      const quotedValue = needsTemplate ? `\`${valueExpr}\`` : `"${valueExpr}"`;
-      return `        "${h.key}": ${quotedValue}`;
-    });
+    // JWT auto-refresh — uses getJwtToken from module-level require.
+    // Also re-syncs dynamic auth headers in defaults after token refresh.
+    const authHeaderUpdate = this._authGlobalHeaders && this._authGlobalHeaders.size > 0
+      ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${
+          Array.from(this._authGlobalHeaders.entries()).map(([k,v]) => `            "${k}": ${v}`).join(',\n')
+        }\n        });`
+      : '';
 
-    const headerBlock = [
-      `        "accept-encoding": "gzip, deflate, br"`,
-      `        "accept-language": "en-US,en;q=0.9"`,
-      `        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"`,
-      ...extraHeaderLines
-    ].join(',\n');
+    const jwtRefreshBlock = this.hasJwt ? `
+    // Auto-refresh JWT token if expired (for long-running tests)
+    if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
+        load.global.jwt_token = getJwtToken(load.params);
+        load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
+        load.log('JWT token refreshed', load.LogLevel.info);${authHeaderUpdate}
+    }
+` : (authHeaderUpdate ? `\n    // Refresh dynamic auth headers\n    Object.assign(load.WebRequest.defaults.headers, {\n${
+    Array.from((this._authGlobalHeaders || new Map()).entries()).map(([k,v]) => `        "${k}": ${v}`).join(',\n')
+  }\n    });\n` : '');
 
-    let code = `load.action("Action", async function() {
-    load.log("▶️  Starting action - Iteration " + load.config.runtime.iteration, load.LogLevel.info);
-
-    // Set default request options
-    load.WebRequest.defaults.returnBody = false;
-    load.WebRequest.defaults.headers = {
-${headerBlock}
-    };
+    let code = `load.action('Action', async function() {
+    load.log('Action iteration ' + load.config.runtime.iteration, load.LogLevel.info);
+${jwtRefreshBlock}
 `;
 
     if (this.options.groupByFolder && this.options.useTransactions) {
@@ -815,7 +1086,7 @@ ${headerBlock}
 
         // Add think time between requests (except after last one)
         if (reqIndex < requests.length - 1 && this.options.thinkTime > 0) {
-          code += `\n    load.thinkTime(${this.options.thinkTime});`;
+          code += `\n    load.sleep(${this.options.thinkTime});`;
         }
         code += `\n`;
       });
@@ -894,11 +1165,20 @@ ${headerBlock}
       code += `\n${this.indent(`// Depends on: ${dependencies.join(', ')}`, indentLevel)}`;
     }
 
-    // Add pre-request script if exists
-    const customScripts = this.customScripts.get(request.name);
-    if (customScripts?.preRequest) {
-      code += this.scriptParser.generatePreRequestCode(customScripts.preRequest, indentLevel);
-    }
+    // NOTE: Pre-request and test scripts are intentionally NOT emitted here.
+    // Scripts are used during analysis only (variable detection, JWT fingerprinting,
+    // correlation detection). The generated LR script stays clean and readable.
+
+    // Emit per-request dynamic variable generation (UUID/nonce for headers like x-fapi-interaction-id).
+    // These must run BEFORE the request so the fresh value is ready for use in headers.
+    this.perRequestVars.forEach((info, varName) => {
+      // Only emit for requests that actually use this variable in their headers or body
+      const usesVar = this.requestUsesVar(request, varName);
+      if (usesVar) {
+        const genExpr = this.perRequestGenExpression(info.generationType);
+        code += `\n${this.indent(`load.global.${varName} = ${genExpr};`, indentLevel)}`;
+      }
+    });
 
     // Generate WebRequest options (increments requestIdCounter)
     const options = this.generateRequestOptions(request);
@@ -912,7 +1192,7 @@ ${headerBlock}
     // Add response logging
     code += `\n${this.indent(`load.log(\`${request.name} - Status: \${${responseVar}.status}\`, load.LogLevel.${this.options.logLevel});`, indentLevel)}`;
 
-    // Handle correlation - store extracted values
+    // Emit correlation assignments — values extracted from this response
     const produces = this.getProducedCorrelations(request);
     if (produces.length > 0) {
       code += `\n`;
@@ -924,25 +1204,37 @@ ${headerBlock}
       });
     }
 
-    // Add post-response/test script if exists
-    if (customScripts?.test) {
-      code += this.scriptParser.generateTestCode(customScripts.test, responseVar, indentLevel);
-
-      // Add validation logic from test script
-      if (customScripts.test.extractors && customScripts.test.extractors.length > 0) {
-        code += `\n${this.indent(`// Validation checks from test script`, indentLevel)}`;
-        customScripts.test.extractors.forEach(extractor => {
-          code += `\n${this.indent(`if (${responseVar}.extractors.${extractor.name}) {`, indentLevel)}`;
-          code += `\n${this.indent(`    load.log("Validation passed: ${extractor.name}", load.LogLevel.info);`, indentLevel)}`;
-          code += `\n${this.indent(`}`, indentLevel)}`;
-        });
-      }
-    }
-
     // Store the response variable name for this request (used by grouped actions)
     this.lastResponseVar = responseVar;
 
     return code;
+  }
+
+  /**
+   * Check if a request uses a given variable name in its URL, headers, or body.
+   * Used to decide whether to emit a per-request var generation line before this request.
+   */
+  requestUsesVar(request, varName) {
+    const pattern = new RegExp(`\\{\\{\\s*${varName}\\s*\\}\\}|\\$\\{[^}]*${varName}[^}]*\\}`);
+    const url = typeof request.url === 'string' ? request.url : (request.url?.raw || '');
+    if (pattern.test(url)) return true;
+    if (request.headers?.some(h => pattern.test(h.value || ''))) return true;
+    if (request.body?.raw && pattern.test(request.body.raw)) return true;
+    return false;
+  }
+
+  /**
+   * Return the DevWeb JS expression for generating a per-request dynamic value.
+   * Used when a pre-request script sets a variable via crypto.randomUUID() etc.
+   */
+  perRequestGenExpression(generationType) {
+    switch (generationType) {
+      case 'uuid':      return 'crypto.randomUUID()';
+      case 'nonce':     return "require('crypto').randomBytes(16).toString('hex')";
+      case 'random':    return "Math.random().toString(36).substring(2)";
+      case 'timestamp': return "Date.now().toString()";
+      default:          return 'crypto.randomUUID()';
+    }
   }
 
   /**
@@ -1033,34 +1325,59 @@ ${headerBlock}
   }
 
   /**
-   * Generate headers with auth injection
+   * Generate per-request headers, skipping anything already in global defaults.
+   *
+   * Global defaults (set in module-level load.WebRequest.defaults.headers):
+   *   - staticGlobal: static headers common to most requests (accept-*, user-agent, x-client-id, etc.)
+   *   - authGlobal:   dynamic auth headers (Authorization) updated at start of action()
+   *
+   * Only headers UNIQUE to this request or DIFFERENT from defaults are emitted here.
+   * This keeps individual requests clean and avoids duplication.
    */
   generateHeaders(request) {
     const headers = {};
 
-    // Only add headers if they exist and are not empty
+    // Determine which header keys are already in global defaults — skip those
+    const globalKeys = new Set([
+      'accept-encoding', 'accept-language', 'user-agent',
+      ...(this._authGlobalHeaders ? Array.from(this._authGlobalHeaders.keys()) : []),
+      ...(this._staticGlobalHeaders ? Array.from(this._staticGlobalHeaders.keys()) : [])
+    ].map(k => k.toLowerCase()));
+
+    // Build headers from explicit headers array — only non-global ones
     if (request.headers && Array.isArray(request.headers) && request.headers.length > 0) {
       request.headers
-        .filter(h => !h.disabled && h.key && h.value) // Only include enabled headers with both key and value
+        .filter(h => !h.disabled && h.key && h.value)
         .forEach(h => {
+          // Skip headers already handled by global defaults (case-insensitive)
+          if (globalKeys.has(h.key.toLowerCase())) return;
           headers[h.key] = this.replaceParameters(h.value);
         });
     }
 
-    // Inject authentication headers only if auth is configured
-    const authConfig = this.findAuthConfig(request);
-    if (authConfig) {
-      const authHeader = this.authHandler.generateAuthHeaderInjection(authConfig);
-      if (authHeader) {
-        // Parse the auth header code and add to headers
-        const match = authHeader.match(/"([^"]+)":\s*(.+)/);
-        if (match) {
-          headers[match[1]] = `{{${match[2]}}}`;  // Will be replaced in final code
+    // Inject auth header from auth section ONLY if Authorization is NOT already explicit.
+    // This prevents duplication when auth section and headers both define Authorization.
+    const hasExplicitAuthHeader = Object.keys(headers)
+      .some(k => k.toLowerCase() === 'authorization');
+
+    if (!hasExplicitAuthHeader) {
+      const authConfig = this.findAuthConfig(request);
+      if (authConfig) {
+        const authHeader = this.authHandler.generateAuthHeaderInjection(authConfig);
+        if (authHeader) {
+          // authHeader format: '"Authorization": `Bearer ${load.global.token}`'
+          // Strip outer backticks if present — formatOptionsObject re-wraps with backticks
+          // when it detects ${...} in the string, avoiding double-backtick output.
+          const match = authHeader.match(/"([^"]+)":\s*(.+)/);
+          if (match) {
+            let val = match[2].trim();
+            if (val.startsWith('`') && val.endsWith('`')) val = val.slice(1, -1);
+            headers[match[1]] = val;
+          }
         }
       }
     }
 
-    // Return headers only if there are any
     return Object.keys(headers).length > 0 ? headers : null;
   }
 
@@ -1374,8 +1691,8 @@ ${headerBlock}
    * Generate finalize section
    */
   generateFinalize() {
-    return `load.finalize("finalize", async function() {
-    load.log("🏁 Finalizing Vuser " + load.config.user.userId, load.LogLevel.info);
+    return `load.finalize('Finalize', async function() {
+    load.log('Finalizing Vuser ' + load.config.user.userId, load.LogLevel.info);
     
     // Cleanup code here if needed
     

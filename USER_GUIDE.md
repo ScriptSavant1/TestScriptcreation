@@ -34,12 +34,17 @@ npm install
 npm link
 ```
 
-**Option 3: Using Docker**
+**Option 3: Using Docker (Recommended for CI/CD)**
 ```bash
-docker pull your-org/bruno-devweb-converter:latest
+# Linux — run directly from registry, no Node.js needed:
+docker run --rm -v $(pwd):/workspace \
+  registry.gitlab.com/your-org/bruno-devweb-converter:latest \
+  convert -i my-collection.json -o output/
 ```
 
 ### First Conversion
+
+#### DevWeb (JavaScript) — Default
 
 1. **Prepare your collection**:
    - Export from Bruno or Postman
@@ -61,6 +66,30 @@ docker pull your-org/bruno-devweb-converter:latest
    ```bash
    devweb run main.js
    ```
+
+#### VuGen Web HTTP/HTML (C) — add `--protocol web-http`
+
+1. **Run conversion with protocol flag**:
+   ```bash
+   bruno-devweb convert -i my-collection.json --protocol web-http -o my-vugen-script
+   ```
+
+2. **Review output**:
+   ```bash
+   cd my-vugen-script
+   ls -la
+   # Action.c  vuser_init.c  vuser_end.c  globals.h
+   # MyScript.usr  default.cfg  default.usp
+   # ParameterFile.prm  collection_data.dat  ScriptUploadMetadata.xml
+   ```
+
+3. **Open in VuGen**:
+   - File → Open → Select `MyScript.usr`
+   - Or drag the `.usr` file into the VuGen window
+
+4. **Upload to LoadRunner Enterprise (LRE)**:
+   - All 10 files are packaged in the ZIP download from the Web UI
+   - Or upload the entire script folder from VuGen → Upload to LRE
 
 ---
 
@@ -94,6 +123,18 @@ bruno-devweb convert -i my-api.json -e environment.json -o my-script
 bruno-devweb convert -i my-api.json -o output/ -m multi
 ```
 
+**VuGen Web HTTP/HTML (C) Protocol**:
+```bash
+# Single mode — generates Action.c, vuser_init.c, vuser_end.c, globals.h + config files
+bruno-devweb convert -i my-api.json --protocol web-http -o output/
+
+# Multi mode — one self-contained VuGen script per top-level folder
+bruno-devweb convert -i my-api.json --protocol web-http -m multi -o scripts/
+
+# With environment file
+bruno-devweb convert -i MyCollection.yml --protocol web-http -e environment.json -o output/
+```
+
 **All Options**:
 ```bash
 bruno-devweb convert \
@@ -101,6 +142,7 @@ bruno-devweb convert \
   --environment environment.json \
   --output devweb-scripts/my-api \
   --mode single \
+  --protocol devweb \
   --no-transactions \
   --no-correlation \
   --no-parameterization \
@@ -407,7 +449,7 @@ load.action("Action", async function () {
     const webResponse_01 = new load.WebRequest({...}).sendSync();
     TS01.stop(load.TransactionStatus.Passed);
 
-    load.thinkTime(1);
+    load.sleep(1);
 
     // TS02 - Users
     TS02.start();
@@ -426,6 +468,53 @@ bruno-devweb convert -i collection.json -o output/ -m multi
 
 Each top-level folder becomes a separate, self-contained DevWeb script folder
 that can be independently uploaded to LoadRunner Enterprise.
+
+### 5. Output Protocols
+
+#### DevWeb (JavaScript) — default
+
+```
+my-script/
+├── main.js              # DevWeb script (JavaScript)
+├── scenario.yml         # Scenario config
+├── rts.yml              # Runtime settings
+├── tsconfig.json        # TypeScript config
+├── DevWebSdk.d.ts       # Type definitions
+├── parameters.yml       # Parameter definitions
+└── collection_data.csv  # Parameter values
+```
+
+Variables use `${load.params.varName}` and `${load.global.varName}` syntax.
+
+#### VuGen Web HTTP/HTML (C) — `--protocol web-http`
+
+```
+my-vugen-script/
+├── Action.c             # Main test logic (C)
+├── vuser_init.c         # Init lifecycle (C)
+├── vuser_end.c          # End lifecycle (C)
+├── globals.h            # Standard includes
+├── MyScript.usr         # VuGen metadata — open this to load the script
+├── default.cfg          # Runtime settings (INI)
+├── default.usp          # Run logic profile (INI)
+├── ParameterFile.prm    # Parameter definitions (VuGen INI format)
+├── collection_data.dat  # Parameter values (CSV)
+└── ScriptUploadMetadata.xml  # LRE upload manifest
+```
+
+Variables use `{varName}` syntax (LR parameter syntax — same for both config and correlated values).
+
+**Key differences vs DevWeb:**
+
+| Aspect | DevWeb | Web HTTP/HTML |
+|--------|--------|---------------|
+| Language | JavaScript | C |
+| GET request | `new load.WebRequest({method:"GET",...})` | `web_url("name","URL=...",LAST)` |
+| POST request | `new load.WebRequest({method:"POST",...})` | `web_custom_request("name","Method=POST",...,LAST)` |
+| Variable syntax | `${load.params.var}` / `${load.global.var}` | `{varName}` |
+| Think time | `load.sleep(1)` | `lr_think_time(1)` |
+| Transaction | `T.start()` / `T.stop()` | `lr_start_transaction()` / `lr_end_transaction()` |
+| JSON correlation | `new load.JsonPathExtractor()` | `web_reg_save_param_json()` |
 
 ---
 
@@ -474,58 +563,57 @@ Open browser: `http://localhost:3000`
 
 ## GitLab Integration
 
-### Setup Repository
+### Using the Docker Image in Your Team's Pipeline
 
-```bash
-# Initialize repository
-git init
-git remote add origin https://gitlab.com/your-org/api-tests.git
+The converter is published as a Docker image. Include it in your team's pipeline — no installation required.
 
-# Add collections
-mkdir collections
-cp my-api.json collections/
-
-# Add .gitlab-ci.yml
-cp .gitlab-ci.yml ./
-
-# Commit and push
-git add .
-git commit -m "Initial commit"
-git push -u origin main
+**Linux runner (zero setup, recommended):**
+```yaml
+# In your team's .gitlab-ci.yml
+convert:
+  image: registry.gitlab.com/your-org/bruno-devweb-converter:latest
+  tags: [linux]
+  script:
+    - bruno-devweb convert -i my-collection.json -o output/
+    - bruno-devweb convert -i MyCollection.yml -m multi -o scripts/
+  artifacts:
+    paths: [output/]
+    expire_in: 1 week
 ```
 
-### Configure CI/CD Variables
-
-In GitLab: **Settings → CI/CD → Variables**
-
-Required variables:
-- `LRE_URL`: https://lre.yourcompany.com
-- `LRE_API_KEY`: your-api-key-here
-
-Optional variables:
-- `THINK_TIME`: 2
-- `LOG_LEVEL`: info
-
-### Pipeline Execution
-
-**Manual Trigger**:
-```bash
-git add collections/updated-api.json
-git commit -m "Update API collection"
-git push origin main
+**Windows runner (shell executor):**
+```yaml
+convert:
+  tags: [windows]
+  before_script:
+    - git clone https://gitlab.com/your-org/bruno-devweb-converter.git $env:TEMP\bdw
+    - npm ci --prefix $env:TEMP\bdw --omit=dev
+  script:
+    - node $env:TEMP\bdw\src\cli.js convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
 ```
 
-**Pipeline Stages**:
-1. ✅ **Validate**: Check collection syntax
-2. ✅ **Convert**: Generate DevWeb scripts
-3. ✅ **Test**: Validate generated scripts
-4. ✅ **Package**: Create ZIP archives
-5. 🔵 **Deploy**: Upload to LRE (manual)
+### CLI Options in Pipeline Scripts
 
-**View Results**:
-- Go to CI/CD → Pipelines
-- Click on pipeline
-- Download artifacts
+```yaml
+script:
+  # Basic conversion
+  - bruno-devweb convert -i collection.json -o output/
+
+  # With environment override and multi-mode
+  - bruno-devweb convert -i collection.json -e prod.json -m multi -o scripts/
+
+  # With custom think time and log level
+  - bruno-devweb convert -i collection.json -t 2 --log-level debug -o output/
+```
+
+### Pipeline Runner Requirements
+
+| Runner OS | Approach | Requirement |
+|-----------|----------|-------------|
+| Linux | Use `image:` with Docker | Runner must support Docker |
+| Windows | Clone repo + `npm ci` | Node.js >= 14 on runner |
 
 ---
 
@@ -688,6 +776,13 @@ bruno-devweb convert \
 ### Q: What collection formats are supported?
 **A**: Bruno (.bru and .json) and Postman (.json) formats.
 
+### Q: Which output protocol should I choose?
+**A**:
+- **DevWeb (JavaScript)** — for LoadRunner Enterprise DevWeb scripts (modern, recommended)
+- **Web HTTP/HTML (C)** — for classic VuGen Web HTTP/HTML C-based scripts, or when your LRE license only covers Web HTTP/HTML
+
+Use `--protocol devweb` (default) or `--protocol web-http` to select.
+
 ### Q: Can I convert multiple collections at once?
 **A**: Yes, using a shell script:
 ```bash
@@ -768,4 +863,4 @@ bruno-devweb analyze -i collection.json
 
 ---
 
-*Version 2.2.0 - Last Updated: February 2026*
+*Version 2.3.1 - Last Updated: February 2026*

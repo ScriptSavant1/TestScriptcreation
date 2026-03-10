@@ -1,10 +1,10 @@
 # 🚀 Bruno to DevWeb Converter
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](https://gitlab.com/your-org/bruno-devweb-converter)
+[![Version](https://img.shields.io/badge/version-2.3.1-blue.svg)](https://gitlab.com/your-org/bruno-devweb-converter)
 [![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Advanced converter for Bruno/Postman collections to LoadRunner Enterprise DevWeb scripts with intelligent correlation, parameterization, and authentication support.**
+**Advanced converter for Bruno/Postman collections to LoadRunner Enterprise scripts — supports both DevWeb (JavaScript) and VuGen Web HTTP/HTML (C) protocols, with intelligent correlation, parameterization, and authentication support.**
 
 ---
 
@@ -12,12 +12,12 @@
 
 ### 🎯 Core Features
 - ✅ **5 Input Formats**: Postman JSON, Bruno JSON, Bruno Single YAML, Bruno YAML Folder, Single `.bru` file
-- ✅ **Smart Transactions**: Automatic grouping by folders (declared INSIDE action)
+- ✅ **2 Output Protocols**: DevWeb JavaScript (`--protocol devweb`) and VuGen Web HTTP/HTML C (`--protocol web-http`)
+- ✅ **Smart Transactions**: Automatic grouping by folders
 - ✅ **Auto-Correlation**: Intelligent detection of dynamic values
-- ✅ **3-Tier Variable Classification**: Dynamic (`load.global`), Config (`load.params` once), Test Data (`load.params` iteration)
+- ✅ **3-Tier Variable Classification**: Dynamic, Config (once), Test Data (per iteration)
 - ✅ **Authentication**: OAuth 2.0, Basic, Bearer, API Key, AWS Signature v4
 - ✅ **Think Time**: Configurable delays between requests
-- ✅ **Error Handling**: Transaction status with pass/fail tracking
 
 ### 🔧 Advanced Features
 - 🔍 **Correlation Detection**: Automatically identifies tokens, IDs, session values
@@ -25,7 +25,7 @@
 - 🔐 **Auth Handlers**: Support for all major authentication methods
 - 📦 **Large Base64 Extraction**: Auto-detect and extract to external `data/*.b64` files
 - 📝 **Environment Override** (`-e`): Override collection variables with environment file
-- 🌐 **Web UI**: User-friendly interface for non-technical users
+- 🌐 **Web UI**: User-friendly interface with protocol selector
 - 🔄 **Cross-Folder Dependency Detection**: Warns about shared variables across scripts
 - 🏷️ **Collection-Level Headers/Auth**: Bruno YAML `request.headers`, `request.auth`, and before-request scripts merged into defaults
 
@@ -91,11 +91,23 @@ npm install
 npm link
 ```
 
-### 🐳 Docker Installation
+### 🐳 Docker — Zero-Install (Recommended for CI/CD)
 
+The converter is published as a Docker image to the GitLab Container Registry.
+No Node.js installation needed on the runner.
+
+**Linux runner (pull and run directly):**
+```bash
+docker run --rm \
+  -v $(pwd):/workspace \
+  registry.gitlab.com/your-org/bruno-devweb-converter:latest \
+  convert -i my-collection.json -o output/
+```
+
+**Build image locally from source:**
 ```bash
 docker build -t bruno-devweb-converter .
-docker run -v $(pwd)/collections:/app/collections bruno-devweb-converter
+docker run --rm -v $(pwd):/workspace bruno-devweb-converter convert -i my-collection.json -o output/
 ```
 
 ### 📚 Installation Resources
@@ -130,9 +142,12 @@ node src/cli.js convert -i Login.bru -o ./output
 # With environment file override
 node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
 
-# Multi-script mode (one DevWeb script per top-level folder)
+# Multi-script mode (one script per top-level folder)
 node src/cli.js convert -i MyCollection.yml -m multi -o ./scripts
-node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
+
+# VuGen Web HTTP/HTML (C) — same flags, add --protocol web-http
+node src/cli.js convert -i collection.json --protocol web-http -o ./output
+node src/cli.js convert -i MyCollection.yml --protocol web-http -m multi -o ./scripts
 
 # Analyze collection (no files written)
 node src/cli.js analyze -i collection.json
@@ -141,10 +156,15 @@ node src/cli.js analyze -i collection.json
 #### After global install (`npm install -g` or `npm link`):
 
 ```bash
-# Same commands, shorter prefix:
+# DevWeb (JavaScript) — default
 bruno-devweb convert -i collection.json -o output/
 bruno-devweb convert -i MyCollection.yml -e environment.json -o output/
 bruno-devweb convert -i "MyCollection/" -m multi -o scripts/
+
+# VuGen Web HTTP/HTML (C)
+bruno-devweb convert -i collection.json --protocol web-http -o output/
+bruno-devweb convert -i "MyCollection/" --protocol web-http -m multi -o scripts/
+
 bruno-devweb analyze -i collection.json
 bruno-devweb web --port 3000
 ```
@@ -186,7 +206,7 @@ Then open `http://localhost:3000` in your browser.
 
 ### CLI Commands
 
-#### `convert` - Convert collection to DevWeb script
+#### `convert` - Convert collection to script
 
 ```bash
 node src/cli.js convert [options]
@@ -198,11 +218,12 @@ Options:
   -e, --environment <file>     Environment JSON file (overrides collection variable values)
   -o, --output <dir>           Output directory (default: ./devweb-script)
   -m, --mode <mode>            Script mode: single or multi (default: single)
+  --protocol <protocol>        Output protocol: devweb (JavaScript) or web-http (VuGen C) (default: devweb)
   --no-transactions            Disable transaction grouping
   --no-correlation             Disable auto-correlation
   --no-parameterization        Disable parameterization
   --no-authentication          Disable authentication handling
-  -t, --think-time <seconds>   Think time between transactions (default: 2)
+  -t, --think-time <seconds>   Think time between transactions (default: 1)
   --no-comments                Disable code comments
   --log-level <level>          Log level: error|warning|info|debug (default: info)
   --fail-on-error              Stop execution on first error
@@ -237,6 +258,11 @@ node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
 # ---- SINGLE .BRU FILE ----
 node src/cli.js convert -i Login.bru -o ./output
 node src/cli.js convert -i Login.bru -e environment.json -o ./output
+
+# ---- VuGen WEB HTTP/HTML (C) — add --protocol web-http to any command ----
+node src/cli.js convert -i collection.json --protocol web-http -o ./output
+node src/cli.js convert -i MyCollection.yml --protocol web-http -e environment.json -o ./output
+node src/cli.js convert -i "MyCollection/" --protocol web-http -m multi -o ./scripts
 
 # ---- ANALYZE (any format, no files written) ----
 node src/cli.js analyze -i collection.json
@@ -459,6 +485,25 @@ output/
     └── ...
 ```
 
+### Web HTTP/HTML Mode (`--protocol web-http`)
+
+Single mode:
+```
+output/
+├── Action.c                    # Main requests (C)
+├── vuser_init.c                # Init lifecycle
+├── vuser_end.c                 # End lifecycle
+├── globals.h                   # Standard includes
+├── [ScriptName].usr            # VuGen metadata (required for VuGen/LRE upload)
+├── default.cfg                 # Runtime settings
+├── default.usp                 # Run logic profile
+├── ParameterFile.prm           # Parameter definitions (VuGen INI format)
+├── collection_data.dat         # Parameter values (CSV)
+└── ScriptUploadMetadata.xml    # LRE upload manifest
+```
+
+Multi mode (`-m multi --protocol web-http`): one self-contained folder per top-level collection folder, each with all 10 files above.
+
 ### Generated DevWeb Script Structure
 
 ```javascript
@@ -491,7 +536,7 @@ load.action("Action", async function () {
 
     load.global.token = webResponse_01.extractors.token;
     TS01.stop(load.TransactionStatus.Passed);
-    load.thinkTime(1);
+    load.sleep(1);
 
     TS02.start();
     const webResponse_02 = new load.WebRequest({
@@ -512,46 +557,42 @@ load.finalize("Finalize", async function () {
 
 ## 🔄 GitLab CI/CD Integration
 
-### Setup
+### How Teams Use the Docker Image in Their Pipelines
 
-1. **Add Collections to Repository:**
-   ```bash
-   mkdir collections
-   cp your-collection.json collections/
-   git add collections/
-   git commit -m "Add API collection"
-   git push
-   ```
+The converter is packaged as a Docker image. Other teams include it in their own GitLab pipelines — no installation required.
 
-2. **Configure CI/CD Variables:**
-   - `LRE_URL`: LoadRunner Enterprise URL
-   - `LRE_API_KEY`: API key for authentication
-   - `THINK_TIME`: Default think time (optional)
-   - `LOG_LEVEL`: Logging level (optional)
+**Linux runner (zero setup):**
+```yaml
+convert:
+  image: registry.gitlab.com/your-org/bruno-devweb-converter:latest
+  tags: [linux]
+  script:
+    - bruno-devweb convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
+```
 
-3. **Pipeline Stages:**
-   ```
-   validate → convert → test → package → deploy
-   ```
+**Windows runner (shell executor, Node.js must be installed):**
+```yaml
+convert:
+  tags: [windows]
+  before_script:
+    - git clone https://gitlab.com/your-org/bruno-devweb-converter.git $env:TEMP\bdw
+    - npm ci --prefix $env:TEMP\bdw --omit=dev
+  script:
+    - node $env:TEMP\bdw\src\cli.js convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
+```
 
-### Pipeline Configuration
+### Publishing a New Image Version
 
-The `.gitlab-ci.yml` includes:
-- ✅ Collection validation
-- ✅ Automatic conversion
-- ✅ Script validation
-- ✅ Packaging as ZIP
-- ✅ Manual deployment to LRE
-- ✅ Documentation generation
-
-### Triggering Conversion
+The repo's own `.gitlab-ci.yml` auto-builds and pushes the image when you tag a release:
 
 ```bash
-# Manual trigger
-git push origin main
-
-# Or trigger via GitLab UI
-# CI/CD > Pipelines > Run Pipeline
+git tag v2.1.1
+git push origin v2.1.1
+# CI builds :2.1.1 and :latest automatically
 ```
 
 ---
@@ -684,4 +725,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 **Made with ❤️ for Performance Engineers**
 
-*Version 2.2.0 - Last Updated: February 2026*
+*Version 2.3.1 - Last Updated: February 2026*
