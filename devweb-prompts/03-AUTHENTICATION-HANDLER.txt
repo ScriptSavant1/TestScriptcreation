@@ -475,6 +475,58 @@ SUPPORTED BRUNO AUTH MODES:
   mode: none           --> No auth code generated
 
 ================================================================================
+  JWT AUTHENTICATION (DevWeb JavaScript)
+================================================================================
+
+DETECTION: Scan ALL pre-request scripts for these patterns:
+  - "jsrsasign" / "KJUR.jws.JWS.sign("  → jsrsasign library
+  - require('jsonwebtoken') + .sign(      → jsonwebtoken library
+  - require('jose')                       → jose library
+  Any variable set by a JWT pre-request script → Tier 1 DYNAMIC (load.global.X)
+
+DEVWEB OUTPUT FILES (added automatically when JWT detected):
+  jwt-lib.js    — copied from project root (zero-dependency JWT signer)
+  tranport.pem  — placeholder PEM file (user replaces with real private key)
+  Both listed in [ManuallyExtraFiles] in [ScriptName].usr
+
+DEVWEB main.js PATTERN — Initialize section (ALWAYS commented-out — user activates):
+  // ── JWT Token ───────────────────────────────────────────────────────────
+  // TODO: Configure algorithm, key, and payload to match your API spec.
+  // const jwtLib = require('./jwt-lib');
+  // load.global.jwtToken = jwtLib.generate({
+  //   algorithm: 'RS256',         // PS256, RS256, HS256, ES256
+  //   keyPath:   './tranport.pem', // replace with your actual key file
+  //   payload: {
+  //     sub: load.params.clientId,
+  //     iat: Math.floor(Date.now() / 1000),
+  //     exp: Math.floor(Date.now() / 1000) + 600  // 10 min
+  //   }
+  // });
+
+  jwt-lib.js CAPABILITIES (PS256/RS256/HS256/ES256, all variants):
+    jwt.generate(options)              → returns signed JWT string
+    jwt.decode(token)                  → decodes payload WITHOUT verification
+    jwt.isExpiring(token, thresholdSec)→ true if token expires within threshold
+    jwt.isAlgorithmSupported(alg)      → algorithm support check
+
+  REFRESH PATTERN in action() (ALWAYS commented-out — user activates):
+  // if (!load.global.jwtToken || jwtLib.isExpiring(load.global.jwtToken, 60)) {
+  //   load.global.jwtToken = jwtLib.generate({ /* same options as initialize */ });
+  // }
+
+TOKEN USED IN REQUESTS:
+  When a request's auth references {{jwt_token}} or similar:
+  → If the variable is in dynamicVarNames: emit load.global.jwtToken (NOT load.params)
+  → Do NOT put JWT tokens in parameters.yml or collection_data.csv
+  → JWT token variables are ALWAYS Tier 1 dynamic
+
+CRITICAL RULES:
+  - jwt-lib.js uses Node.js built-in crypto (no npm install required)
+  - tranport.pem must be replaced with real key before running test
+  - JWT variable names set by pre-request scripts → always Tier 1 dynamic
+  - Never emit load.params.X for a JWT token variable
+
+================================================================================
   TOKEN REFRESH PATTERN
 ================================================================================
 

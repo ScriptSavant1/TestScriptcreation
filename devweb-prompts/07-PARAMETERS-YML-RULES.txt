@@ -6,6 +6,18 @@
   THIS IS THE MOST IMPORTANT PROMPT FILE.
   WRONG classification of variables is the #1 mistake AI systems make.
 
+  SCOPE: This file covers DevWeb (JavaScript) parameters.yml format.
+  FOR VuGen Web HTTP/HTML (C): The same 3-tier classification logic applies,
+  but the output format is ParameterFile.prm (INI) + collection_data.dat.
+  See 06-MANDATORY-FILES.txt for the ParameterFile.prm exact format.
+
+  Quick mapping: DevWeb → Web HTTP/HTML (C)
+    parameters.yml + collection_data.csv  →  ParameterFile.prm + collection_data.dat
+    nextValue: once                        →  GenerateNewVal="Once"
+    nextValue: iteration                   →  GenerateNewVal="EachIteration"
+    load.params.varName                    →  {varName} in C code
+    load.global.varName (dynamic)          →  {_varName} (web_reg_save_param_* target)
+
 ================================================================================
   THE 3-TIER VARIABLE CLASSIFICATION SYSTEM
 ================================================================================
@@ -347,5 +359,50 @@ MISTAKE 4: Hardcoding values that should be parameterized
 MISTAKE 5: Using different CSV files for different parameters
   WRONG: fileName: accounts.csv for some, config.csv for others
   CORRECT: fileName: collection_data.csv for ALL parameters (single file)
+
+MISTAKE 6 (Web HTTP/HTML C only): Putting correlated values in ParameterFile.prm
+  WRONG: [parameter:_accessToken] in ParameterFile.prm (LR manages these internally)
+  CORRECT: web_reg_save_param_json("_accessToken", ...) captures it at runtime
+
+MISTAKE 7 (Web HTTP/HTML C only): Using XML format for ParameterFile.prm
+  WRONG: <ParamList><Param Name="baseUrl" UpdateValueOn="Once" /></ParamList>
+  CORRECT: [parameter:baseUrl]\nGenerateNewVal="Once"\nTable="collection_data.dat"
+
+================================================================================
+  WEB HTTP/HTML EQUIVALENT: ParameterFile.prm (INI format)
+================================================================================
+
+The same 3-tier classification logic produces a different output file for
+VuGen Web HTTP/HTML (C) scripts.
+
+DevWeb parameters.yml entry:                VuGen ParameterFile.prm entry:
+  - name: baseUrl                           [parameter:baseUrl]
+    type: csv                               ColumnName="baseUrl"
+    fileName: collection_data.csv           Delimiter=","
+    columnName: baseUrl                     GenerateNewVal="Once"
+    nextValue: once                         OriginalValue="https://api.example.com"
+    nextRow: sequential                     OutOfRangePolicy="ContinueWithLast"
+    onEnd: loop                             ParamName="baseUrl"
+                                            SelectNextRow="Sequential"
+                                            StartRow="1"
+                                            Table="collection_data.dat"
+                                            TableLocation="Local"
+                                            Type="Table"
+                                            auto_allocate_block_size="1"
+                                            value_for_each_vuser=""
+
+  - name: username                          [parameter:username]
+    type: csv                               ColumnName="username"
+    fileName: collection_data.csv           GenerateNewVal="EachIteration"
+    columnName: username                    Table="collection_data.dat"
+    nextValue: iteration                    Type="Table"
+    nextRow: sequential                     ... (same other fields)
+    onEnd: loop
+
+  NOTE: collection_data.dat is the same CSV format as collection_data.csv,
+  just with a .dat extension. VuGen uses .dat, DevWeb uses .csv.
+
+For the complete ParameterFile.prm format with all required fields,
+see 06-MANDATORY-FILES.txt.
 
 ================================================================================

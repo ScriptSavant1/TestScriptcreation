@@ -4,3 +4,7 @@ HOTFIX_v2.0.3.md
 INSTALL_COMPARISON.md
 node_modules/@babel/helpers/LICENSE
 .claude/settings.local.json
+postman_collection.json
+postman_environment.json
+transport.pem
+/output/

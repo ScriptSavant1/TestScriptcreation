@@ -253,7 +253,37 @@ Generated alongside parameters.yml. Contains actual variable values from
 the collection and/or environment file. Single CSV file for ALL parameters.
 
 ================================================================================
-  OUTPUT FOLDER STRUCTURE
+  DEVWEB EXTRA FILES (from project root — auto-copied to each script folder)
+================================================================================
+
+DEVWEB EXTRA FILES (from project root — auto-copied to each script folder):
+  [ScriptName].usr    — DevWeb metadata INI (Type=DevWeb, Main=main.js)
+  default.cfg         — DevWeb runtime config (Encoding=UTF8, LogExtended)
+  default.usp         — DevWeb run logic (Main action only + ErrorHandler)
+  ScriptUploadMetadata.xml — LRE upload manifest (Protocol=DevWeb)
+  DevWebSdk.d.ts      — COPIED from project root (never generated/stubbed)
+  jwt-lib.js          — COPIED from project root (when JWT detected)
+  tranport.pem        — COPIED from project root (placeholder private key)
+
+[ManuallyExtraFiles] in [ScriptName].usr (when JWT detected):
+  jwt-lib.js=
+  tranport.pem=
+
+DevWeb .usr critical fields (differs from VuGen Web HTTP .usr):
+  Type=DevWeb          (NOT Type=Multi)
+  RunType=DevWeb       (NOT RunType=cci)
+  ScriptLanguage=JavaScript (NOT C)
+  ActiveTypes=DevWeb   (NOT QTWeb)
+  [Actions] Main=main.js (NOT vuser_init/Action/vuser_end)
+  [ManuallyExtraFiles] for jwt-lib.js, tranport.pem (NOT [ExtraFiles])
+
+DevWeb default.usp differs from VuGen:
+  - Only [RunLogicRunRoot:Main] child (no vuser_init/vuser_end children)
+  - Has [RunLogicErrorHandlerRoot] + [RunLogicErrorHandlerRoot:vuser_errorhandler]
+  - [RunLogicInitRoot] and [RunLogicEndRoot] have MercIniTreeSons="" (empty)
+
+================================================================================
+  OUTPUT FOLDER STRUCTURE — DEVWEB (--protocol devweb, default)
 ================================================================================
 
 Single-mode output (-m single, default):
@@ -286,11 +316,779 @@ Multi-mode output (-m multi):
       main.js
       scenario.yml
       ...
-    BulkV2/
-      main.js
-      ...
 
   Each folder is a self-contained DevWeb script that can be independently
   uploaded to LoadRunner Enterprise for scenario design.
+
+================================================================================
+  VUGEN WEB HTTP/HTML (--protocol web-http) — ALL FILES AND EXACT FORMATS
+================================================================================
+
+Used when: node src/cli.js convert -i collection.json --protocol web-http -o out/
+
+Output files for each script folder:
+
+  ScriptName/
+    Action.c                 <-- Main requests in C
+    vuser_init.c             <-- Init lifecycle
+    vuser_end.c              <-- End lifecycle
+    globals.h                <-- Standard includes + parameter inventory
+    ScriptName.usr           <-- VuGen metadata (INI) — required for VuGen upload
+    default.cfg              <-- Runtime settings (INI)
+    default.usp              <-- Run logic profile (INI)
+    ParameterFile.prm        <-- Parameter definitions (VuGen INI format)
+    collection_data.dat      <-- Parameter values (CSV, header row + data rows)
+    ScriptUploadMetadata.xml <-- LRE upload manifest (XML)
+
+================================================================================
+  VUGEN FILE 1: Action.c (main requests, grouped by folder/transaction)
+================================================================================
+
+```c
+Action()
+{
+    web_set_sockets_option("SSL_VERSION", "AUTO");
+
+    // ---- Authentication (Transaction T01) ----
+    lr_start_transaction("T01_Authentication");
+
+    // Correlation registration BEFORE the producing request:
+    web_reg_save_param_json("accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
+
+    web_add_header("Content-Type", "application/x-www-form-urlencoded");
+
+    web_custom_request("Login",
+        "URL={url}/oauth2/token",
+        "Method=POST",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Snapshot=t1.inf",
+        "Mode=HTML",
+        "EncType=application/x-www-form-urlencoded",
+        "Body=grant_type=password&client_id={clientId}&client_secret={clientSecret}&username={username}&password={password}",
+        LAST);
+
+    lr_end_transaction("T01_Authentication", LR_AUTO);
+    lr_think_time(1);
+
+    // ---- Users (Transaction T02) ----
+    lr_start_transaction("T02_Users");
+
+    web_add_header("Authorization", "Bearer {accessToken}");
+    web_add_header("Content-Type", "application/json");
+
+    web_url("Get Users",
+        "URL={url}/api/v2/users",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Snapshot=t2.inf",
+        "Mode=HTML",
+        LAST);
+
+    lr_end_transaction("T02_Users", LR_AUTO);
+    lr_think_time(1);
+
+    return 0;
+}
+```
+
+RULES for Action.c:
+- `web_set_sockets_option("SSL_VERSION", "AUTO")` is ALWAYS the first line
+- Each top-level collection folder becomes one transaction: T01_FolderName, T02_FolderName
+- `web_reg_save_param_json/regexp` MUST appear BEFORE the request that produces the value
+- `web_add_header()` applies to the NEXT request only — call before each request that needs headers
+- `{varName}` is VuGen parameter syntax — replaces `{{varName}}` from collection
+- `{accessToken}` for correlation targets (also use {varName} — LR stores correlations as params)
+- `"Snapshot=tN.inf"` is REQUIRED in EVERY web_url() and web_custom_request() — place it
+  immediately before `"Mode=HTML"`. N increments globally: t1, t2, t3... across the whole script
+- GET requests → `web_url()`, all other methods → `web_custom_request()`
+- `lr_think_time(1)` after each transaction end
+- Function ends with `return 0;`
+
+CORRELATION FUNCTIONS (place BEFORE the producing request):
+
+JSON path extraction:
+```c
+web_reg_save_param_json("paramName",
+    "QueryString=$.json.path",
+    "Ord=1",
+    LAST);
+```
+
+Boundary extraction:
+```c
+web_reg_save_param("paramName",
+    "LB=<leftBoundary>",
+    "RB=<rightBoundary>",
+    "Ord=1",
+    LAST);
+```
+
+Regexp extraction:
+```c
+web_reg_save_param_regexp("paramName",
+    "RegExp=<pattern>",
+    "Ord=1",
+    LAST);
+```
+
+HTTP FUNCTION REFERENCE:
+
+GET request:
+```c
+web_url("Request Name",
+    "URL={baseUrl}/path/{resourceId}",
+    "Resource=0",
+    "RecContentType=application/json",
+    "Referer=",
+    "Snapshot=t1.inf",
+    "Mode=HTML",
+    LAST);
+```
+
+POST/PUT/PATCH/DELETE with JSON body:
+```c
+web_custom_request("Request Name",
+    "URL={baseUrl}/api/endpoint",
+    "Method=POST",
+    "Resource=0",
+    "RecContentType=application/json",
+    "Referer=",
+    "Snapshot=t2.inf",
+    "Mode=HTML",
+    "EncType=application/json",
+    "Body={\"username\":\"{username}\",\"password\":\"{password}\"}",
+    LAST);
+```
+
+POST with URL-encoded body:
+```c
+web_custom_request("Token Request",
+    "URL={url}/oauth/token",
+    "Method=POST",
+    "Resource=0",
+    "RecContentType=application/json",
+    "Referer=",
+    "Snapshot=t3.inf",
+    "Mode=HTML",
+    "EncType=application/x-www-form-urlencoded",
+    "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}",
+    LAST);
+```
+
+NOTE: "Snapshot=tN.inf" is REQUIRED in every web_url() and web_custom_request() call.
+N starts at 1 and increments globally across all requests in Action.c (t1, t2, t3...).
+Place it immediately BEFORE "Mode=HTML".
+
+================================================================================
+  VUGEN FILE 2: vuser_init.c
+================================================================================
+
+```c
+vuser_init()
+{
+    /* lr_whoami() is the correct VuGen function for user ID.              */
+    /* lr_get_vuser_id() does NOT exist — it causes "Unresolved symbol".   */
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("VUser %d initializing — base URL: %s", vusr_id,
+                      lr_eval_string("{url}"));
+
+    /* TODO: Add OAuth2 token fetch if authentication is session-scoped.   */
+    /* IMPORTANT: web_reg_save_param_json MUST come BEFORE web_custom_request. */
+    /*
+    web_reg_save_param_json("_accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
+    web_custom_request("GetToken",
+        "URL={url}/oauth/token",
+        "Method=POST",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Snapshot=t1.inf",
+        "Mode=HTML",
+        "EncType=application/x-www-form-urlencoded",
+        "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}",
+        LAST);
+    lr_output_message("Token acquired: %s", lr_eval_string("{_accessToken}"));
+    */
+
+    return 0;
+}
+```
+
+================================================================================
+  VUGEN FILE 3: vuser_end.c
+================================================================================
+
+```c
+vuser_end()
+{
+    // TODO: Add logout or cleanup here if needed
+    // web_custom_request("Logout",
+    //     "URL={url}/api/logout",
+    //     "Method=POST",
+    //     "EncType=application/json",
+    //     "Body={}",
+    //     LAST);
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("VUser %d finalized.", vusr_id);
+    return 0;
+}
+```
+
+================================================================================
+  VUGEN FILE 4: globals.h
+================================================================================
+
+```c
+#ifndef _GLOBALS_H
+#define _GLOBALS_H
+
+//--------------------------------------------------------------------
+// Include Files
+#include "lrun.h"
+#include "web_api.h"
+#include "lrw_custom_body.h"
+
+//--------------------------------------------------------------------
+// Static Parameters (from collection_data.dat, GenerateNewVal=Once)
+//   {url}          — base URL (e.g., https://api.example.com)
+//   {clientId}     — OAuth2 client ID
+//   {clientSecret} — OAuth2 client secret
+
+// Test Data Parameters (from collection_data.dat, GenerateNewVal=EachIteration)
+//   {username}     — test user login name (changes per vuser iteration)
+//   {password}     — test user password (paired with username)
+
+// Correlation Parameters (captured from responses by web_reg_save_param_*)
+//   {accessToken}  — OAuth2 bearer token (captured from /oauth/token response)
+
+//--------------------------------------------------------------------
+// Global Variables (declare here if shared across vuser_init/Action/vuser_end)
+
+#endif // _GLOBALS_H
+```
+
+================================================================================
+  VUGEN FILE 5: [ScriptName].usr (VuGen metadata INI)
+================================================================================
+
+```ini
+[General]
+Type=Multi
+DefaultCfg=default.cfg
+ParameterFile=ParameterFile.prm
+GlobalParameterFile=
+NewFunctionHeader=1
+RunType=cci
+ActionLogicExt=action_logic
+LastActiveAction=Action
+MajorVersion=26
+MinorVersion=1
+ActiveTypes=QTWeb
+GenerateTypes=QTWeb
+AdditionalTypes=QTWeb
+DevelopTool=Vugen
+LastModifyVer=26.1.0.0
+DFERebrandFlag=Done
+LastCodeGenerationVer=26.1.0.0
+DisableRegenerate=0
+ParamLeftBrace={
+ParamRightBrace=}
+ScriptLanguage=C
+Encoding=ANSI
+Description=
+
+[Actions]
+vuser_init=vuser_init.c
+Action=Action.c
+vuser_end=vuser_end.c
+
+[RunLogicFiles]
+Default Profile=default.usp
+
+[VuserProfiles]
+Profiles=Default Profile
+
+[CfgFiles]
+Default Profile=default.cfg
+
+[ExtraFiles]
+globals.h=
+
+[Modified Actions]
+vuser_init=0
+Action=1
+vuser_end=0
+
+[Recorded Actions]
+vuser_init=0
+Action=1
+vuser_end=0
+
+[Replayed Actions]
+vuser_init=0
+Action=0
+vuser_end=0
+
+[Interpreters]
+vuser_init=cci
+Action=cci
+vuser_end=cci
+
+[StateManagement]
+LastReplayStatus=0
+
+[ActiveReplay]
+LastReplayedRunName=
+ActiveRunName=
+
+[TransactionsOrder]
+Order="T01_Authentication__*delimiter*__T02_Users"
+
+[Transactions]
+T01_Authentication=
+T02_Users=
+```
+
+NOTES:
+- Script name (filename) must match the collection or folder name (spaces → underscores)
+- `[Transactions]` section lists ALL transaction names used in Action.c
+- `[TransactionsOrder]` uses `__*delimiter*__` separator between transaction names
+- `ParamLeftBrace={` and `ParamRightBrace=}` are REQUIRED for parameter substitution
+
+================================================================================
+  VUGEN FILE 6: default.cfg (runtime settings INI)
+================================================================================
+
+Complete canonical VuGen 26.1 Web HTTP/HTML runtime config — 9 sections, 163 lines.
+Generated automatically. Key settings to be aware of:
+  [General]  ContinueOnError=0, AutomaticTransactions=1, Encoding=ANSI
+  [WEB]      EnableHTTP2=1, EnableSnapshotsInReplay=1, proxy settings, SSL, NTLM
+  [Log]      LogOptions=LogBrief (change to LogExtended for debugging)
+
+```ini
+[General]
+XlBridgeTimeout=120
+DefaultRunLogic=default.usp
+automatic_nested_transactions=1
+AutomaticTransactions=1
+Encoding=ANSI
+ContinueOnError=0
+FailTransOnErrorMsg=0
+AutomaticTransactionsPerFunc=0
+UseThreads=1
+Replay64bit=0
+AccessVTSPortByQueryString=0
+VTSHTTPAccessPort=80
+VTSHTTPSAccessPort=443
+
+[ThinkTime]
+Options=NOTHINK
+Factor=1
+LimitFlag=0
+Limit=1
+ThinkTimeRandomLow=50
+ThinkTimeRandomHigh=150
+
+[Iterations]
+NumOfIterations=1
+IterationPace=IterationASAP
+StartEvery=60
+RandomMin=60
+RandomMax=90
+
+[Log]
+LogOptions=LogBrief
+MsgClassData=0
+MsgClassParameters=0
+MsgClassFull=0
+AutoLog=0
+AutoLogBufferSize=1
+LogDetail=0
+IncludeEnvInfo=1
+PrintTimeStamp=0
+
+[WEB]
+SearchForImages=1
+HttpVer=1.1
+KeepAlive=1
+EnableChecks=0
+AnalogMode=0
+MaxConnections=0
+SnapshotOnErrorActive=0
+UseBrowserAgent=0
+UseCustomAgent=1
+Browser_Type=Microsoft Internet Explorer
+BrowserVer=10.0
+BrowserPlatform=Windows
+BrowserLanguageCode=
+BrowserUserAgent=Mozilla/5.0 (compatible; MSIE 10.0; Windows; Trident/6.0)
+CustomUserAgent=Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)
+SimulateCache=1
+CacheHtmlPages=1
+IgnoreContentCachingTypes=1
+KeepNonTextMimeType=text/xml;text/plain
+CacheAlwaysCheckForNewerPages=0
+ResetContext=1
+ClearCacheForSimulateNewUser=1
+SimulatePrefetchPrerender=0
+DisableAED=0
+ProxyUseProxy=1
+ProxyUseBrowser=1
+ProxyUseAutoConfigScript=0
+ProxyAutoConfigScriptURL=
+ProxyUseProxyServer=0
+ProxyHTTPHost=
+ProxyHTTPPort=
+ProxyHTTPSHost=
+ProxyHTTPSPort=
+ProxyUseSame=0
+ProxyBypass=
+ProxyNoLocal=0
+ProxyUserName=
+ProxyPasswordIsEncrypted=false
+GraphHitsPerSecondHttpStatusCodes=1
+GraphPagesPerSecond=0
+GraphBytesPerSecond=1
+WinInetReplay=0
+AutoTransFileLine=1
+FailNonCriticalItem=0
+SaveSnapshotResources=0
+EnableDynatrace=0
+HTTPVer=1.1
+EnableHTTP2=1
+BrowserAcceptLanguage=None
+HttpErrorsAsWarnings=0
+ConnectTimeout=120
+ReceiveTimeout=120
+KeepAliveTimeout=60
+ZlibHeadersInCompressedRequestBody=0
+BrowserAcceptEncoding=gzip, deflate, br
+DeleteCacheUnreferencedIterations=1
+EnableSnapshotsInReplay=1
+EnableIPCache=0
+UTF8InputOutput=0
+SupportCharset=None
+ResourcePageTimeoutIsWarning=0
+ParseHtmlContentType=TEXT
+PageDownloadTimeout=120
+NetBufSize=12288
+PrintNTLMLog=0
+PrintSSLLog=0
+SSLVersionKey=0
+OpensslEngineType=0
+OpenSSL3CompatibleConnection=0
+MaxErrorMatchesAsERRORS=10
+MaxRedirectionDepth=10
+MaxSelfMetaRefreshCount=2
+AedUtf8Values=0
+TreeViewRequestBodyLimit=2047
+IPVersionPolicy=2
+WebSyncRetryIntervalMs=1000
+WebSyncRetryTimeoutMs=3000
+WebSocketCallBackTimerIntervalMS=500
+PrefetchPrerenderCallBackTimerIntervalMS=500
+Retry401ThinkTime=0
+DisableNTLM2SS=0
+UseNativeNTLM=0
+OverrideNTLMCreds=0
+IntegratedAuthentication=0
+HeavyKDCLoad=0
+SPNCNameLookup=0
+SPNAddNoneDefPort=0
+LoadChilEngine=0
+PrintBufLineLen=99
+PrintBufEscape0=0
+LogEnableResponseLimit=0
+LogMaxResponseSize=100
+EnableJsForTransport=0
+JsForTransportRuntimeSize=51200
+JsForTransportStackSize=32
+LogFileWrite=0
+LogFileWriteTraceToFile=0
+UseDataFormatExtensions=0
+
+[ModemSpeed]
+EnableCustomModemSpeed=0
+EnableModemSpeed=0
+ModemSpeed=128000
+CustomModemSpeed=1000
+
+[Streaming]
+SaveStreamSnapshot=0
+StreamLog=1
+StreamRetryTime=10
+StreamSeekMethod=ByVideoSize
+StreamTimeout=30
+
+[FILTERS]
+FilterType=1
+ExcludeFiltersInList=
+IncludeFiltersInList=
+
+[Java]
+UseExternalJVM=0
+ExternalJREPath=
+
+```
+
+================================================================================
+  VUGEN FILE 7: default.usp (run logic profile INI)
+================================================================================
+
+CRITICAL: VuGen requires the full MercIniTree format with section names, tree hierarchy
+attributes, action types, and child subsections for EACH root. Missing any of these fields
+causes VuGen to fail parsing run logic — transactions WILL NOT EXECUTE during replay.
+
+```ini
+[Profile Actions]
+MercIniTreeFather=""
+MercIniTreeSectionName="Profile Actions"
+Profile Actions name=vuser_init,Action,vuser_end
+
+[RunLogicEndRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicEndRoot"
+MercIniTreeSons="vuser_end"
+Name="End"
+RunLogicActionOrder="vuser_end"
+RunLogicActionType="VuserEnd"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicEndRoot:vuser_end]
+MercIniTreeFather="RunLogicEndRoot"
+MercIniTreeSectionName="vuser_end"
+Name="vuser_end"
+RunLogicActionType="VuserEnd"
+RunLogicObjectKind="Action"
+
+[RunLogicErrorHandlerRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicErrorHandlerRoot"
+MercIniTreeSons="vuser_errorhandler"
+Name="ErrorHandler"
+RunLogicActionOrder="vuser_errorhandler"
+RunLogicActionType="VuserErrorHandler"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicErrorHandlerRoot:vuser_errorhandler]
+MercIniTreeFather="RunLogicErrorHandlerRoot"
+MercIniTreeSectionName="vuser_errorhandler"
+Name="vuser_errorhandler"
+RunLogicActionType="VuserErrorHandler"
+RunLogicObjectKind="Action"
+
+[RunLogicInitRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicInitRoot"
+MercIniTreeSons="vuser_init"
+Name="Init"
+RunLogicActionOrder="vuser_init"
+RunLogicActionType="VuserInit"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicInitRoot:vuser_init]
+MercIniTreeFather="RunLogicInitRoot"
+MercIniTreeSectionName="vuser_init"
+Name="vuser_init"
+RunLogicActionType="VuserInit"
+RunLogicObjectKind="Action"
+
+[RunLogicRunRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicRunRoot"
+MercIniTreeSons="Action"
+Name="Run"
+RunLogicActionOrder="Action"
+RunLogicActionType="VuserRun"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicRunRoot:Action]
+MercIniTreeFather="RunLogicRunRoot"
+MercIniTreeSectionName="Action"
+Name="Action"
+RunLogicActionType="VuserRun"
+RunLogicObjectKind="Action"
+```
+
+================================================================================
+  VUGEN FILE 8: ParameterFile.prm (VuGen INI format — NOT XML!)
+================================================================================
+
+CRITICAL: VuGen uses INI-style [parameter:name] sections, NOT XML.
+Each section maps one {paramName} in C code to a column in collection_data.dat.
+
+Classification:
+  nextValue: once      → GenerateNewVal="Once"          (config: URL, clientId, API keys)
+  nextValue: iteration → GenerateNewVal="EachIteration"  (test data: username, password)
+
+```ini
+; ParameterFile.prm — VuGen Web HTTP/HTML Parameter Definitions
+; Generated by Bruno to DevWeb Converter
+;
+; HOW TO UPDATE VALUES:
+;   Edit collection_data.dat (same folder) — one row per iteration.
+;   Column names must match the ColumnName entries below.
+;
+; PARAMETER TYPES:
+;   GenerateNewVal="Once"          → config (base URL, client IDs, API keys)
+;   GenerateNewVal="EachIteration" → test data (username, password)
+
+[parameter:url]
+ColumnName="url"
+Delimiter=","
+GenerateNewVal="Once"
+OriginalValue="https://api.example.com"
+OutOfRangePolicy="ContinueWithLast"
+ParamName="url"
+SelectNextRow="Sequential"
+StartRow="1"
+Table="collection_data.dat"
+TableLocation="Local"
+Type="Table"
+auto_allocate_block_size="1"
+value_for_each_vuser=""
+
+[parameter:clientId]
+ColumnName="clientId"
+Delimiter=","
+GenerateNewVal="Once"
+OriginalValue=""
+OutOfRangePolicy="ContinueWithLast"
+ParamName="clientId"
+SelectNextRow="Sequential"
+StartRow="1"
+Table="collection_data.dat"
+TableLocation="Local"
+Type="Table"
+auto_allocate_block_size="1"
+value_for_each_vuser=""
+
+[parameter:username]
+ColumnName="username"
+Delimiter=","
+GenerateNewVal="EachIteration"
+OriginalValue=""
+OutOfRangePolicy="ContinueWithLast"
+ParamName="username"
+SelectNextRow="Sequential"
+StartRow="1"
+Table="collection_data.dat"
+TableLocation="Local"
+Type="Table"
+auto_allocate_block_size="1"
+value_for_each_vuser=""
+
+[parameter:password]
+ColumnName="password"
+Delimiter=","
+GenerateNewVal="EachIteration"
+OriginalValue=""
+OutOfRangePolicy="ContinueWithLast"
+ParamName="password"
+SelectNextRow="Sequential"
+StartRow="1"
+Table="collection_data.dat"
+TableLocation="Local"
+Type="Table"
+auto_allocate_block_size="1"
+value_for_each_vuser=""
+```
+
+RULES:
+- `ColumnName` must EXACTLY match the CSV header column name
+- `OriginalValue` = the actual value from the collection/environment file (or empty)
+- `StartRow="1"` = first data row (header row is automatically skipped by VuGen)
+- NO XML format. Always INI [parameter:name] sections.
+
+================================================================================
+  VUGEN FILE 9: collection_data.dat (CSV with header)
+================================================================================
+
+```
+url,clientId,clientSecret,username,password
+https://api.example.com,my-client-id,,testuser,TestPass@123
+```
+
+RULES:
+- First row = column headers (must match ColumnName in ParameterFile.prm)
+- Second row = actual values from collection/environment file
+- Add one row per test user if data-driven testing is needed
+- Use empty values when the original collection had no value defined
+- File extension is .dat (not .csv), same structure as CSV
+
+================================================================================
+  VUGEN FILE 10: ScriptUploadMetadata.xml (LRE upload manifest)
+================================================================================
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<VugenScriptMetadata>
+  <ScriptName>ScriptName</ScriptName>
+  <Protocol>Web - HTTP/HTML</Protocol>
+  <ActionFiles>
+    <FileEntry Name="vuser_init.c" Filter="2" />
+    <FileEntry Name="Action.c" Filter="2" />
+    <FileEntry Name="vuser_end.c" Filter="2" />
+    <FileEntry Name="globals.h" Filter="2" />
+  </ActionFiles>
+  <GeneralFiles>
+    <FileEntry Name="ScriptName.usr" Filter="4" />
+    <FileEntry Name="default.cfg" Filter="4" />
+    <FileEntry Name="default.usp" Filter="4" />
+    <FileEntry Name="ParameterFile.prm" Filter="4" />
+    <FileEntry Name="collection_data.dat" Filter="4" />
+  </GeneralFiles>
+</VugenScriptMetadata>
+```
+
+================================================================================
+  PARAMETER MAPPING: DevWeb (JS) vs Web HTTP/HTML (C)
+================================================================================
+
+  +---------------------+-----------------------------+-----------------------------+
+  | Aspect              | DevWeb (JavaScript)          | Web HTTP/HTML (C)           |
+  +---------------------+-----------------------------+-----------------------------+
+  | Config param        | ${load.params.baseUrl}       | {baseUrl}                   |
+  | Dynamic/corr. value | ${load.global.accessToken}   | {accessToken}               |
+  | Think time          | load.thinkTime(1)            | lr_think_time(1)            |
+  | Transaction start   | TS01.start()                 | lr_start_transaction("T01") |
+  | Transaction stop    | TS01.stop(Passed)            | lr_end_transaction("T01",   |
+  |                     |                             |   LR_AUTO)                  |
+  | GET request         | new load.WebRequest({...})   | web_url("name",...,LAST)    |
+  | POST request        | new load.WebRequest({...})   | web_custom_request("name",  |
+  |                     |                             |   "Method=POST",...,LAST)   |
+  | Header              | headers: {key: value}        | web_add_header("k","v")     |
+  | Log                 | load.log("msg",info)         | lr_output_message("msg")    |
+  | JSON correlation    | new load.JsonPathExtractor() | web_reg_save_param_json()   |
+  | Boundary corr.      | new load.BoundaryExtractor() | web_reg_save_param()        |
+  | Regexp corr.        | new load.RegexpExtractor()   | web_reg_save_param_regexp() |
+  | Config file ext.    | .csv                         | .dat                        |
+  | Parameter syntax    | ${load.params.name}          | {name}                      |
+  +---------------------+-----------------------------+-----------------------------+
+
+IMPORTANT: In Web HTTP/HTML, ALL variables (static config, test data, correlations)
+use the same {varName} syntax. There is no load.global / load.params distinction.
+Correlation values are stored as LR parameters automatically by web_reg_save_param_*.
 
 ================================================================================
