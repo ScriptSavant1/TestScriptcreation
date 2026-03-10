@@ -5,6 +5,183 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.7] - 2026-03-10
+
+### Fixed — VuGen Web HTTP/HTML `default.cfg`
+
+`generateDefaultCfg()` in `webHttpMandatoryFilesGenerator.js` now generates the complete canonical VuGen 26.1 `default.cfg` for the Web HTTP/HTML (QTWeb) protocol.
+
+**Added 9 sections, 163 lines total** (was 6 sections, ~15 lines):
+
+| Section | Key additions |
+|---------|--------------|
+| `[General]` | `ContinueOnError`, `FailTransOnErrorMsg`, `UseThreads`, `Replay64bit`, VTS ports |
+| `[ThinkTime]` | `ThinkTimeRandomLow`, `ThinkTimeRandomHigh` |
+| `[Iterations]` | (unchanged) |
+| `[Log]` | `AutoLog`, `LogDetail`, `IncludeEnvInfo`, `PrintTimeStamp` |
+| `[WEB]` | Full browser emulation: `UseCustomAgent`, `CustomUserAgent`, `SimulateCache`, proxy settings, HTTP/2, timeouts, SSL, NTLM, JS engine settings, encoding — 80+ settings |
+| `[ModemSpeed]` | NEW — modem speed simulation settings |
+| `[Streaming]` | NEW — streaming/WebSocket settings |
+| `[FILTERS]` | NEW — URL filter lists |
+| `[Java]` | NEW — external JVM settings |
+
+### Changed
+- `package.json` version: `2.4.6` → `2.4.7`
+
+---
+
+## [2.4.6] - 2026-03-10
+
+### Added — VuGen C Per-Request Generator Functions
+
+Replaced the `#define GEN_UNIQUE_ID` macro with three proper C `static` functions defined in `globals.h`. Functions are clean single-line calls instead of multi-line macro expansions. Pattern taken directly from VuGen Script Studio correlation engine (`lr_param_sprintf` with RFC 4122 UUID format).
+
+**`globals.h` — Three generator functions:**
+
+| Function | Format | Use for |
+|----------|--------|---------|
+| `gen_uuid(param_name)` | `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx` (UUID v4) | `x-fapi-interaction-id`, `x-request-id`, `jti` |
+| `gen_csrf_token(param_name)` | 32-char hex (16 random bytes) | `x-xsrf-token`, `x-csrf-token`, `x-xsrf-header` |
+| `gen_hex64(param_name)` | 64-char hex (32 random bytes / 256-bit) | `x-nonce`, high-entropy state params |
+
+**Usage in `Action.c`** (clean, one line per request):
+```c
+gen_uuid("_interaction_id");
+web_add_header("x-fapi-interaction-id", "{_interaction_id}");
+
+gen_csrf_token("_xsrfToken");
+web_add_header("x-xsrf-token", "{_xsrfToken}");
+```
+
+### Added — CSRF/XSRF Header Auto-Detection
+
+`webHttpScriptGenerator.analyze()` now scans all request headers for CSRF/XSRF pattern names. When a header key matches (e.g., `x-xsrf-token`, `x-csrf-header`, `x-anti-forgery-token`), the referenced variable is automatically classified as per-request generated (`gen_csrf_token()`) without needing a matching `pm.variables.set()` in a pre-request script.
+
+Detection pattern list (from VuGen Script Studio):
+`x-csrf-token`, `x-xsrf-token`, `x-xsrf-header`, `csrf-token`, `x-anti-forgery-token`, `x-request-verification-token`, plus regex `/csrf|xsrf|antiforg|request.?verif/i`.
+
+### Added — Extended script pattern detection in `customScriptParser.detectPerRequestDynamicVars()`
+
+New patterns recognised:
+- `CryptoJS.lib.WordArray.random()` / `CryptoJS.enc.*` → `generationType: 'csrf'` → `gen_csrf_token()`
+- `.toString(16)` / `.toString('hex')` → `generationType: 'hex64'` → `gen_hex64()`
+- `crypto.randomBytes()` → `generationType: 'hex32'` → `gen_csrf_token()`
+- Added `isCsrfHeaderName(headerKey)` static method for reuse across the codebase
+
+### Changed
+- `package.json` version: `2.4.5` → `2.4.6`
+
+---
+
+## [2.4.5] - 2026-03-10
+
+### Added — Smart Header Classification (both protocols)
+
+**DevWeb (JavaScript):**
+- `analyzeCommonHeaders()` detects which headers appear in ≥70% of requests with the same value and classifies them as `staticGlobal` (static values) or `authGlobal` (dynamic token headers).
+- **Static global headers** (e.g., `x-client-id`, browser baseline) → emitted once in module-level `load.WebRequest.defaults.headers` — applied to ALL requests automatically.
+- **Auth global headers** (e.g., `Authorization: Bearer ${load.global.access_token}`) → applied via `Object.assign(load.WebRequest.defaults.headers, {...})` at the start of `action()` AFTER the token is available.
+- **Per-request headers** (e.g., `x-fapi-interaction-id` with UUID, `Content-Type` that varies) → still emitted per-request only.
+- `generateHeaders()` skips headers already in global defaults — individual request code is clean.
+
+**VuGen Web HTTP/HTML (C):**
+- `analyzeCommonHeaders()` performs same classification.
+- **Static global headers** → `web_add_auto_header("key", "value")` at the top of `Action()` — persists for ALL subsequent requests (unlike `web_add_header()` which applies to only the next request).
+- **Per-request headers** (UUID, Content-Type) → `web_add_header()` before each specific request only.
+- `generateAddHeaders()` skips keys already set via `web_add_auto_header()`.
+
+### Added — VuGen JWT via web_js_run() + web_set_certificate_ex()
+
+At the start of `Action()` when JWT is detected:
+```c
+/* mTLS Certificate */
+web_set_certificate_ex("CertFilePath=transport.pem","CertFormat=PEM","KeyFilePath=transport.pem","KeyFormat=PEM",LAST);
+
+/* Generate JWT via jsrsasign.js using VuGen's built-in JavaScript engine */
+web_js_run("Code=createJWT(LR.getParam('client_id'),...);","ResultParam=_jwt_token",SOURCES,"File=jsrsasign.js",ENDITEM,LAST);
+```
+`ResultParam=_jwt_token` stores the token as `{_jwt_token}` (consistent with the `_` prefix convention used throughout the script in request bodies).
+
+### Fixed
+- **DevWeb `load.WebRequest.defaults.headers` auth update** moved from module level (where `access_token` is null) to start of `action()` after token refresh.
+- **DevWeb `load.global.jwt_token = null`** reinitializing removed — JWT output vars are now skipped in the global-variable initialization block since `getJwtToken()` has already set them.
+- **VuGen `ResultParam=_jwt_token`** — consistent with `{_jwt_token}` used in request body `client_assertion={_jwt_token}`.
+
+### Changed
+- `package.json` version: `2.4.4` → `2.4.5`
+
+---
+
+## [2.4.4] - 2026-03-10
+
+### Fixed — DevWeb & VuGen JWT Code Quality
+
+**DevWeb:**
+- `const { getJwtToken } = require('./jwt-helper.js')` moved to **top of main.js** (module scope, before `load.initialize`) so it is available in both `initialize()` and `action()` without re-requiring.
+- `load.setUserCertificate('./cert.pem', './key.pem')` is now **active code** in `initialize()` (not commented out).
+- `action()` JWT refresh block no longer contains a `require` call — uses the top-level declaration.
+
+**VuGen Web HTTP/HTML:**
+- JWT output variables (e.g., `jwt_token`) are now classified as **static parameters** (`GenerateNewVal="Once"`) in `ParameterFile.prm` instead of correlation targets. VuGen C cannot sign JWTs at runtime — the token must be pre-generated and stored in `collection_data.dat`.
+- `{jwt_token}` (no underscore) is used in `Action.c` body — it's a static parameter the user pre-populates.
+- `vuser_init.c` contains **active validation code** that aborts the test if `{jwt_token}` is empty, with clear pre-generation instructions.
+- JWT detection now scans **pre-request script only** (not test script) when extracting JWT output variable names. This prevents `access_token` and `refresh_token` (set in test scripts from API responses) from being incorrectly classified as JWT tokens.
+- `generate_jwt.js` is no longer generated (removed in v2.4.3 — `jsrsasign.js` + `transport.pem` in `[ManuallyExtraFiles]` is the correct VuGen approach).
+
+### Changed
+- `package.json` version: `2.4.3` → `2.4.4`
+
+---
+
+## [2.4.3] - 2026-03-10
+
+### Added
+- **DevWeb — Active JWT initialization in `initialize()`**: When JWT signing (jsrsasign/PS256) is detected, `initialize()` now emits working code instead of commented-out TODO blocks:
+  ```javascript
+  const { getJwtToken } = require('./jwt-helper.js');
+  // load.setUserCertificate('./cert.pem', './key.pem');  // uncomment for mTLS
+  load.global.jwt_token = getJwtToken(load.params);
+  load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
+  ```
+- **DevWeb — Active JWT refresh in `action()`**: Auto-refresh block is now live code, not comments:
+  ```javascript
+  if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
+      const { getJwtToken } = require('./jwt-helper.js');
+      load.global.jwt_token = getJwtToken(load.params);
+      load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
+  }
+  ```
+- **`globals.h` — `GEN_UNIQUE_ID(param_name)` macro**: Replaces the repeated inline C block for per-request UUID generation. Clean single-line usage: `GEN_UNIQUE_ID("_interaction_id");`
+- **`jwt-helper.js` added to project root**: Copied from `src/analyzers/jwt-helper.js` to the project root so the DevWeb generator can copy it to each output folder.
+
+### Fixed
+- **Removed TODO/comment-only JWT blocks**: Previously all JWT code was commented out with `// TODO:` markers. Now emits active, working code when JWT is detected.
+- **`load.global.jsrsasign = null;` removed**: The jsrsasign library name (stored in Postman globals as the library source) was incorrectly appearing as a runtime variable. Added a `LIBRARY_NAMES` exclusion set in `generateGlobalVariablesInit()` to filter out known library names (`jsrsasign`, `KJUR`, `CryptoJS`, `forge`, etc.).
+- **`generate_jwt.js` removed from VuGen output**: This standalone Node.js helper is no longer generated — users use `jsrsasign.js` directly for VuGen JWT workflows. Removed from `[ManuallyExtraFiles]` and `ScriptUploadMetadata.xml` entries.
+- **VuGen per-request C code**: Replaced multi-line inline UUID blocks with clean `GEN_UNIQUE_ID("_interaction_id");` macro call (defined in `globals.h`).
+- **`jwt-helper.js` project root only**: Removed the `src/analyzers/` fallback from `copyFromProjectRoot()`. All shared files (`jwt-helper.js`, `jsrsasign.js`, `transport.pem`, `DevWebSdk.d.ts`) must be in the project root.
+
+### Changed
+- `package.json` version: `2.4.2` → `2.4.3`
+
+---
+
+## [2.4.2] - 2026-03-10
+
+### Fixed — VuGen Web HTTP/HTML
+
+- **Root cause: events stored as `req.tests` not `req.event`** — The `brunoParser` normalizes Postman/Bruno events into `req.tests[]` but `webHttpScriptGenerator.analyze()` was looking for `req.event[]`. Result: JWT detection never fired, per-request UUID vars never detected, script-set variable scanning partially broken. Fixed by using `req.tests || req.event || []` in all three places (`analyze()`, `detectScriptSetVariables()`).
+- **`jsrsasign.js` + `transport.pem` now correctly copied** to VuGen output when JWT is detected (was silently skipped because `hasJwt` was always `false` due to the event lookup bug above). Both `[ManuallyExtraFiles]` in `.usr` and `<GeneralFiles>` in `ScriptUploadMetadata.xml` are updated when JWT present.
+- **Correlation deduplication** — `generateCorrelationRegistrations()` now deduplicates by variable name per request. Previously, the same `_endpoint` or `_accessToken` could be emitted dozens of times before one request (513 → 16 registrations for Salesforce collection).
+- **`QueryString=$.fieldName` path improved** — when `corr.extractPath` is `'$'` (root-only, incomplete), the code now falls back to `$.corrBase` (variable name minus `_` prefix) instead of the useless `$.value`. E.g., `_accessToken` → `QueryString=$.accessToken`.
+- **`detectScriptSetVariables()` now handles both `item.event` and `item.tests`** — raw collection format AND normalized request format are both scanned.
+- **`jwt-helper.js`, `jsrsasign.js`, `transport.pem` source** — all must be in the project root. Removed the fallback to `src/analyzers/jwt-helper.js`. Simplified `copyFromProjectRoot()` back to single-source (no `altSources` parameter).
+
+### Changed
+- `package.json` version: `2.4.1` → `2.4.2`
+
+---
+
 ## [2.4.1] - 2026-03-10
 
 ### Added

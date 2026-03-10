@@ -94,14 +94,20 @@ class WebHttpScriptGenerator {
   }
 
   detectScriptSetVariables() {
-    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\(\s*["']([^"']+)["']/g;
+    // Covers: pm.*.set(), context.set(), bru.setVar(), bru.setEnvVar()
+    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\(\s*["']([^"']+)["']|bru\.(?:setVar|setEnvVar)\(\s*["']([^"']+)["']/g;
     const scan = (item) => {
-      if (item.event && Array.isArray(item.event)) {
-        item.event.forEach(ev => {
+      // Support both raw collection (item.event) and normalized request (item.tests)
+      const events = item.event || item.tests || [];
+      if (Array.isArray(events)) {
+        events.forEach(ev => {
           if (ev.script && ev.script.exec) {
             const text = Array.isArray(ev.script.exec) ? ev.script.exec.join('\n') : ev.script.exec;
             let m;
-            while ((m = setPattern.exec(text)) !== null) this.scriptSetVarNames.add(m[1]);
+            while ((m = setPattern.exec(text)) !== null) {
+              const varName = m[1] || m[2];
+              if (varName) this.scriptSetVarNames.add(varName);
+            }
           }
         });
       }
@@ -109,6 +115,20 @@ class WebHttpScriptGenerator {
       if (Array.isArray(items)) items.forEach(scan);
     };
     scan(this.collection);
+    // Also scan normalized requests (req.tests = brunoParser normalized events)
+    this.requests.forEach(req => {
+      const events = req.tests || req.event || [];
+      events.forEach(ev => {
+        if (ev.script && ev.script.exec) {
+          const text = Array.isArray(ev.script.exec) ? ev.script.exec.join('\n') : ev.script.exec;
+          let m;
+          while ((m = setPattern.exec(text)) !== null) {
+            const varName = m[1] || m[2];
+            if (varName) this.scriptSetVarNames.add(varName);
+          }
+        }
+      });
+    });
   }
 
   /**
@@ -165,6 +185,12 @@ class WebHttpScriptGenerator {
       }
     }
 
+    // JWT output vars remain in dynamicVarNames (Tier 1).
+    // web_js_run("ResultParam=jwt_token") in Action.c sets {jwt_token} dynamically at runtime
+    // via VuGen's built-in JavaScript engine — no CSV entry needed.
+    // Note: {jwt_token} uses NO underscore (web_js_run ResultParam convention differs from
+    // web_reg_save_param_* which uses the _ prefix correlation convention).
+
     console.log(`✓ Classified variables: ${this.paramVarNames.size} parameterized, ${this.dynamicVarNames.size} dynamic (correlations)`);
   }
 
@@ -211,13 +237,10 @@ class WebHttpScriptGenerator {
       outputDir, this.parameters, this.transactionNames, dataFileNames, this.hasJwt
     );
 
-    // 8. If JWT detected: write generate_jwt.js helper + copy jsrsasign.js + transport.pem
+    // 8. If JWT detected: copy jsrsasign.js + transport.pem from project root.
+    //    jsrsasign.js is the JWT signing library for VuGen (listed in [ManuallyExtraFiles]).
+    //    transport.pem is the private key file used for signing.
     if (this.hasJwt) {
-      fs.writeFileSync(path.join(outputDir, 'generate_jwt.js'),
-        this.generateJwtHelperScript(), 'utf8');
-      console.log('✓ Generated generate_jwt.js  (run before test to pre-generate JWT token)');
-
-      // Copy jsrsasign.js from project root (user places it there)
       const PROJECT_ROOT = path.join(__dirname, '..', '..');
       const jsrsasignSrc = path.join(PROJECT_ROOT, 'jsrsasign.js');
       if (fs.existsSync(jsrsasignSrc)) {
@@ -258,11 +281,14 @@ class WebHttpScriptGenerator {
       console.log(`✓ Detected ${this.correlations.length} correlations`);
     }
 
-    // Custom scripts — parsed for variable detection and JWT fingerprinting
+    // Custom scripts — parsed for variable detection and JWT fingerprinting.
+    // brunoParser normalizes Postman/Bruno events into req.tests[] (listen + script).
+    // Some code paths store them as req.event[]. Support both to be generic.
     if (this.options.useCustomScripts) {
       this.requests.forEach(req => {
-        const preScript = req.event?.find(e => e.listen === 'prerequest')?.script?.exec;
-        const testScript = req.event?.find(e => e.listen === 'test')?.script?.exec;
+        const events = req.tests || req.event || [];
+        const preScript = events.find(e => e.listen === 'prerequest')?.script?.exec;
+        const testScript = events.find(e => e.listen === 'test')?.script?.exec;
         const preText = Array.isArray(preScript) ? preScript.join('\n') : (preScript || '');
         const testText = Array.isArray(testScript) ? testScript.join('\n') : (testScript || '');
 
@@ -272,14 +298,18 @@ class WebHttpScriptGenerator {
             test: testText ? this.scriptParser.parseTestScript(testText, req.name) : null
           });
 
-          // JWT detection — scan pre-request scripts for jsrsasign / JWT signing patterns
-          const combined = `${preText}\n${testText}`;
-          const jwtInfo = CustomScriptParser.detectJwtUsage(combined);
-          if (jwtInfo.isJwt) {
-            this.hasJwt = true;
-            this.jwtVarNames.push(...jwtInfo.outputVars);
-            jwtInfo.outputVars.forEach(v => this.scriptSetVarNames.add(v));
-            console.log(`  ✓ JWT detected in "${req.name}" (library: ${jwtInfo.library}, algorithm: ${jwtInfo.algorithm})`);
+          // JWT detection — scan PRE-REQUEST scripts ONLY for jsrsasign / JWT signing patterns.
+          // The test script handles response extraction (access_token, refresh_token) — those
+          // are correlations, not JWT output vars, and must NOT be added to jwtVarNames.
+          if (preText) {
+            const jwtInfo = CustomScriptParser.detectJwtUsage(preText);
+            if (jwtInfo.isJwt) {
+              this.hasJwt = true;
+              this.jwtVarNames.push(...jwtInfo.outputVars);
+              // JWT output vars are reclassified as static params in classifyVariables()
+              // so they appear in ParameterFile.prm for the user to pre-populate.
+              console.log(`  ✓ JWT detected in "${req.name}" (library: ${jwtInfo.library}, algorithm: ${jwtInfo.algorithm})`);
+            }
           }
 
           // Per-request dynamic vars (UUID/nonce/random generated per request — not from responses)
@@ -299,6 +329,28 @@ class WebHttpScriptGenerator {
     if (this.options.useParameterization) {
       this.classifyVariables();
     }
+
+    // CSRF/XSRF header detection — scan all request headers for known CSRF pattern names.
+    // If a header key matches the CSRF pattern AND its value is a template variable,
+    // mark the variable as per-request generated using gen_csrf_token() in C.
+    this.requests.forEach(req => {
+      (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
+        if (!CustomScriptParser.isCsrfHeaderName(h.key)) return;
+
+        // Extract the variable name from the header value {{varName}}
+        const m = String(h.value).match(/\{\{([^}]+)\}\}/);
+        if (!m) return;
+        const varName = m[1].trim();
+
+        // Only mark as per-request if it's not already classified and not a static param
+        if (this.perRequestVars.has(varName)) return;
+        if (this.parameters.has(varName)) return;
+
+        this.perRequestVars.set(varName, { generationType: 'csrf', requestNames: [req.name] });
+        this.scriptSetVarNames.add(varName);  // ensure Tier 1 dynamic, never in ParameterFile.prm
+        console.log(`  ✓ CSRF header "${h.key}" → per-request gen_csrf_token("_${varName}")`);
+      });
+    });
 
     // Large base64 extraction — scan after parameterization so replaceParameters() works
     this.scanForLargeBase64();
@@ -360,19 +412,88 @@ ${corrList}
 #include "lrw_custom_body.h"
 
 //--------------------------------------------------------------------
+// Utility Macros
+//--------------------------------------------------------------------
+
+/*
+ * ─── Per-Request Dynamic Value Generators ───────────────────────────────────
+ *
+ * These functions are called BEFORE each web_add_header() for headers that
+ * require a fresh value on every request (interaction IDs, CSRF tokens, nonces).
+ *
+ * All functions store the generated value as an LR parameter so it can be
+ * referenced in headers and request bodies using the {_paramName} syntax.
+ *
+ * Pattern is taken from VuGen Script Studio correlation engine.
+ *
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * gen_uuid(param_name)
+ *
+ * Generates a UUID v4 formatted string and stores it as an LR parameter.
+ * Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx (RFC 4122 v4 pattern)
+ *
+ * Use for: x-fapi-interaction-id, x-request-id, x-correlation-id, jti, etc.
+ *
+ * Example:
+ *     gen_uuid("_interaction_id");
+ *     web_add_header("x-fapi-interaction-id", "{_interaction_id}");
+ */
+static void gen_uuid(const char *param_name) {
+    lr_param_sprintf(param_name,
+        "%08x-%04x-4%03x-%04x-%04x%08x",
+        rand(),
+        rand() & 0xffff,
+        rand() & 0x0fff,
+        (rand() & 0x3fff) | 0x8000,
+        rand() & 0xffff,
+        rand());
+}
+
+/*
+ * gen_csrf_token(param_name)
+ *
+ * Generates a 32-character random hex token for CSRF / XSRF / anti-forgery headers.
+ * Equivalent to 16 random bytes encoded as lowercase hex.
+ *
+ * Use for: x-xsrf-token, x-csrf-token, x-xsrf-header, __RequestVerificationToken, etc.
+ *
+ * Example:
+ *     gen_csrf_token("_xsrfToken");
+ *     web_add_header("x-xsrf-token", "{_xsrfToken}");
+ */
+static void gen_csrf_token(const char *param_name) {
+    lr_param_sprintf(param_name,
+        "%08x%08x%08x%08x",
+        rand(), rand(), rand(), rand());
+}
+
+/*
+ * gen_hex64(param_name)
+ *
+ * Generates a 64-character random hex string (32 bytes / 256-bit entropy).
+ * Use for long tokens, nonces, or state parameters that require high entropy.
+ *
+ * Example:
+ *     gen_hex64("_nonce");
+ *     web_add_header("x-nonce", "{_nonce}");
+ */
+static void gen_hex64(const char *param_name) {
+    lr_param_sprintf(param_name,
+        "%08x%08x%08x%08x%08x%08x%08x%08x",
+        rand(), rand(), rand(), rand(), rand(), rand(), rand(), rand());
+}
+
+//--------------------------------------------------------------------
 // Global Variables
+//--------------------------------------------------------------------
 //
-// Declare C-level global variables here if you need to share data between
-// vuser_init(), Action(), and vuser_end() that cannot be stored as LR params.
+// Declare C-level global variables here to share data across
+// vuser_init(), Action(), and vuser_end().
 //
-// Example — store a token fetched in vuser_init() for use in Action():
+// Example:
 //   char g_accessToken[2048] = "";
-//
-// Then in vuser_init():
-//   strcpy(g_accessToken, lr_eval_string("{_accessToken}"));
-//
-// And in Action():
-//   web_add_header("Authorization", g_accessToken);
 
 #endif // _GLOBALS_H
 `;
@@ -393,18 +514,12 @@ ${corrList}
     const paramCount  = this.parameters.size;
     const corrCount   = this.dynamicVarNames.size;
 
-    // JWT note — inserted when jsrsasign/JWT signing detected in pre-request scripts
+    // JWT vars detected — build active validation block for each JWT variable.
+    // JWT note: web_js_run() in Action() handles JWT generation via jsrsasign.js.
+    // No pre-generation or validation needed in vuser_init.c.
     const jwtNote = this.hasJwt ? `
-/* -----------------------------------------------------------------------
- * JWT DETECTED — Pre-request scripts use JWT signing (jsrsasign.js).
- *
- * VuGen C cannot execute JavaScript natively. Options:
- *   A) Pre-generate: node generate_jwt.js  (output → jwtToken column in
- *      collection_data.dat), then re-run test.
- *   B) Call a token endpoint (uncomment OAuth2 block below and adapt URL).
- *
- * jsrsasign.js and transport.pem are in [ManuallyExtraFiles] for LRE upload.
- * ----------------------------------------------------------------------- */
+    /* JWT client assertion is generated automatically at the start of each Action()
+     * iteration via web_js_run() + jsrsasign.js. No setup needed here. */
 ` : '';
 
     return `/* -------------------------------------------------------------------------------
@@ -419,7 +534,7 @@ ${corrList}
  *    2. Perform one-time authentication (OAuth token fetch, session login).
  *       web_reg_save_param_json() MUST come BEFORE the token request.
  *    3. Load any per-Vuser configuration that must happen before Action().
- * ------------------------------------------------------------------------------- */${jwtNote}
+ * ------------------------------------------------------------------------------- */
 
 vuser_init()
 {
@@ -428,18 +543,7 @@ vuser_init()
     lr_whoami(&vusr_id, &vusr_group, &scid);
     lr_output_message("[init] Vuser %d starting — ${scriptName}", vusr_id);
     lr_output_message("  Parameters loaded : ${paramCount} static, ${corrCount} correlation target(s)");${urlParamLog}
-
-    /* ------------------------------------------------------------------
-     * Validate critical parameters.
-     * Uncomment and adapt as needed — returning -1 aborts this Vuser.
-     * ------------------------------------------------------------------ */
-    /*
-    if (strcmp(lr_eval_string("{url}"), "") == 0) {
-        lr_error_message("[init] FATAL: parameter 'url' is empty — check collection_data.dat");
-        return -1;
-    }
-    */
-
+${jwtNote}
     /* ------------------------------------------------------------------
      * One-time authentication example (OAuth2 client_credentials).
      * NOTE: web_reg_save_param_json MUST come BEFORE web_custom_request.
@@ -515,13 +619,103 @@ vuser_end()
 `;
   }
 
+  /**
+   * Analyse headers across all requests and classify them for VuGen C.
+   *
+   * Returns { globalHeaders, perRequestKeys }:
+   *   globalHeaders  — headers present in ≥70% of requests with the same value template.
+   *                    These are set via web_add_auto_header() once at the start of Action().
+   *   perRequestKeys — keys that vary per request or use per-request UUID vars (web_add_header each time).
+   */
+  analyzeCommonHeaders() {
+    if (this._cachedCommonHeaders) return this._cachedCommonHeaders;
+
+    const headerFreq    = new Map();
+    const totalRequests = this.requests.length || 1;
+
+    this.requests.forEach(req => {
+      (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
+        if (!headerFreq.has(h.key)) headerFreq.set(h.key, { count: 0, values: new Map() });
+        const entry = headerFreq.get(h.key);
+        entry.count++;
+        const raw = String(h.value);
+        entry.values.set(raw, (entry.values.get(raw) || 0) + 1);
+      });
+    });
+
+    const globalHeaders  = new Map();  // key → replaceParameters(value) for web_add_auto_header
+    const perRequestKeys = new Set();
+    const THRESHOLD      = 0.7;
+
+    headerFreq.forEach((entry, key) => {
+      // Content-Type varies by body type — always per-request
+      if (key.toLowerCase() === 'content-type') { perRequestKeys.add(key); return; }
+
+      const freq = entry.count / totalRequests;
+      if (freq < THRESHOLD) { perRequestKeys.add(key); return; }
+
+      // Find dominant value
+      let dominantRaw = '';
+      let best = 0;
+      entry.values.forEach((cnt, val) => { if (cnt > best) { dominantRaw = val; best = cnt; } });
+
+      // If value uses a per-request UUID var → per-request
+      const isPerReq = this.perRequestVars &&
+        Array.from(this.perRequestVars.keys()).some(v => dominantRaw.includes(`{{${v}}}`));
+      if (isPerReq) { perRequestKeys.add(key); return; }
+
+      globalHeaders.set(key, this.replaceParameters(dominantRaw));
+    });
+
+    this._cachedCommonHeaders = { globalHeaders, perRequestKeys };
+    return this._cachedCommonHeaders;
+  }
+
   generateActionC() {
     const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
     const timestamp = new Date().toISOString();
 
+    // Analyse common headers for this collection
+    const { globalHeaders } = this.analyzeCommonHeaders();
+
+    // JWT setup block — certificate + token generation via jsrsasign.js
+    // web_js_run() executes JavaScript using VuGen's built-in JS engine.
+    // createJWT() is a function expected inside jsrsasign.js.
+    const jwtSetup = this.hasJwt ? `
+    /* mTLS Certificate — required for private_key_jwt client authentication */
+    web_set_certificate_ex(
+        "CertFilePath=transport.pem",
+        "CertFormat=PEM",
+        "KeyFilePath=transport.pem",
+        "KeyFormat=PEM",
+        LAST);
+
+    /* Generate JWT client assertion using jsrsasign.js (VuGen built-in JS engine).
+     * ResultParam=_jwt_token stores the result as LR parameter {_jwt_token} so that
+     * it is used consistently in request bodies as: client_assertion={_jwt_token} */
+    web_js_run(
+        "Code=createJWT(LR.getParam('client_id'),LR.getParam('token_url'),LR.getParam('scope'),LR.getParam('signing_private_key'));",
+        "ResultParam=_jwt_token",
+        SOURCES,
+        "File=jsrsasign.js",
+        ENDITEM,
+        LAST);
+    lr_output_message("[init] JWT token generated (%d chars)", (int)strlen(lr_eval_string("{_jwt_token}")));
+
+` : '';
+
+    // Global persistent headers — applied to ALL subsequent requests automatically.
+    // web_add_auto_header() persists until explicitly removed, unlike web_add_header().
+    const autoHeaderLines = Array.from(globalHeaders.entries())
+      .map(([k, v]) => `    web_add_auto_header("${k}", "${v.replace(/"/g, '\\"')}");`)
+      .join('\n');
+    const autoHeaderBlock = globalHeaders.size > 0
+      ? `\n    /* Global headers — applied to ALL requests automatically */\n${autoHeaderLines}\n`
+      : '';
+
     let code = `/* -------------------------------------------------------------------------------
     Script Title       : ${scriptName}
-    Generated by       : Bruno to DevWeb Converter v2.3.0
+    Generated by       : Bruno to DevWeb Converter v2.4.4
     Protocol           : Web - HTTP/HTML
     Generated on       : ${timestamp}
     Total Requests     : ${this.requests.length}
@@ -532,6 +726,7 @@ vuser_end()
 Action()
 {
     web_set_sockets_option("SSL_VERSION", "AUTO");
+${jwtSetup}${autoHeaderBlock}
 
 `;
 
@@ -662,23 +857,28 @@ Action()
 
     let code = '';
     this.perRequestVars.forEach((info, varName) => {
-      // Only emit for requests that use this variable in headers or URL
       if (!this.requestUsesVar(request, varName)) return;
 
-      const paramName = `_${varName}`;   // prefix with _ (VuGen convention for dynamic values)
-      const varExpr   = info.generationType;
+      const paramName = `_${varName}`;  // _ prefix = VuGen convention for dynamic LR params
+      const genType   = info.generationType;
 
-      if (varExpr === 'uuid' || varExpr === 'nonce' || varExpr === 'random') {
-        // Generate a unique ID using vuser_id + time + counter (VuGen C — no native UUID)
-        code += `${indent}/* Per-request unique ID for ${varName} */\n`;
-        code += `${indent}{ int _vusr, _sc; char *_grp; char _uid[64];\n`;
-        code += `${indent}  lr_whoami(&_vusr, &_grp, &_sc);\n`;
-        code += `${indent}  sprintf(_uid, "id-%d-%ld-%d", _vusr, (long)time(NULL), rand() % 99999);\n`;
-        code += `${indent}  lr_save_string(_uid, "${paramName}"); }\n`;
-      } else if (varExpr === 'timestamp') {
-        code += `${indent}/* Per-request timestamp for ${varName} */\n`;
-        code += `${indent}{ char _ts[32]; sprintf(_ts, "%ld", (long)time(NULL));\n`;
-        code += `${indent}  lr_save_string(_ts, "${paramName}"); }\n`;
+      // Call the appropriate generator function defined in globals.h.
+      // These are proper C functions (not macros) — one call per request that needs a fresh value.
+      if (genType === 'uuid') {
+        // gen_uuid() — UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        code += `${indent}gen_uuid("${paramName}");\n`;
+      } else if (genType === 'csrf' || genType === 'hex32') {
+        // gen_csrf_token() — 32-char hex (16 bytes): for CSRF/XSRF tokens
+        code += `${indent}gen_csrf_token("${paramName}");\n`;
+      } else if (genType === 'hex64' || genType === 'nonce') {
+        // gen_hex64() — 64-char hex (32 bytes): for high-entropy nonces
+        code += `${indent}gen_hex64("${paramName}");\n`;
+      } else if (genType === 'random' || genType === 'alphanumeric') {
+        // Default: use UUID format (widely compatible)
+        code += `${indent}gen_uuid("${paramName}");\n`;
+      } else if (genType === 'timestamp') {
+        // Timestamp as decimal string
+        code += `${indent}{ char _ts[32]; sprintf(_ts, "%ld", (long)time(NULL)); lr_save_string(_ts, "${paramName}"); }\n`;
       }
     });
     return code;
@@ -704,15 +904,35 @@ Action()
     );
     if (produced.length === 0) return '';
 
+    // Deduplicate: keep only the FIRST (best-quality) correlation per variable name.
+    // The correlation detector may assign the same variable to the same request multiple
+    // times (e.g. _endpoint from heuristic + script detection). VuGen only needs one.
+    const seen = new Set();
+    const unique = produced.filter(corr => {
+      if (seen.has(corr.name)) return false;
+      seen.add(corr.name);
+      return true;
+    });
+
     let code = '';
-    produced.forEach(corr => {
+    unique.forEach(corr => {
+      // Determine the best JSON path for the extraction.
+      // corr.extractPath may be: '$.access_token' (good), '$' (root only — bad), or empty.
+      // When the path is missing or just '$', derive it from the variable name.
+      const rawPath  = corr.extractPath || '';
+      const corrBase = corr.name.replace(/^_/, '');  // strip leading _ for path guess
+
+      // A valid specific path has at least one dot after $ (e.g. $.access_token, $[0].id)
+      const hasValidPath = rawPath.startsWith('$') && rawPath.length > 1 && rawPath !== '$';
+      const jsonPath = hasValidPath ? rawPath : `$.${corrBase}`;
+
       switch (corr.type) {
         case 'json':
         case 'token':
         case 'id':
         case 'sessionId':
           code += `${indent}web_reg_save_param_json("${corr.name}",\n`;
-          code += `${indent}    "QueryString=${corr.extractPath || '$.value'}",\n`;
+          code += `${indent}    "QueryString=${jsonPath}",\n`;
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
           break;
@@ -720,7 +940,7 @@ Action()
         case 'boundary':
         case 'csrf':
           code += `${indent}web_reg_save_param("${corr.name}",\n`;
-          if (corr.leftBoundary) code += `${indent}    "LB=${this.escapeCString(corr.leftBoundary)}",\n`;
+          if (corr.leftBoundary)  code += `${indent}    "LB=${this.escapeCString(corr.leftBoundary)}",\n`;
           if (corr.rightBoundary) code += `${indent}    "RB=${this.escapeCString(corr.rightBoundary)}",\n`;
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
@@ -729,15 +949,15 @@ Action()
         case 'regex':
         case 'regexp':
           code += `${indent}web_reg_save_param_regexp("${corr.name}",\n`;
-          code += `${indent}    "RegExp=${this.escapeCString(corr.pattern || '([^&]+)')}",\n`;
+          code += `${indent}    "RegExp=${this.escapeCString(corr.pattern || `${corrBase}=([^&"'\\s]+)`)}",\n`;
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
           break;
 
         default:
-          // Fallback: use JSON path extraction
+          // Fallback: JSON path using variable name as field
           code += `${indent}web_reg_save_param_json("${corr.name}",\n`;
-          code += `${indent}    "QueryString=$.${corr.name}",\n`;
+          code += `${indent}    "QueryString=${jsonPath}",\n`;
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
       }
@@ -748,26 +968,35 @@ Action()
   // ─── Headers ─────────────────────────────────────────────────────────────────
 
   generateAddHeaders(request, indent) {
+    // Global headers are already set via web_add_auto_header() at the start of Action().
+    // Only emit web_add_header() for headers that are:
+    //   - Specific to this request (not in globalHeaders), OR
+    //   - Per-request dynamic (UUID etc.)
+    const { globalHeaders } = this.analyzeCommonHeaders();
+    const globalKeys = new Set(Array.from(globalHeaders.keys()).map(k => k.toLowerCase()));
+
     const headers = [];
 
-    // Collection-level headers
+    // Collection-level headers (skip those already handled as global auto-headers)
     if (this.collection.collectionHeaders) {
       this.collection.collectionHeaders.forEach(h => {
-        if (h.key && h.value && !h.disabled) headers.push(h);
+        if (h.key && h.value && !h.disabled && !globalKeys.has(h.key.toLowerCase()))
+          headers.push(h);
       });
     }
 
-    // Request-level headers
+    // Request-level headers (skip global ones — they're already persistent via auto-header)
     if (request.headers && Array.isArray(request.headers)) {
       request.headers.forEach(h => {
-        if (h.key && h.value && !h.disabled) headers.push(h);
+        if (h.key && h.value && !h.disabled && !globalKeys.has(h.key.toLowerCase()))
+          headers.push(h);
       });
     }
 
-    // Auth header injection from auth section — ONLY if Authorization is not already explicit.
-    // Prevents duplicate Authorization when both auth section and headers define it.
+    // Auth header injection — only if not already in global auto-headers
     const hasExplicitAuth = headers.some(h => h.key?.toLowerCase() === 'authorization');
-    if (!hasExplicitAuth) {
+    const authInGlobal    = globalKeys.has('authorization');
+    if (!hasExplicitAuth && !authInGlobal) {
       const authHeader = this.getAuthHeader(request);
       if (authHeader) headers.push(authHeader);
     }
