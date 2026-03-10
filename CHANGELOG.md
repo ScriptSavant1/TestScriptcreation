@@ -5,6 +5,29 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-03-10
+
+### Added
+- **Per-request dynamic variable generation** — detects `pm.variables.set('varName', crypto.randomUUID())` (and Math.random/Date.now/randomBytes patterns) in pre-request scripts. Emits:
+  - DevWeb: `load.global.interaction_id = crypto.randomUUID();` inline BEFORE each request that uses the variable
+  - VuGen C: C block using `lr_whoami` + `time()` + `rand()` → `lr_save_string("_interaction_id")` BEFORE `web_add_header`
+  - Variable is never added to parameters.yml/ParameterFile.prm — it is always Tier 1 dynamic
+  - `customScriptParser.detectPerRequestDynamicVars(script)` static method (supports uuid/nonce/random/timestamp)
+- **Auth section vs headers deduplication** — when `Authorization` appears in BOTH the auth section and the explicit headers array, the explicit headers value is used and the auth section injection is skipped. Prevents duplicate `Authorization: Bearer ...` headers.
+
+### Fixed
+- **`jwt-helper.js`** (DevWeb) — source corrected from `jwt-lib.js` → `jwt-helper.js`, copied from `src/analyzers/jwt-helper.js` (falls back to project root if present there). The `jwt-helper.js` is the production file with PS256 + auto-refresh via `getJwtToken()`.
+- **`jsrsasign.js`** (VuGen) — copied from project root to each VuGen output folder when JWT detected.
+- **`transport.pem`** — fixed consistent typo `tranport.pem` → `transport.pem` throughout all generators and prompt files.
+- **Pre-request and test scripts removed from main.js / Action.c output** — scripts are used during analysis only (variable detection, JWT fingerprinting, correlation). Generated scripts no longer contain `// TODO: Manual conversion` noise.
+- **`replaceParameters()` in webHttpScriptGenerator** — per-request vars (`interaction_id`) now render as `{_interaction_id}` (underscore prefix) matching the inline-generated LR parameter name. Dynamic/correlated vars also consistently use `{_varName}`.
+- **`scanForUndeclaredParams()`** — skips variables starting with `_` and per-request var base names, preventing them from appearing in ParameterFile.prm.
+
+### Changed
+- `package.json` version: `2.4.0` → `2.4.1`
+
+---
+
 ## [2.4.0] - 2026-03-09
 
 ### Added

@@ -157,7 +157,7 @@ LastReplayStatus=0
 [ActiveReplay]
 LastReplayedRunName=
 ActiveRunName=
-${txOrder}${txSection}${hasJwt ? '\n[ManuallyExtraFiles]\njsrsasign.js=\ngenerate_jwt.js=\ntranport.pem=\n' : ''}`;
+${txOrder}${txSection}${hasJwt ? '\n[ManuallyExtraFiles]\njsrsasign.js=\ngenerate_jwt.js=\ntransport.pem=\n' : ''}`;
   }
 
   // ─── default.cfg (INI) ───────────────────────────────────────────────────────
@@ -372,7 +372,7 @@ RunLogicObjectKind="Action"
 
     // JWT helper files bundled with the script for LRE upload
     const jwtEntries = hasJwt
-      ? `    <FileEntry Name="jsrsasign.js" Filter="2" />\n    <FileEntry Name="generate_jwt.js" Filter="2" />\n    <FileEntry Name="tranport.pem" Filter="2" />\n`
+      ? `    <FileEntry Name="jsrsasign.js" Filter="2" />\n    <FileEntry Name="generate_jwt.js" Filter="2" />\n    <FileEntry Name="transport.pem" Filter="2" />\n`
       : '';
 
     return `<?xml version="1.0" encoding="utf-8"?>

@@ -486,6 +486,70 @@ class CustomScriptParser {
 
     return { isJwt: true, library, outputVars, algorithm };
   }
+
+  /**
+   * Detect per-request dynamically generated variables in a pre-request script.
+   * These are variables created fresh on EVERY request — NOT from response correlation
+   * and NOT static parameters. They need inline generation before each request.
+   *
+   * Common patterns:
+   *   pm.variables.set('interaction_id', crypto.randomUUID())
+   *   pm.variables.set('xsrfToken', crypto.randomUUID())
+   *   pm.variables.set('nonce', Math.random().toString(36).substring(2))
+   *   pm.variables.set('requestId', Date.now().toString())
+   *
+   * @param  {string} script - Pre-request script text
+   * @returns {Array<{varName: string, generationType: 'uuid'|'random'|'timestamp'|'nonce'}>}
+   *
+   * generationType values:
+   *   'uuid'      → crypto.randomUUID()  — emit crypto.randomUUID() in DevWeb, lr_param_sprintf in VuGen
+   *   'random'    → Math.random()        — emit Math.random().toString(36) in DevWeb
+   *   'timestamp' → Date.now()           — emit Date.now().toString() in DevWeb
+   *   'nonce'     → CryptoJS/custom      — emit crypto.randomBytes(16).toString('hex') in DevWeb
+   */
+  static detectPerRequestDynamicVars(script) {
+    if (!script || typeof script !== 'string') return [];
+
+    const results = [];
+
+    // Pattern: pm.variables.set('varName', <generationExpression>)
+    // Also: pm.environment.set / pm.globals.set with dynamic RHS
+    const setPattern = /pm\.(?:variables|environment|globals|collectionVariables)\.set\s*\(\s*['"]([^'"]+)['"]\s*,\s*([^)]+)\)/g;
+    const bruPattern = /bru\.(?:setVar|setEnvVar)\s*\(\s*['"]([^'"]+)['"]\s*,\s*([^)]+)\)/g;
+
+    const classify = (varName, rhs) => {
+      const r = rhs.trim();
+      // UUID generation patterns
+      if (/crypto\.randomUUID\s*\(|uuidv4\s*\(|uuid\s*\(|generateUUID\s*\(/i.test(r)) {
+        return { varName, generationType: 'uuid' };
+      }
+      // Nonce / random bytes
+      if (/crypto\.randomBytes\s*\(|randomBytes\s*\(/i.test(r)) {
+        return { varName, generationType: 'nonce' };
+      }
+      // Math.random() based
+      if (/Math\.random\s*\(/.test(r) && !r.includes('pm.') && !r.includes('load.')) {
+        return { varName, generationType: 'random' };
+      }
+      // Timestamp based
+      if (/Date\.now\s*\(|new Date\s*\(/.test(r) && !r.includes('pm.') && !r.includes('load.')) {
+        return { varName, generationType: 'timestamp' };
+      }
+      return null;
+    };
+
+    let m;
+    while ((m = setPattern.exec(script)) !== null) {
+      const result = classify(m[1], m[2]);
+      if (result) results.push(result);
+    }
+    while ((m = bruPattern.exec(script)) !== null) {
+      const result = classify(m[1], m[2]);
+      if (result) results.push(result);
+    }
+
+    return results;
+  }
 }
 
 module.exports = CustomScriptParser;

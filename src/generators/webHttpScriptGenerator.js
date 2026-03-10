@@ -72,6 +72,9 @@ class WebHttpScriptGenerator {
     this.hasJwt = false;
     this.jwtVarNames = [];    // variable names the pre-request script stores the token into
 
+    // Per-request dynamic variables (UUID/nonce/random generated fresh per request)
+    this.perRequestVars = new Map(); // varName → { generationType, requestNames[] }
+
     this.buildVariableMap();
   }
 
@@ -208,11 +211,28 @@ class WebHttpScriptGenerator {
       outputDir, this.parameters, this.transactionNames, dataFileNames, this.hasJwt
     );
 
-    // 8. If JWT detected: write generate_jwt.js helper for pre-generating tokens outside VuGen
+    // 8. If JWT detected: write generate_jwt.js helper + copy jsrsasign.js + transport.pem
     if (this.hasJwt) {
       fs.writeFileSync(path.join(outputDir, 'generate_jwt.js'),
         this.generateJwtHelperScript(), 'utf8');
       console.log('✓ Generated generate_jwt.js  (run before test to pre-generate JWT token)');
+
+      // Copy jsrsasign.js from project root (user places it there)
+      const PROJECT_ROOT = path.join(__dirname, '..', '..');
+      const jsrsasignSrc = path.join(PROJECT_ROOT, 'jsrsasign.js');
+      if (fs.existsSync(jsrsasignSrc)) {
+        fs.copyFileSync(jsrsasignSrc, path.join(outputDir, 'jsrsasign.js'));
+        console.log('✓ Copied jsrsasign.js');
+      } else {
+        console.warn('  ⚠  jsrsasign.js not found in project root. Add it there and re-run.');
+      }
+
+      // Copy transport.pem from project root
+      const pemSrc = path.join(PROJECT_ROOT, 'transport.pem');
+      if (fs.existsSync(pemSrc)) {
+        fs.copyFileSync(pemSrc, path.join(outputDir, 'transport.pem'));
+        console.log('✓ Copied transport.pem');
+      }
     }
 
     const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
@@ -258,10 +278,19 @@ class WebHttpScriptGenerator {
           if (jwtInfo.isJwt) {
             this.hasJwt = true;
             this.jwtVarNames.push(...jwtInfo.outputVars);
-            // All JWT output variables must be dynamic (not parameterized)
             jwtInfo.outputVars.forEach(v => this.scriptSetVarNames.add(v));
             console.log(`  ✓ JWT detected in "${req.name}" (library: ${jwtInfo.library}, algorithm: ${jwtInfo.algorithm})`);
           }
+
+          // Per-request dynamic vars (UUID/nonce/random generated per request — not from responses)
+          const perReqVars = CustomScriptParser.detectPerRequestDynamicVars(preText);
+          perReqVars.forEach(({ varName, generationType }) => {
+            if (!this.perRequestVars.has(varName)) {
+              this.perRequestVars.set(varName, { generationType, requestNames: [] });
+              this.scriptSetVarNames.add(varName); // ensure Tier 1 dynamic, never parameterized
+            }
+            this.perRequestVars.get(varName).requestNames.push(req.name);
+          });
         }
       });
     }
@@ -374,7 +403,7 @@ ${corrList}
  *      collection_data.dat), then re-run test.
  *   B) Call a token endpoint (uncomment OAuth2 block below and adapt URL).
  *
- * jsrsasign.js and tranport.pem are in [ManuallyExtraFiles] for LRE upload.
+ * jsrsasign.js and transport.pem are in [ManuallyExtraFiles] for LRE upload.
  * ----------------------------------------------------------------------- */
 ` : '';
 
@@ -586,10 +615,11 @@ Action()
 
   /**
    * Generate C code for one request:
-   *   1. web_reg_save_param_* calls (correlation registrations) — BEFORE the request
-   *   2. web_add_header() calls — immediately before the request
-   *   3. web_url() or web_custom_request()
-   *   4. lr_output_message() log
+   *   1. Per-request dynamic var generation (UUID/nonce — before correlation and headers)
+   *   2. web_reg_save_param_* calls (correlation registrations) — BEFORE the request
+   *   3. web_add_header() calls — immediately before the request
+   *   4. web_url() or web_custom_request()
+   *   5. lr_output_message() log
    */
   generateRequestBlock(request, indentLevel = 1) {
     const indent = '    '.repeat(indentLevel);
@@ -599,19 +629,71 @@ Action()
       code += `${indent}/* ${request.name} */\n`;
     }
 
-    // 1. Correlation registrations (must come BEFORE the producing request)
+    // 1. Per-request dynamic variable generation (e.g. x-fapi-interaction-id UUID)
+    code += this.generatePerRequestVarCode(request, indent);
+
+    // 2. Correlation registrations (must come BEFORE the producing request)
     code += this.generateCorrelationRegistrations(request, indent);
 
-    // 2. Headers
+    // 3. Headers
     code += this.generateAddHeaders(request, indent);
 
-    // 3. Web function
+    // 4. Web function
     code += this.generateWebFunction(request, indent);
 
-    // 4. Log
+    // 5. Log
     code += `${indent}lr_output_message("${this.sanitizeCName(request.name)} - completed");\n`;
 
     return code;
+  }
+
+  /**
+   * Generate C code to create per-request dynamic values (UUID, nonce, timestamp).
+   * Emits a C block that saves a unique value into an LR parameter BEFORE the request headers.
+   *
+   * Example output for interaction_id (uuid):
+   *   { char _interaction_id[64]; int _v, _sc; char *_g;
+   *     lr_whoami(&_v, &_g, &_sc);
+   *     sprintf(_interaction_id, "id-%d-%ld-%d", _v, (long)time(NULL), rand() % 9999);
+   *     lr_save_string(_interaction_id, "_interaction_id"); }
+   */
+  generatePerRequestVarCode(request, indent) {
+    if (!this.perRequestVars || this.perRequestVars.size === 0) return '';
+
+    let code = '';
+    this.perRequestVars.forEach((info, varName) => {
+      // Only emit for requests that use this variable in headers or URL
+      if (!this.requestUsesVar(request, varName)) return;
+
+      const paramName = `_${varName}`;   // prefix with _ (VuGen convention for dynamic values)
+      const varExpr   = info.generationType;
+
+      if (varExpr === 'uuid' || varExpr === 'nonce' || varExpr === 'random') {
+        // Generate a unique ID using vuser_id + time + counter (VuGen C — no native UUID)
+        code += `${indent}/* Per-request unique ID for ${varName} */\n`;
+        code += `${indent}{ int _vusr, _sc; char *_grp; char _uid[64];\n`;
+        code += `${indent}  lr_whoami(&_vusr, &_grp, &_sc);\n`;
+        code += `${indent}  sprintf(_uid, "id-%d-%ld-%d", _vusr, (long)time(NULL), rand() % 99999);\n`;
+        code += `${indent}  lr_save_string(_uid, "${paramName}"); }\n`;
+      } else if (varExpr === 'timestamp') {
+        code += `${indent}/* Per-request timestamp for ${varName} */\n`;
+        code += `${indent}{ char _ts[32]; sprintf(_ts, "%ld", (long)time(NULL));\n`;
+        code += `${indent}  lr_save_string(_ts, "${paramName}"); }\n`;
+      }
+    });
+    return code;
+  }
+
+  /**
+   * Check if a request uses a given variable name ({{varName}}) in URL, headers, or body.
+   */
+  requestUsesVar(request, varName) {
+    const pattern = new RegExp(`\\{\\{\\s*${varName}\\s*\\}\\}`);
+    const url = typeof request.url === 'string' ? request.url : (request.url?.raw || '');
+    if (pattern.test(url)) return true;
+    if (request.headers?.some(h => pattern.test(h.value || ''))) return true;
+    if (request.body?.raw && pattern.test(request.body.raw)) return true;
+    return false;
   }
 
   // ─── Correlation ─────────────────────────────────────────────────────────────
@@ -682,9 +764,13 @@ Action()
       });
     }
 
-    // Auth header injection
-    const authHeader = this.getAuthHeader(request);
-    if (authHeader) headers.push(authHeader);
+    // Auth header injection from auth section — ONLY if Authorization is not already explicit.
+    // Prevents duplicate Authorization when both auth section and headers define it.
+    const hasExplicitAuth = headers.some(h => h.key?.toLowerCase() === 'authorization');
+    if (!hasExplicitAuth) {
+      const authHeader = this.getAuthHeader(request);
+      if (authHeader) headers.push(authHeader);
+    }
 
     if (headers.length === 0) return '';
 
@@ -926,9 +1012,14 @@ Action()
     while ((match = varPattern.exec(cCode)) !== null) {
       const varName = match[1];
 
-      // Skip already-classified variables
-      if (this.parameters.has(varName))      continue;
-      if (this.dynamicVarNames.has(varName)) continue;
+      // Skip already-classified variables and dynamic/per-request vars
+      if (this.parameters.has(varName))             continue;
+      if (this.dynamicVarNames.has(varName))        continue;
+      // Per-request vars use _ prefix in generated code — _varName won't be a parameter
+      if (varName.startsWith('_'))                  continue;
+      // Skip per-request vars that were renamed with _ prefix
+      const baseVarName = varName.replace(/^_/, '');
+      if (this.perRequestVars && this.perRequestVars.has(baseVarName)) continue;
 
       // Add to parameters map so it appears in ParameterFile.prm and collection_data.dat
       const isCredential = credentialPattern.test(varName);
@@ -961,8 +1052,12 @@ Action()
 
     return str.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
       const trimmed = varName.trim();
-      // Skip Postman built-in dynamic variables
+      // Skip Postman built-in dynamic variables ($guid, $timestamp, etc.)
       if (trimmed.startsWith('$')) return match;
+      // Per-request dynamic vars use _ prefix in VuGen (generated inline before the request)
+      if (this.perRequestVars && this.perRequestVars.has(trimmed)) return `{_${trimmed}}`;
+      // Dynamic/correlated vars also use _ prefix by convention
+      if (this.dynamicVarNames && this.dynamicVarNames.has(trimmed)) return `{_${trimmed}}`;
       return `{${trimmed}}`;
     });
   }
@@ -1136,8 +1231,8 @@ Action()
    * token and prints it to stdout.  Users run this BEFORE the VuGen test and
    * paste the token into collection_data.dat (jwtToken column).
    *
-   * Uses jwt-lib.js (the same library as DevWeb scripts).
-   * Placed in the output folder alongside jsrsasign.js + tranport.pem.
+   * Uses jwt-helper.js (the same library as DevWeb scripts).
+   * Placed in the output folder alongside jsrsasign.js + transport.pem.
    *
    * Usage:
    *   node generate_jwt.js
@@ -1166,19 +1261,19 @@ Action()
  *   4. For long tests: regenerate before each test run or before token expires.
  *
  * DEPENDENCIES:
- *   - jwt-lib.js (in same folder — uses only Node.js built-in crypto, no npm)
- *   - tranport.pem (private key — replace placeholder with your actual key)
+ *   - jwt-helper.js (in same folder — uses only Node.js built-in crypto, no npm)
+ *   - transport.pem (private key — replace placeholder with your actual key)
  */
 
 'use strict';
 
-const jwtLib = require('./jwt-lib');
+const jwtLib = require('./jwt-helper');
 const path   = require('path');
 
 // ── TODO: Update these values to match your API's JWT requirements ──────────
 const options = {
   algorithm: 'RS256',          // PS256, RS256, HS256, ES256 — check your API spec
-  keyPath:   path.join(__dirname, 'tranport.pem'),  // private key PEM file
+  keyPath:   path.join(__dirname, 'transport.pem'),  // private key PEM file
   payload: {
     // TODO: Replace placeholder values with your actual claims
     sub: 'YOUR_CLIENT_ID',     // subject — typically the client/application ID
@@ -1197,7 +1292,7 @@ try {
   process.stdout.write(token + '\\n');
 } catch (err) {
   process.stderr.write('[generate_jwt] ERROR: ' + err.message + '\\n');
-  process.stderr.write('  Check: tranport.pem exists and contains a valid private key.\\n');
+  process.stderr.write('  Check: transport.pem exists and contains a valid private key.\\n');
   process.exit(1);
 }
 `;
