@@ -51,7 +51,8 @@ class WebServer {
           useAuthentication: req.body.useAuthentication !== 'false',
           thinkTime: parseFloat(req.body.thinkTime) || 1,
           addComments: req.body.addComments !== 'false',
-          logLevel: req.body.logLevel || 'info'
+          logLevel: req.body.logLevel || 'info',
+          protocol: req.body.protocol || 'devweb'
         };
 
         const converter = new BrunoDevWebConverter(options);

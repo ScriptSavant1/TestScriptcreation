@@ -1,6 +1,6 @@
 # 📦 Installation Guide
 
-Complete installation guide for **Bruno to DevWeb Converter v2.1.0** on all platforms.
+Complete installation guide for **Bruno to DevWeb Converter v2.1.1** on all platforms.
 
 ---
 
@@ -113,6 +113,58 @@ mkdir -p uploads output examples/collections
 
 # 4. Test installation
 bruno-devweb --version
+```
+
+---
+
+---
+
+## 🐳 Docker — Zero-Install (Best for GitLab CI/CD)
+
+No Node.js installation required. The converter runs inside a pre-built Linux container.
+
+### **Linux Runner — Use Registry Image Directly**
+
+```yaml
+# In your team's .gitlab-ci.yml
+convert:
+  image: registry.gitlab.com/your-org/bruno-devweb-converter:latest
+  tags: [linux]
+  script:
+    - bruno-devweb convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
+```
+
+### **Linux Machine — Run Locally with Docker**
+
+```bash
+docker run --rm \
+  -v $(pwd):/workspace \
+  registry.gitlab.com/your-org/bruno-devweb-converter:latest \
+  convert -i my-collection.json -o output/
+```
+
+### **Windows Runner — Shell Executor (Node.js required on runner)**
+
+```yaml
+convert:
+  tags: [windows]
+  before_script:
+    - git clone https://gitlab.com/your-org/bruno-devweb-converter.git $env:TEMP\bdw
+    - npm ci --prefix $env:TEMP\bdw --omit=dev
+  script:
+    - node $env:TEMP\bdw\src\cli.js convert -i my-collection.json -o output/
+  artifacts:
+    paths: [output/]
+```
+
+### **Build Image Locally from Source**
+
+```bash
+cd bruno-devweb-converter
+docker build -t bruno-devweb-converter:local .
+docker run --rm -v $(pwd):/workspace bruno-devweb-converter:local convert -i my-collection.json -o output/
 ```
 
 ---
@@ -375,25 +427,75 @@ After successful installation:
 
 ## 🎯 Quick Start Commands
 
+### Using `node src/cli.js` (no global install needed):
+
 ```bash
-# Convert a collection
-bruno-devweb convert -i collection.json -o output/
+# ---- POSTMAN COLLECTIONS ----
+node src/cli.js convert -i collection.postman_collection.json -o ./output
+node src/cli.js convert -i collection.json -e environment.json -o ./output
+node src/cli.js convert -i collection.json -m multi -o ./scripts
 
-# Analyze a collection (no conversion)
-bruno-devweb analyze -i collection.json
+# ---- BRUNO JSON EXPORT ----
+node src/cli.js convert -i BrunoCollection.json -o ./output
+node src/cli.js convert -i BrunoCollection.json -m multi -o ./scripts
 
-# Start web UI
-bruno-devweb web --port 3000
+# ---- BRUNO SINGLE YAML FILE ----
+node src/cli.js convert -i MyCollection.yml -o ./output
+node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
+node src/cli.js convert -i MyCollection.yml -m multi -o ./scripts
 
-# Get help
-bruno-devweb --help
+# ---- BRUNO YAML FOLDER (distributed format) ----
+node src/cli.js convert -i "MyCollection/" -o ./output
+node src/cli.js convert -i "MyCollection/" -e environment.json -o ./output
+node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
 
-# Show version
-bruno-devweb --version
+# ---- SINGLE .BRU FILE ----
+node src/cli.js convert -i Login.bru -o ./output
+
+# ---- VuGen WEB HTTP/HTML (C) — add --protocol web-http ----
+node src/cli.js convert -i collection.json --protocol web-http -o ./output
+node src/cli.js convert -i MyCollection.yml --protocol web-http -e environment.json -o ./output
+node src/cli.js convert -i "MyCollection/" --protocol web-http -m multi -o ./scripts
+
+# ---- ANALYZE (any format) ----
+node src/cli.js analyze -i collection.json
+node src/cli.js analyze -i MyCollection.yml
+node src/cli.js analyze -i "MyCollection/"
 ```
+
+### After global install (`npm link`):
+
+```bash
+# Same commands with the global prefix:
+bruno-devweb convert -i collection.json -o output/
+bruno-devweb convert -i MyCollection.yml -e environment.json -o output/
+bruno-devweb convert -i "MyCollection/" -m multi -o scripts/
+bruno-devweb convert -i collection.json --protocol web-http -o output/
+bruno-devweb convert -i "MyCollection/" --protocol web-http -m multi -o scripts/
+bruno-devweb analyze -i collection.json
+bruno-devweb web --port 3000
+```
+
+### CLI Options Reference
+
+| Option | Description |
+|--------|-------------|
+| `-i, --input <path>` | Input: `.json`, `.yml`, `.bru`, or folder path — **required** |
+| `-e, --environment <file>` | Environment JSON file — overrides collection variable values in CSV |
+| `-o, --output <dir>` | Output directory (default: `./devweb-script`) |
+| `-m, --mode <mode>` | `single` (one script, default) or `multi` (one per top-level folder) |
+| `--protocol <protocol>` | Output protocol: `devweb` (JavaScript, default) or `web-http` (VuGen C) |
+| `-t, --think-time <seconds>` | Think time between transactions (default: 1) |
+| `--no-transactions` | Disable transaction wrapping |
+| `--no-correlation` | Disable automatic correlation detection |
+| `--no-parameterization` | Disable variable parameterization |
+| `--no-authentication` | Disable auth code generation |
+| `--no-comments` | Strip explanatory comments from output |
+| `--log-level <level>` | Logging: `error`, `warn`, `info`, `debug` |
+| `--fail-on-error` | Exit with non-zero code on any conversion error |
 
 ---
 
 **Happy Testing! 🎉**
 
-*Version 2.1.0 - February 2026*
+*Version 2.3.1 - February 2026*
