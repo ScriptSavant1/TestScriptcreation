@@ -35,10 +35,11 @@ class WebHttpMandatoryFilesGenerator {
    * @param {string}   outputDir
    * @param {Map}      parameters
    * @param {string[]} transactionNames
-   * @param {string[]} dataFiles        - Large body data files extracted to data/ subfolder
-   * @param {boolean}  hasJwt           - If true, add jsrsasign.js + generate_jwt.js to [ManuallyExtraFiles]
+   * @param {string[]} dataFiles  - Large body data files extracted to data/ subfolder
+   * @param {boolean}  hasJwt    - If true, add jsrsasign.js to [ManuallyExtraFiles]
+   * @param {Object}   proxy     - Proxy config { enabled, host, port, username, password } or null
    */
-  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = [], hasJwt = false) {
+  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = [], hasJwt = false, proxy = null) {
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -48,7 +49,8 @@ class WebHttpMandatoryFilesGenerator {
     this.writeFile(outputDir, `${safeScriptName}.usr`,
       this.generateUsrFile(safeScriptName, transactionNames, dataFiles, hasJwt));
     this.writeFile(outputDir, 'default.cfg',
-      this.generateDefaultCfg());
+      this.generateDefaultCfg(proxy));
+    if (proxy && proxy.enabled) console.log(`  ✓ Proxy configured in default.cfg: ${proxy.host}:${proxy.port}`);
     this.writeFile(outputDir, 'default.usp',
       this.generateDefaultUsp());
     this.writeFile(outputDir, 'ParameterFile.prm',
@@ -162,9 +164,40 @@ ${txOrder}${txSection}${hasJwt ? '\n[ManuallyExtraFiles]\njsrsasign.js=\ntranspo
 
   // ─── default.cfg (INI) ───────────────────────────────────────────────────────
 
-  generateDefaultCfg() {
+  generateDefaultCfg(proxy = null) {
     // Complete canonical VuGen Web HTTP/HTML runtime config.
-    // Based on the full VuGen 26.1 default.cfg for the QTWeb protocol.
+    // Proxy settings are injected into [WEB] when a proxy is detected in the collection.
+    const proxyLines = proxy && proxy.enabled
+      ? `ProxyUseProxy=1
+ProxyUseBrowser=0
+ProxyUseAutoConfigScript=0
+ProxyAutoConfigScriptURL=
+ProxyUseProxyServer=1
+ProxyHTTPHost=${proxy.host}
+ProxyHTTPPort=${proxy.port}
+ProxyHTTPSHost=${proxy.host}
+ProxyHTTPSPort=${proxy.port}
+ProxyUseSame=1
+ProxyBypass=
+ProxyNoLocal=0
+ProxyUserName=${proxy.username || ''}
+ProxyPassword=${proxy.password || ''}
+ProxyPasswordIsEncrypted=false`
+      : `ProxyUseProxy=1
+ProxyUseBrowser=1
+ProxyUseAutoConfigScript=0
+ProxyAutoConfigScriptURL=
+ProxyUseProxyServer=0
+ProxyHTTPHost=
+ProxyHTTPPort=
+ProxyHTTPSHost=
+ProxyHTTPSPort=
+ProxyUseSame=0
+ProxyBypass=
+ProxyNoLocal=0
+ProxyUserName=
+ProxyPasswordIsEncrypted=false`;
+
     return `[General]
 XlBridgeTimeout=120
 DefaultRunLogic=default.usp
@@ -231,20 +264,7 @@ ResetContext=1
 ClearCacheForSimulateNewUser=1
 SimulatePrefetchPrerender=0
 DisableAED=0
-ProxyUseProxy=1
-ProxyUseBrowser=1
-ProxyUseAutoConfigScript=0
-ProxyAutoConfigScriptURL=
-ProxyUseProxyServer=0
-ProxyHTTPHost=
-ProxyHTTPPort=
-ProxyHTTPSHost=
-ProxyHTTPSPort=
-ProxyUseSame=0
-ProxyBypass=
-ProxyNoLocal=0
-ProxyUserName=
-ProxyPasswordIsEncrypted=false
+${proxyLines}
 GraphHitsPerSecondHttpStatusCodes=1
 GraphPagesPerSecond=0
 GraphBytesPerSecond=1

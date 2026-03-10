@@ -72,6 +72,77 @@ class AdvancedScriptGenerator {
   }
 
   /**
+   * Detect proxy configuration from collection variables or environment.
+   *
+   * Looks for variables named:
+   *   proxy, proxyUrl, proxy_url, http_proxy, HTTP_PROXY, https_proxy, HTTPS_PROXY,
+   *   proxyServer, proxy_server, proxyHost + proxyPort (separate)
+   *
+   * Supported formats:
+   *   Full URL:   http://user:pass@host:8080   or   http://host:8080
+   *   host:port:  userproxy.corp.net:8080
+   *   Separate:   proxyHost = host, proxyPort = 8080
+   *
+   * @returns {{ enabled:true, host:string, port:number, username:string, password:string }|null}
+   */
+  detectProxyConfig() {
+    const urlVarNames  = ['proxy','proxyUrl','proxy_url','proxyURI','proxy_uri',
+                          'http_proxy','HTTP_PROXY','https_proxy','HTTPS_PROXY',
+                          'proxyServer','proxy_server','httpProxy','httpsProxy'];
+    const hostVarNames = ['proxyHost','proxy_host','proxyHostname'];
+    const portVarNames = ['proxyPort','proxy_port'];
+    const userVarNames = ['proxyUser','proxy_user','proxyUsername','proxy_username','proxyUserName'];
+    const passVarNames = ['proxyPassword','proxy_password','proxyPass','proxy_pass'];
+
+    const get = (names) => {
+      for (const n of names) {
+        const v = this.variableMap.get(n);
+        if (v && String(v).trim()) return String(v).trim();
+      }
+      return '';
+    };
+
+    // Try full URL first
+    for (const name of urlVarNames) {
+      const raw = this.variableMap.get(name);
+      if (!raw || !String(raw).trim()) continue;
+      const val = String(raw).trim();
+      try {
+        const urlStr = val.startsWith('http') ? val : `http://${val}`;
+        const u = new URL(urlStr);
+        const host     = u.hostname;
+        const port     = u.port ? parseInt(u.port) : 8080;
+        const username = decodeURIComponent(u.username || '') || get(userVarNames);
+        const password = decodeURIComponent(u.password || '') || get(passVarNames);
+        if (host) {
+          console.log(`  ✓ Proxy detected: ${host}:${port}${username ? ' (authenticated)' : ''}`);
+          return { enabled: true, host, port, username, password };
+        }
+      } catch {
+        // Might be bare host:port
+        if (val.includes(':')) {
+          const [host, rawPort] = val.split(':');
+          const port = parseInt(rawPort) || 8080;
+          if (host && host.includes('.')) {
+            console.log(`  ✓ Proxy detected: ${host}:${port}`);
+            return { enabled: true, host, port, username: get(userVarNames), password: get(passVarNames) };
+          }
+        }
+      }
+    }
+
+    // Try separate host + port variables
+    const host = get(hostVarNames);
+    if (host) {
+      const port = parseInt(get(portVarNames)) || 8080;
+      console.log(`  ✓ Proxy detected: ${host}:${port}`);
+      return { enabled: true, host, port, username: get(userVarNames), password: get(passVarNames) };
+    }
+
+    return null;  // no proxy found
+  }
+
+  /**
    * Build a map of all variables from collection and environment file
    */
   buildVariableMap() {
@@ -442,7 +513,8 @@ ${finalizeSection}
         this.parameters,
         {
           transactionNames: this.transactionNames || [],
-          hasJwt:           this.hasJwt || false
+          hasJwt:           this.hasJwt || false,
+          proxy:            this.detectProxyConfig()
         }
       );
 
