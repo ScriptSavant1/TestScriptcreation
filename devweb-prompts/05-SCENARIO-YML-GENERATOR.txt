@@ -1,0 +1,140 @@
+================================================================================
+  PROMPT 05: scenario.yml GENERATION RULES
+================================================================================
+
+The scenario.yml file defines the DevWeb script runtime configuration
+including virtual users, pacing, ramp-up, duration, and tear-down.
+It is ALWAYS required.
+
+================================================================================
+  CORRECT FORMAT (WITH PACING)
+================================================================================
+
+Generate this file with proper pacing structure:
+
+```yaml
+# All times are defined in seconds
+vusers: 1        #The number of Vusers that will be run during the test
+pacing:          #The period of time to wait between iteration of each Vuser
+  type: delay    #The Pacing type, valid values: delay or interval
+  mode: random   #The Pacing mode, valid values: fixed or random
+  min: 3         #The min and max are valid on mode: random.
+  max: 6         #The min and max determine the range of values
+rampUp: 2        #The number of seconds it will take to start all the Vusers
+duration: 20     #The number of seconds to run Vuser iterations after all the Vusers have started running
+tearDown: 0      #Not used
+```
+
+================================================================================
+  FIELD DEFINITIONS
+================================================================================
+
+vusers:
+  Number of virtual users to run. Default: 1 for development/debugging.
+  In production load tests, this is set in the LoadRunner Enterprise controller.
+
+pacing:
+  Controls wait time between iterations of each Vuser.
+
+  type: "delay" or "interval"
+    - delay: Wait a specified time AFTER the iteration ends
+    - interval: Wait until a specified time has passed SINCE iteration start
+
+  mode: "fixed" or "random"
+    - fixed: Use a constant value (use "min" field only)
+    - random: Random value between min and max
+
+  min: Minimum pacing time in seconds
+  max: Maximum pacing time in seconds (only used with mode: random)
+
+rampUp:
+  Time in seconds to start all Vusers. Vusers are started gradually
+  over this period. Default: 2 seconds.
+
+duration:
+  Time in seconds to run Vuser iterations AFTER all Vusers have started.
+  Default: 20 seconds for development. Set higher for actual load tests.
+
+tearDown:
+  Time in seconds for tear-down phase. Default: 0 (not used).
+
+================================================================================
+  PACING EXAMPLES
+================================================================================
+
+Example 1: Fixed delay (simple)
+```yaml
+pacing:
+  type: delay
+  mode: fixed
+  min: 5
+```
+Waits exactly 5 seconds between each iteration.
+
+Example 2: Random delay (recommended default)
+```yaml
+pacing:
+  type: delay
+  mode: random
+  min: 3
+  max: 6
+```
+Waits a random time between 3-6 seconds between iterations.
+
+Example 3: Fixed interval
+```yaml
+pacing:
+  type: interval
+  mode: fixed
+  min: 30
+```
+Ensures each iteration starts every 30 seconds (if iteration finishes
+in 20s, waits 10s; if iteration takes 35s, starts immediately).
+
+Example 4: Random interval
+```yaml
+pacing:
+  type: interval
+  mode: random
+  min: 20
+  max: 40
+```
+Target iteration interval is random between 20-40 seconds.
+
+================================================================================
+  COMMON MISTAKES TO AVOID
+================================================================================
+
+WRONG - Old format (name/description only):
+```yaml
+scenario:
+  name: MyScript
+  description: Load test script
+```
+This format is INCORRECT. scenario.yml must have vusers, pacing, rampUp,
+duration, and tearDown fields.
+
+WRONG - Missing pacing sub-fields:
+```yaml
+pacing: 5
+```
+Pacing must be an object with type, mode, min (and max for random).
+
+WRONG - Using "scenario:" as root key:
+```yaml
+scenario:
+  vusers: 1
+```
+The root-level keys are vusers, pacing, rampUp, duration, tearDown.
+There is no "scenario:" wrapper.
+
+================================================================================
+  DEFAULT scenario.yml
+================================================================================
+
+For most converted collections, use the default configuration shown above.
+The values are suitable for development and debugging. In production,
+the LoadRunner Enterprise controller overrides vusers, duration, and
+ramp-up settings.
+
+================================================================================

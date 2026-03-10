@@ -1,675 +1,282 @@
-# 📘 Technical Documentation
+# Technical Documentation — Bruno to DevWeb Converter v2.4.0
 
-## Architecture Overview
+---
 
-### System Architecture
+## Architecture
+
+The pipeline has 4 stages: **Parse → Analyze → Classify → Generate**.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Bruno/Postman Collection                  │
-│                         (.json / .bru)                       │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Collection Parser                         │
-│  ┌──────────────┐           ┌──────────────┐               │
-│  │ Bruno Parser │           │Postman Parser│               │
-│  └──────────────┘           └──────────────┘               │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Analysis Engine                            │
-│  ┌──────────────┐  ┌─────────────┐  ┌──────────────┐      │
-│  │ Correlation  │  │Parameteriza-│  │    Auth      │      │
-│  │  Detector    │  │    tion      │  │   Handler    │      │
-│  └──────────────┘  └─────────────┘  └──────────────┘      │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│               DevWeb Script Generator                        │
-│  - Initialize Section                                        │
-│  - Action Section (with Transactions)                        │
-│  - Finalize Section                                          │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Output Generation                           │
-│  - main.js                                                   │
-│  - config.yml                                                │
-│  - parameters.yml                                            │
-│  - data files                                                │
-│  - documentation                                             │
-└─────────────────────────────────────────────────────────────┘
+INPUT (any format)
+  Postman v2.1 JSON | Bruno JSON | Bruno YAML folder | Bruno Single YAML | .bru file
+  + optional environment.json
+         │
+         ▼
+PARSER — src/parsers/brunoParser.js
+  normalizeRequest() → request[] (the IR)
+  { name, method, url, headers[], body, auth, event[], folder, id }
+         │
+         ├──► correlationDetector.js  — 2-pass producer/consumer matching
+         ├──► customScriptParser.js   — script conversion + detectJwtUsage()
+         └──► authenticationHandler.js — auth config extraction
+         │
+         ▼
+GENERATOR (chosen by --protocol flag)
+
+  devweb (default)               web-http
+  ─────────────────              ─────────────────────────
+  advancedScriptGenerator.js     webHttpScriptGenerator.js
+    classifyVariables()            classifyVariables()
+    detectJwtUsage()               detectJwtUsage()
+    generateInitialize()           generateActionC()
+    generateAction()               generateVuserInitC()
+    generateFinalize()             generateVuserEndC()
+                                   generateJwtHelperScript()
+
+  mandatoryFilesGenerator.js     webHttpMandatoryFilesGenerator.js
+    generateDevWebUsrFile()        generateUsrFile()
+    generateDevWebDefaultCfg()     generateDefaultCfg()
+    generateDevWebDefaultUsp()     generateDefaultUsp()
+    generateDevWebScriptUpload..() generateScriptUploadMetadata()
+    generateRtsYml()               generateParameterFilePrm()
+    copyFromProjectRoot()          generateCollectionDataDat()
 ```
 
 ---
 
-## Core Components
+## Key Architectural Decisions
 
-### 1. Collection Parsers
+### 1. The Normalized Request IS the IR
+`brunoParser.js::normalizeRequest()` (line ~651) converts all 5 input formats to a
+consistent request object. This is the IR — no separate layer needed.
 
-#### BrunoParser (`src/parsers/brunoParser.js`)
+### 2. 3-Tier Classification Lives in Each Generator (NOT parameterizationEngine.js)
+`classifyVariables()` is duplicated in `advancedScriptGenerator.js` and
+`webHttpScriptGenerator.js`. `parameterizationEngine.js` is a raw value scanner —
+it does NOT do 3-tier classification. Centralization is pending (Phase 1B).
 
-**Responsibility**: Parse Bruno collections (.bru and .json formats)
+### 3. Auth Handler Dynamic Awareness (v2.4.0 fix)
+Always call `authHandler.setDynamicVarNames(this.dynamicVarNames)` AFTER `classifyVariables()`.
+Without it: bearer token `{{access_token}}` → `load.params.accessToken` (wrong).
+With it: `{{access_token}}` in dynamicVarNames → `load.global.accessToken` (correct).
 
-**Key Methods**:
-- `parse()`: Main parsing entry point
-- `parseJSON()`: Handle JSON format collections
-- `parseBru()`: Handle .bru format files
-- `extractRequests()`: Extract normalized request objects
+### 4. Correlation Placement
+Extractors/registrations are emitted BEFORE the producing request — not after.
+`generateRequestBlock()` calls registrations first, then headers, then the web function.
 
-**Normalization**:
-All collections are normalized to a common format:
-```javascript
-{
-  name: string,
-  folder: string,
-  method: string,
-  url: string,
-  headers: Array<{key, value, disabled}>,
-  body: {mode, raw, urlencoded, formdata},
-  auth: object,
-  description: string,
-  tests: Array,
-  variables: object,
-  id: string
-}
-```
+### 5. Never Use new URL() on Template URLs
+`new URL("https://{{baseUrl}}/path", "http://dummy")` encodes `{{` → `%7B%7B` silently.
+Always split manually: `const qIdx = url.indexOf('?');`
+This bug was fixed in correlationDetector.js in v2.4.0.
 
-#### PostmanParser (Future)
-Similar structure to BrunoParser but handles Postman-specific features.
+### 6. Snapshot Counter (VuGen only)
+`this.snapshotCounter = 0` in constructor. `++this.snapshotCounter` in `generateWebFunction()`
+produces `t1.inf`, `t2.inf`, ... across the entire Action.c script. Position: before `"Mode=HTML"`.
+
+### 7. JWT Detection
+`CustomScriptParser.detectJwtUsage(script)` — static method, usable from any generator.
+Returns `{ isJwt, library, outputVars, algorithm }`.
+JWT output vars MUST be added to `scriptSetVarNames` to force Tier 1 dynamic classification.
 
 ---
 
-### 2. Analysis Engine
+## Variable Classification (3-Tier)
 
-#### CorrelationDetector (`src/analyzers/correlationDetector.js`)
+Implemented in `classifyVariables()` inside each generator. Priority order (higher = wins):
 
-**Responsibility**: Detect dynamic values that need correlation between requests
+| Priority | Condition | Result | Access |
+|----------|-----------|--------|--------|
+| 1 | `pm.*.set()` / `bru.setVar()` / `context.set()` in any script | Tier 1 Dynamic | `load.global.X` / `{_X}` |
+| 2 | Correlation target | Tier 1 Dynamic | `load.global.X` / `{_X}` |
+| 3 | Name starts with `_` AND empty value | Tier 1 Dynamic | `load.global.X` |
+| 4 | Name starts with `$` (Postman built-in) | SKIP | not in CSV |
+| 5 | JWT output var (from detectJwtUsage) | Tier 1 Dynamic | `load.global.X` |
+| 6 | Credential name pattern (username/password/email/account) | Tier 3 Test Data | `load.params.X` nextValue: iteration |
+| 7 | Everything else | Tier 2 Config | `load.params.X` nextValue: once |
 
-**Algorithm**:
-1. **Value Production Analysis**:
-   - Scans response patterns (URLs, headers, body)
-   - Identifies potential dynamic values (tokens, IDs, etc.)
-   - Maps values to their source requests
+Password → `nextRow: "same as username"` to keep credential pairs linked.
 
-2. **Value Consumption Analysis**:
-   - Scans request patterns (headers, body, URL params)
-   - Identifies variable references ({{var}}, ${var})
-   - Maps consumed values to requests
+---
 
-3. **Correlation Matching**:
-   - Links producers with consumers
-   - Generates extractor configurations
-   - Creates correlation rules
+## Correlation Algorithm (2-Pass)
 
-**Pattern Detection**:
-```javascript
-correlationPatterns = [
-  { pattern: /token/i, type: 'token', extractorType: 'json' },
-  { pattern: /sessionid/i, type: 'sessionId', extractorType: 'json' },
-  { pattern: /csrf/i, type: 'csrf', extractorType: 'boundary' },
-  { pattern: /\bid\b/i, type: 'id', extractorType: 'json' }
-]
 ```
+PASS 1 — What each request PRODUCES:
+  • pm.*.set(varName) / bru.setVar(varName) in test scripts → variable name
+  • Heuristic URL patterns: /login /auth /token /oauth → produces auth token
+  • Response header patterns: Set-Cookie, Authorization, X-Auth-Token
+  • JSON path inference from variable name context
 
-**Extractor Generation**:
-```javascript
-// JSON Path Extractor
-new load.JsonPathExtractor("authToken", "$.token")
+PASS 2 — What each request CONSUMES:
+  • Headers: {{varName}} references
+  • URL path + query: {{varName}} — ALWAYS manual split, never new URL()
+  • Request body: {{varName}} in JSON/form data
+  • Pre-request scripts: pm.*.get(varName), bru.getVar(varName)
 
-// Boundary Extractor
-new load.BoundaryExtractor("csrf", '<input name="csrf" value="', '">')
+MATCH:
+  Most recent producer before consumer (by request index)
+  Output: correlations[] = [{ name, producerRequest, consumerRequest, type, extractPath }]
 
-// Regex Extractor
-new load.RegexpExtractor("sessionId", "session=([^;]+)", "i")
-```
-
-#### ParameterizationEngine (`src/analyzers/parameterizationEngine.js`)
-
-**Responsibility**: Extract and manage test data parameters
-
-**Detection Strategy**:
-1. **Collection-Level Variables**: Extracted from collection metadata
-2. **Environment Variables**: From environment configurations
-3. **Request Analysis**:
-   - URL patterns (base URL, endpoints)
-   - Header values (API keys, custom headers)
-   - Body values (form data, JSON fields)
-   - Query parameters
-
-**Type Detection**:
-```javascript
-detectParameterType(value) {
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'email';
-  if (/^https?:\/\/.+/.test(value)) return 'url';
-  if (/^[0-9a-f-]{36}$/i.test(value)) return 'uuid';
-  if (!isNaN(value)) return 'number';
-  if (/true|false/i.test(value)) return 'boolean';
-  return 'string';
-}
-```
-
-**Data File Generation**:
-Generates CSV files for each parameter type:
-```csv
-email
-user1@example.com
-user2@example.com
-user3@example.com
-```
-
-#### AuthenticationHandler (`src/analyzers/authenticationHandler.js`)
-
-**Responsibility**: Handle authentication configurations
-
-**Supported Types**:
-- OAuth 2.0 (Client Credentials, Password, Authorization Code)
-- Basic Authentication
-- Bearer Token
-- API Key (Header/Query)
-- AWS Signature v4
-- Digest Authentication
-
-**Code Generation**:
-Each auth type generates appropriate DevWeb code:
-
-**OAuth 2.0 Example**:
-```javascript
-const oauth2Token_request = new load.WebRequest({
-    url: "https://api.example.com/oauth/token",
-    method: "POST",
-    body: {
-        grant_type: "client_credentials",
-        client_id: load.params.clientId,
-        client_secret: load.params.clientSecret
-    },
-    extractors: [
-        new load.JsonPathExtractor("accessToken", "$.access_token")
-    ]
-});
+Extractor types: json | boundary | regex | cookie | header
 ```
 
 ---
 
-### 3. Script Generator
+## Authentication Handler
 
-#### AdvancedScriptGenerator (`src/generators/advancedScriptGenerator.js`)
+### Flow
+```
+1. authHandler.extractAuthentication(collection)  → authConfigs Map
+2. classifyVariables()                             → dynamicVarNames Set
+3. authHandler.setDynamicVarNames(dynamicVarNames) ← MUST call this before step 4
+4. authHandler.generateInitializationCode()        → auth setup code
 
-**Responsibility**: Generate complete DevWeb scripts
+parameterize(value):
+  {{access_token}} in dynamicVarNames  →  load.global.accessToken  ✓
+  {{access_token}} NOT in dynamicVarNames  →  load.params.accessToken
+```
 
-**Generation Process**:
+### Supported Auth Types
 
-1. **Analysis Phase**:
-   ```javascript
-   await this.analyze() {
-     // Run correlation detection
-     // Extract parameters
-     // Configure authentication
-   }
-   ```
+| Type | DevWeb | VuGen C | Notes |
+|------|--------|---------|-------|
+| OAuth2 client_credentials | in initialize() | commented in vuser_init.c | token fetch |
+| OAuth2 password grant | in initialize() | commented in vuser_init.c | token fetch |
+| Bearer (dynamic token) | load.global.X | web_add_header before EACH request | from correlation |
+| Bearer (static token) | load.params.X | {X} parameter | from CSV |
+| Basic Auth | load.utils.base64Encode() | web_set_user() | |
+| API Key (header) | defaults.headers | web_add_header before EACH request | |
+| API Key (query) | URL append | {apiKey} in URL | |
+| AWS Signature v4 | load.AWSAuthentication | not implemented | |
+| Digest | load.setUserCredentials | not implemented | |
+| JWT | jwt-lib.js commented block | generate_jwt.js pre-generator | |
+| NTLM | declared, empty | declared, empty | pending |
+| Cookie jar | not implemented | not implemented | pending |
 
-2. **Initialize Section**:
-   ```javascript
-   generateInitialize() {
-     // Global variable initialization
-     // Authentication setup
-     // Configuration loading
-   }
-   ```
+---
 
-3. **Action Section**:
-   ```javascript
-   generateAction() {
-     if (groupByFolder && useTransactions) {
-       return generateGroupedActions();
-     } else {
-       return generateSequentialActions();
-     }
-   }
-   ```
+## JWT Architecture
 
-4. **Request Code Generation**:
-   ```javascript
-   generateRequestCode(request) {
-     // Build WebRequest options
-     // Add extractors for correlation
-     // Inject authentication headers
-     // Handle response
-     // Store correlated values
-   }
-   ```
+### jwt-lib.js (DevWeb — copied from project root to each script)
+- Zero npm dependencies — Node.js built-in `crypto` only
+- Algorithms: PS256/384/512, RS256/384/512, HS256/384/512, ES256/384/512
+- ECDSA: DER→R‖S conversion handled (RFC 7518 §3.4)
+- Key functions:
+  - `generate({ algorithm, keyPath, key, secret, payload, header })` → signed JWT string
+  - `decode(token)` → payload object (no signature verification)
+  - `isExpiring(token, thresholdSec)` → true if `exp - now < threshold`
+- Source: `DevWeb2/jwt-lib.js` — copy to project root for all scripts to use
 
-5. **Finalize Section**:
-   ```javascript
-   generateFinalize() {
-     // Cleanup code
-     // Final logging
-   }
-   ```
+### generate_jwt.js (VuGen — generated into each output folder)
+- Standalone Node.js pre-generator — run BEFORE the VuGen test
+- `node generate_jwt.js` → prints signed JWT to stdout
+- Paste token into `collection_data.dat` (jwtToken column)
+- Contains TODO placeholders: algorithm, keyPath, payload claims
+- Uses jwt-lib.js internally
 
-**Code Structure**:
-```javascript
-// Generated script structure
-load.initialize("init", async function() {...});
-load.action("Action", async function() {
-  // Transaction 1
-  const T1 = new load.Transaction("T1");
-  T1.start();
-  try {
-    // Requests
-  } catch (error) {
-    T1.stop(load.TransactionStatus.Failed);
-  }
-});
-load.finalize("finalize", async function() {...});
+### Detection (customScriptParser.detectJwtUsage — static method)
+```
+jsrsasign:    "jsrsasign" anywhere  OR  "KJUR.jws.JWS.sign(" in script
+jsonwebtoken: require('jsonwebtoken') AND .sign( in same script
+jose:         require('jose') in script
+manual crypto: crypto.sign( AND base64url in same script
 ```
 
 ---
 
-## Data Flow
+## DevWeb File Formats (canonical source: DevWeb2/ reference project)
 
-### Request Processing Pipeline
+### [ScriptName].usr — key differences from VuGen Web HTTP format
+```ini
+Type=DevWeb            ; not Multi
+RunType=DevWeb         ; not cci
+ScriptLanguage=JavaScript
+ActiveTypes=DevWeb     ; not QTWeb
 
+[Actions]
+Main=main.js           ; DevWeb has ONE action: Main
+
+[ExtraFiles]           ; only YAML/config files go here
+parameters.yml=
+rts.yml=
+
+[ManuallyExtraFiles]   ; JWT extra files go here (NOT in [ExtraFiles])
+jwt-lib.js=
+tranport.pem=
 ```
-Collection File
-      │
-      ▼
-Parse Collection
-      │
-      ├─► Extract Metadata
-      ├─► Extract Variables
-      ├─► Extract Auth Config
-      └─► Extract Requests
-            │
-            ▼
-      Normalize Requests
-            │
-            ▼
-      Analyze for Correlation
-            │
-            ├─► Detect Producers
-            ├─► Detect Consumers
-            └─► Create Mappings
-            │
-            ▼
-      Analyze for Parameters
-            │
-            ├─► Extract from URLs
-            ├─► Extract from Headers
-            ├─► Extract from Body
-            └─► Type Detection
-            │
-            ▼
-      Generate DevWeb Code
-            │
-            ├─► Initialize Section
-            ├─► Action Section
-            │     ├─► Transaction Wrapper
-            │     ├─► WebRequest Creation
-            │     ├─► Extractor Configuration
-            │     ├─► Parameter Injection
-            │     └─► Error Handling
-            └─► Finalize Section
-            │
-            ▼
-      Write Output Files
-            │
-            ├─► main.js
-            ├─► config.yml
-            ├─► parameters.yml
-            ├─► data/*.csv
-            └─► documentation
+
+### default.usp — DevWeb run logic
+- Only `[RunLogicRunRoot:Main]` child — DevWeb has no separate vuser_init/end actions
+- `[RunLogicInitRoot]` and `[RunLogicEndRoot]` have `MercIniTreeSons=""` (empty)
+- MUST include `[RunLogicErrorHandlerRoot]` + `[RunLogicErrorHandlerRoot:vuser_errorhandler]`
+
+### default.cfg — DevWeb settings
+- `Encoding=UTF8` (not ANSI)
+- `LogOptions=LogExtended` (not LogBrief)
+- `AutomaticTransactions=0`
+- NO `[WEB]` section
+
+### rts.yml — 11 canonical sections
+`httpConnection`, `dns`, `grpc`, `proxy`, `ssl`, `replay`, `vts`, `encryption`,
+`vuserLogger`, `flow`, `thinkTime`, `openTelemetry`, `userArguments`
+
+Notable values from DevWeb2 reference:
+- `replay.enableIntegratedAuthentication: true`
+- `ssl.enableHTTP3: false`
+- `dns.bypassSystem: false, ttl: 600`
+
+### main.js function names (match DevWeb2 exactly)
+```javascript
+load.initialize('Initialize', async function() { ... });
+load.action('Action',        async function() { ... });
+load.finalize('Finalize',    async function() { ... });
 ```
 
 ---
 
-## Algorithm Details
+## VuGen Web HTTP/HTML — C Code Rules
 
-### Correlation Detection Algorithm
-
-**Step 1: Build Value Registry**
-```javascript
-valueRegistry = Map<valueName, Array<{
-  producedAt: number,
-  requestName: string,
-  extractorType: string,
-  extractPath: string
-}>>
-```
-
-**Step 2: Detect Producers**
-```javascript
-for each request {
-  analyze response patterns
-  if (matches known pattern) {
-    valueRegistry.add(pattern → request mapping)
-  }
-}
-```
-
-**Step 3: Detect Consumers**
-```javascript
-for each request {
-  analyze request (headers, body, URL)
-  if (contains variable reference) {
-    find producer in valueRegistry
-    create correlation rule
-  }
-}
-```
-
-**Step 4: Generate Extractors**
-```javascript
-for each correlation {
-  switch (extractorType) {
-    case 'json':
-      return new load.JsonPathExtractor(...)
-    case 'boundary':
-      return new load.BoundaryExtractor(...)
-    case 'regex':
-      return new load.RegexpExtractor(...)
-  }
-}
-```
-
-### Parameter Extraction Algorithm
-
-**Step 1: Collection-Level Scan**
-```javascript
-extract collection.variable[]
-extract collection.auth
-extract environment variables
-```
-
-**Step 2: Request-Level Analysis**
-```javascript
-for each request {
-  analyzeUrl(request.url)
-  analyzeHeaders(request.headers)
-  analyzeBody(request.body)
-}
-```
-
-**Step 3: Type Inference**
-```javascript
-function inferType(value) {
-  if (isEmail(value)) return 'email'
-  if (isURL(value)) return 'url'
-  if (isUUID(value)) return 'uuid'
-  if (isNumber(value)) return 'number'
-  return 'string'
-}
-```
-
-**Step 4: Data Generation**
-```javascript
-for each parameter {
-  generateSampleData(parameter.type, count=10)
-  writeToCSV(parameter.name, sampleData)
-}
-```
+| Rule | Correct | Wrong |
+|------|---------|-------|
+| Get Vuser ID | `lr_whoami(&id, &grp, &sc)` | `lr_get_vuser_id()` — does NOT exist |
+| Logging | `lr_output_message()` | `lr_log_message()` — log file only, not Output window |
+| Correlation order | `web_reg_save_param_*` BEFORE producing request | After request |
+| Header persistence | `web_add_header()` before EACH request that needs it | Set once, expect persistence |
+| Snapshot | `"Snapshot=tN.inf"` immediately before `"Mode=HTML"` | Omitting snapshot |
+| Large body | `BodyFilePath=` for bodies >500 chars | Inline `Body=` |
+| .prm format | `[parameter:name]` INI sections | XML `<ParamList>` format |
+| Transaction end | `lr_end_transaction("name", LR_AUTO)` | `LR_PASS` or `LR_FAIL` |
+| C89 declarations | All vars at top of function block before statements | Declarations after statements |
+| URL template vars | `{varName}` single braces | `{{varName}}` double braces |
 
 ---
 
-## Performance Considerations
+## Project Root Files Required
 
-### Memory Management
-- **Streaming**: Large collections processed in chunks
-- **Lazy Loading**: Files loaded on-demand
-- **Cleanup**: Temporary files deleted after processing
+These files must exist in the project root — generators copy them to output folders:
 
-### Optimization Strategies
-- **Caching**: Parsed collections cached during analysis
-- **Parallel Processing**: Multiple collections processed concurrently
-- **Incremental Generation**: Script sections generated independently
+| File | Copied To | When |
+|------|-----------|------|
+| `DevWebSdk.d.ts` | Every DevWeb script folder | Always |
+| `jwt-lib.js` | DevWeb script folders | When JWT detected |
+| `tranport.pem` | DevWeb + VuGen script folders | When JWT detected |
+| `jsrsasign.js` | (listed in ExtraFiles only) | When JWT detected in VuGen |
 
----
-
-## Error Handling
-
-### Error Categories
-
-1. **Parse Errors**:
-   - Invalid JSON/BRU format
-   - Missing required fields
-   - Unsupported collection version
-
-2. **Analysis Errors**:
-   - Circular correlation dependencies
-   - Invalid parameter types
-   - Unsupported auth methods
-
-3. **Generation Errors**:
-   - File write failures
-   - Invalid DevWeb syntax
-   - Resource constraints
-
-### Error Recovery
-
-```javascript
-try {
-  await converter.convert();
-} catch (error) {
-  if (error instanceof ParseError) {
-    // Retry with fallback parser
-  } else if (error instanceof AnalysisError) {
-    // Continue with partial analysis
-  } else {
-    // Log and fail gracefully
-  }
-}
-```
+`copyFromProjectRoot()` in `mandatoryFilesGenerator.js` handles all copies.
+Source: `path.join(__dirname, '..', '..', filename)` (two levels up from `src/generators/`).
 
 ---
 
-## Testing Strategy
+## Pending Improvements (see memory/improvement-plan.md)
 
-### Unit Tests
-```javascript
-// Parser tests
-describe('BrunoParser', () => {
-  it('should parse JSON collection', async () => {});
-  it('should parse .bru file', async () => {});
-  it('should normalize requests', () => {});
-});
-
-// Analyzer tests
-describe('CorrelationDetector', () => {
-  it('should detect token correlation', () => {});
-  it('should generate extractors', () => {});
-});
-```
-
-### Integration Tests
-```javascript
-describe('End-to-End Conversion', () => {
-  it('should convert Postman collection', async () => {
-    const result = await converter.convert();
-    expect(result.success).toBe(true);
-    expect(fs.existsSync(result.scriptPath)).toBe(true);
-  });
-});
-```
-
-### Test Fixtures
-```
-tests/
-├── fixtures/
-│   ├── simple-collection.json
-│   ├── oauth-collection.json
-│   ├── complex-collection.json
-│   └── bruno-collection.bru
-└── expected/
-    ├── simple-output/
-    ├── oauth-output/
-    └── complex-output/
-```
-
----
-
-## Extending the Converter
-
-### Adding New Auth Type
-
-1. **Update AuthenticationHandler**:
-```javascript
-generateCustomAuthCode(authConfig) {
-  return `
-    // Custom Auth Setup
-    load.setUserCredentials({...});
-  `;
-}
-```
-
-2. **Add to switch statement**:
-```javascript
-case 'custom':
-  return this.generateCustomAuthCode(authConfig);
-```
-
-### Adding New Extractor Type
-
-1. **Update CorrelationDetector**:
-```javascript
-correlationPatterns.push({
-  pattern: /customValue/i,
-  type: 'custom',
-  extractorType: 'custom'
-});
-```
-
-2. **Add extractor generation**:
-```javascript
-case 'custom':
-  return `new load.CustomExtractor("${name}", options)`;
-```
-
-### Adding New Parser
-
-1. **Create parser class**:
-```javascript
-class CustomParser {
-  async parse() {
-    // Parse custom format
-    return normalizedRequests;
-  }
-}
-```
-
-2. **Register in factory**:
-```javascript
-createParser(type) {
-  switch(type) {
-    case 'custom': return new CustomParser();
-  }
-}
-```
-
----
-
-## Configuration Reference
-
-### config.yml Schema
-
-```yaml
-general:
-  scriptName: string          # Script name
-  logLevel: string           # error|warning|info|debug
-  description: string        # Script description
-
-runtime:
-  iterations: number         # Number of iterations
-  pacing: number            # Pacing in seconds
-  thinkTime: number         # Think time between requests
-
-features:
-  transactions: boolean      # Enable transactions
-  correlation: boolean       # Enable correlation
-  parameterization: boolean # Enable parameterization
-  authentication: boolean   # Enable authentication
-
-statistics:
-  totalRequests: number     # Total requests
-  correlations: number      # Correlations detected
-  parameters: number        # Parameters extracted
-  authConfigs: number       # Auth configs found
-```
-
-### parameters.yml Schema
-
-```yaml
-parameters:
-  paramName:
-    type: string|number|email|url|uuid
-    value: any
-    description: string
-    source: collection|request|environment
-```
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue**: Correlation not detected
-```
-Solution: Check if variable names match between producer and consumer
-Debug: Enable debug logging and check correlation report
-```
-
-**Issue**: Authentication failing
-```
-Solution: Verify auth credentials in parameters.yml
-Debug: Check generated auth code in initialize section
-```
-
-**Issue**: Parameters not replaced
-```
-Solution: Ensure parameter names match in collection
-Debug: Check parameters.yml for extracted parameters
-```
-
----
-
-## API Reference
-
-### BrunoDevWebConverter
-
-```javascript
-const converter = new BrunoDevWebConverter(options);
-
-// Methods
-await converter.convert()         // Main conversion
-converter.getResults()            // Get conversion results
-
-// Options
-{
-  inputFile: string,
-  outputDir: string,
-  useTransactions: boolean,
-  useCorrelation: boolean,
-  useParameterization: boolean,
-  useAuthentication: boolean,
-  thinkTime: number,
-  logLevel: string
-}
-```
-
-### CLI API
-
-```bash
-bruno-devweb convert [options]
-bruno-devweb analyze [options]
-bruno-devweb web [options]
-```
-
----
-
-**Last Updated**: February 2026  
-**Version**: 2.0.0
+| Phase | Description |
+|-------|-------------|
+| 1B | Centralize `classifyVariables()` into `parameterizationEngine.js` |
+| 2A | Formal dependency graph + consumer-before-producer warnings |
+| 3B | Cookie jar auth in `authenticationHandler.js` |
+| 3C | NTLM auth (declared but empty) |
+| 4A | Parse `pm.response.json().field` chains in `customScriptParser.js` (line 287 TODO) |
+| 4B | Regex extractor type in `correlationDetector.js` |
+| 4C | Multi-value correlation (`Ord=All` for arrays) |
+| 5A | Consumer-before-producer warning comments in generated script output |
+| 5B | Bruno workspace settings (`.brurc`) reader for proxy/cert config |

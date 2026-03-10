@@ -1,0 +1,690 @@
+================================================================================
+  VUGEN WEB HTTP/HTML (C) USER GUIDE
+  Postman / Bruno → VuGen Web HTTP/HTML Script Converter
+================================================================================
+
+  Protocol:   VuGen Web HTTP/HTML — classic LoadRunner C-based scripts
+  Output:     Action.c, vuser_init.c, vuser_end.c, globals.h,
+              [ScriptName].usr, default.cfg, default.usp,
+              ParameterFile.prm, collection_data.dat,
+              ScriptUploadMetadata.xml
+              (+ data/*.b64 or data/*.dat for large base64 bodies)
+  CLI flag:   --protocol web-http  (REQUIRED)
+  Web UI:     Protocol = "Web HTTP/HTML (C)"
+
+  FOR DEVWEB (JAVASCRIPT) OUTPUT: See USAGE-GUIDE-DEVWEB.txt
+  COMBINED REFERENCE:             See USAGE-GUIDE.txt
+
+================================================================================
+  SECTION 1 — WHAT GETS GENERATED
+================================================================================
+
+  Every VuGen Web HTTP/HTML conversion produces 10 required files:
+
+  C SOURCE FILES (for VuGen script editor):
+    Action.c         — All requests (web_url, web_custom_request, correlations,
+                       transactions, think time, headers)
+    vuser_init.c     — One-time init per Vuser (auth token fetch goes here)
+    vuser_end.c      — Cleanup / logout per Vuser
+    globals.h        — Standard #include block (lrun.h, web_api.h, etc.)
+
+  VUGEN CONFIGURATION FILES (required for VuGen to load and replay):
+    [ScriptName].usr         — VuGen metadata INI (protocol, actions, params)
+    default.cfg              — Runtime settings INI (9 sections, 163 lines — complete VuGen 26.1 canonical config)
+    default.usp              — Run logic profile INI (MercIniTree format)
+    ParameterFile.prm        — Parameter definitions INI (NOT XML!)
+    collection_data.dat      — Parameter values CSV (header + data rows)
+    ScriptUploadMetadata.xml — LRE upload manifest
+
+  OPTIONAL (generated when large bodies detected, >500 chars):
+    data/[RequestName]_body.b64   — Extracted pure base64 body
+    data/[RequestName]_body.dat   — JSON body with embedded base64 fields
+
+  STRUCTURE OF Action.c:
+    Action()
+    {
+        web_set_sockets_option("SSL_VERSION", "AUTO");   // ALWAYS first line
+
+        lr_start_transaction("T01_FolderName");
+
+        web_reg_save_param_json("_accessToken",          // BEFORE producer request
+            "QueryString=$.access_token", "Ord=1", LAST);
+
+        web_add_header("Content-Type", "application/json");
+        web_custom_request("Login",
+            "URL={baseUrl}/auth/login", "Method=POST", "Resource=0",
+            "RecContentType=application/json", "Referer=", "Snapshot=t1.inf", "Mode=HTML",
+            "EncType=application/json",
+            "Body={\"username\":\"{username}\",\"password\":\"{password}\"}",
+            LAST);
+        lr_output_message("Login - completed");
+
+        lr_end_transaction("T01_FolderName", LR_AUTO);
+        lr_think_time(1);
+
+        return 0;
+    }
+
+================================================================================
+  SECTION 2 — PREREQUISITES
+================================================================================
+
+  YOU NEED:
+  1. An AI tool (GitLab Duo, GitHub Copilot, Claude, ChatGPT, or any AI agent)
+  2. Your collection file in ONE of these formats:
+       - Postman export: Collection v2.1 (.json)
+       - Bruno JSON:     collection.json  (items[] array, no schema URL)
+       - Bruno YAML:     opencollection.yml  or  single-request.yml
+       - Bruno folder:   Drag the entire /collection folder
+       - Single .bru:    One Bruno request file
+  3. (Optional) A Postman environment file (.json) for variable values
+  4. VuGen 26.1 to open, review, and replay the generated script
+
+  IMPORTANT: Always use --protocol web-http flag (or select "Web HTTP/HTML (C)"
+  in the web UI). Without this flag, the converter produces DevWeb JavaScript.
+
+  SUPPORTED INPUT FORMATS:
+  ┌─────────────────────┬───────────────────────────────────┐
+  │ Format              │ How to get it                     │
+  ├─────────────────────┼───────────────────────────────────┤
+  │ Postman v2.1 JSON   │ Export → Collection v2.1          │
+  │ Bruno JSON          │ Export → JSON (from Bruno app)    │
+  │ Bruno YAML folder   │ Use the collection folder as-is   │
+  │ Single YAML .yml    │ Any Bruno .yml request file       │
+  │ Single .bru file    │ Any Bruno .bru request file       │
+  └─────────────────────┴───────────────────────────────────┘
+
+================================================================================
+  SECTION 3 — WHICH PROMPT FILES TO UPLOAD
+================================================================================
+
+  FILE 06 (mandatory files) and FILE 10 (Action.c rules) are ALWAYS required.
+  Add more files based on collection complexity:
+
+  ┌─────────────────────────────────────────────┬────────────────────────────┐
+  │ Your Collection Has...                      │ Upload These Files         │
+  ├─────────────────────────────────────────────┼────────────────────────────┤
+  │ Simple requests, no auth                    │ 06 + 07 + 10               │
+  │ With dynamic tokens / correlations          │ 04 + 06 + 07 + 10          │
+  │ With OAuth2, Bearer, Basic, or API key auth │ 06 + 07 + 10 + 11          │
+  │ Auth + correlations                         │ 04 + 06 + 07 + 10 + 11     │
+  │ Full complex collection                     │ 04+06+07+08+10+11          │
+  │ Bruno YAML or multi-folder collection       │ Add 08 to any of the above │
+  │ With JWT auth (jsrsasign)                   │ 06 + 07 + 10 + 11 + collection │
+  └─────────────────────────────────────────────┴────────────────────────────┘
+
+  FILE DESCRIPTIONS:
+    04-CORRELATION-EXTRACTOR.txt      2-pass correlation detection algorithm
+    06-MANDATORY-FILES.txt            Exact templates for ALL 10 VuGen files
+    07-PARAMETERS-YML-RULES.txt       Variable classification (CRITICAL)
+    08-COLLECTION-PARSING-RULES.txt   Multi-format input parsing rules
+    10-WEB-HTTP-ACTION-GENERATOR.txt  C code rules (Action.c, vuser_init.c)
+    11-WEB-HTTP-AUTH-HANDLER.txt      OAuth2, Bearer, Basic, API key in C
+
+  NOTE: File 01-MASTER-PROMPT.txt is optional for Web HTTP/HTML. It contains
+  useful correlation and variable classification rules but is DevWeb-focused.
+  For pure VuGen output, files 06 + 07 + 10 + 11 are sufficient and more focused.
+
+  FILES YOU NEVER NEED FOR VUGEN WEB HTTP/HTML:
+    01-MASTER-PROMPT.txt alone        (DevWeb rules, use only for correlation section)
+    02-MAIN-JS-GENERATOR.txt          (DevWeb main.js rules)
+    03-AUTHENTICATION-HANDLER.txt     (DevWeb auth, use 11 instead)
+    05-SCENARIO-YML-GENERATOR.txt     (DevWeb scenario.yml)
+    09-CUSTOM-SCRIPT-CONVERTER.txt    (DevWeb JS script conversion)
+    USAGE-GUIDE-DEVWEB.txt            (DevWeb user guide)
+
+================================================================================
+  SECTION 4 — COPY-PASTE AI CHAT TEMPLATES
+================================================================================
+
+  HOW TO USE: Upload the prompt file(s) listed, then upload your collection
+  file, then paste the matching template below. Replace [BRACKETED] values.
+
+--------------------------------------------------------------------------------
+  TEMPLATE G — Simple VuGen script, no auth
+--------------------------------------------------------------------------------
+
+  Upload: 06-MANDATORY-FILES.txt + 07-PARAMETERS-YML-RULES.txt +
+          10-WEB-HTTP-ACTION-GENERATOR.txt + your collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my collection.
+
+  Please convert this collection to a VuGen Web HTTP/HTML (C) script
+  following ALL rules in the uploaded prompt files.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Requests: approximately [N] requests
+    - Base URL variable: [baseUrl / url / apiUrl]
+    - No authentication needed
+
+  Generate ALL 10 required output files:
+    1. Action.c          — all requests with lr_start/end_transaction, correlations
+                           BEFORE producing requests, web_add_header before each request
+    2. vuser_init.c      — lr_whoami, lr_output_message, return 0
+    3. vuser_end.c       — lr_whoami, lr_output_message, return 0
+    4. globals.h         — standard #include lrun.h, web_api.h, lrw_custom_body.h
+    5. [ScriptName].usr  — complete VuGen INI metadata with all required sections
+    6. default.cfg       — runtime settings INI
+    7. default.usp       — run logic profile (complete MercIniTree hierarchy)
+    8. ParameterFile.prm — VuGen INI format (NOT XML!) with [parameter:name] sections
+    9. collection_data.dat — CSV with header row + data row
+   10. ScriptUploadMetadata.xml — LRE upload manifest
+
+  CRITICAL RULES:
+    - Action.c MUST start with: web_set_sockets_option("SSL_VERSION", "AUTO");
+    - Variable syntax: {varName} single braces (NOT {{varName}} double braces)
+    - web_reg_save_param_* MUST appear BEFORE the request that produces the value
+    - web_add_header applies ONLY to the NEXT request — repeat before every request
+    - ParameterFile.prm uses INI [parameter:name] sections, GenerateNewVal="Once"
+      for config and GenerateNewVal="EachIteration" for credentials
+    - lr_end_transaction uses LR_AUTO (not LR_PASS, not LR_FAIL)
+    - All logging via lr_output_message() (NOT lr_log_message)
+    - Use lr_think_time(1) between transactions
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE H — VuGen script with OAuth2 authentication
+--------------------------------------------------------------------------------
+
+  Upload: 06-MANDATORY-FILES.txt + 07-PARAMETERS-YML-RULES.txt +
+          10-WEB-HTTP-ACTION-GENERATOR.txt + 11-WEB-HTTP-AUTH-HANDLER.txt +
+          your collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my collection.
+
+  Please convert this collection to a VuGen Web HTTP/HTML (C) script
+  with OAuth2 authentication support, following ALL rules in the uploaded files.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Authentication: [OAuth2 client_credentials / OAuth2 password grant / Bearer]
+    - Token endpoint: [https://auth.example.com/oauth2/token]
+    - Grant type: [client_credentials / password]
+    - Client ID param: [clientId]
+    - Client Secret param: [clientSecret]
+    - Token field in response: [$.access_token / $.token]
+    - Token used as: [Authorization: Bearer {_accessToken}]
+
+  Authentication requirements for VuGen C:
+    - Token fetch goes in vuser_init.c (runs ONCE per Vuser, before Action)
+    - In vuser_init.c:
+        * web_reg_save_param_json("_accessToken","QueryString=$.access_token","Ord=1",LAST)
+          MUST come BEFORE web_custom_request
+        * After token fetch: validate with strcmp(lr_eval_string("{_accessToken}"),"")
+        * If empty: lr_error_message + return -1  (aborts this Vuser)
+    - {_accessToken} uses _ prefix (VuGen convention for correlated values)
+    - In Action.c: web_add_header("Authorization","Bearer {_accessToken}") BEFORE
+      EVERY request that needs it (web_add_header scope = next request only!)
+    - clientId and clientSecret → ParameterFile.prm with GenerateNewVal="Once"
+    - username/password (if password grant) → GenerateNewVal="EachIteration"
+
+  Generate ALL 10 required output files. vuser_init.c must contain the active
+  (uncommented) token fetch code, not commented-out example code.
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE I — VuGen script with dynamic correlations
+--------------------------------------------------------------------------------
+
+  Upload: 04-CORRELATION-EXTRACTOR.txt + 06-MANDATORY-FILES.txt +
+          07-PARAMETERS-YML-RULES.txt + 10-WEB-HTTP-ACTION-GENERATOR.txt +
+          your collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my collection.
+
+  Please convert this collection to a VuGen Web HTTP/HTML (C) script
+  with FULL correlation support, following ALL rules in the uploaded files.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Known dynamic values: [list any, e.g., orderId from POST /orders, sessionId]
+    - Test scripts present: [yes/no — if yes, describe pm.*.set() patterns]
+
+  Correlation requirements for VuGen C (CRITICAL — apply BEFORE writing code):
+    - Run the 2-pass correlation algorithm first:
+      PASS 1: Identify what each request PRODUCES
+        * Check test scripts for pm.*.set(), context.set() calls
+        * Check URL patterns: /login, /auth, /token → produces token; /create → produces ID
+      PASS 2: Identify what each request CONSUMES
+        * Check URL, headers, body for {variable} references
+
+    - For each correlation, choose the extractor type:
+        JSON response field:  web_reg_save_param_json("_name","QueryString=$.field","Ord=1",LAST)
+        Boundary extraction:  web_reg_save_param("_name","LB=leftBound","RB=rightBound","Ord=1",LAST)
+        Regex extraction:     web_reg_save_param_regexp("_name","RegExp=pattern","Ord=1",LAST)
+
+    - ALL web_reg_save_param_* calls MUST appear IMMEDIATELY BEFORE the request
+      that produces the value (not before the request that consumes it)
+    - Correlated variable names use _ prefix: _accessToken, _userId, _orderId
+    - Correlated variables are NOT in ParameterFile.prm (VuGen populates them
+      automatically from web_reg_save_param_* at runtime)
+
+  Generate ALL 10 required output files. Verify in Action.c that every
+  web_reg_save_param_* call comes before its producing web_custom_request.
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE J — Multi-script mode (one script per top-level folder)
+--------------------------------------------------------------------------------
+
+  Upload: 06-MANDATORY-FILES.txt + 07-PARAMETERS-YML-RULES.txt +
+          10-WEB-HTTP-ACTION-GENERATOR.txt + your collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my collection.
+
+  Please convert this collection to VuGen Web HTTP/HTML (C) scripts
+  using MULTI-SCRIPT MODE: one complete script per top-level folder.
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Top-level folders: [list them, e.g., Auth, Products, Orders, Users]
+    - Cross-folder dependencies: [e.g., "Auth script produces token used by Products"]
+
+  Multi-mode rules for VuGen C:
+    - Generate one complete script per top-level folder
+    - Each script has its own Action.c, vuser_init.c, vuser_end.c, globals.h,
+      [ScriptName_Folder].usr, default.cfg, default.usp, ParameterFile.prm,
+      collection_data.dat, ScriptUploadMetadata.xml
+    - Cross-folder token dependencies: add {_accessToken} as a parameter in
+      ParameterFile.prm of the consuming script with GenerateNewVal="Once",
+      instructing the tester to pre-populate from the Auth script output
+    - Script names: [CollectionName]_[FolderName] (sanitized, underscores)
+
+  Generate all scripts. List each script's output files separately.
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE K — Postman collection with complex/large request bodies
+--------------------------------------------------------------------------------
+
+  Upload: 06-MANDATORY-FILES.txt + 07-PARAMETERS-YML-RULES.txt +
+          10-WEB-HTTP-ACTION-GENERATOR.txt + your collection file
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have uploaded the prompt files and my collection.
+
+  Please convert this collection to a VuGen Web HTTP/HTML (C) script.
+  The collection contains large request bodies (possibly base64-encoded).
+
+  Collection details:
+    - Name: [Your Collection Name]
+    - Requests with large bodies: [list the request names if known]
+    - Body type: [raw base64 / JSON with embedded base64 fields / large JSON]
+
+  Large body handling rules:
+    - Bodies > 500 characters: extract to data/ subfolder
+    - Pure base64 body → data/[RequestName]_body.b64
+      In Action.c use: "BodyFilePath=data/[RequestName]_body.b64"
+    - JSON with embedded base64 field → data/[RequestName]_body.dat
+      (entire JSON body including {varName} substitution references)
+      In Action.c use: "BodyFilePath=data/[RequestName]_body.dat"
+    - VuGen performs {param} substitution inside BodyFilePath files at runtime
+    - Register data files in [ExtraFiles] in [ScriptName].usr AND in
+      <GeneralFiles> in ScriptUploadMetadata.xml
+
+  Generate ALL 10 required output files plus any data/ folder files needed.
+  ─────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+  TEMPLATE L — Fix or regenerate a specific VuGen file
+--------------------------------------------------------------------------------
+
+  Upload: relevant prompt files (06, 07, 10, 11 as needed)
+
+  Paste this message:
+  ─────────────────────────────────────────────────────────────────────────────
+  I have a previously generated VuGen Web HTTP/HTML script that needs a fix.
+
+  PROBLEM:
+    [Describe the exact problem, e.g.:
+     "Action.c has web_reg_save_param_json AFTER the web_custom_request"
+     "ParameterFile.prm is in XML format instead of INI [parameter:name] sections"
+     "vuser_init.c uses lr_get_vuser_id() which causes Unresolved symbol error"
+     "default.usp is missing the MercIniTree hierarchy sections"
+     "web_add_header for Authorization is only set once before the first request"]
+
+  Context:
+    - VuGen version: 26.1
+    - Affected file: [Action.c / vuser_init.c / ParameterFile.prm / default.usp]
+    - Error message from VuGen: [paste the exact error if available]
+
+  Please regenerate ONLY the affected file(s) with the correct content.
+  Follow ALL rules in the uploaded prompt files.
+  ─────────────────────────────────────────────────────────────────────────────
+
+================================================================================
+  SECTION 5 — VUGEN C PARAMETER QUICK REFERENCE
+================================================================================
+
+  VARIABLE SYNTAX IN C CODE:
+    {varName}          — single braces (NOT double braces {{varName}})
+    {baseUrl}          — static config parameter
+    {username}         — test data parameter (changes per iteration)
+    {_accessToken}     — correlated value (populated by web_reg_save_param_json)
+
+  SNAPSHOT PARAMETER (REQUIRED IN EVERY REQUEST):
+    "Snapshot=t1.inf"  — must appear BEFORE "Mode=HTML" in every web_url()
+                         and web_custom_request() call
+    The counter is sequential across the ENTIRE Action.c script:
+      First request  → "Snapshot=t1.inf"
+      Second request → "Snapshot=t2.inf"
+      Third request  → "Snapshot=t3.inf"  ...and so on
+    VuGen uses these .inf files to display response snapshots in its UI.
+    Omitting Snapshot= is a common mistake — always include it.
+
+  VARIABLE CLASSIFICATION (applied identically to DevWeb, different output):
+  ┌────────────┬────────────────────────────────┬───────────────────────────┐
+  │ Type       │ In ParameterFile.prm           │ Examples                  │
+  ├────────────┼────────────────────────────────┼───────────────────────────┤
+  │ CORRELATED │ NOT in .prm (auto-stored by LR)│ _accessToken, _userId,    │
+  │ (dynamic)  │ web_reg_save_param_* handles it│ _orderId, _csrfToken      │
+  ├────────────┼────────────────────────────────┼───────────────────────────┤
+  │ CONFIG     │ YES, GenerateNewVal="Once"      │ baseUrl, clientId,        │
+  │            │ (same value all iterations)     │ apiKey, version           │
+  ├────────────┼────────────────────────────────┼───────────────────────────┤
+  │ TEST DATA  │ YES, GenerateNewVal="EachIteration"│ username, password,   │
+  │            │ (new value each iteration)      │ email, accountId          │
+  └────────────┴────────────────────────────────┴───────────────────────────┘
+
+  PARAMETERFILE.PRM FORMAT — INI (NOT XML):
+    [parameter:baseUrl]
+    Delimiter=","
+    GenerateNewVal="Once"
+    ColumnName="baseUrl"
+    OutOfRangePolicy="CyclicParameter"
+    SelectNextRow="Sequential"
+    StartRow="2"
+    Table="collection_data.dat"
+    TableLocation=""
+    Type="File"
+    auto_allocate_block_size="1"
+    value_for_each_vuser="1"
+
+    [parameter:username]
+    GenerateNewVal="EachIteration"
+    ColumnName="username"
+    ...same other fields...
+
+  COLLECTION_DATA.DAT FORMAT (CSV):
+    First row = header (column names, must match ColumnName in .prm)
+    Second row = values
+    Example:
+      baseUrl,username,password
+      https://api.example.com,testuser,Pass@123
+
+================================================================================
+  SECTION 6 — LARGE BASE64 BODY HANDLING
+================================================================================
+
+  VuGen cannot handle request Body= strings longer than ~4000 characters
+  reliably. Bodies > 500 characters (especially base64-encoded content) are
+  automatically extracted to files and referenced via BodyFilePath=.
+
+  HOW IT WORKS:
+
+  Case 1 — Entire raw body is base64:
+    Generated Action.c uses:
+      web_custom_request("RequestName",
+          "URL={baseUrl}/upload",
+          "Method=POST",
+          "Resource=0",
+          "RecContentType=application/json",
+          "Referer=",
+          "Snapshot=tN.inf",
+          "Mode=HTML",
+          "EncType=application/octet-stream",
+          "BodyFilePath=data/RequestName_body.b64",
+          LAST);
+    File: data/RequestName_body.b64 (contains the raw base64 string)
+
+  Case 2 — JSON body with embedded base64 field:
+    Generated Action.c uses:
+      web_custom_request("RequestName",
+          "URL={baseUrl}/create",
+          "Method=POST",
+          "Resource=0",
+          "RecContentType=application/json",
+          "Referer=",
+          "Snapshot=tN.inf",
+          "Mode=HTML",
+          "EncType=application/json",
+          "BodyFilePath=data/RequestName_body.dat",
+          LAST);
+    File: data/RequestName_body.dat (contains the complete JSON with
+          {varName} LR parameter references preserved — VuGen substitutes
+          these at runtime before sending)
+
+  REGISTRATION REQUIREMENTS:
+    Both data files MUST be registered in:
+    1. [ScriptName].usr under [ExtraFiles]:
+         data\RequestName_body.b64=
+    2. ScriptUploadMetadata.xml under <GeneralFiles>:
+         <FileEntry Name="data/RequestName_body.b64" Filter="4" />
+
+  Without registration, VuGen cannot find the files during replay.
+
+================================================================================
+  SECTION 7 — CORRELATION QUICK REFERENCE
+================================================================================
+
+  THREE CORRELATION FUNCTIONS — all MUST appear BEFORE the producing request:
+
+  1. JSON FIELD EXTRACTION (most common — for JSON API responses):
+     web_reg_save_param_json("_accessToken",
+         "QueryString=$.access_token",
+         "Ord=1",
+         LAST);
+
+  2. BOUNDARY EXTRACTION (for HTML responses or non-JSON):
+     web_reg_save_param("_csrfToken",
+         "LB=name=\"_token\" value=\"",
+         "RB=\"",
+         "Ord=1",
+         LAST);
+
+  3. REGEX EXTRACTION (for flexible pattern matching):
+     web_reg_save_param_regexp("_sessionId",
+         "RegExp=sessionId=([a-zA-Z0-9]+)",
+         "Ord=1",
+         LAST);
+
+  GOLDEN RULE: The web_reg_save_param_* call must be placed IMMEDIATELY BEFORE
+  the web_custom_request() that will return the value in its response.
+
+  USAGE: After the producing request, use {_varName} (single braces, _ prefix)
+  anywhere in subsequent requests:
+    web_add_header("Authorization", "Bearer {_accessToken}");
+    "URL={baseUrl}/orders/{_orderId}/items"
+    "Body={\"token\":\"{_csrfToken}\"}"
+
+================================================================================
+  SECTION 8 — VUGEN-SPECIFIC TROUBLESHOOTING
+================================================================================
+
+  ISSUE 1: "Unresolved symbol" error in VuGen replay
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  vuser_init.c(17): Error -- Unresolved symbol : lr_get_vuser_id
+  CAUSE:    lr_get_vuser_id() does not exist in VuGen Web HTTP/HTML
+  FIX:      "Replace lr_get_vuser_id() with lr_whoami(). Correct pattern:
+               int vusr_id, scid;
+               char *vusr_group;
+               lr_whoami(&vusr_id, &vusr_group, &scid);
+               lr_output_message(\"[init] Vuser %d starting\", vusr_id);"
+
+  ISSUE 2: Double braces {{varName}} appear in generated C code
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  Action.c contains "URL={{baseUrl}}/api" — VuGen doesn't substitute
+  CAUSE:    AI kept Postman {{var}} syntax instead of converting to {var}
+  FIX:      "VuGen C uses SINGLE braces. Replace all {{varName}} with {varName}
+             in Action.c, vuser_init.c, and vuser_end.c."
+
+  ISSUE 3: Correlation registration placed AFTER the producing request
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  {_accessToken} is empty in subsequent requests
+  CAUSE:    web_reg_save_param_json comes AFTER web_custom_request("Login",...)
+  FIX:      "Move web_reg_save_param_json("_accessToken",...) to BEFORE the
+             web_custom_request that returns the token. VuGen processes
+             registrations BEFORE making the request — they tell VuGen what to
+             capture from the upcoming response."
+
+  ISSUE 4: web_set_sockets_option missing from Action.c
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  HTTPS requests fail with SSL negotiation errors
+  CAUSE:    Missing the mandatory first line in Action()
+  FIX:      "The FIRST statement inside Action() must ALWAYS be:
+               web_set_sockets_option(\"SSL_VERSION\", \"AUTO\");
+             Add it before any lr_start_transaction() call."
+
+  ISSUE 5: ParameterFile.prm generated in XML format
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  ParameterFile.prm contains <?xml version="1.0"?> <ParamList>...
+  CAUSE:    AI used old XML format — VuGen 24.1+ requires INI format
+  FIX:      "Regenerate ParameterFile.prm in VuGen INI format.
+             CORRECT format:
+               [parameter:baseUrl]
+               GenerateNewVal=\"Once\"
+               ColumnName=\"baseUrl\"
+               Delimiter=\",\"
+               OutOfRangePolicy=\"CyclicParameter\"
+               SelectNextRow=\"Sequential\"
+               StartRow=\"2\"
+               Table=\"collection_data.dat\"
+               TableLocation=\"\"
+               Type=\"File\"
+               auto_allocate_block_size=\"1\"
+               value_for_each_vuser=\"1\""
+
+  ISSUE 6: Large base64 body inline in Action.c (>4000 chars)
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  Body= parameter contains a 10KB+ base64 string
+  CAUSE:    AI did not extract to data/ subfolder
+  FIX:      "Extract the base64 content to: data/[RequestName]_body.b64
+             Replace in Action.c:
+               \"BodyFilePath=data/[RequestName]_body.b64\"
+             Register in [ScriptName].usr under [ExtraFiles]:
+               data\\[RequestName]_body.b64=
+             Register in ScriptUploadMetadata.xml:
+               <FileEntry Name=\"data/[RequestName]_body.b64\" Filter=\"4\" />"
+
+  ISSUE 7: Transactions not executing — VuGen skips to return 0
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  Script replays but no transactions execute; Output shows only
+            "Action started" then "Action ended"
+  CAUSE:    default.usp is missing the complete MercIniTree hierarchy
+  FIX:      "Regenerate default.usp. It MUST contain (among other sections):
+               MercIniTreeSectionName= in all root sections
+               MercIniTreeSons= linking parents to child subsections
+               RunLogicActionType= in child sections
+               [RunLogicInitRoot:vuser_init], [RunLogicRunRoot:Action],
+               [RunLogicEndRoot:vuser_end] child subsections
+             Use the exact template from 06-MANDATORY-FILES.txt."
+
+  ISSUE 8: web_add_header not applying to all requests
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  Authorization header is sent with the first request but missing
+            from all subsequent requests
+  CAUSE:    web_add_header applies ONLY to the NEXT single request
+            (unlike DevWeb's persistent defaults.headers)
+  FIX:      "Emit web_add_header(\"Authorization\",\"Bearer {_accessToken}\")
+             BEFORE EVERY request that needs the auth header.
+             There is NO persistent default header mechanism in VuGen C.
+             Wrong:  set header once, then make 5 requests (only 1st gets it)
+             Correct: set header immediately before each of the 5 requests."
+
+  ISSUE 9: Snapshot= missing from web_url / web_custom_request
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  VuGen cannot show response snapshots in the Output window / Tree view;
+            script may fail validation; response viewer shows no data
+  CAUSE:    AI omitted "Snapshot=tN.inf" from web_url() / web_custom_request() calls
+  FIX:      "Add \"Snapshot=tN.inf\" immediately BEFORE \"Mode=HTML\" in every request.
+             The N counter starts at 1 and increments for every request in Action.c:
+               web_url(\"Get_Products\",
+                   \"URL={baseUrl}/products\",
+                   \"Resource=0\",
+                   \"RecContentType=application/json\",
+                   \"Referer=\",
+                   \"Snapshot=t1.inf\",
+                   \"Mode=HTML\",
+                   LAST);
+             Requests in vuser_init.c also need their own snapshot counter (t1, t2...
+             independent of Action.c counter — each action file has its own sequence)."
+
+  ISSUE 10: JWT token generation failing in VuGen C script
+  ─────────────────────────────────────────────────────────────────────────────
+  SYMPTOM:  VuGen cannot execute JWT generation; {jwtToken} is empty
+  CAUSE:    VuGen C cannot run JavaScript natively — pre-request JWT scripts
+            are not executable in the C runtime
+  FIX:      "Use the generate_jwt.js pre-generator (in output folder):
+               1. Edit generate_jwt.js: fill in algorithm, keyPath, payload
+               2. Run: node generate_jwt.js
+               3. Copy the output token to collection_data.dat → jwtToken column
+               4. Ensure ParameterFile.prm has jwtToken with GenerateNewVal='Once'
+               5. In Action.c: web_add_header('Authorization', 'Bearer {jwtToken}')
+             For tests longer than token lifetime: regenerate before each run."
+
+================================================================================
+  SECTION 9 — FILES YOU NEVER NEED FOR VUGEN WEB HTTP/HTML
+================================================================================
+
+  These files are ONLY for DevWeb (JavaScript) output:
+    02-MAIN-JS-GENERATOR.txt          → DevWeb main.js rules
+    03-AUTHENTICATION-HANDLER.txt     → DevWeb auth patterns (use 11 instead)
+    05-SCENARIO-YML-GENERATOR.txt     → DevWeb scenario.yml (no equivalent in C)
+    09-CUSTOM-SCRIPT-CONVERTER.txt    → DevWeb JS script conversion
+    USAGE-GUIDE-DEVWEB.txt            → DevWeb user guide
+
+  These DevWeb concepts have NO equivalent in VuGen Web HTTP/HTML:
+    main.js, scenario.yml, rts.yml, tsconfig.json, parameters.yml (.yml)
+    collection_data.csv (.csv extension — VuGen uses .dat)
+    DevWebSdk.d.ts, load.WebRequest, load.global, load.params,
+    load.Transaction, load.sleep, load.JsonPathExtractor, load.BoundaryExtractor
+
+================================================================================
+  QUICK COMMAND REFERENCE
+================================================================================
+
+  CLI (code-based converter):
+    Basic:
+      node src/cli.js convert -i collection.json --protocol web-http -o ./output/
+
+    With environment file:
+      node src/cli.js convert -i collection.json --protocol web-http \
+        -e environment.json -o ./output/
+
+    Multi-script mode (one script per top-level folder):
+      node src/cli.js convert -i collection.json --protocol web-http \
+        -m multi -o ./output/
+
+    Bruno YAML folder:
+      node src/cli.js convert -i ./collection-folder/ --protocol web-http -o ./output/
+
+  Web UI:
+      node src/web/server.js   (open http://localhost:3000)
+      Protocol radio: select "Web HTTP/HTML (C)"
+
+  Analyze without generating:
+      node src/cli.js analyze -i collection.json
+
+  AFTER GENERATION — OPEN IN VUGEN:
+    1. Open VuGen 26.1
+    2. File → Open → Script
+    3. Navigate to output folder
+    4. Select [ScriptName].usr
+    5. VuGen loads all .c files and config automatically
+    6. Replay to verify
+
+================================================================================
+  END OF VUGEN WEB HTTP/HTML USER GUIDE
+  For DevWeb (JavaScript): See USAGE-GUIDE-DEVWEB.txt
+  Full combined reference: See USAGE-GUIDE.txt
+================================================================================

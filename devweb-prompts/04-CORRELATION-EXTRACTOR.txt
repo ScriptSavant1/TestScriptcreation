@@ -1,0 +1,674 @@
+================================================================================
+  PROMPT 04: CORRELATION DETECTION AND DYNAMIC VALUE EXTRACTION
+  (ADVANCED - USE FOR COMPLEX COLLECTIONS WITH CHAINED REQUESTS)
+================================================================================
+
+This prompt teaches the AI how to detect, classify, and implement correlations
+(dynamic values that flow between API requests) in DevWeb scripts.
+
+================================================================================
+  WHAT IS CORRELATION?
+================================================================================
+
+Correlation = A value PRODUCED by one request's response that is
+              CONSUMED by a later request's URL, header, body, or script.
+
+Examples:
+  - Login returns access_token --> all later requests use it in Authorization header
+  - POST /orders creates an order --> returns orderId --> GET /orders/{orderId} uses it
+  - GET /page returns CSRF token in HTML --> POST /submit sends it in body
+
+In load testing, these values are DIFFERENT every time. You CANNOT hardcode them.
+You MUST extract them from responses and pass them to subsequent requests.
+
+================================================================================
+  THE 3 TYPES OF EVIDENCE FOR CORRELATIONS
+================================================================================
+
+TYPE 1: EXPLICIT (from Postman/Bruno test scripts)
+  Confidence: 95%+ (the script tells us exactly what to extract and from where)
+
+  Example Postman test script:
+    const jsonData = pm.response.json();
+    pm.environment.set("authToken", jsonData.data.access_token);
+    pm.environment.set("userId", jsonData.data.user.id);
+
+  What we know for certain:
+    - Variable "authToken" is produced by THIS request
+    - JSON path is: $.data.access_token
+    - Variable "userId" is produced by THIS request
+    - JSON path is: $.data.user.id
+
+  Example Bruno post-response vars:
+    vars.res: [
+      { "name": "authToken", "value": "res.body.data.access_token" },
+      { "name": "userId", "value": "res.body.data.user.id" }
+    ]
+
+TYPE 2: CONSUMPTION (from {{variable}} usage in later requests)
+  Confidence: 90% (we know the variable is needed but may need to guess producer)
+
+  Example: Request 5 has this header:
+    "Authorization": "Bearer {{authToken}}"
+
+  What we know:
+    - "authToken" is CONSUMED by Request 5
+    - Some EARLIER request must produce it
+    - If no script sets it, we must INFER the producer
+
+TYPE 3: INFERRED (no scripts, but URL patterns suggest production)
+  Confidence: 60-70% (educated guess based on API patterns)
+
+  Example: Request 1 is POST /auth/login with no test script
+           Request 2 uses {{token}} in Authorization header
+
+  What we infer:
+    - POST /auth/login likely returns a token in its response
+    - The token is probably at $.access_token or $.token
+    - We should extract it, but mark with // VERIFY comment
+
+================================================================================
+  COMPLETE 2-PASS CORRELATION ALGORITHM
+================================================================================
+
+Follow this algorithm EXACTLY for every collection.
+
+============================================
+  PASS 1: FIND ALL PRODUCERS
+============================================
+
+For each request, in collection order (request 1, 2, 3, ...):
+
+STEP 1A: SCAN TEST SCRIPTS FOR pm.environment.set / bru.setVar
+
+  Look in event[listen==="test"].script.exec[] for these patterns:
+
+  PATTERN: pm.environment.set("VARNAME", EXPRESSION)
+  PATTERN: pm.globals.set("VARNAME", EXPRESSION)
+  PATTERN: pm.collectionVariables.set("VARNAME", EXPRESSION)
+  PATTERN: bru.setVar("VARNAME", EXPRESSION)
+  PATTERN: bru.setEnvVar("VARNAME", EXPRESSION)
+
+  For each match, extract:
+    - variableName = VARNAME
+    - producerRequest = current request name/index
+    - jsonPath = convert EXPRESSION to JSON path (see conversion table below)
+
+  EXPRESSION TO JSON PATH CONVERSION:
+
+    EXPRESSION                               JSON PATH
+    -------------------------------------------------------
+    pm.response.json().token                 $.token
+    pm.response.json().access_token          $.access_token
+    pm.response.json().data.id               $.data.id
+    pm.response.json().data[0].id            $.data[0].id
+    pm.response.json().user.profile.name     $.user.profile.name
+    pm.response.json()["hyphen-key"]         $.["hyphen-key"]
+
+    // When intermediate variable is used:
+    const jsonData = pm.response.json();
+    jsonData.access_token                    $.access_token
+    jsonData.data.user.id                    $.data.user.id
+
+    // When response variable is used:
+    const response = pm.response.json();
+    response.token                           $.token
+
+    // When destructured:
+    const { token, userId } = pm.response.json();
+    token                                    $.token
+    userId                                   $.userId
+
+    // Bruno format:
+    res.body.token                           $.token
+    res.body.data.id                         $.data.id
+
+  CHOOSING EXTRACTOR TYPE:
+
+    If response is JSON (most API collections):
+      --> new load.JsonPathExtractor("varName", "$.path")
+
+    If response is XML/SOAP:
+      --> new load.BoundaryExtractor("varName", "<tagName>", "</tagName>")
+
+    If value is in response header (Set-Cookie, Location, etc.):
+      --> new load.BoundaryExtractor("varName", {
+              leftBoundary: "headerPrefix",
+              rightBoundary: "delimiter",
+              scope: "headers"
+          })
+
+    If value needs regex extraction:
+      --> new load.RegexpExtractor("varName", "pattern_with_(capture_group)")
+
+
+STEP 1B: SCAN BRUNO RESPONSE VARS
+
+  Look in request.vars.res[]:
+    { "name": "varName", "value": "res.body.path.to.field", "enabled": true }
+
+  Convert:
+    res.body.token         --> $.token
+    res.body.data.id       --> $.data.id
+    res.body.items[0].name --> $.items[0].name
+
+
+STEP 1C: SCAN FOR HEADER-BASED PRODUCTION
+
+  Look in test scripts for header extraction:
+    pm.response.headers.get("X-Auth-Token")
+    pm.response.headers.get("Location")
+
+  These require BoundaryExtractor with scope: "headers":
+    new load.BoundaryExtractor("varName", {
+        leftBoundary: "X-Auth-Token: ",
+        rightBoundary: "\r\n",
+        scope: "headers"
+    })
+
+
+STEP 1D: SCAN FOR COOKIE-BASED PRODUCTION
+
+  Look for cookie extraction in scripts:
+    pm.cookies.get("JSESSIONID")
+    pm.cookies.get("XSRF-TOKEN")
+
+  Convert to:
+    new load.BoundaryExtractor("sessionCookie", {
+        leftBoundary: "JSESSIONID=",
+        rightBoundary: ";",
+        scope: "headers"
+    })
+
+
+STEP 1E: RECORD RESULTS
+
+  Build a PRODUCER TABLE:
+
+  +----------+-------------------+-----------+-----------------------------------+
+  | Variable | Producer Request  | Evidence  | Extractor Code                    |
+  +----------+-------------------+-----------+-----------------------------------+
+  | token    | #1 POST /login    | EXPLICIT  | JsonPath("token", "$.access_tkn") |
+  | userId   | #1 POST /login    | EXPLICIT  | JsonPath("userId", "$.user.id")   |
+  | orderId  | #3 POST /orders   | EXPLICIT  | JsonPath("orderId", "$.id")       |
+  +----------+-------------------+-----------+-----------------------------------+
+
+
+============================================
+  PASS 2: FIND ALL CONSUMERS
+============================================
+
+For each request, scan ALL of these locations for {{variableName}} patterns:
+
+SCAN LOCATION 1: URL (request.url.raw)
+
+  "{{baseUrl}}/api/users/{{userId}}/orders/{{orderId}}"
+
+  Extract all {{...}} tokens:
+    baseUrl  --> Check: is it in collection/environment variables? YES = STATIC
+    userId   --> Check: is it in producer table? YES = CORRELATION
+    orderId  --> Check: is it in producer table? YES = CORRELATION
+
+  DevWeb URL construction:
+    "https://api.example.com/api/users/" + load.global.userId + "/orders/" + load.global.orderId
+
+
+SCAN LOCATION 2: HEADERS (request.header[])
+
+  { "key": "Authorization", "value": "Bearer {{token}}" }
+  { "key": "X-CSRF-Token", "value": "{{csrfToken}}" }
+
+  Extract: token, csrfToken --> CORRELATION
+
+  DevWeb header construction:
+    "Authorization": "Bearer " + load.global.token,
+    "X-CSRF-Token": load.global.csrfToken
+
+
+SCAN LOCATION 3: QUERY PARAMETERS (request.url.query[])
+
+  { "key": "session_id", "value": "{{sessionId}}" }
+  { "key": "page", "value": "1" }
+
+  Extract: sessionId --> CORRELATION
+  Note: "page" with value "1" is STATIC (hardcode)
+
+  DevWeb queryString:
+    queryString: {
+        "session_id": load.global.sessionId,
+        "page": "1"
+    }
+
+
+SCAN LOCATION 4: REQUEST BODY (request.body.raw or request.body.urlencoded[])
+
+  For raw JSON:
+    "{\"userId\": \"{{userId}}\", \"productId\": \"{{productId}}\", \"quantity\": 1}"
+
+  Extract: userId, productId --> CORRELATION
+
+  DevWeb body:
+    body: {
+        "userId": load.global.userId,
+        "productId": load.global.productId,
+        "quantity": 1
+    }
+
+  For XML/SOAP body:
+    "<loginUser>{{username}}</loginUser>"
+
+  DevWeb body (template literal):
+    body: `...<loginUser>${load.global.username}</loginUser>...`
+
+  For URL-encoded:
+    { "key": "token", "value": "{{refreshToken}}" }
+
+  DevWeb body:
+    body: { "token": load.global.refreshToken }
+
+
+SCAN LOCATION 5: PRE-REQUEST SCRIPTS
+
+  const token = pm.environment.get("authToken");
+  const userId = pm.globals.get("userId");
+  const data = bru.getVar("responseData");
+
+  Extract: authToken, userId, responseData --> CORRELATION
+
+
+SCAN LOCATION 6: AUTH OBJECT
+
+  request.auth.bearer[]: { "key": "token", "value": "{{accessToken}}" }
+  request.auth.apikey[]: { "key": "value", "value": "{{apiKey}}" }
+
+  Extract: accessToken, apiKey --> Check if STATIC or CORRELATION
+
+
+============================================
+  PASS 3: MATCH PRODUCERS TO CONSUMERS + HANDLE GAPS
+============================================
+
+Now cross-reference:
+
+FOR EACH CONSUMED VARIABLE:
+
+  Case 1: Found in PRODUCER TABLE
+    --> Confirmed correlation. Generate extractor + load.global.
+
+  Case 2: Found in collection.variable[] or environment.values[]
+    --> STATIC. Hardcode the value.
+
+  Case 3: NOT in producer table AND NOT in variables
+    --> UNRESOLVED. Must decide:
+
+    Sub-case 3a: Variable name suggests dynamic value AND an earlier request
+    is a likely producer (login, create, token endpoint):
+      --> INFER the correlation:
+          - Add an extractor to the likely producer with best-guess JSON path
+          - Mark with: // VERIFY: Confirm JSON path matches actual response
+          - Store in load.global
+
+    Sub-case 3b: Variable name suggests test data (username, password,
+    email, accountNum, testData):
+      --> Ask: should this be CSV parameterized or hardcoded?
+          Default to hardcoded with a clear // TODO comment.
+
+    Sub-case 3c: Cannot determine source:
+      --> Add: // TODO: Replace {{varName}} with actual value
+          Use a placeholder constant at the top of the script:
+          const PLACEHOLDER_varName = "REPLACE_ME";
+
+BUILD FINAL CORRELATION MAP:
+
+  +------------------+------------------+------------------------------+--------------------+--------+
+  | Variable         | Produced By      | Extractor                    | Consumed By        | Status |
+  +------------------+------------------+------------------------------+--------------------+--------+
+  | token            | #1 Login         | JsonPath $.access_token      | #2,#3,#4 (header)  | OK     |
+  | userId           | #1 Login         | JsonPath $.user.id           | #3 (body)          | OK     |
+  | productId        | #2 GetProducts   | JsonPath $.data[0].id        | #3 (body)          | OK     |
+  | orderId          | #3 CreateOrder   | JsonPath $.order.id          | #4 (URL)           | OK     |
+  | refreshToken     | INFERRED #1      | JsonPath $.refresh_token     | #5 (body)          | VERIFY |
+  | apiKey           | STATIC           | "sk_live_abc123" (hardcoded) | #2,#3 (header)     | OK     |
+  | unknownVar       | NOT FOUND        | // TODO                      | #4 (body)          | TODO   |
+  +------------------+------------------+------------------------------+--------------------+--------+
+
+================================================================================
+  INFERENCE RULES (WHEN NO SCRIPTS EXIST)
+================================================================================
+
+When a variable is consumed but NO script explicitly sets it, use these rules
+to INFER which request produces it:
+
+RULE 1: TOKEN VARIABLES
+  Variable names matching: token, access_token, authToken, auth_token,
+  accessToken, bearerToken, jwt, sessionToken, id_token
+
+  Likely producer: The FIRST request in the collection that is:
+    - POST /login, POST /auth, POST /signin, POST /authenticate
+    - POST /oauth/token, POST /token
+    - Any request with "auth" or "login" in its name
+
+  Likely JSON paths (try in order):
+    $.access_token
+    $.token
+    $.data.access_token
+    $.data.token
+    $.result.token
+    $.response.token
+
+RULE 2: USER/SESSION VARIABLES
+  Variable names matching: userId, user_id, sessionId, session_id,
+  accountId, customerId
+
+  Likely producer: Login or user creation request
+  Likely JSON paths:
+    $.user.id
+    $.userId
+    $.data.user.id
+    $.session.id
+    $.data.userId
+    $.id
+
+RULE 3: RESOURCE ID VARIABLES
+  Variable names matching: orderId, productId, itemId, recordId,
+  transactionId, bookingId, any *Id pattern
+
+  Likely producer: The POST request that creates that resource type
+    orderId --> produced by POST /orders
+    productId --> produced by POST /products or GET /products (first item)
+    itemId --> produced by POST /items or GET /items (first item)
+
+  Likely JSON paths:
+    $.id
+    $.data.id
+    $.[resourceName].id
+    $.data.[resourceName].id
+
+RULE 4: CSRF/SECURITY TOKENS
+  Variable names matching: csrf, csrfToken, xsrf, _token, nonce
+
+  Likely producer: The first GET request to the application
+  Likely extraction: BoundaryExtractor or RegexpExtractor
+    new load.BoundaryExtractor("csrfToken", 'name="csrf_token" value="', '"')
+    new load.BoundaryExtractor("csrfToken", 'name="_token" content="', '"')
+
+RULE 5: COOKIE-BASED VALUES
+  Variable names matching: sessionCookie, JSESSIONID, PHPSESSID,
+  LWSSO_COOKIE_KEY, connect.sid
+
+  Likely producer: Login request or first GET request
+  Extraction: BoundaryExtractor with header scope
+    new load.BoundaryExtractor("sessionCookie", {
+        leftBoundary: "JSESSIONID=",
+        rightBoundary: ";",
+        scope: "headers"
+    })
+
+IMPORTANT: ALL inferred correlations MUST be marked with:
+  // VERIFY: JSON path inferred from variable name. Confirm against actual API response.
+
+================================================================================
+  CODE GENERATION: PUTTING IT ALL TOGETHER
+================================================================================
+
+After building the correlation map, generate code like this:
+
+REQUEST THAT PRODUCES CORRELATIONS:
+```javascript
+// Request: Login (PRODUCES: token, userId, refreshToken)
+const loginResponse = new load.WebRequest({
+    id: 1,
+    url: "https://api.example.com/auth/login",
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json"
+    },
+    body: {
+        "email": "user@test.com",
+        "password": "secret123"
+    },
+    returnBody: true,
+    extractors: [
+        new load.JsonPathExtractor("token", "$.access_token"),
+        new load.JsonPathExtractor("userId", "$.user.id"),
+        new load.JsonPathExtractor("refreshToken", "$.refresh_token")  // VERIFY
+    ]
+}).sendSync();
+
+// Store extracted values for use in later requests
+if (loginResponse.status === 200) {
+    load.global.token = loginResponse.extractors.token;
+    load.global.userId = loginResponse.extractors.userId;
+    load.global.refreshToken = loginResponse.extractors.refreshToken;
+    load.log("Login OK - token obtained", load.LogLevel.info);
+} else {
+    load.log("Login FAILED: " + loginResponse.status, load.LogLevel.error);
+    transaction.stop(load.TransactionStatus.Failed);
+    return;
+}
+```
+
+REQUEST THAT CONSUMES CORRELATIONS:
+```javascript
+// Request: Create Order (CONSUMES: token, userId, productId | PRODUCES: orderId)
+const createOrderResponse = new load.WebRequest({
+    id: 4,
+    url: "https://api.example.com/api/orders",
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + load.global.token     // <-- CONSUMES token
+    },
+    body: {
+        "userId": load.global.userId,                       // <-- CONSUMES userId
+        "productId": load.global.productId,                 // <-- CONSUMES productId
+        "quantity": 1
+    },
+    returnBody: true,
+    extractors: [
+        new load.JsonPathExtractor("orderId", "$.order.id") // <-- PRODUCES orderId
+    ]
+}).sendSync();
+
+load.global.orderId = createOrderResponse.extractors.orderId;
+```
+
+REQUEST THAT ONLY CONSUMES:
+```javascript
+// Request: Get Order Details (CONSUMES: token, orderId)
+const orderDetailsResponse = new load.WebRequest({
+    id: 5,
+    url: "https://api.example.com/api/orders/" + load.global.orderId,  // <-- CONSUMES
+    method: "GET",
+    headers: {
+        "Authorization": "Bearer " + load.global.token                  // <-- CONSUMES
+    },
+    returnBody: true
+}).sendSync();
+```
+
+================================================================================
+  COMPLETE END-TO-END EXAMPLE
+================================================================================
+
+Given this Postman collection:
+
+  Request 1: POST /auth/login
+    Body: { "email": "{{email}}", "password": "{{password}}" }
+    Test script:
+      const json = pm.response.json();
+      pm.environment.set("token", json.access_token);
+      pm.environment.set("userId", json.user.id);
+
+  Request 2: GET /products?category=electronics
+    Header: Authorization: Bearer {{token}}
+    Test script:
+      const json = pm.response.json();
+      pm.environment.set("productId", json.data[0].id);
+
+  Request 3: POST /orders
+    Header: Authorization: Bearer {{token}}
+    Body: { "userId": "{{userId}}", "productId": "{{productId}}", "qty": 1 }
+    Test script:
+      pm.environment.set("orderId", pm.response.json().id);
+
+  Request 4: GET /orders/{{orderId}}
+    Header: Authorization: Bearer {{token}}
+    (no test script)
+
+  Collection variables: email=test@example.com, password=secret123
+
+ANALYSIS RESULT:
+
+  Variable Classification:
+    email      = STATIC (collection var: "test@example.com")
+    password   = STATIC (collection var: "secret123")
+    token      = CORRELATION (produced by Req 1, consumed by Req 2,3,4)
+    userId     = CORRELATION (produced by Req 1, consumed by Req 3)
+    productId  = CORRELATION (produced by Req 2, consumed by Req 3)
+    orderId    = CORRELATION (produced by Req 3, consumed by Req 4)
+
+  Correlation Map:
+    token     : Req1 -> JsonPath $.access_token -> Req2,3,4 headers
+    userId    : Req1 -> JsonPath $.user.id -> Req3 body
+    productId : Req2 -> JsonPath $.data[0].id -> Req3 body
+    orderId   : Req3 -> JsonPath $.id -> Req4 URL
+
+GENERATED main.js:
+
+```javascript
+load.initialize("Initialize", async function () {
+    load.log("Init VUser: " + load.config.user.userId, load.LogLevel.info);
+});
+
+load.action("Action", async function () {
+    load.WebRequest.defaults.returnBody = false;
+
+    let t01_Auth = new load.Transaction("01_Authentication");
+    let t02_Browse = new load.Transaction("02_BrowseProducts");
+    let t03_Order = new load.Transaction("03_CreateOrder");
+    let t04_Verify = new load.Transaction("04_VerifyOrder");
+
+    // ---- 01: Authentication ----
+    t01_Auth.start();
+
+    const loginResponse = new load.WebRequest({
+        id: 1,
+        url: "https://api.example.com/auth/login",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: {
+            "email": "test@example.com",       // STATIC: from collection variable
+            "password": "secret123"             // STATIC: from collection variable
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("token", "$.access_token"),
+            new load.JsonPathExtractor("userId", "$.user.id")
+        ]
+    }).sendSync();
+
+    if (loginResponse.status === 200) {
+        load.global.token = loginResponse.extractors.token;
+        load.global.userId = loginResponse.extractors.userId;
+        load.log("Login OK", load.LogLevel.info);
+        t01_Auth.stop(load.TransactionStatus.Passed);
+    } else {
+        load.log("Login FAILED: " + loginResponse.status, load.LogLevel.error);
+        t01_Auth.stop(load.TransactionStatus.Failed);
+        return;
+    }
+
+    load.thinkTime(2);
+
+    // ---- 02: Browse Products ----
+    t02_Browse.start();
+
+    const productsResponse = new load.WebRequest({
+        id: 2,
+        url: "https://api.example.com/products",
+        method: "GET",
+        headers: {
+            "Authorization": "Bearer " + load.global.token
+        },
+        queryString: { "category": "electronics" },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("productId", "$.data[0].id")
+        ]
+    }).sendSync();
+
+    if (productsResponse.status === 200) {
+        load.global.productId = productsResponse.extractors.productId;
+        load.log("Product selected: " + load.global.productId, load.LogLevel.info);
+        t02_Browse.stop(load.TransactionStatus.Passed);
+    } else {
+        load.log("Product search failed: " + productsResponse.status, load.LogLevel.error);
+        t02_Browse.stop(load.TransactionStatus.Failed);
+    }
+
+    load.thinkTime(1);
+
+    // ---- 03: Create Order ----
+    t03_Order.start();
+
+    const orderResponse = new load.WebRequest({
+        id: 3,
+        url: "https://api.example.com/orders",
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + load.global.token
+        },
+        body: {
+            "userId": load.global.userId,
+            "productId": load.global.productId,
+            "qty": 1
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("orderId", "$.id")
+        ]
+    }).sendSync();
+
+    if (orderResponse.status === 201 || orderResponse.status === 200) {
+        load.global.orderId = orderResponse.extractors.orderId;
+        load.log("Order created: " + load.global.orderId, load.LogLevel.info);
+        t03_Order.stop(load.TransactionStatus.Passed);
+    } else {
+        load.log("Order failed: " + orderResponse.status, load.LogLevel.error);
+        t03_Order.stop(load.TransactionStatus.Failed);
+    }
+
+    load.thinkTime(1);
+
+    // ---- 04: Verify Order ----
+    t04_Verify.start();
+
+    const verifyResponse = new load.WebRequest({
+        id: 4,
+        url: "https://api.example.com/orders/" + load.global.orderId,
+        method: "GET",
+        headers: {
+            "Authorization": "Bearer " + load.global.token
+        },
+        returnBody: true
+    }).sendSync();
+
+    if (verifyResponse.status === 200) {
+        t04_Verify.stop(load.TransactionStatus.Passed);
+    } else {
+        t04_Verify.stop(load.TransactionStatus.Failed);
+    }
+});
+
+load.finalize("Finalize", async function () {
+    load.log("Finalize VUser: " + load.config.user.userId, load.LogLevel.info);
+});
+```
+
+NOTE: email and password are HARDCODED (static collection variables).
+      token, userId, productId, orderId are CORRELATED (extracted from responses).
+      NO parameters.yml was generated (no CSV test data needed).
+
+================================================================================

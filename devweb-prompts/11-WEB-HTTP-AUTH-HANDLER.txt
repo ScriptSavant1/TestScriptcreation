@@ -1,0 +1,590 @@
+================================================================================
+  PROMPT FILE 11: VuGen Web HTTP/HTML — Authentication Handler (C)
+================================================================================
+
+PURPOSE: Authentication patterns for VuGen Web HTTP/HTML C scripts.
+         Equivalent of 03-AUTHENTICATION-HANDLER.txt but for VuGen C code.
+
+WHEN TO USE: Upload together with 06-MANDATORY-FILES.txt and
+             10-WEB-HTTP-ACTION-GENERATOR.txt when the collection has
+             OAuth2, Basic, Bearer Token, or API Key authentication.
+
+Key differences from DevWeb (JavaScript):
+  - Auth token fetch goes in vuser_init() in vuser_init.c (runs ONCE per vuser)
+  - web_reg_save_param_json() MUST appear BEFORE the token request
+  - All values use {varName} single-brace LR parameter syntax
+  - No load.global / load.params split — correlated values are LR parameters
+  - Use _ prefix for correlated/runtime values: {_accessToken}, {_refreshToken}
+
+================================================================================
+  HOW TO DETECT AUTH TYPE IN POSTMAN/BRUNO COLLECTIONS
+================================================================================
+
+Look for the "auth" object in the collection JSON:
+
+  Collection-level auth:   collection.auth.type
+  Folder-level auth:       item[].auth.type
+  Request-level auth:      item[].request.auth.type
+
+Auth types you may find:
+  "bearer"          --> Bearer Token
+  "basic"           --> Basic Authentication
+  "oauth2"          --> OAuth 2.0 (client_credentials, password, authorization_code)
+  "apikey"          --> API Key (header or query)
+  "noauth" / null   --> No Authentication
+  "inherit"         --> Inherits from parent folder/collection
+
+================================================================================
+  AUTH TYPE 1: OAUTH 2.0 — CLIENT CREDENTIALS
+================================================================================
+
+Detection: auth.type === "oauth2" AND grant_type === "client_credentials"
+
+Put token fetch in vuser_init.c. The web_reg_save_param_json() call MUST
+come BEFORE the web_custom_request() that returns the token.
+
+vuser_init.c:
+```c
+vuser_init()
+{
+    /* lr_whoami() is the correct VuGen function to get the vuser ID.     */
+    /* lr_get_vuser_id() does NOT exist — it causes "Unresolved symbol".   */
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("[init] Vuser %d starting", vusr_id);
+
+    /* Register parameter extraction BEFORE the token request */
+    web_reg_save_param_json("_accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
+
+    /* OAuth2 client_credentials token fetch */
+    web_custom_request("OAuth2_Token_Fetch",
+        "URL={tokenUrl}",
+        "Method=POST",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Mode=HTML",
+        "EncType=application/x-www-form-urlencoded",
+        "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}&scope={scope}",
+        LAST);
+
+    if (strcmp(lr_eval_string("{_accessToken}"), "") == 0) {
+        lr_error_message("[init] FATAL: OAuth2 token fetch failed — {_accessToken} is empty");
+        return -1;
+    }
+    lr_output_message("[init] OAuth2 token obtained");
+
+    return 0;
+}
+```
+
+Then in Action.c, use {_accessToken} for each request:
+```c
+web_add_header("Authorization", "Bearer {_accessToken}");
+web_url("Get_Resources", ...);
+```
+
+ParameterFile.prm parameters needed (add these):
+  tokenUrl     → GenerateNewVal="Once"
+  clientId     → GenerateNewVal="Once"
+  clientSecret → GenerateNewVal="Once"
+  scope        → GenerateNewVal="Once"  (or omit if fixed)
+
+================================================================================
+  AUTH TYPE 2: OAUTH 2.0 — PASSWORD GRANT (ROPC)
+================================================================================
+
+Detection: auth.type === "oauth2" AND grant_type === "password"
+
+vuser_init.c:
+```c
+vuser_init()
+{
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("[init] Vuser %d starting", vusr_id);
+
+    web_reg_save_param_json("_accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
+    web_reg_save_param_json("_refreshToken",
+        "QueryString=$.refresh_token",
+        "Ord=1",
+        LAST);
+
+    web_custom_request("OAuth2_Password_Token",
+        "URL={tokenUrl}",
+        "Method=POST",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Mode=HTML",
+        "EncType=application/x-www-form-urlencoded",
+        "Body=grant_type=password&client_id={clientId}&client_secret={clientSecret}&username={username}&password={password}",
+        LAST);
+
+    if (strcmp(lr_eval_string("{_accessToken}"), "") == 0) {
+        lr_error_message("[init] FATAL: OAuth2 password grant failed");
+        return -1;
+    }
+    lr_output_message("[init] OAuth2 password token obtained");
+
+    return 0;
+}
+```
+
+Note: {username} and {password} use GenerateNewVal="EachIteration" so each
+vuser gets its own credentials from collection_data.dat.
+
+================================================================================
+  AUTH TYPE 3: OAUTH 2.0 — LOGIN ENDPOINT (Non-standard password flow)
+================================================================================
+
+Some APIs use a plain JSON login endpoint instead of OAuth2 form encoding.
+Detection: POST endpoint with /login, /auth, /signin + JSON body + token response.
+
+vuser_init.c:
+```c
+vuser_init()
+{
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("[init] Vuser %d starting", vusr_id);
+
+    web_reg_save_param_json("_accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
+
+    web_add_header("Content-Type", "application/json");
+    web_custom_request("Login",
+        "URL={baseUrl}/auth/login",
+        "Method=POST",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Mode=HTML",
+        "EncType=application/json",
+        "Body={\"username\":\"{username}\",\"password\":\"{password}\"}",
+        LAST);
+
+    if (strcmp(lr_eval_string("{_accessToken}"), "") == 0) {
+        lr_error_message("[init] FATAL: Login failed — {_accessToken} is empty");
+        return -1;
+    }
+    lr_output_message("[init] Login successful");
+
+    return 0;
+}
+```
+
+In Action.c, apply the token to requests:
+```c
+web_add_header("Authorization", "Bearer {_accessToken}");
+web_url("Get_Users", ...);
+```
+
+================================================================================
+  AUTH TYPE 4: BEARER TOKEN (STATIC — from collection variable)
+================================================================================
+
+Detection: auth.type === "bearer" with a known/static token value.
+
+vuser_init.c:
+```c
+vuser_init()
+{
+    /* Static bearer token from ParameterFile.prm / collection_data.dat */
+    /* No token fetch needed — {bearerToken} is pre-configured */
+    lr_output_message("[init] Using static bearer token");
+    return 0;
+}
+```
+
+In Action.c, apply to every request:
+```c
+web_add_header("Authorization", "Bearer {bearerToken}");
+web_url("Get_Users", ...);
+```
+
+ParameterFile.prm:
+  bearerToken → GenerateNewVal="Once"  (static, same for all iterations)
+
+If bearer token is a {{variable}} that references another request's response,
+treat it as a dynamic correlation target (use _ prefix) and put the token
+fetch in vuser_init.c.
+
+================================================================================
+  AUTH TYPE 5: BASIC AUTHENTICATION
+================================================================================
+
+Detection: auth.type === "basic"
+
+Option A — Use built-in VuGen Basic Auth:
+```c
+vuser_init()
+{
+    /* VuGen built-in: base64(user:pass) Authorization header */
+    web_set_user("{username}", "{password}", "{baseUrl}");
+    return 0;
+}
+```
+Note: web_set_user() applies to all requests for the specified server.
+
+Option B — Manual Base64 (when server requires exact header format):
+```c
+vuser_init()
+{
+    /* Manually set Authorization: Basic <base64(user:pass)> */
+    /* For most use cases, use web_set_user() (Option A) instead */
+    web_add_header("Authorization", "Basic {basicAuthToken}");
+    /* basicAuthToken must be pre-computed and stored in collection_data.dat */
+    return 0;
+}
+```
+
+================================================================================
+  AUTH TYPE 6: API KEY (HEADER)
+================================================================================
+
+Detection: auth.type === "apikey" AND in === "header"
+
+No vuser_init.c changes needed. Apply directly in Action.c before each request,
+or set collection-level (emitted before every request):
+
+```c
+/* In Action.c — before every request */
+web_add_header("X-API-Key", "{apiKey}");
+web_url("Get_Data", ...);
+```
+
+For collection-level API key (applied to all requests):
+Apply web_add_header("X-API-Key", "{apiKey}") before EACH web_url()/web_custom_request().
+There is no equivalent to load.WebRequest.defaults.headers in VuGen C —
+you MUST emit web_add_header() before every individual request.
+
+ParameterFile.prm:
+  apiKey → GenerateNewVal="Once"
+
+================================================================================
+  AUTH TYPE 7: API KEY (QUERY PARAMETER)
+================================================================================
+
+Detection: auth.type === "apikey" AND in === "query"
+
+Append as a query parameter in the URL:
+```c
+web_url("Get_Data",
+    "URL={baseUrl}/api/data?api_key={apiKey}",
+    "Resource=0",
+    "RecContentType=application/json",
+    "Referer=",
+    "Mode=HTML",
+    LAST);
+```
+
+Or encode it in the body for POST requests:
+```c
+"Body=api_key={apiKey}&other_param=value",
+```
+
+================================================================================
+  AUTH INHERITANCE — RESOLUTION ORDER
+================================================================================
+
+Postman/Bruno collections have auth inheritance:
+
+  Collection auth:   Bearer Token
+    Folder 1 auth:   (inherit) → use Bearer Token from collection
+      Request 1:     (inherit) → Bearer Token
+      Request 2:     Basic Auth (override) → Basic Auth
+    Folder 2:        API Key (override)
+      Request 3:     (inherit) → API Key
+
+Resolution in VuGen C (Action.c):
+  - Set the MOST COMMON auth via web_add_header() before every request
+  - Override for specific requests using additional web_add_header() calls
+    (VuGen applies the last web_add_header() for the same header name)
+
+```c
+/* Most requests use Bearer token — emit before each request */
+web_add_header("Authorization", "Bearer {_accessToken}");
+web_url("Get_Users", ...);
+lr_output_message("Get_Users - completed");
+
+lr_think_time(1);
+
+/* This request uses API Key instead — override Authorization */
+web_add_header("X-API-Key", "{apiKey}");
+web_url("Legacy_Endpoint", ...);
+lr_output_message("Legacy_Endpoint - completed");
+
+lr_think_time(1);
+
+/* This request has no auth — omit web_add_header entirely */
+web_url("Public_Health",
+    "URL={baseUrl}/health",
+    ...
+    LAST);
+lr_output_message("Public_Health - completed");
+```
+
+================================================================================
+  TOKEN REFRESH PATTERN
+================================================================================
+
+If the collection has a refresh token flow, add a refresh request in
+Action.c BEFORE the first request that would use an expired token.
+Mark with a comment and make it optional (usually not needed for short tests):
+
+```c
+/* Optional: Refresh expired OAuth2 token before long-running transactions */
+/*
+web_reg_save_param_json("_accessToken",
+    "QueryString=$.access_token",
+    "Ord=1",
+    LAST);
+web_custom_request("Refresh_Token",
+    "URL={tokenUrl}",
+    "Method=POST",
+    "Resource=0",
+    "RecContentType=application/json",
+    "Referer=",
+    "Mode=HTML",
+    "EncType=application/x-www-form-urlencoded",
+    "Body=grant_type=refresh_token&refresh_token={_refreshToken}&client_id={clientId}",
+    LAST);
+lr_output_message("Refresh_Token - completed");
+*/
+```
+
+================================================================================
+  VUSER_INIT.C — MULTI-AUTH COMPLETE EXAMPLE
+================================================================================
+
+Collection with OAuth2 client_credentials + two configuration parameters:
+
+```c
+vuser_init()
+{
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("[init] Vuser %d starting", vusr_id);
+
+    /* ------------------------------------------------------------------
+     * Validate mandatory parameters.  If empty, abort this Vuser.
+     * ------------------------------------------------------------------ */
+    if (strcmp(lr_eval_string("{baseUrl}"), "") == 0) {
+        lr_error_message("[init] FATAL: 'baseUrl' is empty — check collection_data.dat");
+        return -1;
+    }
+    if (strcmp(lr_eval_string("{clientId}"), "") == 0) {
+        lr_error_message("[init] FATAL: 'clientId' is empty — check collection_data.dat");
+        return -1;
+    }
+
+    /* ------------------------------------------------------------------
+     * OAuth2 client_credentials token fetch.
+     * web_reg_save_param_json MUST come BEFORE the request.
+     * ------------------------------------------------------------------ */
+    web_reg_save_param_json("_accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
+
+    web_custom_request("OAuth2_Token_Fetch",
+        "URL={baseUrl}/oauth/token",
+        "Method=POST",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Mode=HTML",
+        "EncType=application/x-www-form-urlencoded",
+        "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}",
+        LAST);
+
+    if (strcmp(lr_eval_string("{_accessToken}"), "") == 0) {
+        lr_error_message("[init] FATAL: OAuth2 token is empty — check credentials");
+        return -1;
+    }
+    lr_output_message("[init] OAuth2 token obtained: %.20s...", lr_eval_string("{_accessToken}"));
+
+    return 0;
+}
+```
+
+Corresponding collection_data.dat:
+```
+baseUrl,clientId,clientSecret
+https://api.example.com,abc123def456,secret_key_xyz
+```
+
+Corresponding ParameterFile.prm entries:
+  [parameter:baseUrl]      → GenerateNewVal="Once"
+  [parameter:clientId]     → GenerateNewVal="Once"
+  [parameter:clientSecret] → GenerateNewVal="Once"
+
+================================================================================
+  BRUNO YAML COLLECTION-LEVEL AUTH DETECTION
+================================================================================
+
+Bruno YAML root request.auth section is detected the same way as DevWeb.
+For VuGen Web HTTP/HTML, generate COMMENTED-OUT auth code in vuser_init.c
+so the script engineer can enable it with minimal editing.
+
+Detection in Bruno YAML root:
+```yaml
+request:
+  auth:
+    mode: oauth2
+    oauth2:
+      grantType: client_credentials
+      tokenUrl: "{{baseUrl}}/oauth2/token"
+      clientId: "{{clientId}}"
+      clientSecret: "{{clientSecret}}"
+      scope: "api full"
+```
+
+Generated vuser_init.c (commented by default — uncomment to enable):
+```c
+vuser_init()
+{
+    int vusr_id, scid;
+    char *vusr_group;
+    lr_whoami(&vusr_id, &vusr_group, &scid);
+    lr_output_message("[init] Vuser %d starting", vusr_id);
+
+    /* ------------------------------------------------------------------
+     * COLLECTION-LEVEL OAUTH2 AUTH (from request.auth in Bruno YAML)
+     * Uncomment the block below to fetch an OAuth2 token before each Vuser.
+     * ------------------------------------------------------------------ */
+    /*
+    web_reg_save_param_json("_accessToken",
+        "QueryString=$.access_token",
+        "Ord=1",
+        LAST);
+    web_custom_request("OAuth2_Token_Fetch",
+        "URL={baseUrl}/oauth2/token",
+        "Method=POST",
+        "Resource=0",
+        "RecContentType=application/json",
+        "Referer=",
+        "Mode=HTML",
+        "EncType=application/x-www-form-urlencoded",
+        "Body=grant_type=client_credentials&client_id={clientId}&client_secret={clientSecret}&scope=api full",
+        LAST);
+    if (strcmp(lr_eval_string("{_accessToken}"), "") == 0) {
+        lr_error_message("[init] OAuth2 token fetch FAILED");
+        return -1;
+    }
+    lr_output_message("[init] OAuth2 token obtained");
+    */
+
+    return 0;
+}
+```
+
+================================================================================
+  IMPORTANT: web_add_header() SCOPE
+================================================================================
+
+web_add_header() applies ONLY to the NEXT web_url() or web_custom_request().
+There is NO persistent default header mechanism in VuGen C.
+
+This means: for collection-level auth (e.g., Bearer token sent with every
+request), you MUST emit web_add_header("Authorization", "Bearer {_accessToken}")
+BEFORE EVERY SINGLE REQUEST in Action.c.
+
+WRONG (only applies to first request):
+```c
+web_add_header("Authorization", "Bearer {_accessToken}");
+/* ... many other statements ... */
+web_url("Get_Users", ...);  /* ← Authorization MISSING here */
+web_url("Get_Orders", ...); /* ← Authorization MISSING here */
+```
+
+CORRECT:
+```c
+web_add_header("Authorization", "Bearer {_accessToken}");
+web_url("Get_Users", ...);
+
+lr_think_time(1);
+
+web_add_header("Authorization", "Bearer {_accessToken}");
+web_url("Get_Orders", ...);
+```
+
+================================================================================
+  JWT AUTHENTICATION (VuGen Web HTTP/HTML)
+================================================================================
+
+DETECTION: Same patterns as DevWeb — scan pre-request scripts for jsrsasign/JWT.
+
+VuGen C CANNOT execute JavaScript natively. When JWT is detected:
+
+OUTPUT FILES (added to output folder automatically):
+  jsrsasign.js     → listed in [ManuallyExtraFiles] in .usr (upload with script)
+  generate_jwt.js  → standalone Node.js script for pre-generating token
+  tranport.pem     → placeholder PEM file (user replaces with real key)
+  All 3 in [ManuallyExtraFiles] and ScriptUploadMetadata.xml <GeneralFiles>
+
+vuser_init.c JWT NOTE BLOCK (auto-generated when JWT detected):
+  /* -----------------------------------------------------------------------
+   * JWT DETECTED — Pre-request scripts use JWT signing (jsrsasign.js).
+   *
+   * VuGen C cannot execute JavaScript natively. Options:
+   *   A) Pre-generate: node generate_jwt.js  (output → jwtToken column in
+   *      collection_data.dat), then re-run test.
+   *   B) Call a token endpoint (uncomment OAuth2 block below and adapt URL).
+   *
+   * jsrsasign.js and tranport.pem are in [ManuallyExtraFiles] for LRE upload.
+   * ----------------------------------------------------------------------- */
+
+PARAMETER SETUP for pre-generated JWT token:
+  ParameterFile.prm:
+    [parameter:jwtToken]
+    GenerateNewVal="Once"
+    ColumnName="jwtToken"
+    Table="collection_data.dat"
+    ...
+
+  In Action.c — use token: web_add_header("Authorization", "Bearer {jwtToken}");
+
+generate_jwt.js USAGE:
+  node generate_jwt.js         → prints signed JWT to stdout
+  Copy output to collection_data.dat → jwtToken column
+  Uses jwt-lib.js internally (same library as DevWeb scripts)
+  TODO placeholders inside: algorithm, keyPath, payload — user must fill in
+
+CRITICAL RULES:
+  - jwtToken is a static parameter in VuGen (GenerateNewVal="Once")
+  - NOT a dynamic correlation target — pre-generated before test
+  - jsrsasign.js in ExtraFiles = bundled for LRE upload reference only
+  - For long tests: regenerate token and update collection_data.dat before each run
+
+================================================================================
+  DEVWEB (JS) VS WEB HTTP/HTML (C) — AUTH COMPARISON
+================================================================================
+
+| Auth Type        | DevWeb (JavaScript) vuser       | Web HTTP/HTML (C) vuser_init()       |
+|------------------|---------------------------------|--------------------------------------|
+| OAuth2 CC        | load.WebRequest token POST      | web_reg_save_param_json + web_custom_request |
+| OAuth2 Password  | load.WebRequest token POST      | web_reg_save_param_json + web_custom_request |
+| Bearer static    | load.global.token = "..."       | {bearerToken} in collection_data.dat |
+| Basic Auth       | load.utils.base64Encode(u+p)    | web_set_user(user, pass, host)       |
+| API Key (header) | defaults.headers["X-API-Key"]   | web_add_header() before EACH request |
+| API Key (query)  | queryString: { key: val }       | ?key={apiKey} appended to URL=       |
+
+| Where is token   | load.global.accessToken         | {_accessToken} (LR parameter)        |
+| Used in request  | "Authorization": `Bearer ${...}`| web_add_header("Authorization", "Bearer {_accessToken}") |
+| Validated        | if (!tokenResp) exit abort      | if strcmp == "" then return -1       |
+
+================================================================================

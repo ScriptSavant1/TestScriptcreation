@@ -6,10 +6,20 @@
 const fs = require('fs');
 const path = require('path');
 
+const PROJECT_ROOT = path.join(__dirname, '..', '..');
+
 class MandatoryFilesGenerator {
   constructor(options = {}) {
     this.options = options;
     this.scriptName = options.scriptName || 'DevWebScript';
+  }
+
+  sanitizeName(name) {
+    return String(name)
+      .replace(/[<>:"/\\|?* ]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      || 'DevWebScript';
   }
 
   /**
@@ -33,78 +43,100 @@ class MandatoryFilesGenerator {
   }
 
   /**
-   * Generate rts.yml (Runtime Settings)
+   * Generate rts.yml (Runtime Settings) — canonical version matching DevWeb2 reference
    */
-  generateRtsYml() {
-    return `# Runtime Settings Configuration for DevWeb
-httpConnection:                         # Configuration for the Net Loader component
-  maxPersistentConnectionsPerHost: 6    # The maximum number of connections per host a Vuser can open simultaneously (browser emulation).
-  maxConnectedHosts: 30                 # The maximum number of connected hosts per Vuser at any time.
-  maxRedirectDepth: 10                  # The maximum number of redirects when sending a request.
-  keepAliveTimeout: 60                  # Specifies the keep-alive period (in seconds) for an active network connection.
-  connectTimeout: 120                   # Specifies the maximum amount of time (in seconds) a dial will wait for a "connect" to complete.
-  abruptClose: false                    # If true, SO_LINGER is set to 0. The socket will not enter TIME_WAIT state, and can be used immediately.
-  requestTimeout: 120                   # Specifies the timeout (in seconds) to wait for an HTTP request to complete.
-  canonicalHeaderEntries: true          # use canonical keys for http request header entries
+  generateRtsYml(proxy = null) {
+    // Build proxy section — defaults disabled; populated when proxy detected in collection
+    const proxySection = proxy && proxy.enabled
+      ? `proxy:
+  usePAC: false
+  pacAddress: ''
+  useProxy: true
+  proxyServer: '${proxy.host}:${proxy.port}'
+  proxyDomain: ''
+  proxyUser: '${proxy.username || ''}'
+  proxyPassword: '${proxy.password || ''}'
+  proxyAuthenticationType: '${proxy.username ? 'basic' : ''}'
+  excludedHosts: []`
+      : `proxy:
+  usePAC: false
+  pacAddress: ''
+  useProxy: false
+  proxyServer: ''
+  proxyDomain: ''
+  proxyUser: ''
+  proxyPassword: ''
+  proxyAuthenticationType: ''
+  excludedHosts: []`;
 
-grpc:                                   # Configuration for gRPC protocol
-  connectTimeout: 120                   # Specifies the maximum amount of time (in seconds) to wait for connection to be established.
-  keepAliveTime: 0                      # If specified, the maximum idle time in seconds, after which a keepalive probe is sent.
-  maxRecvMsgSize: 0                     # Specifies the maximum message size in bytes the gRPC client can receive. Set 0 for using default value of 4MB.
-  maxSendMsgSize: 0                     # Specifies the maximum message size in bytes the gRPC client can send. Set 0 for using default value.
-
-proxy:                                  # Configuration for Proxy server
-  usePAC: false                         # Indicates whether to use proxy automatic configuration script during send requests.
-  pacAddress: ""                        # Automatic configuration script address. Format: "http://pacaddress".
-  useProxy: false                       # Indicates whether to use proxy during send requests.
-  proxyServer: ""                       # Proxy server to use. Format: "server:port".
-  proxyDomain: ""                       # Proxy server authentication domain.
-  proxyUser: ""                         # Proxy server authentication user name.
-  proxyPassword: ""                     # Proxy server authentication password.
-  proxyAuthenticationType: ""           # Proxy server authentication type. Possible values are ["basic", "ntlm"].
-  excludedHosts: []                     # Proxy hosts exception list. Use regular expressions, for example ['prefix.*', '.*.domain'].
-
+    return `httpConnection:
+  maxPersistentConnectionsPerHost: 6
+  maxConnectedHosts: 30
+  maxRedirectDepth: 10
+  keepAliveTimeout: 60
+  connectTimeout: 120
+  abruptClose: false
+  requestTimeout: 120
+  canonicalHeaderEntries: true
+dns:
+  bypassSystem: false
+  ttl: 600
+grpc:
+  connectTimeout: 120
+  keepAliveTime: 0
+  maxRecvMsgSize: 0
+  maxSendMsgSize: 0
+${proxySection}
 ssl:
-  disableHTTP2: false                   # If true, HTTP/2 will be disabled
-  ignoreBadCertificate: false           # If true, SSL accepts any certificate presented by the server and any hostname in that certificate.
-  tlsMaxVersion: tls12                  # Maximum SSL/TLS version that is acceptable. Possible values are [tls10, tls11, tls12, tls13]. Default maximum version is tls12.
-
+  disableHTTP2: false
+  ignoreBadCertificate: false
+  tlsMaxVersion: tls12
+  enableHTTP3: false
 replay:
-  simulateNewUser: true                 # If true, simulates a new Vuser in each iteration (relevant for closing connections).
-  saveSnapshots: "always"               # Specify when to save a snapshot file for WebRequest. Possible values are ["always", "error", "never"].
-  snapshotBodySizeLimit: 100            # Limits the snapshot body size (in KB). Set -1 for no limit.
-  useCache: false                       # If true, resources response is cached, based on response headers.
-  enableDynatrace: false                # Enable Dynatrace AppMon monitoring.
-  resourceHttpErrorAsWarning: true      # If true, the log level WARNING is logged, if an issue occurs when obtaining the resource. If false, log level ERROR is logged if an issue occurs.
-  enableIntegratedAuthentication: false # Enable Kerberos-based authentication. When the server proposes authentication schemes, use Negotiate preference to other schemes.
-  multiIP: "none"                       # Select the way IPs are allocated to Vusers. none - disable the automatic IPs distribution. roundrobin - the IPs are
-                                        # allocated in a cyclic manner, random - the IPs are allocated randomly.
-
-vts:                                    # Configuration for VTS proxy server
-  useProxy: false                       # If true, uses proxy for VTS requests.
-  proxyServer: ""                       # Proxy server to use. Format: "server:port".
-  proxyUser: ""                         # Proxy server authentication user name.
-  proxyPassword: ""                     # Proxy server authentication password.
-  portInQueryString: false              # If true, the port number will be added to the query string and the requests will be sent on httpPort or httpsPort respectively.
-  httpPort: 80                          # if "portInQueryString" is set to true this is the port all the http requests will be sent on.
-  httpsPort: 443                        # if "portInQueryString" is set to true this is the port all the https requests will be sent on.
-  ignoreBadCertificate: false           # If true, SSL accepts any certificate presented by the vts server and any hostname in that certificate.
-
+  simulateNewUser: true
+  saveSnapshots: always
+  snapshotBodySizeLimit: 100
+  useCache: false
+  enableDynatrace: false
+  resourceHttpErrorAsWarning: true
+  enableIntegratedAuthentication: true
+  multiIP: none
+vts:
+  useProxy: false
+  proxyServer: ''
+  proxyUser: ''
+  proxyPassword: ''
+  portInQueryString: false
+  httpPort: 80
+  httpsPort: 443
+  ignoreBadCertificate: false
 encryption:
-  keyLocation: ""                       # Location of the file containing the key used for data decryption. Format: "folder/keyFile.txt".
-
-vuserLogger:                            # Configuration for Vuser logger
-  errorBufferSize: 4096                 # The maximum buffer size for each Vuser logger.
-  logMode: full                         # Specify when to create the log file. Possible values are [full, error, none].
-  logLevel: trace                       # The log level for Vuser logger. Possible values are [error, warning, info, debug, trace].
-  showInConsole: true                   # If true, all the Vuser logging is printed to the console.
-
-flow:                                   # Flow Control definition, please refer to documentation for more details.
+  keyLocation: ''
+vuserLogger:
+  errorBufferSize: 4096
+  logMode: full
+  logLevel: trace
+  traceRequestFlowDetails:
+    - headers
+    - body
+  showInConsole: true
+flow:
   enabled: false
-
-thinkTime:                              # Configuration for think time, to control how the Vuser uses think time during script execution.
-  type: "asRecorded"                    # Specifies the think time type to control how the Vuser uses think time during script execution. Possible values are: [ignore, asRecorded, multiply, randomPercentage].
-  limit: -1                             # Limits the recorded think time (in seconds) during execution. Set -1 for disabling think time limit.
+  initialize: {}
+  run: {}
+  finalize: {}
+thinkTime:
+  type: asRecorded
+  limit: -1
+  arguments: {}
+openTelemetry:
+  enabled: false
+  collector: ''
+  enableTLS: false
+  tlsCertificate: ''
+  authenticationHeader: ''
+  vusersRate: 100
+userArguments: {}
 `;
   }
 
@@ -221,162 +253,344 @@ tearDown: 0      #Not used
     return result;
   }
 
-  /**
-   * Copy DevWebSdk.d.ts from examples
-   */
-  copyDevWebSdkDefinitions(outputDir, examplesPath) {
-    const sourcePath = path.join(examplesPath, 'examples', 'EmptyScript', 'DevWebSdk.d.ts');
-    const destPath = path.join(outputDir, 'DevWebSdk.d.ts');
+  // ─── DevWeb Mandatory Files ───────────────────────────────────────────────────
 
+  /**
+   * Copy a file from the project root to the output directory.
+   * jwt-helper.js, jsrsasign.js, DevWebSdk.d.ts, and transport.pem all live
+   * in the project root — place them there before running the converter.
+   * Returns true on success, false if source not found (logs warning, does NOT generate a stub).
+   */
+  copyFromProjectRoot(outputDir, filename) {
+    const src  = path.join(PROJECT_ROOT, filename);
+    const dest = path.join(outputDir, filename);
     try {
-      if (fs.existsSync(sourcePath)) {
-        fs.copyFileSync(sourcePath, destPath);
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, dest);
         return true;
-      } else {
-        console.warn('⚠️  DevWebSdk.d.ts not found in examples, using fallback');
-        return this.generateFallbackDevWebSdk(destPath);
       }
-    } catch (error) {
-      console.error('Error copying DevWebSdk.d.ts:', error.message);
-      return this.generateFallbackDevWebSdk(destPath);
-    }
-  }
-
-  /**
-   * Generate fallback DevWebSdk.d.ts if original not available
-   */
-  generateFallbackDevWebSdk(destPath) {
-    const fallbackContent = `// DevWeb SDK Type Definitions (Fallback)
-// For full definitions, copy from LoadRunner Enterprise DevWeb SDK
-
-declare namespace load {
-  // Configuration
-  export const config: {
-    user: { userId: number };
-    runtime: { iteration: number };
-  };
-
-  // Global variables
-  export const global: any;
-
-  // Parameters
-  export const params: any;
-
-  // Logging
-  export enum LogLevel { error, warning, info, debug }
-  export function log(message: string, level?: LogLevel): void;
-
-  // Timing
-  export function sleep(seconds: number): void;
-  export function thinkTime(seconds: number): void;
-
-  // Transactions
-  export enum TransactionStatus { Passed, Failed, Stopped }
-  export class Transaction {
-    constructor(name: string);
-    start(): void;
-    stop(status: TransactionStatus): void;
-  }
-
-  // Web Requests
-  export class WebRequest {
-    static defaults: any;
-    constructor(options: any);
-    send(): Promise<any>;
-    sendSync(): any;
-  }
-
-  // Extractors
-  export enum ExtractorScope { Body, Headers, All }
-  export class BoundaryExtractor {
-    constructor(name: string, leftBoundary: string, rightBoundary: string);
-  }
-  export class JsonPathExtractor {
-    constructor(name: string, jsonPath: string);
-  }
-  export class RegexpExtractor {
-    constructor(name: string, pattern: string);
-  }
-  export class TextCheckExtractor {
-    constructor(name: string, options: any);
-  }
-
-  // Functions
-  export function initialize(name: string, func: () => Promise<void>): void;
-  export function action(name: string, func: () => Promise<void>): void;
-  export function finalize(name: string, func: () => Promise<void>): void;
-}
-`;
-
-    try {
-      fs.writeFileSync(destPath, fallbackContent, 'utf8');
-      return true;
-    } catch (error) {
-      console.error('Failed to generate fallback DevWebSdk.d.ts:', error.message);
+      console.warn(`  ⚠  ${filename} not found in project root (${PROJECT_ROOT}). Place it there and re-run.`);
+      return false;
+    } catch (err) {
+      console.error(`  ✗  Failed to copy ${filename}: ${err.message}`);
       return false;
     }
   }
 
   /**
-   * Generate all mandatory files
+   * Generate [ScriptName].usr for DevWeb protocol.
+   * Based on the canonical DevWeb2.usr reference project.
+   * @param {string}   scriptName        - Sanitized script name (no spaces/special chars)
+   * @param {string[]} transactionNames  - Transaction names for [TransactionsOrder]
+   * @param {boolean}  hasJwt            - Add jwt-helper.js + transport.pem to [ManuallyExtraFiles]
    */
-  async generateAll(outputDir, parameters = null, examplesPath = null) {
+  generateDevWebUsrFile(scriptName, transactionNames = [], hasJwt = false) {
+    const txOrder = transactionNames.length > 0
+      ? transactionNames.join('__*delimiter*__')
+      : '';
+
+    const manualExtras = hasJwt
+      ? `jwt-helper.js=\ntransport.pem=\n`
+      : '';
+
+    return `[General]
+Type=DevWeb
+DefaultCfg=default.cfg
+MajorVersion=25
+MinorVersion=3
+ParameterFile=
+GlobalParameterFile=
+RunType=DevWeb
+NewFunctionHeader=1
+ActionLogicExt=action_logic
+LastActiveAction=Main
+ScriptLanguage=JavaScript
+Encoding=UTF8
+DevelopTool=Vugen
+LastModifyVer=25.3.0.0
+ActiveTypes=DevWeb
+AdditionalTypes=DevWeb
+GenerateTypes=DevWeb
+ParamLeftBrace={
+ParamRightBrace=}
+LastCodeGenerationVer=
+DisableRegenerate=0
+Description=
+ScriptLocale=en-GB
+
+[ExtraFiles]
+parameters.yml=
+rts.yml=
+
+[Actions]
+Main=main.js
+
+[Recorded Actions]
+Main=0
+
+[Interpreters]
+Main=DevWeb
+
+[RunLogicFiles]
+Default Profile=default.usp
+
+[Modified Actions]
+Main=0
+
+[Replayed Actions]
+Main=0
+
+[TransactionsOrder]
+Order=${txOrder}
+
+[StateManagement]
+LastReplayStatus=0
+
+[ActiveReplay]
+LastReplayedRunName=
+ActiveRunName=
+${manualExtras ? `\n[ManuallyExtraFiles]\n${manualExtras}` : ''}`;
+  }
+
+  /**
+   * Generate default.cfg for DevWeb protocol.
+   * DevWeb config differs from VuGen: UTF8 encoding, no [WEB] section, LogExtended.
+   */
+  generateDevWebDefaultCfg() {
+    return `[General]
+AutomaticTransactions=0
+AutomaticTransactionsPerFunc=0
+ContinueOnError=0
+XlBridgeTimeout=120
+DefaultRunLogic=default.usp
+Encoding=UTF8
+
+[Iterations]
+NumOfIterations=1
+IterationPace=IterationASAP
+StartEvery=60
+RandomMin=60
+RandomMax=90
+
+[Log]
+AutoLog=0
+AutoLogBufferSize=1
+IncludeEnvInfo=0
+LogDetail=1
+LogOptions=LogExtended
+MsgClassData=0
+MsgClassFull=0
+MsgClassParameters=0
+PrintTimeStamp=0
+
+[ThinkTime]
+Factor=1
+Limit=1
+LimitFlag=0
+Options=NOTHINK
+`;
+  }
+
+  /**
+   * Generate default.usp (run logic profile) for DevWeb.
+   * DevWeb only has a "Main" action — no vuser_init/vuser_end children.
+   * Includes the ErrorHandler sections required by VuGen DevWeb.
+   */
+  generateDevWebDefaultUsp() {
+    return `[Profile Actions]
+MercIniTreeFather=""
+MercIniTreeSectionName="Profile Actions"
+Profile Actions name=Main
+
+[RunLogicEndRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicEndRoot"
+MercIniTreeSons=""
+Name="End"
+RunLogicActionOrder=""
+RunLogicActionType="VuserEnd"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicErrorHandlerRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicErrorHandlerRoot"
+MercIniTreeSons="vuser_errorhandler"
+Name="ErrorHandler"
+RunLogicActionOrder="vuser_errorhandler"
+RunLogicActionType="VuserErrorHandler"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicErrorHandlerRoot:vuser_errorhandler]
+MercIniTreeFather="RunLogicErrorHandlerRoot"
+MercIniTreeSectionName="vuser_errorhandler"
+Name="vuser_errorhandler"
+RunLogicActionType="VuserErrorHandler"
+RunLogicObjectKind="Action"
+
+[RunLogicInitRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicInitRoot"
+MercIniTreeSons=""
+Name="Init"
+RunLogicActionOrder=""
+RunLogicActionType="VuserInit"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicRunMode="Sequential"
+
+[RunLogicRunRoot]
+MercIniTreeFather=""
+MercIniTreeSectionName="RunLogicRunRoot"
+MercIniTreeSons="Main"
+Name="Run"
+RunLogicActionOrder="Main"
+RunLogicActionType="VuserRun"
+RunLogicAfterPaceMax="90"
+RunLogicAfterPaceMin="60"
+RunLogicNumOfIterations="1"
+RunLogicObjectKind="Group"
+RunLogicPaceConstAfterTime="60"
+RunLogicPaceConstTime="60"
+RunLogicPaceType="Asap"
+RunLogicRandomPaceMax="90"
+RunLogicRandomPaceMin="60"
+RunLogicRunMode="Sequential"
+
+[RunLogicRunRoot:Main]
+MercIniTreeFather="RunLogicRunRoot"
+MercIniTreeSectionName="Main"
+Name="Main"
+RunLogicActionType="VuserRun"
+RunLogicObjectKind="Action"
+`;
+  }
+
+  /**
+   * Generate ScriptUploadMetadata.xml for DevWeb protocol.
+   * Lists all files for LRE upload.
+   * @param {string}  scriptName - Sanitized script name
+   * @param {boolean} hasJwt     - Include jwt-helper.js + transport.pem entries
+   */
+  generateDevWebScriptUploadMetadata(scriptName, hasJwt = false) {
+    const jwtEntries = hasJwt
+      ? `    <FileEntry Name="jwt-helper.js" Filter="2" />\n    <FileEntry Name="transport.pem" Filter="2" />\n`
+      : '';
+
+    return `<?xml version="1.0" encoding="utf-8"?>
+<VugenScriptMetadata>
+  <ScriptName>${scriptName}</ScriptName>
+  <Protocol>DevWeb</Protocol>
+  <ActionFiles>
+    <FileEntry Name="main.js" Filter="2" />
+  </ActionFiles>
+  <GeneralFiles>
+    <FileEntry Name="${scriptName}.usr" Filter="4" />
+    <FileEntry Name="default.cfg" Filter="4" />
+    <FileEntry Name="default.usp" Filter="4" />
+    <FileEntry Name="parameters.yml" Filter="2" />
+    <FileEntry Name="rts.yml" Filter="2" />
+${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
+    <FileEntry Name="Bookmarks.xml" Filter="1" />
+    <FileEntry Name="Breakpoints.xml" Filter="1" />
+    <FileEntry Name="DevWebSdk.d.ts" Filter="1" />
+    <FileEntry Name="ScriptUploadMetadata.xml" Filter="1" />
+    <FileEntry Name="tsconfig.json" Filter="1" />
+    <FileEntry Name="UserTasks.xml" Filter="1" />
+    <FileEntry Name="vuser_end.c" Filter="1" />
+    <FileEntry Name="vuser_init.c" Filter="1" />
+  </GeneralFiles>
+</VugenScriptMetadata>
+`;
+  }
+
+  /**
+   * Generate all mandatory DevWeb files.
+   *
+   * @param {string} outputDir   - Script output folder path
+   * @param {Map}    parameters  - Parameter map from classifyVariables()
+   * @param {Object} [options]   - Optional settings:
+   *   @param {string}   options.examplesPath    - (legacy, ignored — DevWebSdk copied from project root)
+   *   @param {string[]} options.transactionNames - Transaction names for [TransactionsOrder]
+   *   @param {boolean}  options.hasJwt           - Copy jwt-helper.js + transport.pem, add to ExtraFiles
+   * @returns {Object} map of generated file paths
+   */
+  async generateAll(outputDir, parameters = null, options = null) {
+    // Back-compat: if 3rd arg is a string it's the legacy examplesPath — ignore it
+    if (typeof options === 'string') options = {};
+    options = options || {};
+    const { transactionNames = [], hasJwt = false, proxy = null } = options;
+
     const files = {};
+    const safeScriptName = this.sanitizeName(this.scriptName);
 
-    try {
-      // 1. Generate tsconfig.json
-      const tsconfig = this.generateTsConfig();
-      const tsconfigPath = path.join(outputDir, 'tsconfig.json');
-      fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2), 'utf8');
-      files.tsconfig = tsconfigPath;
-      console.log('✓ Generated tsconfig.json');
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-      // 2. Generate rts.yml
-      const rts = this.generateRtsYml();
-      const rtsPath = path.join(outputDir, 'rts.yml');
-      fs.writeFileSync(rtsPath, rts, 'utf8');
-      files.rts = rtsPath;
-      console.log('✓ Generated rts.yml');
+    // 1. tsconfig.json
+    fs.writeFileSync(path.join(outputDir, 'tsconfig.json'),
+      JSON.stringify(this.generateTsConfig(), null, 2), 'utf8');
+    console.log('✓ Generated tsconfig.json');
 
-      // 3. Generate scenario.yml
-      const scenario = this.generateScenarioYml();
-      const scenarioPath = path.join(outputDir, 'scenario.yml');
-      fs.writeFileSync(scenarioPath, scenario, 'utf8');
-      files.scenario = scenarioPath;
-      console.log('✓ Generated scenario.yml');
+    // 2. rts.yml (canonical 11-section version matching DevWeb2 reference)
+    fs.writeFileSync(path.join(outputDir, 'rts.yml'), this.generateRtsYml(proxy), 'utf8');
+    if (proxy && proxy.enabled) console.log(`  ✓ Proxy configured in rts.yml: ${proxy.host}:${proxy.port}`);
+    console.log('✓ Generated rts.yml');
 
-      // 4. Generate parameters.yml and collection_data.csv
-      if (parameters && parameters.size > 0) {
-        const parametersYml = this.generateParametersYml(parameters);
-        const parametersPath = path.join(outputDir, 'parameters.yml');
-        fs.writeFileSync(parametersPath, parametersYml, 'utf8');
-        files.parameters = parametersPath;
-        console.log('✓ Generated parameters.yml');
+    // 3. scenario.yml
+    fs.writeFileSync(path.join(outputDir, 'scenario.yml'), this.generateScenarioYml(), 'utf8');
+    console.log('✓ Generated scenario.yml');
 
-        // 5. Generate collection_data.csv with actual values
-        const csv = this.generateCollectionDataCSV(parameters);
-        if (csv) {
-          const csvPath = path.join(outputDir, 'collection_data.csv');
-          fs.writeFileSync(csvPath, csv, 'utf8');
-          files.dataCSV = csvPath;
-          console.log('✓ Generated collection_data.csv');
-        }
-      } else {
-        console.log('ℹ️  Skipped parameters.yml (no variables to parameterize)');
+    // 4. parameters.yml + collection_data.csv
+    if (parameters && parameters.size > 0) {
+      fs.writeFileSync(path.join(outputDir, 'parameters.yml'),
+        this.generateParametersYml(parameters), 'utf8');
+      console.log('✓ Generated parameters.yml');
+
+      const csv = this.generateCollectionDataCSV(parameters);
+      if (csv) {
+        fs.writeFileSync(path.join(outputDir, 'collection_data.csv'), csv, 'utf8');
+        console.log('✓ Generated collection_data.csv');
       }
-
-      // 6. Copy DevWebSdk.d.ts
-      if (examplesPath) {
-        this.copyDevWebSdkDefinitions(outputDir, examplesPath);
-        files.devwebSdk = path.join(outputDir, 'DevWebSdk.d.ts');
-        console.log('✓ Copied DevWebSdk.d.ts');
-      }
-
-      return files;
-    } catch (error) {
-      console.error('Error generating mandatory files:', error);
-      throw error;
     }
+
+    // 5. [ScriptName].usr (DevWeb format)
+    fs.writeFileSync(path.join(outputDir, `${safeScriptName}.usr`),
+      this.generateDevWebUsrFile(safeScriptName, transactionNames, hasJwt), 'utf8');
+    console.log(`✓ Generated ${safeScriptName}.usr`);
+
+    // 6. default.cfg (DevWeb format — differs from VuGen)
+    fs.writeFileSync(path.join(outputDir, 'default.cfg'),
+      this.generateDevWebDefaultCfg(), 'utf8');
+    console.log('✓ Generated default.cfg');
+
+    // 7. default.usp (DevWeb run logic — Main only, no vuser_init/end children)
+    fs.writeFileSync(path.join(outputDir, 'default.usp'),
+      this.generateDevWebDefaultUsp(), 'utf8');
+    console.log('✓ Generated default.usp');
+
+    // 8. ScriptUploadMetadata.xml (DevWeb format)
+    fs.writeFileSync(path.join(outputDir, 'ScriptUploadMetadata.xml'),
+      this.generateDevWebScriptUploadMetadata(safeScriptName, hasJwt), 'utf8');
+    console.log('✓ Generated ScriptUploadMetadata.xml');
+
+    // 9. Copy DevWebSdk.d.ts from project root (canonical source — do NOT generate a stub)
+    this.copyFromProjectRoot(outputDir, 'DevWebSdk.d.ts');
+    console.log('✓ Copied DevWebSdk.d.ts');
+
+    // 10. Copy jwt-helper.js + transport.pem from project root when JWT is used.
+    //     These files MUST be placed in the project root by the user.
+    //     jwt-helper.js is the DevWeb-specific JWT helper (uses Node.js built-in crypto).
+    if (hasJwt) {
+      this.copyFromProjectRoot(outputDir, 'jwt-helper.js');
+      console.log('✓ Copied jwt-helper.js  (place jwt-helper.js in project root if missing)');
+      this.copyFromProjectRoot(outputDir, 'transport.pem');
+      console.log('✓ Copied transport.pem  (replace with your actual private key)');
+    }
+
+    return files;
   }
 }
 

@@ -1,0 +1,996 @@
+================================================================================
+  USAGE GUIDE: AI-POWERED POSTMAN/BRUNO TO VUGEN SCRIPT CONVERTER
+================================================================================
+  Version: 3.1 (multi-format: Postman JSON, Bruno JSON, Bruno YAML, .bru)
+           Dual-protocol: DevWeb (JavaScript) | VuGen Web HTTP/HTML (C)
+  Approach: Pure Prompt-Based (No Code, No Project Setup)
+  Compatible: GitLab Duo | GitHub Copilot | Claude | ChatGPT | Any AI Agent
+================================================================================
+
+
+TABLE OF CONTENTS
+-----------------
+  1. Overview
+  2. What You Need (Prerequisites)
+  3. Quick Start (5-Minute Guide)
+  4. Step-by-Step Detailed Guide
+  5. Which Prompt Files to Upload
+  6. Exact Chat Templates (Copy-Paste Ready)
+  7. Handling AI Output Issues (Troubleshooting)
+  8. Examples by Collection Complexity
+  9. Tips and Best Practices
+  10. FAQ
+
+
+================================================================================
+  1. OVERVIEW
+================================================================================
+
+  WHAT IS THIS?
+  A set of plain text prompt files (.txt) that teach any AI assistant how to
+  convert Postman/Bruno API collections into VuGen DevWeb load testing scripts.
+
+  HOW DOES IT WORK?
+  You upload the prompt file(s) + your collection JSON to an AI tool.
+  The AI reads the instructions and generates complete DevWeb script files.
+
+  WHAT DOES THE AI GENERATE?
+
+  For DevWeb (JavaScript) — default:
+  +---------------------+------------------------------------------------------+
+  | File                | Purpose                                              |
+  +---------------------+------------------------------------------------------+
+  | main.js             | The load test script (all requests/logic)            |
+  | scenario.yml        | Scenario config (vusers, pacing, duration, rampUp)   |
+  | rts.yml             | Runtime settings (ALL 10 sections)                   |
+  | tsconfig.json       | TypeScript compiler configuration                    |
+  | parameters.yml      | Parameter definitions (when variables exist)         |
+  | collection_data.csv | Actual variable values from collection/environment   |
+  | data/*.b64          | Extracted large base64 values (if found)             |
+  +---------------------+------------------------------------------------------+
+
+  For VuGen Web HTTP/HTML (C) — specify protocol=web-http:
+  +---------------------------+--------------------------------------------------+
+  | File                      | Purpose                                          |
+  +---------------------------+--------------------------------------------------+
+  | Action.c                  | Main C script (requests, transactions)           |
+  | vuser_init.c              | VuGen init lifecycle (runs once per vuser)       |
+  | vuser_end.c               | VuGen end lifecycle (cleanup)                    |
+  | globals.h                 | Standard includes + parameter reference comments |
+  | [ScriptName].usr          | VuGen script metadata (INI) — required for VuGen |
+  | default.cfg               | Runtime settings (INI)                           |
+  | default.usp               | Run logic profile (INI)                          |
+  | ParameterFile.prm         | Parameter definitions (VuGen INI format)         |
+  | collection_data.dat       | Parameter values (CSV with header row)           |
+  | ScriptUploadMetadata.xml  | LRE upload manifest                              |
+  +---------------------------+--------------------------------------------------+
+
+  NO CODE REQUIRED. NO PROJECT SETUP. JUST PROMPTS + AI.
+
+
+================================================================================
+  2. WHAT YOU NEED (PREREQUISITES)
+================================================================================
+
+  YOU NEED:
+  [x] Your API collection in ONE of these supported formats:
+      - Postman Collection v2.1 JSON (.json)
+      - Bruno JSON export (.json)
+      - Bruno Single YAML export (.yml) ← "Single YAML (YAML)" option in Bruno
+      - Bruno YAML folder export (directory) ← "Bruno collection (ZIP)" extracted
+      - Single .bru request file
+  [x] (Optional) Postman/Bruno environment JSON file
+  [x] The prompt files from the "devweb-prompts" folder
+  [x] Access to any AI coding assistant:
+      - GitLab Duo
+      - GitHub Copilot Chat
+      - Claude (claude.ai or Claude Code)
+      - ChatGPT (GPT-4 recommended)
+      - Any other AI agent
+
+  HOW TO EXPORT FROM POSTMAN:
+  1. Open Postman
+  2. Right-click your collection → "Export"
+  3. Choose "Collection v2.1" → save .json file
+
+  HOW TO EXPORT FROM BRUNO:
+  Method A — Single YAML (recommended for AI prompt approach):
+  1. Open Bruno → right-click collection → "Export Collection"
+  2. Choose "Single YAML (YAML)" → saves as one .yml file
+  3. Upload this .yml file to the AI
+
+  Method B — ZIP folder (for the Node.js converter):
+  1. Open Bruno → right-click collection → "Export Collection"
+  2. Choose "Bruno collection (ZIP)" → saves as .zip
+  3. Extract the ZIP → pass the extracted folder to the converter
+
+  HOW TO EXPORT ENVIRONMENT FROM POSTMAN:
+  1. Go to Environments tab
+  2. Click the three dots (...) next to your environment → "Export"
+  3. Save the .json file
+
+
+================================================================================
+  3. QUICK START (5-MINUTE GUIDE)
+================================================================================
+
+  FOR SIMPLE COLLECTIONS (under 15 requests, basic auth):
+
+    Step 1: Open your AI tool (GitLab Duo / Copilot / Claude / etc.)
+    Step 2: Upload these 2 files in a SINGLE message:
+            - 01-MASTER-PROMPT.txt
+            - YourCollection.postman_collection.json
+    Step 3: Type: "Convert this Postman collection to VuGen DevWeb scripts"
+    Step 4: Press Send
+    Step 5: Copy the generated files into your DevWeb project folder
+    Step 6: Done!
+
+  That's it. For most collections, this is all you need.
+
+
+================================================================================
+  4. STEP-BY-STEP DETAILED GUIDE
+================================================================================
+
+  STEP 1: PREPARE YOUR INPUT FILES
+  ---------------------------------
+  Gather these files on your desktop or a folder:
+
+    YourCollection.postman_collection.json   (required)
+    YourEnvironment.postman_environment.json (optional)
+    01-MASTER-PROMPT.txt                     (required - always)
+    Additional prompt files                  (optional - see Section 5)
+
+
+  STEP 2: OPEN YOUR AI TOOL
+  --------------------------
+  Open one of these:
+    - GitLab Duo: Open in your IDE or gitlab.com
+    - GitHub Copilot: Open Copilot Chat in VS Code
+    - Claude: Go to claude.ai or use Claude Code CLI
+    - ChatGPT: Go to chatgpt.com (use GPT-4 for best results)
+
+
+  STEP 3: UPLOAD FILES + SEND MESSAGE
+  -------------------------------------
+  IMPORTANT: Upload ALL files in a SINGLE message. Do not send one by one.
+
+  Attach the files and type your message (see Section 6 for templates).
+
+  The AI will:
+    a) Read the master prompt (understands DevWeb format)
+    b) Parse your collection JSON (extracts all requests)
+    c) Analyze authentication, correlations, variables
+    d) Generate all output files
+
+
+  STEP 4: REVIEW THE OUTPUT
+  --------------------------
+  The AI will output the content of each file with clear headers like:
+
+    === FILE: main.js ===
+    (script content)
+
+    === FILE: scenario.yml ===
+    (config content)
+
+  Review each file for:
+    [x] All requests from collection are included
+    [x] Authentication is handled correctly
+    [x] Dynamic values (tokens, IDs) are extracted and reused
+    [x] {{variables}} are replaced with actual values
+    [x] No parameters.yml unless CSV data is truly needed
+
+
+  STEP 5: COPY FILES TO DEVWEB PROJECT
+  --------------------------------------
+  Create a new folder for your DevWeb script and copy the generated files:
+
+    MyDevWebScript/
+      main.js              <-- The load test script
+      scenario.yml         <-- Scenario config (pacing, vusers, duration)
+      rts.yml              <-- Runtime settings
+      tsconfig.json        <-- TypeScript config
+      DevWebSdk.d.ts       <-- Copy from VuGen installation
+      parameters.yml       <-- Parameter definitions (if variables exist)
+      collection_data.csv  <-- Variable values (if variables exist)
+      data/                <-- Large base64 data files (if any)
+
+  Open the folder in VuGen DevWeb to verify and run.
+
+
+  STEP 6: ITERATE IF NEEDED
+  ---------------------------
+  If something is wrong, send a follow-up message to the AI:
+    "The authentication part is incorrect. Please fix it."
+    "Request #5 is missing the authorization header."
+    "Please add extractors for the token in the login response."
+
+  You can also upload additional prompt files for specific fixes
+  (see Section 5 and Section 7).
+
+
+================================================================================
+  5. WHICH PROMPT FILES TO UPLOAD
+================================================================================
+
+  DECISION TABLE:
+  +-----------------------------+------------------------------------------+
+  | Your Collection Has...      | Upload These Files                       |
+  +-----------------------------+------------------------------------------+
+  | Simple GET/POST requests    | 01-MASTER-PROMPT.txt                     |
+  | No authentication           | + collection.json                        |
+  |                             | (2 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Bearer token or Basic auth  | 01-MASTER-PROMPT.txt                     |
+  |                             | 03-AUTHENTICATION-HANDLER.txt            |
+  |                             | + collection.json                        |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | OAuth2 authentication       | 01-MASTER-PROMPT.txt                     |
+  |                             | 03-AUTHENTICATION-HANDLER.txt            |
+  |                             | 04-CORRELATION-EXTRACTOR.txt             |
+  |                             | + collection.json                        |
+  |                             | (4 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Chained requests            | 01-MASTER-PROMPT.txt                     |
+  | (token from login used      | 04-CORRELATION-EXTRACTOR.txt             |
+  | in later requests)          | + collection.json                        |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Pre-request / test scripts  | 01-MASTER-PROMPT.txt                     |
+  | in Postman                  | 02-MAIN-JS-GENERATOR.txt                 |
+  |                             | + collection.json                        |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | CSV test data needed        | 01-MASTER-PROMPT.txt                     |
+  | (multiple user accounts)    | 07-PARAMETERS-YML-RULES.txt              |
+  |                             | + collection.json                        |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Complex pre-request/test    | 01-MASTER-PROMPT.txt                     |
+  | scripts (pm.test,           | 09-CUSTOM-SCRIPT-CONVERTER.txt           |
+  | pm.sendRequest, CryptoJS)   | + collection.json                        |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Complex / everything        | 01-MASTER-PROMPT.txt                     |
+  |                             | 02-MAIN-JS-GENERATOR.txt                 |
+  |                             | 03-AUTHENTICATION-HANDLER.txt            |
+  |                             | 04-CORRELATION-EXTRACTOR.txt             |
+  |                             | 09-CUSTOM-SCRIPT-CONVERTER.txt           |
+  |                             | 07-PARAMETERS-YML-RULES.txt              |
+  |                             | + collection.json                        |
+  |                             | (7 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Bruno collection (JSON)     | 01-MASTER-PROMPT.txt                     |
+  |                             | 08-COLLECTION-PARSING-RULES.txt          |
+  |                             | + bruno-collection.json                  |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Bruno Single YAML (.yml)    | 01-MASTER-PROMPT.txt                     |
+  |                             | 08-COLLECTION-PARSING-RULES.txt          |
+  |                             | + collection.yml                         |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | Bruno YAML folder-based     | 01-MASTER-PROMPT.txt                     |
+  | (ZIP extracted)             | 08-COLLECTION-PARSING-RULES.txt          |
+  |                             | + paste folder contents or describe       |
+  |                             | (3 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | VuGen Web HTTP/HTML C       | 01-MASTER-PROMPT.txt                     |
+  | (simple, no auth)           | 06-MANDATORY-FILES.txt                   |
+  |                             | 10-WEB-HTTP-ACTION-GENERATOR.txt         |
+  |                             | + collection.json                        |
+  |                             | (4 files total)                          |
+  +-----------------------------+------------------------------------------+
+  | VuGen Web HTTP/HTML C       | 01-MASTER-PROMPT.txt                     |
+  | (with auth + correlations)  | 04-CORRELATION-EXTRACTOR.txt             |
+  |                             | 06-MANDATORY-FILES.txt                   |
+  |                             | 10-WEB-HTTP-ACTION-GENERATOR.txt         |
+  |                             | 11-WEB-HTTP-AUTH-HANDLER.txt             |
+  |                             | + collection.json                        |
+  |                             | (6 files total)                          |
+  +-----------------------------+------------------------------------------+
+
+  VISUAL FLOWCHART:
+
+                        Start Here
+                            |
+                    Is it a simple collection?
+                    (under 10 requests, no auth)
+                       /           \
+                     YES            NO
+                      |              |
+                Upload: 01       Does it have authentication?
+                + collection        /          \
+                (DONE!)           YES            NO
+                                   |              |
+                             Upload: 01      Does it chain requests?
+                             + 03               /          \
+                             + collection     YES            NO
+                                (DONE!)        |              |
+                                          Upload: 01     Upload: 01
+                                          + 04           + 02
+                                          + collection   + collection
+                                          (DONE!)        (DONE!)
+
+
+  FILES YOU NEVER NEED TO UPLOAD (for DevWeb JavaScript output):
+    - 00-README-START-HERE.txt         (this is for humans, not AI)
+    - 05-SCENARIO-YML-GENERATOR.txt    (covered in master prompt)
+    - 06-MANDATORY-FILES.txt           (covered in master prompt for DevWeb)
+    - 10-WEB-HTTP-ACTION-GENERATOR.txt (only for VuGen Web HTTP/HTML C output)
+    - 11-WEB-HTTP-AUTH-HANDLER.txt     (only for VuGen Web HTTP/HTML C output)
+    - USAGE-GUIDE.txt                  (this document)
+
+  FILES TO UPLOAD FOR VuGen Web HTTP/HTML (C) output:
+    - 06-MANDATORY-FILES.txt           (config file templates: .usr, default.cfg,
+                                        default.usp INI, ParameterFile.prm INI,
+                                        collection_data.dat, ScriptUploadMetadata.xml)
+    - 10-WEB-HTTP-ACTION-GENERATOR.txt (C code rules: web_url, web_custom_request,
+                                        web_add_header, web_reg_save_param_*,
+                                        {varName} syntax, transaction structure)
+    - 11-WEB-HTTP-AUTH-HANDLER.txt     (when collection has OAuth2/auth — C patterns
+                                        for vuser_init.c token fetch)
+
+  NEW IN v3.1 (dual-protocol):
+    - 10-WEB-HTTP-ACTION-GENERATOR.txt — C code generation rules for Action.c,
+      vuser_init.c, vuser_end.c, globals.h (equivalent of 02-MAIN-JS-GENERATOR
+      but for VuGen Web HTTP/HTML C protocol)
+    - 11-WEB-HTTP-AUTH-HANDLER.txt — VuGen Web HTTP/HTML auth patterns in C
+      (OAuth2, Basic, Bearer, API Key for vuser_init.c)
+    - 06-MANDATORY-FILES.txt now includes the complete default.usp MercIniTree format
+      required for VuGen to execute transactions during replay
+
+  NEW IN v2.0:
+    - 09-CUSTOM-SCRIPT-CONVERTER.txt  (Postman/Bruno script translation)
+    - Upload this when your collection has complex pre-request or test scripts
+      (pm.test, pm.sendRequest, CryptoJS, assertions, conditional logic)
+
+
+================================================================================
+  6. EXACT CHAT TEMPLATES (COPY-PASTE READY)
+================================================================================
+
+  TEMPLATE A: SIMPLE COLLECTION
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + MyCollection.json
+
+  Type this message:
+
+    "I am attaching a prompt instruction file and a Postman collection.
+    Please read the prompt instructions carefully and convert this
+    Postman collection into VuGen DevWeb load testing scripts.
+
+    Generate these output files:
+    1. main.js
+    2. scenario.yml
+    3. rts.yml
+    4. tsconfig.json"
+
+  -----------------------------------------------------------------------
+
+
+  TEMPLATE B: COLLECTION WITH AUTHENTICATION
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + 03-AUTHENTICATION-HANDLER.txt
+          + MyCollection.json
+
+  Type this message:
+
+    "I am attaching prompt instruction files and a Postman collection.
+
+    The collection uses [OAuth2 / Bearer Token / Basic Auth / API Key]
+    authentication. Please read both prompt files carefully.
+
+    Convert the Postman collection into VuGen DevWeb scripts.
+    Handle the authentication flow in the initialize section.
+
+    Generate all required output files:
+    1. main.js (with proper auth in initialize section)
+    2. scenario.yml
+    3. rts.yml
+    4. tsconfig.json"
+
+  -----------------------------------------------------------------------
+
+
+  TEMPLATE C: COLLECTION WITH CHAINED REQUESTS (CORRELATIONS)
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + 03-AUTHENTICATION-HANDLER.txt
+          + 04-CORRELATION-EXTRACTOR.txt + MyCollection.json
+
+  Type this message:
+
+    "I am attaching prompt instruction files and a Postman collection.
+
+    This collection has chained API calls where values from one response
+    are used in subsequent requests (e.g., auth tokens, resource IDs).
+
+    Please:
+    1. Read all prompt instruction files carefully
+    2. Detect all dynamic values that flow between requests
+    3. Use proper extractors (JsonPathExtractor, BoundaryExtractor, etc.)
+    4. Store extracted values in load.global and use them in later requests
+    5. Replace all {{variables}} with hardcoded values or load.global references
+
+    Generate all output files:
+    1. main.js (with extractors and correlations)
+    2. scenario.yml
+    3. rts.yml
+    4. tsconfig.json"
+
+  -----------------------------------------------------------------------
+
+
+  TEMPLATE D: COLLECTION WITH ENVIRONMENT FILE
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + MyCollection.json + MyEnvironment.json
+
+  Type this message:
+
+    "I am attaching a prompt instruction file, a Postman collection,
+    and a Postman environment file.
+
+    Please:
+    1. Read the prompt instructions
+    2. Use the environment variable values to resolve all {{variables}}
+       in the collection (hardcode them directly in the script)
+    3. Convert the collection into VuGen DevWeb scripts
+
+    Generate all output files:
+    1. main.js
+    2. scenario.yml
+    3. rts.yml
+    4. tsconfig.json"
+
+  -----------------------------------------------------------------------
+
+
+  TEMPLATE E: FULL COMPLEX COLLECTION
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + 02-MAIN-JS-GENERATOR.txt
+          + 03-AUTHENTICATION-HANDLER.txt + 04-CORRELATION-EXTRACTOR.txt
+          + 09-CUSTOM-SCRIPT-CONVERTER.txt + 07-PARAMETERS-YML-RULES.txt
+          + MyCollection.json + MyEnvironment.json
+
+  Type this message:
+
+    "I am attaching multiple prompt instruction files, a Postman collection,
+    and an environment file.
+
+    This is a complex collection with:
+    - OAuth2 authentication
+    - Chained requests with dynamic values (correlations)
+    - Pre-request and test scripts (pm.test, pm.environment.set, etc.)
+    - Multiple folders/workflows
+
+    Please read ALL prompt instruction files carefully, then:
+
+    STEP 1: Build a VARIABLE CLASSIFICATION TABLE listing every {{variable}}
+    and whether it is STATIC, CORRELATION, CSV_PARAM, or GENERATED.
+
+    STEP 2: Run the 2-PASS CORRELATION ALGORITHM to build a correlation
+    map showing which request produces each dynamic value and which
+    requests consume it.
+
+    STEP 3: Convert ALL pre-request and test scripts from Postman to
+    DevWeb equivalents. Convert pm.environment.set() to extractors,
+    pm.test() to if-checks, and all pm.* APIs per the conversion rules.
+
+    STEP 4: Generate all output files:
+    1. main.js (with proper auth, extractors, correlations, script conversion)
+    2. scenario.yml
+    3. rts.yml
+    4. tsconfig.json
+    5. parameters.yml (ONLY if CSV data-driven testing is needed)
+
+    Do NOT generate parameters.yml unless I explicitly ask for data-driven
+    testing. Hardcode all static values. Use extractors for dynamic values."
+
+  -----------------------------------------------------------------------
+
+
+  TEMPLATE F: LARGE COLLECTION (50+ REQUESTS) - BATCH PROCESSING
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + MyLargeCollection.json
+
+  Type this message:
+
+    "I am attaching a prompt instruction file and a large Postman collection
+    with many requests.
+
+    Please process this in batches:
+
+    FIRST: Analyze the full collection and list:
+    - Total number of requests
+    - Folder structure
+    - Authentication type
+    - Variables that need correlation
+
+    THEN: Generate the complete main.js with all requests.
+    If the output is too long, generate it in parts:
+    - Part 1: initialize() + first half of action()
+    - Part 2: second half of action() + finalize()
+
+    Also generate: scenario.yml, rts.yml, tsconfig.json"
+
+  -----------------------------------------------------------------------
+
+
+  TEMPLATE G: VUGEN WEB HTTP/HTML (C) - SIMPLE COLLECTION
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + 06-MANDATORY-FILES.txt
+          + 10-WEB-HTTP-ACTION-GENERATOR.txt + MyCollection.json
+
+  Type this message:
+
+    "I am attaching prompt instruction files and a Postman/Bruno collection.
+
+    Please generate VuGen Web HTTP/HTML (C-based) LoadRunner script files,
+    NOT DevWeb JavaScript files.
+
+    Read prompt 10 for the C code patterns (web_url, web_custom_request,
+    web_add_header, web_reg_save_param_*, {varName} syntax).
+    Read prompt 06 for the exact config file formats (.usr, default.cfg,
+    default.usp INI, ParameterFile.prm INI, ScriptUploadMetadata.xml).
+
+    Generate ALL required files:
+    1. Action.c             (C script with lr_start_transaction, web_url, web_custom_request)
+    2. vuser_init.c         (VuGen init lifecycle)
+    3. vuser_end.c          (VuGen end lifecycle)
+    4. globals.h            (standard includes + parameter inventory comments)
+    5. [ScriptName].usr     (VuGen metadata INI)
+    6. default.cfg          (runtime settings INI)
+    7. default.usp          (run logic profile INI — full MercIniTree format)
+    8. ParameterFile.prm    (INI format with [parameter:name] sections, NOT XML)
+    9. collection_data.dat  (CSV with header row + values)
+    10. ScriptUploadMetadata.xml
+
+    Use {varName} syntax for all parameters (NOT ${load.params.varName}).
+    Place web_reg_save_param_json() BEFORE the request that produces the value.
+    Always add web_set_sockets_option('SSL_VERSION', 'AUTO') as first line of Action()."
+
+  -----------------------------------------------------------------------
+
+
+  TEMPLATE H: VUGEN WEB HTTP/HTML (C) - WITH AUTH AND CORRELATIONS
+  -----------------------------------------------------------------------
+  Attach: 01-MASTER-PROMPT.txt + 04-CORRELATION-EXTRACTOR.txt
+          + 06-MANDATORY-FILES.txt + 10-WEB-HTTP-ACTION-GENERATOR.txt
+          + 11-WEB-HTTP-AUTH-HANDLER.txt + MyCollection.json
+
+  Type this message:
+
+    "I am attaching prompt instruction files and an API collection.
+
+    This collection uses OAuth2 authentication and has chained requests
+    (values from one response are used in subsequent requests).
+
+    Generate VuGen Web HTTP/HTML (C-based) LoadRunner script files.
+
+    Please:
+    1. Read all prompt files carefully
+    2. Run the 2-pass correlation algorithm (from prompt 04) to detect all
+       dynamic values (tokens, IDs) that flow between requests
+    3. Put the OAuth2 token fetch in vuser_init.c (see prompt 11 for exact C patterns)
+    4. Use web_reg_save_param_json() BEFORE the request that produces each value
+    5. Use {varName} syntax for all parameters and correlation references
+    6. Use _ prefix for correlated variables: {_accessToken}, {_userId}, {_orderId}
+    7. Group requests into lr_start_transaction / lr_end_transaction blocks by folder
+
+    Generate ALL required files:
+    Action.c (with web_set_sockets_option SSL_VERSION AUTO as first line),
+    vuser_init.c (OAuth2 token fetch using web_reg_save_param_json + web_custom_request),
+    vuser_end.c, globals.h, [ScriptName].usr, default.cfg, default.usp (full MercIniTree),
+    ParameterFile.prm (INI format — NOT XML), collection_data.dat, ScriptUploadMetadata.xml"
+
+  -----------------------------------------------------------------------
+
+
+================================================================================
+  7. HANDLING AI OUTPUT ISSUES (TROUBLESHOOTING)
+================================================================================
+
+  ISSUE 1: AI generates parameters.yml with API URLs and configuration
+  -----------------------------------------------------------------------
+  This is WRONG. parameters.yml should only have CSV test data.
+
+  Send this follow-up:
+    "STOP. The parameters.yml is incorrect. Read the attached rules file.
+    parameters.yml should ONLY be used for CSV test data (like usernames
+    and passwords from a CSV file). API URLs, client IDs, and configuration
+    values should be HARDCODED directly in main.js, not parameterized.
+    Please remove parameters.yml and hardcode all values in main.js."
+
+  Attach: 07-PARAMETERS-YML-RULES.txt
+
+
+  ISSUE 2: AI misses dynamic values / correlations
+  -----------------------------------------------------------------------
+  Tokens, session IDs, or resource IDs are not being extracted.
+
+  Send this follow-up:
+    "Some dynamic values are not being correlated. Please check:
+    - The login response should extract the auth token using JsonPathExtractor
+    - Any created resource ID (from POST requests) should be extracted
+    - Use load.global to store and reuse these values
+    Please read the attached correlation rules and fix the extractors."
+
+  Attach: 04-CORRELATION-EXTRACTOR.txt
+
+
+  ISSUE 3: AI generates wrong authentication code
+  -----------------------------------------------------------------------
+  Auth flow is missing or incorrect.
+
+  Send this follow-up:
+    "The authentication is not correct. This collection uses [OAuth2 /
+    Bearer / Basic / API Key]. Please read the attached authentication
+    rules and regenerate the initialize() section with proper auth setup."
+
+  Attach: 03-AUTHENTICATION-HANDLER.txt
+
+
+  ISSUE 4: AI does not convert pre-request/test scripts
+  -----------------------------------------------------------------------
+  Postman scripts are ignored or incorrectly converted.
+
+  Send this follow-up:
+    "The collection has pre-request and test scripts that were not converted.
+    Please convert them using these rules:
+    - pm.environment.set() --> load.global.xxx = value
+    - pm.environment.get() --> load.global.xxx
+    - pm.response.json() --> JSON.parse(response.body)
+    - pm.test() --> if-check after request
+    - console.log() --> load.log()
+    Read the attached prompt for complete conversion rules."
+
+  Attach: 02-MAIN-JS-GENERATOR.txt
+
+
+  ISSUE 5: AI skips or ignores Postman scripts (pre-request / test)
+  -----------------------------------------------------------------------
+  Custom scripts were not converted to DevWeb equivalents.
+
+  Send this follow-up:
+    "The collection has pre-request and test scripts that you skipped.
+    These MUST be converted to DevWeb format. Please read the attached
+    script conversion rules and re-generate the script. Key rules:
+    - pm.environment.set() in test scripts --> become EXTRACTORS on the request
+    - pm.test() assertions --> become if-checks after the request
+    - pm.sendRequest() --> become separate load.WebRequest calls
+    - CryptoJS --> use Node.js crypto module instead
+    - console.log() --> load.log()
+    Do NOT skip any scripts. Convert everything."
+
+  Attach: 09-CUSTOM-SCRIPT-CONVERTER.txt
+
+
+  ISSUE 6: AI output is truncated / incomplete
+  -----------------------------------------------------------------------
+  Large collections may exceed AI output limits.
+
+  Send this follow-up:
+    "The output was truncated. Please continue from where you stopped.
+    Generate the remaining requests starting from [Request Name]."
+
+  Or ask for batch processing:
+    "Please split the output into parts:
+    Part 1: initialize() section
+    Part 2: action() section - first 10 requests
+    Part 3: action() section - remaining requests + finalize()"
+
+
+  ISSUE 6: {{variables}} are not replaced
+  -----------------------------------------------------------------------
+  Some {{placeholders}} remain in the generated script.
+
+  Send this follow-up:
+    "There are still {{variable}} placeholders in the script.
+    Please resolve them:
+    - If the value is in the collection/environment variables, hardcode it
+    - If it comes from a previous response, use load.global.variableName
+    - If unknown, add a // TODO comment
+    List any variables you could not resolve."
+
+
+  ISSUE 7: rts.yml is incomplete (missing sections)
+  -----------------------------------------------------------------------
+  rts.yml has only 3 sections (httpConnection, ssl, replay) instead of 10.
+
+  Send this follow-up:
+    "The rts.yml is incomplete. It must have ALL 10 sections.
+    Please regenerate it with: httpConnection, grpc, proxy, ssl, replay,
+    vts, encryption, vuserLogger, flow, thinkTime — with all properties.
+    Do not abbreviate or skip any section."
+
+  Attach: 06-MANDATORY-FILES.txt
+
+
+  ISSUE 8: VuGen Web HTTP/HTML — ParameterFile.prm is in XML format
+  -----------------------------------------------------------------------
+  The generated ParameterFile.prm uses <ParamList> XML tags instead of
+  VuGen INI [parameter:name] sections.
+
+  Send this follow-up:
+    "The ParameterFile.prm is in the wrong format. VuGen uses INI format,
+    NOT XML. Each parameter needs a [parameter:name] section with:
+    ColumnName='name', GenerateNewVal='Once' or 'EachIteration',
+    SelectNextRow='Sequential', Table='collection_data.dat', Type='Table'.
+    The ColumnName must exactly match the column header in collection_data.dat.
+    Please regenerate in correct INI format."
+
+  Attach: 06-MANDATORY-FILES.txt
+
+
+  ISSUE 9: VuGen Web HTTP/HTML — {varName} is URL-encoded to %7BvarName%7D
+  -----------------------------------------------------------------------
+  Parameters appear as %7BclientId%7D instead of {clientId} in bodies.
+
+  Send this follow-up:
+    "The parameter references in the request body are URL-encoded.
+    {clientId} should appear literally as {clientId} in the Body string —
+    LR will substitute the value at runtime. Do NOT URL-encode the {braces}.
+    Please fix all Body= parameters that contain {varName} references."
+
+
+  ISSUE 10: VuGen Web HTTP/HTML — correlation not placed before request
+  -----------------------------------------------------------------------
+  web_reg_save_param_json() or web_reg_save_param() appears AFTER the
+  request that produces the value.
+
+  Send this follow-up:
+    "The web_reg_save_param_json() call for {tokenName} must be placed
+    BEFORE the web_custom_request() that returns the token — VuGen
+    registers the extraction rule before the request is sent.
+    Please move all correlation registrations to just before their
+    producing request."
+
+
+================================================================================
+  8. EXAMPLES BY COLLECTION COMPLEXITY
+================================================================================
+
+  EXAMPLE 1: Simple REST API (5 requests, no auth)
+  -------------------------------------------------
+  Collection: CRUD operations on /api/users
+  Requests: GET list, GET by ID, POST create, PUT update, DELETE
+
+  Upload: 01-MASTER-PROMPT.txt + collection.json
+  Result: Simple main.js with 5 requests, each in its own transaction
+
+  AI Generates:
+    load.action("Action", async function() {
+        let t01 = new load.Transaction("01_GetUsers");
+        t01.start();
+        const resp1 = new load.WebRequest({
+            id: 1, url: "https://api.example.com/users",
+            method: "GET", returnBody: true
+        }).sendSync();
+        t01.stop(load.TransactionStatus.Passed);
+        // ... more requests ...
+    });
+
+
+  EXAMPLE 2: API with Bearer Token (10 requests)
+  ------------------------------------------------
+  Collection: E-commerce API with static bearer token
+  Auth: Bearer token set at collection level
+
+  Upload: 01-MASTER-PROMPT.txt + 03-AUTHENTICATION-HANDLER.txt + collection.json
+  Result: main.js with token in initialize, all requests use it
+
+  AI Generates:
+    load.initialize("Initialize", async function() {
+        load.global.bearerToken = "eyJhbG...";
+    });
+    load.action("Action", async function() {
+        load.WebRequest.defaults.headers = {
+            "Authorization": "Bearer " + load.global.bearerToken
+        };
+        // ... requests without individual auth headers ...
+    });
+
+
+  EXAMPLE 3: OAuth2 + Chained Requests (20 requests)
+  ----------------------------------------------------
+  Collection: Banking API with OAuth2 client credentials,
+  creates accounts and uses account IDs in subsequent calls
+
+  Upload: 01 + 03 + 04 + collection.json + environment.json
+  Result: Full script with token fetch, correlations, transactions
+
+  AI Generates:
+    load.initialize("Initialize", async function() {
+        // OAuth2 token fetch with extractors
+        const tokenResp = new load.WebRequest({
+            url: "https://auth.bank.com/token",
+            method: "POST",
+            body: { "grant_type": "client_credentials", ... },
+            extractors: [
+                new load.JsonPathExtractor("accessToken", "$.access_token")
+            ]
+        }).sendSync();
+        load.global.accessToken = tokenResp.extractors.accessToken;
+    });
+    load.action("Action", async function() {
+        // Create account - extract accountId
+        // Use accountId in subsequent requests
+        // All {{variables}} resolved
+    });
+
+
+  EXAMPLE 4: Data-Driven with CSV (15 requests)
+  -----------------------------------------------
+  Collection: User registration flow, needs different test users
+
+  Upload: 01 + 07 + collection.json
+  Message: "Each virtual user should use different credentials from a CSV"
+  Result: main.js with load.params + parameters.yml + sample CSV
+
+  AI Generates:
+    parameters.yml with CSV reference
+    main.js using load.params.userID, load.params.userPWD
+
+
+================================================================================
+  9. TIPS AND BEST PRACTICES
+================================================================================
+
+  TIP 1: ALWAYS UPLOAD 01-MASTER-PROMPT.txt FIRST
+    This is the foundation. Without it, the AI does not know DevWeb format.
+
+  TIP 2: UPLOAD ALL FILES IN ONE MESSAGE
+    Do not send files one by one. The AI needs to see the prompt AND the
+    collection together to generate accurate output.
+
+  TIP 3: USE THE ENVIRONMENT FILE
+    If your collection has {{variables}}, the environment file provides
+    the actual values. Without it, the AI may leave placeholders.
+
+  TIP 4: REVIEW THE OUTPUT CAREFULLY
+    AI-generated scripts are 80-90% accurate. Always review:
+    - Are all requests included?
+    - Is authentication correct?
+    - Are dynamic values properly extracted?
+    - Are transaction start/stop balanced?
+
+  TIP 5: ITERATE WITH FOLLOW-UP MESSAGES
+    You do not need to start over. If something is wrong, just tell the AI
+    what to fix in a follow-up message.
+
+  TIP 6: FOR VERY LARGE COLLECTIONS
+    If your collection has 50+ requests, ask the AI to:
+    - First: List all requests and folders (analysis)
+    - Then: Generate the script in parts
+
+  TIP 7: COPY DevWebSdk.d.ts FROM VUGEN INSTALLATION
+    The AI cannot generate the full type definitions file.
+    Copy it from: <VuGen Install Dir>/dat/devweb/DevWebSdk.d.ts
+
+  TIP 8: TEST IN VUGEN BEFORE LOAD TESTING
+    Always open the generated script in VuGen DevWeb and run a single
+    user test (replay) before running a full load test.
+
+  TIP 9: SAVE GOOD OUTPUTS AS REFERENCE
+    When the AI generates a good script for a specific collection type
+    (e.g., OAuth2 + REST), save it as a reference for similar future
+    collections.
+
+  TIP 10: AI TOOL COMPARISON
+    - GitLab Duo: Good integration with GitLab CI/CD pipelines
+    - GitHub Copilot: Best for in-IDE usage (VS Code)
+    - Claude: Best for large collections (200K context window)
+    - ChatGPT GPT-4: Good general purpose, may truncate large outputs
+
+
+================================================================================
+  10. FAQ
+================================================================================
+
+  Q: Do I need to upload ALL 8 prompt files every time?
+  A: No! For most collections, just upload 01-MASTER-PROMPT.txt +
+     your collection JSON. Add other prompts only when needed.
+
+  Q: Can I use this with GitLab Duo?
+  A: Yes! Upload the .txt prompt file(s) and collection JSON to
+     GitLab Duo chat. It works the same way.
+
+  Q: Can I use this with GitHub Copilot?
+  A: Yes! In VS Code, open Copilot Chat, attach the files, and
+     send your message.
+
+  Q: What if my collection is too large for the AI?
+  A: Ask the AI to process in batches. Split by folders or
+     request groups. See Template F in Section 6.
+
+  Q: Do I need to know JavaScript to use this?
+  A: Basic JavaScript knowledge helps for reviewing the output,
+     but you do not need to write any code yourself.
+
+  Q: What if the AI generates wrong code?
+  A: Send a follow-up message describing the issue. Upload the
+     relevant additional prompt file (see Section 7).
+
+  Q: Can I convert Bruno collections too?
+  A: Yes! Bruno is fully supported in all its export formats:
+     - Bruno JSON export (.json): Upload 01 + 08 + your .json file
+     - Bruno Single YAML (.yml): Upload 01 + 08 + your .yml file
+     - Bruno YAML folder (ZIP extracted): Use the Node.js converter
+       with the folder path: node src/cli.js convert -i MyFolder/ -o output/
+     - Single .bru file: Upload 01 + 08 + your .bru file
+
+  Q: What is the difference between Bruno Single YAML and Bruno ZIP folder?
+  A: Both contain the same data but in different structures.
+     - "Single YAML (YAML)": Everything in one .yml file with an "items"
+       array. Best for sharing with AI assistants.
+     - "Bruno collection (ZIP)": A directory tree where each request is
+       its own .yml file. Best for the Node.js converter tool.
+     Both are fully supported and produce identical DevWeb output.
+
+  Q: Does the Node.js converter support all Bruno formats?
+  A: Yes. Pass any of these to -i / --input:
+     - .json file   → Postman v2.1 or Bruno JSON
+     - .yml file    → Bruno Single YAML (bundled)
+     - folder path  → Bruno YAML folder-based (distributed)
+     - .bru file    → Single Bruno request
+
+  Q: Do I need the original converter project (Node.js code)?
+  A: No! These prompts are completely standalone.
+     No code, no npm install, no project setup needed.
+
+  Q: Where do I get the DevWebSdk.d.ts file?
+  A: Copy from your VuGen installation directory:
+     <VuGen Dir>/dat/devweb/DevWebSdk.d.ts
+
+  Q: Can I customize the prompts?
+  A: Yes! The prompt files are plain text. Edit them to add your
+     organization-specific patterns, API conventions, or naming rules.
+
+  Q: Which output protocol should I choose — DevWeb or Web HTTP/HTML?
+  A: It depends on your LoadRunner setup:
+     - DevWeb (JavaScript): Use for OpenText LoadRunner 24.x+ / LRE Cloud.
+       Modern, async JS engine. Best for REST/JSON APIs.
+     - Web HTTP/HTML (C): Use for classic VuGen C-based scripts, on-premise LRE,
+       or when your organization standardizes on Web protocol scripts.
+       Same as recording with VuGen Web (HTTP/HTML) protocol.
+
+  Q: Can I use VuGen Web HTTP/HTML scripts in LoadRunner Enterprise (LRE)?
+  A: Yes. Open the generated folder in VuGen, validate/replay, then upload
+     via LRE directly. The ScriptUploadMetadata.xml handles the upload manifest.
+
+  Q: What is the difference between collection_data.dat and collection_data.csv?
+  A: Same format (comma-separated with header), different file extensions.
+     DevWeb uses .csv (collection_data.csv), VuGen Web HTTP/HTML uses .dat
+     (collection_data.dat). Both are referenced in ParameterFile.prm or
+     parameters.yml respectively.
+
+  Q: Why does ParameterFile.prm use INI format instead of XML?
+  A: VuGen's internal format for ParameterFile.prm is INI-style [parameter:name]
+     sections, which is what VuGen generates when you use "Replace with Parameter"
+     from the GUI. This is the correct format that VuGen reads natively.
+
+  Q: How are LR parameters different from DevWeb parameters?
+  A: In Web HTTP/HTML (C), ALL variables use {varName} syntax — config params,
+     test data, and correlation values all use the same {braces} notation.
+     LR resolves them at runtime from ParameterFile.prm or as captured
+     correlation values. There is no load.global / load.params split.
+
+  Q: How do I add more test users for data-driven testing (C scripts)?
+  A: Edit collection_data.dat and add one row per test user. The ParameterFile.prm
+     entries with GenerateNewVal="EachIteration" will pick up a new row each
+     iteration. Column order must match the header row.
+
+  Q: The .usr file can't be opened in VuGen — "unsupported protocol" error.
+  A: Check that MajorVersion=26, MinorVersion=1, ActiveTypes=QTWeb, and
+     AdditionalTypes=QTWeb are all set correctly in [ScriptName].usr.
+     VuGen version 25.x uses MajorVersion=25, MinorVersion=3.
+     Adjust to match your installed VuGen version.
+
+
+================================================================================
+  END OF USAGE GUIDE
+================================================================================
+  For questions or improvements to these prompts, contact the API Testing Team.
+================================================================================

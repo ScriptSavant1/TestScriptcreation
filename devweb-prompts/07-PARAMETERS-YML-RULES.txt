@@ -1,0 +1,408 @@
+================================================================================
+  PROMPT 07: parameters.yml AND VARIABLE CLASSIFICATION RULES
+  (CRITICAL - READ CAREFULLY!)
+================================================================================
+
+  THIS IS THE MOST IMPORTANT PROMPT FILE.
+  WRONG classification of variables is the #1 mistake AI systems make.
+
+  SCOPE: This file covers DevWeb (JavaScript) parameters.yml format.
+  FOR VuGen Web HTTP/HTML (C): The same 3-tier classification logic applies,
+  but the output format is ParameterFile.prm (INI) + collection_data.dat.
+  See 06-MANDATORY-FILES.txt for the ParameterFile.prm exact format.
+
+  Quick mapping: DevWeb → Web HTTP/HTML (C)
+    parameters.yml + collection_data.csv  →  ParameterFile.prm + collection_data.dat
+    nextValue: once                        →  GenerateNewVal="Once"
+    nextValue: iteration                   →  GenerateNewVal="EachIteration"
+    load.params.varName                    →  {varName} in C code
+    load.global.varName (dynamic)          →  {_varName} (web_reg_save_param_* target)
+
+================================================================================
+  THE 3-TIER VARIABLE CLASSIFICATION SYSTEM
+================================================================================
+
+  Every {{variable}} in a collection MUST be classified into one of 3 tiers.
+  The classification determines how the variable is used in the generated script
+  and whether it appears in parameters.yml.
+
+  +-----------+--------------------+---------------------------+-------------------+
+  | Tier      | Access Pattern     | Source                    | parameters.yml?   |
+  +-----------+--------------------+---------------------------+-------------------+
+  | DYNAMIC   | load.global.var    | API responses, scripts    | NO                |
+  | PARAM CFG | load.params.var    | collection_data.csv       | YES (once)        |
+  | PARAM DATA| load.params.var    | collection_data.csv       | YES (iteration)   |
+  +-----------+--------------------+---------------------------+-------------------+
+
+================================================================================
+  TIER 1: DYNAMIC VARIABLES → load.global.varName
+================================================================================
+
+  What: Values that are PRODUCED at runtime by API responses or scripts.
+  Source: Extracted from HTTP responses, set by pre-request/test scripts.
+  In script: load.global.variableName
+  Initialized: load.global.varName = null in initialize()
+
+  How to detect:
+    1. Variable is a CORRELATION TARGET (extracted from a response via extractors)
+    2. Variable is SET BY SCRIPTS: context.set("var"), pm.environment.set("var"),
+       pm.collectionVariables.set("var"), pm.globals.set("var")
+    3. Variable has _ prefix AND empty value (convention for dynamic placeholders)
+
+  Examples:
+    load.global.authToken      (from login response)
+    load.global.userId         (from login response)
+    load.global.orderId        (from order creation response)
+    load.global.sessionId      (from session response)
+    load.global.csrfToken      (from HTML page extraction)
+
+  NEVER put dynamic variables in parameters.yml.
+  Use EXTRACTORS (JsonPathExtractor, BoundaryExtractor, etc.) instead.
+
+================================================================================
+  TIER 2: PARAMETERIZED CONFIG → load.params.varName (nextValue: once)
+================================================================================
+
+  What: Configuration values that stay constant throughout the test run.
+  Source: Collection variables, environment variables with known values.
+  In script: load.params.variableName
+  Stored in: collection_data.csv (actual values from collection/environment)
+  parameters.yml: nextValue: once (read once per test run)
+
+  How to detect:
+    - URLs, base URLs, endpoints → config
+    - API keys, client IDs, client secrets → config
+    - Redirect URLs, callback URLs → config
+    - API version strings → config
+    - Any non-credential, non-dynamic value with a known value → config
+
+  Examples:
+    load.params.baseUrl        → "https://api.example.com"
+    load.params.clientId       → "abc123def456"
+    load.params.apiKey         → "sk_live_xyz789"
+    load.params.redirectUri    → "https://app.example.com/callback"
+    load.params.apiVersion     → "v2"
+
+  parameters.yml entry:
+    - name: baseUrl
+      type: csv
+      fileName: collection_data.csv
+      columnName: baseUrl
+      nextValue: once           # ← Read ONCE per test run
+      nextRow: sequential
+      onEnd: loop
+
+================================================================================
+  TIER 3: PARAMETERIZED TEST DATA → load.params.varName (nextValue: iteration)
+================================================================================
+
+  What: Test data that should DIFFER per virtual user or per iteration.
+  Source: Collection variables containing credential-like values.
+  In script: load.params.variableName
+  Stored in: collection_data.csv (actual values from collection/environment)
+  parameters.yml: nextValue: iteration (new value each iteration)
+
+  How to detect:
+    - Variable name contains: username, password, user, pass, email,
+      account, login, credential (case-insensitive)
+    - These are the credentials that should vary per vuser in load tests
+
+  Examples:
+    load.params.username       → "testuser1"
+    load.params.password       → "Pass@123"
+    load.params.email          → "user1@example.com"
+    load.params.accountNumber  → "ACC-001"
+
+  parameters.yml entry:
+    - name: username
+      type: csv
+      fileName: collection_data.csv
+      columnName: username
+      nextValue: iteration      # ← New value EACH iteration
+      nextRow: sequential
+      onEnd: loop
+
+    - name: password
+      type: csv
+      fileName: collection_data.csv
+      columnName: password
+      nextValue: iteration
+      nextRow: same as username  # ← Keep password matched to username!
+      onEnd: loop
+
+  IMPORTANT: Password MUST use "nextRow: same as username" to keep
+  credential pairs linked (same row in CSV).
+
+================================================================================
+  SPECIAL CASES
+================================================================================
+
+  $ PREFIX (Postman built-ins like $randomInt, $guid, $timestamp):
+    - SKIP entirely. Do not parameterize.
+    - These are Postman runtime functions, not collection variables.
+    - Convert to DevWeb equivalents in the script:
+      $randomInt → Math.floor(Math.random() * 1000)
+      $guid → load.utils.uuid()
+      $timestamp → Date.now()
+
+================================================================================
+  DETECTION LOGIC (PRIORITY ORDER)
+================================================================================
+
+  For each {{variable}} found in the collection, apply these rules IN ORDER:
+
+  1. Scan ALL scripts for context.set("var") / pm.*.set("var")
+     → If found: DYNAMIC (Tier 1)
+
+  2. Is it a correlation target? (value extracted from a previous response)
+     → If found: DYNAMIC (Tier 1)
+
+  3. Does name start with _ AND value is empty?
+     → DYNAMIC (Tier 1) — convention for dynamic placeholders
+
+  4. Does name start with $ ?
+     → SKIP (Postman built-in function, not a variable)
+
+  5. Does name match credential pattern? (username, password, email, account, etc.)
+     → PARAMETERIZED TEST DATA (Tier 3, nextValue: iteration)
+
+  6. Everything else with a known value
+     → PARAMETERIZED CONFIG (Tier 2, nextValue: once)
+
+================================================================================
+  ALWAYS GENERATE parameters.yml AND collection_data.csv
+================================================================================
+
+  Unlike previous versions, parameters.yml and collection_data.csv are ALWAYS
+  generated when the collection has any Tier 2 or Tier 3 variables.
+
+  This is because ALL {{variables}} that are not dynamic need to be resolved
+  at runtime. Using load.params with collection_data.csv provides a clean way
+  to manage these values without hardcoding them in the script.
+
+  Benefits:
+    - Easy to change values without editing main.js
+    - Environment-specific values can be swapped by replacing the CSV
+    - Credential rotation just requires updating CSV rows
+    - Consistent approach for all non-dynamic variables
+
+================================================================================
+  CORRECT parameters.yml FORMAT
+================================================================================
+
+```yaml
+# Parameters Configuration
+# Auto-generated from collection/environment variables
+# nextValue: once = read once per test run (config), iteration = read per iteration (test data)
+parameters:
+  - name: baseUrl
+    type: csv
+    fileName: collection_data.csv
+    columnName: baseUrl
+    nextValue: once
+    nextRow: sequential
+    onEnd: loop
+
+  - name: clientId
+    type: csv
+    fileName: collection_data.csv
+    columnName: clientId
+    nextValue: once
+    nextRow: sequential
+    onEnd: loop
+
+  - name: username
+    type: csv
+    fileName: collection_data.csv
+    columnName: username
+    nextValue: iteration
+    nextRow: sequential
+    onEnd: loop
+
+  - name: password
+    type: csv
+    fileName: collection_data.csv
+    columnName: password
+    nextValue: iteration
+    nextRow: same as username
+    onEnd: loop
+```
+
+Field descriptions:
+  name:        Variable name used in script as load.params.<name>
+  type:        Always "csv" for file-based parameters
+  fileName:    Always "collection_data.csv" (single file for all params)
+  columnName:  Column header in the CSV file (matches name)
+  nextValue:   "once" for config (Tier 2), "iteration" for test data (Tier 3)
+  nextRow:     "sequential" for first param, "same as <param>" for linked pairs
+  onEnd:       "loop" (start from beginning when all rows consumed)
+
+================================================================================
+  CORRESPONDING collection_data.csv FORMAT
+================================================================================
+
+```
+baseUrl,clientId,username,password
+https://api.example.com,abc123,testuser1,Pass@123
+```
+
+Rules:
+  - First row is ALWAYS the header row
+  - Column names EXACTLY match the "name" in parameters.yml
+  - Values come from collection variables / environment variables
+  - Use comma as delimiter
+  - No spaces around commas
+  - Quote values that contain commas: "value,with,commas"
+  - Single row with actual values (users can add more rows for load testing)
+
+  When environment file is provided (-e environment.json):
+  - Environment values OVERRIDE collection variable values in the CSV
+  - Same classification logic applies — env vars just provide better values
+
+================================================================================
+  USAGE IN main.js
+================================================================================
+
+```javascript
+load.initialize("Initialize", async function () {
+    load.log("VUser: " + load.config.user.userId, load.LogLevel.info);
+
+    // Initialize dynamic variables (Tier 1)
+    load.global.authToken = null;
+    load.global.userId = null;
+});
+
+load.action("Action", async function () {
+    // Log which test data is being used
+    load.log("Testing with user: " + load.params.username, load.LogLevel.info);
+
+    // Tier 2 (config): load.params.baseUrl — same for all iterations
+    // Tier 3 (test data): load.params.username — different per iteration
+    const webResponse_01 = new load.WebRequest({
+        id: 1,
+        url: `${load.params.baseUrl}/login`,             // Tier 2 config
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: {
+            "username": load.params.username,              // Tier 3 test data
+            "password": load.params.password               // Tier 3 test data
+        },
+        returnBody: true,
+        extractors: [
+            new load.JsonPathExtractor("authToken", "$.access_token")
+        ]
+    }).sendSync();
+
+    // Tier 1 (dynamic): Token comes from RESPONSE, stored in load.global
+    load.global.authToken = webResponse_01.extractors.authToken;
+
+    // Subsequent requests use load.global for dynamic values
+    const webResponse_02 = new load.WebRequest({
+        id: 2,
+        url: `${load.params.baseUrl}/profile`,            // Tier 2 config
+        method: "GET",
+        headers: {
+            "Authorization": "Bearer " + load.global.authToken  // Tier 1 dynamic
+        },
+        returnBody: true
+    }).sendSync();
+});
+```
+
+Notice:
+  - load.params.baseUrl = from CSV (Tier 2 config, nextValue: once)
+  - load.params.username = from CSV (Tier 3 test data, nextValue: iteration)
+  - load.global.authToken = from API response (Tier 1 dynamic, NOT from CSV)
+  - They are COMPLETELY DIFFERENT mechanisms. Never mix them up.
+
+================================================================================
+  COMPARISON TABLE
+================================================================================
+
+  +-------------------+------------------+----------------------------+-------------------+
+  | Value             | Tier             | In Script                  | parameters.yml?   |
+  +-------------------+------------------+----------------------------+-------------------+
+  | API base URL      | 2 - Config       | load.params.baseUrl        | YES (once)        |
+  | Client ID         | 2 - Config       | load.params.clientId       | YES (once)        |
+  | API Key           | 2 - Config       | load.params.apiKey         | YES (once)        |
+  | Redirect URI      | 2 - Config       | load.params.redirectUri    | YES (once)        |
+  | Auth token        | 1 - Dynamic      | load.global.authToken      | NO - extractor    |
+  | Created order ID  | 1 - Dynamic      | load.global.orderId        | NO - extractor    |
+  | Session cookie    | 1 - Dynamic      | load.global.sessionCookie  | NO - extractor    |
+  | _tempValue (empty)| 1 - Dynamic      | load.global.tempValue      | NO - script set   |
+  | Test username     | 3 - Test Data    | load.params.username       | YES (iteration)   |
+  | Test password     | 3 - Test Data    | load.params.password       | YES (iteration)   |
+  | Test account #    | 3 - Test Data    | load.params.accountNum     | YES (iteration)   |
+  | $randomInt        | SKIP             | Math.random()              | NO - built-in     |
+  +-------------------+------------------+----------------------------+-------------------+
+
+================================================================================
+  COMMON MISTAKES TO AVOID
+================================================================================
+
+MISTAKE 1: Using load.params for values from API responses
+  WRONG: load.params.authToken  (tokens don't come from CSV!)
+  CORRECT: load.global.authToken (tokens come from extractors)
+
+MISTAKE 2: Confusing load.params with load.global
+  load.params  = reads from CSV FILE (assigned by DevWeb framework)
+  load.global  = reads from MEMORY (dynamic values you set from responses)
+
+MISTAKE 3: Not linking credential pairs
+  WRONG: username and password both use nextRow: sequential
+  CORRECT: password uses nextRow: same as username
+
+MISTAKE 4: Hardcoding values that should be parameterized
+  WRONG: url: "https://api.example.com/login" (hardcoded baseUrl)
+  CORRECT: url: `${load.params.baseUrl}/login` (parameterized)
+
+MISTAKE 5: Using different CSV files for different parameters
+  WRONG: fileName: accounts.csv for some, config.csv for others
+  CORRECT: fileName: collection_data.csv for ALL parameters (single file)
+
+MISTAKE 6 (Web HTTP/HTML C only): Putting correlated values in ParameterFile.prm
+  WRONG: [parameter:_accessToken] in ParameterFile.prm (LR manages these internally)
+  CORRECT: web_reg_save_param_json("_accessToken", ...) captures it at runtime
+
+MISTAKE 7 (Web HTTP/HTML C only): Using XML format for ParameterFile.prm
+  WRONG: <ParamList><Param Name="baseUrl" UpdateValueOn="Once" /></ParamList>
+  CORRECT: [parameter:baseUrl]\nGenerateNewVal="Once"\nTable="collection_data.dat"
+
+================================================================================
+  WEB HTTP/HTML EQUIVALENT: ParameterFile.prm (INI format)
+================================================================================
+
+The same 3-tier classification logic produces a different output file for
+VuGen Web HTTP/HTML (C) scripts.
+
+DevWeb parameters.yml entry:                VuGen ParameterFile.prm entry:
+  - name: baseUrl                           [parameter:baseUrl]
+    type: csv                               ColumnName="baseUrl"
+    fileName: collection_data.csv           Delimiter=","
+    columnName: baseUrl                     GenerateNewVal="Once"
+    nextValue: once                         OriginalValue="https://api.example.com"
+    nextRow: sequential                     OutOfRangePolicy="ContinueWithLast"
+    onEnd: loop                             ParamName="baseUrl"
+                                            SelectNextRow="Sequential"
+                                            StartRow="1"
+                                            Table="collection_data.dat"
+                                            TableLocation="Local"
+                                            Type="Table"
+                                            auto_allocate_block_size="1"
+                                            value_for_each_vuser=""
+
+  - name: username                          [parameter:username]
+    type: csv                               ColumnName="username"
+    fileName: collection_data.csv           GenerateNewVal="EachIteration"
+    columnName: username                    Table="collection_data.dat"
+    nextValue: iteration                    Type="Table"
+    nextRow: sequential                     ... (same other fields)
+    onEnd: loop
+
+  NOTE: collection_data.dat is the same CSV format as collection_data.csv,
+  just with a .dat extension. VuGen uses .dat, DevWeb uses .csv.
+
+For the complete ParameterFile.prm format with all required fields,
+see 06-MANDATORY-FILES.txt.
+
+================================================================================

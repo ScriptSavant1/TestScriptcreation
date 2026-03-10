@@ -1,0 +1,721 @@
+================================================================================
+  PROMPT 08: COLLECTION PARSING RULES (Postman & Bruno — ALL FORMATS)
+================================================================================
+
+This prompt explains how to parse ALL supported collection formats to extract
+all the information needed for DevWeb script generation.
+
+SUPPORTED FORMATS:
+  1. Postman Collection v2.1 JSON
+  2. Bruno JSON export
+  3. Bruno Single YAML (.yml) — bundled single-file export
+  4. Bruno YAML folder-based — directory with opencollection.yml
+  5. Single .bru file — Bruno native text format
+
+FORMAT DETECTION:
+  - File ends with .json AND contains "schema" URL → Postman v2.1
+  - File ends with .json AND has top-level "items" array (no schema) → Bruno JSON
+  - File ends with .yml / .yaml → Bruno Single YAML (bundled)
+  - Path is a directory (or points to opencollection.yml) → Bruno YAML folder-based
+  - File ends with .bru → Single Bruno request
+
+================================================================================
+  POSTMAN COLLECTION v2.1 STRUCTURE
+================================================================================
+
+Top-level structure:
+```json
+{
+  "info": {
+    "name": "Collection Name",
+    "description": "Collection description",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [ ... ],         // Folders and requests
+  "auth": { ... },         // Collection-level authentication
+  "variable": [ ... ],     // Collection variables
+  "event": [ ... ]         // Collection-level scripts
+}
+```
+
+================================================================================
+  EXTRACTING COLLECTION INFO
+================================================================================
+
+Collection Name:     info.name
+Collection Desc:     info.description
+Schema Version:      info.schema (should contain "v2.1")
+
+Collection Variables (used to resolve {{varName}}):
+```json
+"variable": [
+  { "key": "baseUrl", "value": "https://api.example.com" },
+  { "key": "clientId", "value": "abc123" },
+  { "key": "apiVersion", "value": "v2" }
+]
+```
+
+Extract these as key-value pairs. Use them to replace {{varName}} in
+requests with actual hardcoded values.
+
+================================================================================
+  EXTRACTING FOLDERS (BECOME TRANSACTIONS)
+================================================================================
+
+Items can be folders (contain sub-items) or requests:
+
+FOLDER (has "item" array):
+```json
+{
+  "name": "Authentication",
+  "item": [
+    { "name": "Login", "request": { ... } },
+    { "name": "Refresh Token", "request": { ... } }
+  ],
+  "auth": { ... },         // Optional folder-level auth
+  "event": [ ... ]         // Optional folder-level scripts
+}
+```
+
+REQUEST (has "request" object):
+```json
+{
+  "name": "Get Users",
+  "request": { ... },
+  "response": [ ... ],
+  "event": [ ... ]
+}
+```
+
+Detection: If item has "item" property --> it's a FOLDER
+           If item has "request" property --> it's a REQUEST
+
+Nested folders: Folders can contain sub-folders. Flatten them:
+  Folder A / Sub-Folder B / Request C
+  Transaction name: "FolderA_SubFolderB"
+
+================================================================================
+  EXTRACTING REQUEST DETAILS
+================================================================================
+
+Each request object contains:
+
+```json
+{
+  "request": {
+    "method": "POST",
+    "header": [
+      { "key": "Content-Type", "value": "application/json", "disabled": false },
+      { "key": "Authorization", "value": "Bearer {{token}}", "disabled": false }
+    ],
+    "url": {
+      "raw": "{{baseUrl}}/api/users?page=1&limit=50",
+      "host": ["{{baseUrl}}"],
+      "path": ["api", "users"],
+      "query": [
+        { "key": "page", "value": "1", "disabled": false },
+        { "key": "limit", "value": "50", "disabled": false }
+      ],
+      "variable": [
+        { "key": "userId", "value": "123" }
+      ]
+    },
+    "body": { ... },
+    "auth": { ... },
+    "description": "Optional request description"
+  }
+}
+```
+
+EXTRACT:
+  Method:       request.method (GET, POST, PUT, PATCH, DELETE)
+  URL:          request.url.raw (resolve {{variables}} using collection vars)
+  Headers:      request.header[] (skip disabled: true)
+  Query Params: request.url.query[] (skip disabled: true)
+  Path Vars:    request.url.variable[]
+  Body:         request.body (see body section below)
+  Auth:         request.auth (see auth section below)
+  Description:  request.description
+
+================================================================================
+  EXTRACTING REQUEST BODY
+================================================================================
+
+Body modes in Postman:
+
+MODE 1: raw (JSON)
+```json
+"body": {
+  "mode": "raw",
+  "raw": "{\"name\":\"John\",\"email\":\"john@example.com\"}",
+  "options": {
+    "raw": { "language": "json" }
+  }
+}
+```
+DevWeb: body: JSON.parse(rawString) --> use as JS object
+        header: "Content-Type": "application/json"
+
+MODE 2: raw (XML/SOAP/Text)
+```json
+"body": {
+  "mode": "raw",
+  "raw": "<?xml version=\"1.0\"?><root>...</root>",
+  "options": {
+    "raw": { "language": "xml" }
+  }
+}
+```
+DevWeb: body: `<raw string as template literal>`
+        header: "Content-Type": "text/xml" or "application/xml"
+
+MODE 3: urlencoded
+```json
+"body": {
+  "mode": "urlencoded",
+  "urlencoded": [
+    { "key": "grant_type", "value": "client_credentials", "disabled": false },
+    { "key": "client_id", "value": "{{clientId}}", "disabled": false }
+  ]
+}
+```
+DevWeb: body: { "grant_type": "client_credentials", "client_id": "actual_value" }
+        header: "Content-Type": "application/x-www-form-urlencoded"
+
+MODE 4: formdata (multipart)
+```json
+"body": {
+  "mode": "formdata",
+  "formdata": [
+    { "key": "file", "type": "file", "src": "path/to/file" },
+    { "key": "name", "type": "text", "value": "myfile.pdf" }
+  ]
+}
+```
+DevWeb: Currently limited support - convert text fields to body object
+        Note: File uploads need manual handling in DevWeb
+
+MODE 5: graphql
+```json
+"body": {
+  "mode": "graphql",
+  "graphql": {
+    "query": "query { users { id name } }",
+    "variables": "{\"limit\": 10}"
+  }
+}
+```
+DevWeb: body: JSON.stringify({ query: "...", variables: {...} })
+        header: "Content-Type": "application/json"
+
+================================================================================
+  EXTRACTING AUTHENTICATION
+================================================================================
+
+Auth object structure:
+```json
+"auth": {
+  "type": "bearer",
+  "bearer": [
+    { "key": "token", "value": "{{accessToken}}", "type": "string" }
+  ]
+}
+```
+
+```json
+"auth": {
+  "type": "basic",
+  "basic": [
+    { "key": "username", "value": "myuser", "type": "string" },
+    { "key": "password", "value": "mypass", "type": "string" }
+  ]
+}
+```
+
+```json
+"auth": {
+  "type": "oauth2",
+  "oauth2": [
+    { "key": "accessTokenUrl", "value": "https://auth.example.com/token" },
+    { "key": "clientId", "value": "abc123" },
+    { "key": "clientSecret", "value": "secret" },
+    { "key": "scope", "value": "read write" },
+    { "key": "grant_type", "value": "client_credentials" }
+  ]
+}
+```
+
+```json
+"auth": {
+  "type": "apikey",
+  "apikey": [
+    { "key": "key", "value": "X-API-Key", "type": "string" },
+    { "key": "value", "value": "sk_live_abc123", "type": "string" },
+    { "key": "in", "value": "header", "type": "string" }
+  ]
+}
+```
+
+```json
+"auth": {
+  "type": "awsv4",
+  "awsv4": [
+    { "key": "accessKey", "value": "AKIAIOSFODNN7EXAMPLE" },
+    { "key": "secretKey", "value": "wJalrXUtnFEMI/K7MDENG..." },
+    { "key": "region", "value": "us-east-1" },
+    { "key": "service", "value": "execute-api" }
+  ]
+}
+```
+
+================================================================================
+  EXTRACTING SCRIPTS (Pre-request & Test)
+================================================================================
+
+Scripts are in the "event" array:
+
+```json
+"event": [
+  {
+    "listen": "prerequest",
+    "script": {
+      "exec": [
+        "// Pre-request script lines",
+        "const timestamp = Date.now();",
+        "pm.environment.set('timestamp', timestamp);"
+      ],
+      "type": "text/javascript"
+    }
+  },
+  {
+    "listen": "test",
+    "script": {
+      "exec": [
+        "// Test/post-request script lines",
+        "const jsonData = pm.response.json();",
+        "pm.environment.set('userId', jsonData.user.id);",
+        "pm.test('Status is 200', function() {",
+        "    pm.expect(pm.response.code).to.equal(200);",
+        "});"
+      ],
+      "type": "text/javascript"
+    }
+  }
+]
+```
+
+Pre-request script (listen: "prerequest"):
+  --> Convert to code placed BEFORE the WebRequest
+  --> Replace pm.* APIs with DevWeb equivalents (see prompt 02)
+
+Test script (listen: "test"):
+  --> Convert to code placed AFTER the WebRequest
+  --> Variable extractions become extractors on the WebRequest
+  --> Assertions become if-checks after the response
+
+================================================================================
+  EXTRACTING ENVIRONMENT VARIABLES
+================================================================================
+
+Postman environment files are separate JSON:
+```json
+{
+  "name": "Production",
+  "values": [
+    { "key": "baseUrl", "value": "https://api.prod.example.com", "enabled": true },
+    { "key": "clientId", "value": "prod_client_123", "enabled": true },
+    { "key": "apiKey", "value": "sk_live_abc123", "enabled": true }
+  ]
+}
+```
+
+Merge these with collection variables. Environment values override
+collection variables when the same key exists.
+
+Use all resolved values to replace {{varName}} with actual values.
+
+================================================================================
+  BRUNO COLLECTION FORMAT
+================================================================================
+
+Bruno collections can be JSON exports:
+```json
+{
+  "name": "My Bruno Collection",
+  "items": [
+    {
+      "name": "Get Users",
+      "type": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.example.com/users",
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "params": {
+          "query": [
+            { "name": "page", "value": "1", "enabled": true }
+          ]
+        },
+        "body": {
+          "mode": "json",
+          "json": "{\"key\": \"value\"}"
+        },
+        "auth": {
+          "mode": "bearer",
+          "bearer": { "token": "{{accessToken}}" }
+        },
+        "script": {
+          "req": "// pre-request script",
+          "res": "// post-response script"
+        },
+        "vars": {
+          "req": [
+            { "name": "timestamp", "value": "Date.now()", "enabled": true }
+          ],
+          "res": [
+            { "name": "userId", "value": "res.body.id", "enabled": true }
+          ]
+        }
+      }
+    }
+  ],
+  "environments": [
+    {
+      "name": "Production",
+      "variables": [
+        { "name": "baseUrl", "value": "https://api.example.com", "enabled": true }
+      ]
+    }
+  ]
+}
+```
+
+Bruno-specific parsing:
+  - request.params.query[] --> query parameters
+  - request.body.mode: "json" | "xml" | "formUrlEncoded" | "multipartForm"
+  - request.script.req --> pre-request script
+  - request.script.res --> post-response script
+  - request.vars.req[] --> pre-request variable assignments
+  - request.vars.res[] --> post-response variable captures (THESE ARE CORRELATIONS!)
+
+Bruno variable APIs:
+  bru.setVar("name", value)      --> load.global.name = value
+  bru.getVar("name")             --> load.global.name
+  bru.setEnvVar("name", value)   --> load.global.name = value
+  bru.getEnvVar("name")          --> load.global.name
+  req.getUrl()                   --> (not needed in DevWeb)
+  req.setHeader("key", "value")  --> add to headers object
+  res.getBody()                  --> response.body (with returnBody: true)
+  res.getStatus()                --> response.status
+
+================================================================================
+  VARIABLE RESOLUTION ORDER
+================================================================================
+
+When you encounter {{variableName}}:
+
+  1. Check environment variables --> hardcode the value
+  2. Check collection variables --> hardcode the value
+  3. Check if it's set in a pre-request/test script of an earlier request
+     --> This is a CORRELATION, use load.global.variableName
+  4. Check if it's a Postman dynamic variable:
+     {{$timestamp}} --> Date.now()
+     {{$guid}}      --> load.utils.uuid()
+     {{$randomInt}} --> Math.floor(Math.random() * 1000)
+  5. If not found anywhere --> Add a TODO comment:
+     // TODO: Replace <variableName> with actual value
+
+================================================================================
+  BRUNO SINGLE YAML FORMAT (bundled .yml export)
+================================================================================
+
+Bruno's "Single YAML (YAML)" export produces a single .yml file with ALL
+requests embedded inline. Structure:
+
+```yaml
+opencollection: 1.0.0
+info:
+  name: My API Collection
+config:
+  proxy: {}
+items:                        # ← all folders and requests inline
+  - info:
+      name: Auth
+      type: folder
+      seq: 1
+    items:
+      - info:
+          name: Client Credentials
+          type: http
+          seq: 1
+        http:
+          method: POST
+          url: "{{baseUrl}}/oauth2/token"
+          headers:
+            - name: Content-Type
+              value: application/x-www-form-urlencoded
+          body:
+            type: form-urlencoded
+            data:
+              - name: grant_type
+                value: client_credentials
+              - name: client_id
+                value: "{{clientId}}"
+        runtime:
+          scripts:
+            - type: after-response
+              code: |
+                context.set("_accessToken", res.getBody().access_token);
+        settings:
+          encodeUrl: true
+          followRedirects: true
+request:                      # ← collection-level global settings
+  headers:
+    - name: X-Api-Key
+      value: "{{apiKey}}"
+  auth:
+    type: oauth2
+    flow: client_credentials
+    accessTokenUrl: "{{baseUrl}}/oauth2/token"
+    credentials:
+      clientId: "{{clientId}}"
+      clientSecret: "{{clientSecret}}"
+      placement: body
+  variables:
+    - name: baseUrl
+      value: https://api.example.com
+    - name: version
+      value: "1.0"
+    - name: username
+      value: ""
+    - name: clientId
+      value: ""
+  scripts:
+    - type: before-request
+      code: "req.getHeaders().add({key: 'X-App-Name', value: 'my-app'});"
+bundled: true
+```
+
+ITEM TYPE DETECTION (items[]):
+  - item.info.type === "folder"  → it's a folder; recurse into item.items[]
+  - item.info.type === "http"    → it's a request; parse item.http
+  - Ordering: sort by item.info.seq (ascending)
+
+REQUEST FIELDS (item.http):
+  - item.http.method            → HTTP method
+  - item.http.url               → URL (may contain {{variable}})
+  - item.http.headers[].name    → header key (NOT .key — Bruno uses .name here)
+  - item.http.headers[].value   → header value
+  - item.http.body              → see Body Types below
+  - item.info.name              → request name
+  - item.info.seq               → sequence number
+
+SCRIPTS (item.runtime.scripts[]):
+  - type: "after-response"      → post-response (test) script
+  - type: "before-request"      → pre-request script
+  - code                        → script body string
+
+BODY TYPES (item.http.body):
+  type: json          → body.data (string or object) → mode: raw, JSON
+  type: form-urlencoded → body.data[].name / .value → mode: urlencoded
+  type: multipart-form → body.data[].name / .value → mode: formdata
+  type: text / xml    → body.data (raw string) → mode: raw
+  type: graphql       → body.query + body.variables → JSON stringify
+
+================================================================================
+  BRUNO SINGLE YAML — COLLECTION-LEVEL "request:" SECTION
+================================================================================
+
+The root-level "request:" key contains GLOBAL settings applied to ALL requests.
+This is equivalent to collection-level settings in Postman.
+
+  request.headers[]
+    Each header: { name: "Header-Name", value: "value" }
+    → Add ALL these headers to load.WebRequest.defaults.headers
+    → They apply to every request in the collection
+
+    Example:
+      request.headers:
+        - name: X-Api-Key
+          value: "{{apiKey}}"
+        - name: X-App-Name
+          value: my-app
+    →
+      load.WebRequest.defaults.headers = {
+          ...,
+          "X-Api-Key": `${load.params.apiKey}`,
+          "X-App-Name": "my-app"
+      };
+
+  request.auth
+    OAuth2 / Bearer / API Key config for the entire collection.
+    → Generate a COMMENTED-OUT token fetch block in load.initialize()
+    → Developers uncomment it when they want automatic token fetch
+
+    OAuth2 client_credentials example:
+      request.auth:
+        type: oauth2
+        flow: client_credentials
+        accessTokenUrl: "{{baseUrl}}/oauth2/token"
+        credentials:
+          clientId: "{{clientId}}"
+          clientSecret: "{{clientSecret}}"
+          placement: body
+    →
+      // OAuth2 Client Credentials flow detected.
+      // Uncomment to fetch a bearer token during initialization:
+      //
+      // const tokenResp = await new load.WebRequest({
+      //   method: "POST",
+      //   url: `${load.params.baseUrl}/oauth2/token`,
+      //   body: {
+      //     type: "form",
+      //     formData: {
+      //       grant_type: "client_credentials",
+      //       client_id: `${load.params.clientId}`,
+      //       client_secret: `${load.params.clientSecret}`
+      //     }
+      //   }
+      // }).send();
+      // const tokenJson = JSON.parse(tokenResp.body);
+      // load.global._accessToken = tokenJson.access_token;
+      // load.WebRequest.defaults.headers["Authorization"] = `Bearer ${load.global._accessToken}`;
+
+  request.variables[]
+    Each variable: { name: "varName", value: "actualValue" }
+    → Treated as collection variables → classify into dynamic / parameterized
+    → Same logic as Postman collection.variable[]
+
+  request.scripts[]
+    Each script: { type: "before-request" | "after-response", code: "..." }
+    before-request scripts:
+      → Scan for req.getHeaders().add({key: K, value: V})
+      → Merge detected headers into load.WebRequest.defaults.headers
+      → Other code: add as comments in initialize() or action()
+
+================================================================================
+  BRUNO YAML FOLDER-BASED FORMAT (ZIP export, extracted)
+================================================================================
+
+Bruno's "Bruno collection (ZIP)" export creates a directory structure:
+
+  MyCollection/
+    opencollection.yml          (root metadata: name, variables, scripts, auth)
+    Auth/
+      folder.yml                (folder name, seq)
+      Login.yml                 (individual request)
+      Refresh Token.yml
+    Products/
+      folder.yml
+      Get Products.yml
+    Orders/
+      folder.yml
+      Create Order.yml
+      Subfolders/
+        folder.yml
+        Nested Request.yml
+
+opencollection.yml:
+```yaml
+opencollection: 1.0.0
+info:
+  name: My API Collection
+request:
+  headers:
+    - name: X-Api-Key
+      value: sk_live_abc123
+  auth:
+    type: oauth2
+    flow: client_credentials
+    accessTokenUrl: "{{baseUrl}}/oauth/token"
+    credentials:
+      clientId: "{{clientId}}"
+      clientSecret: "{{clientSecret}}"
+  variables:
+    - name: baseUrl
+      value: https://api.example.com
+    - name: version
+      value: v2
+  scripts:
+    - type: before-request
+      code: "req.getHeaders().add({key: 'X-Trace-Id', value: 'load-test'});"
+```
+
+folder.yml (in each subfolder):
+```yaml
+info:
+  name: Authentication     # Display name for the folder
+  seq: 1                   # Sort order within parent
+```
+
+Individual request .yml (e.g., Login.yml):
+```yaml
+info:
+  name: Login
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: '{"username": "{{username}}", "password": "{{password}}"}'
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |
+        const body = res.getBody();
+        context.set("_accessToken", body.access_token);
+
+settings:
+  encodeUrl: true
+  timeout: 30
+  followRedirects: true
+  maxRedirects: 5
+```
+
+PARSING RULES FOR FOLDER FORMAT:
+  - opencollection.yml → collection metadata, variables, headers, auth, scripts
+  - folder.yml → folder display name and sequence number
+  - *.yml files (not folder.yml, not opencollection.yml, info.type === "http")
+    → individual request files
+  - Sort requests within a directory by info.seq
+  - Sort subdirectories by folder.yml info.seq
+  - Full folder path becomes the transaction name (last segment used in LRE)
+
+================================================================================
+  COMPLETE PARSING CHECKLIST (ALL FORMATS)
+================================================================================
+
+  [ ] Detect collection format (Postman JSON / Bruno JSON / Bruno YAML / .bru)
+  [ ] Extract collection name and description
+  [ ] Extract collection-level headers (request.headers[] for Bruno YAML)
+  [ ] Extract collection-level auth (request.auth for Bruno YAML)
+  [ ] Extract all collection variables (key-value pairs)
+  [ ] Extract all environment variables (if provided)
+  [ ] Build variable resolution map (merge collection + environment)
+  [ ] Identify folder structure (map to transactions)
+  [ ] Apply collection headers to load.WebRequest.defaults.headers
+  [ ] Generate commented-out auth block in initialize() for OAuth2
+  [ ] For each request:
+      [ ] Extract method (GET/POST/PUT/PATCH/DELETE)
+      [ ] Extract and resolve URL (replace {{vars}} with actual values)
+      [ ] Extract headers (skip disabled ones)
+            Bruno YAML uses headers[].name (not .key)
+      [ ] Extract query parameters (skip disabled ones)
+      [ ] Extract body (determine type: JSON/form/raw/GraphQL)
+      [ ] Extract auth type and credentials
+      [ ] Extract pre-request scripts (before-request)
+      [ ] Extract test/post-response scripts (after-response)
+      [ ] Identify variable sets → correlations to extract
+      [ ] Identify variable gets → correlations to consume
+  [ ] Determine request execution order (seq-based for Bruno YAML)
+  [ ] Map correlations (which request produces what, who consumes it)
+
+================================================================================

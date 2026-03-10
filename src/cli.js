@@ -32,6 +32,8 @@ program
   .option('--no-comments', 'Disable code comments')
   .option('--log-level <level>', 'Log level (error/warning/info/debug)', 'info')
   .option('--fail-on-error', 'Stop execution on first error')
+  .option('-m, --mode <mode>', 'Script generation mode: single (one script) or multi (one script per top-level folder)', 'single')
+  .option('--protocol <protocol>', 'Output protocol: devweb (JavaScript) or web-http (VuGen C)', 'devweb')
   .action(async (options) => {
     const spinner = ora('Starting conversion...').start();
 
@@ -47,7 +49,9 @@ program
         thinkTime: parseFloat(options.thinkTime),
         addComments: options.comments,
         logLevel: options.logLevel,
-        failOnError: options.failOnError
+        failOnError: options.failOnError,
+        mode: options.mode,
+        protocol: options.protocol
       });
 
       spinner.stop();
@@ -57,16 +61,43 @@ program
 
       if (results.success) {
         console.log('\n' + chalk.green.bold('✨ Success!') + '\n');
-        console.log(chalk.cyan('📊 Conversion Summary:'));
-        console.log(`  Total Requests: ${chalk.bold(results.analysis.requests.total)}`);
-        console.log(`  Correlations: ${chalk.bold(results.analysis.correlations.totalCorrelations)}`);
-        console.log(`  Parameters: ${chalk.bold(results.analysis.parameters.totalParameters)}`);
-        console.log(`  Auth Configs: ${chalk.bold(results.analysis.authentication.totalConfigs)}`);
-        console.log(`\n📁 Output: ${chalk.bold(results.outputDir)}`);
-        console.log(`\n${chalk.yellow('Next steps:')}`);
-        console.log(`  1. cd ${results.outputDir}`);
-        console.log(`  2. Review main.js`);
-        console.log(`  3. Run: devweb run main.js`);
+
+        if (results.scripts) {
+          // Multi-mode output
+          console.log(chalk.cyan('📊 Multi-Script Conversion Summary:'));
+          console.log(`  Total Scripts: ${chalk.bold(results.scripts.length)}`);
+          console.log(`  Total Requests: ${chalk.bold(results.totalRequests)}`);
+          results.scripts.forEach(s => {
+            console.log(`\n  ${chalk.bold(s.folder)}/ (${s.requests} requests)`);
+            console.log(`    Correlations: ${s.correlations}, Parameters: ${s.parameters}`);
+          });
+          if (results.crossFolderWarnings && results.crossFolderWarnings.length > 0) {
+            console.log(`\n${chalk.yellow('⚠  Cross-folder dependencies:')}`);
+            results.crossFolderWarnings.forEach(w => console.log(`  ${w}`));
+          }
+          console.log(`\n📁 Output: ${chalk.bold(results.outputDir)}`);
+          console.log(`\n${chalk.yellow('Next steps:')}`);
+          console.log(`  1. cd ${results.outputDir}`);
+          console.log(`  2. Review each script folder`);
+          console.log(`  3. Upload scripts to LoadRunner Enterprise`);
+        } else {
+          // Single-mode output
+          console.log(chalk.cyan('📊 Conversion Summary:'));
+          console.log(`  Total Requests: ${chalk.bold(results.analysis.requests.total)}`);
+          console.log(`  Correlations: ${chalk.bold(results.analysis.correlations.totalCorrelations)}`);
+          console.log(`  Parameters: ${chalk.bold(results.analysis.parameters.totalParameters)}`);
+          console.log(`  Auth Configs: ${chalk.bold(results.analysis.authentication.totalConfigs)}`);
+          console.log(`\n📁 Output: ${chalk.bold(results.outputDir)}`);
+          console.log(`\n${chalk.yellow('Next steps:')}`);
+          console.log(`  1. cd ${results.outputDir}`);
+          if (options.protocol === 'web-http') {
+            console.log(`  2. Review Action.c`);
+            console.log(`  3. Open in VuGen or upload to LoadRunner Enterprise`);
+          } else {
+            console.log(`  2. Review main.js`);
+            console.log(`  3. Run: devweb run main.js`);
+          }
+        }
       }
     } catch (error) {
       spinner.fail(chalk.red('Conversion failed'));
