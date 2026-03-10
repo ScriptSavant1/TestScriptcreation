@@ -45,7 +45,30 @@ class MandatoryFilesGenerator {
   /**
    * Generate rts.yml (Runtime Settings) — canonical version matching DevWeb2 reference
    */
-  generateRtsYml() {
+  generateRtsYml(proxy = null) {
+    // Build proxy section — defaults disabled; populated when proxy detected in collection
+    const proxySection = proxy && proxy.enabled
+      ? `proxy:
+  usePAC: false
+  pacAddress: ''
+  useProxy: true
+  proxyServer: '${proxy.host}:${proxy.port}'
+  proxyDomain: ''
+  proxyUser: '${proxy.username || ''}'
+  proxyPassword: '${proxy.password || ''}'
+  proxyAuthenticationType: '${proxy.username ? 'basic' : ''}'
+  excludedHosts: []`
+      : `proxy:
+  usePAC: false
+  pacAddress: ''
+  useProxy: false
+  proxyServer: ''
+  proxyDomain: ''
+  proxyUser: ''
+  proxyPassword: ''
+  proxyAuthenticationType: ''
+  excludedHosts: []`;
+
     return `httpConnection:
   maxPersistentConnectionsPerHost: 6
   maxConnectedHosts: 30
@@ -63,16 +86,7 @@ grpc:
   keepAliveTime: 0
   maxRecvMsgSize: 0
   maxSendMsgSize: 0
-proxy:
-  usePAC: false
-  pacAddress: ''
-  useProxy: false
-  proxyServer: ''
-  proxyDomain: ''
-  proxyUser: ''
-  proxyPassword: ''
-  proxyAuthenticationType: ''
-  excludedHosts: []
+${proxySection}
 ssl:
   disableHTTP2: false
   ignoreBadCertificate: false
@@ -508,7 +522,7 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
     // Back-compat: if 3rd arg is a string it's the legacy examplesPath — ignore it
     if (typeof options === 'string') options = {};
     options = options || {};
-    const { transactionNames = [], hasJwt = false } = options;
+    const { transactionNames = [], hasJwt = false, proxy = null } = options;
 
     const files = {};
     const safeScriptName = this.sanitizeName(this.scriptName);
@@ -521,7 +535,8 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
     console.log('✓ Generated tsconfig.json');
 
     // 2. rts.yml (canonical 11-section version matching DevWeb2 reference)
-    fs.writeFileSync(path.join(outputDir, 'rts.yml'), this.generateRtsYml(), 'utf8');
+    fs.writeFileSync(path.join(outputDir, 'rts.yml'), this.generateRtsYml(proxy), 'utf8');
+    if (proxy && proxy.enabled) console.log(`  ✓ Proxy configured in rts.yml: ${proxy.host}:${proxy.port}`);
     console.log('✓ Generated rts.yml');
 
     // 3. scenario.yml

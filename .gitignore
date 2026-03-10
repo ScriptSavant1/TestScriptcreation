@@ -7,3 +7,4 @@ node_modules/@babel/helpers/LICENSE
 postman_collection.json
 postman_environment.json
 transport.pem
+/output/

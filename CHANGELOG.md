@@ -5,6 +5,58 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.8] - 2026-03-10
+
+### Added — Proxy Auto-Detection (both protocols)
+
+`detectProxyConfig()` scans collection variables and the environment file for proxy settings.
+**Only applies when proxy is found** — zero changes when no proxy detected.
+
+**Detected variable names** (first match wins):
+- Full URL: `proxy`, `proxyUrl`, `proxy_url`, `http_proxy`, `HTTP_PROXY`, `https_proxy`, `HTTPS_PROXY`, `proxyServer`, `proxy_server`
+- URL format: `http://user:pass@host:port` or bare `host:port`
+- Separate: `proxyHost` + `proxyPort` (+ optional `proxyUser` + `proxyPassword`)
+
+**DevWeb (`rts.yml` proxy section)** — when proxy found:
+```yaml
+proxy:
+  useProxy: true
+  proxyServer: 'userproxy-pnf.web.banksvcs.net:8080'
+  proxyUser: 'karrirc'
+  proxyPassword: 'myPass123'
+  proxyAuthenticationType: 'basic'
+```
+
+**VuGen Web HTTP/HTML (`default.cfg` [WEB] section)** — when proxy found:
+```ini
+ProxyUseProxy=1
+ProxyUseBrowser=0
+ProxyUseProxyServer=1
+ProxyHTTPHost=userproxy-pnf.web.banksvcs.net
+ProxyHTTPPort=8080
+ProxyHTTPSHost=userproxy-pnf.web.banksvcs.net
+ProxyHTTPSPort=8080
+ProxyUseSame=1
+ProxyUserName=karrirc
+ProxyPassword=myPass123
+```
+
+### Also — JWT Detection Explanation
+
+JWT code is generated **only** when `customScriptParser.detectJwtUsage(script)` finds these fingerprints in a pre-request script:
+- `jsrsasign` / `KJUR.jws.JWS.sign(` — jsrsasign library
+- `require('jsonwebtoken')` + `.sign(` — jsonwebtoken library
+- `require('jose')` — jose library
+- `crypto.sign(` + `base64url` — manual crypto JWT
+
+For **all other collections** (no JWT fingerprint): `hasJwt = false` — zero JWT code emitted.
+Headers, correlations, UUIDs, auth, and proxy all work for every collection regardless.
+
+### Changed
+- `package.json` version: `2.4.7` → `2.4.8`
+
+---
+
 ## [2.4.7] - 2026-03-10
 
 ### Fixed — VuGen Web HTTP/HTML `default.cfg`
