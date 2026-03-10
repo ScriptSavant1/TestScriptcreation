@@ -63,6 +63,11 @@ class AdvancedScriptGenerator {
     this.hasJwt     = false;
     this.jwtVarNames = [];   // token variable names set by JWT pre-request scripts
 
+    // Per-request dynamic variables — generated fresh before each request (e.g. UUID, nonce).
+    // Map: varName → { generationType: 'uuid'|'random'|'timestamp'|'nonce', requestNames: string[] }
+    // These are NOT static params and NOT response correlations — they are inline-generated.
+    this.perRequestVars = new Map();
+
     this.buildVariableMap();
   }
 
@@ -157,6 +162,20 @@ class AdvancedScriptGenerator {
             });
             console.log(`  ✓ JWT detected (library: ${result.library}, algorithm: ${result.algorithm})`);
           }
+
+          // Per-request dynamic var detection (UUID/nonce/random generated per request)
+          const perReqVars = CustomScriptParser.detectPerRequestDynamicVars(text);
+          perReqVars.forEach(({ varName, generationType }) => {
+            if (!this.perRequestVars.has(varName)) {
+              this.perRequestVars.set(varName, { generationType, requestNames: [] });
+              // Per-request vars are Tier 1 dynamic — never parameterize them
+              this.scriptSetVarNames.add(varName);
+            }
+            // Tag which request this var is generated for
+            if (item.name) {
+              this.perRequestVars.get(varName).requestNames.push(item.name);
+            }
+          });
         });
       }
       // Recurse
@@ -575,16 +594,16 @@ ${finalizeSection}
    */
   generateInitialize() {
     // JWT block — emitted when jsrsasign/JWT signing detected in pre-request scripts.
-    // Uses jwt-lib.js (copied from project root to script folder).
+    // Uses jwt-helper.js (copied from project root to script folder).
     // Token is refreshed in action() via jwtLib.isExpiring() — see below.
     const jwtBlock = this.hasJwt ? `
     // ── JWT Token ───────────────────────────────────────────────────────────────
     // TODO: Configure algorithm, key path, and payload to match your API spec.
-    // jwt-lib.js uses Node.js built-in crypto — no npm install required.
-    // const jwtLib = require('./jwt-lib');
+    // jwt-helper.js uses Node.js built-in crypto — no npm install required.
+    // const jwtLib = require('./jwt-helper');
     // load.global.jwtToken = jwtLib.generate({
     //   algorithm: 'RS256',       // PS256, RS256, HS256, ES256 — check your API spec
-    //   keyPath:   './tranport.pem',  // replace with your actual PEM key file path
+    //   keyPath:   './transport.pem',  // replace with your actual PEM key file path
     //   payload: {
     //     sub: load.params.clientId, // TODO: set actual subject/claims
     //     iat: Math.floor(Date.now() / 1000),
@@ -771,7 +790,7 @@ ${jwtBlock}
     ].join(',\n');
 
     // JWT refresh check — runs every action iteration. Regenerates token if expiring soon.
-    // Uncomment when jwt-lib.js is configured in initialize().
+    // Uncomment when jwt-helper.js is configured in initialize().
     const jwtRefreshBlock = this.hasJwt ? `
     // ── JWT refresh (every iteration, checks if token expires within 60 s) ────
     // if (load.global.jwtToken && jwtLib.isExpiring(load.global.jwtToken, 60)) {
@@ -976,11 +995,20 @@ ${headerBlock}
       code += `\n${this.indent(`// Depends on: ${dependencies.join(', ')}`, indentLevel)}`;
     }
 
-    // Add pre-request script if exists
-    const customScripts = this.customScripts.get(request.name);
-    if (customScripts?.preRequest) {
-      code += this.scriptParser.generatePreRequestCode(customScripts.preRequest, indentLevel);
-    }
+    // NOTE: Pre-request and test scripts are intentionally NOT emitted here.
+    // Scripts are used during analysis only (variable detection, JWT fingerprinting,
+    // correlation detection). The generated LR script stays clean and readable.
+
+    // Emit per-request dynamic variable generation (UUID/nonce for headers like x-fapi-interaction-id).
+    // These must run BEFORE the request so the fresh value is ready for use in headers.
+    this.perRequestVars.forEach((info, varName) => {
+      // Only emit for requests that actually use this variable in their headers or body
+      const usesVar = this.requestUsesVar(request, varName);
+      if (usesVar) {
+        const genExpr = this.perRequestGenExpression(info.generationType);
+        code += `\n${this.indent(`load.global.${varName} = ${genExpr};`, indentLevel)}`;
+      }
+    });
 
     // Generate WebRequest options (increments requestIdCounter)
     const options = this.generateRequestOptions(request);
@@ -994,7 +1022,7 @@ ${headerBlock}
     // Add response logging
     code += `\n${this.indent(`load.log(\`${request.name} - Status: \${${responseVar}.status}\`, load.LogLevel.${this.options.logLevel});`, indentLevel)}`;
 
-    // Handle correlation - store extracted values
+    // Emit correlation assignments — values extracted from this response
     const produces = this.getProducedCorrelations(request);
     if (produces.length > 0) {
       code += `\n`;
@@ -1006,25 +1034,37 @@ ${headerBlock}
       });
     }
 
-    // Add post-response/test script if exists
-    if (customScripts?.test) {
-      code += this.scriptParser.generateTestCode(customScripts.test, responseVar, indentLevel);
-
-      // Add validation logic from test script
-      if (customScripts.test.extractors && customScripts.test.extractors.length > 0) {
-        code += `\n${this.indent(`// Validation checks from test script`, indentLevel)}`;
-        customScripts.test.extractors.forEach(extractor => {
-          code += `\n${this.indent(`if (${responseVar}.extractors.${extractor.name}) {`, indentLevel)}`;
-          code += `\n${this.indent(`    load.log("Validation passed: ${extractor.name}", load.LogLevel.info);`, indentLevel)}`;
-          code += `\n${this.indent(`}`, indentLevel)}`;
-        });
-      }
-    }
-
     // Store the response variable name for this request (used by grouped actions)
     this.lastResponseVar = responseVar;
 
     return code;
+  }
+
+  /**
+   * Check if a request uses a given variable name in its URL, headers, or body.
+   * Used to decide whether to emit a per-request var generation line before this request.
+   */
+  requestUsesVar(request, varName) {
+    const pattern = new RegExp(`\\{\\{\\s*${varName}\\s*\\}\\}|\\$\\{[^}]*${varName}[^}]*\\}`);
+    const url = typeof request.url === 'string' ? request.url : (request.url?.raw || '');
+    if (pattern.test(url)) return true;
+    if (request.headers?.some(h => pattern.test(h.value || ''))) return true;
+    if (request.body?.raw && pattern.test(request.body.raw)) return true;
+    return false;
+  }
+
+  /**
+   * Return the DevWeb JS expression for generating a per-request dynamic value.
+   * Used when a pre-request script sets a variable via crypto.randomUUID() etc.
+   */
+  perRequestGenExpression(generationType) {
+    switch (generationType) {
+      case 'uuid':      return 'crypto.randomUUID()';
+      case 'nonce':     return "require('crypto').randomBytes(16).toString('hex')";
+      case 'random':    return "Math.random().toString(36).substring(2)";
+      case 'timestamp': return "Date.now().toString()";
+      default:          return 'crypto.randomUUID()';
+    }
   }
 
   /**
@@ -1115,34 +1155,48 @@ ${headerBlock}
   }
 
   /**
-   * Generate headers with auth injection
+   * Generate headers with auth injection and deduplication.
+   *
+   * Deduplication rule: If the request's headers array already has an explicit
+   * "Authorization" entry, use that value and SKIP the auth section injection.
+   * This prevents duplicate Authorization headers when both sections define it
+   * (common in Postman collections that have both auth.bearer AND header Authorization).
    */
   generateHeaders(request) {
     const headers = {};
 
-    // Only add headers if they exist and are not empty
+    // Build headers from explicit headers array
     if (request.headers && Array.isArray(request.headers) && request.headers.length > 0) {
       request.headers
-        .filter(h => !h.disabled && h.key && h.value) // Only include enabled headers with both key and value
+        .filter(h => !h.disabled && h.key && h.value)
         .forEach(h => {
           headers[h.key] = this.replaceParameters(h.value);
         });
     }
 
-    // Inject authentication headers only if auth is configured
-    const authConfig = this.findAuthConfig(request);
-    if (authConfig) {
-      const authHeader = this.authHandler.generateAuthHeaderInjection(authConfig);
-      if (authHeader) {
-        // Parse the auth header code and add to headers
-        const match = authHeader.match(/"([^"]+)":\s*(.+)/);
-        if (match) {
-          headers[match[1]] = `{{${match[2]}}}`;  // Will be replaced in final code
+    // Inject auth header from auth section ONLY if Authorization is NOT already explicit.
+    // This prevents duplication when auth section and headers both define Authorization.
+    const hasExplicitAuthHeader = Object.keys(headers)
+      .some(k => k.toLowerCase() === 'authorization');
+
+    if (!hasExplicitAuthHeader) {
+      const authConfig = this.findAuthConfig(request);
+      if (authConfig) {
+        const authHeader = this.authHandler.generateAuthHeaderInjection(authConfig);
+        if (authHeader) {
+          // authHeader format: '"Authorization": `Bearer ${load.global.token}`'
+          // Strip outer backticks if present — formatOptionsObject re-wraps with backticks
+          // when it detects ${...} in the string, avoiding double-backtick output.
+          const match = authHeader.match(/"([^"]+)":\s*(.+)/);
+          if (match) {
+            let val = match[2].trim();
+            if (val.startsWith('`') && val.endsWith('`')) val = val.slice(1, -1);
+            headers[match[1]] = val;
+          }
         }
       }
     }
 
-    // Return headers only if there are any
     return Object.keys(headers).length > 0 ? headers : null;
   }
 

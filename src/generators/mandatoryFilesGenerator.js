@@ -242,19 +242,25 @@ tearDown: 0      #Not used
   // ─── DevWeb Mandatory Files ───────────────────────────────────────────────────
 
   /**
-   * Copy a file from the project root to the output directory.
-   * Project root contains: DevWebSdk.d.ts, jwt-lib.js, tranport.pem (canonical sources).
-   * Returns true on success, false if source not found (warns but does NOT generate a stub).
+   * Copy a file to the output directory.
+   * Checks locations in order: project root, then any altSources paths (relative to project root).
+   * altSources is used for files like jwt-helper.js which live in src/analyzers/.
+   * Returns true on success, false if not found anywhere.
    */
-  copyFromProjectRoot(outputDir, filename) {
-    const src  = path.join(PROJECT_ROOT, filename);
+  copyFromProjectRoot(outputDir, filename, altSources = []) {
     const dest = path.join(outputDir, filename);
+    const candidates = [
+      path.join(PROJECT_ROOT, filename),
+      ...altSources.map(s => path.join(PROJECT_ROOT, s))
+    ];
     try {
-      if (fs.existsSync(src)) {
-        fs.copyFileSync(src, dest);
-        return true;
+      for (const src of candidates) {
+        if (fs.existsSync(src)) {
+          fs.copyFileSync(src, dest);
+          return true;
+        }
       }
-      console.warn(`  ⚠  ${filename} not found in project root (${PROJECT_ROOT}). Add it there and re-run.`);
+      console.warn(`  ⚠  ${filename} not found (searched: ${candidates.join(', ')}). Add it to project root and re-run.`);
       return false;
     } catch (err) {
       console.error(`  ✗  Failed to copy ${filename}: ${err.message}`);
@@ -267,7 +273,7 @@ tearDown: 0      #Not used
    * Based on the canonical DevWeb2.usr reference project.
    * @param {string}   scriptName        - Sanitized script name (no spaces/special chars)
    * @param {string[]} transactionNames  - Transaction names for [TransactionsOrder]
-   * @param {boolean}  hasJwt            - Add jwt-lib.js + tranport.pem to [ManuallyExtraFiles]
+   * @param {boolean}  hasJwt            - Add jwt-helper.js + transport.pem to [ManuallyExtraFiles]
    */
   generateDevWebUsrFile(scriptName, transactionNames = [], hasJwt = false) {
     const txOrder = transactionNames.length > 0
@@ -275,7 +281,7 @@ tearDown: 0      #Not used
       : '';
 
     const manualExtras = hasJwt
-      ? `jwt-lib.js=\ntranport.pem=\n`
+      ? `jwt-helper.js=\ntransport.pem=\n`
       : '';
 
     return `[General]
@@ -458,11 +464,11 @@ RunLogicObjectKind="Action"
    * Generate ScriptUploadMetadata.xml for DevWeb protocol.
    * Lists all files for LRE upload.
    * @param {string}  scriptName - Sanitized script name
-   * @param {boolean} hasJwt     - Include jwt-lib.js + tranport.pem entries
+   * @param {boolean} hasJwt     - Include jwt-helper.js + transport.pem entries
    */
   generateDevWebScriptUploadMetadata(scriptName, hasJwt = false) {
     const jwtEntries = hasJwt
-      ? `    <FileEntry Name="jwt-lib.js" Filter="2" />\n    <FileEntry Name="tranport.pem" Filter="2" />\n`
+      ? `    <FileEntry Name="jwt-helper.js" Filter="2" />\n    <FileEntry Name="transport.pem" Filter="2" />\n`
       : '';
 
     return `<?xml version="1.0" encoding="utf-8"?>
@@ -500,7 +506,7 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
    * @param {Object} [options]   - Optional settings:
    *   @param {string}   options.examplesPath    - (legacy, ignored — DevWebSdk copied from project root)
    *   @param {string[]} options.transactionNames - Transaction names for [TransactionsOrder]
-   *   @param {boolean}  options.hasJwt           - Copy jwt-lib.js + tranport.pem, add to ExtraFiles
+   *   @param {boolean}  options.hasJwt           - Copy jwt-helper.js + transport.pem, add to ExtraFiles
    * @returns {Object} map of generated file paths
    */
   async generateAll(outputDir, parameters = null, options = null) {
@@ -564,12 +570,13 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
     this.copyFromProjectRoot(outputDir, 'DevWebSdk.d.ts');
     console.log('✓ Copied DevWebSdk.d.ts');
 
-    // 10. Copy jwt-lib.js + tranport.pem from project root when JWT is used
+    // 10. Copy jwt-helper.js + transport.pem from project root when JWT is used
     if (hasJwt) {
-      this.copyFromProjectRoot(outputDir, 'jwt-lib.js');
-      console.log('✓ Copied jwt-lib.js');
-      this.copyFromProjectRoot(outputDir, 'tranport.pem');
-      console.log('✓ Copied tranport.pem (replace with your actual private key)');
+      // jwt-helper.js: check project root first, fall back to src/analyzers/ (where it's developed)
+      this.copyFromProjectRoot(outputDir, 'jwt-helper.js', ['src/analyzers/jwt-helper.js']);
+      console.log('✓ Copied jwt-helper.js');
+      this.copyFromProjectRoot(outputDir, 'transport.pem');
+      console.log('✓ Copied transport.pem (replace with your actual private key)');
     }
 
     return files;

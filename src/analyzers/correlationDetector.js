@@ -484,10 +484,9 @@ class CorrelationDetector {
         const queryVars = this.findVariablesInString(rawQuery);
         queryVars.forEach(varName => {
           if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
-              consumed.push({ name: varName, type: 'url', location: 'url', path: 'url' });
-            }
-          });
-        }
+            consumed.push({ name: varName, type: 'url', location: 'url', path: 'url' });
+          }
+        });
       }
     }
 
@@ -692,7 +691,7 @@ class CorrelationDetector {
   /**
    * Generate usage code for DevWeb
    */
-  generateUsage(correlation, requestVarName) {
+  generateUsage(correlation, _requestVarName) {
     const varName = `load.global.${correlation.name}`;
     
     switch (correlation.usageLocation) {
