@@ -127,14 +127,33 @@ devweb-prompts/   15 AI prompt files for AI-assisted conversion without the Node
 
 ---
 
+## Variable Classification — 5 Rules (Generic, Future-Proof)
+
+| Rule | Condition | Result |
+|------|-----------|--------|
+| 1 | Set by any script (bru.setEnv, pm.*.set, etc.) | Tier 1 Dynamic |
+| 2 | Correlation target | Tier 1 Dynamic |
+| 3 | Name starts with `_` | Tier 1 Dynamic |
+| **4** | **Empty value + not credential** | **Tier 1 Dynamic** ← safety net |
+| 5 | Has real value | Tier 2 Config or Tier 3 Test Data |
+
+Rule 4 ensures runtime vars (access_token, refresh_token, interaction_id) are **never** in parameters — they are always left empty in collections intentionally.
+
+---
+
 ## Version History
 
 | Version | Highlights |
 |---------|------------|
-| **2.4.0** | JWT auth (DevWeb + VuGen), DevWeb full file set (.usr/.cfg/.usp/XML), correlation URL bug fix, bru.setVar detection, dynamic bearer token fix, load.initialize('Initialize') canonical naming |
+| **2.5.3** | brunoParser syntax fix, Generic Rule 4 (empty=dynamic), library name exclusion strengthened |
+| 2.5.2 | Bruno YAML event detection: detectScriptSetVariables + extractTestScript robustness |
+| 2.5.1 | sanitizeVarName for hyphenated vars, Bearer token consumer detection, Bruno getter APIs |
+| 2.5.0 | bru.setGlobalVar/setNextEnvVar, res.headers/cookies extractors, header/cookie generation |
+| 2.4.9 | Bruno script runtime API full coverage, body?.field, indirect var resolution |
+| 2.4.8 | Proxy auto-detection from collection/env vars |
+| 2.4.7 | VuGen default.cfg: 9 sections, 163 lines canonical |
+| 2.4.6 | VuGen gen_uuid/gen_csrf_token/gen_hex64 C functions; CSRF auto-detection |
+| 2.4.5 | Smart header classification: global auto-headers vs per-request |
+| **2.4.0** | JWT auth, DevWeb full file set (.usr/.cfg/.usp/XML), correlation URL bug fix, bru.setVar |
 | 2.3.4 | Snapshot=tN.inf in all VuGen requests |
-| 2.3.3 | lr_whoami fix, separate user guides per protocol, formdata warning |
-| 2.3.2 | VuGen default.usp MercIniTree fix, .usr metadata fields |
-| 2.3.1 | Complete rts.yml (11 sections), web-http prompt files 10 & 11 |
 | 2.3.0 | VuGen Web HTTP/HTML protocol support (--protocol web-http) |
-| 2.1.1 | load.sleep() fix, Docker packaging |
