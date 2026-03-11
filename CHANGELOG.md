@@ -5,6 +5,41 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-03-10
+
+### Fixed
+
+**Bug 1 — `load.global.jsrsasign-js = null` — invalid JavaScript identifier**
+
+Variable names containing hyphens (e.g., `jsrsasign-js`, `access-token`, `my-api-key`) are not valid JavaScript identifiers. These appeared in generated DevWeb scripts when Postman globals stored library code (e.g. jsrsasign) under a hyphenated key.
+
+- Added `sanitizeVarName(name)` method to `advancedScriptGenerator.js` — converts any non-identifier characters to `_`
+- Applied in `generateGlobalVariablesInit()` and `replaceParameters()` so all generated `load.global.X` and `load.params.X` references use sanitized names
+- Also expanded `LIBRARY_NAMES` exclusion filter to catch variants like `jsrsasign-js`
+
+**Bug 2 — `access_token` (and other tokens) not correlated when used as `Bearer {{access_token}}`**
+
+The root cause: `detectConsumedValues()` used `isVariablePattern(value)` to check header values, which only matched when the *entire* value was a variable (`{{access_token}}`). Values like `Bearer {{access_token}}` failed the check because of the `"Bearer "` prefix, so the consumer was never matched to the producer.
+
+- Fixed `detectConsumedValues()` to use `findVariablesInString(value)` for header values — extracts all embedded `{{varName}}` references regardless of surrounding text
+- Applied same fix to `findVariablesInBody()` — body values like `grant_type=cc&client_assertion={{jwt_token}}` now correctly identify `jwt_token` as consumed
+- Added full Bruno getter API coverage to `extractUsedVariables()`: `bru.getEnvVar()`, `bru.getGlobalVar()`, `bru.getCollectionVar()`, legacy `env.get()` / `vars.get()`
+
+**Result**: Generated scripts now correctly produce:
+```javascript
+// In request that produces access_token:
+new load.JsonPathExtractor("access_token", "$.access_token")
+load.global.access_token = webResponse_01.extractors.access_token;
+
+// In all subsequent requests that consume it:
+"Authorization": `Bearer ${load.global.access_token}`
+```
+
+### Changed
+- `package.json` version: `2.5.0` → `2.5.1`
+
+---
+
 ## [2.5.0] - 2026-03-10
 
 ### Added — Complete Bruno + Postman API Coverage for Correlation Detection
