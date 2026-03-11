@@ -201,17 +201,29 @@ class WebHttpScriptGenerator {
   classifyVariables() {
     const credentialPattern = /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
 
-    // Correlation targets are dynamic (set by web_reg_save_param_* at runtime)
+    // RULE 1 — Correlation targets → dynamic (VuGen: web_reg_save_param_* handles them)
     this.correlations.forEach(corr => this.dynamicVarNames.add(corr.name));
+
+    // RULE 2 — Script-set variables → dynamic
     this.scriptSetVarNames.forEach(name => this.dynamicVarNames.add(name));
 
+    // RULE 3 — _ prefix → always dynamic
+    for (const [name] of this.variableMap.entries()) {
+      if (name.startsWith('_')) this.dynamicVarNames.add(name);
+    }
+
+    // RULE 4 (GENERIC) — Empty value in collection/environment → dynamic.
+    // Static params always have real values. Runtime vars are left empty intentionally.
     for (const [name, value] of this.variableMap.entries()) {
-      if (name.startsWith('_') && (value === '' || value === null || value === undefined)) {
+      if (this.dynamicVarNames.has(name)) continue;
+      if (name.startsWith('$')) continue;
+      const isEmpty = value === '' || value === null || value === undefined;
+      if (isEmpty && !credentialPattern.test(name)) {
         this.dynamicVarNames.add(name);
       }
     }
 
-    // Static params — everything not dynamic
+    // RULE 5 — Everything with a real value → static param (ParameterFile.prm / collection_data.dat)
     let usernameParam = null;
     for (const [name] of this.variableMap.entries()) {
       if (this.dynamicVarNames.has(name)) continue;
