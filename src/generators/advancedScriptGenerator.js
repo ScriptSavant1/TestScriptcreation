@@ -210,6 +210,24 @@ class AdvancedScriptGenerator {
     };
 
     scanItem(this.collection);
+
+    // ALSO scan normalized requests (req.tests = brunoParser normalized events).
+    // brunoParser stores events in req.tests[], NOT item.event[], for Bruno YAML collections.
+    // Without this pass, script-set vars (access_token, refresh_token, etc.) from Bruno
+    // collections are missed → incorrectly classified as static params instead of Tier 1 dynamic.
+    this.requests.forEach(req => {
+      const events = req.tests || req.event || [];
+      events.forEach(ev => {
+        const exec = ev.script?.exec;
+        const text = Array.isArray(exec) ? exec.join('\n') : (typeof exec === 'string' ? exec : '');
+        if (!text) return;
+        let m;
+        while ((m = setPattern.exec(text)) !== null) {
+          const varName = m[1] || m[2] || m[3];
+          if (varName) this.scriptSetVarNames.add(varName);
+        }
+      });
+    });
   }
 
   /**

@@ -5,6 +5,29 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-03-10
+
+### Fixed — Bruno Collections: access_token in parameters.yml + not correlated
+
+**Root cause**: `advancedScriptGenerator.detectScriptSetVariables()` only scanned `item.event[]` in the raw collection object. For Bruno YAML collections parsed by brunoParser, scripts are stored in `req.tests[]` on normalized requests — not in `item.event[]`. So for Bruno collections, script-set variables like `access_token`, `refresh_token` were **never added to `scriptSetVarNames`**, causing them to fall through to Tier 2 (static parameters) instead of Tier 1 (dynamic runtime).
+
+**Fixes applied:**
+
+1. **`advancedScriptGenerator.detectScriptSetVariables()`**: Added second scan of `this.requests[]` using `req.tests || req.event || []` — same pattern already working in `webHttpScriptGenerator`. This ensures script-set variables are correctly classified as Tier 1 dynamic for ALL collection formats (Postman JSON, Bruno JSON, Bruno YAML, `.bru`).
+
+2. **`correlationDetector.extractTestScript()`**: Made robust for all event formats — handles `req.tests[]` (brunoParser), `req.event[]` (Postman), `script.exec` as Array or String, `script` as plain String. Previously returned `null` early if tests array existed but format was unexpected, missing the actual script.
+
+3. **`correlationDetector.extractPreRequestScript()`**: Same robustness fix applied — now checks both `req.tests[]` and `req.event[]`.
+
+**Result:**
+- `access_token`: NOT in `parameters.yml` ✓, correlated as `load.global.access_token` ✓, `JsonPathExtractor("access_token","$.access_token")` generated ✓
+- Works for Postman JSON AND Bruno YAML/JSON/.bru collections
+
+### Changed
+- `package.json` version: `2.5.1` → `2.5.2`
+
+---
+
 ## [2.5.1] - 2026-03-10
 
 ### Fixed
