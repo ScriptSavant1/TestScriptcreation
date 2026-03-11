@@ -80,11 +80,49 @@ class BrunoParser {
   async parseBru() {
     const content = await fs.readFile(this.collectionPath, 'utf8');
     this.metadata.type = 'bruno-bru';
-    
-    // Parse .bru file
+
+    // Check if its an environmnet file (contains only vars section)
+    if (content.trim().startsWith('vars' {} || content.includes('\nvars {')) {
+      // It's an environment file — return empty requests, vars will be extracted seperately
+      return [];
+    }
+
+    // Parse .bru file as request
     const request = this.parseBruContent(content);
     return [request];
   }
+
+   /**
+   * Parse Bruno .bru environment file and extract variables
+   * Returns Object with variables
+   */
+  async parseBruEnvironment() {
+    const content = await fs.readFile(this.collectionPath, 'utf8');
+    const vars = {};
+
+    //Match vars { ... } block
+    const varsMatch = content.match(/vars\s*\{([^}]+)\}/s);
+    if (varsMatch) {
+      const varsContent = varsMatch[1];
+      const lines = varsContent.split('\n');
+
+      for (const line of lines){
+        const trimmed = line.trim();
+        if(!trimmed || trimmed.startsWith('//'))  {
+          continue; // Skip empty lines and comments
+        }
+
+        const colonIndex = trimmed.indexOf(':');
+        if (colonIndex > 0) {
+          const key = trimmed.substring(0, colonIndex).trim();
+          const value = trimmed.substring(colonIndex + 1).trim();
+          vars[key] = value;
+        }          
+      }
+    }
+    return vars;
+  }
+
 
   /**
    * Parse a single .bru file content
@@ -311,6 +349,9 @@ class BrunoParser {
     // Extract collection-level auth (OAuth2 / API Key / Bearer / etc.)
     const collectionAuth = rootData.request?.auth || null;
 
+    //Extract proxy configuration
+    const proxyConfig = rootData.config?.proxy || null;
+
     // Initialize collection object — item[] populated after walk/traverse
     this.collection = {
       info: { name: this.metadata.name },
@@ -318,6 +359,7 @@ class BrunoParser {
       event: collectionEvents,
       collectionHeaders,   // <-- headers that apply to every request
       collectionAuth,      // <-- OAuth2/auth config at collection level
+      
       item: []
     };
 
