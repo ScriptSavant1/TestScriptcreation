@@ -82,7 +82,7 @@ class BrunoParser {
     this.metadata.type = 'bruno-bru';
 
     // Check if its an environmnet file (contains only vars section)
-    if (content.trim().startsWith('vars' {} || content.includes('\nvars {')) {
+    if (content.trim().startsWith('vars {') || content.includes('\nvars {')) {
       // It's an environment file — return empty requests, vars will be extracted seperately
       return [];
     }

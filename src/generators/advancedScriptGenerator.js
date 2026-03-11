@@ -285,29 +285,39 @@ class AdvancedScriptGenerator {
   classifyVariables() {
     const credentialPattern = /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
 
-    // 1. Mark correlation targets as dynamic
-    this.correlations.forEach(corr => {
-      this.dynamicVarNames.add(corr.name);
-    });
+    // RULE 1 — Correlation targets: always Tier 1 (dynamic)
+    // These are values extracted from API responses at runtime.
+    this.correlations.forEach(corr => this.dynamicVarNames.add(corr.name));
 
-    // 2. Mark script-set variables as dynamic
-    this.scriptSetVarNames.forEach(name => {
-      this.dynamicVarNames.add(name);
-    });
+    // RULE 2 — Script-set variables: always Tier 1 (dynamic)
+    // Any variable explicitly set by a script (pm.*.set, bru.setEnv, etc.) is runtime.
+    this.scriptSetVarNames.forEach(name => this.dynamicVarNames.add(name));
 
-    // 3. Mark _ prefix + empty value as dynamic (Postman convention for runtime vars)
+    // RULE 3 — _ prefix: always Tier 1 regardless of value
+    // Postman/Bruno convention: underscore prefix = correlation placeholder.
+    for (const [name] of this.variableMap.entries()) {
+      if (name.startsWith('_')) this.dynamicVarNames.add(name);
+    }
+
+    // RULE 4 (GENERIC) — Empty value in collection/environment = Tier 1 (dynamic).
+    // Static config vars (baseUrl, clientId, apiKey) ALWAYS have real values.
+    // Runtime vars (access_token, refresh_token, interaction_id) are intentionally
+    // left EMPTY because they are filled at runtime from API responses.
+    // Credentials (username/password) are excluded — they go to Tier 3.
     for (const [name, value] of this.variableMap.entries()) {
-      if (name.startsWith('_') && (value === '' || value === null || value === undefined)) {
+      if (this.dynamicVarNames.has(name)) continue;
+      if (name.startsWith('$')) continue;
+      const isEmpty = value === '' || value === null || value === undefined;
+      const isCredential = credentialPattern.test(name);
+      if (isEmpty && !isCredential) {
         this.dynamicVarNames.add(name);
       }
     }
 
-    // 4. Everything else → parameterize via CSV
+    // RULE 5 — Everything else with a real value → parameterize via CSV
     let usernameParam = null;
     for (const [name] of this.variableMap.entries()) {
-      // Skip dynamic variables
       if (this.dynamicVarNames.has(name)) continue;
-      // Skip Postman built-in dynamic variables ($randomXxx, $guid, $timestamp)
       if (name.startsWith('$')) continue;
 
       this.paramVarNames.add(name);
@@ -950,16 +960,14 @@ ${jwtBlock}
     const vars = [];
     const seen = new Set();
 
-    // Known JavaScript library names that appear in Postman globals but are NOT
-    // LR runtime variables — they hold library source code loaded via eval().
-    const LIBRARY_NAMES = new Set([
-      'jsrsasign', 'KJUR', 'kjur', 'CryptoJS', 'cryptojs',
-      'jsonwebtoken', 'jose', 'forge', 'jsbn', 'rsa'
-    ]);
+    // Known JavaScript library keywords — variables holding library source code (e.g. eval(pm.globals.get('jsrsasign')))
+    // are NOT LR runtime vars. Any variable whose name starts with or contains these keywords is excluded.
+    const LIBRARY_KEYWORDS = ['jsrsasign', 'kjur', 'cryptojs', 'jsonwebtoken', 'jose', 'forge', 'jsbn'];
 
-    // Filter: skip any name that contains only library keywords (e.g. "jsrsasign-js")
-    const isLibraryName = (name) =>
-      LIBRARY_NAMES.has(name) || LIBRARY_NAMES.has(name.replace(/[-_.]/g, '').toLowerCase());
+    const isLibraryName = (name) => {
+      const lower = name.toLowerCase().replace(/[-_.]/g, '');
+      return LIBRARY_KEYWORDS.some(kw => lower === kw || lower.startsWith(kw) || lower.endsWith(kw));
+    };
 
     // Add correlation variables (deduplicated, sanitized)
     this.correlations.forEach(corr => {

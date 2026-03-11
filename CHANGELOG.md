@@ -5,6 +5,38 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.3] - 2026-03-10
+
+### Fixed — brunoParser.js syntax error + Generic dynamic variable rule
+
+**Critical fix: brunoParser.js line 85** had a syntax error (`vars' {}` instead of `vars {'`) that caused the entire conversion to crash. Fixed.
+
+**Generic Rule 4 — Empty value = Dynamic (both generators):**
+
+The root cause of `access_token` in parameters was that empty-value variables were not reliably classified as Tier 1 dynamic. Added an explicit rule to both `advancedScriptGenerator.classifyVariables()` and `webHttpScriptGenerator.classifyVariables()`:
+
+> *If a variable has an empty/null value in the collection or environment file, AND it is not a credential (username/password/email), classify it as Tier 1 Dynamic.*
+
+This is the correct generic rule because:
+- **Static config vars** (baseUrl, clientId, apiKey, scope) **always have real values** in the collection
+- **Runtime vars** (access_token, refresh_token, interaction_id, jwt_token) are intentionally **left empty** — they are filled at runtime from API responses
+
+The 5 classification rules are now (in priority order):
+1. Script-set vars (pm.*.set, bru.setEnv, etc.) → Tier 1 Dynamic
+2. Correlation targets → Tier 1 Dynamic
+3. `_` prefix → Tier 1 Dynamic (regardless of value)
+4. **Empty value + not credential → Tier 1 Dynamic** ← NEW GENERIC RULE
+5. Everything else with a real value → Tier 2 Config (once) or Tier 3 Test Data (iteration)
+
+**Library name exclusion strengthened** (`LIBRARY_KEYWORDS` vs `LIBRARY_NAMES`):
+
+The old check `jsrsasign` matched exactly but missed variants like `jsrsasign-js`. Replaced with keyword-prefix matching — any variable whose sanitized lowercase name starts with, ends with, or equals a known library keyword is excluded from `load.global` initialization.
+
+### Changed
+- `package.json` version: `2.5.2` → `2.5.3`
+
+---
+
 ## [2.5.2] - 2026-03-10
 
 ### Fixed — Bruno Collections: access_token in parameters.yml + not correlated
