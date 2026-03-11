@@ -1,19 +1,23 @@
 /**
- * Web UI Server for Bruno to DevWeb Converter
+ * Web UI Server — Bruno / Postman → LoadRunner Converter
  */
 
-const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs').promises;
+const express  = require('express');
+const multer   = require('multer');
+const path     = require('path');
+const fs       = require('fs').promises;
+const fsSync   = require('fs');
 const archiver = require('archiver');
 const BrunoDevWebConverter = require('../index');
 
 class WebServer {
   constructor(port = 3000) {
     this.port = port;
-    this.app = express();
+    this.app  = express();
+
+    // Accept up to 2 files: collection + optional environment
     this.upload = multer({ dest: 'uploads/' });
+
     this.setupMiddleware();
     this.setupRoutes();
   }
@@ -27,137 +31,108 @@ class WebServer {
   }
 
   setupRoutes() {
-    // Home page
+    // ── Home page ─────────────────────────────────────────────────────────────
     this.app.get('/', (req, res) => {
       res.render('index', {
-        title: 'Bruno to DevWeb Converter',
+        title:   'Bruno / Postman → LoadRunner Converter',
         version: require('../../package.json').version
       });
     });
 
-    // Upload and convert
-    this.app.post('/convert', this.upload.single('collection'), async (req, res) => {
-      try {
-        if (!req.file) {
-          return res.status(400).json({ error: 'No file uploaded' });
+    // ── Convert ───────────────────────────────────────────────────────────────
+    // Accepts: collection (required) + environment (optional)
+    this.app.post('/convert',
+      this.upload.fields([
+        { name: 'collection',  maxCount: 1 },
+        { name: 'environment', maxCount: 1 }
+      ]),
+      async (req, res) => {
+        const collectionFile  = req.files?.collection?.[0];
+        const environmentFile = req.files?.environment?.[0];
+
+        if (!collectionFile) {
+          return res.status(400).json({ error: 'Collection file is required.' });
         }
 
-        const options = {
-          inputFile: req.file.path,
-          outputDir: `./output/${Date.now()}`,
-          useTransactions: req.body.useTransactions !== 'false',
-          useCorrelation: req.body.useCorrelation !== 'false',
-          useParameterization: req.body.useParameterization !== 'false',
-          useAuthentication: req.body.useAuthentication !== 'false',
-          thinkTime: parseFloat(req.body.thinkTime) || 1,
-          addComments: req.body.addComments !== 'false',
-          logLevel: req.body.logLevel || 'info',
-          protocol: req.body.protocol || 'devweb'
-        };
+        const outputDir = `./output/${Date.now()}`;
 
-        const converter = new BrunoDevWebConverter(options);
-        const results = await converter.convert();
+        try {
+          const options = {
+            inputFile:           collectionFile.path,
+            outputDir,
+            environmentFile:     environmentFile ? environmentFile.path : null,
+            protocol:            req.body.protocol   || 'devweb',
+            mode:                req.body.mode        || 'single',
+            useTransactions:     req.body.useTransactions     !== 'false',
+            useCorrelation:      req.body.useCorrelation      !== 'false',
+            useParameterization: req.body.useParameterization !== 'false',
+            useAuthentication:   req.body.useAuthentication   !== 'false',
+            thinkTime:           parseFloat(req.body.thinkTime) || 1,
+            addComments:         req.body.addComments !== 'false',
+            logLevel:            req.body.logLevel || 'info'
+          };
 
-        // Cleanup uploaded file
-        await fs.unlink(req.file.path);
+          const converter = new BrunoDevWebConverter(options);
+          const results   = await converter.convert();
 
-        // Create zip of output
-        const zipPath = `${options.outputDir}.zip`;
-        await this.createZip(options.outputDir, zipPath);
+          // Cleanup uploads
+          await fs.unlink(collectionFile.path).catch(() => {});
+          if (environmentFile) await fs.unlink(environmentFile.path).catch(() => {});
 
-        res.json({
-          success: true,
-          downloadUrl: `/download/${path.basename(zipPath)}`,
-          analysis: results.analysis,
-          outputDir: options.outputDir
-        });
+          // Zip the output
+          const zipName = `script_${Date.now()}.zip`;
+          const zipPath = `./output/${zipName}`;
+          await this.createZip(outputDir, zipPath);
 
-      } catch (error) {
-        console.error('Conversion error:', error);
-        res.status(500).json({
-          error: error.message,
-          stack: error.stack
-        });
+          res.json({
+            success:     true,
+            downloadUrl: `/download/${zipName}`,
+            analysis:    results.analysis,
+            protocol:    options.protocol,
+            mode:        options.mode
+          });
+
+        } catch (err) {
+          // Cleanup on error
+          await fs.unlink(collectionFile.path).catch(() => {});
+          if (environmentFile) await fs.unlink(environmentFile.path).catch(() => {});
+
+          console.error('Conversion error:', err);
+          res.status(500).json({ error: err.message });
+        }
       }
-    });
+    );
 
-    // Download generated script
+    // ── Download ──────────────────────────────────────────────────────────────
     this.app.get('/download/:filename', async (req, res) => {
-      const filePath = path.join(__dirname, '../../output', req.params.filename);
-      
+      const safe = path.basename(req.params.filename);  // prevent path traversal
+      const filePath = path.join(process.cwd(), 'output', safe);
+
       try {
         await fs.access(filePath);
-        res.download(filePath, (err) => {
+        res.download(filePath, `loadrunner_script.zip`, (err) => {
           if (!err) {
-            // Cleanup after download
             setTimeout(() => {
-              fs.unlink(filePath).catch(console.error);
+              fs.unlink(filePath).catch(() => {});
               const dir = filePath.replace('.zip', '');
-              fs.rm(dir, { recursive: true }).catch(console.error);
-            }, 5000);
+              fs.rm(dir, { recursive: true }).catch(() => {});
+            }, 10000);
           }
         });
-      } catch (error) {
-        res.status(404).json({ error: 'File not found' });
+      } catch {
+        res.status(404).json({ error: 'File not found or already downloaded.' });
       }
     });
 
-    // Analyze collection
-    this.app.post('/analyze', this.upload.single('collection'), async (req, res) => {
-      try {
-        if (!req.file) {
-          return res.status(400).json({ error: 'No file uploaded' });
-        }
-
-        const BrunoParser = require('../parsers/brunoParser');
-        const CorrelationDetector = require('../analyzers/correlationDetector');
-        const ParameterizationEngine = require('../analyzers/parameterizationEngine');
-        const AuthenticationHandler = require('../analyzers/authenticationHandler');
-
-        const parser = new BrunoParser(req.file.path);
-        const requests = await parser.parse();
-        const metadata = parser.getMetadata();
-
-        const correlationDetector = new CorrelationDetector();
-        const paramEngine = new ParameterizationEngine();
-        const authHandler = new AuthenticationHandler();
-
-        const correlations = correlationDetector.analyzeRequests(requests);
-        await paramEngine.extractParameters(parser.collection);
-        authHandler.extractAuthentication(parser.collection);
-
-        // Cleanup uploaded file
-        await fs.unlink(req.file.path);
-
-        res.json({
-          metadata,
-          requests: {
-            total: requests.length,
-            sample: requests.slice(0, 5)
-          },
-          correlations: correlationDetector.getCorrelationReport(),
-          parameters: paramEngine.getReport(),
-          authentication: authHandler.getAuthSummary()
-        });
-
-      } catch (error) {
-        console.error('Analysis error:', error);
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    // Health check
+    // ── Health ────────────────────────────────────────────────────────────────
     this.app.get('/health', (req, res) => {
       res.json({ status: 'ok', version: require('../../package.json').version });
     });
   }
 
-  /**
-   * Create zip file of directory
-   */
   async createZip(sourceDir, outPath) {
     return new Promise((resolve, reject) => {
-      const output = require('fs').createWriteStream(outPath);
+      const output  = fsSync.createWriteStream(outPath);
       const archive = archiver('zip', { zlib: { level: 9 } });
 
       output.on('close', () => resolve(outPath));
@@ -169,39 +144,27 @@ class WebServer {
     });
   }
 
-  /**
-   * Start the server
-   */
   async start(port = this.port) {
-    // Create necessary directories
     await fs.mkdir('uploads', { recursive: true });
-    await fs.mkdir('output', { recursive: true });
+    await fs.mkdir('output',  { recursive: true });
 
     return new Promise((resolve) => {
       this.server = this.app.listen(port, () => {
-        console.log(`\n🌐 Web UI server running at http://localhost:${port}`);
-        console.log(`📊 Upload your collection and convert to DevWeb!\n`);
+        console.log(`\n🌐  Converter UI  →  http://localhost:${port}\n`);
         resolve(this.server);
       });
     });
   }
 
-  /**
-   * Stop the server
-   */
   async stop() {
     if (this.server) {
-      return new Promise((resolve) => {
-        this.server.close(resolve);
-      });
+      return new Promise((resolve) => this.server.close(resolve));
     }
   }
 }
 
-// Export for use in CLI
 module.exports = new WebServer();
 
-// Start server if run directly
 if (require.main === module) {
   const port = process.env.PORT || 3000;
   module.exports.start(port);

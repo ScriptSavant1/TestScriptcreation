@@ -1,490 +1,493 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= title %> - v<%= version %></title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LR Script Converter v<%= version %></title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
+  --text:#e6edf3;--muted:#8b949e;--primary:#58a6ff;--primary-dark:#1f6feb;
+  --success:#3fb950;--success-bg:#0d2e1a;--warn:#d29922;
+  --danger:#f85149;
+  --devweb:#58a6ff;--vugen:#f0883e;
+  --radius:10px;--font:'Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;padding:24px 16px}
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
+.header{width:100%;max-width:860px;text-align:center;margin-bottom:32px}
+.logo{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px}
+.logo-icon{width:44px;height:44px;background:linear-gradient(135deg,var(--primary),var(--vugen));
+  border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
+.logo-title{font-size:24px;font-weight:700;letter-spacing:-0.5px}
+.logo-sub{color:var(--muted);font-size:13px;margin-top:4px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;
+  color:var(--muted);margin-top:8px}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--success);
+  box-shadow:0 0 6px var(--success);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;
+  width:100%;max-width:860px;padding:28px;margin-bottom:16px}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:1px;margin-bottom:20px;display:flex;align-items:center;gap:8px}
+.card-title::before{content:'';width:3px;height:14px;background:var(--primary);
+  border-radius:2px;display:inline-block;flex-shrink:0}
 
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px;
-            text-align: center;
-        }
+/* Protocol */
+.proto-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
+@media(max-width:560px){.proto-grid,.upload-grid{grid-template-columns:1fr}}
+.proto-card{border:2px solid var(--border);border-radius:var(--radius);padding:16px 20px;
+  cursor:pointer;transition:.2s;display:flex;gap:14px;align-items:flex-start;user-select:none}
+.proto-card:hover{border-color:var(--primary-dark)}
+.proto-card.active-devweb{border-color:var(--devweb);background:rgba(88,166,255,.07)}
+.proto-card.active-vugen{border-color:var(--vugen);background:rgba(240,136,62,.07)}
+.proto-icon{font-size:28px;line-height:1;flex-shrink:0}
+.proto-name{font-weight:700;font-size:15px;margin-bottom:3px}
+.proto-desc{font-size:12px;color:var(--muted);line-height:1.5}
+.proto-badge{display:inline-block;font-size:10px;border-radius:4px;padding:2px 6px;
+  margin-top:5px;font-weight:700}
+.badge-js{background:rgba(88,166,255,.2);color:var(--devweb)}
+.badge-c{background:rgba(240,136,62,.2);color:var(--vugen)}
 
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
+/* Upload */
+.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:28px 16px;
+  text-align:center;cursor:pointer;transition:.2s;position:relative;background:var(--bg)}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--primary);background:rgba(88,166,255,.04)}
+.drop-zone.loaded{border-color:var(--success);border-style:solid;background:rgba(63,185,80,.06)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-icon{font-size:28px;margin-bottom:8px;display:block}
+.dz-label{font-size:13px;font-weight:600;margin-bottom:3px}
+.dz-sub{font-size:11px;color:var(--muted)}
+.dz-opt{font-size:10px;color:var(--warn);margin-top:4px;display:block}
+.dz-name{font-size:12px;color:var(--success);font-weight:600;word-break:break-all;
+  margin-top:6px;padding:0 8px}
+.dz-clear{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--muted);
+  cursor:pointer;font-size:18px;line-height:1;z-index:10}
+.dz-clear:hover{color:var(--danger)}
 
-        .header p {
-            font-size: 1.2em;
-            opacity: 0.9;
-        }
+/* Options */
+.options-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.opt-group{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:12px 16px;flex:1;min-width:150px}
+.opt-group > span{font-size:11px;color:var(--muted);display:block;margin-bottom:8px;
+  text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.seg-btns{display:flex;gap:4px}
+.seg-btn{flex:1;padding:6px 8px;border:1px solid var(--border);background:transparent;
+  color:var(--muted);border-radius:6px;font-size:12px;cursor:pointer;transition:.15s;white-space:nowrap}
+.seg-btn:hover{border-color:var(--primary);color:var(--primary)}
+.seg-btn.active{background:var(--primary-dark);border-color:var(--primary);color:#fff;font-weight:700}
 
-        .content {
-            padding: 40px;
-        }
+/* Advanced */
+.adv-toggle{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;
+  display:flex;align-items:center;gap:6px;padding:6px 0;margin-bottom:12px;transition:.15s}
+.adv-toggle:hover{color:var(--text)}
+.arrow{transition:.2s transform;display:inline-block}
+.adv-toggle.open .arrow{transform:rotate(90deg)}
+.adv-panel{display:none;padding:16px;background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--radius);margin-bottom:16px}
+.adv-panel.show{display:block}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border)}
+.toggle-row:last-child{border-bottom:none}
+.tgl-label{font-size:13px;font-weight:500}
+.tgl-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.switch{position:relative;width:40px;height:22px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:var(--border);border-radius:22px;
+  cursor:pointer;transition:.2s}
+.slider:before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;
+  background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked + .slider{background:var(--primary)}
+.switch input:checked + .slider:before{transform:translateX(18px)}
 
-        .upload-area {
-            border: 3px dashed #667eea;
-            border-radius: 15px;
-            padding: 60px 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 30px;
-        }
+/* Convert button */
+.btn-convert{width:100%;padding:14px;font-size:15px;font-weight:700;border:none;
+  border-radius:var(--radius);cursor:pointer;transition:.15s;
+  display:flex;align-items:center;justify-content:center;gap:10px;letter-spacing:.2px}
+.btn-convert.devweb{background:linear-gradient(135deg,#1f6feb,#58a6ff);color:#fff;
+  box-shadow:0 4px 14px rgba(31,111,235,.35)}
+.btn-convert.vugen{background:linear-gradient(135deg,#b45309,#f0883e);color:#fff;
+  box-shadow:0 4px 14px rgba(240,136,62,.35)}
+.btn-convert:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.btn-convert:disabled{opacity:.5;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+.spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.35);
+  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-        .upload-area:hover {
-            border-color: #764ba2;
-            background: #f8f9ff;
-        }
+/* Progress */
+.prog-wrap{height:4px;background:var(--border);border-radius:4px;overflow:hidden;
+  margin:14px 0;display:none}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--success));
+  width:0%;transition:width .4s ease}
 
-        .upload-area.dragover {
-            background: #f0f2ff;
-            border-color: #764ba2;
-        }
+/* Result */
+.result-box{border-radius:var(--radius);padding:20px;margin-bottom:16px;
+  width:100%;max-width:860px}
+.result-ok{background:rgba(63,185,80,.08);border:1px solid var(--success);display:none}
+.result-err{background:rgba(248,81,73,.08);border:1px solid var(--danger);display:none}
+.res-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
+.res-icon{font-size:24px;flex-shrink:0;line-height:1}
+.res-title{font-size:16px;font-weight:700}
+.res-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.stats-row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 16px}
+.stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:10px 16px;text-align:center;flex:1;min-width:80px}
+.stat-num{font-size:24px;font-weight:700;color:var(--primary);display:block;font-family:'Cascadia Code',monospace}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.btn-dl{display:inline-flex;align-items:center;gap:8px;background:var(--success);
+  color:#fff;border:none;border-radius:var(--radius);padding:12px 24px;font-size:14px;
+  font-weight:700;cursor:pointer;text-decoration:none;transition:.15s}
+.btn-dl:hover{background:#2ea043;transform:translateY(-1px)}
+.btn-reset{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  border-radius:var(--radius);padding:11px 18px;font-size:13px;cursor:pointer;
+  transition:.15s;margin-left:8px;vertical-align:middle}
+.btn-reset:hover{border-color:var(--primary);color:var(--primary)}
 
-        .upload-icon {
-            font-size: 4em;
-            margin-bottom: 20px;
-        }
+/* How it works */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.step{padding:16px 10px;text-align:center;border:1px solid var(--border);
+  border-radius:var(--radius);background:var(--bg)}
+.step-em{font-size:26px;margin-bottom:8px;display:block}
+.step-ttl{font-size:13px;font-weight:700;margin-bottom:4px}
+.step-txt{font-size:11px;color:var(--muted);line-height:1.5}
 
-        .options {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-
-        .option {
-            background: #f8f9ff;
-            padding: 15px;
-            border-radius: 10px;
-        }
-
-        .option label {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        .option input[type="checkbox"] {
-            margin-right: 10px;
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-        }
-
-        .option input[type="number"] {
-            width: 100%;
-            padding: 8px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            margin-top: 10px;
-        }
-
-        .button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 40px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s;
-            width: 100%;
-        }
-
-        .button:hover {
-            transform: translateY(-2px);
-        }
-
-        .button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .button.secondary {
-            background: #6c757d;
-            margin-top: 10px;
-        }
-
-        .status {
-            margin-top: 30px;
-            padding: 20px;
-            border-radius: 10px;
-            display: none;
-        }
-
-        .status.success {
-            background: #d4edda;
-            border: 2px solid #28a745;
-            color: #155724;
-        }
-
-        .status.error {
-            background: #f8d7da;
-            border: 2px solid #dc3545;
-            color: #721c24;
-        }
-
-        .status.processing {
-            background: #d1ecf1;
-            border: 2px solid #17a2b8;
-            color: #0c5460;
-            display: flex;
-            align-items: center;
-        }
-
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin-right: 15px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .analysis-results {
-            display: none;
-            margin-top: 30px;
-            padding: 20px;
-            background: #f8f9ff;
-            border-radius: 10px;
-        }
-
-        .analysis-results h3 {
-            margin-bottom: 15px;
-            color: #667eea;
-        }
-
-        .stat {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .stat:last-child {
-            border-bottom: none;
-        }
-
-        .stat strong {
-            color: #333;
-        }
-
-        .badge {
-            background: #667eea;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.9em;
-        }
-
-        #fileInput {
-            display: none;
-        }
-
-        .footer {
-            background: #f8f9ff;
-            padding: 20px;
-            text-align: center;
-            color: #666;
-            font-size: 0.9em;
-        }
-    </style>
+footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;padding-bottom:24px}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🚀 <%= title %></h1>
-            <p>Convert Bruno/Postman Collections to DevWeb Scripts</p>
-            <p style="font-size: 0.9em; margin-top: 10px;">Version <%= version %></p>
-        </div>
 
-        <div class="content">
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📁</div>
-                <h2>Drop your collection here</h2>
-                <p style="margin-top: 10px; color: #666;">or click to browse</p>
-                <p style="margin-top: 10px; font-size: 0.9em; color: #999;">Supports .json and .bru files</p>
-                <input type="file" id="fileInput" accept=".json,.bru">
-            </div>
+<!-- Header -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <span class="logo-title">LR Script Converter</span>
+  </div>
+  <div class="logo-sub">Convert Postman &amp; Bruno API collections to LoadRunner Enterprise scripts</div>
+  <div class="badge"><span class="badge-dot"></span>v<%= version %>&nbsp;·&nbsp;DevWeb (JS) + Web HTTP/HTML (C)</div>
+</div>
 
-            <div id="fileName" style="margin-bottom: 20px; font-weight: 600; color: #667eea;"></div>
+<!-- Main card -->
+<div class="card">
 
-            <h3 style="margin-bottom: 15px;">🔌 Output Protocol</h3>
-            <div style="display: flex; gap: 15px; margin-bottom: 25px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; background: #f8f9ff; padding: 12px 20px; border-radius: 10px; font-weight: 500; border: 2px solid transparent; transition: border-color 0.2s;" id="protoDevwebLabel">
-                    <input type="radio" name="protocol" id="protoDevweb" value="devweb" checked onchange="updateConvertBtn()">
-                    DevWeb (JavaScript)
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; background: #f8f9ff; padding: 12px 20px; border-radius: 10px; font-weight: 500; border: 2px solid transparent; transition: border-color 0.2s;" id="protoWebHttpLabel">
-                    <input type="radio" name="protocol" id="protoWebHttp" value="web-http" onchange="updateConvertBtn()">
-                    Web HTTP/HTML (C)
-                </label>
-            </div>
-
-            <h3 style="margin-bottom: 15px;">⚙️ Conversion Options</h3>
-            <div class="options">
-                <div class="option">
-                    <label>
-                        <input type="checkbox" id="useTransactions" checked>
-                        Enable Transactions
-                    </label>
-                </div>
-                <div class="option">
-                    <label>
-                        <input type="checkbox" id="useCorrelation" checked>
-                        Auto Correlation
-                    </label>
-                </div>
-                <div class="option">
-                    <label>
-                        <input type="checkbox" id="useParameterization" checked>
-                        Parameterization
-                    </label>
-                </div>
-                <div class="option">
-                    <label>
-                        <input type="checkbox" id="useAuthentication" checked>
-                        Authentication
-                    </label>
-                </div>
-                <div class="option">
-                    <label>
-                        <input type="checkbox" id="addComments" checked>
-                        Add Comments
-                    </label>
-                </div>
-                <div class="option">
-                    <label style="display: block;">
-                        Think Time (seconds)
-                        <input type="number" id="thinkTime" value="1" min="0" step="0.1">
-                    </label>
-                </div>
-            </div>
-
-            <button class="button" id="analyzeBtn" disabled>📊 Analyze Collection</button>
-            <button class="button" id="convertBtn" disabled>🔄 Convert to DevWeb (JavaScript)</button>
-
-            <div class="status" id="status"></div>
-
-            <div class="analysis-results" id="analysisResults">
-                <h3>📊 Analysis Results</h3>
-                <div id="analysisContent"></div>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>Created with ❤️ for Performance Engineers</p>
-            <p style="margin-top: 5px;">Bruno to DevWeb Converter © 2025</p>
-        </div>
+  <!-- Protocol -->
+  <div class="card-title">1 · Choose Output Protocol</div>
+  <div class="proto-grid">
+    <div class="proto-card active-devweb" id="pc-devweb" onclick="setProto('devweb')">
+      <div class="proto-icon">🟦</div>
+      <div>
+        <div class="proto-name">DevWeb (JavaScript)</div>
+        <div class="proto-desc">Modern JS protocol for LRE. Generates <b>main.js</b> with transactions, correlations, JWT helper &amp; full config files.</div>
+        <span class="proto-badge badge-js">JavaScript · main.js</span>
+      </div>
     </div>
+    <div class="proto-card" id="pc-vugen" onclick="setProto('web-http')">
+      <div class="proto-icon">🟧</div>
+      <div>
+        <div class="proto-name">VuGen Web HTTP/HTML</div>
+        <div class="proto-desc">Classic C-based VuGen protocol. Generates <b>Action.c</b> with web_custom_request, mTLS, jsrsasign &amp; all VuGen config.</div>
+        <span class="proto-badge badge-c">C Code · Action.c</span>
+      </div>
+    </div>
+  </div>
 
-    <script>
-        let selectedFile = null;
+  <!-- Upload -->
+  <div class="card-title">2 · Upload Files</div>
+  <div class="upload-grid">
+    <div class="drop-zone" id="dz-col"
+         ondragover="onDrag(event,'dz-col')" ondragleave="offDrag('dz-col')"
+         ondrop="onDrop(event,'dz-col','collection')">
+      <input type="file" id="fi-col" accept=".json,.yml,.yaml,.bru"
+             onchange="onPick('dz-col','fi-col','lbl-col','collection')">
+      <span class="dz-icon">📂</span>
+      <div class="dz-label">Collection File <span style="color:var(--danger)">*</span></div>
+      <div class="dz-sub">Postman v2.1 JSON &nbsp;·&nbsp; Bruno JSON / YAML &nbsp;·&nbsp; .bru</div>
+      <div id="lbl-col" class="dz-name"></div>
+    </div>
+    <div class="drop-zone" id="dz-env"
+         ondragover="onDrag(event,'dz-env')" ondragleave="offDrag('dz-env')"
+         ondrop="onDrop(event,'dz-env','environment')">
+      <input type="file" id="fi-env" accept=".json,.bru"
+             onchange="onPick('dz-env','fi-env','lbl-env','environment')">
+      <span class="dz-icon">🔑</span>
+      <div class="dz-label">Environment File</div>
+      <div class="dz-sub">Postman environment JSON &nbsp;·&nbsp; Bruno .bru vars</div>
+      <span class="dz-opt">Optional — provides variable values</span>
+      <div id="lbl-env" class="dz-name"></div>
+    </div>
+  </div>
 
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const analyzeBtn = document.getElementById('analyzeBtn');
-        const convertBtn = document.getElementById('convertBtn');
-        const status = document.getElementById('status');
-        const fileName = document.getElementById('fileName');
-        const analysisResults = document.getElementById('analysisResults');
+  <!-- Options -->
+  <div class="card-title">3 · Configure Options</div>
+  <div class="options-row">
+    <div class="opt-group">
+      <span>Script Mode</span>
+      <div class="seg-btns">
+        <button class="seg-btn active" id="m-single" onclick="setMode('single')">Single Script</button>
+        <button class="seg-btn"        id="m-multi"  onclick="setMode('multi')">Multi-Script</button>
+      </div>
+    </div>
+    <div class="opt-group">
+      <span>Think Time (sec)</span>
+      <div class="seg-btns">
+        <button class="seg-btn active" id="tt-1" onclick="setTT(1)">1s</button>
+        <button class="seg-btn"        id="tt-2" onclick="setTT(2)">2s</button>
+        <button class="seg-btn"        id="tt-3" onclick="setTT(3)">3s</button>
+        <button class="seg-btn"        id="tt-5" onclick="setTT(5)">5s</button>
+      </div>
+    </div>
+    <div class="opt-group">
+      <span>Log Level</span>
+      <div class="seg-btns">
+        <button class="seg-btn active" id="ll-info"  onclick="setLL('info')">Info</button>
+        <button class="seg-btn"        id="ll-debug" onclick="setLL('debug')">Debug</button>
+      </div>
+    </div>
+  </div>
 
-        // Upload area click
-        uploadArea.addEventListener('click', () => fileInput.click());
+  <!-- Advanced -->
+  <button class="adv-toggle" id="adv-btn" onclick="toggleAdv()">
+    <span class="arrow">▶</span>&nbsp; Advanced settings
+  </button>
+  <div class="adv-panel" id="adv-panel">
+    <div class="toggle-row">
+      <div><div class="tgl-label">Correlation Detection</div><div class="tgl-sub">Extract dynamic values from API responses (access_token, userId, etc.)</div></div>
+      <label class="switch"><input type="checkbox" id="opt-corr" checked><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="tgl-label">Parameterization</div><div class="tgl-sub">Convert static variables to CSV parameters (baseUrl, clientId, etc.)</div></div>
+      <label class="switch"><input type="checkbox" id="opt-param" checked><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="tgl-label">Authentication Handling</div><div class="tgl-sub">OAuth2, Bearer (dynamic-aware), Basic, API Key, JWT, AWS Sig v4</div></div>
+      <label class="switch"><input type="checkbox" id="opt-auth" checked><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="tgl-label">Add Code Comments</div><div class="tgl-sub">Inline explanatory comments in the generated script</div></div>
+      <label class="switch"><input type="checkbox" id="opt-cmt" checked><span class="slider"></span></label>
+    </div>
+  </div>
 
-        // File selection
-        fileInput.addEventListener('change', (e) => {
-            selectedFile = e.target.files[0];
-            if (selectedFile) {
-                fileName.textContent = `Selected: ${selectedFile.name}`;
-                analyzeBtn.disabled = false;
-                convertBtn.disabled = false;
-            }
-        });
+  <!-- Progress bar -->
+  <div class="prog-wrap" id="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
 
-        // Drag and drop
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
+  <!-- Convert button -->
+  <button class="btn-convert devweb" id="btn-cvt" onclick="doConvert()">
+    <div class="spinner" id="spinner"></div>
+    <span id="btn-lbl">⚡ Convert to DevWeb Script</span>
+  </button>
+</div>
 
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
+<!-- Result -->
+<div class="result-box result-ok" id="res-ok">
+  <div class="res-head">
+    <span class="res-icon">✅</span>
+    <div>
+      <div class="res-title">Script Generated Successfully!</div>
+      <div class="res-sub" id="res-sub"></div>
+    </div>
+  </div>
+  <div class="stats-row" id="stats-row"></div>
+  <a id="btn-dl" class="btn-dl" href="#" download>⬇ Download Script (.zip)</a>
+  <button class="btn-reset" onclick="resetResult()">↩ Convert Another</button>
+</div>
 
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                selectedFile = files[0];
-                fileInput.files = files;
-                fileName.textContent = `Selected: ${selectedFile.name}`;
-                analyzeBtn.disabled = false;
-                convertBtn.disabled = false;
-            }
-        });
+<div class="result-box result-err" id="res-err">
+  <div class="res-head">
+    <span class="res-icon">❌</span>
+    <div>
+      <div class="res-title">Conversion Failed</div>
+      <div class="res-sub" id="err-msg"></div>
+    </div>
+  </div>
+  <button class="btn-reset" onclick="resetResult()">↩ Try Again</button>
+</div>
 
-        // Analyze button
-        analyzeBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
+<!-- How it works -->
+<div class="card">
+  <div class="card-title">How It Works</div>
+  <div class="steps">
+    <div class="step">
+      <span class="step-em">📤</span>
+      <div class="step-ttl">Upload</div>
+      <div class="step-txt">Drop your Postman or Bruno collection. Add the environment file for variable values.</div>
+    </div>
+    <div class="step">
+      <span class="step-em">🔬</span>
+      <div class="step-ttl">Analyze</div>
+      <div class="step-txt">Detects correlations, JWT, auth, proxy, headers and classifies into 3 variable tiers.</div>
+    </div>
+    <div class="step">
+      <span class="step-em">⚙️</span>
+      <div class="step-ttl">Generate</div>
+      <div class="step-txt">Creates complete LR script with all config files — per-request transactions included.</div>
+    </div>
+    <div class="step">
+      <span class="step-em">⬇️</span>
+      <div class="step-ttl">Download</div>
+      <div class="step-txt">Get a .zip file. Open the .usr in VuGen or upload directly to LoadRunner Enterprise.</div>
+    </div>
+  </div>
+</div>
 
-            showStatus('processing', 'Analyzing collection...');
-            analysisResults.style.display = 'none';
+<footer>Bruno / Postman → LoadRunner Converter &nbsp;·&nbsp; v<%= version %> &nbsp;·&nbsp; Performance Engineering Toolkit</footer>
 
-            const formData = new FormData();
-            formData.append('collection', selectedFile);
+<script>
+const S = { proto:'devweb', mode:'single', tt:1, ll:'info' };
+const F = { collection:null, environment:null };
 
-            try {
-                const response = await fetch('/analyze', {
-                    method: 'POST',
-                    body: formData
-                });
+function setProto(p) {
+  S.proto = p;
+  document.getElementById('pc-devweb').className = 'proto-card' + (p==='devweb'?' active-devweb':'');
+  document.getElementById('pc-vugen').className  = 'proto-card' + (p==='web-http'?' active-vugen':'');
+  const btn = document.getElementById('btn-cvt');
+  btn.className = 'btn-convert ' + (p==='devweb'?'devweb':'vugen');
+  document.getElementById('btn-lbl').textContent = p==='devweb'
+    ? '⚡ Convert to DevWeb Script' : '⚙️  Convert to VuGen Web HTTP/HTML';
+}
 
-                const result = await response.json();
+function setMode(m) {
+  S.mode = m;
+  ['single','multi'].forEach(x =>
+    document.getElementById('m-'+x).className = 'seg-btn'+(m===x?' active':''));
+}
 
-                if (response.ok) {
-                    displayAnalysis(result);
-                    showStatus('success', 'Analysis complete!');
-                } else {
-                    showStatus('error', `Error: ${result.error}`);
-                }
-            } catch (error) {
-                showStatus('error', `Failed to analyze: ${error.message}`);
-            }
-        });
+function setTT(t) {
+  S.tt = t;
+  [1,2,3,5].forEach(n =>
+    document.getElementById('tt-'+n).className = 'seg-btn'+(n===t?' active':''));
+}
 
-        function getSelectedProtocol() {
-            return document.querySelector('input[name="protocol"]:checked').value;
-        }
+function setLL(l) {
+  S.ll = l;
+  ['info','debug'].forEach(x =>
+    document.getElementById('ll-'+x).className = 'seg-btn'+(l===x?' active':''));
+}
 
-        function updateConvertBtn() {
-            const proto = getSelectedProtocol();
-            convertBtn.textContent = proto === 'web-http'
-                ? '🔄 Convert to Web HTTP/HTML (C)'
-                : '🔄 Convert to DevWeb (JavaScript)';
-        }
+function toggleAdv() {
+  const btn = document.getElementById('adv-btn');
+  const pan = document.getElementById('adv-panel');
+  btn.classList.toggle('open');
+  pan.classList.toggle('show');
+}
 
-        // Convert button
-        convertBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
+// ── Drag-and-drop ─────────────────────────────────────────────────────────
+function onDrag(e,id){ e.preventDefault(); document.getElementById(id).classList.add('drag-over'); }
+function offDrag(id) { document.getElementById(id).classList.remove('drag-over'); }
+function onDrop(e,dzId,key) {
+  e.preventDefault(); offDrag(dzId);
+  const f = e.dataTransfer.files[0];
+  if(f) attachFile(dzId, key, f);
+}
+function onPick(dzId, inputId, lblId, key) {
+  const f = document.getElementById(inputId).files[0];
+  if(f) attachFile(dzId, key, f);
+}
+function attachFile(dzId, key, f) {
+  F[key] = f;
+  const dz  = document.getElementById(dzId);
+  const lbl = document.getElementById(key==='collection'?'lbl-col':'lbl-env');
+  dz.classList.add('loaded'); dz.classList.remove('drag-over');
+  lbl.textContent = '✓ ' + f.name;
+  // add clear btn
+  if (!dz.querySelector('.dz-clear')) {
+    const x = document.createElement('button');
+    x.className = 'dz-clear'; x.title = 'Remove'; x.textContent = '×';
+    x.onclick = ev => { ev.stopPropagation(); clearFile(dzId, key); };
+    dz.appendChild(x);
+  }
+}
+function clearFile(dzId, key) {
+  F[key] = null;
+  const dz  = document.getElementById(dzId);
+  const lbl = document.getElementById(key==='collection'?'lbl-col':'lbl-env');
+  dz.classList.remove('loaded'); lbl.textContent = '';
+  const x = dz.querySelector('.dz-clear'); if(x) x.remove();
+  const fi = document.getElementById(key==='collection'?'fi-col':'fi-env');
+  fi.value = '';
+}
 
-            const proto = getSelectedProtocol();
-            const protoLabel = proto === 'web-http' ? 'Web HTTP/HTML (C)' : 'DevWeb (JavaScript)';
-            showStatus('processing', `Converting to ${protoLabel} script...`);
+// ── Convert ───────────────────────────────────────────────────────────────
+async function doConvert() {
+  if (!F.collection) { alert('Please upload a collection file first.'); return; }
 
-            const formData = new FormData();
-            formData.append('collection', selectedFile);
-            formData.append('useTransactions', document.getElementById('useTransactions').checked);
-            formData.append('useCorrelation', document.getElementById('useCorrelation').checked);
-            formData.append('useParameterization', document.getElementById('useParameterization').checked);
-            formData.append('useAuthentication', document.getElementById('useAuthentication').checked);
-            formData.append('addComments', document.getElementById('addComments').checked);
-            formData.append('thinkTime', document.getElementById('thinkTime').value);
-            formData.append('protocol', proto);
+  const btn  = document.getElementById('btn-cvt');
+  const spin = document.getElementById('spinner');
+  const lbl  = document.getElementById('btn-lbl');
+  const pw   = document.getElementById('prog-wrap');
+  const pf   = document.getElementById('prog-fill');
 
-            try {
-                const response = await fetch('/convert', {
-                    method: 'POST',
-                    body: formData
-                });
+  btn.disabled = true; spin.style.display='block'; lbl.textContent='Converting…';
+  pw.style.display='block'; pf.style.width='0%';
+  hideResults();
 
-                const result = await response.json();
+  let pct=0;
+  const tick = setInterval(() => {
+    pct = Math.min(pct + Math.random()*14, 88);
+    pf.style.width = pct+'%';
+  }, 300);
 
-                if (response.ok && result.success) {
-                    const downloadLabel = proto === 'web-http' ? 'Download VuGen Script' : 'Download DevWeb Script';
-                    showStatus('success', `
-                        ✅ Conversion successful!<br><br>
-                        <strong>Statistics:</strong><br>
-                        Requests: ${result.analysis.requests.total}<br>
-                        Correlations: ${result.analysis.correlations.totalCorrelations}<br>
-                        Parameters: ${result.analysis.parameters.totalParameters}<br><br>
-                        <a href="${result.downloadUrl}" class="button" style="display: inline-block; text-decoration: none; margin-top: 10px;">
-                            ⬇️ ${downloadLabel}
-                        </a>
-                    `);
-                } else {
-                    showStatus('error', `Error: ${result.error || 'Conversion failed'}`);
-                }
-            } catch (error) {
-                showStatus('error', `Failed to convert: ${error.message}`);
-            }
-        });
+  const fd = new FormData();
+  fd.append('collection', F.collection);
+  if (F.environment) fd.append('environment', F.environment);
+  fd.append('protocol',            S.proto);
+  fd.append('mode',                S.mode);
+  fd.append('thinkTime',           S.tt);
+  fd.append('logLevel',            S.ll);
+  fd.append('useCorrelation',      document.getElementById('opt-corr').checked);
+  fd.append('useParameterization', document.getElementById('opt-param').checked);
+  fd.append('useAuthentication',   document.getElementById('opt-auth').checked);
+  fd.append('addComments',         document.getElementById('opt-cmt').checked);
 
-        function showStatus(type, message) {
-            status.className = `status ${type}`;
-            if (type === 'processing') {
-                status.innerHTML = `<div class="spinner"></div><div>${message}</div>`;
-            } else {
-                status.innerHTML = message;
-            }
-            status.style.display = type === 'processing' ? 'flex' : 'block';
-        }
+  try {
+    const r = await fetch('/convert', { method:'POST', body:fd });
+    const d = await r.json();
+    clearInterval(tick); pf.style.width='100%';
+    setTimeout(() => { pw.style.display='none'; resetBtn(); showResult(r.ok?d:null, r.ok?null:d.error); }, 400);
+  } catch(e) {
+    clearInterval(tick); pw.style.display='none'; resetBtn(); showResult(null, e.message);
+  }
+}
 
-        function displayAnalysis(result) {
-            const content = `
-                <div class="stat">
-                    <span>Collection Type:</span>
-                    <strong><span class="badge">${result.metadata.type}</span></strong>
-                </div>
-                <div class="stat">
-                    <span>Total Requests:</span>
-                    <strong>${result.requests.total}</strong>
-                </div>
-                <div class="stat">
-                    <span>Correlations:</span>
-                    <strong>${result.correlations.totalCorrelations}</strong>
-                </div>
-                <div class="stat">
-                    <span>Parameters:</span>
-                    <strong>${result.parameters.totalParameters}</strong>
-                </div>
-                <div class="stat">
-                    <span>Auth Configs:</span>
-                    <strong>${result.authentication.totalConfigs}</strong>
-                </div>
-            `;
+function resetBtn() {
+  document.getElementById('btn-cvt').disabled = false;
+  document.getElementById('spinner').style.display = 'none';
+  document.getElementById('btn-lbl').textContent = S.proto==='devweb'
+    ? '⚡ Convert to DevWeb Script' : '⚙️  Convert to VuGen Web HTTP/HTML';
+}
 
-            document.getElementById('analysisContent').innerHTML = content;
-            analysisResults.style.display = 'block';
-        }
-    </script>
+function showResult(data, err) {
+  if (err || !data) {
+    document.getElementById('err-msg').textContent = err || 'Unknown error';
+    document.getElementById('res-err').style.display = 'block';
+    document.getElementById('res-err').scrollIntoView({behavior:'smooth',block:'start'});
+    return;
+  }
+  const a = data.analysis || {};
+  const reqs   = a.requests?.total || '—';
+  const corrs  = a.correlations?.totalCorrelations || '—';
+  const params = a.parameters?.totalParameters || '—';
+  document.getElementById('stats-row').innerHTML =
+    `<div class="stat"><span class="stat-num">${reqs}</span><span class="stat-lbl">Requests</span></div>
+     <div class="stat"><span class="stat-num">${corrs}</span><span class="stat-lbl">Correlations</span></div>
+     <div class="stat"><span class="stat-num">${params}</span><span class="stat-lbl">Parameters</span></div>`;
+  const pl = data.protocol==='web-http' ? 'VuGen Web HTTP/HTML (C)' : 'DevWeb (JavaScript)';
+  const ml = data.mode==='multi' ? 'Multi-Script' : 'Single Script';
+  document.getElementById('res-sub').textContent = `${pl} · ${ml} · Ready for LoadRunner Enterprise`;
+  document.getElementById('btn-dl').href = data.downloadUrl;
+  document.getElementById('res-ok').style.display = 'block';
+  document.getElementById('res-ok').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function hideResults() {
+  document.getElementById('res-ok').style.display = 'none';
+  document.getElementById('res-err').style.display = 'none';
+}
+function resetResult() { hideResults(); }
+</script>
 </body>
 </html>
