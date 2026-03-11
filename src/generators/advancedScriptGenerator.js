@@ -1237,7 +1237,9 @@ ${jwtRefreshBlock}
     if (produces.length > 0) {
       code += `\n`;
       produces.forEach(corr => {
-        code += `\n${this.indent(`load.global.${corr.name} = ${responseVar}.extractors.${corr.name};`, indentLevel)}`;
+        // Sanitize name for use as JS identifier — correlation names can contain hyphens (e.g. "my-token")
+        const safeCorrName = this.sanitizeVarName(corr.name);
+        code += `\n${this.indent(`load.global.${safeCorrName} = ${responseVar}.extractors["${corr.name}"];`, indentLevel)}`;
         if (this.options.addComments) {
           code += ` // Extracted ${corr.type}`;
         }
@@ -1501,11 +1503,14 @@ ${jwtRefreshBlock}
     const extractors = [];
     const seenNames = new Set();
 
-    // Find correlations this request produces (deduplicate by name)
+    // Find correlations this request produces (deduplicate by name).
+    // Use sanitized name so the extractor key and the load.global assignment are consistent.
     this.correlations.forEach(corr => {
       if (corr.producerRequest === request.name && !seenNames.has(corr.name)) {
         seenNames.add(corr.name);
-        const extractorCode = this.correlationDetector.generateExtractor(corr);
+        // Build a sanitized copy — the extractor name in DevWeb must be a valid JS key
+        const sanitized = { ...corr, name: this.sanitizeVarName(corr.name) };
+        const extractorCode = this.correlationDetector.generateExtractor(sanitized);
         extractors.push(extractorCode);
       }
     });

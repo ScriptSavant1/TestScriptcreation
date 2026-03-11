@@ -240,6 +240,12 @@ class CorrelationDetector {
     const e = fromEvents(request.event);
     if (e) return e;
 
+    // 3. Bruno JSON export format: post-response script in request.script.res
+    if (request.script?.res) {
+      const s = request.script.res;
+      return typeof s === 'string' ? s : (Array.isArray(s) ? s.join('\n') : null);
+    }
+
     if (typeof request.tests === 'string') return request.tests;
     return null;
   }
@@ -658,8 +664,11 @@ class CorrelationDetector {
       return null;
     };
 
-    // Check both req.tests[] (brunoParser) and req.event[] (Postman raw)
-    return fromEvents(request.tests) || fromEvents(request.event) || null;
+    // Check both req.tests[] (brunoParser), req.event[] (Postman raw), and Bruno JSON script.req
+    return fromEvents(request.tests)
+        || fromEvents(request.event)
+        || (request.script?.req ? (typeof request.script.req === 'string' ? request.script.req : null) : null)
+        || null;
   }
 
   /**
