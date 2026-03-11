@@ -651,7 +651,30 @@ class BrunoParser {
    */
   normalizeRequest(item, folderName, depth = 0) {
     const request = item.request || item;
-    
+
+    // Normalize scripts — handle THREE formats:
+    //   1. Postman v2.1:  item.event[] with {listen, script}
+    //   2. Bruno JSON:    item.script.req (pre-request) + item.script.res (post-response)
+    //   3. Bruno YAML:    handled separately via normalizeBrunoYamlScripts()
+    let tests = this.normalizeTests(item.event);
+
+    if (tests.length === 0 && item.script) {
+      // Bruno JSON export format — scripts live in item.script.{req,res}
+      const brunoScript = item.script;
+      if (brunoScript.req) {
+        const text = typeof brunoScript.req === 'string' ? brunoScript.req : '';
+        if (text.trim()) {
+          tests.push({ listen: 'prerequest', script: { exec: text.split(/\r?\n/) } });
+        }
+      }
+      if (brunoScript.res) {
+        const text = typeof brunoScript.res === 'string' ? brunoScript.res : '';
+        if (text.trim()) {
+          tests.push({ listen: 'test', script: { exec: text.split(/\r?\n/) } });
+        }
+      }
+    }
+
     return {
       name: item.name || 'Unnamed Request',
       folder: folderName,
@@ -662,7 +685,7 @@ class BrunoParser {
       body: this.normalizeBody(request.body),
       auth: request.auth || item.auth || null,
       description: request.description || item.description || '',
-      tests: this.normalizeTests(item.event),
+      tests: tests,
       variables: item.vars || {},
       id: item.id || this.generateId()
     };

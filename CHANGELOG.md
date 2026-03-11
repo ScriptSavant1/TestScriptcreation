@@ -5,6 +5,45 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.4] - 2026-03-10
+
+### Fixed
+
+**Issue 1 — Hyphenated variable names in extractor assignment**
+
+`load.global.jsrsasign-js = response.extractors.jsrsasign-js` is invalid JavaScript (hyphen is subtraction). Fixed in two places:
+
+1. `generateRequestCode()`: Now uses `sanitizeVarName(corr.name)` for the `load.global.X` property and bracket notation `extractors["original-name"]` for the response accessor — ensuring the JS identifier is valid while the extractor lookup still works.
+
+2. `generateExtractors()`: Passes a sanitized copy of the correlation to `generateExtractor()` so the extractor name registered on the WebRequest is also a valid JS key.
+
+Result:
+```javascript
+// BEFORE: invalid JS
+new load.JsonPathExtractor("jsrsasign-js", "$.body")
+load.global.jsrsasign-js = webResponse_01.extractors.jsrsasign-js;
+
+// AFTER: valid JS
+new load.JsonPathExtractor("jsrsasign_js", "$.body")
+load.global.jsrsasign_js = webResponse_01.extractors["jsrsasign_js"];
+```
+
+**Issue 2 — Bruno JSON export: post-response scripts not detected**
+
+Bruno JSON export (not Postman format) stores scripts in `item.script.req` (pre-request) and `item.script.res` (post-response) — a completely different structure from Postman's `item.event[]`. Neither `brunoParser.normalizeRequest()` nor `correlationDetector.extractTestScript()` handled this format.
+
+Fixes:
+- **`brunoParser.normalizeRequest()`**: When `item.event` is empty, checks `item.script.req/res` and converts to `req.tests[]` format, enabling all downstream analysis.
+- **`correlationDetector.extractTestScript()`**: Added fallback to `request.script.res` as option 3.
+- **`correlationDetector.extractPreRequestScript()`**: Added fallback to `request.script.req`.
+
+This means `bru.setEnvVar('access_token', res.body.access_token)` in a Bruno JSON collection's post-response script is now correctly detected, `access_token` is correlated, and `JsonPathExtractor("access_token", "$.access_token")` is generated.
+
+### Changed
+- `package.json` version: `2.5.3` → `2.5.4`
+
+---
+
 ## [2.5.3] - 2026-03-10
 
 ### Fixed — brunoParser.js syntax error + Generic dynamic variable rule
