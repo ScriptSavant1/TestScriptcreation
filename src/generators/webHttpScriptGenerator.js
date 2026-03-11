@@ -828,39 +828,59 @@ ${jwtSetup}${autoHeaderBlock}
     return groups;
   }
 
+  /**
+   * Generate per-request transactions.
+   *
+   * Each API request = one LR transaction: T{nn}_{RequestName}
+   * Counter is global across ALL folder groups (T01, T02 ... Tn).
+   * Folders remain as C comments for code readability — no outer transactions.
+   *
+   * Examples:
+   *   Folder Auth:      T01_Get_Access_Token,  T02_Refresh_Token
+   *   Folder Products:  T03_Get_Products,       T04_Create_Product
+   *   Sub-folder A/B:   T05_Get_Items  (uses sanitized request name)
+   *
+   * All transaction names collected in this.transactionNames for .usr file.
+   */
   generateGroupedRequests() {
     const groups = this.groupRequestsByFolder();
     let code = '';
-    let txIndex = 1;
-    this.transactionNames = [];  // Reset on each call
+    let txCounter = 1;
+    this.transactionNames = [];  // Reset — will hold ALL per-request tx names
 
-    groups.forEach((requests, folder) => {
-      const txName = `T${String(txIndex).padStart(2, '0')}_${this.sanitizeCName(folder)}`;
-      this.transactionNames.push(txName);
-      txIndex++;
+    const groupEntries = Array.from(groups.entries());
+    groupEntries.forEach(([folder, requests], groupIndex) => {
 
-      if (this.options.addComments) {
+      // Folder comment (no outer transaction wrapper)
+      if (this.options.addComments && folder) {
         code += `    /* ---- ${folder} ---- */\n`;
       }
-      code += `    lr_start_transaction("${txName}");\n\n`;
 
       requests.forEach((request, idx) => {
-        code += this.generateRequestBlock(request, 1);
+        const seqNum  = String(txCounter).padStart(2, '0');
+        // Strip leading underscores/digits so "01_Get_Token" → "Get_Token" not "_01_Get_Token"
+        const rawLabel = this.sanitizeCName(request.name).replace(/^[_0-9]+/, '');
+        const txLabel  = rawLabel || `Req${seqNum}`;
+        const txName   = `T${seqNum}_${txLabel}`;
+        this.transactionNames.push(txName);
+        txCounter++;
 
-        // Think time between requests (not after the last one in a group)
+        // Per-request transaction wrapper
+        code += `    lr_start_transaction("${txName}");\n\n`;
+        code += this.generateRequestBlock(request, 1);
+        code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
+
+        // Think time between requests in same folder (not after last)
         if (idx < requests.length - 1 && this.options.thinkTime > 0) {
           code += `\n    lr_think_time(${this.options.thinkTime});\n`;
         }
         code += '\n';
       });
 
-      code += `    lr_end_transaction("${txName}", LR_AUTO);\n`;
-
-      // Think time between transaction groups
-      if (this.options.thinkTime > 0) {
-        code += `    lr_think_time(${this.options.thinkTime});\n`;
+      // Think time between folder groups (not after last group)
+      if (groupIndex < groupEntries.length - 1 && this.options.thinkTime > 0) {
+        code += `    lr_think_time(${this.options.thinkTime});\n\n`;
       }
-      code += '\n';
     });
 
     return code;
@@ -868,8 +888,18 @@ ${jwtSetup}${autoHeaderBlock}
 
   generateSequentialRequests() {
     let code = '';
+    let txCounter = 1;
+    this.transactionNames = [];
     this.requests.forEach((request, idx) => {
+      const seqNum  = String(txCounter).padStart(2, '0');
+      const rawLabel = this.sanitizeCName(request.name).replace(/^[_0-9]+/, '');
+      const txName   = `T${seqNum}_${rawLabel || `Req${seqNum}`}`;
+      this.transactionNames.push(txName);
+      txCounter++;
+
+      code += `    lr_start_transaction("${txName}");\n\n`;
       code += this.generateRequestBlock(request, 1);
+      code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
 
       if (idx < this.requests.length - 1 && this.options.thinkTime > 0) {
         code += `\n    lr_think_time(${this.options.thinkTime});\n`;
