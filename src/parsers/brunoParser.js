@@ -75,6 +75,7 @@ class BrunoParser {
 
   /**
    * Parse .bru format (Bruno's native format)
+   * Can be a request file or environment file
    */
   async parseBru() {
     const content = await fs.readFile(this.collectionPath, 'utf8');

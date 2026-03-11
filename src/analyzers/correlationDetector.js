@@ -207,29 +207,40 @@ class CorrelationDetector {
   /**
    * Extract test script from request
    */
+  /**
+   * Extract the post-response (test) script from a request.
+   * Handles all storage formats across Postman, Bruno JSON, and Bruno YAML:
+   *   - request.testScript           (pre-normalized string)
+   *   - request.tests[]              (brunoParser normalized — listen:'test')
+   *   - request.event[]              (Postman raw — listen:'test')
+   *   - script.exec as Array         (standard Postman)
+   *   - script.exec as string        (some Bruno exports)
+   *   - script as plain string       (legacy)
+   */
   extractTestScript(request) {
     if (request.testScript) return request.testScript;
 
-    // Normalized format: request.tests is an array of {listen, script} event objects
-    if (request.tests && Array.isArray(request.tests)) {
-      const testEvent = request.tests.find(e => e.listen === 'test');
-      if (testEvent && testEvent.script) {
-        if (testEvent.script.exec && Array.isArray(testEvent.script.exec)) {
-          return testEvent.script.exec.join('\n');
-        }
-        if (typeof testEvent.script === 'string') return testEvent.script;
-      }
+    // Helper: extract script text from an events array
+    const fromEvents = (events) => {
+      if (!Array.isArray(events)) return null;
+      const ev = events.find(e => e.listen === 'test' || e.listen === 'post-response');
+      if (!ev) return null;
+      const s = ev.script;
+      if (!s) return null;
+      if (s.exec) return Array.isArray(s.exec) ? s.exec.join('\n') : String(s.exec);
+      if (typeof s === 'string') return s;
       return null;
-    }
-    if (typeof request.tests === 'string') return request.tests;
+    };
 
-    // Original Postman format: request.event
-    if (request.event) {
-      const testEvent = request.event.find(e => e.listen === 'test');
-      if (testEvent && testEvent.script && testEvent.script.exec) {
-        return testEvent.script.exec.join('\n');
-      }
-    }
+    // 1. brunoParser normalized requests store events in req.tests[]
+    const t = fromEvents(request.tests);
+    if (t) return t;
+
+    // 2. Postman raw format stores events in req.event[]
+    const e = fromEvents(request.event);
+    if (e) return e;
+
+    if (typeof request.tests === 'string') return request.tests;
     return null;
   }
 
@@ -635,13 +646,20 @@ class CorrelationDetector {
    */
   extractPreRequestScript(request) {
     if (request.preRequestScript) return request.preRequestScript;
-    if (request.event) {
-      const preEvent = request.event.find(e => e.listen === 'prerequest');
-      if (preEvent && preEvent.script && preEvent.script.exec) {
-        return preEvent.script.exec.join('\n');
-      }
-    }
-    return null;
+
+    const fromEvents = (events) => {
+      if (!Array.isArray(events)) return null;
+      const ev = events.find(e => e.listen === 'prerequest' || e.listen === 'pre-request');
+      if (!ev) return null;
+      const s = ev.script;
+      if (!s) return null;
+      if (s.exec) return Array.isArray(s.exec) ? s.exec.join('\n') : String(s.exec);
+      if (typeof s === 'string') return s;
+      return null;
+    };
+
+    // Check both req.tests[] (brunoParser) and req.event[] (Postman raw)
+    return fromEvents(request.tests) || fromEvents(request.event) || null;
   }
 
   /**
