@@ -1239,7 +1239,8 @@ ${jwtRefreshBlock}
       produces.forEach(corr => {
         // Sanitize name for use as JS identifier — correlation names can contain hyphens (e.g. "my-token")
         const safeCorrName = this.sanitizeVarName(corr.name);
-        code += `\n${this.indent(`load.global.${safeCorrName} = ${responseVar}.extractors["${corr.name}"];`, indentLevel)}`;
+        // Extractor registered as safeCorrName AND accessed with same name — must be identical
+        code += `\n${this.indent(`load.global.${safeCorrName} = ${responseVar}.extractors["${safeCorrName}"];`, indentLevel)}`;
         if (this.options.addComments) {
           code += ` // Extracted ${corr.type}`;
         }

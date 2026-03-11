@@ -5,6 +5,42 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.5] - 2026-03-10
+
+### Fixed — Extractor name consistency
+
+In v2.5.4, the extractor was registered with sanitized name `"jsrassign_js"` but accessed with the original hyphenated name `"jsrassign-js"` — a mismatch that causes the DevWeb script to fail at runtime.
+
+**Root cause**: `generateRequestCode()` used `"${corr.name}"` (original) for the accessor while `generateExtractors()` used `sanitizeVarName(corr.name)` (sanitized) for registration.
+
+**Fix**: Both registration and accessor now use the SAME sanitized name:
+```javascript
+// BEFORE (broken — mismatch):
+new load.JsonPathExtractor("jsrassign_js", "$.body")          // sanitized name
+load.global.jsrassign_js = response.extractors["jsrassign-js"]; // original name → fails
+
+// AFTER (correct — consistent):
+new load.JsonPathExtractor("jsrassign_js", "$.body")
+load.global.jsrassign_js = response.extractors["jsrassign_js"]; // same name ✓
+```
+
+### Confirmed Working — access_token correlation
+
+The 2-pass correlation algorithm correctly detects `access_token` for the Postman JWT collection:
+- **Produced by**: request "01 - Generate JWT..." via `pm.environment.set('access_token', json.access_token)` → `extractPath: $.access_token`
+- **Consumed by**: all 34 subsequent requests via `Authorization: Bearer {{access_token}}` header
+- **Generated**: `new load.JsonPathExtractor("access_token", "$.access_token")` on the producing request
+- **Assignment**: `load.global.access_token = webResponse_01.extractors["access_token"]`
+- **Not in parameters.yml** ✓ (Tier 1 Dynamic)
+- **VuGen**: `web_reg_save_param_json("access_token", "QueryString=$.access_token", ...)` ✓
+
+If `access_token` appears to be missing, the output folder is likely stale — regenerate with `node src/cli.js convert -i collection.json -o output/`.
+
+### Changed
+- `package.json` version: `2.5.4` → `2.5.5`
+
+---
+
 ## [2.5.4] - 2026-03-10
 
 ### Fixed
