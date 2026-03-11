@@ -68,6 +68,10 @@ class AdvancedScriptGenerator {
     // These are NOT static params and NOT response correlations — they are inline-generated.
     this.perRequestVars = new Map();
 
+    // Pre-computed transaction map — populated by generateAction(), used by generateHeader()
+    // Maps requestName → { txVar: "T01", txName: "T01_GetAccessToken" }
+    this.requestTxMap = new Map();
+
     this.buildVariableMap();
   }
 
@@ -804,7 +808,16 @@ load.WebRequest.defaults.returnBody = false;
 load.WebRequest.defaults.headers = {
 ${staticHeaderLines}
 };
-${authDefaultsBlock}`;
+${authDefaultsBlock}
+// ── Transaction objects — declared once at module level ──────────────────
+// All transactions are pre-declared here (before initialize) so they are
+// available in action() without re-allocating on every iteration.
+${this.requestTxMap && this.requestTxMap.size > 0
+  ? Array.from(this.requestTxMap.values())
+      .map(({ txVar, txName }) => `const ${txVar} = new load.Transaction("${txName}");`)
+      .join('\n')
+  : '// (no transactions — useTransactions is disabled)'}
+`;
   }
 
   /**
@@ -993,9 +1006,41 @@ ${jwtBlock}
   }
 
   /**
+   * Pre-compute the transaction map for ALL requests in order.
+   * Maps request.name → { txVar: "T01", txName: "T01_GetAccessToken" }
+   * Called once at the start of generateAction() so generateHeader() can
+   * emit all declarations at module level (before initialize()).
+   */
+  buildTransactionMap() {
+    this.requestTxMap = new Map();
+    let counter = 1;
+
+    const assign = (requests) => {
+      requests.forEach(req => {
+        const seqNum  = String(counter).padStart(2, '0');
+        const rawLabel = this.generateTransactionVarName(req.name).replace(/^t?[0-9]+/i, '');
+        const txLabel  = rawLabel || `Req${seqNum}`;
+        const txVar    = `T${seqNum}`;
+        const txName   = `${txVar}_${txLabel}`;
+        this.requestTxMap.set(req.name, { txVar, txName });
+        counter++;
+      });
+    };
+
+    if (this.options.groupByFolder && this.options.useTransactions) {
+      const grouped = this.groupRequestsByFolder();
+      Object.values(grouped).forEach(requests => assign(requests));
+    } else {
+      assign(this.requests);
+    }
+  }
+
+  /**
    * Generate action section
    */
   generateAction() {
+    // Pre-compute transaction names so generateHeader() can emit module-level declarations
+    this.buildTransactionMap();
     // JWT auto-refresh — uses getJwtToken from module-level require.
     // Also re-syncs dynamic auth headers in defaults after token refresh.
     const authHeaderUpdate = this._authGlobalHeaders && this._authGlobalHeaders.size > 0
@@ -1035,11 +1080,55 @@ ${jwtRefreshBlock}
   /**
    * Generate grouped actions by folder (as transactions)
    */
+  /**
+   * Generate per-request transactions.
+   *
+   * Each API request = one transaction: T{nn}_{RequestName}
+   * Counter is global across ALL folders (T01, T02 ... Tn).
+   * Folders remain as code comments for readability but have no outer transaction.
+   *
+   * Examples across folders:
+   *   Folder Auth:      T01_Get_Access_Token, T02_Refresh_Token
+   *   Folder Products:  T03_Get_Products,     T04_Create_Product
+   *   Sub-folder A/B:   T05_Get_Items
+   */
   generateGroupedActions() {
     const grouped = this.groupRequestsByFolder();
     let code = '';
 
-    // First, declare all transactions with short variable names (TS01, TS02, ...)
+    // Transactions are already declared at module level (in generateHeader via requestTxMap).
+    // Here we only emit .start() and .stop() — no inline "let T01 = new load.Transaction()" declarations.
+    const groupEntries = Object.entries(grouped);
+    groupEntries.forEach(([folder, requests], groupIndex) => {
+      if (folder && this.options.addComments) {
+        code += `\n    // ── ${folder} ──────────────────────────────────────────`;
+      }
+      requests.forEach((request, reqIndex) => {
+        const tx = this.requestTxMap.get(request.name);
+        const txVar = tx ? tx.txVar : null;
+
+        if (txVar) code += `\n    ${txVar}.start();`;
+        code += this.generateRequestCode(request, 1);
+        if (txVar) code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
+
+        if (reqIndex < requests.length - 1 && this.options.thinkTime > 0) {
+          code += `\n    load.sleep(${this.options.thinkTime});`;
+        }
+        code += '\n';
+      });
+
+      if (groupIndex < groupEntries.length - 1 && this.options.thinkTime > 0) {
+        code += `\n    load.sleep(${this.options.thinkTime});\n`;
+      }
+    });
+
+    return code;
+  }
+
+  // ── LEGACY (folder-level transactions — kept for reference, not used) ──────
+  generateGroupedActionsFolderLevel() {
+    const grouped = this.groupRequestsByFolder();
+    let code = '';
     const transactionDeclarations = [];
     const transactionMapping = new Map();
 
@@ -1168,9 +1257,15 @@ ${jwtRefreshBlock}
   generateSequentialActions() {
     let code = '';
 
+    // Transactions already declared at module level via requestTxMap — only start/stop here
     this.requests.forEach((request, index) => {
+      const tx    = this.requestTxMap.get(request.name);
+      const txVar = tx ? tx.txVar : null;
+
+      if (txVar) code += `\n    ${txVar}.start();`;
       code += this.generateRequestCode(request, 1);
-      
+      if (txVar) code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
+
       if (index < this.requests.length - 1 && this.options.thinkTime > 0) {
         code += `\n    load.sleep(${this.options.thinkTime});`;
       }

@@ -1,4 +1,4 @@
-# Bruno to DevWeb Converter — Project Summary v2.5.0
+# Bruno to DevWeb Converter — Project Summary v2.6.1
 
 **Production-ready framework for converting Bruno/Postman API collections to LoadRunner Enterprise
 performance test scripts. Supports DevWeb (JavaScript) and VuGen Web HTTP/HTML (C) output.
@@ -141,10 +141,26 @@ Rule 4 ensures runtime vars (access_token, refresh_token, interaction_id) are **
 
 ---
 
+## Per-Request Transactions (v2.6.0 / v2.6.1)
+
+Each API request = one LR transaction `T{nn}_{RequestName}`. Sequential global counter across all folders.
+
+**DevWeb structure (v2.6.1)** — transactions declared BEFORE `initialize()`:
+```
+JWT require + setUserCertificate → load.WebRequest.defaults → const T01 = new load.Transaction(...)
+→ load.initialize() → load.action() { T01.start(); ... T01.stop(); }
+```
+
+---
+
 ## Version History
 
 | Version | Highlights |
 |---------|------------|
+| **2.6.1** | DevWeb: all transactions pre-declared at module level BEFORE initialize() |
+| 2.6.0 | Per-request transactions both protocols: T01_GetToken, T02_CreateOrder globally sequential |
+| 2.5.5 | Extractor name + accessor consistency (both use sanitized name) |
+| 2.5.4 | Bruno JSON: item.script.req/res format support in parser + correlationDetector |
 | **2.5.3** | brunoParser syntax fix, Generic Rule 4 (empty=dynamic), library name exclusion strengthened |
 | 2.5.2 | Bruno YAML event detection: detectScriptSetVariables + extractTestScript robustness |
 | 2.5.1 | sanitizeVarName for hyphenated vars, Bearer token consumer detection, Bruno getter APIs |

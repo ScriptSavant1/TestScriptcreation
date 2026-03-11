@@ -3,6 +3,77 @@
 All notable changes to the Bruno to DevWeb Converter will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+
+## [2.6.1] - 2026-03-11
+
+### Changed — DevWeb: Transaction declarations at module level (before initialize)
+
+All `load.Transaction` objects are now declared once at module scope — before `load.initialize()`, alongside `require`, `load.setUserCertificate`, and `load.WebRequest.defaults`.
+
+`action()` only emits `T01.start()` and `T01.stop()` — no inline `let T01 = new load.Transaction(...)`.
+
+**Implementation**: `buildTransactionMap()` pre-computes all `{txVar, txName}` pairs inside `generateAction()` (which runs before `generateHeader()` in the template literal). `generateHeader()` reads `this.requestTxMap` to emit all declarations.
+
+### Changed
+- `package.json` version: `2.6.0` → `2.6.1`
+
+---
+
+## [2.6.0] - 2026-03-10
+
+### Added — Per-Request Transactions (both protocols)
+
+Each API request is now its own LR transaction, named `T{nn}_{RequestName}`.
+The sequential counter runs **globally across all folders**, so transaction numbers are unique and ordered throughout the entire script.
+
+**Transaction naming pattern**: `T01_GenerateJWTAndRetrieveAccessToken`, `T02_ProtectedAPI2`, etc.
+
+**Folder handling** (all edge cases covered):
+- **Flat collection** (no folders): `T01_Request1`, `T02_Request2` — sequential from the start
+- **Single folder**: requests numbered in order inside the folder
+- **Multiple folders**: counter continues across folders (`T01-T02` in Auth, `T03-T04` in Products)
+- **Sub-folders** (e.g. `Products/Electronics`): request name used for transaction, outer folder path shown as comment
+- **Duplicate request names**: always unique because of the sequential number prefix
+
+**DevWeb (`main.js`):**
+```javascript
+let T01 = new load.Transaction("T01_GenerateJWTAndRetrieveAccessToken");
+T01.start();
+const webResponse_01 = new load.WebRequest({...}).sendSync();
+load.global.access_token = webResponse_01.extractors["access_token"];
+T01.stop(load.TransactionStatus.Passed);
+load.sleep(1);
+
+let T02 = new load.Transaction("T02_ProtectedAPI2");
+T02.start();
+const webResponse_02 = new load.WebRequest({...}).sendSync();
+T02.stop(load.TransactionStatus.Passed);
+```
+
+**VuGen Web HTTP/HTML (`Action.c`):**
+```c
+lr_start_transaction("T01_Generate_JWT_and_Retrieve_Access_Token");
+GEN_UNIQUE_ID("_interaction_id");
+web_reg_save_param_json("access_token", "QueryString=$.access_token", "Ord=1", LAST);
+web_custom_request("...", ...);
+lr_end_transaction("T01_Generate_JWT_and_Retrieve_Access_Token", LR_AUTO);
+
+lr_think_time(1);
+
+lr_start_transaction("T02_Protected_API_2");
+web_url("...", ...);
+lr_end_transaction("T02_Protected_API_2", LR_AUTO);
+```
+
+**VuGen `.usr` [TransactionsOrder]** now contains all per-request transaction names automatically.
+
+### Changed
+- `generateGroupedActions()` and `generateSequentialActions()` in `advancedScriptGenerator.js` — replaced folder-level transactions with per-request transactions
+- `generateGroupedRequests()` and `generateSequentialRequests()` in `webHttpScriptGenerator.js` — same change
+- Folder grouping preserved as code comments for readability and think-time separation
+- `package.json` version: `2.5.5` → `2.6.0`
+
+---
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [2.5.5] - 2026-03-10
