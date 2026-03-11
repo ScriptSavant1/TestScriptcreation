@@ -919,33 +919,47 @@ ${jwtBlock}
   /**
    * Generate global variables initialization
    */
+  /**
+   * Sanitize a variable name for use as a JavaScript identifier.
+   * Hyphens and other invalid chars → underscore.
+   * Examples: "jsrsasign-js" → "jsrsasign_js", "access-token" → "access_token"
+   */
+  sanitizeVarName(name) {
+    return String(name).replace(/[^a-zA-Z0-9_$]/g, '_');
+  }
+
   generateGlobalVariablesInit() {
     const vars = [];
     const seen = new Set();
 
     // Known JavaScript library names that appear in Postman globals but are NOT
     // LR runtime variables — they hold library source code loaded via eval().
-    // These must be excluded from load.global.X initialization.
     const LIBRARY_NAMES = new Set([
       'jsrsasign', 'KJUR', 'kjur', 'CryptoJS', 'cryptojs',
       'jsonwebtoken', 'jose', 'forge', 'jsbn', 'rsa'
     ]);
 
-    // Add correlation variables (deduplicated)
+    // Filter: skip any name that contains only library keywords (e.g. "jsrsasign-js")
+    const isLibraryName = (name) =>
+      LIBRARY_NAMES.has(name) || LIBRARY_NAMES.has(name.replace(/[-_.]/g, '').toLowerCase());
+
+    // Add correlation variables (deduplicated, sanitized)
     this.correlations.forEach(corr => {
-      if (!seen.has(corr.name) && !LIBRARY_NAMES.has(corr.name)) {
+      if (!seen.has(corr.name) && !isLibraryName(corr.name)) {
         seen.add(corr.name);
-        vars.push(`load.global.${corr.name} = null; // Correlated: ${corr.type}`);
+        const safe = this.sanitizeVarName(corr.name);
+        vars.push(`load.global.${safe} = null; // Correlated: ${corr.type}`);
       }
     });
 
     // Add script-set dynamic variables not already covered by correlations.
-    // Skip JWT output vars — they are set by getJwtToken() earlier in initialize().
+    // Skip JWT output vars — already set by getJwtToken() in initialize().
     const jwtOutputVars = new Set(this.jwtVarNames || []);
     this.dynamicVarNames.forEach(name => {
-      if (!seen.has(name) && !LIBRARY_NAMES.has(name) && !jwtOutputVars.has(name)) {
+      if (!seen.has(name) && !isLibraryName(name) && !jwtOutputVars.has(name)) {
         seen.add(name);
-        vars.push(`load.global.${name} = null;`);
+        const safe = this.sanitizeVarName(name);
+        vars.push(`load.global.${safe} = null;`);
       }
     });
 
@@ -1522,16 +1536,19 @@ ${jwtRefreshBlock}
 
       // Dynamic variable → load.global (set by scripts/correlation at runtime)
       if (this.dynamicVarNames.has(trimmedName)) {
-        return `\${load.global.${trimmedName}}`;
+        // Sanitize: hyphens and special chars are invalid JS identifiers
+        const safeName = this.sanitizeVarName(trimmedName);
+        return `\${load.global.${safeName}}`;
       }
 
       // Parameterized variable → load.params (from CSV)
       if (this.paramVarNames.has(trimmedName)) {
-        const isSimpleIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(trimmedName);
+        const safeName = this.sanitizeVarName(trimmedName);
+        const isSimpleIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(safeName);
         if (isSimpleIdentifier) {
-          return `\${load.params.${trimmedName}}`;
+          return `\${load.params.${safeName}}`;
         }
-        return `\${load.params["${trimmedName}"]}`;
+        return `\${load.params["${safeName}"]}`;
       }
 
       // Variable exists in map but wasn't classified (parameterization disabled)

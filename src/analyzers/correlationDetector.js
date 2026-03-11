@@ -535,51 +535,29 @@ class CorrelationDetector {
 
       headers.forEach(header => {
         if (header.disabled) return;
-
-        const key = header.key;
+        const key   = header.key;
         const value = header.value;
+        if (!key || !value) return;
 
-        // Skip headers without a key
-        if (!key) return;
+        // Extract ALL {{varName}} references from this header value.
+        // Using findVariablesInString() handles both:
+        //   Pure variable:   {{access_token}}         → varName = "access_token"
+        //   Embedded:        Bearer {{access_token}}   → varName = "access_token"
+        //   Multiple:        {{scheme}} {{token}}      → both extracted
+        const varsInValue = this.findVariablesInString(String(value));
+        varsInValue.forEach(varName => {
+          if (!valueRegistry.has(varName)) return;
+          if (consumed.find(c => c.name === varName)) return;
 
-        // Check if header value looks like a variable/placeholder
-        if (this.isVariablePattern(value)) {
-          const varName = this.extractVariableName(value);
-          if (valueRegistry.has(varName)) {
-            consumed.push({
-              name: varName,
-              type: 'header',
-              location: 'headers',
-              path: key
-            });
-          }
-        }
-
-        // Check for common auth patterns
-        if (key.toLowerCase() === 'authorization' && this.isVariablePattern(value)) {
-          const varName = this.extractVariableName(value);
-          if (!consumed.find(c => c.name === varName)) {
-            consumed.push({
-              name: varName || 'authToken',
-              type: 'token',
-              location: 'headers',
-              path: 'Authorization'
-            });
-          }
-        }
-
-        // Check for bearer token patterns
-        if (value && value.toLowerCase().includes('bearer') && this.isVariablePattern(value)) {
-          const varName = this.extractVariableName(value);
-          if (varName && !consumed.find(c => c.name === varName)) {
-            consumed.push({
-              name: varName,
-              type: 'token',
-              location: 'headers',
-              path: key
-            });
-          }
-        }
+          const isAuth = key.toLowerCase() === 'authorization' ||
+                         String(value).toLowerCase().includes('bearer');
+          consumed.push({
+            name: varName,
+            type: isAuth ? 'token' : 'header',
+            location: 'headers',
+            path: key
+          });
+        });
       });
     }
 
@@ -673,18 +651,19 @@ class CorrelationDetector {
     const variables = new Set();
     if (!script) return Array.from(variables);
 
-    // Pattern: pm.environment.get("varName")
-    const pmGetPattern = /pm\.(environment|globals|collectionVariables|variables)\.get\s*\(\s*["']([^"']+)["']\s*\)/g;
     let match;
-    while ((match = pmGetPattern.exec(script)) !== null) {
-      variables.add(match[2]);
-    }
 
-    // Pattern: bru.getVar("varName")
-    const bruGetPattern = /bru\.getVar\s*\(\s*["']([^"']+)["']\s*\)/g;
-    while ((match = bruGetPattern.exec(script)) !== null) {
-      variables.add(match[1]);
-    }
+    // Postman: pm.*.get("varName")
+    const pmGetPattern = /pm\.(environment|globals|collectionVariables|variables)\.get\s*\(\s*["']([^"']+)["']\s*\)/g;
+    while ((match = pmGetPattern.exec(script)) !== null) variables.add(match[2]);
+
+    // Bruno: bru.getEnv/getEnvVar/getVar/getGlobalVar/getCollectionVar("varName")
+    const bruGetPattern = /bru\.(?:getEnv|getEnvVar|getVar|getGlobalVar|getCollectionVar)\s*\(\s*["']([^"']+)["']\s*\)/g;
+    while ((match = bruGetPattern.exec(script)) !== null) variables.add(match[1]);
+
+    // Bruno legacy: env.get("varName"), vars.get("varName")
+    const legacyGetPattern = /(?:^|[^a-zA-Z0-9_])(?:env|vars)\.get\s*\(\s*["']([^"']+)["']\s*\)/gm;
+    while ((match = legacyGetPattern.exec(script)) !== null) variables.add(match[1]);
 
     return Array.from(variables);
   }
@@ -754,10 +733,10 @@ class CorrelationDetector {
       Object.entries(body).forEach(([key, value]) => {
         const currentPath = `${path}.${key}`;
         
-        if (typeof value === 'string' && this.isVariablePattern(value)) {
-          variables.push({
-            name: this.extractVariableName(value),
-            path: currentPath
+        if (typeof value === 'string') {
+          // Use findVariablesInString to catch both pure {{var}} and embedded "prefix {{var}}"
+          this.findVariablesInString(value).forEach(varName => {
+            variables.push({ name: varName, path: currentPath });
           });
         } else if (typeof value === 'object') {
           variables.push(...this.findVariablesInBody(value, currentPath));
