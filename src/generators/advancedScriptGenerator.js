@@ -3,12 +3,12 @@
  * Integrates correlation, parameterization, authentication, and transactions
  */
 
-const crypto = require('crypto');
-const CorrelationDetector = require('../analyzers/correlationDetector');
-const ParameterizationEngine = require('../analyzers/parameterizationEngine');
-const AuthenticationHandler = require('../analyzers/authenticationHandler');
-const CustomScriptParser = require('../analyzers/customScriptParser');
-const MandatoryFilesGenerator = require('./mandatoryFilesGenerator');
+const crypto = require("crypto");
+const CorrelationDetector = require("../analyzers/correlationDetector");
+const ParameterizationEngine = require("../analyzers/parameterizationEngine");
+const AuthenticationHandler = require("../analyzers/authenticationHandler");
+const CustomScriptParser = require("../analyzers/customScriptParser");
+const MandatoryFilesGenerator = require("./mandatoryFilesGenerator");
 
 class AdvancedScriptGenerator {
   constructor(requests, collection, options = {}) {
@@ -24,9 +24,9 @@ class AdvancedScriptGenerator {
       thinkTime: options.thinkTime || 1,
       groupByFolder: options.groupByFolder !== false,
       addComments: options.addComments !== false,
-      logLevel: options.logLevel || 'info',
+      logLevel: options.logLevel || "info",
       examplesPath: options.examplesPath || null,
-      ...options
+      ...options,
     };
 
     // Initialize analyzers
@@ -35,7 +35,8 @@ class AdvancedScriptGenerator {
     this.authHandler = new AuthenticationHandler();
     this.scriptParser = new CustomScriptParser();
     this.mandatoryFilesGen = new MandatoryFilesGenerator({
-      scriptName: this.collection.info?.name || this.collection.name || 'DevWebScript'
+      scriptName:
+        this.collection.info?.name || this.collection.name || "DevWebScript",
     });
 
     // Analysis results
@@ -44,7 +45,7 @@ class AdvancedScriptGenerator {
     this.authConfigs = new Map();
     this.customScripts = new Map();
     this.requestIdCounter = 0;
-    this.lastResponseVar = null;  // Track current response variable for cross-method access
+    this.lastResponseVar = null; // Track current response variable for cross-method access
 
     // Large base64 data extraction
     // Map: hash → { varName, fileName, content, size, usedBy[] }
@@ -54,14 +55,14 @@ class AdvancedScriptGenerator {
     this.BASE64_THRESHOLD = 500; // Min chars to consider for extraction
 
     // Variable classification
-    this.variableMap = new Map();        // All variables: name → value
-    this.dynamicVarNames = new Set();    // Variables set by scripts/correlation → load.global
-    this.paramVarNames = new Set();      // Variables to parameterize → load.params
-    this.scriptSetVarNames = new Set();  // Variables detected as set by scripts
+    this.variableMap = new Map(); // All variables: name → value
+    this.dynamicVarNames = new Set(); // Variables set by scripts/correlation → load.global
+    this.paramVarNames = new Set(); // Variables to parameterize → load.params
+    this.scriptSetVarNames = new Set(); // Variables detected as set by scripts
 
     // JWT detection — populated by detectJwtUsage() during analyze()
-    this.hasJwt     = false;
-    this.jwtVarNames = [];   // token variable names set by JWT pre-request scripts
+    this.hasJwt = false;
+    this.jwtVarNames = []; // token variable names set by JWT pre-request scripts
 
     // Per-request dynamic variables — generated fresh before each request (e.g. UUID, nonce).
     // Map: varName → { generationType: 'uuid'|'random'|'timestamp'|'nonce', requestNames: string[] }
@@ -90,20 +91,43 @@ class AdvancedScriptGenerator {
    * @returns {{ enabled:true, host:string, port:number, username:string, password:string }|null}
    */
   detectProxyConfig() {
-    const urlVarNames  = ['proxy','proxyUrl','proxy_url','proxyURI','proxy_uri',
-                          'http_proxy','HTTP_PROXY','https_proxy','HTTPS_PROXY',
-                          'proxyServer','proxy_server','httpProxy','httpsProxy'];
-    const hostVarNames = ['proxyHost','proxy_host','proxyHostname'];
-    const portVarNames = ['proxyPort','proxy_port'];
-    const userVarNames = ['proxyUser','proxy_user','proxyUsername','proxy_username','proxyUserName'];
-    const passVarNames = ['proxyPassword','proxy_password','proxyPass','proxy_pass'];
+    const urlVarNames = [
+      "proxy",
+      "proxyUrl",
+      "proxy_url",
+      "proxyURI",
+      "proxy_uri",
+      "http_proxy",
+      "HTTP_PROXY",
+      "https_proxy",
+      "HTTPS_PROXY",
+      "proxyServer",
+      "proxy_server",
+      "httpProxy",
+      "httpsProxy",
+    ];
+    const hostVarNames = ["proxyHost", "proxy_host", "proxyHostname"];
+    const portVarNames = ["proxyPort", "proxy_port"];
+    const userVarNames = [
+      "proxyUser",
+      "proxy_user",
+      "proxyUsername",
+      "proxy_username",
+      "proxyUserName",
+    ];
+    const passVarNames = [
+      "proxyPassword",
+      "proxy_password",
+      "proxyPass",
+      "proxy_pass",
+    ];
 
     const get = (names) => {
       for (const n of names) {
         const v = this.variableMap.get(n);
         if (v && String(v).trim()) return String(v).trim();
       }
-      return '';
+      return "";
     };
 
     // Try full URL first
@@ -112,24 +136,34 @@ class AdvancedScriptGenerator {
       if (!raw || !String(raw).trim()) continue;
       const val = String(raw).trim();
       try {
-        const urlStr = val.startsWith('http') ? val : `http://${val}`;
+        const urlStr = val.startsWith("http") ? val : `http://${val}`;
         const u = new URL(urlStr);
-        const host     = u.hostname;
-        const port     = u.port ? parseInt(u.port) : 8080;
-        const username = decodeURIComponent(u.username || '') || get(userVarNames);
-        const password = decodeURIComponent(u.password || '') || get(passVarNames);
+        const host = u.hostname;
+        const port = u.port ? parseInt(u.port) : 8080;
+        const username =
+          decodeURIComponent(u.username || "") || get(userVarNames);
+        const password =
+          decodeURIComponent(u.password || "") || get(passVarNames);
         if (host) {
-          console.log(`  ✓ Proxy detected: ${host}:${port}${username ? ' (authenticated)' : ''}`);
+          console.log(
+            `  ✓ Proxy detected: ${host}:${port}${username ? " (authenticated)" : ""}`,
+          );
           return { enabled: true, host, port, username, password };
         }
       } catch {
         // Might be bare host:port
-        if (val.includes(':')) {
-          const [host, rawPort] = val.split(':');
+        if (val.includes(":")) {
+          const [host, rawPort] = val.split(":");
           const port = parseInt(rawPort) || 8080;
-          if (host && host.includes('.')) {
+          if (host && host.includes(".")) {
             console.log(`  ✓ Proxy detected: ${host}:${port}`);
-            return { enabled: true, host, port, username: get(userVarNames), password: get(passVarNames) };
+            return {
+              enabled: true,
+              host,
+              port,
+              username: get(userVarNames),
+              password: get(passVarNames),
+            };
           }
         }
       }
@@ -140,10 +174,16 @@ class AdvancedScriptGenerator {
     if (host) {
       const port = parseInt(get(portVarNames)) || 8080;
       console.log(`  ✓ Proxy detected: ${host}:${port}`);
-      return { enabled: true, host, port, username: get(userVarNames), password: get(passVarNames) };
+      return {
+        enabled: true,
+        host,
+        port,
+        username: get(userVarNames),
+        password: get(passVarNames),
+      };
     }
 
-    return null;  // no proxy found
+    return null; // no proxy found
   }
 
   /**
@@ -152,7 +192,7 @@ class AdvancedScriptGenerator {
   buildVariableMap() {
     // Extract collection variables
     if (this.collection.variable) {
-      this.collection.variable.forEach(variable => {
+      this.collection.variable.forEach((variable) => {
         this.variableMap.set(variable.key, variable.value);
       });
     }
@@ -187,15 +227,16 @@ class AdvancedScriptGenerator {
   detectScriptSetVariables() {
     // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
     // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
-    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
+    const setPattern =
+      /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
 
     const scanItem = (item) => {
       // Check events (pre-request, test scripts)
       if (item.event && Array.isArray(item.event)) {
-        item.event.forEach(event => {
+        item.event.forEach((event) => {
           if (event.script && event.script.exec) {
             const scriptText = Array.isArray(event.script.exec)
-              ? event.script.exec.join('\n')
+              ? event.script.exec.join("\n")
               : event.script.exec;
             let match;
             while ((match = setPattern.exec(scriptText)) !== null) {
@@ -209,7 +250,7 @@ class AdvancedScriptGenerator {
       // Recurse into folders
       const items = item.item || item.items;
       if (Array.isArray(items)) {
-        items.forEach(child => scanItem(child));
+        items.forEach((child) => scanItem(child));
       }
     };
 
@@ -219,11 +260,15 @@ class AdvancedScriptGenerator {
     // brunoParser stores events in req.tests[], NOT item.event[], for Bruno YAML collections.
     // Without this pass, script-set vars (access_token, refresh_token, etc.) from Bruno
     // collections are missed → incorrectly classified as static params instead of Tier 1 dynamic.
-    this.requests.forEach(req => {
+    this.requests.forEach((req) => {
       const events = req.tests || req.event || [];
-      events.forEach(ev => {
+      events.forEach((ev) => {
         const exec = ev.script?.exec;
-        const text = Array.isArray(exec) ? exec.join('\n') : (typeof exec === 'string' ? exec : '');
+        const text = Array.isArray(exec)
+          ? exec.join("\n")
+          : typeof exec === "string"
+            ? exec
+            : "";
         if (!text) return;
         let m;
         while ((m = setPattern.exec(text)) !== null) {
@@ -240,31 +285,37 @@ class AdvancedScriptGenerator {
    * JWT output variables are added to scriptSetVarNames so classifyVariables() marks them dynamic.
    */
   detectJwtUsage() {
-    const CustomScriptParser = require('../analyzers/customScriptParser');
+    const CustomScriptParser = require("../analyzers/customScriptParser");
     const scanItem = (item) => {
       // Scan the item's own pre-request script
       if (item.event && Array.isArray(item.event)) {
-        item.event.forEach(event => {
-          if (event.listen !== 'prerequest') return;
+        item.event.forEach((event) => {
+          if (event.listen !== "prerequest") return;
           const exec = event.script?.exec;
-          const text = Array.isArray(exec) ? exec.join('\n') : (exec || '');
+          const text = Array.isArray(exec) ? exec.join("\n") : exec || "";
           if (!text) return;
 
           const result = CustomScriptParser.detectJwtUsage(text);
           if (result.isJwt) {
             this.hasJwt = true;
-            result.outputVars.forEach(v => {
+            result.outputVars.forEach((v) => {
               this.jwtVarNames.push(v);
               this.scriptSetVarNames.add(v); // ensure they're Tier 1 dynamic
             });
-            console.log(`  ✓ JWT detected (library: ${result.library}, algorithm: ${result.algorithm})`);
+            console.log(
+              `  ✓ JWT detected (library: ${result.library}, algorithm: ${result.algorithm})`,
+            );
           }
 
           // Per-request dynamic var detection (UUID/nonce/random generated per request)
-          const perReqVars = CustomScriptParser.detectPerRequestDynamicVars(text);
+          const perReqVars =
+            CustomScriptParser.detectPerRequestDynamicVars(text);
           perReqVars.forEach(({ varName, generationType }) => {
             if (!this.perRequestVars.has(varName)) {
-              this.perRequestVars.set(varName, { generationType, requestNames: [] });
+              this.perRequestVars.set(varName, {
+                generationType,
+                requestNames: [],
+              });
               // Per-request vars are Tier 1 dynamic — never parameterize them
               this.scriptSetVarNames.add(varName);
             }
@@ -277,7 +328,7 @@ class AdvancedScriptGenerator {
       }
       // Recurse
       const items = item.item || item.items;
-      if (Array.isArray(items)) items.forEach(child => scanItem(child));
+      if (Array.isArray(items)) items.forEach((child) => scanItem(child));
     };
     scanItem(this.collection);
   }
@@ -287,20 +338,21 @@ class AdvancedScriptGenerator {
    * Must be called AFTER correlation detection and script parsing
    */
   classifyVariables() {
-    const credentialPattern = /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
+    const credentialPattern =
+      /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
 
     // RULE 1 — Correlation targets: always Tier 1 (dynamic)
     // These are values extracted from API responses at runtime.
-    this.correlations.forEach(corr => this.dynamicVarNames.add(corr.name));
+    this.correlations.forEach((corr) => this.dynamicVarNames.add(corr.name));
 
     // RULE 2 — Script-set variables: always Tier 1 (dynamic)
     // Any variable explicitly set by a script (pm.*.set, bru.setEnv, etc.) is runtime.
-    this.scriptSetVarNames.forEach(name => this.dynamicVarNames.add(name));
+    this.scriptSetVarNames.forEach((name) => this.dynamicVarNames.add(name));
 
     // RULE 3 — _ prefix: always Tier 1 regardless of value
     // Postman/Bruno convention: underscore prefix = correlation placeholder.
     for (const [name] of this.variableMap.entries()) {
-      if (name.startsWith('_')) this.dynamicVarNames.add(name);
+      if (name.startsWith("_")) this.dynamicVarNames.add(name);
     }
 
     // RULE 4 (GENERIC) — Empty value in collection/environment = Tier 1 (dynamic).
@@ -310,8 +362,8 @@ class AdvancedScriptGenerator {
     // Credentials (username/password) are excluded — they go to Tier 3.
     for (const [name, value] of this.variableMap.entries()) {
       if (this.dynamicVarNames.has(name)) continue;
-      if (name.startsWith('$')) continue;
-      const isEmpty = value === '' || value === null || value === undefined;
+      if (name.startsWith("$")) continue;
+      const isEmpty = value === "" || value === null || value === undefined;
       const isCredential = credentialPattern.test(name);
       if (isEmpty && !isCredential) {
         this.dynamicVarNames.add(name);
@@ -322,7 +374,7 @@ class AdvancedScriptGenerator {
     let usernameParam = null;
     for (const [name] of this.variableMap.entries()) {
       if (this.dynamicVarNames.has(name)) continue;
-      if (name.startsWith('$')) continue;
+      if (name.startsWith("$")) continue;
 
       this.paramVarNames.add(name);
 
@@ -339,13 +391,13 @@ class AdvancedScriptGenerator {
 
       this.parameters.set(name, {
         name,
-        type: 'csv',
-        fileName: 'collection_data.csv',
+        type: "csv",
+        fileName: "collection_data.csv",
         columnName: name,
-        nextValue: isCredential ? 'iteration' : 'once',
-        nextRow: 'sequential',
-        onEnd: 'loop',
-        paramValue: value !== undefined && value !== null ? String(value) : ''
+        nextValue: isCredential ? "iteration" : "once",
+        nextRow: "sequential",
+        onEnd: "loop",
+        paramValue: value !== undefined && value !== null ? String(value) : "",
       });
     }
 
@@ -360,23 +412,25 @@ class AdvancedScriptGenerator {
 
     // 7. Add dynamic variables that need load.global initialization
     //    (those not already tracked by correlations)
-    this.dynamicVarNames.forEach(name => {
-      const isCorrelation = this.correlations.some(c => c.name === name);
+    this.dynamicVarNames.forEach((name) => {
+      const isCorrelation = this.correlations.some((c) => c.name === name);
       if (!isCorrelation) {
         // These are script-set variables — still need load.global init
         // but won't have extractors
       }
     });
 
-    console.log(`✓ Classified variables: ${this.paramVarNames.size} parameterized, ${this.dynamicVarNames.size} dynamic`);
+    console.log(
+      `✓ Classified variables: ${this.paramVarNames.size} parameterized, ${this.dynamicVarNames.size} dynamic`,
+    );
   }
 
   /**
    * Check if a string is base64 encoded (allowing whitespace/newlines)
    */
   isBase64(str) {
-    if (!str || typeof str !== 'string') return false;
-    const stripped = str.replace(/\s/g, '');
+    if (!str || typeof str !== "string") return false;
+    const stripped = str.replace(/\s/g, "");
     if (stripped.length < this.BASE64_THRESHOLD) return false;
     // Base64 charset: A-Z, a-z, 0-9, +, /, = (padding)
     return /^[A-Za-z0-9+/=]+$/.test(stripped);
@@ -386,7 +440,11 @@ class AdvancedScriptGenerator {
    * Generate a short hash for deduplication
    */
   hashContent(content) {
-    return crypto.createHash('md5').update(content).digest('hex').substring(0, 12);
+    return crypto
+      .createHash("md5")
+      .update(content)
+      .digest("hex")
+      .substring(0, 12);
   }
 
   /**
@@ -394,12 +452,12 @@ class AdvancedScriptGenerator {
    */
   safeFileName(requestName, fieldPath) {
     const name = `${requestName}_${fieldPath}`
-      .replace(/[^a-zA-Z0-9_]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '')
-      .replace(/^[0-9]+_?/, '')  // Strip leading digits — JS identifiers cannot start with a number
+      .replace(/[^a-zA-Z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .replace(/^[0-9]+_?/, "") // Strip leading digits — JS identifiers cannot start with a number
       .substring(0, 60);
-    return name || 'data_file';
+    return name || "data_file";
   }
 
   /**
@@ -411,35 +469,41 @@ class AdvancedScriptGenerator {
     let totalFound = 0;
     let deduplicated = 0;
 
-    this.requests.forEach(request => {
-      if (!request.body || !['POST', 'PUT', 'PATCH'].includes(request.method)) return;
+    this.requests.forEach((request) => {
+      if (!request.body || !["POST", "PUT", "PATCH"].includes(request.method))
+        return;
 
-      if (request.body.mode === 'raw' && request.body.raw) {
+      if (request.body.mode === "raw" && request.body.raw) {
         try {
           const jsonBody = JSON.parse(request.body.raw);
-          this._scanObjectForBase64(jsonBody, request.name, '', (fieldPath, value) => {
-            const hash = this.hashContent(value);
-            const indexKey = `${request.name}::${fieldPath}`;
+          this._scanObjectForBase64(
+            jsonBody,
+            request.name,
+            "",
+            (fieldPath, value) => {
+              const hash = this.hashContent(value);
+              const indexKey = `${request.name}::${fieldPath}`;
 
-            if (this.extractedDataFiles.has(hash)) {
-              // Deduplicate: same content already extracted
-              this.extractedDataFiles.get(hash).usedBy.push(request.name);
-              this.largeValueIndex.set(indexKey, hash);
-              deduplicated++;
-            } else {
-              const varName = this.safeFileName(request.name, fieldPath);
-              const fileName = `${varName}.b64`;
-              this.extractedDataFiles.set(hash, {
-                varName,
-                fileName,
-                content: value,
-                size: value.length,
-                usedBy: [request.name]
-              });
-              this.largeValueIndex.set(indexKey, hash);
-              totalFound++;
-            }
-          });
+              if (this.extractedDataFiles.has(hash)) {
+                // Deduplicate: same content already extracted
+                this.extractedDataFiles.get(hash).usedBy.push(request.name);
+                this.largeValueIndex.set(indexKey, hash);
+                deduplicated++;
+              } else {
+                const varName = this.safeFileName(request.name, fieldPath);
+                const fileName = `${varName}.b64`;
+                this.extractedDataFiles.set(hash, {
+                  varName,
+                  fileName,
+                  content: value,
+                  size: value.length,
+                  usedBy: [request.name],
+                });
+                this.largeValueIndex.set(indexKey, hash);
+                totalFound++;
+              }
+            },
+          );
         } catch (e) {
           // Not JSON — check if the entire raw body is base64
           if (this.isBase64(request.body.raw)) {
@@ -451,14 +515,14 @@ class AdvancedScriptGenerator {
               this.largeValueIndex.set(indexKey, hash);
               deduplicated++;
             } else {
-              const varName = this.safeFileName(request.name, 'body');
+              const varName = this.safeFileName(request.name, "body");
               const fileName = `${varName}.b64`;
               this.extractedDataFiles.set(hash, {
                 varName,
                 fileName,
                 content: request.body.raw,
                 size: request.body.raw.length,
-                usedBy: [request.name]
+                usedBy: [request.name],
               });
               this.largeValueIndex.set(indexKey, hash);
               totalFound++;
@@ -469,7 +533,9 @@ class AdvancedScriptGenerator {
     });
 
     if (totalFound > 0 || deduplicated > 0) {
-      console.log(`✓ Extracted ${totalFound + deduplicated} large values to data/ folder (${totalFound} unique, ${deduplicated} deduplicated)`);
+      console.log(
+        `✓ Extracted ${totalFound + deduplicated} large values to data/ folder (${totalFound} unique, ${deduplicated} deduplicated)`,
+      );
     }
   }
 
@@ -478,7 +544,7 @@ class AdvancedScriptGenerator {
    * Calls onFound(fieldPath, value) for each match.
    */
   _scanObjectForBase64(obj, requestName, currentPath, onFound) {
-    if (typeof obj === 'string') {
+    if (typeof obj === "string") {
       if (this.isBase64(obj)) {
         onFound(currentPath, obj);
       }
@@ -486,11 +552,16 @@ class AdvancedScriptGenerator {
     }
     if (Array.isArray(obj)) {
       obj.forEach((item, index) => {
-        this._scanObjectForBase64(item, requestName, `${currentPath}[${index}]`, onFound);
+        this._scanObjectForBase64(
+          item,
+          requestName,
+          `${currentPath}[${index}]`,
+          onFound,
+        );
       });
       return;
     }
-    if (typeof obj === 'object' && obj !== null) {
+    if (typeof obj === "object" && obj !== null) {
       Object.entries(obj).forEach(([key, value]) => {
         const path = currentPath ? `${currentPath}.${key}` : key;
         this._scanObjectForBase64(value, requestName, path, onFound);
@@ -502,12 +573,12 @@ class AdvancedScriptGenerator {
    * Generate complete DevWeb script with all advanced features
    */
   async generate(outputDir = null) {
-    console.log('🔍 Analyzing collection...');
+    console.log("🔍 Analyzing collection...");
 
     // Run analysis
     await this.analyze();
 
-    console.log('📝 Generating script...');
+    console.log("📝 Generating script...");
 
     // Generate script sections
     const initSection = this.generateInitialize();
@@ -515,15 +586,20 @@ class AdvancedScriptGenerator {
     const finalizeSection = this.generateFinalize();
 
     // Generate comment listing parameterized variables that need values in CSV
-    let configComment = '';
+    let configComment = "";
     const emptyParams = [];
     for (const [name, config] of this.parameters.entries()) {
-      if (!config.paramValue || config.paramValue === '') {
+      if (!config.paramValue || config.paramValue === "") {
         emptyParams.push(name);
       }
     }
     if (emptyParams.length > 0) {
-      configComment = `\n/**\n * CONFIGURATION REQUIRED:\n * The following parameters have empty values in collection_data.csv:\n${emptyParams.sort().map(v => ` *   - ${v}`).join('\n')}\n * \n * Please update collection_data.csv with the correct values before running.\n */\n`;
+      configComment = `\n/**\n * CONFIGURATION REQUIRED:\n * The following parameters have empty values in collection_data.csv:\n${emptyParams
+        .sort()
+        .map((v) => ` *   - ${v}`)
+        .join(
+          "\n",
+        )}\n * \n * Please update collection_data.csv with the correct values before running.\n */\n`;
     }
 
     // Combine sections
@@ -538,36 +614,40 @@ ${finalizeSection}
 
     const result = {
       script: fullScript,
-      analysis: this.getAnalysisReport()
+      analysis: this.getAnalysisReport(),
     };
 
     // Generate mandatory files if output directory specified
     if (outputDir) {
-      console.log('📦 Generating mandatory files...');
+      console.log("📦 Generating mandatory files...");
       result.mandatoryFiles = await this.mandatoryFilesGen.generateAll(
         outputDir,
         this.parameters,
         {
           transactionNames: this.transactionNames || [],
-          hasJwt:           this.hasJwt || false,
-          proxy:            this.detectProxyConfig()
-        }
+          hasJwt: this.hasJwt || false,
+          proxy: this.detectProxyConfig(),
+        },
       );
 
       // Write extracted base64 data files to data/ subfolder
       if (this.extractedDataFiles.size > 0) {
-        const fs = require('fs');
-        const path = require('path');
-        const dataDir = path.join(outputDir, 'data');
+        const fs = require("fs");
+        const path = require("path");
+        const dataDir = path.join(outputDir, "data");
         if (!fs.existsSync(dataDir)) {
           fs.mkdirSync(dataDir, { recursive: true });
         }
         for (const [hash, fileInfo] of this.extractedDataFiles.entries()) {
           const filePath = path.join(dataDir, fileInfo.fileName);
-          fs.writeFileSync(filePath, fileInfo.content, 'utf8');
-          console.log(`✓ Extracted: data/${fileInfo.fileName} (${(fileInfo.size / 1024).toFixed(1)} KB, used by ${fileInfo.usedBy.length} request(s))`);
+          fs.writeFileSync(filePath, fileInfo.content, "utf8");
+          console.log(
+            `✓ Extracted: data/${fileInfo.fileName} (${(fileInfo.size / 1024).toFixed(1)} KB, used by ${fileInfo.usedBy.length} request(s))`,
+          );
         }
-        result.extractedDataFiles = Array.from(this.extractedDataFiles.values()).map(f => f.fileName);
+        result.extractedDataFiles = Array.from(
+          this.extractedDataFiles.values(),
+        ).map((f) => f.fileName);
       }
     }
 
@@ -580,13 +660,17 @@ ${finalizeSection}
   async analyze() {
     // Detect correlations (must run before variable classification)
     if (this.options.useCorrelation) {
-      this.correlations = this.correlationDetector.analyzeRequests(this.requests);
+      this.correlations = this.correlationDetector.analyzeRequests(
+        this.requests,
+      );
       console.log(`✓ Found ${this.correlations.length} correlation(s)`);
     }
 
     // Extract authentication
     if (this.options.useAuthentication) {
-      this.authConfigs = this.authHandler.extractAuthentication(this.collection);
+      this.authConfigs = this.authHandler.extractAuthentication(
+        this.collection,
+      );
       console.log(`✓ Configured ${this.authConfigs.size} authentication(s)`);
     }
 
@@ -617,17 +701,23 @@ ${finalizeSection}
    * Parse custom scripts from Bruno/Postman requests
    */
   parseCustomScripts() {
-    this.requests.forEach(request => {
+    this.requests.forEach((request) => {
       const scripts = {};
 
-      const preScript = this.extractScriptFromRequest(request, 'prerequest');
+      const preScript = this.extractScriptFromRequest(request, "prerequest");
       if (preScript) {
-        scripts.preRequest = this.scriptParser.parsePreRequestScript(preScript, request.name);
+        scripts.preRequest = this.scriptParser.parsePreRequestScript(
+          preScript,
+          request.name,
+        );
       }
 
-      const testScript = this.extractScriptFromRequest(request, 'test');
+      const testScript = this.extractScriptFromRequest(request, "test");
       if (testScript) {
-        scripts.test = this.scriptParser.parseTestScript(testScript, request.name);
+        scripts.test = this.scriptParser.parseTestScript(
+          testScript,
+          request.name,
+        );
       }
 
       if (scripts.preRequest || scripts.test) {
@@ -641,29 +731,29 @@ ${finalizeSection}
    */
   extractScriptFromRequest(request, listenType) {
     // Direct string properties
-    if (listenType === 'prerequest' && request.preRequestScript) {
+    if (listenType === "prerequest" && request.preRequestScript) {
       return request.preRequestScript;
     }
-    if (listenType === 'test' && request.testScript) {
+    if (listenType === "test" && request.testScript) {
       return request.testScript;
     }
 
     // Normalized format: request.tests is array of {listen, script} objects
     if (request.tests && Array.isArray(request.tests)) {
-      const event = request.tests.find(e => e.listen === listenType);
+      const event = request.tests.find((e) => e.listen === listenType);
       if (event && event.script) {
         if (event.script.exec && Array.isArray(event.script.exec)) {
-          return event.script.exec.join('\n');
+          return event.script.exec.join("\n");
         }
-        if (typeof event.script === 'string') return event.script;
+        if (typeof event.script === "string") return event.script;
       }
     }
 
     // Original Postman format: request.event
     if (request.event && Array.isArray(request.event)) {
-      const event = request.event.find(e => e.listen === listenType);
+      const event = request.event.find((e) => e.listen === listenType);
       if (event && event.script && event.script.exec) {
-        return event.script.exec.join('\n');
+        return event.script.exec.join("\n");
       }
     }
 
@@ -688,21 +778,24 @@ ${finalizeSection}
    *   - Pure static params → staticGlobal if common.
    */
   analyzeCommonHeaders() {
-    const headerFreq  = new Map(); // key → { staticCount, values: Map<value, count> }
+    const headerFreq = new Map(); // key → { staticCount, values: Map<value, count> }
     const totalRequests = this.requests.length || 1;
 
-    this.requests.forEach(req => {
-      (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
-        if (!headerFreq.has(h.key)) headerFreq.set(h.key, { count: 0, values: new Map() });
-        const entry = headerFreq.get(h.key);
-        entry.count++;
-        const raw = String(h.value);
-        entry.values.set(raw, (entry.values.get(raw) || 0) + 1);
-      });
+    this.requests.forEach((req) => {
+      (req.headers || [])
+        .filter((h) => h.key && h.value && !h.disabled)
+        .forEach((h) => {
+          if (!headerFreq.has(h.key))
+            headerFreq.set(h.key, { count: 0, values: new Map() });
+          const entry = headerFreq.get(h.key);
+          entry.count++;
+          const raw = String(h.value);
+          entry.values.set(raw, (entry.values.get(raw) || 0) + 1);
+        });
     });
 
-    const staticGlobal  = new Map();  // key → replaceParameters(value) expression
-    const authGlobal    = new Map();  // key → replaceParameters(value) expression
+    const staticGlobal = new Map(); // key → replaceParameters(value) expression
+    const authGlobal = new Map(); // key → replaceParameters(value) expression
     const perRequestKeys = new Set(); // keys that are per-request
 
     const THRESHOLD = 0.7;
@@ -712,21 +805,32 @@ ${finalizeSection}
       if (freq < THRESHOLD) return; // not common enough — per-request
 
       // Find the dominant value (most-used)
-      let dominantRaw = '';
+      let dominantRaw = "";
       let dominantCount = 0;
-      entry.values.forEach((cnt, val) => { if (cnt > dominantCount) { dominantRaw = val; dominantCount = cnt; } });
+      entry.values.forEach((cnt, val) => {
+        if (cnt > dominantCount) {
+          dominantRaw = val;
+          dominantCount = cnt;
+        }
+      });
 
       // Check if this header uses a per-request dynamic var (UUID/nonce)
-      const isPerRequestVar = this.perRequestVars && Array.from(this.perRequestVars.keys())
-        .some(v => dominantRaw.includes(`{{${v}}}`));
-      if (isPerRequestVar) { perRequestKeys.add(key); return; }
+      const isPerRequestVar =
+        this.perRequestVars &&
+        Array.from(this.perRequestVars.keys()).some((v) =>
+          dominantRaw.includes(`{{${v}}}`),
+        );
+      if (isPerRequestVar) {
+        perRequestKeys.add(key);
+        return;
+      }
 
       const valueExpr = this.replaceParameters(dominantRaw);
-      const needsTpl  = valueExpr.includes('${');
-      const quoted    = needsTpl ? `\`${valueExpr}\`` : `"${valueExpr}"`;
+      const needsTpl = valueExpr.includes("${");
+      const quoted = needsTpl ? `\`${valueExpr}\`` : `"${valueExpr}"`;
 
       // Dynamic vars (load.global.X) → authGlobal (set after token is fetched)
-      if (valueExpr.includes('load.global.') || valueExpr.includes('Bearer')) {
+      if (valueExpr.includes("load.global.") || valueExpr.includes("Bearer")) {
         authGlobal.set(key, quoted);
       } else {
         staticGlobal.set(key, quoted);
@@ -738,7 +842,8 @@ ${finalizeSection}
 
   generateHeader() {
     const timestamp = new Date().toISOString();
-    const collectionName = this.collection.info?.name || this.collection.name || 'Unknown';
+    const collectionName =
+      this.collection.info?.name || this.collection.name || "Unknown";
 
     const { staticGlobal, authGlobal } = this.analyzeCommonHeaders();
 
@@ -746,20 +851,20 @@ ${finalizeSection}
     // These run ONCE when the script loads — before any lifecycle function.
 
     const jwtRequire = this.hasJwt
-      ? `// JWT Helper — fast token generation using Node.js built-in crypto (no npm install)\nconst { getJwtToken } = require('./jwt-helper.js');\n`
-      : '';
+      ? `// JWT Helper — fast token generation using Node.js built-in crypto (no npm install)\nconst { getJWTToken } = require('./jwt-helper.js');\n`
+      : "";
 
     const certSetup = this.hasJwt
       ? `// Transport certificate for mutual TLS authentication\nload.setUserCertificate('./transport.pem', './transport.pem');\n\n`
-      : '';
+      : "";
 
     // Static browser baseline + static collection headers
     const collectionHeaders = this.collection.collectionHeaders || [];
     const collectionHeaderLines = collectionHeaders
-      .filter(h => h.key && h.value && !h.disabled)
-      .map(h => {
+      .filter((h) => h.key && h.value && !h.disabled)
+      .map((h) => {
         const v = this.replaceParameters(h.value);
-        const q = v.includes('${') ? `\`${v}\`` : `"${v}"`;
+        const q = v.includes("${") ? `\`${v}\`` : `"${v}"`;
         return `    "${h.key}": ${q}`;
       });
 
@@ -769,19 +874,24 @@ ${finalizeSection}
       `    "accept-language": "en-US,en;q=0.9"`,
       `    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"`,
       ...Array.from(staticGlobal.entries())
-            .filter(([k]) => !['accept-encoding','accept-language','user-agent'].includes(k.toLowerCase()))
-            .map(([k, v]) => `    "${k}": ${v}`),
-      ...collectionHeaderLines
-    ].join(',\n');
+        .filter(
+          ([k]) =>
+            !["accept-encoding", "accept-language", "user-agent"].includes(
+              k.toLowerCase(),
+            ),
+        )
+        .map(([k, v]) => `    "${k}": ${v}`),
+      ...collectionHeaderLines,
+    ].join(",\n");
 
     // Auth/dynamic global headers — set in action() AFTER token is available
     // NOTE: authGlobal headers (Authorization, etc.) contain load.global.X references
     // that are null at module-load time. They are applied at the START of action()
     // after the token has been fetched — see the Object.assign block in generateAction().
-    const authDefaultsBlock = '';  // empty at module level — applied in action() start
+    const authDefaultsBlock = ""; // empty at module level — applied in action() start
 
     // Store for use in action() (avoid recomputing)
-    this._authGlobalHeaders   = authGlobal;
+    this._authGlobalHeaders = authGlobal;
     this._staticGlobalHeaders = staticGlobal;
     this._perRequestHeaderKeys = this.analyzeCommonHeaders().perRequestKeys;
 
@@ -812,11 +922,16 @@ ${authDefaultsBlock}
 // ── Transaction objects — declared once at module level ──────────────────
 // All transactions are pre-declared here (before initialize) so they are
 // available in action() without re-allocating on every iteration.
-${this.requestTxMap && this.requestTxMap.size > 0
-  ? Array.from(this.requestTxMap.values())
-      .map(({ txVar, txName }) => `const ${txVar} = new load.Transaction("${txName}");`)
-      .join('\n')
-  : '// (no transactions — useTransactions is disabled)'}
+${
+  this.requestTxMap && this.requestTxMap.size > 0
+    ? Array.from(this.requestTxMap.values())
+        .map(
+          ({ txVar, txName }) =>
+            `const ${txVar} = new load.Transaction("${txName}");`,
+        )
+        .join("\n")
+    : "// (no transactions — useTransactions is disabled)"
+}
 `;
   }
 
@@ -826,11 +941,13 @@ ${this.requestTxMap && this.requestTxMap.size > 0
   generateInitialize() {
     // JWT initialization — only when JWT signing detected.
     // cert + require declared at module level; only token fetch here.
-    const jwtBlock = this.hasJwt ? `
-    load.global.jwt_token = getJwtToken(load.params);
+    const jwtBlock = this.hasJwt
+      ? `
+    load.global.jwt_token = getJWTToken(load.params);
     load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000); // refresh at 9 min
     load.log('JWT token generated', load.LogLevel.info);
-` : '';
+`
+      : "";
 
     let code = `load.initialize('Initialize', async function() {
     load.log('Initializing Vuser ' + load.config.user.userId, load.LogLevel.${this.options.logLevel});
@@ -875,17 +992,25 @@ ${jwtBlock}
    * Emits real token-fetch code (commented out) so developers can activate it.
    */
   generateCollectionAuthBlock(auth) {
-    const type = (auth.type || '').toLowerCase();
-    const flow = (auth.flow || '').toLowerCase();
+    const type = (auth.type || "").toLowerCase();
+    const flow = (auth.flow || "").toLowerCase();
     let block = `\n    // ── Collection-level Auth (from Bruno request.auth) ──────────────────\n`;
 
-    if (type === 'oauth2') {
-      const tokenUrl  = this.replaceParameters(auth.accessTokenUrl || auth.tokenUrl || '{{url}}/oauth2/token');
-      const clientId  = this.replaceParameters(auth.credentials?.clientId  || auth.clientId  || '{{clientId}}');
-      const clientSecret = this.replaceParameters(auth.credentials?.clientSecret || auth.clientSecret || '{{clientSecret}}');
-      const placement = auth.credentials?.placement || 'body';
+    if (type === "oauth2") {
+      const tokenUrl = this.replaceParameters(
+        auth.accessTokenUrl || auth.tokenUrl || "{{url}}/oauth2/token",
+      );
+      const clientId = this.replaceParameters(
+        auth.credentials?.clientId || auth.clientId || "{{clientId}}",
+      );
+      const clientSecret = this.replaceParameters(
+        auth.credentials?.clientSecret ||
+          auth.clientSecret ||
+          "{{clientSecret}}",
+      );
+      const placement = auth.credentials?.placement || "body";
 
-      if (flow === 'client_credentials') {
+      if (flow === "client_credentials") {
         block += `    // OAuth2 Client Credentials flow detected.
     // Uncomment and adapt the block below to fetch a bearer token during initialization.
     //
@@ -899,16 +1024,24 @@ ${jwtBlock}
     //       client_id: \`${clientId}\`,
     //       client_secret: \`${clientSecret}\`
     //     }
-    //   }${placement === 'header' ? `,
+    //   }${
+      placement === "header"
+        ? `,
     //   // Alternatively pass credentials via Basic Auth header:
-    //   // headers: { Authorization: "Basic " + Buffer.from(\`${clientId}:\${${clientSecret}}\`).toString("base64") }` : ''}
+    //   // headers: { Authorization: "Basic " + Buffer.from(\`${clientId}:\${${clientSecret}}\`).toString("base64") }`
+        : ""
+    }
     // }).send();
     // const tokenJson = JSON.parse(tokenResp.body);
     // load.global._accessToken = tokenJson.access_token;
     // load.WebRequest.defaults.headers["Authorization"] = \`Bearer \${load.global._accessToken}\`;\n`;
-      } else if (flow === 'password') {
-        const username = this.replaceParameters(auth.credentials?.username || '{{username}}');
-        const password = this.replaceParameters(auth.credentials?.password || '{{password}}');
+      } else if (flow === "password") {
+        const username = this.replaceParameters(
+          auth.credentials?.username || "{{username}}",
+        );
+        const password = this.replaceParameters(
+          auth.credentials?.password || "{{password}}",
+        );
         block += `    // OAuth2 Password flow detected.
     // Uncomment and adapt the block below to fetch a bearer token during initialization.
     //
@@ -935,18 +1068,18 @@ ${jwtBlock}
           block += `    // Token URL: ${auth.accessTokenUrl || auth.tokenUrl}\n`;
         }
       }
-    } else if (type === 'apikey') {
-      const key   = auth.key   || 'X-API-Key';
-      const value = this.replaceParameters(auth.value || '{{apiKey}}');
-      const addTo = (auth.addTo || 'header').toLowerCase();
-      if (addTo === 'header') {
+    } else if (type === "apikey") {
+      const key = auth.key || "X-API-Key";
+      const value = this.replaceParameters(auth.value || "{{apiKey}}");
+      const addTo = (auth.addTo || "header").toLowerCase();
+      if (addTo === "header") {
         block += `    // API Key auth — already applied via collection default headers if listed there.\n`;
         block += `    // load.WebRequest.defaults.headers["${key}"] = \`${value}\`;\n`;
       } else {
         block += `    // API Key in query param "${key}" — add to each request URL as needed.\n`;
       }
-    } else if (type === 'bearer') {
-      const token = this.replaceParameters(auth.token || '{{_accessToken}}');
+    } else if (type === "bearer") {
+      const token = this.replaceParameters(auth.token || "{{_accessToken}}");
       block += `    // Bearer token auth.\n`;
       block += `    // load.WebRequest.defaults.headers["Authorization"] = \`Bearer ${token}\`;\n`;
     } else {
@@ -966,7 +1099,7 @@ ${jwtBlock}
    * Examples: "jsrsasign-js" → "jsrsasign_js", "access-token" → "access_token"
    */
   sanitizeVarName(name) {
-    return String(name).replace(/[^a-zA-Z0-9_$]/g, '_');
+    return String(name).replace(/[^a-zA-Z0-9_$]/g, "_");
   }
 
   generateGlobalVariablesInit() {
@@ -975,15 +1108,25 @@ ${jwtBlock}
 
     // Known JavaScript library keywords — variables holding library source code (e.g. eval(pm.globals.get('jsrsasign')))
     // are NOT LR runtime vars. Any variable whose name starts with or contains these keywords is excluded.
-    const LIBRARY_KEYWORDS = ['jsrsasign', 'kjur', 'cryptojs', 'jsonwebtoken', 'jose', 'forge', 'jsbn'];
+    const LIBRARY_KEYWORDS = [
+      "jsrsasign",
+      "kjur",
+      "cryptojs",
+      "jsonwebtoken",
+      "jose",
+      "forge",
+      "jsbn",
+    ];
 
     const isLibraryName = (name) => {
-      const lower = name.toLowerCase().replace(/[-_.]/g, '');
-      return LIBRARY_KEYWORDS.some(kw => lower === kw || lower.startsWith(kw) || lower.endsWith(kw));
+      const lower = name.toLowerCase().replace(/[-_.]/g, "");
+      return LIBRARY_KEYWORDS.some(
+        (kw) => lower === kw || lower.startsWith(kw) || lower.endsWith(kw),
+      );
     };
 
     // Add correlation variables (deduplicated, sanitized)
-    this.correlations.forEach(corr => {
+    this.correlations.forEach((corr) => {
       if (!seen.has(corr.name) && !isLibraryName(corr.name)) {
         seen.add(corr.name);
         const safe = this.sanitizeVarName(corr.name);
@@ -992,9 +1135,9 @@ ${jwtBlock}
     });
 
     // Add script-set dynamic variables not already covered by correlations.
-    // Skip JWT output vars — already set by getJwtToken() in initialize().
+    // Skip JWT output vars — already set by getJWTToken() in initialize().
     const jwtOutputVars = new Set(this.jwtVarNames || []);
-    this.dynamicVarNames.forEach(name => {
+    this.dynamicVarNames.forEach((name) => {
       if (!seen.has(name) && !isLibraryName(name) && !jwtOutputVars.has(name)) {
         seen.add(name);
         const safe = this.sanitizeVarName(name);
@@ -1002,7 +1145,7 @@ ${jwtBlock}
       }
     });
 
-    return vars.length > 0 ? vars.join('\n    ') : '// No dynamic variables';
+    return vars.length > 0 ? vars.join("\n    ") : "// No dynamic variables";
   }
 
   /**
@@ -1016,12 +1159,15 @@ ${jwtBlock}
     let counter = 1;
 
     const assign = (requests) => {
-      requests.forEach(req => {
-        const seqNum  = String(counter).padStart(2, '0');
-        const rawLabel = this.generateTransactionVarName(req.name).replace(/^t?[0-9]+/i, '');
-        const txLabel  = rawLabel || `Req${seqNum}`;
-        const txVar    = `T${seqNum}`;
-        const txName   = `${txVar}_${txLabel}`;
+      requests.forEach((req) => {
+        const seqNum = String(counter).padStart(2, "0");
+        const rawLabel = this.generateTransactionVarName(req.name).replace(
+          /^t?[0-9]+/i,
+          "",
+        );
+        const txLabel = rawLabel || `Req${seqNum}`;
+        const txVar = `T${seqNum}`;
+        const txName = `${txVar}_${txLabel}`;
         this.requestTxMap.set(req.name, { txVar, txName });
         counter++;
       });
@@ -1029,7 +1175,7 @@ ${jwtBlock}
 
     if (this.options.groupByFolder && this.options.useTransactions) {
       const grouped = this.groupRequestsByFolder();
-      Object.values(grouped).forEach(requests => assign(requests));
+      Object.values(grouped).forEach((requests) => assign(requests));
     } else {
       assign(this.requests);
     }
@@ -1041,24 +1187,33 @@ ${jwtBlock}
   generateAction() {
     // Pre-compute transaction names so generateHeader() can emit module-level declarations
     this.buildTransactionMap();
-    // JWT auto-refresh — uses getJwtToken from module-level require.
+    // JWT auto-refresh — uses getJWTToken from module-level require.
     // Also re-syncs dynamic auth headers in defaults after token refresh.
-    const authHeaderUpdate = this._authGlobalHeaders && this._authGlobalHeaders.size > 0
-      ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${
-          Array.from(this._authGlobalHeaders.entries()).map(([k,v]) => `            "${k}": ${v}`).join(',\n')
-        }\n        });`
-      : '';
+    const authHeaderUpdate =
+      this._authGlobalHeaders && this._authGlobalHeaders.size > 0
+        ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${Array.from(
+            this._authGlobalHeaders.entries(),
+          )
+            .map(([k, v]) => `            "${k}": ${v}`)
+            .join(",\n")}\n        });`
+        : "";
 
-    const jwtRefreshBlock = this.hasJwt ? `
+    const jwtRefreshBlock = this.hasJwt
+      ? `
     // Auto-refresh JWT token if expired (for long-running tests)
     if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
-        load.global.jwt_token = getJwtToken(load.params);
+        load.global.jwt_token = getJWTToken(load.params);
         load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
         load.log('JWT token refreshed', load.LogLevel.info);${authHeaderUpdate}
     }
-` : (authHeaderUpdate ? `\n    // Refresh dynamic auth headers\n    Object.assign(load.WebRequest.defaults.headers, {\n${
-    Array.from((this._authGlobalHeaders || new Map()).entries()).map(([k,v]) => `        "${k}": ${v}`).join(',\n')
-  }\n    });\n` : '');
+`
+      : authHeaderUpdate
+        ? `\n    // Refresh dynamic auth headers\n    Object.assign(load.WebRequest.defaults.headers, {\n${Array.from(
+            (this._authGlobalHeaders || new Map()).entries(),
+          )
+            .map(([k, v]) => `        "${k}": ${v}`)
+            .join(",\n")}\n    });\n`
+        : "";
 
     let code = `load.action('Action', async function() {
     load.log('Action iteration ' + load.config.runtime.iteration, load.LogLevel.info);
@@ -1094,7 +1249,7 @@ ${jwtRefreshBlock}
    */
   generateGroupedActions() {
     const grouped = this.groupRequestsByFolder();
-    let code = '';
+    let code = "";
 
     // Transactions are already declared at module level (in generateHeader via requestTxMap).
     // Here we only emit .start() and .stop() — no inline "let T01 = new load.Transaction()" declarations.
@@ -1109,12 +1264,13 @@ ${jwtRefreshBlock}
 
         if (txVar) code += `\n    ${txVar}.start();`;
         code += this.generateRequestCode(request, 1);
-        if (txVar) code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
+        if (txVar)
+          code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
 
         if (reqIndex < requests.length - 1 && this.options.thinkTime > 0) {
           code += `\n    load.sleep(${this.options.thinkTime});`;
         }
-        code += '\n';
+        code += "\n";
       });
 
       if (groupIndex < groupEntries.length - 1 && this.options.thinkTime > 0) {
@@ -1128,7 +1284,7 @@ ${jwtRefreshBlock}
   // ── LEGACY (folder-level transactions — kept for reference, not used) ──────
   generateGroupedActionsFolderLevel() {
     const grouped = this.groupRequestsByFolder();
-    let code = '';
+    let code = "";
     const transactionDeclarations = [];
     const transactionMapping = new Map();
 
@@ -1137,12 +1293,12 @@ ${jwtRefreshBlock}
     const nameCount = new Map(); // Track duplicates
 
     Object.entries(grouped).forEach(([folder, requests], index) => {
-      const seqNum = String(index + 1).padStart(2, '0');
+      const seqNum = String(index + 1).padStart(2, "0");
       const varName = `TS${seqNum}`;
       const originalName = folder || `Transaction_${index + 1}`;
 
       // Extract last segment of the folder path as the short transaction name
-      const segments = originalName.split('/');
+      const segments = originalName.split("/");
       let shortName = segments[segments.length - 1].trim();
 
       // Handle duplicates by appending _1, _2, etc.
@@ -1152,17 +1308,23 @@ ${jwtRefreshBlock}
         shortName = `${shortName}_${count}`;
       }
 
-      transactionMapping.set(folder, { varName: varName, shortName: shortName, originalName: originalName });
-      transactionDeclarations.push(`let ${varName} = new load.Transaction("${shortName}");`);
+      transactionMapping.set(folder, {
+        varName: varName,
+        shortName: shortName,
+        originalName: originalName,
+      });
+      transactionDeclarations.push(
+        `let ${varName} = new load.Transaction("${shortName}");`,
+      );
     });
 
     // Add transaction declarations
     if (transactionDeclarations.length > 0) {
-      code += `\n    ${this.generateComment('Transaction declarations')}`;
-      transactionDeclarations.forEach(decl => {
+      code += `\n    ${this.generateComment("Transaction declarations")}`;
+      transactionDeclarations.forEach((decl) => {
         code += `\n    ${decl}`;
       });
-      code += '\n';
+      code += "\n";
     }
 
     // Now generate the actual requests with transaction start/stop
@@ -1182,8 +1344,9 @@ ${jwtRefreshBlock}
 
         // Check if this request has validation extractors
         const customScripts = this.customScripts.get(request.name);
-        const hasValidation = customScripts?.test?.extractors?.some(e =>
-          e.extractorType === 'textcheck' || e.extractorType === 'validation'
+        const hasValidation = customScripts?.test?.extractors?.some(
+          (e) =>
+            e.extractorType === "textcheck" || e.extractorType === "validation",
         );
 
         // Add conditional transaction status check for critical requests (login, auth, etc.)
@@ -1201,8 +1364,11 @@ ${jwtRefreshBlock}
 
           // Check for validation extractors
           if (hasValidation) {
-            customScripts.test.extractors.forEach(extractor => {
-              if (extractor.extractorType === 'textcheck' || extractor.extractorType === 'validation') {
+            customScripts.test.extractors.forEach((extractor) => {
+              if (
+                extractor.extractorType === "textcheck" ||
+                extractor.extractorType === "validation"
+              ) {
                 code += `\n    if (!${respVar}.extractors.${extractor.name}) {`;
                 code += `\n        load.log("${request.name} validation failed", load.LogLevel.error);`;
                 code += `\n        ${safeName}.stop(load.TransactionStatus.Failed);`;
@@ -1241,13 +1407,13 @@ ${jwtRefreshBlock}
     const nameLower = request.name.toLowerCase();
 
     return (
-      urlLower.includes('/login') ||
-      urlLower.includes('/auth') ||
-      urlLower.includes('/token') ||
-      urlLower.includes('/session') ||
-      nameLower.includes('login') ||
-      nameLower.includes('auth') ||
-      nameLower.includes('token')
+      urlLower.includes("/login") ||
+      urlLower.includes("/auth") ||
+      urlLower.includes("/token") ||
+      urlLower.includes("/session") ||
+      nameLower.includes("login") ||
+      nameLower.includes("auth") ||
+      nameLower.includes("token")
     );
   }
 
@@ -1255,11 +1421,11 @@ ${jwtRefreshBlock}
    * Generate sequential actions without grouping
    */
   generateSequentialActions() {
-    let code = '';
+    let code = "";
 
     // Transactions already declared at module level via requestTxMap — only start/stop here
     this.requests.forEach((request, index) => {
-      const tx    = this.requestTxMap.get(request.name);
+      const tx = this.requestTxMap.get(request.name);
       const txVar = tx ? tx.txVar : null;
 
       if (txVar) code += `\n    ${txVar}.start();`;
@@ -1280,14 +1446,14 @@ ${jwtRefreshBlock}
    * Returns { code, responseVar } so callers can reference the response variable.
    */
   generateRequestCode(request, indentLevel = 1) {
-    let code = '';
+    let code = "";
 
     // Add comment
     if (this.options.addComments) {
       code += `\n${this.indent(`// ${request.name}`, indentLevel)}`;
       if (request.description) {
         // Handle multi-line descriptions by commenting each line
-        const descriptionLines = request.description.split('\n');
+        const descriptionLines = request.description.split("\n");
         descriptionLines.forEach((line) => {
           code += `\n${this.indent(`// ${line}`, indentLevel)}`;
         });
@@ -1297,7 +1463,7 @@ ${jwtRefreshBlock}
     // Check for correlation dependencies
     const dependencies = this.getCorrelationDependencies(request);
     if (dependencies.length > 0 && this.options.addComments) {
-      code += `\n${this.indent(`// Depends on: ${dependencies.join(', ')}`, indentLevel)}`;
+      code += `\n${this.indent(`// Depends on: ${dependencies.join(", ")}`, indentLevel)}`;
     }
 
     // NOTE: Pre-request and test scripts are intentionally NOT emitted here.
@@ -1319,7 +1485,7 @@ ${jwtRefreshBlock}
     const options = this.generateRequestOptions(request);
 
     // Sequential response variable: webResponse_01, webResponse_02, ...
-    const seqNum = String(this.requestIdCounter).padStart(2, '0');
+    const seqNum = String(this.requestIdCounter).padStart(2, "0");
     const responseVar = `webResponse_${seqNum}`;
 
     code += `\n${this.indent(`const ${responseVar} = new load.WebRequest(${options}).sendSync();`, indentLevel)}`;
@@ -1331,7 +1497,7 @@ ${jwtRefreshBlock}
     const produces = this.getProducedCorrelations(request);
     if (produces.length > 0) {
       code += `\n`;
-      produces.forEach(corr => {
+      produces.forEach((corr) => {
         // Sanitize name for use as JS identifier — correlation names can contain hyphens (e.g. "my-token")
         const safeCorrName = this.sanitizeVarName(corr.name);
         // Extractor registered as safeCorrName AND accessed with same name — must be identical
@@ -1353,10 +1519,13 @@ ${jwtRefreshBlock}
    * Used to decide whether to emit a per-request var generation line before this request.
    */
   requestUsesVar(request, varName) {
-    const pattern = new RegExp(`\\{\\{\\s*${varName}\\s*\\}\\}|\\$\\{[^}]*${varName}[^}]*\\}`);
-    const url = typeof request.url === 'string' ? request.url : (request.url?.raw || '');
+    const pattern = new RegExp(
+      `\\{\\{\\s*${varName}\\s*\\}\\}|\\$\\{[^}]*${varName}[^}]*\\}`,
+    );
+    const url =
+      typeof request.url === "string" ? request.url : request.url?.raw || "";
     if (pattern.test(url)) return true;
-    if (request.headers?.some(h => pattern.test(h.value || ''))) return true;
+    if (request.headers?.some((h) => pattern.test(h.value || ""))) return true;
     if (request.body?.raw && pattern.test(request.body.raw)) return true;
     return false;
   }
@@ -1367,11 +1536,16 @@ ${jwtRefreshBlock}
    */
   perRequestGenExpression(generationType) {
     switch (generationType) {
-      case 'uuid':      return 'crypto.randomUUID()';
-      case 'nonce':     return "require('crypto').randomBytes(16).toString('hex')";
-      case 'random':    return "Math.random().toString(36).substring(2)";
-      case 'timestamp': return "Date.now().toString()";
-      default:          return 'crypto.randomUUID()';
+      case "uuid":
+        return "crypto.randomUUID()";
+      case "nonce":
+        return "require('crypto').randomBytes(16).toString('hex')";
+      case "random":
+        return "Math.random().toString(36).substring(2)";
+      case "timestamp":
+        return "Date.now().toString()";
+      default:
+        return "crypto.randomUUID()";
     }
   }
 
@@ -1382,7 +1556,7 @@ ${jwtRefreshBlock}
     const options = {
       id: ++this.requestIdCounter,
       url: this.replaceParameters(this.getBaseUrl(request.url)),
-      method: request.method
+      method: request.method,
     };
 
     // Add headers only if there are any
@@ -1398,7 +1572,7 @@ ${jwtRefreshBlock}
     }
 
     // Add body if applicable
-    if (['POST', 'PUT', 'PATCH'].includes(request.method) && request.body) {
+    if (["POST", "PUT", "PATCH"].includes(request.method) && request.body) {
       const body = this.generateBody(request.body, request.name);
       if (body) {
         options.body = body;
@@ -1430,7 +1604,7 @@ ${jwtRefreshBlock}
    */
   getBaseUrl(url) {
     // Don't use new URL() — it encodes {{var}} to %7B%7Bvar%7D%7D
-    const queryStart = url.indexOf('?');
+    const queryStart = url.indexOf("?");
     return queryStart === -1 ? url : url.substring(0, queryStart);
   }
 
@@ -1439,17 +1613,17 @@ ${jwtRefreshBlock}
    * Uses manual parsing to preserve {{variables}} and special characters
    */
   extractQueryString(url) {
-    const queryStart = url.indexOf('?');
+    const queryStart = url.indexOf("?");
     if (queryStart === -1) return null;
 
     const queryString = url.substring(queryStart + 1);
     const params = {};
-    queryString.split('&').forEach(pair => {
-      const eqIndex = pair.indexOf('=');
+    queryString.split("&").forEach((pair) => {
+      const eqIndex = pair.indexOf("=");
       if (eqIndex === -1) {
         // Key with no value
         if (pair) {
-          params[pair] = this.replaceParameters('');
+          params[pair] = this.replaceParameters("");
         }
       } else {
         const key = pair.substring(0, eqIndex);
@@ -1476,17 +1650,29 @@ ${jwtRefreshBlock}
     const headers = {};
 
     // Determine which header keys are already in global defaults — skip those
-    const globalKeys = new Set([
-      'accept-encoding', 'accept-language', 'user-agent',
-      ...(this._authGlobalHeaders ? Array.from(this._authGlobalHeaders.keys()) : []),
-      ...(this._staticGlobalHeaders ? Array.from(this._staticGlobalHeaders.keys()) : [])
-    ].map(k => k.toLowerCase()));
+    const globalKeys = new Set(
+      [
+        "accept-encoding",
+        "accept-language",
+        "user-agent",
+        ...(this._authGlobalHeaders
+          ? Array.from(this._authGlobalHeaders.keys())
+          : []),
+        ...(this._staticGlobalHeaders
+          ? Array.from(this._staticGlobalHeaders.keys())
+          : []),
+      ].map((k) => k.toLowerCase()),
+    );
 
     // Build headers from explicit headers array — only non-global ones
-    if (request.headers && Array.isArray(request.headers) && request.headers.length > 0) {
+    if (
+      request.headers &&
+      Array.isArray(request.headers) &&
+      request.headers.length > 0
+    ) {
       request.headers
-        .filter(h => !h.disabled && h.key && h.value)
-        .forEach(h => {
+        .filter((h) => !h.disabled && h.key && h.value)
+        .forEach((h) => {
           // Skip headers already handled by global defaults (case-insensitive)
           if (globalKeys.has(h.key.toLowerCase())) return;
           headers[h.key] = this.replaceParameters(h.value);
@@ -1495,13 +1681,15 @@ ${jwtRefreshBlock}
 
     // Inject auth header from auth section ONLY if Authorization is NOT already explicit.
     // This prevents duplication when auth section and headers both define Authorization.
-    const hasExplicitAuthHeader = Object.keys(headers)
-      .some(k => k.toLowerCase() === 'authorization');
+    const hasExplicitAuthHeader = Object.keys(headers).some(
+      (k) => k.toLowerCase() === "authorization",
+    );
 
     if (!hasExplicitAuthHeader) {
       const authConfig = this.findAuthConfig(request);
       if (authConfig) {
-        const authHeader = this.authHandler.generateAuthHeaderInjection(authConfig);
+        const authHeader =
+          this.authHandler.generateAuthHeaderInjection(authConfig);
         if (authHeader) {
           // authHeader format: '"Authorization": `Bearer ${load.global.token}`'
           // Strip outer backticks if present — formatOptionsObject re-wraps with backticks
@@ -1509,7 +1697,8 @@ ${jwtRefreshBlock}
           const match = authHeader.match(/"([^"]+)":\s*(.+)/);
           if (match) {
             let val = match[2].trim();
-            if (val.startsWith('`') && val.endsWith('`')) val = val.slice(1, -1);
+            if (val.startsWith("`") && val.endsWith("`"))
+              val = val.slice(1, -1);
             headers[match[1]] = val;
           }
         }
@@ -1526,11 +1715,15 @@ ${jwtRefreshBlock}
     if (!body) return null;
 
     switch (body.mode) {
-      case 'raw':
+      case "raw":
         try {
           const jsonBody = JSON.parse(body.raw);
           // Replace large base64 values with load.global references before parameter replacement
-          const processedBody = this._replaceLargeBase64InObject(jsonBody, requestName, '');
+          const processedBody = this._replaceLargeBase64InObject(
+            jsonBody,
+            requestName,
+            "",
+          );
           return this.replaceParametersInObject(processedBody);
         } catch (e) {
           // Not JSON — check if the entire raw body is a large base64 value
@@ -1543,18 +1736,18 @@ ${jwtRefreshBlock}
           return this.replaceParameters(body.raw);
         }
 
-      case 'urlencoded':
+      case "urlencoded":
         const formData = {};
         body.urlencoded
-          .filter(item => !item.disabled)
-          .forEach(item => {
+          .filter((item) => !item.disabled)
+          .forEach((item) => {
             formData[item.key] = this.replaceParameters(item.value);
           });
         return formData;
 
-      case 'formdata':
+      case "formdata":
         // For multipart, return special indicator
-        return '{{MULTIPART}}';
+        return "{{MULTIPART}}";
 
       default:
         return body.raw || null;
@@ -1566,7 +1759,7 @@ ${jwtRefreshBlock}
    * with load.global.varName references (as special marker strings)
    */
   _replaceLargeBase64InObject(obj, requestName, currentPath) {
-    if (typeof obj === 'string') {
+    if (typeof obj === "string") {
       const indexKey = `${requestName}::${currentPath}`;
       if (this.largeValueIndex.has(indexKey)) {
         const hash = this.largeValueIndex.get(indexKey);
@@ -1578,14 +1771,22 @@ ${jwtRefreshBlock}
     }
     if (Array.isArray(obj)) {
       return obj.map((item, index) => {
-        return this._replaceLargeBase64InObject(item, requestName, `${currentPath}[${index}]`);
+        return this._replaceLargeBase64InObject(
+          item,
+          requestName,
+          `${currentPath}[${index}]`,
+        );
       });
     }
-    if (typeof obj === 'object' && obj !== null) {
+    if (typeof obj === "object" && obj !== null) {
       const result = {};
       Object.entries(obj).forEach(([key, value]) => {
         const path = currentPath ? `${currentPath}.${key}` : key;
-        result[key] = this._replaceLargeBase64InObject(value, requestName, path);
+        result[key] = this._replaceLargeBase64InObject(
+          value,
+          requestName,
+          path,
+        );
       });
       return result;
     }
@@ -1601,12 +1802,13 @@ ${jwtRefreshBlock}
 
     // Find correlations this request produces (deduplicate by name).
     // Use sanitized name so the extractor key and the load.global assignment are consistent.
-    this.correlations.forEach(corr => {
+    this.correlations.forEach((corr) => {
       if (corr.producerRequest === request.name && !seenNames.has(corr.name)) {
         seenNames.add(corr.name);
         // Build a sanitized copy — the extractor name in DevWeb must be a valid JS key
         const sanitized = { ...corr, name: this.sanitizeVarName(corr.name) };
-        const extractorCode = this.correlationDetector.generateExtractor(sanitized);
+        const extractorCode =
+          this.correlationDetector.generateExtractor(sanitized);
         extractors.push(extractorCode);
       }
     });
@@ -1614,31 +1816,33 @@ ${jwtRefreshBlock}
     // Add extractors from custom test scripts (deduplicate by name)
     const customScripts = this.customScripts.get(request.name);
     if (customScripts?.test?.extractors) {
-      customScripts.test.extractors.forEach(extractor => {
+      customScripts.test.extractors.forEach((extractor) => {
         if (!seenNames.has(extractor.name)) {
           seenNames.add(extractor.name);
-          const extractorCode = this.correlationDetector.generateExtractor(extractor);
+          const extractorCode =
+            this.correlationDetector.generateExtractor(extractor);
           extractors.push(extractorCode);
         }
       });
     }
 
     // Add status code validation extractor if test script has assertions
-    if (customScripts?.test?.assertions && customScripts.test.assertions.length > 0) {
-      // Check for status code assertions
-      const statusAssertion = customScripts.test.assertions.find(a =>
-        a.toLowerCase().includes('status') || a.toLowerCase().includes('code')
-      );
-      if (statusAssertion) {
-        // Add TextCheckExtractor for success validation
-        const textCheck = this.correlationDetector.createTextCheckExtractor(
-          'validationCheck',
-          'success',
-          { scope: 'load.ExtractorScope.Body', failOn: false }
-        );
-        extractors.push(this.correlationDetector.generateExtractor(textCheck));
-      }
-    }
+    //Disabled: Status validation extractors are not needed
+    // if (customScripts?.test?.assertions && customScripts.test.assertions.length > 0) {
+    //   // Check for status code assertions
+    //   const statusAssertion = customScripts.test.assertions.find(a =>
+    //     a.toLowerCase().includes('status') || a.toLowerCase().includes('code')
+    //   );
+    //   if (statusAssertion) {
+    //     // Add TextCheckExtractor for success validation
+    //     const textCheck = this.correlationDetector.createTextCheckExtractor(
+    //       'validationCheck',
+    //       'success',
+    //       { scope: 'load.ExtractorScope.Body', failOn: false }
+    //     );
+    //     extractors.push(this.correlationDetector.generateExtractor(textCheck));
+    //   }
+    // }
 
     return extractors;
   }
@@ -1651,13 +1855,13 @@ ${jwtRefreshBlock}
    * - Unknown variables → kept as {{varName}} for manual review
    */
   replaceParameters(str) {
-    if (!str || typeof str !== 'string') return str;
+    if (!str || typeof str !== "string") return str;
 
     return str.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
       const trimmedName = varName.trim();
 
       // Postman built-in dynamic variables ($randomXxx, $guid, $timestamp)
-      if (trimmedName.startsWith('$')) {
+      if (trimmedName.startsWith("$")) {
         return this.resolvePostmanDynamicVar(trimmedName);
       }
 
@@ -1681,14 +1885,16 @@ ${jwtRefreshBlock}
       // Variable exists in map but wasn't classified (parameterization disabled)
       if (this.variableMap.has(trimmedName)) {
         const value = this.variableMap.get(trimmedName);
-        if (value !== '' && value !== null && value !== undefined) {
+        if (value !== "" && value !== null && value !== undefined) {
           return String(value);
         }
         return match; // Keep as-is for manual review
       }
 
       // Not found — keep original for manual review
-      console.warn(`Variable "${trimmedName}" not found in collection/environment variables`);
+      console.warn(
+        `Variable "${trimmedName}" not found in collection/environment variables`,
+      );
       return match;
     });
   }
@@ -1698,45 +1904,45 @@ ${jwtRefreshBlock}
    */
   resolvePostmanDynamicVar(varName) {
     const dynamicVars = {
-      '$guid': 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx',
-      '$timestamp': 'Date.now()',
-      '$randomInt': 'Math.floor(Math.random() * 1000)',
-      '$randomCompanyName': 'TestCompany',
-      '$randomFirstName': 'John',
-      '$randomLastName': 'Doe',
-      '$randomEmail': 'test@example.com',
-      '$randomUserName': 'testuser',
-      '$randomPhoneNumber': '555-0100',
-      '$randomCity': 'TestCity',
-      '$randomStreetAddress': '123 Test St',
-      '$randomCountry': 'US',
-      '$randomColor': 'blue',
-      '$randomBoolean': 'true',
-      '$randomUUID': 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+      $guid: "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx",
+      $timestamp: "Date.now()",
+      $randomInt: "Math.floor(Math.random() * 1000)",
+      $randomCompanyName: "TestCompany",
+      $randomFirstName: "John",
+      $randomLastName: "Doe",
+      $randomEmail: "test@example.com",
+      $randomUserName: "testuser",
+      $randomPhoneNumber: "555-0100",
+      $randomCity: "TestCity",
+      $randomStreetAddress: "123 Test St",
+      $randomCountry: "US",
+      $randomColor: "blue",
+      $randomBoolean: "true",
+      $randomUUID: "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx",
     };
-    return dynamicVars[varName] || `TODO_${varName.replace('$', '')}`;
+    return dynamicVars[varName] || `TODO_${varName.replace("$", "")}`;
   }
 
   /**
    * Replace parameters in object
    */
   replaceParametersInObject(obj) {
-    if (typeof obj !== 'object' || obj === null) return obj;
+    if (typeof obj !== "object" || obj === null) return obj;
 
     if (Array.isArray(obj)) {
-      return obj.map(item => this.replaceParametersInObject(item));
+      return obj.map((item) => this.replaceParametersInObject(item));
     }
 
     const result = {};
     Object.entries(obj).forEach(([key, value]) => {
-      if (typeof value === 'string') {
+      if (typeof value === "string") {
         // Skip strings that are already load.global markers (from base64 extraction)
         if (/^\{\{load\.global\..+\}\}$/.test(value)) {
           result[key] = value;
         } else {
           result[key] = this.replaceParameters(value);
         }
-      } else if (typeof value === 'object') {
+      } else if (typeof value === "object") {
         result[key] = this.replaceParametersInObject(value);
       } else {
         result[key] = value;
@@ -1756,24 +1962,27 @@ ${jwtRefreshBlock}
     // Handles pure expressions like "${load.params.var}" and mixed content like
     // "https://${load.params.host}/api/${load.params.id}"
     str = str.replace(/"((?:[^"\\]|\\.)*)"/g, (match, content) => {
-      if (content.includes('${')) {
-        return '`' + content.replace(/\\"/g, '"') + '`';
+      if (content.includes("${")) {
+        return "`" + content.replace(/\\"/g, '"') + "`";
       }
       return match;
     });
 
     // Replace "{{MULTIPART}}" with actual multipart code
-    str = str.replace('"{{MULTIPART}}"', 'new load.MultipartBody([...])');
+    str = str.replace('"{{MULTIPART}}"', "new load.MultipartBody([...])");
 
     // Strip quotes from extractor code (new load.XXXExtractor(...))
     // JSON.stringify escapes inner quotes as \", so match those too, then unescape
-    str = str.replace(/"(new load\.\w+Extractor\((?:[^"\\]|\\.)*\))"/g, (match, code) => {
-      return code.replace(/\\"/g, '"');
-    });
+    str = str.replace(
+      /"(new load\.\w+Extractor\((?:[^"\\]|\\.)*\))"/g,
+      (match, code) => {
+        return code.replace(/\\"/g, '"');
+      },
+    );
 
     // Only strip quotes for known code patterns (load.*, new load.*)
     // Leave all other "{{...}}" as quoted strings (unresolvable variable references)
-    str = str.replace(/"{{((?:load\.|new load\.)[^}]+)}}"/g, '$1');
+    str = str.replace(/"{{((?:load\.|new load\.)[^}]+)}}"/g, "$1");
 
     return str;
   }
@@ -1783,15 +1992,15 @@ ${jwtRefreshBlock}
    */
   groupRequestsByFolder() {
     const grouped = {};
-    
-    this.requests.forEach(request => {
-      const folder = request.folder || 'API Requests';
+
+    this.requests.forEach((request) => {
+      const folder = request.folder || "API Requests";
       if (!grouped[folder]) {
         grouped[folder] = [];
       }
       grouped[folder].push(request);
     });
-    
+
     return grouped;
   }
 
@@ -1800,8 +2009,8 @@ ${jwtRefreshBlock}
    */
   getCorrelationDependencies(request) {
     return this.correlations
-      .filter(corr => corr.consumerRequest === request.name)
-      .map(corr => corr.producerRequest);
+      .filter((corr) => corr.consumerRequest === request.name)
+      .map((corr) => corr.producerRequest);
   }
 
   /**
@@ -1809,7 +2018,7 @@ ${jwtRefreshBlock}
    */
   getProducedCorrelations(request) {
     const seen = new Set();
-    return this.correlations.filter(corr => {
+    return this.correlations.filter((corr) => {
       if (corr.producerRequest === request.name && !seen.has(corr.name)) {
         seen.add(corr.name);
         return true;
@@ -1826,7 +2035,7 @@ ${jwtRefreshBlock}
     if (request.auth) {
       return this.authHandler.processAuth(request.name, request.auth);
     }
-    
+
     // Fall back to collection-level auth
     return Array.from(this.authConfigs.values())[0] || null;
   }
@@ -1853,18 +2062,21 @@ ${jwtRefreshBlock}
         total: this.requests.length,
         byMethod: this.getRequestsByMethod(),
         byFolder: Object.keys(this.groupRequestsByFolder()).length,
-        withCustomScripts: this.customScripts.size
+        withCustomScripts: this.customScripts.size,
       },
       correlations: this.correlationDetector.getCorrelationReport(),
       parameters: this.paramEngine.getReport(),
       authentication: this.authHandler.getAuthSummary(),
       customScripts: {
         total: this.customScripts.size,
-        preRequest: Array.from(this.customScripts.values()).filter(s => s.preRequest).length,
-        test: Array.from(this.customScripts.values()).filter(s => s.test).length,
-        warnings: this.scriptParser.getAllWarnings()
+        preRequest: Array.from(this.customScripts.values()).filter(
+          (s) => s.preRequest,
+        ).length,
+        test: Array.from(this.customScripts.values()).filter((s) => s.test)
+          .length,
+        warnings: this.scriptParser.getAllWarnings(),
       },
-      options: this.options
+      options: this.options,
     };
   }
 
@@ -1873,7 +2085,7 @@ ${jwtRefreshBlock}
    */
   getRequestsByMethod() {
     const byMethod = {};
-    this.requests.forEach(req => {
+    this.requests.forEach((req) => {
       byMethod[req.method] = (byMethod[req.method] || 0) + 1;
     });
     return byMethod;
@@ -1884,9 +2096,9 @@ ${jwtRefreshBlock}
    */
   sanitizeName(name) {
     return name
-      .replace(/[^a-zA-Z0-9_]/g, '_')
-      .replace(/^[0-9]/, '_$&')
-      .replace(/_+/g, '_');
+      .replace(/[^a-zA-Z0-9_]/g, "_")
+      .replace(/^[0-9]/, "_$&")
+      .replace(/_+/g, "_");
   }
 
   /**
@@ -1895,16 +2107,16 @@ ${jwtRefreshBlock}
   generateTransactionVarName(transactionName) {
     // Remove common prefixes/suffixes
     let name = transactionName
-      .replace(/^(Transaction|Trans|T)[-_\s]*/i, '')
-      .replace(/[-_\s]*(Transaction|Trans)$/i, '');
+      .replace(/^(Transaction|Trans|T)[-_\s]*/i, "")
+      .replace(/[-_\s]*(Transaction|Trans)$/i, "");
 
     // Convert to camelCase
     name = name
       .split(/[\s\-_\/]+/)
       .map((word, index) => {
         // Remove special characters
-        word = word.replace(/[^a-zA-Z0-9]/g, '');
-        if (word.length === 0) return '';
+        word = word.replace(/[^a-zA-Z0-9]/g, "");
+        if (word.length === 0) return "";
 
         // First word lowercase, rest capitalize first letter
         if (index === 0) {
@@ -1912,14 +2124,14 @@ ${jwtRefreshBlock}
         }
         return word.charAt(0).toUpperCase() + word.slice(1);
       })
-      .join('');
+      .join("");
 
     // Ensure it's a valid JS identifier
     if (!name || /^[0-9]/.test(name)) {
-      name = 't' + name;
+      name = "t" + name;
     }
 
-    return name || 'transaction';
+    return name || "transaction";
   }
 
   /**
@@ -1933,8 +2145,11 @@ ${jwtRefreshBlock}
    * Indent text
    */
   indent(text, level = 1) {
-    const spaces = '    '.repeat(level);
-    return text.split('\n').map(line => spaces + line).join('\n');
+    const spaces = "    ".repeat(level);
+    return text
+      .split("\n")
+      .map((line) => spaces + line)
+      .join("\n");
   }
 }
 
