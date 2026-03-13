@@ -1109,22 +1109,31 @@ ${jwtSetup}${autoHeaderBlock}
     ).join('');
   }
 
+  /**
+   * Normalize auth section lookup — handles both formats:
+   *   Postman array: auth.bearer = [{ key: 'token', value: '...' }, ...]
+   *   Bruno object:  auth.bearer = { token: '...' }
+   */
+  getAuthValue(authSection, key) {
+    if (!authSection) return undefined;
+    if (Array.isArray(authSection)) return authSection.find(e => e.key === key)?.value;
+    return authSection[key];
+  }
+
   getAuthHeader(request) {
     const auth = request.auth || this.collection.auth;
     if (!auth || !auth.type || auth.type === 'noauth') return null;
 
     switch (auth.type) {
       case 'bearer': {
-        const tokenEntry = (auth.bearer || []).find(e => e.key === 'token');
-        if (tokenEntry) {
-          return { key: 'Authorization', value: `Bearer ${tokenEntry.value}` };
-        }
+        const token = this.getAuthValue(auth.bearer, 'token');
+        if (token) return { key: 'Authorization', value: `Bearer ${token}` };
         break;
       }
       case 'apikey': {
-        const keyName = (auth.apikey || []).find(e => e.key === 'key')?.value;
-        const keyVal = (auth.apikey || []).find(e => e.key === 'value')?.value;
-        const placement = (auth.apikey || []).find(e => e.key === 'in')?.value;
+        const keyName   = this.getAuthValue(auth.apikey, 'key');
+        const keyVal    = this.getAuthValue(auth.apikey, 'value');
+        const placement = this.getAuthValue(auth.apikey, 'in');
         if (keyName && keyVal && placement !== 'query') {
           return { key: keyName, value: keyVal };
         }
