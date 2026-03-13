@@ -444,7 +444,7 @@ async function doConvert() {
   fd.append('addComments',         document.getElementById('opt-cmt').checked);
 
   try {
-    const r = await fetch('/convert', { method:'POST', body:fd });
+    const r = await fetch('convert', { method:'POST', body:fd });
     const d = await r.json();
     clearInterval(tick); pf.style.width='100%';
     setTimeout(() => { pw.style.display='none'; resetBtn(); showResult(r.ok?d:null, r.ok?null:d.error); }, 400);
