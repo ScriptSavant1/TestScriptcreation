@@ -110,7 +110,7 @@ class WebServer {
 
           res.json({
             success:     true,
-            downloadUrl: `/download/${token}`,
+            downloadUrl: `download/${token}`,
             analysis:    results.analysis,
             protocol:    options.protocol,
             mode:        options.mode
