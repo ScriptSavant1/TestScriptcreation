@@ -4,6 +4,45 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [2.7.0] - 2026-03-13
+
+### Added — Web Server: No-Disk Privacy Model
+
+All conversion work now happens entirely in RAM — no files are written to disk on the server.
+
+- **`multer.memoryStorage()`** — uploaded collection and environment files stay in RAM only.
+- **`src/lib/memoryFsInterceptor.js`** — new module using `AsyncLocalStorage` to intercept all
+  `require('fs')` calls (sync + async) across the entire codebase. Inside each web request,
+  `writeFile`, `writeFileSync`, `mkdir`, `mkdirSync`, `copyFileSync` are captured in a
+  per-request `Map<path, content>`. CLI usage is completely unaffected.
+- **ZIP streamed directly from memory** — `archiver` pipes the Map entries straight into the
+  HTTP response. No ZIP file is ever created on disk.
+- **No `Content-Length` header** — chunked transfer encoding bypasses corporate proxy
+  size-based download restrictions.
+- **`Content-Type: application/octet-stream`** — avoids zip-specific proxy/firewall filters.
+- Download tokens are single-use with a 5-minute TTL.
+
+### Changed — Generated Scripts: All Log Statements Removed
+
+All `load.log()` calls removed from DevWeb `main.js`:
+- Lifecycle: `load.log('Initializing Vuser ...')`, `load.log("✓ Initialization complete")`,
+  `load.log('Action iteration ...')`, `load.log("✓ Action complete")`,
+  `load.log('Finalizing Vuser ...')`, `load.log("✓ Finalization complete")`
+- JWT: `load.log('JWT token generated')`, `load.log('JWT token refreshed')`
+- Error/validation: `load.log(\`${name} failed with status ...\`, load.LogLevel.error)`,
+  `load.log("${name} validation failed", load.LogLevel.error)`
+- Per-request: `load.log(\`${name} - Status: ${response.status}\`, load.LogLevel.info/debug)`
+
+All `lr_output_message()` calls removed from VuGen scripts:
+- `vuser_init.c`: startup log, parameters loaded log, base URL log, JWT token generated log
+- `vuser_end.c`: finished log
+- `Action.c`: per-request `"${name} - completed"` log
+
+### Changed
+- `package.json` version: `2.6.1` → `2.7.0`
+
+---
+
 ## [2.6.1] - 2026-03-11
 
 ### Changed — DevWeb: Transaction declarations at module level (before initialize)
