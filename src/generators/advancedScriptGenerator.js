@@ -945,12 +945,10 @@ ${
       ? `
     load.global.jwt_token = getJWTToken(load.params);
     load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000); // refresh at 9 min
-    load.log('JWT token generated', load.LogLevel.info);
 `
       : "";
 
     let code = `load.initialize('Initialize', async function() {
-    load.log('Initializing Vuser ' + load.config.user.userId, load.LogLevel.${this.options.logLevel});
 ${jwtBlock}
     // Dynamic variables — populated at runtime from API responses
     ${this.generateGlobalVariablesInit()}
@@ -981,8 +979,7 @@ ${jwtBlock}
       code += this.generateCollectionAuthBlock(collAuth);
     }
 
-    code += `\n    load.log("✓ Initialization complete", load.LogLevel.info);
-});`;
+    code += `\n});`;
 
     return code;
   }
@@ -1203,8 +1200,7 @@ ${jwtBlock}
     // Auto-refresh JWT token if expired (for long-running tests)
     if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
         load.global.jwt_token = getJWTToken(load.params);
-        load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
-        load.log('JWT token refreshed', load.LogLevel.info);${authHeaderUpdate}
+        load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);${authHeaderUpdate}
     }
 `
       : authHeaderUpdate
@@ -1216,7 +1212,6 @@ ${jwtBlock}
         : "";
 
     let code = `load.action('Action', async function() {
-    load.log('Action iteration ' + load.config.runtime.iteration, load.LogLevel.info);
 ${jwtRefreshBlock}
 `;
 
@@ -1226,8 +1221,7 @@ ${jwtRefreshBlock}
       code += this.generateSequentialActions();
     }
 
-    code += `\n    load.log("✓ Action complete", load.LogLevel.info);
-});`;
+    code += `\n});`;
 
     return code;
   }
@@ -1357,7 +1351,6 @@ ${jwtRefreshBlock}
           code += `\n`;
           code += `\n    // Check validation for critical request`;
           code += `\n    if (${respVar}.status !== 200 && ${respVar}.status !== 201) {`;
-          code += `\n        load.log(\`${request.name} failed with status \${${respVar}.status}\`, load.LogLevel.error);`;
           code += `\n        ${safeName}.stop(load.TransactionStatus.Failed);`;
           code += `\n        return false; // Abort script execution`;
           code += `\n    }`;
@@ -1370,7 +1363,6 @@ ${jwtRefreshBlock}
                 extractor.extractorType === "validation"
               ) {
                 code += `\n    if (!${respVar}.extractors.${extractor.name}) {`;
-                code += `\n        load.log("${request.name} validation failed", load.LogLevel.error);`;
                 code += `\n        ${safeName}.stop(load.TransactionStatus.Failed);`;
                 code += `\n        return false;`;
                 code += `\n    }`;
@@ -1489,9 +1481,6 @@ ${jwtRefreshBlock}
     const responseVar = `webResponse_${seqNum}`;
 
     code += `\n${this.indent(`const ${responseVar} = new load.WebRequest(${options}).sendSync();`, indentLevel)}`;
-
-    // Add response logging
-    code += `\n${this.indent(`load.log(\`${request.name} - Status: \${${responseVar}.status}\`, load.LogLevel.${this.options.logLevel});`, indentLevel)}`;
 
     // Emit correlation assignments — values extracted from this response
     const produces = this.getProducedCorrelations(request);
@@ -2045,11 +2034,7 @@ ${jwtRefreshBlock}
    */
   generateFinalize() {
     return `load.finalize('Finalize', async function() {
-    load.log('Finalizing Vuser ' + load.config.user.userId, load.LogLevel.info);
-    
     // Cleanup code here if needed
-    
-    load.log("✓ Finalization complete", load.LogLevel.info);
 });`;
   }
 

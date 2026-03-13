@@ -575,18 +575,6 @@ static void gen_hex64(const char *param_name) {
   generateVuserInitC() {
     const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
 
-    // Pick the first URL-like parameter to log at startup (helps confirm config loaded)
-    let urlParamLog = '';
-    for (const [name] of this.parameters.entries()) {
-      if (/^(url|baseUrl|base_url|host|endpoint|server)$/i.test(name)) {
-        urlParamLog = `\n    lr_output_message("  Base URL : %s", lr_eval_string("{${name}}"));`;
-        break;
-      }
-    }
-
-    const paramCount  = this.parameters.size;
-    const corrCount   = this.dynamicVarNames.size;
-
     // JWT vars detected — build active validation block for each JWT variable.
     // JWT note: web_js_run() in Action() handles JWT generation via jsrsasign.js.
     // No pre-generation or validation needed in vuser_init.c.
@@ -611,11 +599,6 @@ static void gen_hex64(const char *param_name) {
 
 vuser_init()
 {
-    int vusr_id, scid;
-    char *vusr_group;
-    lr_whoami(&vusr_id, &vusr_group, &scid);
-    lr_output_message("[init] Vuser %d starting — ${scriptName}", vusr_id);
-    lr_output_message("  Parameters loaded : ${paramCount} static, ${corrCount} correlation target(s)");${urlParamLog}
 ${jwtNote}
     /* ------------------------------------------------------------------
      * One-time authentication example (OAuth2 client_credentials).
@@ -666,10 +649,6 @@ ${jwtNote}
 
 vuser_end()
 {
-    int vusr_id, scid;
-    char *vusr_group;
-    lr_whoami(&vusr_id, &vusr_group, &scid);
-    lr_output_message("[end] Vuser %d finished — ${scriptName}", vusr_id);
 
     /* ------------------------------------------------------------------
      * Logout example — uncomment and adapt the URL as needed.
@@ -773,8 +752,6 @@ vuser_end()
         "File=jsrsasign.js",
         ENDITEM,
         LAST);
-    lr_output_message("[init] JWT token generated (%d chars)", (int)strlen(lr_eval_string("{_jwt_token}")));
-
 ` : '';
 
     // Global persistent headers — applied to ALL subsequent requests automatically.
@@ -917,7 +894,6 @@ ${jwtSetup}${autoHeaderBlock}
    *   2. web_reg_save_param_* calls (correlation registrations) — BEFORE the request
    *   3. web_add_header() calls — immediately before the request
    *   4. web_url() or web_custom_request()
-   *   5. lr_output_message() log
    */
   generateRequestBlock(request, indentLevel = 1) {
     const indent = '    '.repeat(indentLevel);
@@ -938,9 +914,6 @@ ${jwtSetup}${autoHeaderBlock}
 
     // 4. Web function
     code += this.generateWebFunction(request, indent);
-
-    // 5. Log
-    code += `${indent}lr_output_message("${this.sanitizeCName(request.name)} - completed");\n`;
 
     return code;
   }
