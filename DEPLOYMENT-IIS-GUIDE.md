@@ -1,171 +1,128 @@
 # Bruno DevWeb Converter — IIS Deployment Guide
 ## Server: devecpvm026127
-## URL: https://loadrunner.webdev.banksvcs.net/converter/
+## Final URL: https://loadrunner.webdev.banksvcs.net/converter/
 
 ---
 
-## How It Works (Simple Picture)
+## Read This First — Common Confusions
 
-```
-User's Browser
-      │
-      │  https://loadrunner.webdev.banksvcs.net/converter/
-      ▼
-F5 Load Balancer  ──────────────────── (no changes needed here)
-      │
-      ▼
-IIS on devecpvm026127
-      │
-      │  iisnode module (runs Node.js inside IIS natively)
-      ▼
-Node.js App  ←──  files in D:\MSINetData\WWW\converter\
-```
+### ✅ "node src/web/server.js keeps running" — THIS IS CORRECT
+A web server is supposed to run forever. It sits and waits for user requests.
+Ctrl+C stops it. When running via IIS (iisnode), you never start it manually — IIS does it automatically.
 
-**iisnode** is a free Microsoft module that lets IIS run Node.js apps directly —
-no separate service, no reverse proxy, no proxy settings to enable.
-IIS manages the Node.js process automatically: starts it, restarts it on crash,
-and restarts it after every server reboot.
+### ❌ "npm install --production runs forever" — NO INTERNET ON SERVER
+Do NOT run `npm install` on the server. The server has no internet.
+**Solution: copy the `node_modules` folder directly from your development machine to the server.**
+
+### ✅ Concurrent users — already handled
+The app is built with Node.js async/await and per-request memory isolation.
+It handles many users at the same time with no issues.
 
 ---
 
-## Folder Structure We Will Create
+## Architecture
 
 ```
-D:\MSINetData\WWW\converter\        ← App lives here (same as your HTML files)
-    src\
-    devweb-prompts\
-    node_modules\                   ← created by npm install
-    logs\                           ← create this folder manually
-    package.json
-    web.config                      ← we create this
-    DevWebSdk.d.ts
-    jwt-helper.js
-    jsrsasign.js
-    transport.pem
+Users → https://loadrunner.webdev.banksvcs.net/converter/
+            │
+            F5 (no changes needed)
+            │
+            IIS on devecpvm026127
+            │
+            iisnode module (runs Node.js inside IIS)
+            │
+            D:\MSINetData\WWW\converter\src\web\server.js
 ```
 
 ---
 
-## PART A — One-Time Server Setup (do once, never again)
+## What You Need (All One-Time)
 
-> RDP into devecpvm026127 and do all steps on the server itself.
-
----
-
-### A1. Install Node.js
-
-1. Open a browser on the server
-2. Go to: `https://nodejs.org`
-3. Click the **"LTS"** download button (the recommended version)
-4. Run the downloaded installer (e.g., `node-v20.xx.x-x64.msi`)
-5. Click **Next → Next → Next → Install → Finish**
-   (accept all defaults, no changes needed)
-
-**Verify it worked:**
-1. Press `Windows + R`, type `cmd`, press **Enter**
-2. Type: `node --version` and press Enter
-3. You should see something like: `v20.11.1` ✓
+| Requirement | Status |
+|-------------|--------|
+| Node.js installed on server | ✅ Done |
+| iisnode installed on server | ✅ Done |
+| Project files copied to server | ✅ Done |
+| URL Rewrite module | ❓ Check below |
+| node_modules copied from dev machine | ❓ Check below |
+| web.config created | ❓ Check below |
+| IIS Application Pool — No Managed Code | ❓ Most likely missing |
+| Folder permissions for IIS | ❓ Most likely missing |
 
 ---
 
-### A2. Install iisnode
+## STEP 1 — Verify URL Rewrite Module Is Installed
 
-iisnode is a free Microsoft module — it teaches IIS how to run Node.js apps.
+The `web.config` we use needs this module. Without it, IIS gives error 500.19.
 
-1. Open a browser on the server
-2. Go to: `https://github.com/azure/iisnode/releases`
-3. Find the latest release, download: `iisnode-full-v0.2.26-x64.msi`
-   (or whatever the latest version shows)
-4. Run the installer → **Next → Next → Install → Finish**
-5. When asked to restart IIS — click **Yes**
+**How to check:**
+1. Open IIS Manager (`Windows + R` → type `inetmgr` → Enter)
+2. Click the **server name** (top of left panel)
+3. In the middle panel, look for **"URL Rewrite"** icon
+4. If you see it → ✅ installed, skip to Step 2
 
-**Verify it worked:**
-1. Open **IIS Manager** (`Windows + R` → type `inetmgr` → Enter)
-2. Click on the **server name** in the left panel (top level)
-3. In the middle panel, look for an **"iisnode"** icon
-4. If you see it → iisnode is installed ✓
-
----
-
-### A3. Install URL Rewrite Module
-
-This free Microsoft module is needed to route all `/converter/` requests through Node.js.
-
-1. Open a browser on the server
-2. Go to: `https://www.iis.net/downloads/microsoft/url-rewrite`
-3. Click **"Install this extension"**
-4. Follow the prompts → Install → Finish
-
-**Check if already installed:**
-- Open IIS Manager → click server name → look for **"URL Rewrite"** icon in the middle panel
-- If you see it → already installed, skip this step ✓
+**If NOT installed — do this on any machine that has internet, then copy the installer to the server:**
+1. Download: `rewrite_amd64_en-US.msi` from Microsoft
+   (search "IIS URL Rewrite download" — it's a free Microsoft download)
+2. Copy the `.msi` file to the server via `\\devecpvm026127\c$\Temp\`
+3. On the server, run the `.msi` → Next → Accept → Install → Finish
+4. No server restart needed
 
 ---
 
-## PART B — Deploy the Application
+## STEP 2 — Copy node_modules From Your Dev Machine
+
+Since the server has no internet, `npm install` won't work.
+You must copy `node_modules` from your development machine.
+
+**On your development machine:**
+1. Open File Explorer
+2. Go to your project folder (e.g., `C:\Workspace\bruno-devweb-converter\`)
+3. You will see a `node_modules` folder there
+
+**Copy to server:**
+1. Open: `\\devecpvm026127\d$\MSINetData\WWW\converter\`
+2. Copy the entire `node_modules` folder into `converter\`
+
+This folder is large (~50,000 files). It may take a few minutes to copy.
+
+**After copying, verify:**
+The folder `D:\MSINetData\WWW\converter\node_modules\` should exist on the server.
 
 ---
 
-### B1. Create the App Folder
+## STEP 3 — Verify All Required Files Are Present
 
-1. Open **File Explorer**
-2. Navigate to: `D:\MSINetData\WWW\`
-3. Create a new folder called: `converter`
-4. Inside `converter`, create a folder called: `logs`
+Open `\\devecpvm026127\d$\MSINetData\WWW\converter\` and confirm these exist:
 
-Result:
 ```
-D:\MSINetData\WWW\converter\
-D:\MSINetData\WWW\converter\logs\
+converter\
+  ├── src\                    ← REQUIRED
+  ├── devweb-prompts\         ← REQUIRED
+  ├── node_modules\           ← REQUIRED (copied in Step 2)
+  ├── package.json            ← REQUIRED
+  ├── web.config              ← REQUIRED (create/replace in Step 4)
+  ├── DevWebSdk.d.ts          ← REQUIRED
+  ├── jwt-helper.js           ← REQUIRED
+  ├── jsrsasign.js            ← REQUIRED
+  ├── transport.pem           ← REQUIRED
+  └── logs\                   ← create this empty folder if missing
 ```
 
 ---
 
-### B2. Copy Application Files
+## STEP 4 — Create the Correct web.config
 
-Copy the following files/folders into `D:\MSINetData\WWW\converter\`:
+**Delete any existing web.config in the `converter` folder first.**
 
-| Copy This | Notes |
-|-----------|-------|
-| `src\` folder | All application code |
-| `devweb-prompts\` folder | Prompt template files |
-| `package.json` | Dependency list |
-| `DevWebSdk.d.ts` | DevWeb type definitions |
-| `jwt-helper.js` | JWT support |
-| `jsrsasign.js` | JWT library |
-| `transport.pem` | JWT certificate |
-
-**Do NOT copy these:**
-- `node_modules\` — we install fresh in next step
-- `output\` — not needed
-- `.git\` — not needed
-- `*.md` files — optional, documentation only
-
----
-
-### B3. Install Dependencies
-
-1. Press `Windows + R`, type `cmd`, press **Enter**
-2. Type the following and press Enter:
-   ```
-   cd D:\MSINetData\WWW\converter
-   ```
-3. Then type and press Enter:
-   ```
-   npm install --production
-   ```
-4. Wait 1–3 minutes while packages download
-5. You will see: `added NNN packages` when done ✓
-6. A `node_modules` folder will appear inside `converter` ✓
-
----
-
-### B4. Create the web.config File
-
-This file tells IIS: *"run server.js with Node.js for all requests"*.
-
-1. Open **Notepad**
-2. Copy and paste exactly this content:
+Then create a new one:
+1. Open **Notepad** on the server
+2. Copy and paste the EXACT content below
+3. **File → Save As**
+4. Navigate to: `D:\MSINetData\WWW\converter\`
+5. File name: `web.config`
+6. **Save as type: All Files (\*.\*)** ← CRITICAL — must not save as `.txt`
+7. Click Save
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -202,172 +159,187 @@ This file tells IIS: *"run server.js with Node.js for all requests"*.
     </security>
 
     <iisnode
+      nodeProcessCommandLine="&quot;C:\Program Files\nodejs\node.exe&quot;"
       watchedFiles="*.js;web.config"
       loggingEnabled="true"
       logDirectory="logs"
-      maxLogFiles="10" />
+      maxLogFiles="10"
+      maxNamedPipeConnectionRetry="100"
+      namedPipeConnectionRetryDelay="250" />
 
   </system.webServer>
 </configuration>
 ```
 
-3. Click **File → Save As**
-4. Navigate to: `D:\MSINetData\WWW\converter\`
-5. In **"File name"** box, type: `web.config`
-6. In **"Save as type"**, select: **All Files (\*.\*)**
-   (IMPORTANT — if you leave it as "Text Documents", it saves as `web.config.txt` which won't work)
-7. Click **Save**
+> **Note on `nodeProcessCommandLine`:** This tells iisnode exactly where Node.js is installed.
+> If Node.js is installed somewhere else, update this path. To find it, open Command Prompt and type:
+> `where node` — it will show the full path.
 
 ---
 
-## PART C — IIS Configuration (Minimal — One Step Only)
+## STEP 5 — Set Up IIS Application and Application Pool
 
-This is the only step that requires IIS Manager, and it takes under 1 minute.
+This is the most critical section. Most iisnode failures are caused by wrong Application Pool settings.
 
-We need to tell IIS that `converter` is an **Application** (not just a folder),
-so iisnode can run inside it.
+### 5A — Create a Dedicated Application Pool
 
-1. Open **IIS Manager** (`Windows + R` → type `inetmgr` → Enter)
-2. In the **left panel**, expand:
-   - **Sites**
-   - Expand your site (e.g., `Default Web Site` or `loadrunner.webdev.banksvcs.net`)
-3. You should see **`converter`** listed under the site
-4. **Right-click** on `converter` → click **"Convert to Application"**
-5. A dialog box opens — leave everything as default
-6. Click **OK**
+We create a SEPARATE application pool for the converter so it cannot affect any existing IIS sites.
 
-The `converter` folder icon will change to show a small gear/application symbol ✓
+1. Open **IIS Manager** (`Windows + R` → `inetmgr` → Enter)
+2. In the left panel, right-click **"Application Pools"**
+3. Click **"Add Application Pool..."**
+4. Fill in:
+   - **Name:** `BrunoConverter`
+   - **.NET CLR Version:** `No Managed Code`  ← **CRITICAL — must be exactly this**
+   - **Managed Pipeline Mode:** `Integrated`
+5. Click **OK**
 
-That's it. IIS Manager is done.
+### 5B — Convert the converter Folder to an Application
+
+1. In IIS Manager, expand the left panel:
+   - **Sites** → your site (e.g. `Default Web Site`)
+2. Find **`converter`** in the list
+3. **Right-click `converter`** → click **"Convert to Application"**
+4. A dialog opens
+5. Click **"Select..."** next to Application Pool
+6. Select **`BrunoConverter`** (the one we just created)  ← **CRITICAL**
+7. Click **OK** → **OK**
+
+The `converter` folder icon should change to show a small blue globe symbol.
 
 ---
 
-## PART D — Test
+## STEP 6 — Set Folder Permissions
 
-1. Open a browser **from any machine** (not just the server)
+IIS runs the Node.js app under the Application Pool identity account.
+This account needs permission to read and execute files in the converter folder.
+
+1. Open File Explorer on the server
+2. Navigate to `D:\MSINetData\WWW\`
+3. Right-click the **`converter`** folder → **Properties**
+4. Click the **Security** tab
+5. Click **Edit...**
+6. Click **Add...**
+7. In the text box, type exactly:
+   ```
+   IIS AppPool\BrunoConverter
+   ```
+8. Click **Check Names** — it should underline/resolve the name ✓
+9. Click **OK**
+10. With `IIS AppPool\BrunoConverter` selected, check these boxes:
+    - ✅ Read & execute
+    - ✅ List folder contents
+    - ✅ Read
+11. Click **Apply** → **OK** → **OK**
+
+---
+
+## STEP 7 — Quick Sanity Check Before Testing
+
+Open Command Prompt on the server and run this:
+
+```cmd
+cd D:\MSINetData\WWW\converter
+node src\web\server.js
+```
+
+You should see something like:
+```
+Bruno DevWeb Converter web server running on port 3000
+Browse to: http://localhost:3000
+```
+
+**If you see this → Node.js and the app are working. Press Ctrl+C to stop.**
+
+**If you see an error like `Cannot find module 'express'`** → `node_modules` is missing or incomplete. Repeat Step 2.
+
+---
+
+## STEP 8 — Test via Browser
+
+1. On any machine (not just the server), open a browser
 2. Go to: `https://loadrunner.webdev.banksvcs.net/converter/`
-3. The Bruno DevWeb Converter page should load ✓
-4. Try converting a collection to verify the full flow works ✓
+3. The converter page should load ✓
 
 ---
 
-## PART E — Verify After Server Restart
+## STEP 9 — Verify After Server Reboot
 
-After the Windows team restarts the server:
-1. Wait 1–2 minutes for IIS to start
-2. Browse to: `https://loadrunner.webdev.banksvcs.net/converter/`
-3. It should load automatically — no manual steps needed ✓
-
-IIS automatically starts Node.js on the first request after reboot.
-
----
-
-## PART F — Updating the Application
-
-When a new version is released:
-
-1. Copy new files to `D:\MSINetData\WWW\converter\` (overwrite existing)
-2. If `package.json` changed:
-   - Open Command Prompt
-   - Run:
-     ```
-     cd D:\MSINetData\WWW\converter
-     npm install --production
-     ```
-3. iisnode automatically detects file changes and restarts Node.js
-4. No IIS restart needed ✓
+After Windows team restarts the server:
+1. Wait 2 minutes for IIS to start
+2. Browse to `https://loadrunner.webdev.banksvcs.net/converter/`
+3. First request may take 3–5 seconds (iisnode starts Node.js on first hit)
+4. It should work automatically — no manual steps ✓
 
 ---
 
 ## Troubleshooting
 
-### Page shows "500 Internal Server Error"
-- Node.js error in the app
-- Check: `D:\MSINetData\WWW\converter\logs\` — open the latest log file
-- Most common cause: `npm install` was not run
+### Error: 500.19 — Cannot read configuration file
+**Cause:** `web.config` has a syntax error, OR URL Rewrite module is not installed.
+**Fix:** Reinstall URL Rewrite module (Step 1). Then recreate `web.config` exactly as shown in Step 4.
 
-### Page shows "404 Not Found"
-- `web.config` is missing or saved as `web.config.txt`
-- OR the "Convert to Application" step (Part C) was not done
+### Error: 500.21 — Handler "iisnode" has bad module "iisnode"
+**Cause:** iisnode module is not installed or not registered in IIS.
+**Fix:** Reinstall iisnode. After install, open IIS Manager and click **Server → Modules** to confirm "iisnode" appears in the list.
 
-### Page shows "500.19 — web.config error"
-- `web.config` content has a typo or formatting issue
-- Recreate the file using the exact content from Part B4
+### Error: 500 — Internal Server Error (iisnode log shows "Cannot find module")
+**Cause:** `node_modules` folder missing or incomplete.
+**Fix:** Copy `node_modules` from dev machine again (Step 2). Make sure the copy completed fully.
 
-### Page shows "500.21 — iisnode handler not found"
-- iisnode module not installed (Part A2 not done)
-- Reinstall iisnode
+### Error: 500 — iisnode log shows "ENOENT" or "spawn error"
+**Cause:** Node.js path in `web.config` is wrong.
+**Fix:** On server, open CMD and type `where node`. Use that path in `nodeProcessCommandLine` in `web.config`.
 
-### URL Rewrite error in web.config
-- URL Rewrite module not installed (Part A3 not done)
-- Install URL Rewrite module
+### Error: 403 — Access Denied
+**Cause:** IIS AppPool identity doesn't have permission on the folder.
+**Fix:** Redo Step 6 — set permissions for `IIS AppPool\BrunoConverter`.
 
-### node_modules folder is very large / copy takes too long
-- Do NOT copy `node_modules` from developer machine
-- Run `npm install --production` on the server instead (Part B3)
-- This installs only what's needed (no dev tools)
+### Error: 404 — Not Found
+**Cause:** The `converter` folder was not "Converted to Application" (Step 5B was skipped).
+**Fix:** In IIS Manager, right-click `converter` → Convert to Application → select `BrunoConverter` pool.
+
+### Where to find iisnode error logs
+When something goes wrong, iisnode writes detailed logs to:
+```
+D:\MSINetData\WWW\converter\logs\
+```
+Open the newest `.txt` file there — it shows the exact Node.js error.
+
+---
+
+## How to Update the Application (Future Versions)
+
+Since there is no internet on the server, updating works like this:
+
+1. On your **dev machine**: run `npm install --production` once after any package changes
+2. Copy updated files to `\\devecpvm026127\d$\MSINetData\WWW\converter\`
+3. If `package.json` dependencies changed → also re-copy `node_modules`
+4. iisnode detects file changes automatically and restarts Node.js
+5. No IIS restart needed ✓
 
 ---
 
 ## Quick Reference
 
-| Item | Location |
-|------|----------|
-| Application files | `D:\MSINetData\WWW\converter\` |
-| Log files | `D:\MSINetData\WWW\converter\logs\` |
-| IIS config file | `D:\MSINetData\WWW\converter\web.config` |
+| Item | Value |
+|------|-------|
+| App folder on server | `D:\MSINetData\WWW\converter\` |
+| Application Pool name | `BrunoConverter` |
+| Application Pool .NET version | No Managed Code |
+| Error logs | `D:\MSINetData\WWW\converter\logs\` |
+| Node.js path (default) | `C:\Program Files\nodejs\node.exe` |
 | Public URL | `https://loadrunner.webdev.banksvcs.net/converter/` |
-| Node.js (after install) | `C:\Program Files\nodejs\node.exe` |
 
 ---
 
-## Appendix — Fallback: ARR Reverse Proxy
+## Does This Affect Existing IIS Sites?
 
-> Only use this if iisnode does not work for any reason.
-
-### What changes vs iisnode approach:
-- Node.js runs as a **Windows Service** (NSSM) on port 3001
-- IIS **reverse proxies** `/converter/` requests to `localhost:3001`
-- Requires enabling **ARR global proxy** in IIS
-
-### Additional steps needed:
-
-**1. Install NSSM** (download from `https://nssm.cc/download`, place `nssm.exe` in `D:\Tools\nssm\`)
-
-**2. Run Node.js as Windows Service** (Command Prompt as Administrator):
-```cmd
-D:\Tools\nssm\nssm.exe install BrunoConverter "C:\Program Files\nodejs\node.exe"
-D:\Tools\nssm\nssm.exe set BrunoConverter AppDirectory "D:\MSINetData\WWW\converter"
-D:\Tools\nssm\nssm.exe set BrunoConverter AppParameters "src/web/server.js"
-D:\Tools\nssm\nssm.exe set BrunoConverter AppEnvironmentExtra "PORT=3001"
-D:\Tools\nssm\nssm.exe set BrunoConverter Start SERVICE_AUTO_START
-D:\Tools\nssm\nssm.exe set BrunoConverter AppStdout "D:\MSINetData\WWW\converter\logs\service.log"
-D:\Tools\nssm\nssm.exe set BrunoConverter AppStderr "D:\MSINetData\WWW\converter\logs\error.log"
-net start BrunoConverter
-```
-
-**3. Enable ARR proxy in IIS:**
-- IIS Manager → Server name → Application Request Routing Cache
-- Server Proxy Settings → check "Enable proxy" → Apply
-
-**4. Replace web.config content with:**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-  <system.webServer>
-    <rewrite>
-      <rules>
-        <rule name="BrunoConverter-Proxy" stopProcessing="true">
-          <match url="(.*)" />
-          <action type="Rewrite" url="http://localhost:3001/{R:1}" />
-        </rule>
-      </rules>
-    </rewrite>
-  </system.webServer>
-</configuration>
-```
-
-**5. "Convert to Application" in IIS Manager** — same as Part C above.
+**No.** Here is why:
+- We create a **new, isolated Application Pool** (`BrunoConverter`) — it runs in a completely separate process from all other sites
+- We only add a new `/converter/` application — all other paths (`/vugen/`, etc.) are completely untouched
+- We do NOT enable global ARR proxy — no global IIS settings are changed
+- If the converter app crashes or is stopped, no other site is affected
 
 ---
 
