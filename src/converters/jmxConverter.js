@@ -55,6 +55,11 @@ class JmxConverter {
     // Merge CSV variable names into environment vars so generators know about them
     this.injectCsvVariables(csvDataSets, environmentVars);
 
+    // Inject any {{varName}} references found in requests as empty env vars.
+    // Catches JMeter UDV/CSV vars that may not have been detected by the parser
+    // due to nesting depth issues. Empty value → Rule 4 → Tier 1 Dynamic.
+    this.injectRequestVariables(requests, environmentVars);
+
     // 3. Prepare output dir
     await fs.mkdir(this.options.outputDir, { recursive: true });
 
@@ -125,6 +130,31 @@ class JmxConverter {
       });
       return vars;
     } catch { return {}; }
+  }
+
+  /**
+   * Scan all requests for {{varName}} references and inject unknown ones as
+   * empty strings so the 3-tier classifier treats them as Tier 1 Dynamic.
+   * This catches JMeter UDVs and CSV vars that may be missed by the parser.
+   */
+  injectRequestVariables(requests, environmentVars) {
+    const varPattern = /\{\{([^}]+)\}\}/g;
+    for (const req of requests) {
+      const texts = [
+        req.url || '',
+        JSON.stringify(req.body || ''),
+        JSON.stringify(req.headers || {}),
+      ];
+      for (const text of texts) {
+        let m;
+        while ((m = varPattern.exec(text)) !== null) {
+          const name = m[1].trim();
+          if (name && !(name in environmentVars)) {
+            environmentVars[name] = '';
+          }
+        }
+      }
+    }
   }
 
   /**

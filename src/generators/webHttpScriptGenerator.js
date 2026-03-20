@@ -351,6 +351,8 @@ class WebHttpScriptGenerator {
     // Correlations
     if (this.options.useCorrelation) {
       this.correlations = this.correlationDetector.analyzeRequests(this.requests);
+      // Inject JMX-explicit extractors (RegexExtractor, BoundaryExtractor, etc.)
+      this.injectJmxExtractors();
       console.log(`✓ Detected ${this.correlations.length} correlations`);
     }
 
@@ -974,6 +976,43 @@ ${jwtSetup}${autoHeaderBlock}
 
   // ─── Correlation ─────────────────────────────────────────────────────────────
 
+  /**
+   * Inject JMX-explicit extractors into this.correlations so VuGen web_reg_save_param_*
+   * calls are emitted for them automatically.
+   */
+  injectJmxExtractors() {
+    const seenNames = new Set(this.correlations.map(c => c.name));
+    for (const request of this.requests) {
+      const jmxExtractors = (request.extractors || []).filter(e => e.listen === 'extractor' && e.extractor);
+      for (const { extractor } of jmxExtractors) {
+        const name = extractor.name;
+        if (!name || seenNames.has(name)) continue;
+        seenNames.add(name);
+        let corr;
+        switch ((extractor.type || '').toLowerCase()) {
+          case 'regex':
+          case 'regexp':
+            corr = { name, extractorType: 'regex', pattern: extractor.regex || '(.+?)', producerRequest: request.name, consumerRequests: [] };
+            break;
+          case 'jsonpath':
+          case 'json':
+            corr = { name, extractorType: 'json', extractPath: extractor.expression || `$.${name}`, producerRequest: request.name, consumerRequests: [] };
+            break;
+          case 'boundary':
+            corr = { name, extractorType: 'boundary', leftBound: extractor.lowerBound || '', rightBound: extractor.upperBound || '', producerRequest: request.name, consumerRequests: [] };
+            break;
+          case 'xpath':
+          case 'xpath2':
+            corr = { name, extractorType: 'boundary', leftBound: `<${name}>`, rightBound: `</${name}>`, producerRequest: request.name, consumerRequests: [] };
+            break;
+          default:
+            corr = { name, extractorType: 'regex', pattern: '(.+?)', producerRequest: request.name, consumerRequests: [] };
+        }
+        this.correlations.push(corr);
+      }
+    }
+  }
+
   generateCorrelationRegistrations(request, indent) {
     const produced = this.correlations.filter(c =>
       c.producerRequest === request.name || c.producerRequest === request.id
@@ -1002,8 +1041,9 @@ ${jwtSetup}${autoHeaderBlock}
       const hasValidPath = rawPath.startsWith('$') && rawPath.length > 1 && rawPath !== '$';
       const jsonPath = hasValidPath ? rawPath : `$.${corrBase}`;
 
-      switch (corr.type) {
+      switch (corr.type || corr.extractorType) {
         case 'json':
+        case 'jsonpath':
         case 'token':
         case 'id':
         case 'sessionId':

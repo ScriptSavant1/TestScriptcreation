@@ -3,223 +3,881 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LR Script Converter v<%= version %></title>
+<title>LR Script Converter · v<%= version %></title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
-  --text:#e6edf3;--muted:#8b949e;--primary:#58a6ff;--primary-dark:#1f6feb;
-  --success:#3fb950;--success-bg:#0d2e1a;--warn:#d29922;
-  --danger:#f85149;
-  --devweb:#58a6ff;--vugen:#f0883e;
-  --radius:10px;--font:'Segoe UI',system-ui,sans-serif;
+/* ── Design tokens ──────────────────────────────────────────────────────── */
+:root {
+  --bg:           #080c14;
+  --bg2:          #0d1220;
+  --glass:        rgba(255,255,255,0.04);
+  --glass-border: rgba(255,255,255,0.08);
+  --glass-hover:  rgba(255,255,255,0.07);
+  --surface:      rgba(13,18,32,0.8);
+  --surface2:     rgba(20,27,46,0.9);
+  --text:         #e8edf5;
+  --text-2:       #a8b3c8;
+  --text-3:       #5a6a82;
+  --primary:      #4f8ef7;
+  --primary-glow: rgba(79,142,247,0.3);
+  --primary-dim:  rgba(79,142,247,0.12);
+  --accent:       #7c5cfc;
+  --accent-glow:  rgba(124,92,252,0.3);
+  --vugen:        #f0883e;
+  --vugen-glow:   rgba(240,136,62,0.3);
+  --vugen-dim:    rgba(240,136,62,0.12);
+  --success:      #34d17a;
+  --success-glow: rgba(52,209,122,0.25);
+  --success-dim:  rgba(52,209,122,0.1);
+  --danger:       #f06464;
+  --warn:         #f0c040;
+  --mono:         'JetBrains Mono', monospace;
+  --sans:         'Inter', system-ui, -apple-system, sans-serif;
+  --r-sm:         8px;
+  --r-md:         14px;
+  --r-lg:         20px;
+  --r-xl:         28px;
+  --shadow:       0 8px 32px rgba(0,0,0,0.4);
+  --shadow-lg:    0 24px 64px rgba(0,0,0,0.6);
+  --transition:   0.2s cubic-bezier(0.4,0,0.2,1);
 }
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;
-  display:flex;flex-direction:column;align-items:center;padding:24px 16px}
 
-.header{width:100%;max-width:860px;text-align:center;margin-bottom:32px}
-.logo{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px}
-.logo-icon{width:44px;height:44px;background:linear-gradient(135deg,var(--primary),var(--vugen));
-  border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
-.logo-title{font-size:24px;font-weight:700;letter-spacing:-0.5px}
-.logo-sub{color:var(--muted);font-size:13px;margin-top:4px}
-.badge{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);
-  border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;
-  color:var(--muted);margin-top:8px}
-.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--success);
-  box-shadow:0 0 6px var(--success);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+/* ── Reset & Base ───────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;
-  width:100%;max-width:860px;padding:28px;margin-bottom:16px}
-.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;
-  letter-spacing:1px;margin-bottom:20px;display:flex;align-items:center;gap:8px}
-.card-title::before{content:'';width:3px;height:14px;background:var(--primary);
-  border-radius:2px;display:inline-block;flex-shrink:0}
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 16px 48px;
+  position: relative;
+  overflow-x: hidden;
+}
 
-/* Protocol */
-.proto-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
-@media(max-width:560px){.proto-grid,.upload-grid{grid-template-columns:1fr}}
-.proto-card{border:2px solid var(--border);border-radius:var(--radius);padding:16px 20px;
-  cursor:pointer;transition:.2s;display:flex;gap:14px;align-items:flex-start;user-select:none}
-.proto-card:hover{border-color:var(--primary-dark)}
-.proto-card.active-devweb{border-color:var(--devweb);background:rgba(88,166,255,.07)}
-.proto-card.active-vugen{border-color:var(--vugen);background:rgba(240,136,62,.07)}
-.proto-icon{font-size:28px;line-height:1;flex-shrink:0}
-.proto-name{font-weight:700;font-size:15px;margin-bottom:3px}
-.proto-desc{font-size:12px;color:var(--muted);line-height:1.5}
-.proto-badge{display:inline-block;font-size:10px;border-radius:4px;padding:2px 6px;
-  margin-top:5px;font-weight:700}
-.badge-js{background:rgba(88,166,255,.2);color:var(--devweb)}
-.badge-c{background:rgba(240,136,62,.2);color:var(--vugen)}
+/* ── Animated background ────────────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 0%, rgba(79,142,247,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 10%, rgba(124,92,252,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 50% 90%, rgba(240,136,62,0.07) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
 
-/* Upload */
-.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
-.drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:28px 16px;
-  text-align:center;cursor:pointer;transition:.2s;position:relative;background:var(--bg)}
-.drop-zone:hover,.drop-zone.drag-over{border-color:var(--primary);background:rgba(88,166,255,.04)}
-.drop-zone.loaded{border-color:var(--success);border-style:solid;background:rgba(63,185,80,.06)}
-.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-.dz-icon{font-size:28px;margin-bottom:8px;display:block}
-.dz-label{font-size:13px;font-weight:600;margin-bottom:3px}
-.dz-sub{font-size:11px;color:var(--muted)}
-.dz-opt{font-size:10px;color:var(--warn);margin-top:4px;display:block}
-.dz-name{font-size:12px;color:var(--success);font-weight:600;word-break:break-all;
-  margin-top:6px;padding:0 8px}
-.dz-clear{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--muted);
-  cursor:pointer;font-size:18px;line-height:1;z-index:10}
-.dz-clear:hover{color:var(--danger)}
+body > * { position: relative; z-index: 1; }
 
-/* Options */
-.options-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
-.opt-group{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-  padding:12px 16px;flex:1;min-width:150px}
-.opt-group > span{font-size:11px;color:var(--muted);display:block;margin-bottom:8px;
-  text-transform:uppercase;letter-spacing:.5px;font-weight:700}
-.seg-btns{display:flex;gap:4px}
-.seg-btn{flex:1;padding:6px 8px;border:1px solid var(--border);background:transparent;
-  color:var(--muted);border-radius:6px;font-size:12px;cursor:pointer;transition:.15s;white-space:nowrap}
-.seg-btn:hover{border-color:var(--primary);color:var(--primary)}
-.seg-btn.active{background:var(--primary-dark);border-color:var(--primary);color:#fff;font-weight:700}
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.header {
+  width: 100%;
+  max-width: 900px;
+  text-align: center;
+  padding: 52px 0 40px;
+}
 
-/* Advanced */
-.adv-toggle{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;
-  display:flex;align-items:center;gap:6px;padding:6px 0;margin-bottom:12px;transition:.15s}
-.adv-toggle:hover{color:var(--text)}
-.arrow{transition:.2s transform;display:inline-block}
-.adv-toggle.open .arrow{transform:rotate(90deg)}
-.adv-panel{display:none;padding:16px;background:var(--bg);border:1px solid var(--border);
-  border-radius:var(--radius);margin-bottom:16px}
-.adv-panel.show{display:block}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;
-  padding:10px 0;border-bottom:1px solid var(--border)}
-.toggle-row:last-child{border-bottom:none}
-.tgl-label{font-size:13px;font-weight:500}
-.tgl-sub{font-size:11px;color:var(--muted);margin-top:2px}
-.switch{position:relative;width:40px;height:22px;flex-shrink:0}
-.switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;inset:0;background:var(--border);border-radius:22px;
-  cursor:pointer;transition:.2s}
-.slider:before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;
-  background:#fff;border-radius:50%;transition:.2s}
-.switch input:checked + .slider{background:var(--primary)}
-.switch input:checked + .slider:before{transform:translateX(18px)}
+.logo-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 8px 32px var(--primary-glow);
+  font-size: 30px;
+  margin-bottom: 20px;
+  position: relative;
+}
+.logo-ring::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 19px;
+  background: linear-gradient(135deg, rgba(79,142,247,0.4), rgba(124,92,252,0.4));
+  z-index: -1;
+  filter: blur(12px);
+}
 
-/* Convert button */
-.btn-convert{width:100%;padding:14px;font-size:15px;font-weight:700;border:none;
-  border-radius:var(--radius);cursor:pointer;transition:.15s;
-  display:flex;align-items:center;justify-content:center;gap:10px;letter-spacing:.2px}
-.btn-convert.devweb{background:linear-gradient(135deg,#1f6feb,#58a6ff);color:#fff;
-  box-shadow:0 4px 14px rgba(31,111,235,.35)}
-.btn-convert.vugen{background:linear-gradient(135deg,#b45309,#f0883e);color:#fff;
-  box-shadow:0 4px 14px rgba(240,136,62,.35)}
-.btn-convert:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
-.btn-convert:disabled{opacity:.5;cursor:not-allowed;transform:none!important;box-shadow:none!important}
-.spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.35);
-  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none;flex-shrink:0}
-@keyframes spin{to{transform:rotate(360deg)}}
+.header-title {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, var(--text) 40%, var(--text-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 10px;
+  line-height: 1.1;
+}
 
-/* Progress */
-.prog-wrap{height:4px;background:var(--border);border-radius:4px;overflow:hidden;
-  margin:14px 0;display:none}
-.prog-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--success));
-  width:0%;transition:width .4s ease}
+.header-sub {
+  font-size: 15px;
+  color: var(--text-2);
+  font-weight: 400;
+  line-height: 1.6;
+  max-width: 520px;
+  margin: 0 auto 18px;
+}
 
-/* Result */
-.result-box{border-radius:var(--radius);padding:20px;margin-bottom:16px;
-  width:100%;max-width:860px}
-.result-ok{background:rgba(63,185,80,.08);border:1px solid var(--success);display:none}
-.result-err{background:rgba(248,81,73,.08);border:1px solid var(--danger);display:none}
-.res-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
-.res-icon{font-size:24px;flex-shrink:0;line-height:1}
-.res-title{font-size:16px;font-weight:700}
-.res-sub{font-size:12px;color:var(--muted);margin-top:3px}
-.stats-row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 16px}
-.stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
-  padding:10px 16px;text-align:center;flex:1;min-width:80px}
-.stat-num{font-size:24px;font-weight:700;color:var(--primary);display:block;font-family:'Cascadia Code',monospace}
-.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.btn-dl{display:inline-flex;align-items:center;gap:8px;background:var(--success);
-  color:#fff;border:none;border-radius:var(--radius);padding:12px 24px;font-size:14px;
-  font-weight:700;cursor:pointer;text-decoration:none;transition:.15s}
-.btn-dl:hover{background:#2ea043;transform:translateY(-1px)}
-.btn-reset{background:var(--surface2);border:1px solid var(--border);color:var(--text);
-  border-radius:var(--radius);padding:11px 18px;font-size:13px;cursor:pointer;
-  transition:.15s;margin-left:8px;vertical-align:middle}
-.btn-reset:hover{border-color:var(--primary);color:var(--primary)}
+.header-badges {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
-/* How it works */
-.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
-.step{padding:16px 10px;text-align:center;border:1px solid var(--border);
-  border-radius:var(--radius);background:var(--bg)}
-.step-em{font-size:26px;margin-bottom:8px;display:block}
-.step-ttl{font-size:13px;font-weight:700;margin-bottom:4px}
-.step-txt{font-size:11px;color:var(--muted);line-height:1.5}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text-2);
+  backdrop-filter: blur(8px);
+}
+.chip-live { background: rgba(52,209,122,0.1); border-color: rgba(52,209,122,0.25); color: var(--success); }
+.chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
-footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;padding-bottom:24px}
+/* ── Tabs ───────────────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  width: 100%;
+  max-width: 900px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding: 6px;
+  gap: 4px;
+  backdrop-filter: blur(16px);
+  margin-bottom: -1px;
+  position: relative;
+  z-index: 2;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.tab-btn:hover { color: var(--text-2); background: var(--glass-hover); }
+.tab-btn.active-bruno {
+  background: linear-gradient(135deg, rgba(79,142,247,0.2), rgba(124,92,252,0.15));
+  color: var(--text);
+  border: 1px solid rgba(79,142,247,0.3);
+  box-shadow: 0 2px 12px rgba(79,142,247,0.15);
+}
+.tab-btn.active-jmx {
+  background: linear-gradient(135deg, rgba(240,136,62,0.2), rgba(240,100,62,0.1));
+  color: var(--text);
+  border: 1px solid rgba(240,136,62,0.3);
+  box-shadow: 0 2px 12px rgba(240,136,62,0.15);
+}
+.tab-icon { font-size: 16px; }
+
+/* ── Card ───────────────────────────────────────────────────────────────── */
+.card {
+  width: 100%;
+  max-width: 900px;
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
+  padding: 32px;
+  backdrop-filter: blur(20px);
+  margin-bottom: 16px;
+}
+.card.standalone {
+  border-radius: var(--r-xl);
+  margin-top: 16px;
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin-bottom: 16px;
+}
+.section-label::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, var(--primary), var(--accent));
+  flex-shrink: 0;
+}
+.section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* ── Protocol selector ──────────────────────────────────────────────────── */
+.proto-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+@media (max-width: 560px) { .proto-grid { grid-template-columns: 1fr; } }
+
+.proto-card {
+  border: 1.5px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  user-select: none;
+  background: var(--glass);
+  position: relative;
+  overflow: hidden;
+}
+.proto-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--transition);
+  pointer-events: none;
+}
+.proto-card:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-1px); }
+.proto-card.active-devweb {
+  border-color: var(--primary);
+  background: var(--primary-dim);
+  box-shadow: 0 0 0 1px rgba(79,142,247,0.2), 0 8px 24px rgba(79,142,247,0.15);
+}
+.proto-card.active-vugen {
+  border-color: var(--vugen);
+  background: var(--vugen-dim);
+  box-shadow: 0 0 0 1px rgba(240,136,62,0.2), 0 8px 24px rgba(240,136,62,0.15);
+}
+
+.proto-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.proto-icon-blue { background: linear-gradient(135deg, #1a4f9e, #2d6cd4); }
+.proto-icon-orange { background: linear-gradient(135deg, #7a3b0a, #c4671a); }
+
+.proto-name { font-size: 14.5px; font-weight: 700; margin-bottom: 4px; }
+.proto-desc { font-size: 12px; color: var(--text-2); line-height: 1.55; }
+.proto-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-top: 8px;
+  font-family: var(--mono);
+  letter-spacing: 0.3px;
+}
+.tag-js { background: rgba(79,142,247,0.2); color: #7eb3ff; border: 1px solid rgba(79,142,247,0.3); }
+.tag-c  { background: rgba(240,136,62,0.2);  color: #ffa96a; border: 1px solid rgba(240,136,62,0.3); }
+
+/* ── Upload zones ───────────────────────────────────────────────────────── */
+.upload-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+@media (max-width: 560px) { .upload-grid { grid-template-columns: 1fr; } }
+
+.drop-zone {
+  border: 1.5px dashed var(--glass-border);
+  border-radius: var(--r-lg);
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+  background: var(--glass);
+  overflow: hidden;
+}
+.drop-zone:hover { border-color: rgba(79,142,247,0.4); background: rgba(79,142,247,0.04); }
+.drop-zone.drag-over { border-color: var(--primary); border-style: solid; background: rgba(79,142,247,0.08); }
+.drop-zone.loaded {
+  border-color: var(--success);
+  border-style: solid;
+  background: var(--success-dim);
+}
+.drop-zone input[type=file] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+.dz-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin: 0 auto 12px;
+  transition: var(--transition);
+}
+.drop-zone:hover .dz-icon-wrap { border-color: rgba(79,142,247,0.4); background: var(--primary-dim); }
+.drop-zone.loaded .dz-icon-wrap { border-color: rgba(52,209,122,0.4); background: var(--success-dim); }
+
+.dz-label { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.dz-sub { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+.dz-opt { font-size: 10.5px; color: var(--warn); margin-top: 6px; display: block; }
+.dz-name { font-size: 11.5px; color: var(--success); font-weight: 600; word-break: break-all; margin-top: 8px; }
+.dz-required { color: var(--danger); }
+
+.dz-clear {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  z-index: 10;
+}
+.dz-clear:hover { color: var(--danger); border-color: rgba(240,100,100,0.4); background: rgba(240,100,100,0.1); }
+
+/* ── Options ────────────────────────────────────────────────────────────── */
+.options-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.opt-group {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  flex: 1;
+  min-width: 140px;
+}
+.opt-label {
+  font-size: 10.5px;
+  color: var(--text-3);
+  display: block;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  font-weight: 700;
+}
+
+.seg-btns { display: flex; gap: 4px; }
+.seg-btn {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-3);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+  font-weight: 500;
+}
+.seg-btn:hover { border-color: rgba(79,142,247,0.4); color: var(--primary); }
+.seg-btn.active {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: #7eb3ff;
+  font-weight: 700;
+}
+
+/* ── Advanced panel ─────────────────────────────────────────────────────── */
+.adv-toggle {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: var(--sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--r-sm);
+  transition: var(--transition);
+  font-weight: 500;
+}
+.adv-toggle:hover { color: var(--text-2); background: var(--glass); border-color: var(--glass-border); }
+.arrow { transition: transform var(--transition); font-size: 10px; display: inline-block; }
+.adv-toggle.open .arrow { transform: rotate(90deg); }
+
+.adv-panel {
+  display: none;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 4px 0;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+.adv-panel.show { display: block; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--glass-border);
+  transition: background var(--transition);
+}
+.toggle-row:last-child { border-bottom: none; }
+.toggle-row:hover { background: var(--glass-hover); }
+.tgl-label { font-size: 13px; font-weight: 500; }
+.tgl-sub { font-size: 11px; color: var(--text-3); margin-top: 3px; line-height: 1.4; }
+
+/* Toggle switch */
+.switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  top: 3px;
+  background: var(--text-3);
+  border-radius: 50%;
+  transition: var(--transition);
+}
+.switch input:checked + .slider { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 8px var(--primary-glow); }
+.switch input:checked + .slider::before { transform: translateX(18px); background: #fff; }
+
+/* ── Convert button ─────────────────────────────────────────────────────── */
+.divider { height: 1px; background: var(--glass-border); margin: 20px 0; }
+
+.btn-convert {
+  width: 100%;
+  padding: 15px;
+  font-size: 14.5px;
+  font-weight: 700;
+  font-family: var(--sans);
+  border: none;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  letter-spacing: 0.2px;
+  position: relative;
+  overflow: hidden;
+}
+.btn-convert::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+.btn-convert:hover::before { transform: translateX(100%); }
+
+.btn-convert.devweb {
+  background: linear-gradient(135deg, #1a4fb5, #3d7ef0, #5a9fff);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(60,120,240,0.4), 0 1px 0 rgba(255,255,255,0.1) inset;
+}
+.btn-convert.vugen {
+  background: linear-gradient(135deg, #8a3500, #d4620e, #f0883e);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(200,90,20,0.4), 0 1px 0 rgba(255,255,255,0.1) inset;
+}
+.btn-convert:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.08); }
+.btn-convert:active:not(:disabled) { transform: translateY(0); filter: brightness(0.96); }
+.btn-convert:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; filter: none !important; }
+
+/* Spinner */
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  display: none;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Progress bar */
+.prog-wrap {
+  height: 3px;
+  background: var(--glass-border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 16px 0;
+  display: none;
+}
+.prog-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent), var(--success));
+  background-size: 200%;
+  width: 0%;
+  transition: width 0.4s ease;
+  animation: shimmer 2s linear infinite;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ── Result box ─────────────────────────────────────────────────────────── */
+.result-box {
+  width: 100%;
+  max-width: 900px;
+  border-radius: var(--r-xl);
+  padding: 28px;
+  backdrop-filter: blur(20px);
+  margin-top: 16px;
+}
+.result-ok {
+  background: linear-gradient(135deg, rgba(52,209,122,0.08), rgba(52,209,122,0.04));
+  border: 1px solid rgba(52,209,122,0.25);
+  box-shadow: 0 0 40px rgba(52,209,122,0.08);
+  display: none;
+}
+.result-err {
+  background: linear-gradient(135deg, rgba(240,100,100,0.08), rgba(240,100,100,0.04));
+  border: 1px solid rgba(240,100,100,0.25);
+  display: none;
+}
+
+.res-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+.res-icon {
+  width: 48px; height: 48px;
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.res-icon-ok { background: var(--success-dim); border: 1px solid rgba(52,209,122,0.3); }
+.res-icon-err { background: rgba(240,100,100,0.1); border: 1px solid rgba(240,100,100,0.3); }
+.res-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.res-sub { font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+
+.stats-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.stat {
+  flex: 1;
+  min-width: 80px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  text-align: center;
+}
+.stat-num {
+  display: block;
+  font-size: 28px;
+  font-weight: 800;
+  font-family: var(--mono);
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.stat-lbl { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
+
+.res-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.btn-dl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #0d7a3e, #1aad58, #34d17a);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-md);
+  padding: 13px 24px;
+  font-size: 14px;
+  font-family: var(--sans);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: var(--transition);
+  box-shadow: 0 4px 16px rgba(52,209,122,0.3);
+}
+.btn-dl:hover { transform: translateY(-2px); filter: brightness(1.1); }
+
+.btn-reset {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  color: var(--text-2);
+  border-radius: var(--r-md);
+  padding: 12px 20px;
+  font-size: 13px;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: var(--transition);
+  font-weight: 500;
+}
+.btn-reset:hover { border-color: rgba(79,142,247,0.4); color: var(--primary); }
+
+/* ── JMX info panel ─────────────────────────────────────────────────────── */
+.jmx-features {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  height: 100%;
+}
+.jmx-feat-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+}
+.feat-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.feat-item:last-child { border-bottom: none; }
+.feat-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--success-dim);
+  border: 1px solid rgba(52,209,122,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+/* ── How it works ───────────────────────────────────────────────────────── */
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+  gap: 10px;
+}
+.step {
+  padding: 20px 16px;
+  text-align: center;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  background: var(--glass);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+.step::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--primary-dim), transparent);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.step:hover { border-color: rgba(79,142,247,0.3); transform: translateY(-2px); }
+.step:hover::before { opacity: 1; }
+.step-icon {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--primary-dim), rgba(124,92,252,0.12));
+  border: 1px solid rgba(79,142,247,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin: 0 auto 12px;
+}
+.step-ttl { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.step-txt { font-size: 11.5px; color: var(--text-3); line-height: 1.55; }
+
+/* ── Supported formats bar ──────────────────────────────────────────────── */
+.formats-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 20px 0 0;
+}
+.fmt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 99px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  backdrop-filter: blur(8px);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+footer {
+  color: var(--text-3);
+  font-size: 11.5px;
+  text-align: center;
+  margin-top: 24px;
+  padding-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.footer-links { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+.footer-sep { color: var(--text-3); }
 </style>
 </head>
 <body>
 
-<!-- Header -->
-<div class="header">
-  <div class="logo">
-    <div class="logo-icon">⚡</div>
-    <span class="logo-title">LR Script Converter</span>
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="logo-ring">⚡</div>
+  <h1 class="header-title">LR Script Converter</h1>
+  <p class="header-sub">Convert Postman, Bruno &amp; JMeter test scripts into production-ready LoadRunner Enterprise scripts — in seconds.</p>
+  <div class="header-badges">
+    <span class="chip chip-live"><span class="chip-dot"></span>Live · v<%= version %></span>
+    <span class="chip">🟦 DevWeb JS</span>
+    <span class="chip">🟧 VuGen C</span>
+    <span class="chip">🔒 Files never stored</span>
   </div>
-  <div class="logo-sub">Convert Postman, Bruno &amp; JMeter scripts to LoadRunner Enterprise</div>
-  <div class="badge"><span class="badge-dot"></span>v<%= version %>&nbsp;·&nbsp;DevWeb (JS) + Web HTTP/HTML (C)</div>
-</div>
+</header>
 
-<!-- Source tabs -->
-<div style="width:100%;max-width:860px;display:flex;gap:0;margin-bottom:-1px;position:relative;z-index:1">
-  <button id="tab-bruno" onclick="switchTab('bruno')"
-    style="flex:1;padding:11px 0;border:1px solid var(--border);border-bottom:none;border-radius:10px 0 0 0;
-           background:var(--surface);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;
-           border-bottom:2px solid var(--primary)">
-    📂 Postman / Bruno
+<!-- ── Tab bar ─────────────────────────────────────────────────────────── -->
+<div class="tab-bar">
+  <button class="tab-btn active-bruno" id="tab-bruno" onclick="switchTab('bruno')">
+    <span class="tab-icon">📂</span> Postman / Bruno
   </button>
-  <button id="tab-jmx" onclick="switchTab('jmx')"
-    style="flex:1;padding:11px 0;border:1px solid var(--border);border-bottom:none;border-radius:0 10px 0 0;
-           background:var(--surface2);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer">
-    ♨ JMeter (.jmx)
+  <button class="tab-btn" id="tab-jmx" onclick="switchTab('jmx')">
+    <span class="tab-icon">♨</span> JMeter (.jmx)
   </button>
 </div>
 
-<!-- Main card (Postman/Bruno) -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- Panel: Postman / Bruno                                                 -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="card" id="panel-bruno">
 
-  <!-- Protocol -->
-  <div class="card-title">1 · Choose Output Protocol</div>
+  <!-- 1 · Protocol -->
+  <div class="section-label"><span class="section-num">1</span>Choose Output Protocol</div>
   <div class="proto-grid">
     <div class="proto-card active-devweb" id="pc-devweb" onclick="setProto('devweb')">
-      <div class="proto-icon">🟦</div>
+      <div class="proto-icon proto-icon-blue">🟦</div>
       <div>
-        <div class="proto-name">DevWeb (JavaScript)</div>
-        <div class="proto-desc">Modern JS protocol for LRE. Generates <b>main.js</b> with transactions, correlations, JWT helper &amp; full config files.</div>
-        <span class="proto-badge badge-js">JavaScript · main.js</span>
+        <div class="proto-name">DevWeb · JavaScript</div>
+        <div class="proto-desc">Modern JS protocol for LRE. Generates <strong>main.js</strong> with per-request transactions, correlations, JWT helper &amp; full config files.</div>
+        <span class="proto-tag tag-js">⚡ main.js</span>
       </div>
     </div>
     <div class="proto-card" id="pc-vugen" onclick="setProto('web-http')">
-      <div class="proto-icon">🟧</div>
+      <div class="proto-icon proto-icon-orange">🟧</div>
       <div>
-        <div class="proto-name">VuGen Web HTTP/HTML</div>
-        <div class="proto-desc">Classic C-based VuGen protocol. Generates <b>Action.c</b> with web_custom_request, mTLS, jsrsasign &amp; all VuGen config.</div>
-        <span class="proto-badge badge-c">C Code · Action.c</span>
+        <div class="proto-name">VuGen · Web HTTP/HTML (C)</div>
+        <div class="proto-desc">Classic C-based VuGen protocol. Generates <strong>Action.c</strong> with web_custom_request, NTLM/Kerberos, jsrsasign &amp; all VuGen config.</div>
+        <span class="proto-tag tag-c">⚙ Action.c</span>
       </div>
     </div>
   </div>
 
-  <!-- Upload -->
-  <div class="card-title">2 · Upload Files</div>
-  <div class="upload-grid">
+  <!-- 2 · Upload -->
+  <div class="section-label"><span class="section-num">2</span>Upload Files</div>
+  <div class="upload-grid" style="margin-bottom:28px">
     <div class="drop-zone" id="dz-col"
          ondragover="onDrag(event,'dz-col')" ondragleave="offDrag('dz-col')"
          ondrop="onDrop(event,'dz-col','collection')">
       <input type="file" id="fi-col" accept=".json,.yml,.yaml,.bru"
              onchange="onPick('dz-col','fi-col','lbl-col','collection')">
-      <span class="dz-icon">📂</span>
-      <div class="dz-label">Collection File <span style="color:var(--danger)">*</span></div>
+      <div class="dz-icon-wrap">📂</div>
+      <div class="dz-label">Collection File <span class="dz-required">*</span></div>
       <div class="dz-sub">Postman v2.1 JSON &nbsp;·&nbsp; Bruno JSON / YAML &nbsp;·&nbsp; .bru</div>
       <div id="lbl-col" class="dz-name"></div>
     </div>
@@ -228,7 +886,7 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
          ondrop="onDrop(event,'dz-env','environment')">
       <input type="file" id="fi-env" accept=".json,.bru"
              onchange="onPick('dz-env','fi-env','lbl-env','environment')">
-      <span class="dz-icon">🔑</span>
+      <div class="dz-icon-wrap">🔑</div>
       <div class="dz-label">Environment File</div>
       <div class="dz-sub">Postman environment JSON &nbsp;·&nbsp; Bruno .bru vars</div>
       <span class="dz-opt">Optional — provides variable values</span>
@@ -236,18 +894,18 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
     </div>
   </div>
 
-  <!-- Options -->
-  <div class="card-title">3 · Configure Options</div>
-  <div class="options-row">
+  <!-- 3 · Options -->
+  <div class="section-label"><span class="section-num">3</span>Configure Options</div>
+  <div class="options-grid">
     <div class="opt-group">
-      <span>Script Mode</span>
+      <span class="opt-label">Script Mode</span>
       <div class="seg-btns">
-        <button class="seg-btn active" id="m-single" onclick="setMode('single')">Single Script</button>
+        <button class="seg-btn active" id="m-single" onclick="setMode('single')">Single</button>
         <button class="seg-btn"        id="m-multi"  onclick="setMode('multi')">Multi-Script</button>
       </div>
     </div>
     <div class="opt-group">
-      <span>Think Time (sec)</span>
+      <span class="opt-label">Think Time</span>
       <div class="seg-btns">
         <button class="seg-btn active" id="tt-1" onclick="setTT(1)">1s</button>
         <button class="seg-btn"        id="tt-2" onclick="setTT(2)">2s</button>
@@ -256,7 +914,7 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
       </div>
     </div>
     <div class="opt-group">
-      <span>Log Level</span>
+      <span class="opt-label">Log Level</span>
       <div class="seg-btns">
         <button class="seg-btn active" id="ll-info"  onclick="setLL('info')">Info</button>
         <button class="seg-btn"        id="ll-debug" onclick="setLL('debug')">Debug</button>
@@ -266,92 +924,102 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
 
   <!-- Advanced -->
   <button class="adv-toggle" id="adv-btn" onclick="toggleAdv()">
-    <span class="arrow">▶</span>&nbsp; Advanced settings
+    <span class="arrow">▶</span> Advanced settings
   </button>
   <div class="adv-panel" id="adv-panel">
     <div class="toggle-row">
-      <div><div class="tgl-label">Correlation Detection</div><div class="tgl-sub">Extract dynamic values from API responses (access_token, userId, etc.)</div></div>
+      <div>
+        <div class="tgl-label">Correlation Detection</div>
+        <div class="tgl-sub">Extract dynamic values from API responses — access_token, userId, sessionId, CSRF tokens</div>
+      </div>
       <label class="switch"><input type="checkbox" id="opt-corr" checked><span class="slider"></span></label>
     </div>
     <div class="toggle-row">
-      <div><div class="tgl-label">Parameterization</div><div class="tgl-sub">Convert static variables to CSV parameters (baseUrl, clientId, etc.)</div></div>
+      <div>
+        <div class="tgl-label">Parameterization</div>
+        <div class="tgl-sub">Convert static variables into CSV parameters — baseUrl, clientId, API keys</div>
+      </div>
       <label class="switch"><input type="checkbox" id="opt-param" checked><span class="slider"></span></label>
     </div>
     <div class="toggle-row">
-      <div><div class="tgl-label">Authentication Handling</div><div class="tgl-sub">OAuth2, Bearer (dynamic-aware), Basic, API Key, JWT, AWS Sig v4</div></div>
+      <div>
+        <div class="tgl-label">Authentication Handling</div>
+        <div class="tgl-sub">OAuth2, Bearer (dynamic-aware), Basic, API Key, JWT (PS256 / RS256 / HS256), AWS Sig v4</div>
+      </div>
       <label class="switch"><input type="checkbox" id="opt-auth" checked><span class="slider"></span></label>
     </div>
     <div class="toggle-row">
-      <div><div class="tgl-label">Add Code Comments</div><div class="tgl-sub">Inline explanatory comments in the generated script</div></div>
+      <div>
+        <div class="tgl-label">Add Code Comments</div>
+        <div class="tgl-sub">Inline explanatory comments in the generated script to guide manual review</div>
+      </div>
       <label class="switch"><input type="checkbox" id="opt-cmt" checked><span class="slider"></span></label>
     </div>
   </div>
 
-  <!-- Progress bar -->
+  <div class="divider"></div>
   <div class="prog-wrap" id="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
 
-  <!-- Convert button -->
   <button class="btn-convert devweb" id="btn-cvt" onclick="doConvert()">
     <div class="spinner" id="spinner"></div>
     <span id="btn-lbl">⚡ Convert to DevWeb Script</span>
   </button>
 </div>
 
-<!-- JMX Card -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- Panel: JMeter                                                          -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="card" id="panel-jmx" style="display:none">
 
-  <!-- Protocol -->
-  <div class="card-title">1 · Choose Output Protocol</div>
+  <!-- 1 · Protocol -->
+  <div class="section-label"><span class="section-num">1</span>Choose Output Protocol</div>
   <div class="proto-grid">
     <div class="proto-card active-devweb" id="jpc-devweb" onclick="setJmxProto('devweb')">
-      <div class="proto-icon">🟦</div>
+      <div class="proto-icon proto-icon-blue">🟦</div>
       <div>
-        <div class="proto-name">DevWeb (JavaScript)</div>
-        <div class="proto-desc">Generates <b>main.js</b> with transactions, correlations, auth &amp; WLM Excel.</div>
-        <span class="proto-badge badge-js">JavaScript · main.js</span>
+        <div class="proto-name">DevWeb · JavaScript</div>
+        <div class="proto-desc">Generates <strong>main.js</strong> with transactions, correlations, auth &amp; Workload Model Excel.</div>
+        <span class="proto-tag tag-js">⚡ main.js</span>
       </div>
     </div>
     <div class="proto-card" id="jpc-vugen" onclick="setJmxProto('web-http')">
-      <div class="proto-icon">🟧</div>
+      <div class="proto-icon proto-icon-orange">🟧</div>
       <div>
-        <div class="proto-name">VuGen Web HTTP/HTML</div>
-        <div class="proto-desc">Generates <b>Action.c</b> with web_custom_request, NTLM/Kerberos &amp; WLM Excel.</div>
-        <span class="proto-badge badge-c">C Code · Action.c</span>
+        <div class="proto-name">VuGen · Web HTTP/HTML (C)</div>
+        <div class="proto-desc">Generates <strong>Action.c</strong> with web_reg_save_param, NTLM/Kerberos auth &amp; Workload Model Excel.</div>
+        <span class="proto-tag tag-c">⚙ Action.c</span>
       </div>
     </div>
   </div>
 
-  <!-- Upload -->
-  <div class="card-title">2 · Upload JMeter Script</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+  <!-- 2 · Upload -->
+  <div class="section-label"><span class="section-num">2</span>Upload JMeter Script</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px">
     <div class="drop-zone" id="dz-jmx"
          ondragover="onDrag(event,'dz-jmx')" ondragleave="offDrag('dz-jmx')"
          ondrop="onDropJmx(event)">
       <input type="file" id="fi-jmx" accept=".jmx" onchange="onPickJmx()">
-      <span class="dz-icon">♨</span>
-      <div class="dz-label">JMeter Script <span style="color:var(--danger)">*</span></div>
+      <div class="dz-icon-wrap">♨</div>
+      <div class="dz-label">JMeter Script <span class="dz-required">*</span></div>
       <div class="dz-sub">.jmx file — JMeter Test Plan</div>
       <div id="lbl-jmx" class="dz-name"></div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px;justify-content:center;padding:16px;
-                border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)">
-      <div style="font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">What gets generated</div>
-      <div style="font-size:12px;color:var(--text);line-height:1.8">
-        ✅ DevWeb / VuGen script<br>
-        ✅ All correlation extractors<br>
-        ✅ NTLM / Kerberos auth<br>
-        ✅ JWT (PS256, RS256, HS256)<br>
-        ✅ CSV parameter files<br>
-        ✅ <b>Workload Model Excel (.xlsx)</b>
-      </div>
+    <div class="jmx-features">
+      <div class="jmx-feat-title">What gets generated</div>
+      <div class="feat-item"><span class="feat-check">✓</span>DevWeb JS or VuGen C script</div>
+      <div class="feat-item"><span class="feat-check">✓</span>Regex / JSON / Boundary extractors</div>
+      <div class="feat-item"><span class="feat-check">✓</span>NTLM &amp; Kerberos auth config</div>
+      <div class="feat-item"><span class="feat-check">✓</span>JWT — PS256, RS256, HS256</div>
+      <div class="feat-item"><span class="feat-check">✓</span>CSV parameter files</div>
+      <div class="feat-item"><span class="feat-check">✓</span><strong>Workload Model Excel (.xlsx)</strong></div>
     </div>
   </div>
 
-  <!-- Options -->
-  <div class="card-title">3 · Configure Options</div>
-  <div class="options-row">
+  <!-- 3 · Options -->
+  <div class="section-label"><span class="section-num">3</span>Configure Options</div>
+  <div class="options-grid">
     <div class="opt-group">
-      <span>Think Time (sec)</span>
+      <span class="opt-label">Think Time</span>
       <div class="seg-btns">
         <button class="seg-btn active" id="jtt-1" onclick="setJmxTT(1)">1s</button>
         <button class="seg-btn"        id="jtt-2" onclick="setJmxTT(2)">2s</button>
@@ -360,7 +1028,7 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
       </div>
     </div>
     <div class="opt-group">
-      <span>WLM Excel</span>
+      <span class="opt-label">Workload Model Excel</span>
       <div class="seg-btns">
         <button class="seg-btn active" id="jwlm-yes" onclick="setJmxWlm(true)">Include</button>
         <button class="seg-btn"        id="jwlm-no"  onclick="setJmxWlm(false)">Skip</button>
@@ -368,33 +1036,34 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
     </div>
   </div>
 
-  <!-- Progress bar -->
+  <div class="divider"></div>
   <div class="prog-wrap" id="jprog-wrap"><div class="prog-fill" id="jprog-fill"></div></div>
 
-  <!-- Convert button -->
   <button class="btn-convert devweb" id="btn-jmx" onclick="doConvertJmx()">
     <div class="spinner" id="jspinner"></div>
     <span id="jbtn-lbl">♨ Convert JMeter to DevWeb Script</span>
   </button>
 </div>
 
-<!-- Result -->
+<!-- ── Results ─────────────────────────────────────────────────────────── -->
 <div class="result-box result-ok" id="res-ok">
   <div class="res-head">
-    <span class="res-icon">✅</span>
+    <div class="res-icon res-icon-ok">✅</div>
     <div>
-      <div class="res-title">Script Generated Successfully!</div>
+      <div class="res-title">Script Generated Successfully</div>
       <div class="res-sub" id="res-sub"></div>
     </div>
   </div>
-  <div class="stats-row" id="stats-row"></div>
-  <a id="btn-dl" class="btn-dl" href="#" download>⬇ Download Script (.zip)</a>
-  <button class="btn-reset" onclick="resetResult()">↩ Convert Another</button>
+  <div class="stats-grid" id="stats-row"></div>
+  <div class="res-actions">
+    <a id="btn-dl" class="btn-dl" href="#" download>⬇ Download Script (.zip)</a>
+    <button class="btn-reset" onclick="resetResult()">↩ Convert Another</button>
+  </div>
 </div>
 
 <div class="result-box result-err" id="res-err">
   <div class="res-head">
-    <span class="res-icon">❌</span>
+    <div class="res-icon res-icon-err">❌</div>
     <div>
       <div class="res-title">Conversion Failed</div>
       <div class="res-sub" id="err-msg"></div>
@@ -403,228 +1072,140 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
   <button class="btn-reset" onclick="resetResult()">↩ Try Again</button>
 </div>
 
-<!-- How it works -->
-<div class="card">
-  <div class="card-title">How It Works</div>
-  <div class="steps">
+<!-- ── How it works ────────────────────────────────────────────────────── -->
+<div class="card standalone">
+  <div class="section-label">How It Works</div>
+  <div class="steps-grid">
     <div class="step">
-      <span class="step-em">📤</span>
+      <div class="step-icon">📤</div>
       <div class="step-ttl">Upload</div>
-      <div class="step-txt">Drop your Postman or Bruno collection. Add the environment file for variable values.</div>
+      <div class="step-txt">Drop your Postman, Bruno or JMeter file. Add an environment file for variable values.</div>
     </div>
     <div class="step">
-      <span class="step-em">🔬</span>
+      <div class="step-icon">🔬</div>
       <div class="step-ttl">Analyze</div>
-      <div class="step-txt">Detects correlations, JWT, auth, proxy, headers and classifies into 3 variable tiers.</div>
+      <div class="step-txt">Detects correlations, JWT, auth, proxy, headers and classifies all variables into 3 tiers.</div>
     </div>
     <div class="step">
-      <span class="step-em">⚙️</span>
+      <div class="step-icon">⚙️</div>
       <div class="step-ttl">Generate</div>
-      <div class="step-txt">Creates complete LR script with all config files — per-request transactions included.</div>
+      <div class="step-txt">Creates a complete LR script with all config files — per-request transactions included.</div>
     </div>
     <div class="step">
-      <span class="step-em">⬇️</span>
+      <div class="step-icon">⬇️</div>
       <div class="step-ttl">Download</div>
-      <div class="step-txt">Get a .zip file. Open the .usr in VuGen or upload directly to LoadRunner Enterprise.</div>
+      <div class="step-txt">Get a .zip. Open the .usr in VuGen or upload directly to LoadRunner Enterprise.</div>
     </div>
+  </div>
+  <div class="formats-bar">
+    <span class="fmt-chip">📂 Postman v2.1 JSON</span>
+    <span class="fmt-chip">📂 Bruno JSON / YAML / .bru</span>
+    <span class="fmt-chip">♨ JMeter .jmx</span>
+    <span class="fmt-chip">🟦 DevWeb JS output</span>
+    <span class="fmt-chip">🟧 VuGen C output</span>
   </div>
 </div>
 
-<footer>Bruno / Postman → LoadRunner Converter &nbsp;·&nbsp; v<%= version %> &nbsp;·&nbsp; Performance Engineering Toolkit</footer>
+<!-- ── Footer ──────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer-links">
+    <span>Performance Engineering Toolkit</span>
+    <span class="footer-sep">·</span>
+    <span>v<%= version %></span>
+    <span class="footer-sep">·</span>
+    <span>Files processed in-memory — nothing stored on server</span>
+  </div>
+</footer>
 
+<!-- ══════════════════════════════════════════════════════════════════════ -->
 <script>
+/* ── State ──────────────────────────────────────────────────────────────── */
 const S  = { proto:'devweb', mode:'single', tt:1, ll:'info' };
 const F  = { collection:null, environment:null };
 const JX = { proto:'devweb', tt:1, wlm:true, file:null };
 
-// ── Tab switching ─────────────────────────────────────────────────────────
+/* ── Tab switching ──────────────────────────────────────────────────────── */
 function switchTab(tab) {
-  document.getElementById('panel-bruno').style.display = tab==='bruno' ? '' : 'none';
-  document.getElementById('panel-jmx').style.display   = tab==='jmx'   ? '' : 'none';
-  const tBruno = document.getElementById('tab-bruno');
-  const tJmx   = document.getElementById('tab-jmx');
-  if (tab==='bruno') {
-    tBruno.style.cssText += ';color:var(--text);background:var(--surface);border-bottom:2px solid var(--primary)';
-    tJmx.style.cssText   += ';color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border)';
-  } else {
-    tJmx.style.cssText   += ';color:var(--text);background:var(--surface);border-bottom:2px solid #f0883e';
-    tBruno.style.cssText += ';color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border)';
-  }
+  document.getElementById('panel-bruno').style.display = tab === 'bruno' ? '' : 'none';
+  document.getElementById('panel-jmx').style.display   = tab === 'jmx'   ? '' : 'none';
+  document.getElementById('tab-bruno').className = 'tab-btn' + (tab === 'bruno' ? ' active-bruno' : '');
+  document.getElementById('tab-jmx').className   = 'tab-btn' + (tab === 'jmx'   ? ' active-jmx'   : '');
   hideResults();
 }
 
-// ── JMX protocol / options ────────────────────────────────────────────────
+/* ── Protocol selectors ─────────────────────────────────────────────────── */
+function setProto(p) {
+  S.proto = p;
+  document.getElementById('pc-devweb').className = 'proto-card' + (p === 'devweb'   ? ' active-devweb' : '');
+  document.getElementById('pc-vugen').className  = 'proto-card' + (p === 'web-http' ? ' active-vugen'  : '');
+  const btn = document.getElementById('btn-cvt');
+  btn.className = 'btn-convert ' + (p === 'devweb' ? 'devweb' : 'vugen');
+  document.getElementById('btn-lbl').textContent = p === 'devweb'
+    ? '⚡ Convert to DevWeb Script' : '⚙️  Convert to VuGen Web HTTP/HTML';
+}
+
 function setJmxProto(p) {
   JX.proto = p;
-  document.getElementById('jpc-devweb').className = 'proto-card'+(p==='devweb'?' active-devweb':'');
-  document.getElementById('jpc-vugen').className  = 'proto-card'+(p==='web-http'?' active-vugen':'');
+  document.getElementById('jpc-devweb').className = 'proto-card' + (p === 'devweb'   ? ' active-devweb' : '');
+  document.getElementById('jpc-vugen').className  = 'proto-card' + (p === 'web-http' ? ' active-vugen'  : '');
   const btn = document.getElementById('btn-jmx');
-  btn.className = 'btn-convert '+(p==='devweb'?'devweb':'vugen');
-  document.getElementById('jbtn-lbl').textContent = p==='devweb'
+  btn.className = 'btn-convert ' + (p === 'devweb' ? 'devweb' : 'vugen');
+  document.getElementById('jbtn-lbl').textContent = p === 'devweb'
     ? '♨ Convert JMeter to DevWeb Script' : '♨ Convert JMeter to VuGen Web HTTP/HTML';
+}
+
+/* ── Option pickers ─────────────────────────────────────────────────────── */
+function setMode(m) {
+  S.mode = m;
+  ['single','multi'].forEach(x =>
+    document.getElementById('m-'+x).className = 'seg-btn' + (m === x ? ' active' : ''));
+}
+function setTT(t) {
+  S.tt = t;
+  [1,2,3,5].forEach(n =>
+    document.getElementById('tt-'+n).className = 'seg-btn' + (n === t ? ' active' : ''));
+}
+function setLL(l) {
+  S.ll = l;
+  ['info','debug'].forEach(x =>
+    document.getElementById('ll-'+x).className = 'seg-btn' + (l === x ? ' active' : ''));
 }
 function setJmxTT(t) {
   JX.tt = t;
   [1,2,3,5].forEach(n =>
-    document.getElementById('jtt-'+n).className='seg-btn'+(n===t?' active':''));
+    document.getElementById('jtt-'+n).className = 'seg-btn' + (n === t ? ' active' : ''));
 }
 function setJmxWlm(v) {
   JX.wlm = v;
-  document.getElementById('jwlm-yes').className='seg-btn'+(v?' active':'');
-  document.getElementById('jwlm-no').className ='seg-btn'+(!v?' active':'');
+  document.getElementById('jwlm-yes').className = 'seg-btn' + ( v ? ' active' : '');
+  document.getElementById('jwlm-no').className  = 'seg-btn' + (!v ? ' active' : '');
 }
 
-// ── JMX file picking ──────────────────────────────────────────────────────
-function onPickJmx() {
-  const f = document.getElementById('fi-jmx').files[0];
-  if(f) attachJmxFile(f);
-}
-function onDropJmx(e) {
-  e.preventDefault(); offDrag('dz-jmx');
-  const f = e.dataTransfer.files[0];
-  if(f) attachJmxFile(f);
-}
-function attachJmxFile(f) {
-  JX.file = f;
-  const dz = document.getElementById('dz-jmx');
-  document.getElementById('lbl-jmx').textContent = '✓ ' + f.name;
-  dz.classList.add('loaded'); dz.classList.remove('drag-over');
-  if (!dz.querySelector('.dz-clear')) {
-    const x = document.createElement('button');
-    x.className='dz-clear'; x.title='Remove'; x.textContent='×';
-    x.onclick = ev => { ev.stopPropagation(); JX.file=null; dz.classList.remove('loaded');
-      document.getElementById('lbl-jmx').textContent=''; x.remove();
-      document.getElementById('fi-jmx').value=''; };
-    dz.appendChild(x);
-  }
-}
-
-// ── JMX convert ───────────────────────────────────────────────────────────
-async function doConvertJmx() {
-  if (!JX.file) { alert('Please upload a JMX file first.'); return; }
-
-  const btn  = document.getElementById('btn-jmx');
-  const spin = document.getElementById('jspinner');
-  const lbl  = document.getElementById('jbtn-lbl');
-  const pw   = document.getElementById('jprog-wrap');
-  const pf   = document.getElementById('jprog-fill');
-
-  btn.disabled=true; spin.style.display='block'; lbl.textContent='Converting…';
-  pw.style.display='block'; pf.style.width='0%';
-  hideResults();
-
-  let pct=0;
-  const tick = setInterval(()=>{ pct=Math.min(pct+Math.random()*14,88); pf.style.width=pct+'%'; },300);
-
-  const fd = new FormData();
-  fd.append('jmxFile',           JX.file);
-  fd.append('protocol',          JX.proto);
-  fd.append('thinkTime',         JX.tt);
-  fd.append('generateWlmExcel',  JX.wlm);
-  fd.append('mode',              'single');
-  fd.append('useTransactions',   'true');
-  fd.append('useCorrelation',    'true');
-  fd.append('useParameterization','true');
-  fd.append('useAuthentication', 'true');
-  fd.append('addComments',       'true');
-
-  try {
-    const r = await fetch('convert-jmx', { method:'POST', body:fd });
-    const d = await r.json();
-    clearInterval(tick); pf.style.width='100%';
-    setTimeout(()=>{ pw.style.display='none'; resetJmxBtn();
-      showJmxResult(r.ok?d:null, r.ok?null:d.error); }, 400);
-  } catch(e) {
-    clearInterval(tick); pw.style.display='none'; resetJmxBtn(); showResult(null,e.message);
-  }
-}
-
-function resetJmxBtn() {
-  document.getElementById('btn-jmx').disabled=false;
-  document.getElementById('jspinner').style.display='none';
-  document.getElementById('jbtn-lbl').textContent = JX.proto==='devweb'
-    ? '♨ Convert JMeter to DevWeb Script' : '♨ Convert JMeter to VuGen Web HTTP/HTML';
-}
-
-function showJmxResult(data, err) {
-  if (err || !data) {
-    document.getElementById('err-msg').textContent = err||'Unknown error';
-    document.getElementById('res-err').style.display='block';
-    document.getElementById('res-err').scrollIntoView({behavior:'smooth',block:'start'});
-    return;
-  }
-  const a  = data.analysis || {};
-  const tg = (data.threadGroups || []).length;
-  const reqs   = a.requests?.total || '—';
-  const corrs  = a.correlations?.totalCorrelations || '—';
-  const params = a.parameters?.totalParameters || '—';
-  document.getElementById('stats-row').innerHTML =
-    `<div class="stat"><span class="stat-num">${reqs}</span><span class="stat-lbl">Requests</span></div>
-     <div class="stat"><span class="stat-num">${corrs}</span><span class="stat-lbl">Correlations</span></div>
-     <div class="stat"><span class="stat-num">${params}</span><span class="stat-lbl">Parameters</span></div>
-     <div class="stat"><span class="stat-num">${tg}</span><span class="stat-lbl">Thread Groups</span></div>`;
-  const pl = data.protocol==='web-http'?'VuGen Web HTTP/HTML (C)':'DevWeb (JavaScript)';
-  document.getElementById('res-sub').textContent =
-    `JMeter → ${pl} · ${reqs} requests · ${tg} thread group(s) · WLM Excel included`;
-  document.getElementById('btn-dl').href = data.downloadUrl;
-  document.getElementById('res-ok').style.display='block';
-  document.getElementById('res-ok').scrollIntoView({behavior:'smooth',block:'start'});
-}
-
-function setProto(p) {
-  S.proto = p;
-  document.getElementById('pc-devweb').className = 'proto-card' + (p==='devweb'?' active-devweb':'');
-  document.getElementById('pc-vugen').className  = 'proto-card' + (p==='web-http'?' active-vugen':'');
-  const btn = document.getElementById('btn-cvt');
-  btn.className = 'btn-convert ' + (p==='devweb'?'devweb':'vugen');
-  document.getElementById('btn-lbl').textContent = p==='devweb'
-    ? '⚡ Convert to DevWeb Script' : '⚙️  Convert to VuGen Web HTTP/HTML';
-}
-
-function setMode(m) {
-  S.mode = m;
-  ['single','multi'].forEach(x =>
-    document.getElementById('m-'+x).className = 'seg-btn'+(m===x?' active':''));
-}
-
-function setTT(t) {
-  S.tt = t;
-  [1,2,3,5].forEach(n =>
-    document.getElementById('tt-'+n).className = 'seg-btn'+(n===t?' active':''));
-}
-
-function setLL(l) {
-  S.ll = l;
-  ['info','debug'].forEach(x =>
-    document.getElementById('ll-'+x).className = 'seg-btn'+(l===x?' active':''));
-}
-
+/* ── Advanced toggle ────────────────────────────────────────────────────── */
 function toggleAdv() {
-  const btn = document.getElementById('adv-btn');
-  const pan = document.getElementById('adv-panel');
-  btn.classList.toggle('open');
-  pan.classList.toggle('show');
+  document.getElementById('adv-btn').classList.toggle('open');
+  document.getElementById('adv-panel').classList.toggle('show');
 }
 
-// ── Drag-and-drop ─────────────────────────────────────────────────────────
-function onDrag(e,id){ e.preventDefault(); document.getElementById(id).classList.add('drag-over'); }
-function offDrag(id) { document.getElementById(id).classList.remove('drag-over'); }
-function onDrop(e,dzId,key) {
+/* ── Drag-and-drop helpers ──────────────────────────────────────────────── */
+function onDrag(e, id) { e.preventDefault(); document.getElementById(id).classList.add('drag-over'); }
+function offDrag(id)   { document.getElementById(id).classList.remove('drag-over'); }
+
+function onDrop(e, dzId, key) {
   e.preventDefault(); offDrag(dzId);
   const f = e.dataTransfer.files[0];
-  if(f) attachFile(dzId, key, f);
+  if (f) attachFile(dzId, key, f);
 }
 function onPick(dzId, inputId, lblId, key) {
   const f = document.getElementById(inputId).files[0];
-  if(f) attachFile(dzId, key, f);
+  if (f) attachFile(dzId, key, f);
 }
 function attachFile(dzId, key, f) {
   F[key] = f;
   const dz  = document.getElementById(dzId);
-  const lbl = document.getElementById(key==='collection'?'lbl-col':'lbl-env');
+  const lbl = document.getElementById(key === 'collection' ? 'lbl-col' : 'lbl-env');
   dz.classList.add('loaded'); dz.classList.remove('drag-over');
   lbl.textContent = '✓ ' + f.name;
-  // add clear btn
   if (!dz.querySelector('.dz-clear')) {
     const x = document.createElement('button');
     x.className = 'dz-clear'; x.title = 'Remove'; x.textContent = '×';
@@ -635,32 +1216,61 @@ function attachFile(dzId, key, f) {
 function clearFile(dzId, key) {
   F[key] = null;
   const dz  = document.getElementById(dzId);
-  const lbl = document.getElementById(key==='collection'?'lbl-col':'lbl-env');
+  const lbl = document.getElementById(key === 'collection' ? 'lbl-col' : 'lbl-env');
   dz.classList.remove('loaded'); lbl.textContent = '';
-  const x = dz.querySelector('.dz-clear'); if(x) x.remove();
-  const fi = document.getElementById(key==='collection'?'fi-col':'fi-env');
-  fi.value = '';
+  const x = dz.querySelector('.dz-clear'); if (x) x.remove();
+  document.getElementById(key === 'collection' ? 'fi-col' : 'fi-env').value = '';
 }
 
-// ── Convert ───────────────────────────────────────────────────────────────
+/* ── JMX file handling ──────────────────────────────────────────────────── */
+function onPickJmx() {
+  const f = document.getElementById('fi-jmx').files[0];
+  if (f) attachJmxFile(f);
+}
+function onDropJmx(e) {
+  e.preventDefault(); offDrag('dz-jmx');
+  const f = e.dataTransfer.files[0];
+  if (f) attachJmxFile(f);
+}
+function attachJmxFile(f) {
+  JX.file = f;
+  const dz = document.getElementById('dz-jmx');
+  document.getElementById('lbl-jmx').textContent = '✓ ' + f.name;
+  dz.classList.add('loaded'); dz.classList.remove('drag-over');
+  if (!dz.querySelector('.dz-clear')) {
+    const x = document.createElement('button');
+    x.className = 'dz-clear'; x.title = 'Remove'; x.textContent = '×';
+    x.onclick = ev => {
+      ev.stopPropagation(); JX.file = null; dz.classList.remove('loaded');
+      document.getElementById('lbl-jmx').textContent = ''; x.remove();
+      document.getElementById('fi-jmx').value = '';
+    };
+    dz.appendChild(x);
+  }
+}
+
+/* ── Progress helper ────────────────────────────────────────────────────── */
+function startProgress(wrapId, fillId) {
+  const pw = document.getElementById(wrapId);
+  const pf = document.getElementById(fillId);
+  pw.style.display = 'block'; pf.style.width = '0%';
+  let pct = 0;
+  return {
+    tick: setInterval(() => { pct = Math.min(pct + Math.random() * 14, 88); pf.style.width = pct + '%'; }, 300),
+    fill: () => { pf.style.width = '100%'; },
+    hide: () => { setTimeout(() => { pw.style.display = 'none'; }, 450); }
+  };
+}
+
+/* ── Bruno/Postman convert ──────────────────────────────────────────────── */
 async function doConvert() {
   if (!F.collection) { alert('Please upload a collection file first.'); return; }
-
   const btn  = document.getElementById('btn-cvt');
   const spin = document.getElementById('spinner');
   const lbl  = document.getElementById('btn-lbl');
-  const pw   = document.getElementById('prog-wrap');
-  const pf   = document.getElementById('prog-fill');
-
-  btn.disabled = true; spin.style.display='block'; lbl.textContent='Converting…';
-  pw.style.display='block'; pf.style.width='0%';
+  btn.disabled = true; spin.style.display = 'block'; lbl.textContent = 'Converting…';
   hideResults();
-
-  let pct=0;
-  const tick = setInterval(() => {
-    pct = Math.min(pct + Math.random()*14, 88);
-    pf.style.width = pct+'%';
-  }, 300);
+  const prog = startProgress('prog-wrap', 'prog-fill');
 
   const fd = new FormData();
   fd.append('collection', F.collection);
@@ -675,43 +1285,112 @@ async function doConvert() {
   fd.append('addComments',         document.getElementById('opt-cmt').checked);
 
   try {
-    const r = await fetch('convert', { method:'POST', body:fd });
+    const r = await fetch('convert', { method: 'POST', body: fd });
     const d = await r.json();
-    clearInterval(tick); pf.style.width='100%';
-    setTimeout(() => { pw.style.display='none'; resetBtn(); showResult(r.ok?d:null, r.ok?null:d.error); }, 400);
+    clearInterval(prog.tick); prog.fill(); prog.hide();
+    resetBtn(); showResult(r.ok ? d : null, r.ok ? null : d.error);
   } catch(e) {
-    clearInterval(tick); pw.style.display='none'; resetBtn(); showResult(null, e.message);
+    clearInterval(prog.tick); prog.hide(); resetBtn(); showResult(null, e.message);
   }
 }
 
 function resetBtn() {
   document.getElementById('btn-cvt').disabled = false;
   document.getElementById('spinner').style.display = 'none';
-  document.getElementById('btn-lbl').textContent = S.proto==='devweb'
+  document.getElementById('btn-lbl').textContent = S.proto === 'devweb'
     ? '⚡ Convert to DevWeb Script' : '⚙️  Convert to VuGen Web HTTP/HTML';
 }
 
+/* ── JMeter convert ─────────────────────────────────────────────────────── */
+async function doConvertJmx() {
+  if (!JX.file) { alert('Please upload a JMX file first.'); return; }
+  const btn  = document.getElementById('btn-jmx');
+  const spin = document.getElementById('jspinner');
+  const lbl  = document.getElementById('jbtn-lbl');
+  btn.disabled = true; spin.style.display = 'block'; lbl.textContent = 'Converting…';
+  hideResults();
+  const prog = startProgress('jprog-wrap', 'jprog-fill');
+
+  const fd = new FormData();
+  fd.append('jmxFile',             JX.file);
+  fd.append('protocol',            JX.proto);
+  fd.append('thinkTime',           JX.tt);
+  fd.append('generateWlmExcel',    JX.wlm);
+  fd.append('mode',                'single');
+  fd.append('useTransactions',     'true');
+  fd.append('useCorrelation',      'true');
+  fd.append('useParameterization', 'true');
+  fd.append('useAuthentication',   'true');
+  fd.append('addComments',         'true');
+
+  try {
+    const r = await fetch('convert-jmx', { method: 'POST', body: fd });
+    const d = await r.json();
+    clearInterval(prog.tick); prog.fill(); prog.hide();
+    resetJmxBtn(); showJmxResult(r.ok ? d : null, r.ok ? null : d.error);
+  } catch(e) {
+    clearInterval(prog.tick); prog.hide(); resetJmxBtn(); showResult(null, e.message);
+  }
+}
+
+function resetJmxBtn() {
+  document.getElementById('btn-jmx').disabled = false;
+  document.getElementById('jspinner').style.display = 'none';
+  document.getElementById('jbtn-lbl').textContent = JX.proto === 'devweb'
+    ? '♨ Convert JMeter to DevWeb Script' : '♨ Convert JMeter to VuGen Web HTTP/HTML';
+}
+
+/* ── Result renderers ───────────────────────────────────────────────────── */
 function showResult(data, err) {
   if (err || !data) {
     document.getElementById('err-msg').textContent = err || 'Unknown error';
     document.getElementById('res-err').style.display = 'block';
-    document.getElementById('res-err').scrollIntoView({behavior:'smooth',block:'start'});
+    document.getElementById('res-err').scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
   const a = data.analysis || {};
-  const reqs   = a.requests?.total || '—';
-  const corrs  = a.correlations?.totalCorrelations || '—';
-  const params = a.parameters?.totalParameters || '—';
+  const reqs   = a.requests?.total              ?? '—';
+  const corrs  = a.correlations?.totalCorrelations ?? '—';
+  const params = a.parameters?.totalParameters   ?? '—';
   document.getElementById('stats-row').innerHTML =
-    `<div class="stat"><span class="stat-num">${reqs}</span><span class="stat-lbl">Requests</span></div>
-     <div class="stat"><span class="stat-num">${corrs}</span><span class="stat-lbl">Correlations</span></div>
-     <div class="stat"><span class="stat-num">${params}</span><span class="stat-lbl">Parameters</span></div>`;
-  const pl = data.protocol==='web-http' ? 'VuGen Web HTTP/HTML (C)' : 'DevWeb (JavaScript)';
-  const ml = data.mode==='multi' ? 'Multi-Script' : 'Single Script';
+    stat(reqs,   'Requests')  +
+    stat(corrs,  'Correlations') +
+    stat(params, 'Parameters');
+  const pl = data.protocol === 'web-http' ? 'VuGen Web HTTP/HTML (C)' : 'DevWeb (JavaScript)';
+  const ml = data.mode === 'multi' ? 'Multi-Script' : 'Single Script';
   document.getElementById('res-sub').textContent = `${pl} · ${ml} · Ready for LoadRunner Enterprise`;
   document.getElementById('btn-dl').href = data.downloadUrl;
   document.getElementById('res-ok').style.display = 'block';
-  document.getElementById('res-ok').scrollIntoView({behavior:'smooth',block:'start'});
+  document.getElementById('res-ok').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function showJmxResult(data, err) {
+  if (err || !data) {
+    document.getElementById('err-msg').textContent = err || 'Unknown error';
+    document.getElementById('res-err').style.display = 'block';
+    document.getElementById('res-err').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const a    = data.analysis || {};
+  const tg   = (data.threadGroups || []).length;
+  const reqs   = a.requests?.total              ?? data.metadata?.totalRequests ?? '—';
+  const corrs  = a.correlations?.totalCorrelations ?? '—';
+  const params = a.parameters?.totalParameters   ?? '—';
+  document.getElementById('stats-row').innerHTML =
+    stat(reqs,   'Requests')     +
+    stat(corrs,  'Correlations') +
+    stat(params, 'Parameters')   +
+    stat(tg,     'Thread Groups');
+  const pl = data.protocol === 'web-http' ? 'VuGen Web HTTP/HTML (C)' : 'DevWeb (JavaScript)';
+  document.getElementById('res-sub').textContent =
+    `JMeter → ${pl} · ${reqs} requests · ${tg} thread group(s) · WLM Excel included`;
+  document.getElementById('btn-dl').href = data.downloadUrl;
+  document.getElementById('res-ok').style.display = 'block';
+  document.getElementById('res-ok').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function stat(num, label) {
+  return `<div class="stat"><span class="stat-num">${num}</span><span class="stat-lbl">${label}</span></div>`;
 }
 
 function hideResults() {
