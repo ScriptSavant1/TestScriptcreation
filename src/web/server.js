@@ -16,6 +16,7 @@ const fs       = require('fs').promises;
 const archiver = require('archiver');
 const { runWithMemoryFs } = require('../lib/memoryFsInterceptor');
 const BrunoDevWebConverter = require('../index');
+const JmxConverter         = require('../converters/jmxConverter');
 
 class WebServer {
   constructor(port = 3000) {
@@ -166,6 +167,64 @@ class WebServer {
 
       archive.finalize();
     });
+
+    // ── Convert JMX ──────────────────────────────────────────────────────────
+    this.app.post('/convert-jmx',
+      this.upload.single('jmxFile'),
+      async (req, res) => {
+        const jmxFile = req.file;
+        if (!jmxFile) {
+          return res.status(400).json({ error: 'JMX file is required.' });
+        }
+
+        const tmpJmx = path.join(os.tmpdir(), `lr-jmx-${Date.now()}-${jmxFile.originalname}`);
+
+        try {
+          await fs.writeFile(tmpJmx, jmxFile.buffer);
+
+          const outputDir = path.join(os.tmpdir(), `lr-jmx-out-${Date.now()}`);
+
+          const options = {
+            inputFile:           tmpJmx,
+            outputDir,
+            protocol:            req.body.protocol            || 'devweb',
+            mode:                req.body.mode                || 'single',
+            useTransactions:     req.body.useTransactions     !== 'false',
+            useCorrelation:      req.body.useCorrelation      !== 'false',
+            useParameterization: req.body.useParameterization !== 'false',
+            useAuthentication:   req.body.useAuthentication   !== 'false',
+            thinkTime:           parseFloat(req.body.thinkTime) || 1,
+            addComments:         req.body.addComments !== 'false',
+            logLevel:            req.body.logLevel || 'info',
+            generateWlmExcel:    req.body.generateWlmExcel !== 'false'
+          };
+
+          const converter = new JmxConverter(options);
+          const { result: results, files } = await runWithMemoryFs(() => converter.convert());
+
+          await fs.unlink(tmpJmx).catch(() => {});
+
+          const token = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+          this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
+          setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
+
+          res.json({
+            success:      true,
+            downloadUrl:  `download/${token}`,
+            analysis:     results.analysis,
+            threadGroups: results.threadGroups,
+            metadata:     results.metadata,
+            protocol:     options.protocol,
+            mode:         options.mode
+          });
+
+        } catch (err) {
+          await fs.unlink(tmpJmx).catch(() => {});
+          console.error('JMX conversion error:', err);
+          res.status(500).json({ error: err.message });
+        }
+      }
+    );
 
     // ── Health ────────────────────────────────────────────────────────────────
     this.app.get('/health', (req, res) => {
