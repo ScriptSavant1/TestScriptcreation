@@ -167,12 +167,27 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
     <div class="logo-icon">⚡</div>
     <span class="logo-title">LR Script Converter</span>
   </div>
-  <div class="logo-sub">Convert Postman &amp; Bruno API collections to LoadRunner Enterprise scripts</div>
+  <div class="logo-sub">Convert Postman, Bruno &amp; JMeter scripts to LoadRunner Enterprise</div>
   <div class="badge"><span class="badge-dot"></span>v<%= version %>&nbsp;·&nbsp;DevWeb (JS) + Web HTTP/HTML (C)</div>
 </div>
 
-<!-- Main card -->
-<div class="card">
+<!-- Source tabs -->
+<div style="width:100%;max-width:860px;display:flex;gap:0;margin-bottom:-1px;position:relative;z-index:1">
+  <button id="tab-bruno" onclick="switchTab('bruno')"
+    style="flex:1;padding:11px 0;border:1px solid var(--border);border-bottom:none;border-radius:10px 0 0 0;
+           background:var(--surface);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;
+           border-bottom:2px solid var(--primary)">
+    📂 Postman / Bruno
+  </button>
+  <button id="tab-jmx" onclick="switchTab('jmx')"
+    style="flex:1;padding:11px 0;border:1px solid var(--border);border-bottom:none;border-radius:0 10px 0 0;
+           background:var(--surface2);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer">
+    ♨ JMeter (.jmx)
+  </button>
+</div>
+
+<!-- Main card (Postman/Bruno) -->
+<div class="card" id="panel-bruno">
 
   <!-- Protocol -->
   <div class="card-title">1 · Choose Output Protocol</div>
@@ -282,6 +297,87 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
   </button>
 </div>
 
+<!-- JMX Card -->
+<div class="card" id="panel-jmx" style="display:none">
+
+  <!-- Protocol -->
+  <div class="card-title">1 · Choose Output Protocol</div>
+  <div class="proto-grid">
+    <div class="proto-card active-devweb" id="jpc-devweb" onclick="setJmxProto('devweb')">
+      <div class="proto-icon">🟦</div>
+      <div>
+        <div class="proto-name">DevWeb (JavaScript)</div>
+        <div class="proto-desc">Generates <b>main.js</b> with transactions, correlations, auth &amp; WLM Excel.</div>
+        <span class="proto-badge badge-js">JavaScript · main.js</span>
+      </div>
+    </div>
+    <div class="proto-card" id="jpc-vugen" onclick="setJmxProto('web-http')">
+      <div class="proto-icon">🟧</div>
+      <div>
+        <div class="proto-name">VuGen Web HTTP/HTML</div>
+        <div class="proto-desc">Generates <b>Action.c</b> with web_custom_request, NTLM/Kerberos &amp; WLM Excel.</div>
+        <span class="proto-badge badge-c">C Code · Action.c</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card-title">2 · Upload JMeter Script</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+    <div class="drop-zone" id="dz-jmx"
+         ondragover="onDrag(event,'dz-jmx')" ondragleave="offDrag('dz-jmx')"
+         ondrop="onDropJmx(event)">
+      <input type="file" id="fi-jmx" accept=".jmx" onchange="onPickJmx()">
+      <span class="dz-icon">♨</span>
+      <div class="dz-label">JMeter Script <span style="color:var(--danger)">*</span></div>
+      <div class="dz-sub">.jmx file — JMeter Test Plan</div>
+      <div id="lbl-jmx" class="dz-name"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;justify-content:center;padding:16px;
+                border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)">
+      <div style="font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">What gets generated</div>
+      <div style="font-size:12px;color:var(--text);line-height:1.8">
+        ✅ DevWeb / VuGen script<br>
+        ✅ All correlation extractors<br>
+        ✅ NTLM / Kerberos auth<br>
+        ✅ JWT (PS256, RS256, HS256)<br>
+        ✅ CSV parameter files<br>
+        ✅ <b>Workload Model Excel (.xlsx)</b>
+      </div>
+    </div>
+  </div>
+
+  <!-- Options -->
+  <div class="card-title">3 · Configure Options</div>
+  <div class="options-row">
+    <div class="opt-group">
+      <span>Think Time (sec)</span>
+      <div class="seg-btns">
+        <button class="seg-btn active" id="jtt-1" onclick="setJmxTT(1)">1s</button>
+        <button class="seg-btn"        id="jtt-2" onclick="setJmxTT(2)">2s</button>
+        <button class="seg-btn"        id="jtt-3" onclick="setJmxTT(3)">3s</button>
+        <button class="seg-btn"        id="jtt-5" onclick="setJmxTT(5)">5s</button>
+      </div>
+    </div>
+    <div class="opt-group">
+      <span>WLM Excel</span>
+      <div class="seg-btns">
+        <button class="seg-btn active" id="jwlm-yes" onclick="setJmxWlm(true)">Include</button>
+        <button class="seg-btn"        id="jwlm-no"  onclick="setJmxWlm(false)">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="prog-wrap" id="jprog-wrap"><div class="prog-fill" id="jprog-fill"></div></div>
+
+  <!-- Convert button -->
+  <button class="btn-convert devweb" id="btn-jmx" onclick="doConvertJmx()">
+    <div class="spinner" id="jspinner"></div>
+    <span id="jbtn-lbl">♨ Convert JMeter to DevWeb Script</span>
+  </button>
+</div>
+
 <!-- Result -->
 <div class="result-box result-ok" id="res-ok">
   <div class="res-head">
@@ -337,8 +433,143 @@ footer{color:var(--muted);font-size:11px;text-align:center;margin-top:4px;paddin
 <footer>Bruno / Postman → LoadRunner Converter &nbsp;·&nbsp; v<%= version %> &nbsp;·&nbsp; Performance Engineering Toolkit</footer>
 
 <script>
-const S = { proto:'devweb', mode:'single', tt:1, ll:'info' };
-const F = { collection:null, environment:null };
+const S  = { proto:'devweb', mode:'single', tt:1, ll:'info' };
+const F  = { collection:null, environment:null };
+const JX = { proto:'devweb', tt:1, wlm:true, file:null };
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('panel-bruno').style.display = tab==='bruno' ? '' : 'none';
+  document.getElementById('panel-jmx').style.display   = tab==='jmx'   ? '' : 'none';
+  const tBruno = document.getElementById('tab-bruno');
+  const tJmx   = document.getElementById('tab-jmx');
+  if (tab==='bruno') {
+    tBruno.style.cssText += ';color:var(--text);background:var(--surface);border-bottom:2px solid var(--primary)';
+    tJmx.style.cssText   += ';color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border)';
+  } else {
+    tJmx.style.cssText   += ';color:var(--text);background:var(--surface);border-bottom:2px solid #f0883e';
+    tBruno.style.cssText += ';color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border)';
+  }
+  hideResults();
+}
+
+// ── JMX protocol / options ────────────────────────────────────────────────
+function setJmxProto(p) {
+  JX.proto = p;
+  document.getElementById('jpc-devweb').className = 'proto-card'+(p==='devweb'?' active-devweb':'');
+  document.getElementById('jpc-vugen').className  = 'proto-card'+(p==='web-http'?' active-vugen':'');
+  const btn = document.getElementById('btn-jmx');
+  btn.className = 'btn-convert '+(p==='devweb'?'devweb':'vugen');
+  document.getElementById('jbtn-lbl').textContent = p==='devweb'
+    ? '♨ Convert JMeter to DevWeb Script' : '♨ Convert JMeter to VuGen Web HTTP/HTML';
+}
+function setJmxTT(t) {
+  JX.tt = t;
+  [1,2,3,5].forEach(n =>
+    document.getElementById('jtt-'+n).className='seg-btn'+(n===t?' active':''));
+}
+function setJmxWlm(v) {
+  JX.wlm = v;
+  document.getElementById('jwlm-yes').className='seg-btn'+(v?' active':'');
+  document.getElementById('jwlm-no').className ='seg-btn'+(!v?' active':'');
+}
+
+// ── JMX file picking ──────────────────────────────────────────────────────
+function onPickJmx() {
+  const f = document.getElementById('fi-jmx').files[0];
+  if(f) attachJmxFile(f);
+}
+function onDropJmx(e) {
+  e.preventDefault(); offDrag('dz-jmx');
+  const f = e.dataTransfer.files[0];
+  if(f) attachJmxFile(f);
+}
+function attachJmxFile(f) {
+  JX.file = f;
+  const dz = document.getElementById('dz-jmx');
+  document.getElementById('lbl-jmx').textContent = '✓ ' + f.name;
+  dz.classList.add('loaded'); dz.classList.remove('drag-over');
+  if (!dz.querySelector('.dz-clear')) {
+    const x = document.createElement('button');
+    x.className='dz-clear'; x.title='Remove'; x.textContent='×';
+    x.onclick = ev => { ev.stopPropagation(); JX.file=null; dz.classList.remove('loaded');
+      document.getElementById('lbl-jmx').textContent=''; x.remove();
+      document.getElementById('fi-jmx').value=''; };
+    dz.appendChild(x);
+  }
+}
+
+// ── JMX convert ───────────────────────────────────────────────────────────
+async function doConvertJmx() {
+  if (!JX.file) { alert('Please upload a JMX file first.'); return; }
+
+  const btn  = document.getElementById('btn-jmx');
+  const spin = document.getElementById('jspinner');
+  const lbl  = document.getElementById('jbtn-lbl');
+  const pw   = document.getElementById('jprog-wrap');
+  const pf   = document.getElementById('jprog-fill');
+
+  btn.disabled=true; spin.style.display='block'; lbl.textContent='Converting…';
+  pw.style.display='block'; pf.style.width='0%';
+  hideResults();
+
+  let pct=0;
+  const tick = setInterval(()=>{ pct=Math.min(pct+Math.random()*14,88); pf.style.width=pct+'%'; },300);
+
+  const fd = new FormData();
+  fd.append('jmxFile',           JX.file);
+  fd.append('protocol',          JX.proto);
+  fd.append('thinkTime',         JX.tt);
+  fd.append('generateWlmExcel',  JX.wlm);
+  fd.append('mode',              'single');
+  fd.append('useTransactions',   'true');
+  fd.append('useCorrelation',    'true');
+  fd.append('useParameterization','true');
+  fd.append('useAuthentication', 'true');
+  fd.append('addComments',       'true');
+
+  try {
+    const r = await fetch('convert-jmx', { method:'POST', body:fd });
+    const d = await r.json();
+    clearInterval(tick); pf.style.width='100%';
+    setTimeout(()=>{ pw.style.display='none'; resetJmxBtn();
+      showJmxResult(r.ok?d:null, r.ok?null:d.error); }, 400);
+  } catch(e) {
+    clearInterval(tick); pw.style.display='none'; resetJmxBtn(); showResult(null,e.message);
+  }
+}
+
+function resetJmxBtn() {
+  document.getElementById('btn-jmx').disabled=false;
+  document.getElementById('jspinner').style.display='none';
+  document.getElementById('jbtn-lbl').textContent = JX.proto==='devweb'
+    ? '♨ Convert JMeter to DevWeb Script' : '♨ Convert JMeter to VuGen Web HTTP/HTML';
+}
+
+function showJmxResult(data, err) {
+  if (err || !data) {
+    document.getElementById('err-msg').textContent = err||'Unknown error';
+    document.getElementById('res-err').style.display='block';
+    document.getElementById('res-err').scrollIntoView({behavior:'smooth',block:'start'});
+    return;
+  }
+  const a  = data.analysis || {};
+  const tg = (data.threadGroups || []).length;
+  const reqs   = a.requests?.total || '—';
+  const corrs  = a.correlations?.totalCorrelations || '—';
+  const params = a.parameters?.totalParameters || '—';
+  document.getElementById('stats-row').innerHTML =
+    `<div class="stat"><span class="stat-num">${reqs}</span><span class="stat-lbl">Requests</span></div>
+     <div class="stat"><span class="stat-num">${corrs}</span><span class="stat-lbl">Correlations</span></div>
+     <div class="stat"><span class="stat-num">${params}</span><span class="stat-lbl">Parameters</span></div>
+     <div class="stat"><span class="stat-num">${tg}</span><span class="stat-lbl">Thread Groups</span></div>`;
+  const pl = data.protocol==='web-http'?'VuGen Web HTTP/HTML (C)':'DevWeb (JavaScript)';
+  document.getElementById('res-sub').textContent =
+    `JMeter → ${pl} · ${reqs} requests · ${tg} thread group(s) · WLM Excel included`;
+  document.getElementById('btn-dl').href = data.downloadUrl;
+  document.getElementById('res-ok').style.display='block';
+  document.getElementById('res-ok').scrollIntoView({behavior:'smooth',block:'start'});
+}
 
 function setProto(p) {
   S.proto = p;

@@ -461,28 +461,69 @@ class CustomScriptParser {
     const isManualCrypto = /crypto\.sign\s*\(|createSign\s*\(/.test(script) &&
                            /base64url|header\.payload/.test(script);
 
-    const isJwt = isJsrsasign || isJsonwebtoken || isJose || isManualCrypto;
+    // ── Java / Groovy JWT patterns (JSR223 / BeanShell in JMeter) ────────────
+    // JJWT library: import io.jsonwebtoken.Jwts / Jwts.builder()...signWith(...)
+    const isJjwt = /import\s+io\.jsonwebtoken/.test(script) ||
+                   /Jwts\.builder\s*\(\s*\)/.test(script);
+    // Manual Java HMAC-SHA256
+    const isJavaHmac = /Mac\.getInstance\s*\(\s*["']HmacSHA256["']\s*\)/.test(script) ||
+                       /HmacSHA256/.test(script);
+    // BouncyCastle / Java RSA signing
+    const isJavaRsa  = /Signature\.getInstance/.test(script) &&
+                       (/SHA256withRSA|SHA256withRSAandMGF1|RSA/.test(script));
+    // Java Base64 URL encoding patterns (common in manual JWT creation)
+    const isJavaJwt  = (isJjwt || isJavaHmac || isJavaRsa) ||
+                       (/Base64\.getUrlEncoder/.test(script) && /\.sign\s*\(/.test(script));
+
+    const isJwt = isJsrsasign || isJsonwebtoken || isJose || isManualCrypto || isJavaJwt;
     if (!isJwt) return { isJwt: false, library: null, outputVars: [], algorithm: 'RS256' };
 
     // ── Determine library ───────────────────────────────────────────────────
     let library = 'unknown';
-    if (isJsrsasign)    library = 'jsrsasign';
+    if (isJsrsasign)         library = 'jsrsasign';
     else if (isJsonwebtoken) library = 'jsonwebtoken';
-    else if (isJose)    library = 'jose';
+    else if (isJose)         library = 'jose';
     else if (isManualCrypto) library = 'crypto';
+    else if (isJjwt)         library = 'jjwt-groovy';
+    else if (isJavaJwt)      library = 'java-manual';
 
-    // ── Extract algorithm ───────────────────────────────────────────────────
-    const algMatch = script.match(/['"]alg['"]\s*:\s*['"]([A-Z0-9]+)['"]/i) ||
-                     script.match(/algorithm\s*[:=]\s*['"]([A-Z0-9]+)['"]/i);
-    const algorithm = algMatch ? algMatch[1].toUpperCase() : 'RS256';
+    // ── Extract algorithm — JS and Java/Groovy patterns ─────────────────────
+    const algMatch =
+      // JS: alg: "PS256" or algorithm: "RS256"
+      script.match(/['"]alg['"]\s*:\s*['"]([A-Z0-9]+)['"]/i)          ||
+      script.match(/algorithm\s*[:=]\s*['"]([A-Z0-9]+)['"]/i)         ||
+      // JJWT: SignatureAlgorithm.RS256 / .PS256 / .HS256
+      script.match(/SignatureAlgorithm\.([A-Z0-9]+)/)                  ||
+      // Java getInstance: "SHA256withRSAandMGF1" → PS256
+      //                    "SHA256withRSA"        → RS256
+      //                    "HmacSHA256"           → HS256
+      script.match(/getInstance\s*\(\s*["'](SHA256withRSAandMGF1|SHA256withRSA|HmacSHA256)["']/);
+
+    let algorithm = 'RS256';
+    if (algMatch) {
+      const raw = algMatch[1].toUpperCase();
+      // Map Java algorithm names to JWT alg identifiers
+      const javaAlgMap = {
+        'SHA256WITHRSA':           'RS256',
+        'SHA256WITHRSAANDMGF1':    'PS256',
+        'HMACSHA256':              'HS256',
+        'SHA384WITHRSA':           'RS384',
+        'SHA512WITHRSA':           'RS512',
+        'SHA256WITHECDSA':         'ES256'
+      };
+      algorithm = javaAlgMap[raw] || raw;
+    }
 
     // ── Extract output variable names (variables set after JWT is generated) ─
-    const setPattern = /(?:pm\.environment|pm\.globals|pm\.collectionVariables|pm\.variables)\.set\s*\(\s*['"]([^'"]+)['"]/g;
-    const bruPattern = /bru\.(?:setVar|setEnvVar)\s*\(\s*['"]([^'"]+)['"]/g;
+    const setPattern  = /(?:pm\.environment|pm\.globals|pm\.collectionVariables|pm\.variables)\.set\s*\(\s*['"]([^'"]+)['"]/g;
+    const bruPattern  = /bru\.(?:setVar|setEnvVar)\s*\(\s*['"]([^'"]+)['"]/g;
+    // JMeter Groovy/BeanShell: vars.put("varName", ...) or props.put("varName", ...)
+    const varsPattern = /(?:vars|props)\.put\s*\(\s*["']([^"']+)["']/g;
     const outputVars = [];
     let m;
-    while ((m = setPattern.exec(script)) !== null) outputVars.push(m[1]);
+    while ((m = setPattern.exec(script))  !== null) outputVars.push(m[1]);
     while ((m = bruPattern.exec(script))  !== null) outputVars.push(m[1]);
+    while ((m = varsPattern.exec(script)) !== null) outputVars.push(m[1]);
 
     return { isJwt: true, library, outputVars, algorithm };
   }
