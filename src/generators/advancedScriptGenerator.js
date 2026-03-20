@@ -663,6 +663,9 @@ ${finalizeSection}
       this.correlations = this.correlationDetector.analyzeRequests(
         this.requests,
       );
+      // Inject JMX-explicit extractors (RegexExtractor, BoundaryExtractor, etc.)
+      // stored on req.extractors[] by jmxParser — not detectable from script content.
+      this.injectJmxExtractors();
       console.log(`✓ Found ${this.correlations.length} correlation(s)`);
     }
 
@@ -1127,7 +1130,7 @@ ${jwtBlock}
       if (!seen.has(corr.name) && !isLibraryName(corr.name)) {
         seen.add(corr.name);
         const safe = this.sanitizeVarName(corr.name);
-        vars.push(`load.global.${safe} = null; // Correlated: ${corr.type}`);
+        vars.push(`load.global.${safe} = null; // Correlated: ${corr.type || corr.extractorType}`);
       }
     });
 
@@ -1492,7 +1495,7 @@ ${jwtRefreshBlock}
         // Extractor registered as safeCorrName AND accessed with same name — must be identical
         code += `\n${this.indent(`load.global.${safeCorrName} = ${responseVar}.extractors["${safeCorrName}"];`, indentLevel)}`;
         if (this.options.addComments) {
-          code += ` // Extracted ${corr.type}`;
+          code += ` // Extracted ${corr.type || corr.extractorType}`;
         }
       });
     }
@@ -1780,6 +1783,45 @@ ${jwtRefreshBlock}
       return result;
     }
     return obj;
+  }
+
+  /**
+   * Inject JMX-explicit extractors into this.correlations so the standard
+   * extractor/global-var machinery handles them automatically.
+   * Skips names already detected by correlationDetector.analyzeRequests().
+   */
+  injectJmxExtractors() {
+    const seenNames = new Set(this.correlations.map(c => c.name));
+    for (const request of this.requests) {
+      const jmxExtractors = (request.extractors || []).filter(e => e.listen === 'extractor' && e.extractor);
+      for (const { extractor } of jmxExtractors) {
+        const name = extractor.name;
+        if (!name || seenNames.has(name)) continue;
+        seenNames.add(name);
+        let corr;
+        switch ((extractor.type || '').toLowerCase()) {
+          case 'regex':
+          case 'regexp':
+            corr = { name, extractorType: 'regex', pattern: extractor.regex || '(.+?)', producerRequest: request.name, consumerRequests: [] };
+            break;
+          case 'jsonpath':
+          case 'json':
+            corr = { name, extractorType: 'json', extractPath: extractor.expression || `$.${name}`, producerRequest: request.name, consumerRequests: [] };
+            break;
+          case 'boundary':
+            corr = { name, extractorType: 'boundary', leftBound: extractor.lowerBound || '', rightBound: extractor.upperBound || '', producerRequest: request.name, consumerRequests: [] };
+            break;
+          case 'xpath':
+          case 'xpath2':
+            // Fallback to BoundaryExtractor-style; XPath not natively in DevWeb SDK
+            corr = { name, extractorType: 'boundary', leftBound: `<${name}>`, rightBound: `</${name}>`, producerRequest: request.name, consumerRequests: [] };
+            break;
+          default:
+            corr = { name, extractorType: 'regex', pattern: '(.+?)', producerRequest: request.name, consumerRequests: [] };
+        }
+        this.correlations.push(corr);
+      }
+    }
   }
 
   /**
