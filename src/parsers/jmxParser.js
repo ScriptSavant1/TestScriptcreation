@@ -1,14 +1,33 @@
 /**
- * JMeter JMX Parser
- * Parses .jmx XML files and outputs the same normalized request format
- * as brunoParser.js — ready for AdvancedScriptGenerator / WebHttpScriptGenerator.
+ * JMeter JMX Parser — v3.0
  *
- * JMX XML structure uses alternating element / hashTree pairs:
- *   <HTTPSamplerProxy testname="Login">...</HTTPSamplerProxy>
- *   <hashTree>
- *     <HeaderManager>...</HeaderManager>  ← belongs to Login
- *     <RegexExtractor>...</RegexExtractor> ← belongs to Login
- *   </hashTree>
+ * CRITICAL FIX (v3): Uses fast-xml-parser with preserveOrder:true so
+ * element/hashTree pairs always correspond to the correct document positions.
+ *
+ * ROOT CAUSE OF EXTRACTOR OFFSET BUG (v2):
+ *   fast-xml-parser (preserveOrder:false) groups all same-name siblings into
+ *   a single array, destroying document order. flattenHashTree() then tried to
+ *   reconstruct order from a static ORDERED_TAGS list — this worked only when
+ *   each element type appeared exactly once per level. The moment two
+ *   ConstantTimers (or two HeaderManagers, etc.) were interleaved with requests,
+ *   the hashTree pool counter advanced for BOTH timers first, assigning
+ *   Request1's extractor-hashTree to Timer2, and leaving Request1 with an empty
+ *   hashTree (no extractors). Result: extractors shifted off by one request.
+ *
+ * FIX: preserveOrder:true returns an ordered array where every element is
+ *   immediately followed by its own <hashTree> — pairing is trivial.
+ *
+ * ADDITIONAL IMPROVEMENTS:
+ *   - Global headers scoped per thread-group (no cross-bleed)
+ *   - HTTP Request Defaults proxy extracted (proxyHost/Port/User/Pass)
+ *   - User Defined Variables (Arguments) at ThreadGroup level parsed
+ *   - JMeter built-in functions (${__UUID()}, ${__time()}, etc.) mapped to
+ *     {{_jmfn_*}} variable references (Tier 1 Dynamic via Rule 3 _ prefix)
+ *   - vars.put() / props.put() in JSR223/BeanShell scripts extracted as
+ *     empty dynamic variables
+ *   - XPath2Extractor, CSS Selector (HtmlExtractor), JMESPath supported
+ *   - Per-request proxy from HTTPSampler Advanced tab
+ *   - Scoped defaults: thread-group config doesn't bleed to sibling groups
  */
 
 'use strict';
@@ -17,707 +36,879 @@ const fs   = require('fs').promises;
 const path = require('path');
 const { XMLParser } = require('fast-xml-parser');
 
-// ─── Variable conversion ──────────────────────────────────────────────────────
-// JMeter: ${varName}  →  our internal: {{varName}}
-// JMeter functions like ${__RandomString(...)} are stubbed
+// ─── JMeter built-in function conversion ─────────────────────────────────────
+// Map ${__func(...)} → {{_jmfn_name}} so the _ prefix forces Tier 1 Dynamic
+// classification (Rule 3) in both generators. The user gets a clear TODO in
+// the generated script to replace each _jmfn_* with the equivalent DevWeb /
+// VuGen API call.
+const JMETER_FN_MAP = [
+  // Property / variable indirection — treat as plain variable reference
+  [/\$\{__P\(\s*([^,)]+)(?:,[^)]*)?\)\}/g,           '${$1}'],
+  [/\$\{__property\(\s*([^,)]+)(?:,[^)]*)?\)\}/gi,    '${$1}'],
+  [/\$\{__V\(\s*([^,)]+)(?:,[^)]*)?\)\}/g,            '${$1}'],
+  // Well-known functions → descriptive _jmfn_ variable
+  [/\$\{__UUID\(\)\}/gi,                              '${_jmfn_uuid}'],
+  [/\$\{__time\([^)]*\)\}/gi,                         '${_jmfn_timestamp}'],
+  [/\$\{__timeShift\([^)]*\)\}/gi,                    '${_jmfn_timestamp}'],
+  [/\$\{__Random\([^)]*\)\}/gi,                       '${_jmfn_random}'],
+  [/\$\{__RandomString\([^)]*\)\}/gi,                 '${_jmfn_randomstring}'],
+  [/\$\{__RandomDate\([^)]*\)\}/gi,                   '${_jmfn_randomdate}'],
+  [/\$\{__threadNum\}/gi,                             '${_jmfn_threadnum}'],
+  [/\$\{__threadGroupName\}/gi,                       '${_jmfn_tgname}'],
+  [/\$\{__counter\([^)]*\)\}/gi,                      '${_jmfn_counter}'],
+  [/\$\{__samplerName\(\)\}/gi,                       '${_jmfn_samplername}'],
+  [/\$\{__base64Encode\([^)]*\)\}/gi,                 '${_jmfn_b64encode}'],
+  [/\$\{__base64Decode\([^)]*\)\}/gi,                 '${_jmfn_b64decode}'],
+  [/\$\{__urlencode\([^)]*\)\}/gi,                    '${_jmfn_urlencode}'],
+  [/\$\{__urldecode\([^)]*\)\}/gi,                    '${_jmfn_urldecode}'],
+  [/\$\{__digest\([^)]*\)\}/gi,                       '${_jmfn_digest}'],
+  [/\$\{__MD5\([^)]*\)\}/gi,                          '${_jmfn_md5}'],
+  [/\$\{__char\([^)]*\)\}/gi,                         '${_jmfn_char}'],
+  [/\$\{__dateTimeConvert\([^)]*\)\}/gi,              '${_jmfn_datetimeconvert}'],
+  [/\$\{__groovy\([^)]*\)\}/gi,                       '${_jmfn_groovy}'],
+  [/\$\{__eval\([^)]*\)\}/gi,                         '${_jmfn_eval}'],
+  [/\$\{__evalVar\([^)]*\)\}/gi,                      '${_jmfn_evalvar}'],
+  [/\$\{__intSum\([^)]*\)\}/gi,                       '${_jmfn_intsum}'],
+  [/\$\{__longSum\([^)]*\)\}/gi,                      '${_jmfn_longsum}'],
+  [/\$\{__StringFromFile\([^)]*\)\}/gi,               '${_jmfn_stringfromfile}'],
+  [/\$\{__FileToString\([^)]*\)\}/gi,                 '${_jmfn_filetostring}'],
+  [/\$\{__BeanShell\([^)]*\)\}/gi,                    '${_jmfn_beanshell}'],
+  // Side-effect-only functions → remove entirely
+  [/\$\{__setProperty\([^)]*\)\}/gi,                  ''],
+  [/\$\{__log\([^)]*\)\}/gi,                          ''],
+  // Generic catch-all: ${__fnname(...)} → ${_jmfn_fnname}
+  [/\$\{__([\w]+)\([^)]*\)\}/g,  (_, fn) => `\${_jmfn_${fn.toLowerCase()}}`],
+  // Generic catch-all: ${__fnname} (no parens) → ${_jmfn_fnname}
+  [/\$\{__([\w]+)\}/g,           (_, fn) => `\${_jmfn_${fn.toLowerCase()}}`],
+];
+
+function convertJmeterFunctions(str) {
+  if (!str || typeof str !== 'string') return str;
+  for (const [re, repl] of JMETER_FN_MAP) {
+    str = str.replace(re, repl);
+  }
+  return str;
+}
+
+// Convert ${varName} → {{varName}} (runs after function conversion)
 function convertVars(str) {
   if (!str || typeof str !== 'string') return str;
-  // JMeter built-in functions → leave as-is but wrapped in comment hint
-  str = str.replace(/\$\{__[^}]+\}/g, match => `{{/* ${match} */}}`);
-  // Regular vars
+  str = convertJmeterFunctions(str);
   str = str.replace(/\$\{([^}]+)\}/g, '{{$1}}');
   return str;
 }
 
-function convertVarsInObj(obj) {
-  if (!obj || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(convertVarsInObj);
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = typeof v === 'string' ? convertVars(v) : convertVarsInObj(v);
-  }
-  return out;
-}
-
-// ─── XML parser setup ─────────────────────────────────────────────────────────
+// ─── XML parser ───────────────────────────────────────────────────────────────
 function makeXmlParser() {
   return new XMLParser({
-    ignoreAttributes:          false,
-    attributeNamePrefix:       '@_',
-    allowBooleanAttributes:    true,
-    parseAttributeValue:       false,
-    trimValues:                true,
-    isArray: (name) => [
-      'hashTree', 'stringProp', 'boolProp', 'longProp', 'intProp',
-      'elementProp', 'collectionProp', 'HTTPSamplerProxy',
-      'HeaderManager', 'RegexExtractor', 'BoundaryExtractor',
-      'JSONPathExtractor', 'XPathExtractor', 'ResponseAssertion',
-      'JSR223PreProcessor', 'JSR223PostProcessor',
-      'BeanShellPreProcessor', 'BeanShellPostProcessor',
-      'BeanShellSampler', 'JSR223Sampler',
-      'CSVDataSet', 'ConstantTimer', 'GaussianRandomTimer',
-      'UniformRandomTimer', 'TransactionController',
-      'SetupThreadGroup', 'PostThreadGroup', 'ThreadGroup',
-      'AuthManager', 'CookieManager',
-    ].includes(name)
+    ignoreAttributes:       false,
+    attributeNamePrefix:    '@_',
+    allowBooleanAttributes: true,
+    parseAttributeValue:    false,
+    trimValues:             true,
+    preserveOrder:          true,   // ← THE KEY FIX: keeps document element order
+    parseNodeValue:         true,
   });
 }
 
-// ─── Property helpers ─────────────────────────────────────────────────────────
-function getProp(node, name) {
-  for (const key of ['stringProp', 'boolProp', 'longProp', 'intProp']) {
-    const arr = node[key];
-    if (!Array.isArray(arr)) continue;
-    const found = arr.find(p => p['@_name'] === name);
-    if (found !== undefined) {
-      const val = found['#text'] ?? found;
-      return typeof val === 'object' ? '' : String(val);
-    }
+// ─── preserveOrder format helpers ─────────────────────────────────────────────
+// With preserveOrder:true every node is: { tagName: [children…], ':@': {attrs} }
+// Text content appears as a child: { '#text': 'value' }
+
+function getTag(item) {
+  if (!item || typeof item !== 'object') return null;
+  for (const k of Object.keys(item)) if (k !== ':@') return k;
+  return null;
+}
+
+function getAttrs(item)    { return (item && item[':@']) || {}; }
+
+function getChildren(item) {
+  const tag = getTag(item);
+  if (!tag) return [];
+  const v = item[tag];
+  return Array.isArray(v) ? v : (v != null ? [v] : []);
+}
+
+function getText(item) {
+  const ch = getChildren(item);
+  const t  = ch.find(c => c && '#text' in c);
+  return t ? String(t['#text'] ?? '').trim() : '';
+}
+
+// Read a named string/bool/long/int property from a node's children array
+function getProp(nodeChildren, name) {
+  if (!Array.isArray(nodeChildren)) return '';
+  for (const child of nodeChildren) {
+    const tag = getTag(child);
+    if (!tag) continue;
+    if (!['stringProp', 'boolProp', 'longProp', 'intProp'].includes(tag)) continue;
+    if (getAttrs(child)['@_name'] === name) return getText(child);
   }
   return '';
 }
 
-function getChildByTag(node, tag) {
-  return node[tag]?.[0] ?? node[tag] ?? null;
+function findChild(nodeChildren, tag) {
+  if (!Array.isArray(nodeChildren)) return null;
+  return nodeChildren.find(c => getTag(c) === tag) || null;
 }
 
-function getChildrenByTag(node, tag) {
-  const v = node[tag];
-  if (!v) return [];
-  return Array.isArray(v) ? v : [v];
+function findChildren(nodeChildren, tag) {
+  if (!Array.isArray(nodeChildren)) return [];
+  return nodeChildren.filter(c => getTag(c) === tag);
 }
 
-// ─── Build base URL from HTTP defaults ────────────────────────────────────────
-function buildBaseUrl(defaultDomain, defaultPort, defaultProtocol) {
-  if (!defaultDomain) return '';
-  const proto  = defaultProtocol || 'http';
-  const portStr = defaultPort && defaultPort !== '80' && defaultPort !== '443' ? `:${defaultPort}` : '';
-  return `${proto}://${defaultDomain}${portStr}`;
+function findChildByAttr(nodeChildren, tag, attrKey, attrVal) {
+  if (!Array.isArray(nodeChildren)) return null;
+  return nodeChildren.find(c =>
+    getTag(c) === tag && getAttrs(c)[attrKey] === attrVal
+  ) || null;
 }
 
-// ─── Parse a single HTTPSamplerProxy node ─────────────────────────────────────
-function parseSampler(sampler, defaults, globalHeaders, auth, extractors, preScripts, postScripts, folder, thinkTimeSec) {
-  const enabled = sampler['@_enabled'];
-  if (enabled === 'false' || enabled === false) return null;
+// ─── Flatten hashTree children into ordered [{tag,node,attrs,childHashTree}] ──
+// With preserveOrder:true this is trivially correct:
+//   each element appears at index i and its paired hashTree at index i+1.
+// No ORDERED_TAGS heuristics, no counter drift, no off-by-one possible.
+function flattenHashTree(nodeChildren) {
+  const result = [];
+  if (!Array.isArray(nodeChildren)) return result;
 
-  const name     = sampler['@_testname'] || 'Request';
-  const method   = getProp(sampler, 'HTTPSampler.method') || 'GET';
-  const domain   = getProp(sampler, 'HTTPSampler.domain')   || defaults.domain;
-  const port     = getProp(sampler, 'HTTPSampler.port')     || defaults.port;
-  const protocol = getProp(sampler, 'HTTPSampler.protocol') || defaults.protocol || 'http';
-  const rawPath  = getProp(sampler, 'HTTPSampler.path')     || '/';
-  const postBodyRaw = getProp(sampler, 'HTTPSampler.postBodyRaw');
+  let i = 0;
+  while (i < nodeChildren.length) {
+    const item = nodeChildren[i];
+    const tag  = getTag(item);
 
-  // Build URL
+    // Skip text nodes and standalone hashTrees (consumed as pairs below)
+    if (!tag || tag === '#text' || tag === 'hashTree') { i++; continue; }
+
+    // Peek at the next sibling for the paired hashTree
+    const next    = nodeChildren[i + 1];
+    const nextTag = next ? getTag(next) : null;
+    const childHashTree = (nextTag === 'hashTree') ? getChildren(next) : [];
+
+    result.push({
+      tag,
+      node:         getChildren(item),  // this element's own children
+      attrs:        getAttrs(item),      // this element's attributes
+      childHashTree                      // paired hashTree's children
+    });
+
+    i += (nextTag === 'hashTree') ? 2 : 1;
+  }
+
+  return result;
+}
+
+// ─── Build base URL ───────────────────────────────────────────────────────────
+function buildBaseUrl(domain, port, protocol) {
+  if (!domain) return '';
+  const proto   = protocol || 'http';
   const portStr = port && port !== '80' && port !== '443' ? `:${port}` : '';
-  const base    = domain ? `${protocol}://${domain}${portStr}` : (defaults.baseUrl || '');
-  const url     = convertVars(base + rawPath);
+  return `${proto}://${domain}${portStr}`;
+}
 
-  // ── Body ─────────────────────────────────────────────────────────────────
-  let body = null;
-  const argsEl = sampler['elementProp']
-    ? (Array.isArray(sampler['elementProp']) ? sampler['elementProp'] : [sampler['elementProp']])
-        .find(e => e['@_name'] === 'HTTPsampler.Arguments')
-    : null;
-
-  if (argsEl) {
-    const collProp = argsEl['collectionProp'];
-    const coll     = Array.isArray(collProp) ? collProp[0] : collProp;
-    const argItems = coll ? (Array.isArray(coll['elementProp']) ? coll['elementProp'] : (coll['elementProp'] ? [coll['elementProp']] : [])) : [];
-
-    if (postBodyRaw === 'true' || postBodyRaw === true) {
-      // Raw body (JSON, XML, etc.)
-      const rawVal = argItems[0] ? getProp(argItems[0], 'Argument.value') : '';
-      body = { mode: 'raw', raw: convertVars(rawVal), options: { raw: { language: 'json' } } };
-    } else if (argItems.length > 0) {
-      // URL-encoded form
-      body = {
-        mode: 'urlencoded',
-        urlencoded: argItems
-          .filter(a => a['@_enabled'] !== 'false')
-          .map(a => ({
-            key:   convertVars(getProp(a, 'Argument.name')),
-            value: convertVars(getProp(a, 'Argument.value')),
-            disabled: false
-          }))
-      };
-    }
-  }
-
-  // ── Correlations/extractors → stored as tests for later processing ────────
-  const corrTests = extractors.map(ext => ({
-    listen: 'extractor',
-    extractor: ext
-  }));
-
-  // ── Pre/Post scripts ──────────────────────────────────────────────────────
-  const tests = [];
-  for (const sc of preScripts) {
-    tests.push({ listen: 'prerequest', script: { exec: sc } });
-  }
-  for (const sc of postScripts) {
-    tests.push({ listen: 'test', script: { exec: sc } });
-  }
-
+// ─── Parse HTTP Request Defaults (ConfigTestElement) ─────────────────────────
+function parseHttpDefaults(nodeChildren) {
   return {
-    name,
-    method: method.toUpperCase(),
-    url,
-    folder,
-    depth:   folder ? folder.split('/').length : 0,
-    headers: globalHeaders.map(h => ({ key: h.key, value: convertVars(h.value), disabled: false })),
-    body,
-    auth,
-    tests,
-    extractors: corrTests,    // JMX-explicit correlations
-    thinkTime:  thinkTimeSec, // from ConstantTimer before this request
-    variables:  {},
-    vars:       {}
+    domain:          getProp(nodeChildren, 'HTTPSampler.domain'),
+    port:            getProp(nodeChildren, 'HTTPSampler.port'),
+    protocol:        getProp(nodeChildren, 'HTTPSampler.protocol'),
+    proxyHost:       getProp(nodeChildren, 'HTTPSampler.proxyHost'),
+    proxyPort:       getProp(nodeChildren, 'HTTPSampler.proxyPort'),
+    proxyUser:       getProp(nodeChildren, 'HTTPSampler.proxyUser'),
+    proxyPass:       getProp(nodeChildren, 'HTTPSampler.proxyPass'),
+    contentEncoding: getProp(nodeChildren, 'HTTPSampler.contentEncoding'),
+    followRedirects: getProp(nodeChildren, 'HTTPSampler.follow_redirects'),
   };
 }
 
-// ─── Parse extractors in a request's hashTree ─────────────────────────────────
-function parseExtractors(hashTreeChildren) {
-  const extractors = [];
-
-  for (const child of hashTreeChildren) {
-    const tag = child['@_tag'] || child['__tag'];
-    // RegexExtractor
-    if (child['RegexExtractor'] || (child['@_testclass'] === 'RegexExtractor')) {
-      const n = child['RegexExtractor']?.[0] || child;
-      extractors.push({
-        type:        'regex',
-        name:        getProp(n, 'RegexExtractor.refname'),
-        regex:       getProp(n, 'RegexExtractor.regex'),
-        template:    getProp(n, 'RegexExtractor.template') || '$1$',
-        matchNumber: getProp(n, 'RegexExtractor.match_number') || '1',
-        scope:       getProp(n, 'RegexExtractor.useHeaders') === 'true' ? 'headers' : 'body'
-      });
-    }
-    // BoundaryExtractor
-    if (child['BoundaryExtractor'] || (child['@_testclass'] === 'BoundaryExtractor')) {
-      const n = child['BoundaryExtractor']?.[0] || child;
-      extractors.push({
-        type:         'boundary',
-        name:         getProp(n, 'BoundaryExtractor.refname'),
-        leftBoundary: getProp(n, 'BoundaryExtractor.lboundary'),
-        rightBoundary:getProp(n, 'BoundaryExtractor.rboundary'),
-        scope:        getProp(n, 'BoundaryExtractor.useHeaders') === 'true' ? 'headers' : 'body'
-      });
-    }
-    // JSONPathExtractor
-    if (child['JSONPathExtractor'] || (child['@_testclass'] === 'JSONPathExtractor')) {
-      const n = child['JSONPathExtractor']?.[0] || child;
-      extractors.push({
-        type:      'jsonpath',
-        name:      getProp(n, 'JSONPathExtractor.refname'),
-        jsonPath:  getProp(n, 'JSONPathExtractor.jsonPathExpr')
-      });
-    }
-    // XPathExtractor
-    if (child['XPathExtractor'] || (child['@_testclass'] === 'XPathExtractor')) {
-      const n = child['XPathExtractor']?.[0] || child;
-      extractors.push({
-        type:   'xpath',
-        name:   getProp(n, 'XPathExtractor.refname'),
-        xpath:  getProp(n, 'XPathExtractor.xpathQuery')
-      });
-    }
-  }
-
-  return extractors;
-}
-
-// ─── Parse headers from HeaderManager node ────────────────────────────────────
-function parseHeaderManager(node) {
-  const headers = [];
-  const collProp = node['collectionProp'];
-  const coll = Array.isArray(collProp) ? collProp[0] : collProp;
-  if (!coll) return headers;
-  const items = Array.isArray(coll['elementProp']) ? coll['elementProp'] : (coll['elementProp'] ? [coll['elementProp']] : []);
-  for (const item of items) {
-    const k = getProp(item, 'Header.name');
-    const v = getProp(item, 'Header.value');
+// ─── Parse HeaderManager ──────────────────────────────────────────────────────
+function parseHeaderManager(nodeChildren) {
+  const headers  = [];
+  const collItem = findChild(nodeChildren, 'collectionProp');
+  if (!collItem) return headers;
+  for (const elemItem of findChildren(getChildren(collItem), 'elementProp')) {
+    const ec = getChildren(elemItem);
+    const k  = getProp(ec, 'Header.name');
+    const v  = getProp(ec, 'Header.value');
     if (k) headers.push({ key: k, value: v });
   }
   return headers;
 }
 
 // ─── Parse AuthManager ────────────────────────────────────────────────────────
-function parseAuthManager(node) {
-  const collProp = node['collectionProp'];
-  const coll = Array.isArray(collProp) ? collProp[0] : collProp;
-  if (!coll) return null;
-  const items = Array.isArray(coll['elementProp']) ? coll['elementProp'] : (coll['elementProp'] ? [coll['elementProp']] : []);
+function parseAuthManager(nodeChildren) {
+  const collItem = findChild(nodeChildren, 'collectionProp');
+  if (!collItem) return null;
+  const items = findChildren(getChildren(collItem), 'elementProp');
   if (!items.length) return null;
 
-  const first     = items[0];
-  const username  = getProp(first, 'Authorization.username');
-  const password  = getProp(first, 'Authorization.password');
-  const domain    = getProp(first, 'Authorization.domain');
-  const realm     = getProp(first, 'Authorization.realm');
-  const url       = getProp(first, 'Authorization.url');
-  const mechanism = getProp(first, 'Authorization.mechanism') || '';
+  const fc        = getChildren(items[0]);
+  const username  = getProp(fc, 'Authorization.username');
+  const password  = getProp(fc, 'Authorization.password');
+  const domain    = getProp(fc, 'Authorization.domain');
+  const realm     = getProp(fc, 'Authorization.realm');
+  const url       = getProp(fc, 'Authorization.url');
+  const mechanism = getProp(fc, 'Authorization.mechanism') || '';
 
-  // Determine auth type
   let type = 'basic';
-  if (/kerberos/i.test(mechanism)) type = 'kerberos';
+  if (/kerberos/i.test(mechanism))            type = 'kerberos';
   else if (/ntlm/i.test(mechanism) || domain) type = 'ntlm';
-  else if (/digest/i.test(mechanism)) type = 'digest';
+  else if (/digest/i.test(mechanism))         type = 'digest';
 
   return { type, username, password, domain, realm, url, hostport: extractHostPort(url) };
 }
 
 function extractHostPort(urlStr) {
-  try {
-    const u = new URL(urlStr || '');
-    return u.host || urlStr;
-  } catch { return urlStr || ''; }
+  try { const u = new URL(urlStr || ''); return u.host || urlStr; }
+  catch { return urlStr || ''; }
 }
 
-// ─── Parse script content from JSR223 / BeanShell nodes ──────────────────────
-function parseScriptNode(node) {
-  const script = getProp(node, 'script') || getProp(node, 'BeanShell.query') || '';
-  return script.trim() || null;
+// ─── Parse extractors ────────────────────────────────────────────────────────
+// taggedItems: array of {tag, node} from flattenHashTree output
+function parseExtractors(taggedItems) {
+  const extractors = [];
+  for (const { tag, node } of taggedItems) {
+
+    if (tag === 'RegexExtractor') {
+      const name = getProp(node, 'RegexExtractor.refname');
+      if (!name) continue;
+      extractors.push({
+        type:        'regex',
+        name,
+        regex:       getProp(node, 'RegexExtractor.regex'),
+        template:    getProp(node, 'RegexExtractor.template') || '$1$',
+        matchNumber: getProp(node, 'RegexExtractor.match_number') || '1',
+        scope:       getProp(node, 'RegexExtractor.useHeaders') === 'true' ? 'headers' : 'body',
+      });
+    }
+
+    else if (tag === 'BoundaryExtractor') {
+      const name = getProp(node, 'BoundaryExtractor.refname');
+      if (!name) continue;
+      extractors.push({
+        type:          'boundary',
+        name,
+        leftBoundary:  getProp(node, 'BoundaryExtractor.lboundary'),
+        rightBoundary: getProp(node, 'BoundaryExtractor.rboundary'),
+        scope:         getProp(node, 'BoundaryExtractor.useHeaders') === 'true' ? 'headers' : 'body',
+      });
+    }
+
+    // JSONPath Extractor (standard + atlantbh plugin)
+    else if (tag === 'JSONPathExtractor' ||
+             tag === 'com.atlantbh.jmeter.plugins.jsonutils.jsonpathextractor.JSONPathExtractor') {
+      const name = getProp(node, 'JSONPathExtractor.refname') ||
+                   getProp(node, 'JSON_PATH_EXTRACTOR.REFNAME');
+      if (!name) continue;
+      extractors.push({
+        type:     'jsonpath',
+        name,
+        jsonPath: getProp(node, 'JSONPathExtractor.jsonPathExpr') ||
+                  getProp(node, 'JSON_PATH_EXTRACTOR.JSONPATH')   || `$.${name}`,
+      });
+    }
+
+    // XPath 1.0
+    else if (tag === 'XPathExtractor') {
+      const name = getProp(node, 'XPathExtractor.refname');
+      if (!name) continue;
+      extractors.push({
+        type:  'xpath',
+        name,
+        xpath: getProp(node, 'XPathExtractor.xpathQuery'),
+      });
+    }
+
+    // XPath 2.0
+    else if (tag === 'XPath2Extractor') {
+      const name = getProp(node, 'XPath2Extractor.refname');
+      if (!name) continue;
+      extractors.push({
+        type:  'xpath',
+        name,
+        xpath: getProp(node, 'XPath2Extractor.xpathQuery'),
+      });
+    }
+
+    // CSS Selector Extractor (HtmlExtractor)
+    else if (tag === 'HtmlExtractor') {
+      const name = getProp(node, 'HtmlExtractor.refname');
+      if (!name) continue;
+      const cssExpr = getProp(node, 'HtmlExtractor.expr');
+      const attr    = getProp(node, 'HtmlExtractor.attribute');
+      // Map to boundary as closest VuGen equivalent; annotate for post-conversion
+      extractors.push({
+        type:          'boundary',
+        name,
+        leftBoundary:  cssExpr ? `${cssExpr}>` : '',
+        rightBoundary: '</',
+        scope:         'body',
+        // Extra metadata for future CSS-aware code generation
+        originalType:  'css',
+        cssExpression: cssExpr,
+        attribute:     attr,
+      });
+    }
+
+    // JSON JMESPath Extractor
+    else if (tag === 'JMESPathExtractor') {
+      const name = getProp(node, 'JMESPathExtractor.refname');
+      if (!name) continue;
+      extractors.push({
+        type:     'jsonpath',
+        name,
+        jsonPath: getProp(node, 'JMESPathExtractor.jmesPathExpr') || `$.${name}`,
+      });
+    }
+  }
+  return extractors;
+}
+
+// ─── Extract variable names set inside JSR223/BeanShell scripts ──────────────
+// Detects: vars.put("name", ...), props.put("name", ...), vars.putObject(...)
+// These variables are added to the collection as empty → Rule 4 → Tier 1 Dynamic
+function extractScriptSetVars(scriptText) {
+  const vars = new Set();
+  if (!scriptText) return vars;
+  const patterns = [
+    /vars\.put(?:Object)?\s*\(\s*["']([^"']+)["']/g,
+    /vars\.putObject\s*\(\s*["']([^"']+)["']/g,
+    /props\.put\s*\(\s*["']([^"']+)["']/g,
+    /JMeterVariables\.put\s*\(\s*["']([^"']+)["']/g,
+    // ctx.setVariables / SampleResult.setResponseData variants (less common)
+    /ctx\.getVariables\(\)\.put\s*\(\s*["']([^"']+)["']/g,
+  ];
+  for (const re of patterns) {
+    for (const m of scriptText.matchAll(re)) {
+      if (m[1]) vars.add(m[1]);
+    }
+  }
+  return vars;
+}
+
+// ─── Parse script text from JSR223 / BeanShell node ──────────────────────────
+function parseScriptNode(nodeChildren) {
+  const sc = getProp(nodeChildren, 'script') ||
+             getProp(nodeChildren, 'BeanShell.query') || '';
+  return sc.trim() || null;
 }
 
 // ─── Parse timer delay (ms → seconds) ────────────────────────────────────────
-function parseTimerMs(node) {
-  const delay = getProp(node, 'ConstantTimer.delay') ||
-                getProp(node, 'GaussianRandomTimer.delay') ||
-                getProp(node, 'UniformRandomTimer.Maximum_Timer.delay') || '0';
+function parseTimerMs(nodeChildren) {
+  const delay = getProp(nodeChildren, 'ConstantTimer.delay') ||
+                getProp(nodeChildren, 'GaussianRandomTimer.delay') ||
+                getProp(nodeChildren, 'RandomTimer.delay')   ||
+                getProp(nodeChildren, 'UniformRandomTimer.Maximum_Timer.delay') || '0';
   return parseFloat(delay) / 1000 || 0;
 }
 
-// ─── Parse CSVDataSet node ────────────────────────────────────────────────────
-function parseCsvDataSet(node) {
+// ─── Parse CSVDataSet ─────────────────────────────────────────────────────────
+function parseCsvDataSet(nodeChildren) {
   return {
-    filename:      getProp(node, 'filename'),
-    variableNames: getProp(node, 'variableNames'),
-    delimiter:     getProp(node, 'delimiter') || ',',
-    recycle:       getProp(node, 'recycle') !== 'false',
-    shareMode:     getProp(node, 'shareMode') || 'All threads'
+    filename:      convertVars(getProp(nodeChildren, 'filename')),
+    variableNames: getProp(nodeChildren, 'variableNames'),
+    delimiter:     getProp(nodeChildren, 'delimiter') || ',',
+    recycle:       getProp(nodeChildren, 'recycle')   !== 'false',
+    shareMode:     getProp(nodeChildren, 'shareMode') || 'All threads',
   };
 }
 
 // ─── Parse thread group parameters for WLM Excel ─────────────────────────────
-function parseThreadGroup(node, xmlTag) {
-  const name      = node['@_testname'] || 'Thread Group';
-  const enabled   = node['@_enabled'];
-  if (enabled === 'false') return null;
+function parseThreadGroup(nodeChildren, attrs, xmlTag) {
+  if (attrs['@_enabled'] === 'false') return null;
 
-  // Determine type from XML element name
-  let type = 'Standard';
-  if (xmlTag === 'SetupThreadGroup')   type = 'SetUp';
-  else if (xmlTag === 'PostThreadGroup') type = 'TearDown';
-  else if (xmlTag && xmlTag.includes('SteppingThreadGroup'))   type = 'Stepping';
-  else if (xmlTag && xmlTag.includes('UltimateThreadGroup'))   type = 'Ultimate';
-  else if (xmlTag && xmlTag.includes('ConcurrencyThreadGroup')) type = 'Concurrency';
-  else if (xmlTag && xmlTag.includes('ArrivalsThreadGroup'))    type = 'Arrivals';
+  const name = attrs['@_testname'] || 'Thread Group';
+  let type   = 'Standard';
+  if (xmlTag === 'SetupThreadGroup')              type = 'SetUp';
+  else if (xmlTag === 'PostThreadGroup')          type = 'TearDown';
+  else if (/SteppingThreadGroup/i.test(xmlTag))   type = 'Stepping';
+  else if (/UltimateThreadGroup/i.test(xmlTag))   type = 'Ultimate';
+  else if (/ConcurrencyThreadGroup/i.test(xmlTag)) type = 'Concurrency';
+  else if (/ArrivalsThreadGroup/i.test(xmlTag))    type = 'Arrivals';
 
-  const numThreads = parseInt(getProp(node, 'ThreadGroup.num_threads') || getProp(node, 'TargetLevel') || '1');
-  const rampTime   = parseInt(getProp(node, 'ThreadGroup.ramp_time')   || getProp(node, 'RampUp') || '0');
-  const loops      = getProp(node, 'LoopController.loops') || '-1';
-  const scheduler  = getProp(node, 'ThreadGroup.scheduler') === 'true';
-  const duration   = parseInt(getProp(node, 'ThreadGroup.duration') || getProp(node, 'Hold') || '0');
-  const delay      = parseInt(getProp(node, 'ThreadGroup.delay') || '0');
-
-  // Stepping thread group extras
-  const startCount = parseInt(getProp(node, 'Start users count') || '0');
-  const startPeriod= parseInt(getProp(node, 'Start users period') || '0');
-  const stopCount  = parseInt(getProp(node, 'Stop users count')  || '0');
-  const flightTime = parseInt(getProp(node, 'flighttime') || '0');
+  const numThreads = parseInt(getProp(nodeChildren, 'ThreadGroup.num_threads') || getProp(nodeChildren, 'TargetLevel') || '1');
+  const rampTime   = parseInt(getProp(nodeChildren, 'ThreadGroup.ramp_time')   || getProp(nodeChildren, 'RampUp')       || '0');
+  const loops      = getProp(nodeChildren, 'LoopController.loops') || '-1';
+  const scheduler  = getProp(nodeChildren, 'ThreadGroup.scheduler') === 'true';
+  const duration   = parseInt(getProp(nodeChildren, 'ThreadGroup.duration')    || getProp(nodeChildren, 'Hold')         || '0');
+  const delay      = parseInt(getProp(nodeChildren, 'ThreadGroup.delay')       || '0');
+  const startCount = parseInt(getProp(nodeChildren, 'Start users count')       || '0');
+  const startPeriod= parseInt(getProp(nodeChildren, 'Start users period')      || '0');
+  const stopCount  = parseInt(getProp(nodeChildren, 'Stop users count')        || '0');
 
   return {
     name,
     type,
-    virtualUsers: numThreads,
-    rampUpSec:    rampTime,
-    holdSec:      scheduler || duration > 0 ? duration : (loops === '-1' ? 300 : 0),
-    rampDownSec:  type === 'Stepping' ? (stopCount > 0 ? startPeriod : 0) : 0,
-    iterations:   loops === '-1' || loops === '' ? 'Infinite' : loops,
-    startDelaySec:delay,
-    // Stepping extras
-    stepSize:     type === 'Stepping' ? startCount : undefined,
-    stepDuration: type === 'Stepping' ? startPeriod : undefined,
-    enabled:      enabled !== 'false'
+    virtualUsers:  numThreads,
+    rampUpSec:     rampTime,
+    holdSec:       scheduler || duration > 0 ? duration : (loops === '-1' ? 300 : 0),
+    rampDownSec:   type === 'Stepping' ? (stopCount > 0 ? startPeriod : 0) : 0,
+    iterations:    loops === '-1' || loops === '' ? 'Infinite' : loops,
+    startDelaySec: delay,
+    stepSize:      type === 'Stepping' ? startCount : undefined,
+    stepDuration:  type === 'Stepping' ? startPeriod : undefined,
+    enabled:       attrs['@_enabled'] !== 'false',
   };
 }
 
-// ─── Walk hashTree pairs recursively ─────────────────────────────────────────
-// JMX structure: <Element .../> followed by <hashTree>children</hashTree>
-// We process the parsed XML object's children as key/array pairs.
-function walkHashTree(treeNode, context, results) {
-  const {
-    defaults,         // { domain, port, protocol, baseUrl }
-    globalHeaders,    // accumulated HeaderManager entries
-    auth,             // AuthManager result or null
-    folder,           // current transaction/folder name
-    csvDataSets,      // accumulated CSVDataSet entries
-    threadGroups,     // accumulated thread group WLM info
-    thinkTimeSec      // from ConstantTimer seen before a request
-  } = context;
+// ─── Parse a single HTTPSamplerProxy → normalized request object ──────────────
+function parseSampler(nodeChildren, attrs, defaults, reqHeaders, auth,
+                      extractors, preScripts, postScripts, folder, thinkTimeSec) {
+  if (attrs['@_enabled'] === 'false') return null;
 
-  // treeNode is the parsed hashTree content object.
-  // We need to process element-hashTree pairs. Since fast-xml-parser
-  // groups same-name siblings into arrays, we flatten all child nodes
-  // in order by iterating known element types.
+  const name       = attrs['@_testname'] || 'Request';
+  const method     = getProp(nodeChildren, 'HTTPSampler.method')          || 'GET';
+  const domain     = getProp(nodeChildren, 'HTTPSampler.domain')          || defaults.domain;
+  const port       = getProp(nodeChildren, 'HTTPSampler.port')            || defaults.port;
+  const protocol   = getProp(nodeChildren, 'HTTPSampler.protocol')        || defaults.protocol || 'http';
+  const rawPath    = getProp(nodeChildren, 'HTTPSampler.path')            || '/';
+  const postBodyRaw= getProp(nodeChildren, 'HTTPSampler.postBodyRaw');
+  const encoding   = getProp(nodeChildren, 'HTTPSampler.contentEncoding') || defaults.contentEncoding || '';
+  const follow     = getProp(nodeChildren, 'HTTPSampler.follow_redirects')|| defaults.followRedirects || 'true';
 
-  // Collect children in document order using a flat pass
-  const children = flattenHashTree(treeNode);
+  // Per-request proxy (Advanced tab) — falls back to global defaults from
+  // HTTP Request Defaults ConfigTestElement
+  const proxyHost  = getProp(nodeChildren, 'HTTPSampler.proxyHost') || defaults.proxyHost || '';
+  const proxyPort  = getProp(nodeChildren, 'HTTPSampler.proxyPort') || defaults.proxyPort || '';
+  const proxyUser  = getProp(nodeChildren, 'HTTPSampler.proxyUser') || defaults.proxyUser || '';
+  const proxyPass  = getProp(nodeChildren, 'HTTPSampler.proxyPass') || defaults.proxyPass || '';
 
-  let pendingThinkTime = thinkTimeSec || 0;
+  const portStr = port && port !== '80' && port !== '443' ? `:${port}` : '';
+  const base    = domain ? `${protocol}://${domain}${portStr}` : (defaults.baseUrl || '');
+  const url     = convertVars(base + rawPath);
 
-  for (let i = 0; i < children.length; i++) {
-    const { tag, node } = children[i];
-    const childHashTree = children[i + 1]?.tag === 'hashTree' ? children[i + 1].node : {};
+  // ── Body ─────────────────────────────────────────────────────────────────
+  let body = null;
+  const argsEl = findChildByAttr(nodeChildren, 'elementProp', '@_name', 'HTTPsampler.Arguments');
+  if (argsEl) {
+    const collItem = findChild(getChildren(argsEl), 'collectionProp');
+    const argItems = collItem ? findChildren(getChildren(collItem), 'elementProp') : [];
 
-    // ── HTTP Request Defaults ───────────────────────────────────────────────
+    if (postBodyRaw === 'true') {
+      const rawVal = argItems[0] ? getProp(getChildren(argItems[0]), 'Argument.value') : '';
+      body = { mode: 'raw', raw: convertVars(rawVal), options: { raw: { language: 'json' } } };
+    } else if (argItems.length > 0) {
+      body = {
+        mode: 'urlencoded',
+        urlencoded: argItems
+          .filter(a => getAttrs(a)['@_enabled'] !== 'false')
+          .map(a => {
+            const ac = getChildren(a);
+            return {
+              key:      convertVars(getProp(ac, 'Argument.name')),
+              value:    convertVars(getProp(ac, 'Argument.value')),
+              disabled: false,
+            };
+          }),
+      };
+    }
+  }
+
+  // ── Pre/post scripts → tests array ────────────────────────────────────────
+  const tests = [];
+  for (const sc of preScripts)  tests.push({ listen: 'prerequest', script: { exec: sc } });
+  for (const sc of postScripts) tests.push({ listen: 'test',       script: { exec: sc } });
+
+  return {
+    name,
+    method:    method.toUpperCase(),
+    url,
+    folder,
+    depth:     folder ? folder.split('/').length : 0,
+    headers:   reqHeaders.map(h => ({ key: h.key, value: convertVars(h.value), disabled: false })),
+    body,
+    auth,
+    tests,
+    extractors: extractors.map(ext => ({ listen: 'extractor', extractor: ext })),
+    thinkTime:  thinkTimeSec,
+    proxyConfig: proxyHost ? { host: proxyHost, port: proxyPort, username: proxyUser, password: proxyPass } : null,
+    encoding,
+    followRedirects: follow !== 'false',
+    variables:  {},
+    vars:       {},
+  };
+}
+
+// ─── Tag classification sets ──────────────────────────────────────────────────
+const THREAD_GROUP_TAGS = new Set([
+  'ThreadGroup', 'SetupThreadGroup', 'PostThreadGroup',
+]);
+
+// Logic/container controllers that are transparent (flatten their children)
+const CONTROLLER_TAGS = new Set([
+  'SimpleController', 'GenericSampler', 'InterleaveController',
+  'RandomOrderController', 'ThroughputController',
+  'IfController', 'LoopController', 'ForEachController',
+  'WhileController', 'RuntimeController', 'OnceOnlyController',
+  'SwitchController', 'CriticalSectionController',
+  'IncludeController',
+]);
+
+// Extractor tags that belong inside a request's hashTree
+const EXTRACTOR_TAGS = new Set([
+  'RegexExtractor', 'BoundaryExtractor', 'JSONPathExtractor',
+  'XPathExtractor', 'XPath2Extractor', 'HtmlExtractor', 'JMESPathExtractor',
+  'com.atlantbh.jmeter.plugins.jsonutils.jsonpathextractor.JSONPathExtractor',
+]);
+
+// Timer tags (all delay flavours)
+const TIMER_TAGS = new Set([
+  'ConstantTimer', 'GaussianRandomTimer', 'UniformRandomTimer',
+  'ConstantThroughputTimer', 'PoissonRandomTimer', 'SynchronizingTimer',
+  'BeanShellTimer', 'JSR223Timer',
+]);
+
+// ─── Walk a hashTree children array ──────────────────────────────────────────
+// context = {
+//   defaults, globalHeaders, auth, folder,
+//   csvDataSets, threadGroups, thinkTimeSec, variables
+// }
+function walkHashTree(nodeChildren, context, results) {
+  const children       = flattenHashTree(nodeChildren);
+  let pendingThinkTime = context.thinkTimeSec || 0;
+
+  for (const { tag, node, attrs, childHashTree } of children) {
+
+    // ── HTTP Request Defaults (ConfigTestElement) ─────────────────────────
     if (tag === 'ConfigTestElement') {
-      const d = getProp(node, 'HTTPSampler.domain');
-      const p = getProp(node, 'HTTPSampler.port');
-      const proto = getProp(node, 'HTTPSampler.protocol');
-      if (d) {
-        context.defaults.domain   = d;
-        context.defaults.port     = p;
-        context.defaults.protocol = proto || 'http';
-        context.defaults.baseUrl  = buildBaseUrl(d, p, proto);
+      const d = parseHttpDefaults(node);
+      if (d.domain) {
+        // Update context defaults in-place so nested elements see the change
+        Object.assign(context.defaults, {
+          domain:          d.domain,
+          port:            d.port,
+          protocol:        d.protocol || context.defaults.protocol || 'http',
+          baseUrl:         buildBaseUrl(d.domain, d.port, d.protocol || context.defaults.protocol),
+          contentEncoding: d.contentEncoding || context.defaults.contentEncoding,
+          followRedirects: d.followRedirects  || context.defaults.followRedirects,
+        });
+      }
+      if (d.proxyHost) {
+        Object.assign(context.defaults, {
+          proxyHost: d.proxyHost,
+          proxyPort: d.proxyPort,
+          proxyUser: d.proxyUser,
+          proxyPass: d.proxyPass,
+        });
+        // Also add to variables so generators' detectProxyConfig() can find it
+        context.variables['proxyHost'] = d.proxyHost;
+        if (d.proxyPort) context.variables['proxyPort'] = d.proxyPort;
+        if (d.proxyUser) context.variables['proxyUser'] = d.proxyUser;
       }
       continue;
     }
 
-    // ── Thread Groups ───────────────────────────────────────────────────────
-    if (['ThreadGroup','SetupThreadGroup','PostThreadGroup',
-         'kg.apc.jmeter.threads.SteppingThreadGroup',
-         'kg.apc.jmeter.threads.UltimateThreadGroup',
-         'com.blazemeter.jmeter.threads.concurrency.ConcurrencyThreadGroup',
-         'com.blazemeter.jmeter.threads.arrivals.ArrivalsThreadGroup',
-         'com.blazemeter.jmeter.threads.arrivals.FreeFormArrivalsThreadGroup'
-        ].includes(tag) || tag.includes('ThreadGroup')) {
-      const tg = parseThreadGroup(node, tag);
-      if (tg) threadGroups.push(tg);
-      // Recurse into thread group's hashTree with same context
-      if (childHashTree && Object.keys(childHashTree).length) {
-        walkHashTree(childHashTree, { ...context, folder: '' }, results);
+    // ── User Defined Variables at ThreadGroup or TestPlan level ──────────
+    // JMeter stores these as <Arguments testname="User Defined Variables">
+    if (tag === 'Arguments') {
+      const collItem = findChild(node, 'collectionProp');
+      if (collItem) {
+        for (const elem of findChildren(getChildren(collItem), 'elementProp')) {
+          const ec = getChildren(elem);
+          const k  = getProp(ec, 'Argument.name');
+          const v  = convertVars(getProp(ec, 'Argument.value'));
+          if (k) context.variables[k] = v;   // last write wins (same as JMeter)
+        }
       }
-      i++; // skip hashTree
       continue;
     }
 
-    // ── AuthManager ─────────────────────────────────────────────────────────
+    // ── Thread Groups ─────────────────────────────────────────────────────
+    // Recurse with SCOPED copies of defaults and headers so that config
+    // inside one thread group does not bleed to sibling thread groups.
+    if (THREAD_GROUP_TAGS.has(tag) ||
+        tag.includes('ThreadGroup') ||
+        /ThreadGroup/i.test(tag)) {
+      const tg = parseThreadGroup(node, attrs, tag);
+      if (tg) context.threadGroups.push(tg);
+      if (childHashTree.length) {
+        walkHashTree(childHashTree, {
+          ...context,
+          defaults:      { ...context.defaults },     // shallow copy — prevents back-leak
+          globalHeaders: [...context.globalHeaders],  // copy — per-TG scope
+          folder:        '',
+        }, results);
+      }
+      continue;
+    }
+
+    // ── AuthManager ───────────────────────────────────────────────────────
     if (tag === 'AuthManager') {
       context.auth = parseAuthManager(node);
       continue;
     }
 
-    // ── Global HeaderManager (at thread-group level, not inside a request) ──
-    if (tag === 'HeaderManager' && children[i - 1]?.tag !== 'HTTPSamplerProxy') {
+    // ── HeaderManager at non-request scope (test-plan or thread-group) ────
+    // Per-request HeaderManagers are handled inside the HTTPSamplerProxy block.
+    if (tag === 'HeaderManager') {
       const hdrs = parseHeaderManager(node);
       for (const h of hdrs) {
-        if (!context.globalHeaders.find(g => g.key === h.key)) {
-          context.globalHeaders.push(h);
-        }
+        const existing = context.globalHeaders.find(g => g.key === h.key);
+        if (existing) existing.value = h.value;  // later definition overrides
+        else context.globalHeaders.push(h);
       }
       continue;
     }
 
-    // ── CSVDataSet ──────────────────────────────────────────────────────────
+    // ── CSVDataSet ────────────────────────────────────────────────────────
     if (tag === 'CSVDataSet') {
-      csvDataSets.push(parseCsvDataSet(node));
+      context.csvDataSets.push(parseCsvDataSet(node));
       continue;
     }
 
-    // ── Timer ───────────────────────────────────────────────────────────────
-    if (tag === 'ConstantTimer' || tag === 'GaussianRandomTimer' || tag === 'UniformRandomTimer') {
+    // ── Timers ────────────────────────────────────────────────────────────
+    if (TIMER_TAGS.has(tag)) {
       pendingThinkTime = parseTimerMs(node);
       continue;
     }
 
-    // ── TransactionController ───────────────────────────────────────────────
+    // ── TransactionController → becomes a folder/group prefix ─────────────
     if (tag === 'TransactionController') {
-      const txName = node['@_testname'] || 'Transaction';
-      if (childHashTree && Object.keys(childHashTree).length) {
-        const txFolder = folder ? `${folder}/${txName}` : txName;
+      const txName   = attrs['@_testname'] || 'Transaction';
+      const txFolder = context.folder ? `${context.folder}/${txName}` : txName;
+      if (childHashTree.length) {
         walkHashTree(childHashTree, { ...context, folder: txFolder }, results);
       }
-      i++;
       continue;
     }
 
-    // ── Simple/Generic/Interleave controllers — transparent ─────────────────
-    if (['SimpleController','GenericSampler','InterleaveController',
-         'RandomOrderController','ThroughputController'].includes(tag)) {
-      if (childHashTree && Object.keys(childHashTree).length) {
+    // ── Logic / container controllers — transparent pass-through ──────────
+    if (CONTROLLER_TAGS.has(tag)) {
+      if (childHashTree.length) {
         walkHashTree(childHashTree, { ...context }, results);
       }
-      i++;
       continue;
     }
 
-    // ── IfController / LoopController / ForEachController — flatten ─────────
-    if (['IfController','LoopController','ForEachController',
-         'WhileController','RuntimeController','OnceOnlyController'].includes(tag)) {
-      const condStr = getProp(node, 'IfController.condition') ||
-                      getProp(node, 'LoopController.loops')   || '';
-      const comment = `/* JMeter ${tag}${condStr ? ': ' + condStr : ''} — flattened into sequential */`;
-      if (childHashTree && Object.keys(childHashTree).length) {
-        walkHashTree(childHashTree, { ...context }, results);
-        // Add the comment as a pre-script on the first request from this group
-      }
-      i++;
-      continue;
-    }
-
-    // ── HTTPSamplerProxy (the main request) ─────────────────────────────────
+    // ── HTTPSamplerProxy — the main request ───────────────────────────────
     if (tag === 'HTTPSamplerProxy') {
-      // Collect per-request headers, extractors, pre/post scripts from its hashTree
-      const reqHeaders   = [...context.globalHeaders];
-      const reqExtractors= [];
-      const preScripts   = [];
-      const postScripts  = [];
+      // Start with a copy of the thread-group-level global headers
+      const reqHeaders    = [...context.globalHeaders];
+      const reqExtractors = [];
+      const preScripts    = [];
+      const postScripts   = [];
 
-      if (childHashTree) {
-        const reqChildren = flattenHashTree(childHashTree);
-        for (const rc of reqChildren) {
-          if (rc.tag === 'HeaderManager') {
-            const hdrs = parseHeaderManager(rc.node);
-            for (const h of hdrs) {
-              const existing = reqHeaders.find(g => g.key === h.key);
-              if (existing) existing.value = h.value;
-              else reqHeaders.push(h);
-            }
-          }
-          if (['RegexExtractor','BoundaryExtractor','JSONPathExtractor','XPathExtractor'].includes(rc.tag)) {
-            const exts = parseExtractors([{ [rc.tag]: [rc.node] }]);
-            reqExtractors.push(...exts);
-          }
-          if (['JSR223PreProcessor','BeanShellPreProcessor'].includes(rc.tag)) {
-            const sc = parseScriptNode(rc.node);
-            if (sc) preScripts.push(sc);
-          }
-          if (['JSR223PostProcessor','BeanShellPostProcessor'].includes(rc.tag)) {
-            const sc = parseScriptNode(rc.node);
-            if (sc) postScripts.push(sc);
+      // Process the request's OWN hashTree children in document order.
+      // With preserveOrder:true these are guaranteed correct.
+      for (const rc of flattenHashTree(childHashTree)) {
+
+        // Per-request HeaderManager — local headers override global headers
+        if (rc.tag === 'HeaderManager') {
+          const hdrs = parseHeaderManager(rc.node);
+          for (const h of hdrs) {
+            const existing = reqHeaders.find(g => g.key === h.key);
+            if (existing) existing.value = h.value;   // override
+            else reqHeaders.push(h);                   // add new
           }
         }
+
+        // All extractor types
+        else if (EXTRACTOR_TAGS.has(rc.tag)) {
+          reqExtractors.push(...parseExtractors([rc]));
+        }
+
+        // Pre-processors (run before the request)
+        else if (rc.tag === 'JSR223PreProcessor' || rc.tag === 'BeanShellPreProcessor') {
+          const sc = parseScriptNode(rc.node);
+          if (sc) {
+            preScripts.push(sc);
+            for (const v of extractScriptSetVars(sc)) {
+              if (!(v in context.variables)) context.variables[v] = '';
+            }
+          }
+        }
+
+        // Post-processors (run after the request, parse response, set vars)
+        else if (rc.tag === 'JSR223PostProcessor' || rc.tag === 'BeanShellPostProcessor') {
+          const sc = parseScriptNode(rc.node);
+          if (sc) {
+            postScripts.push(sc);
+            for (const v of extractScriptSetVars(sc)) {
+              if (!(v in context.variables)) context.variables[v] = '';
+            }
+          }
+        }
+
+        // Timers inside a request's hashTree (wait after response before next)
+        else if (TIMER_TAGS.has(rc.tag)) {
+          pendingThinkTime = Math.max(pendingThinkTime, parseTimerMs(rc.node));
+        }
+
+        // ResponseAssertion, ResultCollector, DebugSampler — no conversion needed
       }
 
-      // Merge auth: use request-level if set, else global
-      const effectiveAuth = context.auth;
-
       const req = parseSampler(
-        node,
+        node, attrs,
         context.defaults,
         reqHeaders,
-        effectiveAuth,
+        context.auth,
         reqExtractors,
-        preScripts,
-        postScripts,
+        preScripts, postScripts,
         context.folder,
         pendingThinkTime
       );
       if (req) results.requests.push(req);
       pendingThinkTime = 0;
-
-      i++; // skip the hashTree we already consumed
       continue;
     }
 
-    // ── JSR223Sampler / BeanShellSampler — standalone script steps ──────────
-    if (['JSR223Sampler','BeanShellSampler'].includes(tag)) {
+    // ── Standalone script samplers ────────────────────────────────────────
+    if (tag === 'JSR223Sampler' || tag === 'BeanShellSampler') {
       const sc = parseScriptNode(node);
       if (sc) {
-        // Add as a synthetic "script" request with no URL
         results.standaloneScripts.push({
-          name:   node['@_testname'] || tag,
+          name:   attrs['@_testname'] || tag,
           folder: context.folder,
-          script: sc
+          script: sc,
         });
+        // Capture variables set in standalone script samplers
+        for (const v of extractScriptSetVars(sc)) {
+          if (!(v in context.variables)) context.variables[v] = '';
+        }
       }
-      i++;
       continue;
     }
 
-    // ── hashTree itself — skip (already consumed as pair) ───────────────────
-    if (tag === 'hashTree') continue;
+    // Everything else (ResultCollector, DebugSampler, DNSCacheManager, etc.) — skip
   }
 }
 
-// ─── Flatten a hashTree node into ordered [{tag, node}] entries ───────────────
-// fast-xml-parser groups same-name siblings into arrays and loses ordering.
-// We reconstruct order from the known element list (best effort).
-// NOTE: For production quality, a SAX-style parser preserving order would be ideal.
-// This approach handles the most common JMX structures correctly.
-function flattenHashTree(treeNode) {
-  if (!treeNode || typeof treeNode !== 'object') return [];
+// ─── Build normalized collection ──────────────────────────────────────────────
+function buildCollection(name, requests, csvDataSets, variables, defaults) {
+  // All collected variables → collection.variable array
+  const variable = Object.entries(variables || {})
+    .filter(([k]) => k && k.trim())
+    .map(([k, v]) => ({ key: k, value: v, disabled: false }));
 
-  const ORDERED_TAGS = [
-    'ConfigTestElement',
-    'ThreadGroup', 'SetupThreadGroup', 'PostThreadGroup',
-    'kg.apc.jmeter.threads.SteppingThreadGroup',
-    'kg.apc.jmeter.threads.UltimateThreadGroup',
-    'com.blazemeter.jmeter.threads.concurrency.ConcurrencyThreadGroup',
-    'com.blazemeter.jmeter.threads.arrivals.ArrivalsThreadGroup',
-    'com.blazemeter.jmeter.threads.arrivals.FreeFormArrivalsThreadGroup',
-    'AuthManager',
-    'CookieManager',
-    'HeaderManager',
-    'CSVDataSet',
-    'ConstantTimer', 'GaussianRandomTimer', 'UniformRandomTimer',
-    'TransactionController',
-    'SimpleController', 'GenericSampler',
-    'InterleaveController', 'RandomOrderController', 'ThroughputController',
-    'IfController', 'LoopController', 'ForEachController',
-    'WhileController', 'RuntimeController', 'OnceOnlyController',
-    'HTTPSamplerProxy',
-    'JSR223Sampler', 'BeanShellSampler',
-    'JSR223PreProcessor', 'BeanShellPreProcessor',
-    'JSR223PostProcessor', 'BeanShellPostProcessor',
-    'RegexExtractor', 'BoundaryExtractor',
-    'JSONPathExtractor', 'XPathExtractor',
-    'ResponseAssertion',
-    'ResultCollector', 'DebugSampler',
-    'hashTree'
-  ];
-
-  // Build a flat list. For each tag found in the node, interleave with hashTree.
-  const result = [];
-  const hashTrees = Array.isArray(treeNode['hashTree']) ? [...treeNode['hashTree']] : [];
-  let htIdx = 0;
-
-  for (const tag of ORDERED_TAGS) {
-    const nodes = treeNode[tag];
-    if (!nodes) continue;
-    const arr = Array.isArray(nodes) ? nodes : [nodes];
-    for (const n of arr) {
-      result.push({ tag, node: n });
-      // Pair with next hashTree
-      if (hashTrees.length > htIdx) {
-        result.push({ tag: 'hashTree', node: hashTrees[htIdx++] });
-      } else {
-        result.push({ tag: 'hashTree', node: {} });
-      }
-    }
-  }
-
-  return result;
-}
-
-// ─── Build normalized collection from JMX ────────────────────────────────────
-function buildCollection(testPlanNode, requests, csvDataSets, variables) {
-  const name = testPlanNode?.['@_testname'] || 'JMeter Test Plan';
-
-  // Collect global user-defined variables
-  const udtEl = testPlanNode?.['elementProp'];
-  const udtArr = Array.isArray(udtEl) ? udtEl : (udtEl ? [udtEl] : []);
-  const udtNode = udtArr.find(e => e['@_name'] === 'TestPlan.user_defined_variables');
-  const collProp = udtNode?.['collectionProp'];
-  const coll = Array.isArray(collProp) ? collProp[0] : collProp;
-  const argItems = coll
-    ? (Array.isArray(coll['elementProp']) ? coll['elementProp'] : (coll['elementProp'] ? [coll['elementProp']] : []))
-    : [];
-
-  const variable = argItems.map(a => ({
-    key:   getProp(a, 'Argument.name'),
-    value: convertVars(getProp(a, 'Argument.value')),
-    disabled: false
-  })).filter(v => v.key);
-
-  // Merge with passed-in variables
-  for (const [k, v] of Object.entries(variables || {})) {
-    if (!variable.find(x => x.key === k)) variable.push({ key: k, value: v, disabled: false });
-  }
+  // Proxy from HTTP Request Defaults (if found)
+  const proxy = (defaults && defaults.proxyHost) ? {
+    host:     defaults.proxyHost,
+    port:     defaults.proxyPort  || '',
+    username: defaults.proxyUser  || '',
+    password: defaults.proxyPass  || '',
+  } : null;
 
   return {
-    info: { name, schema: '', type: 'jmeter' },
-    item: requests,
+    info:              { name, schema: '', type: 'jmeter' },
+    item:              requests,
     variable,
     csvDataSets,
-    event: [],
+    event:             [],
     collectionHeaders: [],
-    collectionAuth: null,
-    config: { proxy: null }
+    collectionAuth:    null,
+    config:            { proxy },
   };
 }
 
 // ─── Main parser class ────────────────────────────────────────────────────────
 class JmxParser {
   constructor(inputFile, options = {}) {
-    this.inputFile = inputFile;
-    this.options   = options;
-    this.collection = null;
-    this.metadata   = null;
-    this.threadGroups = [];
-    this.csvDataSets  = [];
+    this.inputFile         = inputFile;
+    this.options           = options;
+    this.collection        = null;
+    this.metadata          = null;
+    this.threadGroups      = [];
+    this.csvDataSets       = [];
     this.standaloneScripts = [];
   }
 
   async parse() {
     const xml    = await fs.readFile(this.inputFile, 'utf8');
     const parser = makeXmlParser();
-    const doc    = parser.parse(xml);
+    const docArr = parser.parse(xml);
 
-    const jmxPlan = doc['jmeterTestPlan'];
-    if (!jmxPlan) throw new Error('Not a valid JMeter .jmx file (missing <jmeterTestPlan>)');
+    // docArr is an ordered array; find the root jmeterTestPlan element
+    const jmxPlanItem = docArr.find(item => getTag(item) === 'jmeterTestPlan');
+    if (!jmxPlanItem) throw new Error('Not a valid JMeter .jmx file (missing <jmeterTestPlan>)');
 
-    const rootHashTree = Array.isArray(jmxPlan['hashTree'])
-      ? jmxPlan['hashTree'][0]
-      : jmxPlan['hashTree'];
-    if (!rootHashTree) throw new Error('JMX file appears to be empty');
+    const jmxVersion     = getAttrs(jmxPlanItem)['@_version'] || '1.2';
+    const jmxPlanChildren = getChildren(jmxPlanItem);
 
-    // Find TestPlan node
-    const testPlanNode = rootHashTree['TestPlan']?.[0] || rootHashTree['TestPlan'] || {};
+    // jmeterTestPlan has exactly one child: <hashTree>
+    const rootHtItem = jmxPlanChildren.find(c => getTag(c) === 'hashTree');
+    if (!rootHtItem) throw new Error('JMX file appears to be empty (no root hashTree)');
 
-    // Walk the second-level hashTree (contains ThreadGroups, etc.)
-    const testHashTrees = Array.isArray(rootHashTree['hashTree'])
-      ? rootHashTree['hashTree']
-      : (rootHashTree['hashTree'] ? [rootHashTree['hashTree']] : []);
+    const rootHtChildren = getChildren(rootHtItem);
 
-    const results = {
-      requests:         [],
-      standaloneScripts: []
-    };
+    // Flatten root to get TestPlan element + its paired hashTree (the main level)
+    const flatRoot      = flattenHashTree(rootHtChildren);
+    const testPlanEntry = flatRoot.find(e => e.tag === 'TestPlan');
+    const testPlanAttrs = testPlanEntry?.attrs || {};
+    const testPlanNode  = testPlanEntry?.node  || [];
+    // testPlanEntry.childHashTree = the "main" level containing ThreadGroups etc.
+    const mainHashTree  = testPlanEntry?.childHashTree || rootHtChildren;
+
+    const planName = testPlanAttrs['@_testname'] ||
+                     this.options.name           ||
+                     path.basename(this.inputFile, '.jmx');
+
+    // ── TestPlan-level User Defined Variables ──────────────────────────────
+    // Stored as <elementProp name="TestPlan.user_defined_variables">
+    const planVars = {};
+    const udtEl = findChildByAttr(
+      testPlanNode, 'elementProp', '@_name', 'TestPlan.user_defined_variables'
+    );
+    if (udtEl) {
+      const collItem = findChild(getChildren(udtEl), 'collectionProp');
+      if (collItem) {
+        for (const elem of findChildren(getChildren(collItem), 'elementProp')) {
+          const ec = getChildren(elem);
+          const k  = getProp(ec, 'Argument.name');
+          const v  = convertVars(getProp(ec, 'Argument.value'));
+          if (k) planVars[k] = v;
+        }
+      }
+    }
+
+    // Merge plan vars with any caller-supplied variables (caller wins)
+    const allVars = { ...planVars, ...(this.options.variables || {}) };
+
+    const results = { requests: [], standaloneScripts: [] };
 
     const context = {
-      defaults:       { domain: '', port: '', protocol: 'http', baseUrl: '' },
-      globalHeaders:  [],
-      auth:           null,
-      folder:         '',
-      csvDataSets:    this.csvDataSets,
-      threadGroups:   this.threadGroups,
-      thinkTimeSec:   0
+      defaults: {
+        domain: '', port: '', protocol: 'http', baseUrl: '',
+        proxyHost: '', proxyPort: '', proxyUser: '', proxyPass: '',
+        contentEncoding: '', followRedirects: 'true',
+      },
+      globalHeaders: [],
+      auth:          null,
+      folder:        '',
+      csvDataSets:   this.csvDataSets,
+      threadGroups:  this.threadGroups,
+      thinkTimeSec:  0,
+      variables:     allVars,  // shared mutable map — accumulates across all scopes
     };
 
-    // Process root-level config (HTTP Defaults, Auth at TestPlan level)
-    for (const ht of testHashTrees) {
-      walkHashTree(ht, context, results);
-    }
+    walkHashTree(mainHashTree, context, results);
 
     this.standaloneScripts = results.standaloneScripts;
 
     this.collection = buildCollection(
-      testPlanNode,
+      planName,
       results.requests,
       this.csvDataSets,
-      this.options.variables || {}
+      context.variables,
+      context.defaults
     );
 
     this.metadata = {
-      version:       jmxPlan['@_version'] || '1.2',
-      name:          testPlanNode['@_testname'] || path.basename(this.inputFile, '.jmx'),
+      version:       jmxVersion,
+      name:          planName,
       type:          'jmeter',
       totalRequests: results.requests.length,
       threadGroups:  this.threadGroups.length,
-      csvDataSets:   this.csvDataSets.length
+      csvDataSets:   this.csvDataSets.length,
     };
 
     return results.requests;
   }
 
-  getMetadata()     { return this.metadata; }
-  getCollection()   { return this.collection; }
-  getThreadGroups() { return this.threadGroups; }
-  getCsvDataSets()  { return this.csvDataSets; }
+  getMetadata()          { return this.metadata; }
+  getCollection()        { return this.collection; }
+  getThreadGroups()      { return this.threadGroups; }
+  getCsvDataSets()       { return this.csvDataSets; }
   getStandaloneScripts() { return this.standaloneScripts; }
 }
 
