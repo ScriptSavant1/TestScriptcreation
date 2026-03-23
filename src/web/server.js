@@ -14,9 +14,10 @@ const path     = require('path');
 const os       = require('os');
 const fs       = require('fs').promises;
 const archiver = require('archiver');
-const { runWithMemoryFs } = require('../lib/memoryFsInterceptor');
-const BrunoDevWebConverter = require('../index');
-const JmxConverter         = require('../converters/jmxConverter');
+const { runWithMemoryFs }      = require('../lib/memoryFsInterceptor');
+const BrunoDevWebConverter     = require('../index');
+const JmxConverter             = require('../converters/jmxConverter');
+const JmxDependencyResolver    = require('../lib/jmxDependencyResolver');
 
 class WebServer {
   constructor(port = 3000) {
@@ -170,17 +171,43 @@ class WebServer {
 
     // ── Convert JMX ──────────────────────────────────────────────────────────
     this.app.post('/convert-jmx',
-      this.upload.single('jmxFile'),
+      this.upload.fields([
+        { name: 'jmxFile',   maxCount: 1  },
+        { name: 'csvFiles',  maxCount: 30 },
+        { name: 'certFiles', maxCount: 10 },
+      ]),
       async (req, res) => {
-        const jmxFile = req.file;
+        const jmxFile   = req.files?.jmxFile?.[0];
+        const csvFiles  = req.files?.csvFiles  || [];
+        const certFiles = req.files?.certFiles || [];
+
         if (!jmxFile) {
           return res.status(400).json({ error: 'JMX file is required.' });
         }
 
-        const tmpJmx = path.join(os.tmpdir(), `lr-jmx-${Date.now()}-${jmxFile.originalname}`);
+        const tmpFiles  = [];   // all temp paths to clean up
+        const tmpJmx    = path.join(os.tmpdir(), `lr-jmx-${Date.now()}-${jmxFile.originalname}`);
+        tmpFiles.push(tmpJmx);
 
         try {
           await fs.writeFile(tmpJmx, jmxFile.buffer);
+
+          // Write uploaded CSV / cert files to a temp directory so the converter
+          // can reference them by path if needed (dependency resolver uses in-memory).
+          const tmpSupportDir = path.join(os.tmpdir(), `lr-jmx-support-${Date.now()}`);
+          const uploadedSupportFiles = [...csvFiles, ...certFiles];
+          const csvFilePaths = {};  // originalname → tmpPath
+
+          if (uploadedSupportFiles.length) {
+            await fs.mkdir(tmpSupportDir, { recursive: true });
+            for (const f of uploadedSupportFiles) {
+              const tmpPath = path.join(tmpSupportDir, f.originalname);
+              await fs.writeFile(tmpPath, f.buffer);
+              tmpFiles.push(tmpPath);
+              csvFilePaths[f.originalname] = tmpPath;
+            }
+            tmpFiles.push(tmpSupportDir);
+          }
 
           const outputDir = path.join(os.tmpdir(), `lr-jmx-out-${Date.now()}`);
 
@@ -196,13 +223,27 @@ class WebServer {
             thinkTime:           parseFloat(req.body.thinkTime) || 1,
             addComments:         req.body.addComments !== 'false',
             logLevel:            req.body.logLevel || 'info',
-            generateWlmExcel:    req.body.generateWlmExcel !== 'false'
+            generateWlmExcel:    req.body.generateWlmExcel !== 'false',
+            csvFilePaths,            // map of filename → tmpPath for converter use
           };
 
           const converter = new JmxConverter(options);
           const { result: results, files } = await runWithMemoryFs(() => converter.convert());
 
-          await fs.unlink(tmpJmx).catch(() => {});
+          // Dependency report — runs after parse (results.csvDataSets populated)
+          const resolver   = new JmxDependencyResolver(results.csvDataSets || [], uploadedSupportFiles);
+          const dependency = resolver.resolve();
+
+          // Copy uploaded CSV / cert files into the in-memory file map so they
+          // are included in the output ZIP alongside the generated scripts.
+          for (const f of uploadedSupportFiles) {
+            const dest = path.join(outputDir, f.originalname).replace(/\\/g, '/');
+            files.set(dest, f.buffer);
+          }
+
+          // Clean up temp files (the JMX itself — support dir handled separately)
+          await Promise.all(tmpFiles.map(p => fs.unlink(p).catch(() => {})));
+          await fs.rmdir(tmpSupportDir).catch(() => {});
 
           const token = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
           this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
@@ -213,13 +254,16 @@ class WebServer {
             downloadUrl:  `download/${token}`,
             analysis:     results.analysis,
             threadGroups: results.threadGroups,
+            scripts:      results.scripts || null,   // non-null only in multi mode
+            multiScript:  results.multiScript || false,
             metadata:     results.metadata,
+            dependency,
             protocol:     options.protocol,
-            mode:         options.mode
+            mode:         options.mode,
           });
 
         } catch (err) {
-          await fs.unlink(tmpJmx).catch(() => {});
+          await Promise.all(tmpFiles.map(p => fs.unlink(p).catch(() => {})));
           console.error('JMX conversion error:', err);
           res.status(500).json({ error: err.message });
         }

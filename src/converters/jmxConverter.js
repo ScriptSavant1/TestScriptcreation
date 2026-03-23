@@ -3,6 +3,9 @@
  * Parses a JMeter .jmx file and generates either DevWeb or VuGen Web HTTP/HTML scripts
  * plus a Workload Modelling Excel file.
  *
+ * mode:'single' → one script from all thread groups (default, existing behaviour)
+ * mode:'multi'  → one script per thread group, each in its own sub-directory
+ *
  * Reuses the same generators as the Bruno/Postman converter — only the parser is new.
  */
 
@@ -38,10 +41,10 @@ class JmxConverter {
 
   async convert() {
     // 1. Parse JMX
-    const parser  = new JmxParser(this.options.inputFile, this.options);
-    const requests = await parser.parse();
-    const metadata = parser.getMetadata();
-    const collection = parser.getCollection();
+    const parser       = new JmxParser(this.options.inputFile, this.options);
+    const requests     = await parser.parse();
+    const metadata     = parser.getMetadata();
+    const collection   = parser.getCollection();
     const threadGroups = parser.getThreadGroups();
     const csvDataSets  = parser.getCsvDataSets();
 
@@ -49,26 +52,31 @@ class JmxConverter {
       throw new Error('No HTTP requests found in this JMX file. Only HTTPSamplerProxy elements are converted.');
     }
 
-    // 2. Load environment file if provided (same format as Postman/Bruno env files)
+    // 2. Build shared environment variables
     const environmentVars = await this.loadEnvironmentFile();
-
-    // Merge CSV variable names into environment vars so generators know about them
     this.injectCsvVariables(csvDataSets, environmentVars);
-
-    // Inject any {{varName}} references found in requests as empty env vars.
-    // Catches JMeter UDV/CSV vars that may not have been detected by the parser
-    // due to nesting depth issues. Empty value → Rule 4 → Tier 1 Dynamic.
     this.injectRequestVariables(requests, environmentVars);
-
-    // Inject proxy settings extracted from HTTP Request Defaults (Advanced tab)
-    // so both generators' detectProxyConfig() can find them by variable name.
     this.injectProxyVariables(collection, environmentVars);
 
-    // 3. Prepare output dir
+    // 3. Prepare root output dir
     await fs.mkdir(this.options.outputDir, { recursive: true });
 
-    // 4. Generate scripts
-    const isWebHttp = this.options.protocol === 'web-http';
+    // 4. Dispatch to single or multi mode
+    const enabledTGs = threadGroups.filter(tg => tg.enabled !== false);
+    if (this.options.mode === 'multi' && enabledTGs.length > 1) {
+      return await this._convertMulti(
+        parser, requests, collection, threadGroups, csvDataSets, environmentVars, metadata
+      );
+    }
+    return await this._convertSingle(
+      requests, collection, threadGroups, csvDataSets, environmentVars, metadata
+    );
+  }
+
+  // ── Single-script path (original behaviour) ──────────────────────────────
+
+  async _convertSingle(requests, collection, threadGroups, csvDataSets, environmentVars, metadata) {
+    const isWebHttp      = this.options.protocol === 'web-http';
     const GeneratorClass = isWebHttp ? WebHttpScriptGenerator : AdvancedScriptGenerator;
 
     const generator = new GeneratorClass(
@@ -84,41 +92,109 @@ class JmxConverter {
       await fs.writeFile(scriptPath, script, 'utf8');
     }
 
-    // 5. Inject JMX-explicit correlations (RegexExtractor, BoundaryExtractor, etc.)
-    //    into the generated script if the generator hasn't already handled them.
-    //    (The generators' correlation detector runs on script content; JMX extractors
-    //     are stored on each request's .extractors[] and already consumed by the generator
-    //     via the normalized request format.)
-
-    // 6. Generate CSV parameter files from CSVDataSet entries
     if (csvDataSets.length && this.options.useParameterization) {
-      await this.generateCsvParameterFiles(csvDataSets, isWebHttp);
+      await this.generateCsvParameterFiles(csvDataSets, isWebHttp, this.options.outputDir);
     }
 
-    // 7. Generate Workload Modelling Excel
     let excelBuffer = null;
     if (this.options.generateWlmExcel) {
-      const excelGen  = new WorkloadExcelGenerator(
-        threadGroups,
-        requests,
-        metadata.name,
-        this.options
-      );
-      excelBuffer = await excelGen.generateBuffer();
+      const excelGen  = new WorkloadExcelGenerator(threadGroups, requests, metadata.name, this.options);
+      excelBuffer     = await excelGen.generateBuffer();
       const excelPath = path.join(this.options.outputDir, `${metadata.name.replace(/[^\w\s-]/g,'_')}_WLM.xlsx`);
       await fs.writeFile(excelPath, excelBuffer);
     }
 
+    return { success: true, outputDir: this.options.outputDir, multiScript: false,
+             analysis, metadata, threadGroups, csvDataSets, excelBuffer };
+  }
+
+  // ── Multi-script path (one sub-directory per thread group) ────────────────
+
+  async _convertMulti(parser, requests, collection, threadGroups, csvDataSets, environmentVars, metadata) {
+    const isWebHttp      = this.options.protocol === 'web-http';
+    const GeneratorClass = isWebHttp ? WebHttpScriptGenerator : AdvancedScriptGenerator;
+
+    const tgRequestsMap = parser.getThreadGroupRequests();
+    const scripts       = [];
+    let   firstAnalysis = null;
+
+    for (const [tgName, tgReqs] of tgRequestsMap) {
+      if (!tgReqs.length) continue;
+
+      // Create a safe directory name from the thread group name
+      const safeName   = tgName
+        .replace(/[<>:"/\\|?*]/g, '')   // strip invalid chars
+        .replace(/\s+/g, '_')
+        .trim() || 'ThreadGroup';
+      const tgOutputDir = path.join(this.options.outputDir, safeName);
+      await fs.mkdir(tgOutputDir, { recursive: true });
+
+      // Find the thread group metadata object for WLM Excel
+      const tgMeta = threadGroups.find(tg => tg.name === tgName) || null;
+
+      // Special thread group types map to init/end sections
+      // SetUp   → always first, used as vuser_init equivalent
+      // TearDown → always last, used as vuser_end equivalent
+      const tgType = tgMeta?.type || 'Standard';
+
+      const generator = new GeneratorClass(
+        tgReqs,
+        collection,
+        { ...this.options, environmentVars, outputDir: tgOutputDir }
+      );
+
+      const { script, analysis } = await generator.generate(tgOutputDir);
+      if (!firstAnalysis) firstAnalysis = analysis;
+
+      if (!isWebHttp) {
+        await fs.writeFile(path.join(tgOutputDir, 'main.js'), script, 'utf8');
+      }
+
+      if (csvDataSets.length && this.options.useParameterization) {
+        await this.generateCsvParameterFiles(csvDataSets, isWebHttp, tgOutputDir);
+      }
+
+      // Per-thread-group WLM Excel (only when we have metadata for this group)
+      if (this.options.generateWlmExcel && tgMeta) {
+        const eg         = new WorkloadExcelGenerator([tgMeta], tgReqs, tgName, this.options);
+        const excelBuf   = await eg.generateBuffer();
+        const excelPath  = path.join(tgOutputDir, `${safeName}_WLM.xlsx`);
+        await fs.writeFile(excelPath, excelBuf);
+      }
+
+      scripts.push({
+        threadGroupName: tgName,
+        threadGroupType: tgType,
+        outputDir:       tgOutputDir,
+        safeDirName:     safeName,
+        requestCount:    tgReqs.length,
+        analysis,
+      });
+    }
+
+    // Combined WLM Excel at the root level (all thread groups together)
+    let excelBuffer = null;
+    if (this.options.generateWlmExcel) {
+      const rootExcelGen  = new WorkloadExcelGenerator(threadGroups, requests, metadata.name, this.options);
+      excelBuffer         = await rootExcelGen.generateBuffer();
+      const rootExcelPath = path.join(this.options.outputDir, `${metadata.name.replace(/[^\w\s-]/g,'_')}_WLM.xlsx`);
+      await fs.writeFile(rootExcelPath, excelBuffer);
+    }
+
     return {
-      success:      true,
-      outputDir:    this.options.outputDir,
-      analysis,
+      success:     true,
+      outputDir:   this.options.outputDir,
+      multiScript: true,
+      scripts,
+      analysis:    firstAnalysis,
       metadata,
       threadGroups,
       csvDataSets,
-      excelBuffer
+      excelBuffer,
     };
   }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   /**
    * Load environment file (Postman/Bruno format: { values: [{key,value,enabled}] })
@@ -139,7 +215,6 @@ class JmxConverter {
   /**
    * Scan all requests for {{varName}} references and inject unknown ones as
    * empty strings so the 3-tier classifier treats them as Tier 1 Dynamic.
-   * This catches JMeter UDVs and CSV vars that may be missed by the parser.
    */
   injectRequestVariables(requests, environmentVars) {
     const varPattern = /\{\{([^}]+)\}\}/g;
@@ -164,7 +239,6 @@ class JmxConverter {
   /**
    * Forward proxy settings extracted from JMX HTTP Request Defaults into
    * environmentVars so generators' detectProxyConfig() picks them up.
-   * Only injects if not already present (CLI --environment-file wins).
    */
   injectProxyVariables(collection, environmentVars) {
     const proxy = collection && collection.config && collection.config.proxy;
@@ -186,7 +260,7 @@ class JmxConverter {
       const cols = (ds.variableNames || '').split(',').map(s => s.trim()).filter(Boolean);
       for (const col of cols) {
         if (!(col in environmentVars)) {
-          environmentVars[col] = '';  // empty → Tier 3 by rule 4
+          environmentVars[col] = '';
         }
       }
     }
@@ -194,13 +268,12 @@ class JmxConverter {
 
   /**
    * Generate parameter entries for CSVDataSet configs.
-   * DevWeb → parameters.yml additions
-   * VuGen  → ParameterFile.prm additions
+   * DevWeb → parameters.yml    VuGen → ParameterFile.prm
+   * @param {string} [outputDir] — defaults to this.options.outputDir
    */
-  async generateCsvParameterFiles(csvDataSets, isWebHttp) {
+  async generateCsvParameterFiles(csvDataSets, isWebHttp, outputDir = this.options.outputDir) {
     if (isWebHttp) {
-      // Append to ParameterFile.prm
-      const prmPath = path.join(this.options.outputDir, 'ParameterFile.prm');
+      const prmPath = path.join(outputDir, 'ParameterFile.prm');
       let prmContent = '';
       try { prmContent = await fs.readFile(prmPath, 'utf8'); } catch {}
 
@@ -220,14 +293,13 @@ class JmxConverter {
       }
       await fs.writeFile(prmPath, prmContent.trim(), 'utf8');
     } else {
-      // Append to parameters.yml
-      const ymlPath = path.join(this.options.outputDir, 'parameters.yml');
+      const ymlPath = path.join(outputDir, 'parameters.yml');
       let ymlContent = '';
       try { ymlContent = await fs.readFile(ymlPath, 'utf8'); } catch {}
       if (!ymlContent.includes('parameters:')) ymlContent = 'parameters:\n';
 
       for (const ds of csvDataSets) {
-        const cols = (ds.variableNames || '').split(',').map(s => s.trim()).filter(Boolean);
+        const cols     = (ds.variableNames || '').split(',').map(s => s.trim()).filter(Boolean);
         const firstCol = cols[0];
         cols.forEach((col, idx) => {
           if (!ymlContent.includes(`name: ${col}`)) {
@@ -236,11 +308,9 @@ class JmxConverter {
             ymlContent += `    fileName: ${ds.filename || `${col}.csv`}\n`;
             ymlContent += `    columnName: ${col}\n`;
             ymlContent += `    nextValue: iteration\n`;
-            if (idx === 0) {
-              ymlContent += `    nextRow: sequential\n`;
-            } else {
-              ymlContent += `    nextRow: same as ${firstCol}\n`;
-            }
+            ymlContent += idx === 0
+              ? `    nextRow: sequential\n`
+              : `    nextRow: same as ${firstCol}\n`;
             ymlContent += `    onEnd: loop\n`;
           }
         });

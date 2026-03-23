@@ -385,6 +385,13 @@ body > * { position: relative; z-index: 1; }
   background: var(--glass);
   overflow: hidden;
 }
+/* Compact secondary drop zones (CSV / cert files) */
+.dz-secondary {
+  padding: 14px 14px;
+}
+.dz-secondary .dz-icon-wrap {
+  width: 34px; height: 34px; border-radius: 9px; font-size: 16px; margin-bottom: 8px;
+}
 .drop-zone:hover        { border-color: rgba(79,142,247,0.40); background: var(--primary-dim); }
 .drop-zone.drag-over    { border-color: var(--primary); border-style: solid; background: rgba(79,142,247,0.08); }
 .drop-zone.loaded       { border-color: var(--success); border-style: solid; background: var(--success-dim); }
@@ -870,7 +877,7 @@ footer {
 
   <!-- 2 · Upload -->
   <div class="section-label"><span class="section-num">2</span>Upload JMeter Script</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
     <div class="drop-zone" id="dz-jmx"
          ondragover="onDrag(event,'dz-jmx')" ondragleave="offDrag('dz-jmx')"
          ondrop="onDropJmx(event)">
@@ -882,18 +889,47 @@ footer {
     </div>
     <div class="jmx-features">
       <div class="jmx-feat-title">What gets generated</div>
-      <div class="feat-item"><span class="feat-check">✓</span>DevWeb JS or VuGen C script</div>
-      <div class="feat-item"><span class="feat-check">✓</span>Regex / JSON / Boundary extractors</div>
-      <div class="feat-item"><span class="feat-check">✓</span>NTLM &amp; Kerberos auth config</div>
-      <div class="feat-item"><span class="feat-check">✓</span>JWT — PS256, RS256, HS256</div>
-      <div class="feat-item"><span class="feat-check">✓</span>CSV parameter files</div>
+      <div class="feat-item"><span class="feat-check">✓</span>DevWeb JS or VuGen C script per thread group</div>
+      <div class="feat-item"><span class="feat-check">✓</span>Regex / JSON / Boundary / XPath / CSS extractors</div>
+      <div class="feat-item"><span class="feat-check">✓</span>Global + per-request headers correctly scoped</div>
+      <div class="feat-item"><span class="feat-check">✓</span>Loop / If / ForEach controller context preserved</div>
+      <div class="feat-item"><span class="feat-check">✓</span>CSV parameter files + dependency report</div>
       <div class="feat-item"><span class="feat-check">✓</span><strong>Workload Model Excel (.xlsx)</strong></div>
+    </div>
+  </div>
+
+  <!-- Supporting files -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px">
+    <div class="drop-zone dz-secondary" id="dz-csv"
+         ondragover="onDrag(event,'dz-csv')" ondragleave="offDrag('dz-csv')"
+         ondrop="onDropCsv(event)">
+      <input type="file" id="fi-csv" accept=".csv" multiple onchange="onPickCsv()">
+      <div class="dz-icon-wrap" style="font-size:1.1rem">📄</div>
+      <div class="dz-label" style="font-size:0.82rem">CSV Data Files <span style="color:var(--text-3);font-weight:400">(optional)</span></div>
+      <div class="dz-sub">Multiple .csv files — added to output ZIP</div>
+      <div id="lbl-csv" class="dz-name"></div>
+    </div>
+    <div class="drop-zone dz-secondary" id="dz-cert"
+         ondragover="onDrag(event,'dz-cert')" ondragleave="offDrag('dz-cert')"
+         ondrop="onDropCert(event)">
+      <input type="file" id="fi-cert" accept=".jks,.p12,.cer,.crt,.key,.pem,.pfx,.jar,.properties" multiple onchange="onPickCert()">
+      <div class="dz-icon-wrap" style="font-size:1.1rem">🔒</div>
+      <div class="dz-label" style="font-size:0.82rem">Certs / JARs / Properties <span style="color:var(--text-3);font-weight:400">(optional)</span></div>
+      <div class="dz-sub">.jks .p12 .cer .key .pem .jar .properties</div>
+      <div id="lbl-cert" class="dz-name"></div>
     </div>
   </div>
 
   <!-- 3 · Options -->
   <div class="section-label"><span class="section-num">3</span>Configure Options</div>
   <div class="options-grid">
+    <div class="opt-group">
+      <span class="opt-label">Script Generation Mode</span>
+      <div class="seg-btns">
+        <button class="seg-btn active" id="jmode-single" onclick="setJmxMode('single')">Single Script</button>
+        <button class="seg-btn"        id="jmode-multi"  onclick="setJmxMode('multi')">Per Thread Group</button>
+      </div>
+    </div>
     <div class="opt-group">
       <span class="opt-label">Think Time</span>
       <div class="seg-btns">
@@ -930,6 +966,10 @@ footer {
     </div>
   </div>
   <div class="stats-grid" id="stats-row"></div>
+  <!-- Multi-script thread group list (hidden in single mode) -->
+  <div id="res-tg-list" style="display:none;margin:12px 0 4px"></div>
+  <!-- Dependency report (shown when CSV files are referenced) -->
+  <div id="res-dep-report" style="display:none;margin:12px 0 4px"></div>
   <div class="res-actions">
     <a id="btn-dl" class="btn-dl" href="#" download>⬇ Download Script (.zip)</a>
     <button class="btn-reset" onclick="resetResult()">↩ Convert Another</button>
@@ -1005,7 +1045,7 @@ function toggleTheme() {
 /* ── State ──────────────────────────────────────────────────────────────── */
 const S  = { proto:'devweb', mode:'single', tt:1, ll:'info' };
 const F  = { collection:null, environment:null };
-const JX = { proto:'devweb', tt:1, wlm:true, file:null };
+const JX = { proto:'devweb', mode:'single', tt:1, wlm:true, file:null, csvFiles:[], certFiles:[] };
 
 /* ── Tab switching ──────────────────────────────────────────────────────── */
 function switchTab(tab) {
@@ -1062,6 +1102,11 @@ function setJmxWlm(v) {
   JX.wlm = v;
   document.getElementById('jwlm-yes').className = 'seg-btn' + ( v ? ' active' : '');
   document.getElementById('jwlm-no').className  = 'seg-btn' + (!v ? ' active' : '');
+}
+function setJmxMode(m) {
+  JX.mode = m;
+  document.getElementById('jmode-single').className = 'seg-btn' + (m === 'single' ? ' active' : '');
+  document.getElementById('jmode-multi').className  = 'seg-btn' + (m === 'multi'  ? ' active' : '');
 }
 
 /* ── Advanced toggle ────────────────────────────────────────────────────── */
@@ -1132,6 +1177,64 @@ function attachJmxFile(f) {
   }
 }
 
+/* ── CSV supporting files ────────────────────────────────────────────────── */
+function onPickCsv() {
+  const files = Array.from(document.getElementById('fi-csv').files);
+  if (files.length) attachCsvFiles(files);
+}
+function onDropCsv(e) {
+  e.preventDefault(); offDrag('dz-csv');
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv'));
+  if (files.length) attachCsvFiles(files);
+}
+function attachCsvFiles(files) {
+  JX.csvFiles = files;
+  const dz = document.getElementById('dz-csv');
+  document.getElementById('lbl-csv').textContent =
+    files.length === 1 ? '✓ ' + files[0].name : `✓ ${files.length} CSV files`;
+  dz.classList.add('loaded'); dz.classList.remove('drag-over');
+  let x = dz.querySelector('.dz-clear');
+  if (!x) {
+    x = document.createElement('button');
+    x.className = 'dz-clear'; x.title = 'Remove'; x.textContent = '×';
+    dz.appendChild(x);
+  }
+  x.onclick = ev => {
+    ev.stopPropagation(); JX.csvFiles = []; dz.classList.remove('loaded');
+    document.getElementById('lbl-csv').textContent = ''; x.remove();
+    document.getElementById('fi-csv').value = '';
+  };
+}
+
+/* ── Cert / JAR supporting files ─────────────────────────────────────────── */
+function onPickCert() {
+  const files = Array.from(document.getElementById('fi-cert').files);
+  if (files.length) attachCertFiles(files);
+}
+function onDropCert(e) {
+  e.preventDefault(); offDrag('dz-cert');
+  const files = Array.from(e.dataTransfer.files);
+  if (files.length) attachCertFiles(files);
+}
+function attachCertFiles(files) {
+  JX.certFiles = files;
+  const dz = document.getElementById('dz-cert');
+  document.getElementById('lbl-cert').textContent =
+    files.length === 1 ? '✓ ' + files[0].name : `✓ ${files.length} file(s)`;
+  dz.classList.add('loaded'); dz.classList.remove('drag-over');
+  let x = dz.querySelector('.dz-clear');
+  if (!x) {
+    x = document.createElement('button');
+    x.className = 'dz-clear'; x.title = 'Remove'; x.textContent = '×';
+    dz.appendChild(x);
+  }
+  x.onclick = ev => {
+    ev.stopPropagation(); JX.certFiles = []; dz.classList.remove('loaded');
+    document.getElementById('lbl-cert').textContent = ''; x.remove();
+    document.getElementById('fi-cert').value = '';
+  };
+}
+
 /* ── Progress helper ────────────────────────────────────────────────────── */
 function startProgress(wrapId, fillId) {
   const pw = document.getElementById(wrapId);
@@ -1199,12 +1302,15 @@ async function doConvertJmx() {
   fd.append('protocol',            JX.proto);
   fd.append('thinkTime',           JX.tt);
   fd.append('generateWlmExcel',    JX.wlm);
-  fd.append('mode',                'single');
+  fd.append('mode',                JX.mode);
   fd.append('useTransactions',     'true');
   fd.append('useCorrelation',      'true');
   fd.append('useParameterization', 'true');
   fd.append('useAuthentication',   'true');
   fd.append('addComments',         'true');
+  // Attach CSV and cert/JAR supporting files
+  for (const f of JX.csvFiles)  fd.append('csvFiles',  f);
+  for (const f of JX.certFiles) fd.append('certFiles', f);
 
   try {
     const r = await fetch('convert-jmx', { method: 'POST', body: fd });
@@ -1212,7 +1318,7 @@ async function doConvertJmx() {
     clearInterval(prog.tick); prog.fill(); prog.hide();
     resetJmxBtn(); showJmxResult(r.ok ? d : null, r.ok ? null : d.error);
   } catch(e) {
-    clearInterval(prog.tick); prog.hide(); resetJmxBtn(); showResult(null, e.message);
+    clearInterval(prog.tick); prog.hide(); resetJmxBtn(); showJmxResult(null, e.message);
   }
 }
 
@@ -1254,19 +1360,79 @@ function showJmxResult(data, err) {
     document.getElementById('res-err').scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
-  const a    = data.analysis || {};
-  const tg   = (data.threadGroups || []).length;
+  const a      = data.analysis || {};
+  const tgArr  = data.threadGroups || [];
+  const tgCount= tgArr.length;
   const reqs   = a.requests?.total              ?? data.metadata?.totalRequests ?? '—';
   const corrs  = a.correlations?.totalCorrelations ?? '—';
   const params = a.parameters?.totalParameters   ?? '—';
+
   document.getElementById('stats-row').innerHTML =
-    stat(reqs,   'Requests')     +
-    stat(corrs,  'Correlations') +
-    stat(params, 'Parameters')   +
-    stat(tg,     'Thread Groups');
-  const pl = data.protocol === 'web-http' ? 'VuGen Web HTTP/HTML (C)' : 'DevWeb (JavaScript)';
+    stat(reqs,    'Requests')     +
+    stat(corrs,   'Correlations') +
+    stat(params,  'Parameters')   +
+    stat(tgCount, 'Thread Groups');
+
+  const pl   = data.protocol === 'web-http' ? 'VuGen Web HTTP/HTML (C)' : 'DevWeb (JavaScript)';
+  const mode = data.multiScript ? 'Multi-Script (per thread group)' : 'Single Script';
   document.getElementById('res-sub').textContent =
-    `JMeter → ${pl} · ${reqs} requests · ${tg} thread group(s) · WLM Excel included`;
+    `JMeter → ${pl} · ${mode} · ${reqs} requests · ${tgCount} thread group(s)`;
+
+  // ── Per-thread-group script list (multi mode only) ──────────────────
+  const tgListEl = document.getElementById('res-tg-list');
+  if (data.multiScript && data.scripts && data.scripts.length) {
+    const typeIcon = { Standard:'🧵', SetUp:'▶', TearDown:'⏹', Stepping:'📈', Ultimate:'🚀', Concurrency:'⚡', Arrivals:'🌊' };
+    let html = '<div style="font-size:0.78rem;font-weight:600;color:var(--text-2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Generated Scripts</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:4px">';
+    for (const s of data.scripts) {
+      const icon = typeIcon[s.threadGroupType] || '🧵';
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:var(--glass);border:1px solid var(--glass-border);font-size:0.82rem">
+        <span>${icon}</span>
+        <span style="font-weight:500;color:var(--text)">${s.threadGroupName}</span>
+        <span style="color:var(--text-3);margin-left:auto">${s.requestCount} requests</span>
+        <span style="color:var(--text-3);font-family:'JetBrains Mono',monospace;font-size:0.72rem">${s.safeDirName}/</span>
+      </div>`;
+    }
+    html += '</div>';
+    tgListEl.innerHTML = html;
+    tgListEl.style.display = 'block';
+  } else {
+    tgListEl.style.display = 'none';
+  }
+
+  // ── Dependency report ───────────────────────────────────────────────
+  const depEl = document.getElementById('res-dep-report');
+  const dep   = data.dependency;
+  if (dep) {
+    let html = '<div style="font-size:0.78rem;font-weight:600;color:var(--text-2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Dependency Report</div>';
+    if (dep.missing.length) {
+      html += '<div style="margin-bottom:6px">';
+      for (const m of dep.missing) {
+        html += `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 10px;border-radius:6px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.2);font-size:0.8rem;margin-bottom:4px">
+          <span>⚠</span><span style="color:var(--text)">${m.message}</span></div>`;
+      }
+      html += '</div>';
+    }
+    if (dep.found.filter(f => f.type === 'csv').length) {
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:rgba(80,200,100,0.08);border:1px solid rgba(80,200,100,0.2);font-size:0.8rem">';
+      html += `<span>✓</span><span>${dep.found.filter(f=>f.type==='csv').length} CSV file(s) uploaded — included in output ZIP</span></div>`;
+    }
+    if (dep.warnings.length) {
+      html += '<div style="margin-top:6px">';
+      for (const w of dep.warnings) {
+        html += `<div style="padding:5px 10px;border-radius:5px;background:var(--glass);font-size:0.78rem;color:var(--text-2);margin-bottom:3px">ℹ ${w}</div>`;
+      }
+      html += '</div>';
+    }
+    if (dep.required.length === 0 && dep.warnings.length === 0) {
+      html += '<div style="font-size:0.8rem;color:var(--text-3)">No external file dependencies detected.</div>';
+    }
+    depEl.innerHTML = html;
+    depEl.style.display = 'block';
+  } else {
+    depEl.style.display = 'none';
+  }
+
   document.getElementById('btn-dl').href = data.downloadUrl;
   document.getElementById('res-ok').style.display = 'block';
   document.getElementById('res-ok').scrollIntoView({ behavior: 'smooth', block: 'start' });
