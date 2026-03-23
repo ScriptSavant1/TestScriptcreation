@@ -775,45 +775,89 @@ class CorrelationDetector {
   }
 
   /**
-   * Generate extractor code for DevWeb
+   * Generate extractor code for DevWeb.
+   * Uses JSON.stringify() for all user-supplied strings to ensure proper escaping
+   * of double quotes, backslashes, and other special characters in patterns.
    */
   generateExtractor(correlation) {
+    // JSON.stringify correctly escapes ", \, control chars etc.
+    const n = JSON.stringify(correlation.name || '');
+
+    // Map JMX scope → DevWeb ExtractorScope constant (null = use default Body)
+    const scopeConst = this._dvScopeConst(correlation.scope || correlation.extractorScope);
+
     switch (correlation.extractorType) {
       case 'json':
-        return `new load.JsonPathExtractor("${correlation.name}", "${correlation.extractPath}")`;
+        return `new load.JsonPathExtractor(${n}, ${JSON.stringify(correlation.extractPath || `$.${correlation.name}`)})`;
 
-      case 'boundary':
-        return `new load.BoundaryExtractor("${correlation.name}", "${correlation.leftBound || '<'}", "${correlation.rightBound || '>'}")`;
+      case 'boundary': {
+        const lb = JSON.stringify(correlation.leftBound  || '<');
+        const rb = JSON.stringify(correlation.rightBound || '>');
+        return scopeConst
+          ? `new load.BoundaryExtractor(${n}, ${lb}, ${rb}, ${scopeConst})`
+          : `new load.BoundaryExtractor(${n}, ${lb}, ${rb})`;
+      }
 
       case 'regex':
-      case 'regexp':
-        return `new load.RegexpExtractor("${correlation.name}", "${correlation.pattern || '(.+)'}")`;
+      case 'regexp': {
+        const pat     = JSON.stringify(correlation.pattern || '(.+)');
+        // JMeter matchNumber: 1 = first, -1 = random, 0 = all occurrences
+        const matchNo = this._parseMatchNo(correlation.matchNumber);
+        if (scopeConst) {
+          // DevWeb: RegexpExtractor(name, pattern, matchNo, scope)
+          return `new load.RegexpExtractor(${n}, ${pat}, ${matchNo}, ${scopeConst})`;
+        }
+        if (matchNo !== 1) {
+          return `new load.RegexpExtractor(${n}, ${pat}, ${matchNo})`;
+        }
+        return `new load.RegexpExtractor(${n}, ${pat})`;
+      }
 
       case 'textcheck':
-      case 'validation':
-        // TextCheckExtractor for validating presence of text
+      case 'validation': {
         const options = correlation.extractorOptions || {};
-        const text = correlation.expectedText || correlation.text || correlation.value;
-        const scope = options.scope || 'load.ExtractorScope.Body';
-        const failOn = options.failOn !== undefined ? options.failOn : false;
-        return `new load.TextCheckExtractor("${correlation.name}", { text: "${text}", scope: ${scope}, failOn: ${failOn} })`;
+        const text    = correlation.expectedText || correlation.text || correlation.value || '';
+        const tscope  = options.scope || 'load.ExtractorScope.Body';
+        const failOn  = options.failOn !== undefined ? options.failOn : false;
+        return `new load.TextCheckExtractor(${n}, { text: ${JSON.stringify(text)}, scope: ${tscope}, failOn: ${failOn} })`;
+      }
 
       case 'header': {
-        // extractPath holds the HTTP header name (e.g. "x-csrf-token")
         const headerName = correlation.extractPath || correlation.name.replace(/^_/, '');
-        return `new load.BoundaryExtractor("${correlation.name}", "${headerName}: ", "\\r\\n", load.ExtractorScope.Headers)`;
+        return `new load.BoundaryExtractor(${n}, ${JSON.stringify(headerName + ': ')}, "\\r\\n", load.ExtractorScope.Headers)`;
       }
 
       case 'cookie': {
-        // extractPath holds the cookie name (e.g. "session_id")
         const cookieName = correlation.extractPath || correlation.name.replace(/^_/, '');
-        // DevWeb: use BoundaryExtractor on Headers searching Set-Cookie
-        return `new load.BoundaryExtractor("${correlation.name}", "${cookieName}=", ";", load.ExtractorScope.Headers)`;
+        return `new load.BoundaryExtractor(${n}, ${JSON.stringify(cookieName + '=')}, ";", load.ExtractorScope.Headers)`;
       }
 
       default:
-        return `new load.JsonPathExtractor("${correlation.name}", "$.${correlation.name}")`;
+        return `new load.JsonPathExtractor(${n}, ${JSON.stringify(`$.${correlation.name}`)})`;
     }
+  }
+
+  /**
+   * Map JMX scope field → DevWeb ExtractorScope constant string (or null for body default).
+   */
+  _dvScopeConst(scope) {
+    const map = {
+      'response_headers': 'load.ExtractorScope.Headers',
+      'request_headers':  'load.ExtractorScope.Headers',
+      'url':              'load.ExtractorScope.Url',
+      'response_code':    'load.ExtractorScope.Status',
+      'response_message': 'load.ExtractorScope.Status',
+      'headers':          'load.ExtractorScope.Headers',  // legacy
+    };
+    return map[scope] || null;
+  }
+
+  /**
+   * Parse JMeter match_number to integer (1 = first, -1 = random, 0 = all).
+   */
+  _parseMatchNo(matchNumber) {
+    const n = parseInt(matchNumber, 10);
+    return isNaN(n) ? 1 : n;
   }
 
   /**

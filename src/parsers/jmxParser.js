@@ -264,6 +264,21 @@ function extractHostPort(urlStr) {
   catch { return urlStr || ''; }
 }
 
+// ─── Map JMeter "useHeaders" / "Apply to" field → normalised scope string ────
+// JMeter values: 'false'|''→body · 'true'→response headers · 'request_headers' ·
+//   'URL' · 'code' → HTTP status · 'message' → status message ·
+//   'body_unescaped'→body · 'body_as_document'→body (Office/PDF extraction)
+function jmxScopeFromUseHeaders(raw) {
+  switch ((raw || '').trim()) {
+    case 'true':             return 'response_headers';
+    case 'request_headers':  return 'request_headers';
+    case 'URL':              return 'url';
+    case 'code':             return 'response_code';
+    case 'message':          return 'response_message';
+    default:                 return 'body';  // 'false', '', 'body_unescaped', 'body_as_document'
+  }
+}
+
 // ─── Parse extractors ────────────────────────────────────────────────────────
 // taggedItems: array of {tag, node} from flattenHashTree output
 function parseExtractors(taggedItems) {
@@ -278,8 +293,9 @@ function parseExtractors(taggedItems) {
         name,
         regex:       getProp(node, 'RegexExtractor.regex'),
         template:    getProp(node, 'RegexExtractor.template') || '$1$',
-        matchNumber: getProp(node, 'RegexExtractor.match_number') || '1',
-        scope:       getProp(node, 'RegexExtractor.useHeaders') === 'true' ? 'headers' : 'body',
+        matchNumber: getProp(node, 'RegexExtractor.match_no')     ||
+                     getProp(node, 'RegexExtractor.match_number') || '1',
+        scope:       jmxScopeFromUseHeaders(getProp(node, 'RegexExtractor.useHeaders')),
       });
     }
 
@@ -291,21 +307,27 @@ function parseExtractors(taggedItems) {
         name,
         leftBoundary:  getProp(node, 'BoundaryExtractor.lboundary'),
         rightBoundary: getProp(node, 'BoundaryExtractor.rboundary'),
-        scope:         getProp(node, 'BoundaryExtractor.useHeaders') === 'true' ? 'headers' : 'body',
+        scope:         jmxScopeFromUseHeaders(getProp(node, 'BoundaryExtractor.useHeaders')),
       });
     }
 
     // JSONPath Extractor (standard + atlantbh plugin)
     else if (tag === 'JSONPathExtractor' ||
              tag === 'com.atlantbh.jmeter.plugins.jsonutils.jsonpathextractor.JSONPathExtractor') {
-      const name = getProp(node, 'JSONPathExtractor.refname') ||
-                   getProp(node, 'JSON_PATH_EXTRACTOR.REFNAME');
+      // JMeter 5.x uses 'referenceName'; older/plugins use 'refname', 'REFNAME', 'var'
+      const name = getProp(node, 'JSONPathExtractor.referenceName') ||
+                   getProp(node, 'JSONPathExtractor.refname')        ||
+                   getProp(node, 'JSON_PATH_EXTRACTOR.REFNAME')      ||
+                   getProp(node, 'JSON_PATH_EXTRACTOR.VAR');
       if (!name) continue;
       extractors.push({
-        type:     'jsonpath',
+        type:        'jsonpath',
         name,
-        jsonPath: getProp(node, 'JSONPathExtractor.jsonPathExpr') ||
-                  getProp(node, 'JSON_PATH_EXTRACTOR.JSONPATH')   || `$.${name}`,
+        jsonPath:    getProp(node, 'JSONPathExtractor.jsonPathExpr')   ||
+                     getProp(node, 'JSONPathExtractor.jsonpath')        ||
+                     getProp(node, 'JSON_PATH_EXTRACTOR.JSONPATH')      || `$.${name}`,
+        matchNumber: getProp(node, 'JSONPathExtractor.match_no')        ||
+                     getProp(node, 'JSONPathExtractor.match_number')    || '1',
       });
     }
 
@@ -388,10 +410,21 @@ function extractScriptSetVars(scriptText) {
 }
 
 // ─── Parse script text from JSR223 / BeanShell node ──────────────────────────
-function parseScriptNode(nodeChildren) {
-  const sc = getProp(nodeChildren, 'script') ||
-             getProp(nodeChildren, 'BeanShell.query') || '';
-  return sc.trim() || null;
+// Returns { code, lang } so callers can emit language-specific conversions.
+// lang: 'groovy' | 'java' | 'javascript' | 'beanshell'
+function parseScriptNode(nodeChildren, attrs) {
+  const code = (getProp(nodeChildren, 'script') ||
+                getProp(nodeChildren, 'BeanShell.query') || '').trim();
+  if (!code) return null;
+  // Determine script language from attribute or explicit property
+  const rawLang = (attrs && (attrs['@_scriptLanguage'] || '')) ||
+                   getProp(nodeChildren, 'scriptLanguage') || 'groovy';
+  let lang = rawLang.toLowerCase();
+  if (lang.includes('beanshell'))  lang = 'beanshell';
+  else if (lang.includes('java'))  lang = 'java';
+  else if (lang.includes('js') || lang.includes('ecma') || lang.includes('nashorn')) lang = 'javascript';
+  else                              lang = 'groovy'; // default
+  return { code, lang };
 }
 
 // ─── Parse timer delay (ms → seconds) ────────────────────────────────────────
@@ -505,10 +538,18 @@ function parseSampler(nodeChildren, attrs, defaults, reqHeaders, auth,
     }
   }
 
-  // ── Pre/post scripts → tests array ────────────────────────────────────────
+  // ── Pre/post scripts ──────────────────────────────────────────────────────
+  // Stored in two ways:
+  //   req.tests[] — standard Postman/Bruno format for script scanning / JWT detection
+  //   req.preScripts[] / req.postScripts[] — { code, lang } for code generation
   const tests = [];
-  for (const sc of preScripts)  tests.push({ listen: 'prerequest', script: { exec: sc } });
-  for (const sc of postScripts) tests.push({ listen: 'test',       script: { exec: sc } });
+  for (const sc of preScripts) {
+    // sc = { code, lang }
+    tests.push({ listen: 'prerequest', script: { exec: sc.code }, lang: sc.lang });
+  }
+  for (const sc of postScripts) {
+    tests.push({ listen: 'test', script: { exec: sc.code }, lang: sc.lang });
+  }
 
   return {
     name,
@@ -520,6 +561,8 @@ function parseSampler(nodeChildren, attrs, defaults, reqHeaders, auth,
     body,
     auth,
     tests,
+    preScripts:  preScripts,   // [{ code, lang }] — available for code generation
+    postScripts: postScripts,  // [{ code, lang }]
     extractors: extractors.map(ext => ({ listen: 'extractor', extractor: ext })),
     thinkTime:  thinkTimeSec,
     proxyConfig: proxyHost ? { host: proxyHost, port: proxyPort, username: proxyUser, password: proxyPass } : null,
@@ -775,10 +818,10 @@ function walkHashTree(nodeChildren, context, results) {
 
         // Pre-processors (run before the request)
         else if (rc.tag === 'JSR223PreProcessor' || rc.tag === 'BeanShellPreProcessor') {
-          const sc = parseScriptNode(rc.node);
+          const sc = parseScriptNode(rc.node, rc.attrs);
           if (sc) {
-            preScripts.push(sc);
-            for (const v of extractScriptSetVars(sc)) {
+            preScripts.push(sc);  // sc = { code, lang }
+            for (const v of extractScriptSetVars(sc.code)) {
               if (!(v in context.variables)) context.variables[v] = '';
             }
           }
@@ -786,10 +829,10 @@ function walkHashTree(nodeChildren, context, results) {
 
         // Post-processors (run after the request, parse response, set vars)
         else if (rc.tag === 'JSR223PostProcessor' || rc.tag === 'BeanShellPostProcessor') {
-          const sc = parseScriptNode(rc.node);
+          const sc = parseScriptNode(rc.node, rc.attrs);
           if (sc) {
-            postScripts.push(sc);
-            for (const v of extractScriptSetVars(sc)) {
+            postScripts.push(sc);  // sc = { code, lang }
+            for (const v of extractScriptSetVars(sc.code)) {
               if (!(v in context.variables)) context.variables[v] = '';
             }
           }
@@ -835,15 +878,16 @@ function walkHashTree(nodeChildren, context, results) {
 
     // ── Standalone script samplers ────────────────────────────────────────
     if (tag === 'JSR223Sampler' || tag === 'BeanShellSampler') {
-      const sc = parseScriptNode(node);
+      const sc = parseScriptNode(node, attrs);
       if (sc) {
         results.standaloneScripts.push({
           name:   attrs['@_testname'] || tag,
           folder: context.folder,
-          script: sc,
+          script: sc.code,
+          lang:   sc.lang,
         });
         // Capture variables set in standalone script samplers
-        for (const v of extractScriptSetVars(sc)) {
+        for (const v of extractScriptSetVars(sc.code)) {
           if (!(v in context.variables)) context.variables[v] = '';
         }
       }
