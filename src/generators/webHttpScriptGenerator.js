@@ -52,6 +52,8 @@ class WebHttpScriptGenerator {
     this.dynamicVarNames = new Set();  // Correlation targets — stored as LR params via reg functions
     this.paramVarNames = new Set();    // Static params from collection → {varName}
     this.scriptSetVarNames = new Set();
+    // CSV column names from JMX CSVDataSet configs — always Tier 3 (EachIteration params)
+    this.csvVarNames = new Map(); // varName → { fileName, colIndex, delimiter, recycle }
 
     // Large base64 data extraction (mirrors advancedScriptGenerator pattern for VuGen)
     // VuGen C uses BodyFilePath= instead of Body= for large data files.
@@ -149,6 +151,22 @@ class WebHttpScriptGenerator {
     if (this.options.environmentVars) {
       Object.entries(this.options.environmentVars).forEach(([k, v]) => this.variableMap.set(k, v));
     }
+    // Build csvVarNames from JMX CSVDataSet configs so they are always classified
+    // as Tier 3 iteration parameters (never treated as Dynamic via Rule 4).
+    const csvDataSets = this.options.csvDataSets || this.collection.csvDataSets || [];
+    for (const ds of csvDataSets) {
+      const cols = (ds.variableNames || '').split(',').map(s => s.trim()).filter(Boolean);
+      cols.forEach((col, idx) => {
+        this.csvVarNames.set(col, {
+          fileName:  ds.filename || `${col}.csv`,
+          colIndex:  idx + 1,
+          delimiter: ds.delimiter || ',',
+          recycle:   ds.recycle !== false,
+        });
+        // Ensure the var is in variableMap (may have been injected as '' already)
+        if (!this.variableMap.has(col)) this.variableMap.set(col, '');
+      });
+    }
     this.detectScriptSetVariables();
   }
 
@@ -201,6 +219,13 @@ class WebHttpScriptGenerator {
   classifyVariables() {
     const credentialPattern = /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
 
+    // RULE 0 — JMX CSVDataSet columns → always Tier 3 (EachIteration parameter in ParameterFile.prm)
+    // These have empty values from injectCsvVariables() and would fall into Rule 4 (Dynamic) otherwise.
+    // They must NOT be Dynamic — they're read from a file by VuGen at runtime via {varName}.
+    for (const [col] of this.csvVarNames) {
+      this.paramVarNames.add(col);
+    }
+
     // RULE 1 — Correlation targets → dynamic (VuGen: web_reg_save_param_* handles them)
     this.correlations.forEach(corr => this.dynamicVarNames.add(corr.name));
 
@@ -214,8 +239,10 @@ class WebHttpScriptGenerator {
 
     // RULE 4 (GENERIC) — Empty value in collection/environment → dynamic.
     // Static params always have real values. Runtime vars are left empty intentionally.
+    // Skip variables already committed to paramVarNames by Rule 0 (CSV columns).
     for (const [name, value] of this.variableMap.entries()) {
       if (this.dynamicVarNames.has(name)) continue;
+      if (this.paramVarNames.has(name)) continue;        // already a param (Rule 0)
       if (name.startsWith('$')) continue;
       const isEmpty = value === '' || value === null || value === undefined;
       if (isEmpty && !credentialPattern.test(name)) {
@@ -233,25 +260,59 @@ class WebHttpScriptGenerator {
     }
 
     // Build parameters map for ParameterFile.prm
+    // Rule 0 CSV columns get their actual file/column info; all others use collection_data.dat
     for (const name of this.paramVarNames) {
-      const value = this.variableMap.get(name);
+      const value      = this.variableMap.get(name);
+      const csvInfo    = this.csvVarNames.get(name);
       const isCredential = credentialPattern.test(name);
-      this.parameters.set(name, {
-        name,
-        type: 'csv',
-        fileName: 'collection_data.dat',
-        columnName: name,
-        nextValue: isCredential ? 'iteration' : 'once',
-        nextRow: 'sequential',
-        onEnd: 'loop',
-        paramValue: value !== undefined && value !== null ? String(value) : ''
-      });
+      if (csvInfo) {
+        // From a JMX CSVDataSet — point to the actual CSV file
+        this.parameters.set(name, {
+          name,
+          type:      'csv',
+          fileName:  csvInfo.fileName,
+          columnName: name,
+          colIndex:  csvInfo.colIndex,
+          delimiter: csvInfo.delimiter,
+          nextValue: 'iteration',        // CSVDataSet is always per-iteration in JMeter
+          nextRow:   'sequential',
+          onEnd:     csvInfo.recycle ? 'loop' : 'last',
+          paramValue: ''
+        });
+      } else {
+        this.parameters.set(name, {
+          name,
+          type: 'csv',
+          fileName: 'collection_data.dat',
+          columnName: name,
+          nextValue: isCredential ? 'iteration' : 'once',
+          nextRow: 'sequential',
+          onEnd: 'loop',
+          paramValue: value !== undefined && value !== null ? String(value) : ''
+        });
+      }
     }
 
-    // Link password to username
+    // Link all columns from the same CSV file together (col 2..N → same as col 1)
+    const csvFileFirstCol = new Map(); // fileName → first column name
+    for (const [col, info] of this.csvVarNames) {
+      if (!csvFileFirstCol.has(info.fileName)) {
+        csvFileFirstCol.set(info.fileName, col);
+      }
+    }
+    for (const [name, config] of this.parameters.entries()) {
+      const csvInfo = this.csvVarNames.get(name);
+      if (!csvInfo) continue;
+      const firstCol = csvFileFirstCol.get(csvInfo.fileName);
+      if (firstCol && firstCol !== name) {
+        config.nextRow = `same as ${firstCol}`;
+      }
+    }
+
+    // Legacy: Link password-like params to username for non-CSV params
     if (usernameParam) {
       for (const [name, config] of this.parameters.entries()) {
-        if (/^(password|pwd|passwd)$/i.test(name)) {
+        if (/^(password|pwd|passwd)$/i.test(name) && !this.csvVarNames.has(name)) {
           config.nextRow = `same as ${usernameParam}`;
         }
       }

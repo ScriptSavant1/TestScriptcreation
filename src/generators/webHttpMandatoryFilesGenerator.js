@@ -472,17 +472,23 @@ RunLogicObjectKind="Action"
       const generateNewVal = config.nextValue === 'iteration' ? 'EachIteration' : 'Once';
       const originalValue  = (config.paramValue !== undefined && config.paramValue !== null)
         ? String(config.paramValue) : '';
+      // CSV vars from JMX CSVDataSet point to their actual file; others use collection_data.dat
+      const tableFile  = config.fileName && config.fileName !== 'collection_data.dat'
+        ? config.fileName : 'collection_data.dat';
+      const delimiter  = config.delimiter || ',';
+      const colIndex   = config.colIndex  || 1;
 
       ini += `[parameter:${name}]\n`;
       ini += `ColumnName="${name}"\n`;
-      ini += `Delimiter=","\n`;
+      ini += `Column="${colIndex}"\n`;
+      ini += `Delimiter="${delimiter}"\n`;
       ini += `GenerateNewVal="${generateNewVal}"\n`;
       ini += `OriginalValue="${originalValue}"\n`;
-      ini += `OutOfRangePolicy="ContinueWithLast"\n`;
+      ini += `OutOfRangePolicy="${config.onEnd === 'last' ? 'AbortVuser' : 'ContinueWithLast'}"\n`;
       ini += `ParamName="${name}"\n`;
       ini += `SelectNextRow="Sequential"\n`;
       ini += `StartRow="1"\n`;
-      ini += `Table="collection_data.dat"\n`;
+      ini += `Table="${tableFile}"\n`;
       ini += `TableLocation="Local"\n`;
       ini += `Type="Table"\n`;
       ini += `auto_allocate_block_size="1"\n`;
@@ -500,7 +506,14 @@ RunLogicObjectKind="Action"
       return '';
     }
 
-    const names = Array.from(parameters.keys());
+    // Only include params that belong in collection_data.dat (not external CSV files)
+    const names = Array.from(parameters.keys()).filter(name => {
+      const cfg = parameters.get(name);
+      return !cfg.fileName || cfg.fileName === 'collection_data.dat';
+    });
+
+    if (!names.length) return '';
+
     const header = names.map(n => this.csvEscape(n)).join(',');
     const values = names.map(name => {
       const config = parameters.get(name);
