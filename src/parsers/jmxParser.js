@@ -622,12 +622,77 @@ function walkHashTree(nodeChildren, context, results) {
         /ThreadGroup/i.test(tag)) {
       const tg = parseThreadGroup(node, attrs, tag);
       if (tg) context.threadGroups.push(tg);
+      const tgIndex = context.threadGroups.length - 1;
+      const tgName  = tg ? tg.name : (attrs['@_testname'] || tag);
+      const tgType  = tg ? tg.type : 'Standard';
       if (childHashTree.length) {
         walkHashTree(childHashTree, {
           ...context,
-          defaults:      { ...context.defaults },     // shallow copy — prevents back-leak
-          globalHeaders: [...context.globalHeaders],  // copy — per-TG scope
-          folder:        '',
+          defaults:         { ...context.defaults },     // shallow copy — prevents back-leak
+          globalHeaders:    [...context.globalHeaders],  // copy — per-TG scope
+          folder:           '',
+          threadGroupIndex: tgIndex,
+          threadGroupName:  tgName,
+          threadGroupType:  tgType,
+        }, results);
+      }
+      continue;
+    }
+
+    // ── LoopController — preserve loop metadata for request tagging ────────
+    if (tag === 'LoopController') {
+      const loops    = parseInt(getProp(node, 'LoopController.loops') || '-1');
+      const loopName = attrs['@_testname'] || 'Loop';
+      if (childHashTree.length) {
+        walkHashTree(childHashTree, {
+          ...context,
+          loopCount: loops === -1 ? 'Infinite' : loops,
+          loopName,
+          folder: context.folder ? `${context.folder}/${loopName}` : loopName,
+        }, results);
+      }
+      continue;
+    }
+
+    // ── IfController — preserve condition for request tagging ─────────────
+    if (tag === 'IfController') {
+      const cond   = convertVars(getProp(node, 'IfController.condition') || '');
+      const ifName = attrs['@_testname'] || 'If';
+      if (childHashTree.length) {
+        walkHashTree(childHashTree, {
+          ...context,
+          ifCondition: cond,
+          folder: context.folder ? `${context.folder}/${ifName}` : ifName,
+        }, results);
+      }
+      continue;
+    }
+
+    // ── ForEachController — tag with iteration variable ───────────────────
+    if (tag === 'ForEachController') {
+      const inputVal = convertVars(getProp(node, 'ForeachController.inputVal') || '');
+      const retVal   = getProp(node, 'ForeachController.returnVal') || 'item';
+      const feName   = attrs['@_testname'] || 'ForEach';
+      if (childHashTree.length) {
+        walkHashTree(childHashTree, {
+          ...context,
+          forEachInput: inputVal,
+          forEachVar:   retVal,
+          folder: context.folder ? `${context.folder}/${feName}` : feName,
+        }, results);
+      }
+      continue;
+    }
+
+    // ── WhileController ───────────────────────────────────────────────────
+    if (tag === 'WhileController') {
+      const cond      = convertVars(getProp(node, 'WhileController.condition') || '');
+      const whileName = attrs['@_testname'] || 'While';
+      if (childHashTree.length) {
+        walkHashTree(childHashTree, {
+          ...context,
+          whileCondition: cond,
+          folder: context.folder ? `${context.folder}/${whileName}` : whileName,
         }, results);
       }
       continue;
@@ -748,7 +813,22 @@ function walkHashTree(nodeChildren, context, results) {
         context.folder,
         pendingThinkTime
       );
-      if (req) results.requests.push(req);
+      if (req) {
+        // Stamp thread group membership (for multi-script generation)
+        req.threadGroupIndex = context.threadGroupIndex ?? -1;
+        req.threadGroupName  = context.threadGroupName  ?? '';
+        req.threadGroupType  = context.threadGroupType  ?? 'Standard';
+        // Stamp loop / condition context (for comment generation in scripts)
+        if (context.loopCount   !== undefined) req.loopCount    = context.loopCount;
+        if (context.loopName    !== undefined) req.loopName     = context.loopName;
+        if (context.ifCondition !== undefined) req.ifCondition  = context.ifCondition;
+        if (context.forEachInput !== undefined) {
+          req.forEachInput = context.forEachInput;
+          req.forEachVar   = context.forEachVar;
+        }
+        if (context.whileCondition !== undefined) req.whileCondition = context.whileCondition;
+        results.requests.push(req);
+      }
       pendingThinkTime = 0;
       continue;
     }
@@ -910,6 +990,22 @@ class JmxParser {
   getThreadGroups()      { return this.threadGroups; }
   getCsvDataSets()       { return this.csvDataSets; }
   getStandaloneScripts() { return this.standaloneScripts; }
+
+  /**
+   * Returns a Map<threadGroupName, Request[]> for multi-script generation.
+   * Requests with no thread group affinity are grouped under '__default__'.
+   */
+  getThreadGroupRequests() {
+    const map      = new Map();
+    const requests = this.collection?.item || [];
+    for (const req of requests) {
+      const key = (req.threadGroupName && req.threadGroupName !== '')
+        ? req.threadGroupName : '__default__';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(req);
+    }
+    return map;
+  }
 }
 
 module.exports = JmxParser;
