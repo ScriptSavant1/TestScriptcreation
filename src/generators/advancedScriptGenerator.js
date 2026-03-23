@@ -286,51 +286,56 @@ class AdvancedScriptGenerator {
    */
   detectJwtUsage() {
     const CustomScriptParser = require("../analyzers/customScriptParser");
-    const scanItem = (item) => {
-      // Scan the item's own pre-request script
-      if (item.event && Array.isArray(item.event)) {
-        item.event.forEach((event) => {
-          if (event.listen !== "prerequest") return;
-          const exec = event.script?.exec;
-          const text = Array.isArray(exec) ? exec.join("\n") : exec || "";
-          if (!text) return;
 
-          const result = CustomScriptParser.detectJwtUsage(text);
-          if (result.isJwt) {
-            this.hasJwt = true;
-            result.outputVars.forEach((v) => {
-              this.jwtVarNames.push(v);
-              this.scriptSetVarNames.add(v); // ensure they're Tier 1 dynamic
-            });
-            console.log(
-              `  ✓ JWT detected (library: ${result.library}, algorithm: ${result.algorithm})`,
-            );
-          }
-
-          // Per-request dynamic var detection (UUID/nonce/random generated per request)
-          const perReqVars =
-            CustomScriptParser.detectPerRequestDynamicVars(text);
-          perReqVars.forEach(({ varName, generationType }) => {
-            if (!this.perRequestVars.has(varName)) {
-              this.perRequestVars.set(varName, {
-                generationType,
-                requestNames: [],
-              });
-              // Per-request vars are Tier 1 dynamic — never parameterize them
-              this.scriptSetVarNames.add(varName);
-            }
-            // Tag which request this var is generated for
-            if (item.name) {
-              this.perRequestVars.get(varName).requestNames.push(item.name);
-            }
-          });
+    const scanScriptText = (text, itemName) => {
+      if (!text) return;
+      const result = CustomScriptParser.detectJwtUsage(text);
+      if (result.isJwt) {
+        this.hasJwt = true;
+        result.outputVars.forEach((v) => {
+          this.jwtVarNames.push(v);
+          this.scriptSetVarNames.add(v); // ensure they're Tier 1 dynamic
         });
+        console.log(
+          `  ✓ JWT detected (library: ${result.library}, algorithm: ${result.algorithm})`,
+        );
       }
-      // Recurse
+      // Per-request dynamic var detection (UUID/nonce/random generated per request)
+      const perReqVars = CustomScriptParser.detectPerRequestDynamicVars(text);
+      perReqVars.forEach(({ varName, generationType }) => {
+        if (!this.perRequestVars.has(varName)) {
+          this.perRequestVars.set(varName, { generationType, requestNames: [] });
+          this.scriptSetVarNames.add(varName);
+        }
+        if (itemName) this.perRequestVars.get(varName).requestNames.push(itemName);
+      });
+    };
+
+    const scanItem = (item) => {
+      // Scan both item.event[] (Bruno/Postman) AND item.tests[] (JMX) — pre-request scripts
+      const events = [...(item.event || []), ...(item.tests || [])];
+      events.forEach((event) => {
+        // For JWT: scan pre-request scripts + all scripts (JSR223 post-processors can generate JWT too)
+        const exec = event.script?.exec;
+        const text = Array.isArray(exec) ? exec.join('\n') : (exec || '');
+        scanScriptText(text, item.name);
+      });
+
+      // Recurse into sub-items
       const items = item.item || item.items;
       if (Array.isArray(items)) items.forEach((child) => scanItem(child));
     };
+
     scanItem(this.collection);
+
+    // Also directly scan JMX preScripts / postScripts stored as { code, lang } objects
+    // These are identical scripts but easier to access on the request object directly.
+    for (const req of this.requests) {
+      for (const sc of [...(req.preScripts || []), ...(req.postScripts || [])]) {
+        const text = typeof sc === 'string' ? sc : (sc?.code || '');
+        scanScriptText(text, req.name);
+      }
+    }
   }
 
   /**
@@ -1102,6 +1107,92 @@ ${jwtBlock}
     return String(name).replace(/[^a-zA-Z0-9_$]/g, "_");
   }
 
+  /**
+   * Convert a JSR223 / BeanShell script (Java/Groovy) into DevWeb JavaScript equivalents.
+   * Returns a block of code lines (indented) suitable for insertion before/after a request.
+   *
+   * Conversion strategy:
+   *  1. Well-known single-line patterns are auto-converted (vars.put, UUID, timestamp, etc.)
+   *  2. JWT-detected code → delegate to jwt-helper.js
+   *  3. Remaining lines are emitted as TODO comments for manual review
+   */
+  convertJsr223Script(scriptObj, phase, indent) {
+    if (!scriptObj) return '';
+    const { code, lang } = (typeof scriptObj === 'string')
+      ? { code: scriptObj, lang: 'groovy' }
+      : scriptObj;
+    if (!code || !code.trim()) return '';
+
+    const lines = [];
+    const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
+    lines.push(`${indent}// ── JSR223 ${phase}-processor (${langLabel}) ──────────────────────────────`);
+
+    const converted = [];
+    let hasUnconverted = false;
+
+    for (const rawLine of code.split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
+
+      // vars.put / props.put → load.global.*
+      const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
+      if (putMatch) {
+        const varName = this.sanitizeVarName(putMatch[1]);
+        const valExpr = this._convertJavaExpr(putMatch[2]);
+        converted.push(`${indent}load.global.${varName} = ${valExpr};`);
+        continue;
+      }
+
+      // Java typed variable declaration: String x = <expr>; / def x = <expr>;
+      const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
+      if (typeAssignMatch) {
+        const localVar = typeAssignMatch[1];
+        const valExpr  = this._convertJavaExpr(typeAssignMatch[2].trim());
+        converted.push(`${indent}const ${localVar} = ${valExpr};`);
+        continue;
+      }
+
+      // log.info / log.warn → comment
+      if (/^log\.(info|debug|warn|error)\s*\(/.test(line)) {
+        converted.push(`${indent}// ${line}`);
+        continue;
+      }
+
+      // Import statements → skip
+      if (/^import\s+/.test(line)) continue;
+
+      // Unrecognised line
+      hasUnconverted = true;
+      converted.push(`${indent}// TODO: ${line}`);
+    }
+
+    if (converted.length === 0) return '';
+    if (hasUnconverted) {
+      lines.push(`${indent}// Review: some lines require manual conversion (shown as TODO)`);
+    }
+    lines.push(...converted);
+    return lines.join('\n') + '\n';
+  }
+
+  /**
+   * Convert a Java/Groovy expression fragment to its DevWeb JavaScript equivalent.
+   */
+  _convertJavaExpr(expr) {
+    return expr
+      .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'load.utils.uuid()')
+      .replace(/java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g, 'load.utils.uuid()')
+      .replace(/System\.currentTimeMillis\(\)/g, 'Date.now()')
+      .replace(/new\s+Date\(\)\.getTime\(\)/g, 'Date.now()')
+      .replace(/new\s+Date\(\)\.toInstant\(\)\.toEpochMilli\(\)/g, 'Date.now()')
+      .replace(/String\.valueOf\s*\(([^)]+)\)/g, 'String($1)')
+      .replace(/Integer\.toString\s*\(([^)]+)\)/g, 'String($1)')
+      .replace(/Long\.toString\s*\(([^)]+)\)/g, 'String($1)')
+      .replace(/\$\{([^}]+)\}/g, '${load.global.$1}')
+      // vars.get("x") inline → load.global.x
+      .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g,
+               (_, n) => `load.global.${this.sanitizeVarName(n)}`);
+  }
+
   generateGlobalVariablesInit() {
     const vars = [];
     const seen = new Set();
@@ -1461,9 +1552,16 @@ ${jwtRefreshBlock}
       code += `\n${this.indent(`// Depends on: ${dependencies.join(", ")}`, indentLevel)}`;
     }
 
-    // NOTE: Pre-request and test scripts are intentionally NOT emitted here.
-    // Scripts are used during analysis only (variable detection, JWT fingerprinting,
-    // correlation detection). The generated LR script stays clean and readable.
+    // Emit converted JSR223 pre-processor scripts (JMX only).
+    // Bruno/Postman scripts are analysis-only; JMX JSR223 scripts contain
+    // runtime logic (UUID gen, custom auth, variable manipulation) that must run.
+    if (request.preScripts && request.preScripts.length) {
+      const ind = this.indent('', indentLevel);
+      for (const sc of request.preScripts) {
+        const block = this.convertJsr223Script(sc, 'Pre', ind);
+        if (block) code += '\n' + block;
+      }
+    }
 
     // Emit per-request dynamic variable generation (UUID/nonce for headers like x-fapi-interaction-id).
     // These must run BEFORE the request so the fresh value is ready for use in headers.
@@ -1498,6 +1596,15 @@ ${jwtRefreshBlock}
           code += ` // Extracted ${corr.type || corr.extractorType}`;
         }
       });
+    }
+
+    // Emit converted JSR223 post-processor scripts (JMX only)
+    if (request.postScripts && request.postScripts.length) {
+      const ind = this.indent('', indentLevel);
+      for (const sc of request.postScripts) {
+        const block = this.convertJsr223Script(sc, 'Post', ind);
+        if (block) code += '\n' + block;
+      }
     }
 
     // Store the response variable name for this request (used by grouped actions)
@@ -1793,31 +1900,49 @@ ${jwtRefreshBlock}
   injectJmxExtractors() {
     const seenNames = new Set(this.correlations.map(c => c.name));
     for (const request of this.requests) {
-      const jmxExtractors = (request.extractors || []).filter(e => e.listen === 'extractor' && e.extractor);
-      for (const { extractor } of jmxExtractors) {
+      // request.extractors[] is in format: [{ listen:'extractor', extractor:{ type, name, regex, scope, matchNumber } }]
+      // as wrapped by jmxParser.parseSampler()
+      for (const item of (request.extractors || [])) {
+        if (item.listen !== 'extractor' || !item.extractor) continue;
+        const extractor = item.extractor;
         const name = extractor.name;
         if (!name || seenNames.has(name)) continue;
         seenNames.add(name);
+
+        const base = {
+          name,
+          producerRequest:  request.name,
+          consumerRequests: [],
+          // Preserve scope & matchNumber for correct extractor code generation
+          scope:       extractor.scope       || 'body',
+          matchNumber: extractor.matchNumber || '1',
+        };
+
         let corr;
         switch ((extractor.type || '').toLowerCase()) {
           case 'regex':
           case 'regexp':
-            corr = { name, extractorType: 'regex', pattern: extractor.regex || '(.+?)', producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'regex',
+                     pattern: extractor.regex || '(.+?)' };
             break;
           case 'jsonpath':
           case 'json':
-            corr = { name, extractorType: 'json', extractPath: extractor.expression || `$.${name}`, producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'json',
+                     extractPath: extractor.jsonPath || extractor.expression || `$.${name}` };
             break;
           case 'boundary':
-            corr = { name, extractorType: 'boundary', leftBound: extractor.lowerBound || '', rightBound: extractor.upperBound || '', producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'boundary',
+                     leftBound:  extractor.leftBoundary  || extractor.lowerBound || '',
+                     rightBound: extractor.rightBoundary || extractor.upperBound || '' };
             break;
           case 'xpath':
           case 'xpath2':
-            // Fallback to BoundaryExtractor-style; XPath not natively in DevWeb SDK
-            corr = { name, extractorType: 'boundary', leftBound: `<${name}>`, rightBound: `</${name}>`, producerRequest: request.name, consumerRequests: [] };
+            // XPath → BoundaryExtractor fallback (XPath not in DevWeb SDK)
+            corr = { ...base, extractorType: 'boundary',
+                     leftBound: `<${name}>`, rightBound: `</${name}>` };
             break;
           default:
-            corr = { name, extractorType: 'regex', pattern: '(.+?)', producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'regex', pattern: '(.+?)' };
         }
         this.correlations.push(corr);
       }

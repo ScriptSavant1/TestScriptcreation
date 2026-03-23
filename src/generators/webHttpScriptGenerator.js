@@ -373,17 +373,19 @@ class WebHttpScriptGenerator {
             test: testText ? this.scriptParser.parseTestScript(testText, req.name) : null
           });
 
-          // JWT detection — scan PRE-REQUEST scripts ONLY for jsrsasign / JWT signing patterns.
-          // The test script handles response extraction (access_token, refresh_token) — those
-          // are correlations, not JWT output vars, and must NOT be added to jwtVarNames.
-          if (preText) {
-            const jwtInfo = CustomScriptParser.detectJwtUsage(preText);
+          // JWT detection — scan all scripts (pre, test, and JMX JSR223 pre/post).
+          // JMX JSR223 scripts (Java/Groovy) may also contain JWT signing logic.
+          const allScriptTexts = [preText, testText,
+            ...(req.preScripts  || []).map(s => typeof s === 'string' ? s : (s?.code || '')),
+            ...(req.postScripts || []).map(s => typeof s === 'string' ? s : (s?.code || '')),
+          ];
+          for (const txt of allScriptTexts.filter(Boolean)) {
+            const jwtInfo = CustomScriptParser.detectJwtUsage(txt);
             if (jwtInfo.isJwt) {
               this.hasJwt = true;
               this.jwtVarNames.push(...jwtInfo.outputVars);
-              // JWT output vars are reclassified as static params in classifyVariables()
-              // so they appear in ParameterFile.prm for the user to pre-populate.
               console.log(`  ✓ JWT detected in "${req.name}" (library: ${jwtInfo.library}, algorithm: ${jwtInfo.algorithm})`);
+              break; // one detection per request is enough
             }
           }
 
@@ -905,6 +907,14 @@ ${jwtSetup}${autoHeaderBlock}
       code += `${indent}/* ${request.name} */\n`;
     }
 
+    // 0. JSR223 Pre-processor (JMX only) — runs before the request
+    if (request.preScripts && request.preScripts.length) {
+      for (const sc of request.preScripts) {
+        const block = this.convertJsr223Script(sc, 'Pre', indent);
+        if (block) code += block;
+      }
+    }
+
     // 1. Per-request dynamic variable generation (e.g. x-fapi-interaction-id UUID)
     code += this.generatePerRequestVarCode(request, indent);
 
@@ -916,6 +926,14 @@ ${jwtSetup}${autoHeaderBlock}
 
     // 4. Web function
     code += this.generateWebFunction(request, indent);
+
+    // 5. JSR223 Post-processor (JMX only) — runs after the request
+    if (request.postScripts && request.postScripts.length) {
+      for (const sc of request.postScripts) {
+        const block = this.convertJsr223Script(sc, 'Post', indent);
+        if (block) code += block;
+      }
+    }
 
     return code;
   }
@@ -983,30 +1001,45 @@ ${jwtSetup}${autoHeaderBlock}
   injectJmxExtractors() {
     const seenNames = new Set(this.correlations.map(c => c.name));
     for (const request of this.requests) {
-      const jmxExtractors = (request.extractors || []).filter(e => e.listen === 'extractor' && e.extractor);
-      for (const { extractor } of jmxExtractors) {
+      for (const item of (request.extractors || [])) {
+        if (item.listen !== 'extractor' || !item.extractor) continue;
+        const extractor = item.extractor;
         const name = extractor.name;
         if (!name || seenNames.has(name)) continue;
         seenNames.add(name);
+
+        const base = {
+          name,
+          producerRequest:  request.name,
+          consumerRequests: [],
+          scope:       extractor.scope       || 'body',
+          matchNumber: extractor.matchNumber || '1',
+        };
+
         let corr;
         switch ((extractor.type || '').toLowerCase()) {
           case 'regex':
           case 'regexp':
-            corr = { name, extractorType: 'regex', pattern: extractor.regex || '(.+?)', producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'regex',
+                     pattern: extractor.regex || '(.+?)' };
             break;
           case 'jsonpath':
           case 'json':
-            corr = { name, extractorType: 'json', extractPath: extractor.expression || `$.${name}`, producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'json',
+                     extractPath: extractor.jsonPath || extractor.expression || `$.${name}` };
             break;
           case 'boundary':
-            corr = { name, extractorType: 'boundary', leftBound: extractor.lowerBound || '', rightBound: extractor.upperBound || '', producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'boundary',
+                     leftBound:  extractor.leftBoundary  || extractor.lowerBound || '',
+                     rightBound: extractor.rightBoundary || extractor.upperBound || '' };
             break;
           case 'xpath':
           case 'xpath2':
-            corr = { name, extractorType: 'boundary', leftBound: `<${name}>`, rightBound: `</${name}>`, producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'boundary',
+                     leftBound: `<${name}>`, rightBound: `</${name}>` };
             break;
           default:
-            corr = { name, extractorType: 'regex', pattern: '(.+?)', producerRequest: request.name, consumerRequests: [] };
+            corr = { ...base, extractorType: 'regex', pattern: '(.+?)' };
         }
         this.correlations.push(corr);
       }
@@ -1088,12 +1121,18 @@ ${jwtSetup}${autoHeaderBlock}
           break;
 
         case 'regex':
-        case 'regexp':
+        case 'regexp': {
+          // Map JMX scope → VuGen Search filter
+          const vScope = this._vugenSearchFilter(corr.scope || corr.extractorScope);
           code += `${indent}web_reg_save_param_regexp("${corr.name}",\n`;
           code += `${indent}    "RegExp=${this.escapeCString(corr.pattern || `${corrBase}=([^&"'\\s]+)`)}",\n`;
-          code += `${indent}    "Ord=1",\n`;
+          if (vScope) code += `${indent}    "Search=${vScope}",\n`;
+          // matchNo: 1 = first, -1 = random (use 1 for VuGen)
+          const matchNo = Math.max(1, parseInt(corr.matchNumber || '1', 10));
+          code += `${indent}    "Ord=${matchNo}",\n`;
           code += `${indent}    LAST);\n`;
           break;
+        }
 
         default:
           // Fallback: JSON path using variable name as field
@@ -1341,6 +1380,86 @@ ${jwtSetup}${autoHeaderBlock}
   }
 
   /**
+   * Convert a JSR223/BeanShell script (Java/Groovy) to VuGen C equivalents.
+   * Emits lr_save_string / lr_eval_string calls for known patterns;
+   * all other lines become TODO comments.
+   */
+  convertJsr223Script(scriptObj, phase, indent) {
+    if (!scriptObj) return '';
+    const { code, lang } = (typeof scriptObj === 'string')
+      ? { code: scriptObj, lang: 'groovy' }
+      : scriptObj;
+    if (!code || !code.trim()) return '';
+
+    const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
+    const lines = [`${indent}/* ── JSR223 ${phase}-processor (${langLabel}) ─────────────────────── */`];
+    let hasUnconverted = false;
+
+    for (const rawLine of code.split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
+
+      // vars.put → lr_save_string
+      const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
+      if (putMatch) {
+        const varName = putMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
+        const valExpr = this._convertJavaExprC(putMatch[2]);
+        lines.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
+        continue;
+      }
+
+      // Type declarations: String x = expr; / def x = expr; / int x = expr;
+      const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
+      if (typeAssignMatch) {
+        const localVar = typeAssignMatch[1];
+        const valExpr  = this._convertJavaExprC(typeAssignMatch[2].trim());
+        // If it's a UUID or time expression, save as param; otherwise declare as local string
+        if (valExpr.includes('lr_gen_unique_id()') || valExpr.includes('time(NULL)')) {
+          lines.push(`${indent}char ${localVar}[64];`);
+          if (valExpr.includes('lr_gen_unique_id()')) {
+            lines.push(`${indent}strcpy(${localVar}, lr_gen_unique_id());`);
+          } else {
+            lines.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
+          }
+        } else {
+          lines.push(`${indent}const char *${localVar} = ${valExpr};`);
+        }
+        continue;
+      }
+
+      // log calls → comment
+      if (/^log\.(info|debug|warn|error)\s*\(/.test(line)) {
+        lines.push(`${indent}/* ${line} */`);
+        continue;
+      }
+
+      // Import → skip
+      if (/^import\s+/.test(line)) continue;
+
+      hasUnconverted = true;
+      lines.push(`${indent}/* TODO: ${line.replace(/\*\//g, '* /')} */`);
+    }
+
+    if (lines.length <= 1) return '';
+    if (hasUnconverted) {
+      lines.splice(1, 0, `${indent}/* Review: some statements require manual conversion (shown as TODO) */`);
+    }
+    lines.push(`${indent}/* ── end JSR223 ${phase}-processor ───────────────────────────────────── */`);
+    return lines.join('\n') + '\n';
+  }
+
+  _convertJavaExprC(expr) {
+    return expr
+      .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'lr_gen_unique_id()')
+      .replace(/java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g, 'lr_gen_unique_id()')
+      .replace(/System\.currentTimeMillis\(\)/g, '(long)time(NULL)*1000')
+      .replace(/new\s+Date\(\)\.getTime\(\)/g, '(long)time(NULL)*1000')
+      .replace(/String\.valueOf\s*\(([^)]+)\)/g, '$1')
+      .replace(/\$\{([^}]+)\}/g, 'lr_eval_string("{$1}")')
+      .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, 'lr_eval_string("{$1}")');
+  }
+
+  /**
    * Escape a string for use in other C string literals.
    */
   escapeCString(str) {
@@ -1349,6 +1468,22 @@ ${jwtSetup}${autoHeaderBlock}
       .replace(/"/g, '\\"')
       .replace(/\n/g, '\\n')
       .replace(/\r/g, '\\r');
+  }
+
+  /**
+   * Map JMX extractor scope → VuGen Search= filter string (or '' for body default).
+   * VuGen web_reg_save_param_regexp Search values:
+   *   Body (default), Headers, All (body+headers), Noresource
+   */
+  _vugenSearchFilter(scope) {
+    const map = {
+      'response_headers': 'Headers',
+      'request_headers':  'Headers',
+      'url':              'Noresource',  // closest equivalent
+      'headers':          'Headers',     // legacy
+      // 'response_code' / 'response_message' → no VuGen equivalent; use Body
+    };
+    return map[scope] || '';
   }
 
   getContentType(request) {
