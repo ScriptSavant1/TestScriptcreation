@@ -59,6 +59,8 @@ class AdvancedScriptGenerator {
     this.dynamicVarNames = new Set(); // Variables set by scripts/correlation → load.global
     this.paramVarNames = new Set(); // Variables to parameterize → load.params
     this.scriptSetVarNames = new Set(); // Variables detected as set by scripts
+    // CSV column names from JMX CSVDataSet configs — always Tier 3 (nextValue: iteration)
+    this.csvVarNames = new Map(); // varName → { fileName, colIndex, delimiter, recycle }
 
     // JWT detection — populated by detectJwtUsage() during analyze()
     this.hasJwt = false;
@@ -211,6 +213,22 @@ class AdvancedScriptGenerator {
       });
     }
 
+    // Build csvVarNames from JMX CSVDataSet configs so they are always classified
+    // as Tier 3 iteration parameters (never treated as Dynamic via Rule 4).
+    const csvDataSets = this.options.csvDataSets || this.collection.csvDataSets || [];
+    for (const ds of csvDataSets) {
+      const cols = (ds.variableNames || '').split(',').map(s => s.trim()).filter(Boolean);
+      cols.forEach((col, idx) => {
+        this.csvVarNames.set(col, {
+          fileName:  ds.filename || `${col}.csv`,
+          colIndex:  idx + 1,
+          delimiter: ds.delimiter || ',',
+          recycle:   ds.recycle !== false,
+        });
+        if (!this.variableMap.has(col)) this.variableMap.set(col, '');
+      });
+    }
+
     // Scan all scripts in the collection to detect variables set at runtime
     this.detectScriptSetVariables();
   }
@@ -346,6 +364,13 @@ class AdvancedScriptGenerator {
     const credentialPattern =
       /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
 
+    // RULE 0 — JMX CSVDataSet columns → always Tier 3 (nextValue: iteration, parameters.yml)
+    // These have empty values from injectCsvVariables() and would fall into Rule 4 (Dynamic)
+    // without this early guard. They are read from a CSV file by DevWeb at runtime.
+    for (const [col] of this.csvVarNames) {
+      this.paramVarNames.add(col);
+    }
+
     // RULE 1 — Correlation targets: always Tier 1 (dynamic)
     // These are values extracted from API responses at runtime.
     this.correlations.forEach((corr) => this.dynamicVarNames.add(corr.name));
@@ -365,8 +390,10 @@ class AdvancedScriptGenerator {
     // Runtime vars (access_token, refresh_token, interaction_id) are intentionally
     // left EMPTY because they are filled at runtime from API responses.
     // Credentials (username/password) are excluded — they go to Tier 3.
+    // CSV columns (Rule 0) are excluded — they already belong to paramVarNames.
     for (const [name, value] of this.variableMap.entries()) {
       if (this.dynamicVarNames.has(name)) continue;
+      if (this.paramVarNames.has(name)) continue;  // already a param (Rule 0 CSV)
       if (name.startsWith("$")) continue;
       const isEmpty = value === "" || value === null || value === undefined;
       const isCredential = credentialPattern.test(name);
@@ -390,26 +417,58 @@ class AdvancedScriptGenerator {
     }
 
     // 5. Build this.parameters map for CSV generation
+    // CSV vars from JMX CSVDataSet use their actual file; others use collection_data.csv
     for (const name of this.paramVarNames) {
-      const value = this.variableMap.get(name);
+      const value      = this.variableMap.get(name);
+      const csvInfo    = this.csvVarNames.get(name);
       const isCredential = credentialPattern.test(name);
 
-      this.parameters.set(name, {
-        name,
-        type: "csv",
-        fileName: "collection_data.csv",
-        columnName: name,
-        nextValue: isCredential ? "iteration" : "once",
-        nextRow: "sequential",
-        onEnd: "loop",
-        paramValue: value !== undefined && value !== null ? String(value) : "",
-      });
+      if (csvInfo) {
+        this.parameters.set(name, {
+          name,
+          type:      "csv",
+          fileName:  csvInfo.fileName,
+          columnName: name,
+          nextValue: "iteration",       // CSVDataSet is always per-iteration in JMeter
+          nextRow:   "sequential",
+          onEnd:     csvInfo.recycle ? "loop" : "last",
+          paramValue: "",
+        });
+      } else {
+        this.parameters.set(name, {
+          name,
+          type: "csv",
+          fileName: "collection_data.csv",
+          columnName: name,
+          nextValue: isCredential ? "iteration" : "once",
+          nextRow: "sequential",
+          onEnd: "loop",
+          paramValue: value !== undefined && value !== null ? String(value) : "",
+        });
+      }
     }
 
-    // 6. Link password-like params to username (same as)
+    // 6a. For each CSV file, link col 2..N to col 1 with "same as <firstCol>"
+    // This ensures all columns advance together (one row per iteration across the file).
+    const csvFileFirstCol = new Map(); // fileName → first column name
+    for (const [col, info] of this.csvVarNames) {
+      if (!csvFileFirstCol.has(info.fileName)) {
+        csvFileFirstCol.set(info.fileName, col); // first registered col for this file
+      }
+    }
+    for (const [name, config] of this.parameters.entries()) {
+      const csvInfo = this.csvVarNames.get(name);
+      if (!csvInfo) continue;
+      const firstCol = csvFileFirstCol.get(csvInfo.fileName);
+      if (firstCol && firstCol !== name) {
+        config.nextRow = `same as ${firstCol}`;
+      }
+    }
+
+    // 6b. Legacy: Link password-like params to username (same as) for non-CSV params
     if (usernameParam) {
       for (const [name, config] of this.parameters.entries()) {
-        if (/^(password|pwd|passwd)$/i.test(name)) {
+        if (/^(password|pwd|passwd)$/i.test(name) && !this.csvVarNames.has(name)) {
           config.nextRow = `same as ${usernameParam}`;
         }
       }

@@ -82,7 +82,7 @@ class JmxConverter {
     const generator = new GeneratorClass(
       requests,
       collection,
-      { ...this.options, environmentVars }
+      { ...this.options, environmentVars, csvDataSets }
     );
 
     const { script, analysis } = await generator.generate(this.options.outputDir);
@@ -92,8 +92,10 @@ class JmxConverter {
       await fs.writeFile(scriptPath, script, 'utf8');
     }
 
-    if (csvDataSets.length && this.options.useParameterization) {
-      await this.generateCsvParameterFiles(csvDataSets, isWebHttp, this.options.outputDir);
+    // DevWeb: generateCsvParameterFiles() appends to parameters.yml for CSV vars.
+    // VuGen:  CSV vars are already in ParameterFile.prm via the generator's parameters map.
+    if (csvDataSets.length && this.options.useParameterization && !isWebHttp) {
+      await this.generateCsvParameterFiles(csvDataSets, false, this.options.outputDir);
     }
 
     let excelBuffer = null;
@@ -140,7 +142,7 @@ class JmxConverter {
       const generator = new GeneratorClass(
         tgReqs,
         collection,
-        { ...this.options, environmentVars, outputDir: tgOutputDir }
+        { ...this.options, environmentVars, csvDataSets, outputDir: tgOutputDir }
       );
 
       const { script, analysis } = await generator.generate(tgOutputDir);
@@ -150,8 +152,9 @@ class JmxConverter {
         await fs.writeFile(path.join(tgOutputDir, 'main.js'), script, 'utf8');
       }
 
-      if (csvDataSets.length && this.options.useParameterization) {
-        await this.generateCsvParameterFiles(csvDataSets, isWebHttp, tgOutputDir);
+      // DevWeb only: append CSV vars to parameters.yml (VuGen handles it in generator)
+      if (csvDataSets.length && this.options.useParameterization && !isWebHttp) {
+        await this.generateCsvParameterFiles(csvDataSets, false, tgOutputDir);
       }
 
       // Per-thread-group WLM Excel (only when we have metadata for this group)
