@@ -60,6 +60,10 @@ class JmxConverter {
     // due to nesting depth issues. Empty value → Rule 4 → Tier 1 Dynamic.
     this.injectRequestVariables(requests, environmentVars);
 
+    // Inject proxy settings extracted from HTTP Request Defaults (Advanced tab)
+    // so both generators' detectProxyConfig() can find them by variable name.
+    this.injectProxyVariables(collection, environmentVars);
+
     // 3. Prepare output dir
     await fs.mkdir(this.options.outputDir, { recursive: true });
 
@@ -155,6 +159,22 @@ class JmxConverter {
         }
       }
     }
+  }
+
+  /**
+   * Forward proxy settings extracted from JMX HTTP Request Defaults into
+   * environmentVars so generators' detectProxyConfig() picks them up.
+   * Only injects if not already present (CLI --environment-file wins).
+   */
+  injectProxyVariables(collection, environmentVars) {
+    const proxy = collection && collection.config && collection.config.proxy;
+    if (!proxy || !proxy.host) return;
+    if (!environmentVars['proxyHost']) environmentVars['proxyHost'] = proxy.host;
+    if (!environmentVars['proxyPort']) environmentVars['proxyPort'] = String(proxy.port || '');
+    if (proxy.username && !environmentVars['proxyUser'])
+      environmentVars['proxyUser'] = proxy.username;
+    if (proxy.password && !environmentVars['proxyPass'])
+      environmentVars['proxyPass'] = proxy.password;
   }
 
   /**
