@@ -1,4 +1,4 @@
-# Technical Documentation — Bruno to DevWeb Converter v2.4.0
+# Technical Documentation — Bruno to DevWeb Converter v2.8.x
 
 ---
 
@@ -82,19 +82,28 @@ JWT output vars MUST be added to `scriptSetVarNames` to force Tier 1 dynamic cla
 
 ## Variable Classification (3-Tier)
 
-Implemented in `classifyVariables()` inside each generator. Priority order (higher = wins):
+Implemented in `classifyVariables()` inside each generator. Priority order:
 
-| Priority | Condition | Result | Access |
-|----------|-----------|--------|--------|
+| Rule | Condition | Result | Access |
+|------|-----------|--------|--------|
+| **0** | **JMX CSVDataSet column** (v2.8.x) | **Tier 3 Param EachIteration** | `load.params.X` / `{X}` |
 | 1 | `pm.*.set()` / `bru.setVar()` / `context.set()` in any script | Tier 1 Dynamic | `load.global.X` / `{_X}` |
 | 2 | Correlation target | Tier 1 Dynamic | `load.global.X` / `{_X}` |
-| 3 | Name starts with `_` AND empty value | Tier 1 Dynamic | `load.global.X` |
-| 4 | Name starts with `$` (Postman built-in) | SKIP | not in CSV |
-| 5 | JWT output var (from detectJwtUsage) | Tier 1 Dynamic | `load.global.X` |
-| 6 | Credential name pattern (username/password/email/account) | Tier 3 Test Data | `load.params.X` nextValue: iteration |
-| 7 | Everything else | Tier 2 Config | `load.params.X` nextValue: once |
+| 3 | Name starts with `_` | Tier 1 Dynamic | `load.global.X` |
+| 4 | Empty/null value + not credential + not already param | Tier 1 Dynamic | `load.global.X` / `{_X}` |
+| 5 | Credential name pattern (username/password/email/account) | Tier 3 Test Data | `load.params.X` nextValue: iteration |
+| 5 | Everything else with real value | Tier 2 Config | `load.params.X` nextValue: once |
 
-Password → `nextRow: "same as username"` to keep credential pairs linked.
+`$` prefix (Postman built-ins) → SKIPPED entirely.
+JWT output vars → Tier 1 via `scriptSetVarNames`.
+CSV columns from same file → `nextRow: "same as <firstCol>"` to advance together.
+
+### Rule 0: JMX CSVDataSet Columns
+`buildVariableMap()` reads `options.csvDataSets` and builds `this.csvVarNames` Map.
+`classifyVariables()` Rule 0 adds all CSV cols to `paramVarNames` before Rule 4 runs.
+Rule 4 now includes a guard: `if (this.paramVarNames.has(name)) continue`.
+Parameters map entry for CSV cols uses actual `fileName`, `colIndex`, `delimiter` from JMX.
+`collection_data.dat/csv` only contains non-CSV params (those with real static values).
 
 ---
 
@@ -264,6 +273,99 @@ These files must exist in the project root — generators copy them to output fo
 
 `copyFromProjectRoot()` in `mandatoryFilesGenerator.js` handles all copies.
 Source: `path.join(__dirname, '..', '..', filename)` (two levels up from `src/generators/`).
+
+---
+
+## JMX Converter (v2.8.x)
+
+### Architecture
+
+```
+JMeter .jmx file
+       │
+       ▼
+jmxParser.js  (fast-xml-parser, preserveOrder:true)
+  flattenHashTree()  — pairs element[i] with sibling hashTree[i+1]
+  parseSampler()     — HTTPSamplerProxy → request IR
+  parseExtractors()  — RegexExtractor, BoundaryExtractor, JSONPathExtractor, ...
+  parseScriptNode()  — JSR223/BeanShell → { code, lang }
+  parseCsvDataSet()  — CSVDataSet → { filename, variableNames, delimiter, recycle }
+  parseThreadGroup() — thread group metadata for WLM Excel
+       │
+       ▼
+jmxConverter.js
+  injectCsvVariables()       — add CSV cols to environmentVars (empty value)
+  injectRequestVariables()   — add {{varName}} refs to environmentVars
+  _convertSingle() or _convertMulti()
+       │
+       ├── new Generator(requests, collection, { csvDataSets, environmentVars, ... })
+       │     buildVariableMap() → csvVarNames Map
+       │     classifyVariables() Rule 0 → CSV cols to paramVarNames
+       │     injectJmxExtractors() → correlation objects with scope + matchNumber
+       │     convertJsr223Script() → inline Groovy/Java → JS/C
+       │
+       └── WorkloadExcelGenerator  — thread group WLM .xlsx
+```
+
+### String Escaping Rule
+
+**Always use `JSON.stringify()` for user-supplied strings in extractor code generation.**
+
+```javascript
+// correlationDetector.generateExtractor()
+const n   = JSON.stringify(correlation.name || '');
+const pat = JSON.stringify(correlation.pattern || '(.+)');
+return `new load.RegexpExtractor(${n}, ${pat})`;
+// Pattern "token":"(.*?)" → emits: new load.RegexpExtractor("access_token", "\"token\":\"(.*?)\"")
+```
+
+### Extractor Scope Pipeline
+
+```
+JMX useHeaders value
+    ↓ jmxScopeFromUseHeaders()  (jmxParser.js)
+internal scope string: 'body' | 'response_headers' | 'url' | 'response_code' | ...
+    ↓ injectJmxExtractors()  (generator)
+correlation.scope = scope
+    ↓ generateExtractor()  (correlationDetector.js)
+DevWeb: _dvScopeConst(scope)   → load.ExtractorScope.Headers / .Url / .Status
+VuGen:  _vugenSearchFilter(scope) → "Search=Headers" / "Search=Noresource"
+```
+
+### CSVDataSet Pipeline
+
+```
+options.csvDataSets (from jmxConverter)
+    ↓ buildVariableMap()
+this.csvVarNames = Map<col, { fileName, colIndex, delimiter, recycle }>
+    ↓ classifyVariables() RULE 0
+paramVarNames.add(col)  for every CSV column
+    ↓ Rule 4 skips paramVarNames members
+    ↓ parameters map
+{ fileName: 'users.csv', colIndex: 1, nextValue: 'iteration', onEnd: 'loop'|'last' }
+    ↓ webHttpMandatoryFilesGenerator.generateParameterFilePrm()
+[parameter:username]
+Table="users.csv"
+Column="1"
+GenerateNewVal="EachIteration"
+```
+
+Same-file linking: columns 2..N → `nextRow: "same as <col1>"`.
+
+### JSR223 Conversion
+
+Both generators have `convertJsr223Script({ code, lang }, phase, indent)`.
+`_convertJavaExpr(expr)` (DevWeb) / `_convertJavaExprC(expr)` (VuGen) handle inline expressions.
+
+Recognised and auto-converted:
+- `UUID.randomUUID().toString()` → `load.utils.uuid()` / `lr_gen_unique_id()`
+- `System.currentTimeMillis()` → `Date.now()` / `(long)time(NULL)*1000`
+- `vars.put("x", val)` → `load.global.x = val` / `lr_save_string(val, "x")`
+- `vars.get("x")` → `load.global.x` / `lr_eval_string("{x}")`
+- `String/int/def/var x = expr` → `const x = <converted>` / `const char *x = <converted>`
+- `log.info/debug/warn/error(...)` → comment
+- `import ...` → skipped
+- Everything else → `// TODO:` / `/* TODO: */` comment for manual review
 
 ---
 

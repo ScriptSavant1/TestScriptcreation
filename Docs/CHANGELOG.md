@@ -4,6 +4,123 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [2.8.x] - 2026-03-23
+
+### Fixed — JMX: Regex Pattern String Escaping
+
+Regex patterns containing double quotes (e.g. `"token":"(.*?)"`) previously caused
+`unexpected identifier` syntax errors in generated scripts.
+
+- `correlationDetector.generateExtractor()` now uses `JSON.stringify()` for **all** string
+  values (name, pattern, bounds, JSON path, header name, etc.) instead of template literals.
+- Pattern `"token":"(.*?)"` → correctly emits `"\"token\":\"(.*?)\""` in both DevWeb JS and VuGen C.
+
+### Fixed — JMX: Extractor Scope (Apply To) — Full Pipeline
+
+JMeter's "Apply to" / `useHeaders` field was being ignored. Fixed across 3 layers:
+
+**Parser** (`jmxParser.js`):
+- Added `jmxScopeFromUseHeaders(raw)` mapping all 5 JMeter values:
+  `false`→body, `true`→response_headers, `request_headers`, `URL`→url, `code`→response_code, `message`→response_message
+- Fixed `JSONPathExtractor.referenceName` (JMeter 5.x) vs old `.refname` (plugin) property name
+- Fixed `RegexExtractor.match_no` vs `match_number`
+
+**Generators** (`advancedScriptGenerator.js`, `webHttpScriptGenerator.js`):
+- `injectJmxExtractors()` now copies `scope` and `matchNumber` fields to the correlation object
+
+**Emitters** (`correlationDetector.js`):
+- `_dvScopeConst(scope)` maps scope → `load.ExtractorScope.Headers` / `.Url` / `.Status`
+- `_parseMatchNo(matchNumber)` parses JMeter match number
+- DevWeb: `new load.RegexpExtractor("name", "pattern", matchNo, load.ExtractorScope.Headers)`
+- VuGen: `web_reg_save_param_regexp(...)` with `"Search=Headers"` / `"Search=Noresource"`
+
+### Fixed — JMX: CSVDataSet Parameterization
+
+CSV columns were incorrectly classified as Tier 1 Dynamic (`load.global` / `{_varName}`)
+because they had empty values and were caught by the generic Rule 4 safety net.
+
+**Root cause**: `injectCsvVariables()` injects CSV column names as empty-value variables.
+Rule 4 (empty value → Dynamic) then misclassified them.
+
+**Fix — RULE 0** added to `classifyVariables()` in both generators:
+- CSV columns from `options.csvDataSets` are committed to `paramVarNames` **before** Rule 4 runs
+- Rule 4 now skips vars already in `paramVarNames`
+- `buildVariableMap()` builds `this.csvVarNames` Map: `col → { fileName, colIndex, delimiter, recycle }`
+- Parameters map uses actual CSV file name, column index, delimiter from JMX config
+- All columns from the same CSV file get `nextRow: same as <firstCol>` (advance together)
+
+**Result (DevWeb `parameters.yml`)**:
+```yaml
+- name: username
+  fileName: users.csv
+  nextValue: iteration
+  nextRow: sequential
+- name: password
+  fileName: users.csv
+  nextValue: iteration
+  nextRow: same as username
+- name: productCode
+  fileName: products.csv
+  nextValue: iteration
+  nextRow: sequential
+```
+
+**Result (VuGen `ParameterFile.prm`)**:
+```ini
+[parameter:username]
+GenerateNewVal="EachIteration"
+Table="users.csv"
+Column="1"
+
+[parameter:productCode]
+GenerateNewVal="EachIteration"
+Table="products.csv"
+Column="1"
+```
+
+`collection_data.dat/csv` now only contains non-CSV static params.
+`jmxConverter` skips `generateCsvParameterFiles()` for VuGen (generator handles it internally).
+
+### Added — JMX: JSR223 / BeanShell Code Conversion
+
+Custom Groovy/Java pre- and post-processor scripts are now converted to target-language
+equivalents instead of being silently discarded.
+
+**Both generators** have `convertJsr223Script({ code, lang }, phase, indent)`.
+
+DevWeb JS conversions:
+| Groovy/Java | DevWeb JS |
+|---|---|
+| `String x = UUID.randomUUID().toString()` | `const x = load.utils.uuid()` |
+| `def ts = System.currentTimeMillis()` | `const ts = Date.now()` |
+| `vars.put("x", val)` | `load.global.x = val` |
+| `String y = vars.get("x")` | `const y = load.global.x` |
+| `log.info(...)` | `// log.info(...)` |
+| unrecognised line | `// TODO: <line>` |
+
+VuGen C conversions:
+| Groovy/Java | VuGen C |
+|---|---|
+| `String corrId = UUID.randomUUID().toString()` | `char corrId[64]; strcpy(corrId, lr_gen_unique_id())` |
+| `def ts = System.currentTimeMillis()` | `char ts[64]; sprintf(ts, "%ld", (long)time(NULL)*1000)` |
+| `vars.put("x", val)` | `lr_save_string(val, "x")` |
+| `String y = vars.get("x")` | `const char *y = lr_eval_string("{x}")` |
+| `log.info(...)` | `/* log.info(...) */` |
+| unrecognised line | `/* TODO: <line> */` |
+
+`parseScriptNode()` in `jmxParser.js` now returns `{ code, lang }` (lang: groovy/java/javascript/beanshell).
+
+### Fixed — JMX: JWT Detection in JSR223 Scripts
+
+`detectJwtUsage()` now scans `item.tests[]` and `req.preScripts[]`/`req.postScripts[]` in
+addition to `item.event[]` — ensuring JWT detection works for JMX collections where scripts
+are stored in `tests[]` (not `event[]`).
+
+Java/Groovy JWT fingerprints detected: `SHA256withRSAandMGF1`, `SHA256withRSA`, `HmacSHA256`,
+`import io.jsonwebtoken` + `SignatureAlgorithm.*`, plus all existing JS patterns.
+
+---
+
 ## [2.7.0] - 2026-03-13
 
 ### Added — Web Server: No-Disk Privacy Model
