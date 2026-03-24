@@ -39,7 +39,7 @@ class WebHttpMandatoryFilesGenerator {
    * @param {boolean}  hasJwt    - If true, add jsrsasign.js to [ManuallyExtraFiles]
    * @param {Object}   proxy     - Proxy config { enabled, host, port, username, password } or null
    */
-  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = [], hasJwt = false, proxy = null) {
+  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = [], hasJwt = false, proxy = null, hasNtlm = false, mtlsCertFile = null) {
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -47,9 +47,9 @@ class WebHttpMandatoryFilesGenerator {
     const safeScriptName = this.sanitizeName(this.scriptName);
 
     this.writeFile(outputDir, `${safeScriptName}.usr`,
-      this.generateUsrFile(safeScriptName, transactionNames, dataFiles, hasJwt));
+      this.generateUsrFile(safeScriptName, transactionNames, dataFiles, hasJwt, mtlsCertFile));
     this.writeFile(outputDir, 'default.cfg',
-      this.generateDefaultCfg(proxy));
+      this.generateDefaultCfg(proxy, hasNtlm));
     if (proxy && proxy.enabled) console.log(`  ✓ Proxy configured in default.cfg: ${proxy.host}:${proxy.port}`);
     this.writeFile(outputDir, 'default.usp',
       this.generateDefaultUsp());
@@ -77,7 +77,7 @@ class WebHttpMandatoryFilesGenerator {
 
   // ─── [ScriptName].usr (INI) ──────────────────────────────────────────────────
 
-  generateUsrFile(scriptName, transactionNames = [], dataFiles = [], hasJwt = false) {
+  generateUsrFile(scriptName, transactionNames = [], dataFiles = [], hasJwt = false, mtlsCertFile = null) {
     const txOrder = transactionNames.length > 0
       ? `\n[TransactionsOrder]\nOrder="${transactionNames.join('__*delimiter*__')}"\n`
       : '';
@@ -159,12 +159,12 @@ LastReplayStatus=0
 [ActiveReplay]
 LastReplayedRunName=
 ActiveRunName=
-${txOrder}${txSection}${hasJwt ? '\n[ManuallyExtraFiles]\njsrsasign.js=\ntransport.pem=\n' : ''}`;
+${txOrder}${txSection}${hasJwt ? '\n[ManuallyExtraFiles]\njsrsasign.js=\ntransport.pem=\n' : (mtlsCertFile ? `\n[ManuallyExtraFiles]\n${mtlsCertFile}=\n` : '')}`;
   }
 
   // ─── default.cfg (INI) ───────────────────────────────────────────────────────
 
-  generateDefaultCfg(proxy = null) {
+  generateDefaultCfg(proxy = null, hasNtlm = false) {
     // Complete canonical VuGen Web HTTP/HTML runtime config.
     // Proxy settings are injected into [WEB] when a proxy is detected in the collection.
     const proxyLines = proxy && proxy.enabled
@@ -308,9 +308,9 @@ WebSocketCallBackTimerIntervalMS=500
 PrefetchPrerenderCallBackTimerIntervalMS=500
 Retry401ThinkTime=0
 DisableNTLM2SS=0
-UseNativeNTLM=0
-OverrideNTLMCreds=0
-IntegratedAuthentication=0
+UseNativeNTLM=${hasNtlm ? 1 : 0}
+OverrideNTLMCreds=${hasNtlm ? 1 : 0}
+IntegratedAuthentication=${hasNtlm ? 1 : 0}
 HeavyKDCLoad=0
 SPNCNameLookup=0
 SPNAddNoneDefPort=0

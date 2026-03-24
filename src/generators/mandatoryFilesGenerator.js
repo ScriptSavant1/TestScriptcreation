@@ -283,15 +283,15 @@ tearDown: 0      #Not used
    * @param {string}   scriptName        - Sanitized script name (no spaces/special chars)
    * @param {string[]} transactionNames  - Transaction names for [TransactionsOrder]
    * @param {boolean}  hasJwt            - Add jwt-helper.js + transport.pem to [ManuallyExtraFiles]
+   * @param {string}   [mtlsCertFile]    - mTLS cert filename to add to [ManuallyExtraFiles]
    */
-  generateDevWebUsrFile(scriptName, transactionNames = [], hasJwt = false) {
+  generateDevWebUsrFile(scriptName, transactionNames = [], hasJwt = false, mtlsCertFile = null) {
     const txOrder = transactionNames.length > 0
       ? transactionNames.join('__*delimiter*__')
       : '';
 
-    const manualExtras = hasJwt
-      ? `jwt-helper.js=\ntransport.pem=\n`
-      : '';
+    let manualExtras = hasJwt ? `jwt-helper.js=\ntransport.pem=\n` : '';
+    if (mtlsCertFile && !hasJwt) manualExtras += `${mtlsCertFile}=\n`;
 
     return `[General]
 Type=DevWeb
@@ -522,7 +522,7 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
     // Back-compat: if 3rd arg is a string it's the legacy examplesPath — ignore it
     if (typeof options === 'string') options = {};
     options = options || {};
-    const { transactionNames = [], hasJwt = false, proxy = null } = options;
+    const { transactionNames = [], hasJwt = false, proxy = null, mtlsCertFile = null } = options;
 
     const files = {};
     const safeScriptName = this.sanitizeName(this.scriptName);
@@ -558,7 +558,7 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
 
     // 5. [ScriptName].usr (DevWeb format)
     fs.writeFileSync(path.join(outputDir, `${safeScriptName}.usr`),
-      this.generateDevWebUsrFile(safeScriptName, transactionNames, hasJwt), 'utf8');
+      this.generateDevWebUsrFile(safeScriptName, transactionNames, hasJwt, mtlsCertFile), 'utf8');
     console.log(`✓ Generated ${safeScriptName}.usr`);
 
     // 6. default.cfg (DevWeb format — differs from VuGen)

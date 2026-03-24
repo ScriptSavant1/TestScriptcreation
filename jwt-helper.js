@@ -84,4 +84,4 @@ function getJwtToken(params) {
   return load.global.jwt_Token;
 }
 
-module.exports = { generateJwt, uuidv4, getJwtToken };
+module.exports = { generateJWT, uuidv4, getJwtToken };
