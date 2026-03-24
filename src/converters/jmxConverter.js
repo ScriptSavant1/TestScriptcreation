@@ -123,6 +123,41 @@ class JmxConverter {
     for (const [tgName, tgReqs] of tgRequestsMap) {
       if (!tgReqs.length) continue;
 
+      // Resolve which thread group index these requests belong to
+      const tgIndex = tgReqs[0]?.threadGroupIndex ?? -1;
+
+      // ── Per-TG CSVDataSet filtering ──────────────────────────────────────
+      // Include: (a) global CSVDataSets (TestPlan level, threadGroupIndex = -1)
+      //          (b) CSVDataSets belonging specifically to THIS thread group
+      // Exclude: CSVDataSets from OTHER thread groups — prevents TG2's CSV
+      //          columns appearing as parameters in TG1's script.
+      const tgCsvDataSets = csvDataSets.filter(csv =>
+        csv.threadGroupIndex === -1 || csv.threadGroupIndex === tgIndex
+      );
+
+      // ── Per-TG variable map ───────────────────────────────────────────────
+      // Start with all global variables (TestPlan-level), then overlay any
+      // variables defined inside THIS thread group.  Variables defined in
+      // OTHER thread groups are excluded so they don't create spurious params.
+      const tgLocalVars  = parser.getThreadGroupVars(tgIndex);
+      // Build a set of column names that belong to OTHER thread groups' CSVs
+      // (they were injected into environmentVars as empty strings by
+      // injectCsvVariables, which ran over ALL csvDataSets).  Remove them so
+      // Rule 4 (empty = Dynamic) doesn't create unwanted load.global entries.
+      const otherTgCsvCols = new Set();
+      for (const csv of csvDataSets) {
+        if (csv.threadGroupIndex !== -1 && csv.threadGroupIndex !== tgIndex) {
+          for (const col of (csv.variableNames || '').split(',').map(c => c.trim()).filter(Boolean)) {
+            otherTgCsvCols.add(col);
+          }
+        }
+      }
+      const tgEnvVars = {};
+      for (const [k, v] of Object.entries(environmentVars)) {
+        if (!otherTgCsvCols.has(k)) tgEnvVars[k] = v;
+      }
+      Object.assign(tgEnvVars, tgLocalVars); // TG-local UDVs override globals
+
       // Create a safe directory name from the thread group name
       const safeName   = tgName
         .replace(/[<>:"/\\|?*]/g, '')   // strip invalid chars
@@ -142,7 +177,7 @@ class JmxConverter {
       const generator = new GeneratorClass(
         tgReqs,
         collection,
-        { ...this.options, environmentVars, csvDataSets, outputDir: tgOutputDir }
+        { ...this.options, environmentVars: tgEnvVars, csvDataSets: tgCsvDataSets, outputDir: tgOutputDir }
       );
 
       const { script, analysis } = await generator.generate(tgOutputDir);
@@ -153,8 +188,8 @@ class JmxConverter {
       }
 
       // DevWeb only: append CSV vars to parameters.yml (VuGen handles it in generator)
-      if (csvDataSets.length && this.options.useParameterization && !isWebHttp) {
-        await this.generateCsvParameterFiles(csvDataSets, false, tgOutputDir);
+      if (tgCsvDataSets.length && this.options.useParameterization && !isWebHttp) {
+        await this.generateCsvParameterFiles(tgCsvDataSets, false, tgOutputDir);
       }
 
       // Per-thread-group WLM Excel (only when we have metadata for this group)

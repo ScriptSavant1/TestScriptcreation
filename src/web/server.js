@@ -274,6 +274,19 @@ class WebServer {
     this.app.get('/health', (req, res) => {
       res.json({ status: 'ok', version: require('../../package.json').version });
     });
+
+    // ── JSON error handler ────────────────────────────────────────────────────
+    // MUST be last and have 4 params (err, req, res, next) for Express to treat
+    // it as an error handler.  Without this, Express returns an HTML error page
+    // whenever multer, body-parser or any middleware calls next(err), which
+    // causes the browser to receive <!DOCTYPE html> when it expects JSON and
+    // shows "unexpected token '<'...is not valid JSON".
+    // eslint-disable-next-line no-unused-vars
+    this.app.use((err, req, res, next) => {
+      console.error('Unhandled middleware error:', err);
+      const status = err.status || err.statusCode || 500;
+      res.status(status).json({ error: err.message || 'Internal server error' });
+    });
   }
 
   async start(port = this.port) {

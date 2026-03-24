@@ -651,7 +651,18 @@ function walkHashTree(nodeChildren, context, results) {
           const ec = getChildren(elem);
           const k  = getProp(ec, 'Argument.name');
           const v  = convertVars(getProp(ec, 'Argument.value'));
-          if (k) context.variables[k] = v;   // last write wins (same as JMeter)
+          if (k) {
+            context.variables[k] = v;  // last write wins (JMeter-compatible)
+            // Track TG-local vars separately for multi-script scoping.
+            // Variables defined at TestPlan level (threadGroupIndex = -1) are
+            // global; those inside a TG walk are TG-local.
+            if (context.threadGroupIndex >= 0 && context.tgVars) {
+              if (!context.tgVars.has(context.threadGroupIndex)) {
+                context.tgVars.set(context.threadGroupIndex, {});
+              }
+              context.tgVars.get(context.threadGroupIndex)[k] = v;
+            }
+          }
         }
       }
       continue;
@@ -761,7 +772,11 @@ function walkHashTree(nodeChildren, context, results) {
 
     // ── CSVDataSet ────────────────────────────────────────────────────────
     if (tag === 'CSVDataSet') {
-      context.csvDataSets.push(parseCsvDataSet(node));
+      const csv = parseCsvDataSet(node);
+      // -1 = TestPlan-level (global, applies to ALL thread groups)
+      // >=0 = scoped to that specific thread group
+      csv.threadGroupIndex = context.threadGroupIndex ?? -1;
+      context.csvDataSets.push(csv);
       continue;
     }
 
@@ -935,6 +950,11 @@ class JmxParser {
     this.threadGroups      = [];
     this.csvDataSets       = [];
     this.standaloneScripts = [];
+    // Map<tgIndex, {varName: value}> — tracks variables defined INSIDE each
+    // thread group (as opposed to TestPlan-level globals).  Used by
+    // jmxConverter._convertMulti() to pass only relevant vars to each TG's
+    // generator, preventing TG2 variables appearing in TG1's script.
+    this.threadGroupVars   = new Map();
   }
 
   async parse() {
@@ -1003,6 +1023,7 @@ class JmxParser {
       threadGroups:  this.threadGroups,
       thinkTimeSec:  0,
       variables:     allVars,  // shared mutable map — accumulates across all scopes
+      tgVars:        this.threadGroupVars, // Map<tgIndex,{k:v}> — per-TG UDV tracking
     };
 
     walkHashTree(mainHashTree, context, results);
@@ -1034,6 +1055,11 @@ class JmxParser {
   getThreadGroups()      { return this.threadGroups; }
   getCsvDataSets()       { return this.csvDataSets; }
   getStandaloneScripts() { return this.standaloneScripts; }
+  /**
+   * Returns variables defined INSIDE thread group tgIndex (not TestPlan-level globals).
+   * Used by jmxConverter._convertMulti() to build per-TG environment variable maps.
+   */
+  getThreadGroupVars(tgIndex) { return this.threadGroupVars.get(tgIndex) || {}; }
 
   /**
    * Returns a Map<threadGroupName, Request[]> for multi-script generation.
