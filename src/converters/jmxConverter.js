@@ -52,7 +52,18 @@ class JmxConverter {
       throw new Error('No HTTP requests found in this JMX file. Only HTTPSamplerProxy elements are converted.');
     }
 
-    // 2. Build shared environment variables
+    // 2. Resolve CSVDataSet filenames that reference JMX variables
+    //    e.g. filename="{{csvFile1}}" where csvFile1="users.csv" in UDVs
+    //    Must run BEFORE filterJmxCollectionVars removes the path variables.
+    this.resolveCsvFilenames(csvDataSets, collection.variable || []);
+
+    // 3. Remove JMX-internal variables from the collection so they never reach
+    //    the generator's classifyVariables().  Without this, vars like
+    //    nrThreads=50, csvFile1=users.csv, lines1=100 become spurious Tier 2
+    //    Config parameters and pollute collection_data.csv / parameters.yml.
+    this.filterJmxCollectionVars(collection);
+
+    // 4. Build shared environment variables
     const environmentVars = await this.loadEnvironmentFile();
     this.injectCsvVariables(csvDataSets, environmentVars);
     this.injectRequestVariables(requests, environmentVars);
@@ -287,6 +298,87 @@ class JmxConverter {
       environmentVars['proxyUser'] = proxy.username;
     if (proxy.password && !environmentVars['proxyPass'])
       environmentVars['proxyPass'] = proxy.password;
+  }
+
+  /**
+   * Resolve {{varName}} references in CSVDataSet filenames.
+   *
+   * JMeter tests often make CSV paths configurable via User Defined Variables:
+   *   UDV:       csvFile1 = "users.csv"
+   *   CSVDataSet filename = "${csvFile1}"  → parsed as "{{csvFile1}}"
+   *
+   * After this step ds.filename = "users.csv" instead of "{{csvFile1}}", so
+   * parameters.yml / ParameterFile.prm point to the real file.
+   *
+   * @param {object[]} csvDataSets  - parsed CSVDataSet objects (mutated in place)
+   * @param {object[]} collectionVars - collection.variable array [{key,value}]
+   */
+  resolveCsvFilenames(csvDataSets, collectionVars) {
+    if (!csvDataSets.length || !collectionVars.length) return;
+    const varMap = new Map(collectionVars.map(v => [v.key, String(v.value || '').trim()]));
+
+    for (const ds of csvDataSets) {
+      if (!ds.filename || !ds.filename.includes('{{')) continue;
+      const resolved = ds.filename.replace(/\{\{([^}]+)\}\}/g, (match, name) => {
+        const val = varMap.get(name.trim());
+        // Only substitute when the resolved value itself is a plain filename/path
+        if (val && !val.includes('{{') && val.trim()) {
+          return path.basename(val.trim()); // keep just the filename, strip any path prefix
+        }
+        return match; // leave unresolved if lookup fails
+      });
+      if (resolved !== ds.filename) ds.filename = resolved;
+    }
+  }
+
+  /**
+   * Remove JMeter-internal variables from collection.variable so they are
+   * never classified as LoadRunner parameters.
+   *
+   * Three categories are filtered:
+   *
+   * A) CSV path variables — value ends in ".csv"
+   *    e.g. csvFile1="users.csv", dataFile="orders.csv"
+   *    JMeter uses these to make CSVDataSet paths configurable.
+   *    LoadRunner references CSV files directly — no variable needed.
+   *
+   * B) JMeter execution/scheduling properties — fixed name list
+   *    e.g. nrThreads, rampUp, duration, loopCount
+   *    These control JMeter's thread model and have no LR equivalent.
+   *
+   * C) Numeric-count pattern names — lines1, lineCount, rowCount, etc.
+   *    Typically used to pass CSV row counts between JMeter components.
+   *
+   * NOTE: This only affects JMX collections.  Bruno/Postman collections
+   * never pass through jmxConverter so this method is never called for them.
+   */
+  filterJmxCollectionVars(collection) {
+    if (!collection || !Array.isArray(collection.variable)) return;
+
+    // B) Hard-coded list of JMeter execution property names
+    const JMETER_EXEC = new Set([
+      'nrthreads', 'numthreads', 'threadcount', 'vusers', 'concurrency',
+      'rampup', 'ramptime', 'ramp_up', 'ramp_time',
+      'loopcount', 'loops', 'iterations', 'loopnum',
+      'duration', 'holdduration', 'holdtime', 'hold_time',
+      'startdelay', 'start_delay', 'initialdelay',
+      'throughput', 'targetthroughput', 'target_throughput', 'targettps',
+      'scheduler',
+    ]);
+
+    // C) Numeric-count patterns: lines1, lines2, lineCount, nrLines, rowCount, records1 …
+    const COUNT_RE = /^(?:lines?\d*|linecount|nrlines|rowcount|rows?\d*|csvlines?\d*|records?\d*)$/i;
+
+    collection.variable = collection.variable.filter(v => {
+      const key = String(v.key || '').trim();
+      const val = String(v.value || '').trim();
+
+      if (!key) return false;                            // skip blank keys
+      if (/\.csv$/i.test(val)) return false;             // A) CSV path var
+      if (JMETER_EXEC.has(key.toLowerCase())) return false; // B) execution prop
+      if (COUNT_RE.test(key)) return false;              // C) count pattern
+      return true;
+    });
   }
 
   /**
