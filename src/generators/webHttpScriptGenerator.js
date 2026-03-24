@@ -1453,19 +1453,19 @@ ${jwtSetup}${autoHeaderBlock}
     if (!code || !code.trim()) return '';
 
     const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
-    const lines = [`${indent}/* ── JSR223 ${phase}-processor (${langLabel}) ─────────────────────── */`];
-    let hasUnconverted = false;
+    const converted = [];
+    let skipped = 0;
 
     for (const rawLine of code.split('\n')) {
       const line = rawLine.trim();
       if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
 
-      // vars.put → lr_save_string
+      // vars.put / props.put → lr_save_string
       const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
       if (putMatch) {
         const varName = putMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
         const valExpr = this._convertJavaExprC(putMatch[2]);
-        lines.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
+        converted.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
         continue;
       }
 
@@ -1474,38 +1474,37 @@ ${jwtSetup}${autoHeaderBlock}
       if (typeAssignMatch) {
         const localVar = typeAssignMatch[1];
         const valExpr  = this._convertJavaExprC(typeAssignMatch[2].trim());
-        // If it's a UUID or time expression, save as param; otherwise declare as local string
-        if (valExpr.includes('lr_gen_unique_id()') || valExpr.includes('time(NULL)')) {
-          lines.push(`${indent}char ${localVar}[64];`);
-          if (valExpr.includes('lr_gen_unique_id()')) {
-            lines.push(`${indent}strcpy(${localVar}, lr_gen_unique_id());`);
-          } else {
-            lines.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
-          }
+        // Skip if the expression is still Java (new ClassName, JMeter context APIs, etc.)
+        if (/new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|JsonSlurper|groovy\.|apache\.|java\./.test(valExpr)) {
+          skipped++; continue;
+        }
+        if (valExpr.includes('lr_gen_unique_id()')) {
+          converted.push(`${indent}char ${localVar}[64];`);
+          converted.push(`${indent}strcpy(${localVar}, lr_gen_unique_id());`);
+        } else if (valExpr.includes('time(NULL)')) {
+          converted.push(`${indent}char ${localVar}[64];`);
+          converted.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
         } else {
-          lines.push(`${indent}const char *${localVar} = ${valExpr};`);
+          converted.push(`${indent}const char *${localVar} = ${valExpr};`);
         }
         continue;
       }
 
-      // log calls → comment
-      if (/^log\.(info|debug|warn|error)\s*\(/.test(line)) {
-        lines.push(`${indent}/* ${line} */`);
-        continue;
-      }
+      // log.* → silently drop (no noise in output)
+      if (/^log\.(info|debug|warn|error)\s*\(/.test(line)) continue;
 
-      // Import → skip
-      if (/^import\s+/.test(line)) continue;
-
-      hasUnconverted = true;
-      lines.push(`${indent}/* TODO: ${line.replace(/\*\//g, '* /')} */`);
+      // Anything else — drop and count
+      skipped++;
     }
 
-    if (lines.length <= 1) return '';
-    if (hasUnconverted) {
-      lines.splice(1, 0, `${indent}/* Review: some statements require manual conversion (shown as TODO) */`);
+    if (converted.length === 0 && skipped === 0) return '';
+
+    const lines = [];
+    if (skipped > 0) {
+      // Single compact note — no inline TODO spam
+      lines.push(`${indent}/* TODO: JSR223 ${phase}-processor (${langLabel}) — ${skipped} line${skipped > 1 ? 's' : ''} need manual conversion. Review original JMX. */`);
     }
-    lines.push(`${indent}/* ── end JSR223 ${phase}-processor ───────────────────────────────────── */`);
+    lines.push(...converted);
     return lines.join('\n') + '\n';
   }
 

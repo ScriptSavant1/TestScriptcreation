@@ -1182,12 +1182,9 @@ ${jwtBlock}
       : scriptObj;
     if (!code || !code.trim()) return '';
 
-    const lines = [];
     const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
-    lines.push(`${indent}// ── JSR223 ${phase}-processor (${langLabel}) ──────────────────────────────`);
-
     const converted = [];
-    let hasUnconverted = false;
+    let skipped = 0;
 
     for (const rawLine of code.split('\n')) {
       const line = rawLine.trim();
@@ -1196,38 +1193,36 @@ ${jwtBlock}
       // vars.put / props.put → load.global.*
       const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
       if (putMatch) {
-        const varName = this.sanitizeVarName(putMatch[1]);
-        const valExpr = this._convertJavaExpr(putMatch[2]);
-        converted.push(`${indent}load.global.${varName} = ${valExpr};`);
+        converted.push(`${indent}load.global.${this.sanitizeVarName(putMatch[1])} = ${this._convertJavaExpr(putMatch[2])};`);
         continue;
       }
 
       // Java typed variable declaration: String x = <expr>; / def x = <expr>;
       const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
       if (typeAssignMatch) {
-        const localVar = typeAssignMatch[1];
-        const valExpr  = this._convertJavaExpr(typeAssignMatch[2].trim());
-        converted.push(`${indent}const ${localVar} = ${valExpr};`);
+        const valExpr = this._convertJavaExpr(typeAssignMatch[2].trim());
+        // Skip if the expression is still Java (new ClassName, JMeter context APIs, etc.)
+        if (/new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|JsonSlurper|groovy\.|apache\.|java\./.test(valExpr)) {
+          skipped++; continue;
+        }
+        converted.push(`${indent}const ${typeAssignMatch[1]} = ${valExpr};`);
         continue;
       }
 
-      // log.info / log.warn → comment
-      if (/^log\.(info|debug|warn|error)\s*\(/.test(line)) {
-        converted.push(`${indent}// ${line}`);
-        continue;
-      }
+      // log.* → silently drop (no noise in output)
+      if (/^log\.(info|debug|warn|error)\s*\(/.test(line)) continue;
 
-      // Import statements → skip
-      if (/^import\s+/.test(line)) continue;
-
-      // Unrecognised line
-      hasUnconverted = true;
-      converted.push(`${indent}// TODO: ${line}`);
+      // Anything else — drop and count
+      skipped++;
     }
 
-    if (converted.length === 0) return '';
-    if (hasUnconverted) {
-      lines.push(`${indent}// Review: some lines require manual conversion (shown as TODO)`);
+    // Nothing converted at all and nothing to note — skip block entirely
+    if (converted.length === 0 && skipped === 0) return '';
+
+    const lines = [];
+    if (skipped > 0) {
+      // Single compact note — no inline TODO spam
+      lines.push(`${indent}// TODO: JSR223 ${phase}-processor (${langLabel}) — ${skipped} line${skipped > 1 ? 's' : ''} need manual conversion. Review original JMX.`);
     }
     lines.push(...converted);
     return lines.join('\n') + '\n';
