@@ -648,6 +648,25 @@ static void gen_hex64(const char *param_name) {
      * iteration via web_js_run() + jsrsasign.js. No setup needed here. */
 ` : '';
 
+    // ── SetUp Thread Group content ────────────────────────────────────────────
+    // HTTP requests from JMeter setUp TG go here. JSR223 samplers become TODOs.
+    const setupRequests = this.options.setupRequests || [];
+    const setupScripts  = this.options.setupScripts  || [];
+    let setupBlock = '';
+    if (setupRequests.length || setupScripts.length) {
+      setupBlock = `\n    /* ── SetUp Thread Group (runs once before all iterations) ── */\n`;
+      for (const sc of setupScripts) {
+        const lang = sc.lang || 'groovy';
+        setupBlock += `    /* TODO: JSR223 setUp-sampler "${sc.name}" (${lang}) — manual conversion required. Review original JMX. */\n`;
+      }
+      for (const req of setupRequests) {
+        setupBlock += `\n    /* SetUp request: ${req.name} */\n`;
+        setupBlock += this.generateWebFunction(req, '    ');
+      }
+    }
+
+    const hasSetup = setupRequests.length || setupScripts.length;
+
     return `/* -------------------------------------------------------------------------------
  *  Script Title  : ${scriptName}
  *  Protocol      : Web - HTTP/HTML
@@ -664,8 +683,8 @@ static void gen_hex64(const char *param_name) {
 
 vuser_init()
 {
-${jwtNote}
-    /* ------------------------------------------------------------------
+${jwtNote}${setupBlock}
+${hasSetup ? '' : `    /* ------------------------------------------------------------------
      * One-time authentication example (OAuth2 client_credentials).
      * NOTE: web_reg_save_param_json MUST come BEFORE web_custom_request.
      * Uncomment, adapt the URL/body, and ensure {clientId}/{clientSecret}
@@ -691,7 +710,7 @@ ${jwtNote}
         return -1;
     }
     */
-
+`}
     return 0;
 }
 `;
@@ -699,6 +718,25 @@ ${jwtNote}
 
   generateVuserEndC() {
     const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
+
+    // ── TearDown Thread Group content ─────────────────────────────────────────
+    const teardownRequests = this.options.teardownRequests || [];
+    const teardownScripts  = this.options.teardownScripts  || [];
+    let teardownBlock = '';
+    if (teardownRequests.length || teardownScripts.length) {
+      teardownBlock = `\n    /* ── TearDown Thread Group (runs once after all iterations) ── */\n`;
+      for (const sc of teardownScripts) {
+        const lang = sc.lang || 'groovy';
+        teardownBlock += `    /* TODO: JSR223 tearDown-sampler "${sc.name}" (${lang}) — manual conversion required. Review original JMX. */\n`;
+      }
+      for (const req of teardownRequests) {
+        teardownBlock += `\n    /* TearDown request: ${req.name} */\n`;
+        teardownBlock += this.generateWebFunction(req, '    ');
+      }
+    }
+
+    const hasTeardown = teardownRequests.length || teardownScripts.length;
+
     return `/* -------------------------------------------------------------------------------
  *  Script Title  : ${scriptName}
  *  Protocol      : Web - HTTP/HTML
@@ -714,8 +752,8 @@ ${jwtNote}
 
 vuser_end()
 {
-
-    /* ------------------------------------------------------------------
+${teardownBlock}
+${hasTeardown ? '' : `    /* ------------------------------------------------------------------
      * Logout example — uncomment and adapt the URL as needed.
      * ------------------------------------------------------------------ */
     /*
@@ -730,7 +768,7 @@ vuser_end()
         "Body={}",
         LAST);
     */
-
+`}
     return 0;
 }
 `;

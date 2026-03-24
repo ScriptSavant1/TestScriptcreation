@@ -72,28 +72,49 @@ class JmxConverter {
     // 3. Prepare root output dir
     await fs.mkdir(this.options.outputDir, { recursive: true });
 
-    // 4. Dispatch to single or multi mode
+    // 4. Fetch standalone JSR223/BeanShell samplers (stamped with threadGroupType by parser)
+    const standaloneScripts = parser.getStandaloneScripts ? parser.getStandaloneScripts() : [];
+
+    // 5. Dispatch to single or multi mode
     const enabledTGs = threadGroups.filter(tg => tg.enabled !== false);
     if (this.options.mode === 'multi' && enabledTGs.length > 1) {
       return await this._convertMulti(
-        parser, requests, collection, threadGroups, csvDataSets, environmentVars, metadata
+        parser, requests, standaloneScripts, collection, threadGroups, csvDataSets, environmentVars, metadata
       );
     }
     return await this._convertSingle(
-      requests, collection, threadGroups, csvDataSets, environmentVars, metadata
+      requests, standaloneScripts, collection, threadGroups, csvDataSets, environmentVars, metadata
     );
   }
 
   // ── Single-script path (original behaviour) ──────────────────────────────
 
-  async _convertSingle(requests, collection, threadGroups, csvDataSets, environmentVars, metadata) {
+  async _convertSingle(requests, standaloneScripts, collection, threadGroups, csvDataSets, environmentVars, metadata) {
     const isWebHttp      = this.options.protocol === 'web-http';
     const GeneratorClass = isWebHttp ? WebHttpScriptGenerator : AdvancedScriptGenerator;
 
+    // Split requests by thread-group role so setUp/tearDown go to the correct
+    // lifecycle section (initialize / finalize) rather than into action().
+    const setupReqs    = requests.filter(r => r.threadGroupType === 'SetUp');
+    const teardownReqs = requests.filter(r => r.threadGroupType === 'TearDown');
+    const mainReqs     = requests.filter(r => r.threadGroupType !== 'SetUp' && r.threadGroupType !== 'TearDown');
+
+    // Standalone JSR223/BeanShell samplers — split the same way
+    const setupScripts    = (standaloneScripts || []).filter(s => s.threadGroupType === 'SetUp');
+    const teardownScripts = (standaloneScripts || []).filter(s => s.threadGroupType === 'TearDown');
+
     const generator = new GeneratorClass(
-      requests,
+      mainReqs,
       collection,
-      { ...this.options, environmentVars, csvDataSets }
+      {
+        ...this.options,
+        environmentVars,
+        csvDataSets,
+        setupRequests:    setupReqs,
+        teardownRequests: teardownReqs,
+        setupScripts,
+        teardownScripts,
+      }
     );
 
     const { script, analysis } = await generator.generate(this.options.outputDir);
@@ -123,7 +144,7 @@ class JmxConverter {
 
   // ── Multi-script path (one sub-directory per thread group) ────────────────
 
-  async _convertMulti(parser, requests, collection, threadGroups, csvDataSets, environmentVars, metadata) {
+  async _convertMulti(parser, requests, standaloneScripts, collection, threadGroups, csvDataSets, environmentVars, metadata) {
     const isWebHttp      = this.options.protocol === 'web-http';
     const GeneratorClass = isWebHttp ? WebHttpScriptGenerator : AdvancedScriptGenerator;
 
@@ -136,25 +157,15 @@ class JmxConverter {
 
       // Resolve which thread group index these requests belong to
       const tgIndex = tgReqs[0]?.threadGroupIndex ?? -1;
+      const tgType  = tgReqs[0]?.threadGroupType  ?? 'Standard';
 
       // ── Per-TG CSVDataSet filtering ──────────────────────────────────────
-      // Include: (a) global CSVDataSets (TestPlan level, threadGroupIndex = -1)
-      //          (b) CSVDataSets belonging specifically to THIS thread group
-      // Exclude: CSVDataSets from OTHER thread groups — prevents TG2's CSV
-      //          columns appearing as parameters in TG1's script.
       const tgCsvDataSets = csvDataSets.filter(csv =>
         csv.threadGroupIndex === -1 || csv.threadGroupIndex === tgIndex
       );
 
       // ── Per-TG variable map ───────────────────────────────────────────────
-      // Start with all global variables (TestPlan-level), then overlay any
-      // variables defined inside THIS thread group.  Variables defined in
-      // OTHER thread groups are excluded so they don't create spurious params.
       const tgLocalVars  = parser.getThreadGroupVars(tgIndex);
-      // Build a set of column names that belong to OTHER thread groups' CSVs
-      // (they were injected into environmentVars as empty strings by
-      // injectCsvVariables, which ran over ALL csvDataSets).  Remove them so
-      // Rule 4 (empty = Dynamic) doesn't create unwanted load.global entries.
       const otherTgCsvCols = new Set();
       for (const csv of csvDataSets) {
         if (csv.threadGroupIndex !== -1 && csv.threadGroupIndex !== tgIndex) {
@@ -167,11 +178,20 @@ class JmxConverter {
       for (const [k, v] of Object.entries(environmentVars)) {
         if (!otherTgCsvCols.has(k)) tgEnvVars[k] = v;
       }
-      Object.assign(tgEnvVars, tgLocalVars); // TG-local UDVs override globals
+      Object.assign(tgEnvVars, tgLocalVars);
+
+      // ── SetUp / TearDown thread groups ────────────────────────────────────
+      // In multi-script mode, setUp/tearDown TGs generate a real script but
+      // their HTTP requests go to initialize()/finalize() rather than action().
+      // Standalone JSR223/BeanShell samplers in those TGs become TODO comments
+      // in the same lifecycle section.
+      const tgStandaloneScripts = (standaloneScripts || []).filter(s => s.threadGroupIndex === tgIndex);
+      const isSetUp    = tgType === 'SetUp';
+      const isTearDown = tgType === 'TearDown';
 
       // Create a safe directory name from the thread group name
       const safeName   = tgName
-        .replace(/[<>:"/\\|?*]/g, '')   // strip invalid chars
+        .replace(/[<>:"/\\|?*]/g, '')
         .replace(/\s+/g, '_')
         .trim() || 'ThreadGroup';
       const tgOutputDir = path.join(this.options.outputDir, safeName);
@@ -180,15 +200,38 @@ class JmxConverter {
       // Find the thread group metadata object for WLM Excel
       const tgMeta = threadGroups.find(tg => tg.name === tgName) || null;
 
-      // Special thread group types map to init/end sections
-      // SetUp   → always first, used as vuser_init equivalent
-      // TearDown → always last, used as vuser_end equivalent
-      const tgType = tgMeta?.type || 'Standard';
+      // For SetUp/TearDown TGs: all requests go to init/finalize, action() is empty.
+      // For Standard TGs: normal generation.
+      const generatorOpts = {
+        ...this.options,
+        environmentVars: tgEnvVars,
+        csvDataSets:     tgCsvDataSets,
+        outputDir:       tgOutputDir,
+      };
+      if (isSetUp) {
+        generatorOpts.setupRequests = tgReqs;
+        generatorOpts.setupScripts  = tgStandaloneScripts;
+        generatorOpts.teardownRequests = [];
+        generatorOpts.teardownScripts  = [];
+        // action() should be empty — pass an empty array as main requests
+      } else if (isTearDown) {
+        generatorOpts.teardownRequests = tgReqs;
+        generatorOpts.teardownScripts  = tgStandaloneScripts;
+        generatorOpts.setupRequests    = [];
+        generatorOpts.setupScripts     = [];
+      } else {
+        // Standard TG — standalone JSR223s in this TG become pre/post script comments
+        generatorOpts.setupRequests    = [];
+        generatorOpts.setupScripts     = [];
+        generatorOpts.teardownRequests = [];
+        generatorOpts.teardownScripts  = [];
+      }
 
+      const mainReqsForTg = (isSetUp || isTearDown) ? [] : tgReqs;
       const generator = new GeneratorClass(
-        tgReqs,
+        mainReqsForTg,
         collection,
-        { ...this.options, environmentVars: tgEnvVars, csvDataSets: tgCsvDataSets, outputDir: tgOutputDir }
+        generatorOpts
       );
 
       const { script, analysis } = await generator.generate(tgOutputDir);
