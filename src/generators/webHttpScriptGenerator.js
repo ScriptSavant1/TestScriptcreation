@@ -1006,6 +1006,10 @@ ${jwtSetup}${autoHeaderBlock}
       code += `${indent}/* ${request.name} */\n`;
     }
 
+    // Open a C block scope so duplicate local variable declarations across requests
+    // don't conflict (C89 requires unique names within the same scope).
+    code += `${indent}{\n`;
+
     // 0. JSR223 Pre-processor (JMX only) — runs before the request
     if (request.preScripts && request.preScripts.length) {
       for (const sc of request.preScripts) {
@@ -1027,12 +1031,21 @@ ${jwtSetup}${autoHeaderBlock}
     code += this.generateWebFunction(request, indent);
 
     // 5. JSR223 Post-processor (JMX only) — runs after the request
+    // Wrap in inner block so const char * declarations are valid C89 (declarations
+    // cannot follow statements in C89 — each post-processor gets its own scope).
     if (request.postScripts && request.postScripts.length) {
       for (const sc of request.postScripts) {
         const block = this.convertJsr223Script(sc, 'Post', indent);
-        if (block) code += block;
+        if (block) {
+          code += `${indent}{\n`;
+          code += block;
+          code += `${indent}}\n`;
+        }
       }
     }
+
+    // Close the per-request C block scope
+    code += `${indent}}\n`;
 
     return code;
   }
@@ -1475,7 +1488,9 @@ ${jwtSetup}${autoHeaderBlock}
    * Replaces " with \" so the C compiler accepts it.
    */
   escapeCBodyString(str) {
-    return str.replace(/"/g, '\\"');
+    return str
+      .replace(/\r/g, '')     // strip carriage returns (CRLF → LF, lone CR → gone)
+      .replace(/"/g, '\\"');
   }
 
   /**
@@ -1494,6 +1509,9 @@ ${jwtSetup}${autoHeaderBlock}
     const converted = [];
     let skipped = 0;
 
+    // Patterns that indicate Java/Groovy-only expressions with no C equivalent
+    const JAVA_ONLY_EXPR = /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser/;
+
     for (const rawLine of code.split('\n')) {
       const line = rawLine.trim();
       if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
@@ -1502,7 +1520,10 @@ ${jwtSetup}${autoHeaderBlock}
       const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
       if (putMatch) {
         const varName = putMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
-        const valExpr = this._convertJavaExprC(putMatch[2]);
+        const rawVal = putMatch[2];
+        // Skip if value uses Java/Groovy-only API (regex matchers, etc.)
+        if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
+        const valExpr = this._convertJavaExprC(rawVal);
         converted.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
         continue;
       }
@@ -1511,7 +1532,10 @@ ${jwtSetup}${autoHeaderBlock}
       const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
       if (typeAssignMatch) {
         const localVar = typeAssignMatch[1];
-        const valExpr  = this._convertJavaExprC(typeAssignMatch[2].trim());
+        const rawVal   = typeAssignMatch[2].trim();
+        // Skip if value uses Java/Groovy-only API (regex matchers, etc.)
+        if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
+        const valExpr  = this._convertJavaExprC(rawVal);
         // Skip if the expression is still Java (new ClassName, JMeter context APIs, etc.)
         if (/new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|JsonSlurper|groovy\.|apache\.|java\./.test(valExpr)) {
           skipped++; continue;
@@ -1661,6 +1685,10 @@ ${jwtSetup}${autoHeaderBlock}
    */
   replaceParameters(str) {
     if (!str || typeof str !== 'string') return str;
+
+    // Strip DevWeb-format references: ${load.global.varName} / ${load.params.varName} → {{varName}}
+    // These appear when JMX files were generated from or alongside DevWeb scripts.
+    str = str.replace(/\$\{load\.(?:global|params)\.([^}]+)\}/g, '{{$1}}');
 
     return str.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
       const trimmed = varName.trim();

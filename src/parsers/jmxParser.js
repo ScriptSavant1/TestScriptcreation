@@ -130,10 +130,26 @@ function getChildren(item) {
   return Array.isArray(v) ? v : (v != null ? [v] : []);
 }
 
+function decodeXmlText(str) {
+  if (!str) return str;
+  return str
+    .replace(/&#xd;/gi, '\r')
+    .replace(/&#x0d;/gi, '\r')
+    .replace(/&#13;/g, '\r')
+    .replace(/&#xa;/gi, '\n')
+    .replace(/&#x0a;/gi, '\n')
+    .replace(/&#10;/g, '\n')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
 function getText(item) {
   const ch = getChildren(item);
   const t  = ch.find(c => c && '#text' in c);
-  return t ? String(t['#text'] ?? '').trim() : '';
+  return t ? decodeXmlText(String(t['#text'] ?? '').trim()) : '';
 }
 
 // Read a named string/bool/long/int property from a node's children array
