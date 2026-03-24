@@ -2271,7 +2271,11 @@ ${jwtRefreshBlock}
         withCustomScripts: this.customScripts.size,
       },
       correlations: this.correlationDetector.getCorrelationReport(),
-      parameters: this.paramEngine.getReport(),
+      // Use this.parameters.size as authoritative count — it reflects the actual
+      // classified parameters from classifyVariables() including JMX CSV columns.
+      // paramEngine is a raw scanner that doesn't see CSV-injected vars, so its
+      // totalParameters is always 0 for JMX files.
+      parameters: { ...this.paramEngine.getReport(), totalParameters: this.parameters.size },
       authentication: this.authHandler.getAuthSummary(),
       customScripts: {
         total: this.customScripts.size,
