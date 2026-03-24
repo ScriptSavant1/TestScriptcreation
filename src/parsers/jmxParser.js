@@ -896,10 +896,13 @@ function walkHashTree(nodeChildren, context, results) {
       const sc = parseScriptNode(node, attrs);
       if (sc) {
         results.standaloneScripts.push({
-          name:   attrs['@_testname'] || tag,
-          folder: context.folder,
-          script: sc.code,
-          lang:   sc.lang,
+          name:             attrs['@_testname'] || tag,
+          folder:           context.folder,
+          script:           sc.code,
+          lang:             sc.lang,
+          threadGroupIndex: context.threadGroupIndex ?? -1,
+          threadGroupName:  context.threadGroupName  ?? '',
+          threadGroupType:  context.threadGroupType  ?? 'Standard',
         });
         // Capture variables set in standalone script samplers
         for (const v of extractScriptSetVars(sc.code)) {

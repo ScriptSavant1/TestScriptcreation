@@ -1046,6 +1046,27 @@ ${jwtBlock}
       code += this.generateCollectionAuthBlock(collAuth);
     }
 
+    // ── SetUp Thread Group requests / scripts ─────────────────────────────
+    // HTTP requests from a JMeter SetUp Thread Group go here (run once before
+    // any iteration, equivalent to vuser_init).
+    // JSR223/BeanShell samplers cannot be auto-converted; emit a TODO comment.
+    const setupRequests = this.options.setupRequests || [];
+    const setupScripts  = this.options.setupScripts  || [];
+
+    if (setupRequests.length || setupScripts.length) {
+      code += `\n    // ── SetUp Thread Group (runs once before all iterations) ──\n`;
+    }
+
+    for (const sc of setupScripts) {
+      const lang = sc.lang || 'groovy';
+      code += `    // TODO: JSR223 setUp-sampler "${sc.name}" (${lang}) — manual conversion required. Review original JMX.\n`;
+    }
+
+    for (const req of setupRequests) {
+      code += `\n    // SetUp request: ${req.name}\n`;
+      code += this.generateRequestCode(req, 1);
+    }
+
     code += `\n});`;
 
     return code;
@@ -2254,9 +2275,29 @@ ${jwtRefreshBlock}
    * Generate finalize section
    */
   generateFinalize() {
-    return `load.finalize('Finalize', async function() {
-    // Cleanup code here if needed
-});`;
+    const teardownRequests = this.options.teardownRequests || [];
+    const teardownScripts  = this.options.teardownScripts  || [];
+
+    let code = `load.finalize('Finalize', async function() {\n`;
+
+    if (teardownRequests.length || teardownScripts.length) {
+      code += `    // ── TearDown Thread Group (runs once after all iterations) ──\n`;
+    } else {
+      code += `    // Cleanup code here if needed\n`;
+    }
+
+    for (const sc of teardownScripts) {
+      const lang = sc.lang || 'groovy';
+      code += `    // TODO: JSR223 tearDown-sampler "${sc.name}" (${lang}) — manual conversion required. Review original JMX.\n`;
+    }
+
+    for (const req of teardownRequests) {
+      code += `\n    // TearDown request: ${req.name}\n`;
+      code += this.generateRequestCode(req, 1);
+    }
+
+    code += `});`;
+    return code;
   }
 
   /**

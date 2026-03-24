@@ -81,22 +81,23 @@ function buildThreadGroupSheet(ws, threadGroups, scriptName) {
 
   ws.addRow([]); // spacer
 
-  // Column definitions
+  // Column definitions — header property intentionally omitted to avoid ExcelJS
+  // writing duplicate values into row 1 (which is already a merged title cell).
   const columns = [
-    { header: '#',                    key: 'seq',         width: 5  },
-    { header: 'Thread Group Name',    key: 'name',        width: 28 },
-    { header: 'Type',                 key: 'type',        width: 14 },
-    { header: 'Script / Action',      key: 'script',      width: 22 },
-    { header: 'Virtual Users (Peak)', key: 'vus',         width: 18 },
-    { header: 'Ramp-Up (sec)',        key: 'rampUp',      width: 14 },
-    { header: 'Hold Duration (sec)',  key: 'hold',        width: 18 },
-    { header: 'Ramp-Down (sec)',      key: 'rampDown',    width: 16 },
-    { header: 'Iterations',           key: 'iterations',  width: 12 },
-    { header: 'Start Delay (sec)',    key: 'delay',       width: 16 },
-    { header: 'Step Size (VUs)',      key: 'stepSize',    width: 14 },
-    { header: 'Step Duration (sec)',  key: 'stepDur',     width: 16 },
-    { header: 'Think Time (sec)',     key: 'thinkTime',   width: 14 },
-    { header: 'LRE Notes',            key: 'notes',       width: 36 }
+    { key: 'seq',         width: 5  },
+    { key: 'name',        width: 28 },
+    { key: 'type',        width: 14 },
+    { key: 'script',      width: 22 },
+    { key: 'vus',         width: 18 },
+    { key: 'rampUp',      width: 14 },
+    { key: 'hold',        width: 18 },
+    { key: 'rampDown',    width: 16 },
+    { key: 'iterations',  width: 12 },
+    { key: 'delay',       width: 16 },
+    { key: 'stepSize',    width: 14 },
+    { key: 'stepDur',     width: 16 },
+    { key: 'thinkTime',   width: 14 },
+    { key: 'notes',       width: 36 }
   ];
   ws.columns = columns;
 
@@ -187,11 +188,11 @@ function buildTransactionsSheet(ws, requests, threadGroups) {
   ws.addRow([]);
 
   ws.columns = [
-    { header: '#',               key: 'seq',     width: 6  },
-    { header: 'Transaction Name',key: 'name',    width: 36 },
-    { header: 'Thread Group',    key: 'tg',      width: 28 },
-    { header: 'HTTP Method',     key: 'method',  width: 12 },
-    { header: 'URL / Path',      key: 'url',     width: 48 }
+    { key: 'seq',     width: 6  },
+    { key: 'name',    width: 36 },
+    { key: 'tg',      width: 28 },
+    { key: 'method',  width: 12 },
+    { key: 'url',     width: 48 }
   ];
 
   const hdrRow = ws.getRow(3);
@@ -234,9 +235,9 @@ function buildGuideSheet(ws) {
   ws.getRow(1).height = 28;
 
   ws.columns = [
-    { header: 'JMeter Setting',   key: 'jmeter', width: 32 },
-    { header: 'LRE Equivalent',   key: 'lre',    width: 36 },
-    { header: 'How To Configure', key: 'how',    width: 60 }
+    { key: 'jmeter', width: 32 },
+    { key: 'lre',    width: 36 },
+    { key: 'how',    width: 60 }
   ];
 
   const guide = [
