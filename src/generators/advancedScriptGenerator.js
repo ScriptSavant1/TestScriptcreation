@@ -1709,13 +1709,15 @@ ${jwtRefreshBlock}
     }
 
     // Emit converted JSR223 pre-processor scripts (JMX only).
-    // Bruno/Postman scripts are analysis-only; JMX JSR223 scripts contain
-    // runtime logic (UUID gen, custom auth, variable manipulation) that must run.
+    // Wrapped in { } so `const` declarations are block-scoped — prevents
+    // "Identifier already declared" when multiple requests use the same local variable names.
     if (request.preScripts && request.preScripts.length) {
-      const ind = this.indent('', indentLevel);
+      const ind = this.indent('', indentLevel + 1);
+      const open  = this.indent('{', indentLevel);
+      const close = this.indent('}', indentLevel);
       for (const sc of request.preScripts) {
         const block = this.convertJsr223Script(sc, 'Pre', ind);
-        if (block) code += '\n' + block;
+        if (block) code += `\n${open}\n${block}${close}\n`;
       }
     }
 
@@ -1754,12 +1756,15 @@ ${jwtRefreshBlock}
       });
     }
 
-    // Emit converted JSR223 post-processor scripts (JMX only)
+    // Emit converted JSR223 post-processor scripts (JMX only).
+    // Wrapped in { } for same reason as pre-processor above.
     if (request.postScripts && request.postScripts.length) {
-      const ind = this.indent('', indentLevel);
+      const ind = this.indent('', indentLevel + 1);
+      const open  = this.indent('{', indentLevel);
+      const close = this.indent('}', indentLevel);
       for (const sc of request.postScripts) {
         const block = this.convertJsr223Script(sc, 'Post', ind);
-        if (block) code += '\n' + block;
+        if (block) code += `\n${open}\n${block}${close}\n`;
       }
     }
 

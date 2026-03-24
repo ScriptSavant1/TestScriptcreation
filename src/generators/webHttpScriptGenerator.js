@@ -1095,11 +1095,17 @@ ${jwtSetup}${autoHeaderBlock}
     // don't conflict (C89 requires unique names within the same scope).
     code += `${indent}{\n`;
 
-    // 0. JSR223 Pre-processor (JMX only) — runs before the request
+    // 0. JSR223 Pre-processor (JMX only) — runs before the request.
+    // Wrapped in { } so C89 declarations inside don't bleed into the outer scope,
+    // and don't conflict with declarations in other requests' pre-processors.
     if (request.preScripts && request.preScripts.length) {
       for (const sc of request.preScripts) {
-        const block = this.convertJsr223Script(sc, 'Pre', indent);
-        if (block) code += block;
+        const block = this.convertJsr223Script(sc, 'Pre', indent + '    ');
+        if (block) {
+          code += `${indent}{\n`;
+          code += block;
+          code += `${indent}}\n`;
+        }
       }
     }
 
@@ -1120,7 +1126,7 @@ ${jwtSetup}${autoHeaderBlock}
     // cannot follow statements in C89 — each post-processor gets its own scope).
     if (request.postScripts && request.postScripts.length) {
       for (const sc of request.postScripts) {
-        const block = this.convertJsr223Script(sc, 'Post', indent);
+        const block = this.convertJsr223Script(sc, 'Post', indent + '    ');
         if (block) {
           code += `${indent}{\n`;
           code += block;
@@ -1597,7 +1603,11 @@ ${jwtSetup}${autoHeaderBlock}
     if (!code || !code.trim()) return '';
 
     const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
-    const converted = [];
+    // C89 rule: ALL declarations must precede ALL statements within a block.
+    // We collect declarations and statements separately so the final output is always
+    // declarations-first, satisfying C89 regardless of original script order.
+    const declarations = [];  // const char * / char [] — must come first
+    const statements   = [];  // lr_save_string, lr_param_sprintf, etc.
     let skipped = 0;
 
     // Patterns that indicate Java/Groovy-only expressions or complex operations with no C equivalent.
@@ -1608,64 +1618,64 @@ ${jwtSetup}${autoHeaderBlock}
       const line = rawLine.trim();
       if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
 
-      // vars.put / props.put → lr_save_string
+      // vars.put / props.put → lr_save_string (pure statements — no declarations needed)
       const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
       if (putMatch) {
         const varName = putMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
         const rawVal = putMatch[2];
-        // Skip if value uses Java/Groovy-only API (regex matchers, etc.)
         if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
         const valExpr = this._convertJavaExprC(rawVal);
         if (valExpr.includes('__VUGEN_UUID__')) {
-          // UUID: generate into param then save to LR parameter
-          converted.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
-          converted.push(`${indent}lr_save_string(lr_eval_string("{_uuid}"), "${varName}");`);
+          statements.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
+          statements.push(`${indent}lr_save_string(lr_eval_string("{_uuid}"), "${varName}");`);
         } else {
-          converted.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
+          statements.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
         }
         continue;
       }
 
       // Type declarations: String x = expr; / def x = expr; / int x = expr;
+      // Split into declaration + assignment so declarations always precede statements (C89).
       const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
       if (typeAssignMatch) {
         const localVar = typeAssignMatch[1];
         const rawVal   = typeAssignMatch[2].trim();
-        // Skip if value uses Java/Groovy-only API (regex matchers, etc.)
         if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
         const valExpr  = this._convertJavaExprC(rawVal);
-        // Skip if the expression is still Java (new ClassName, JMeter context APIs, etc.)
         if (/new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|JsonSlurper|groovy\.|apache\.|java\./.test(valExpr)) {
           skipped++; continue;
         }
         if (valExpr.includes('__VUGEN_UUID__')) {
-          // UUID: lr_param_sprintf stores into LR param; lr_eval_string reads it back as char*
-          converted.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
-          converted.push(`${indent}const char *${localVar} = lr_eval_string("{_uuid}");`);
+          // Declaration first; lr_param_sprintf + pointer assignment as statements.
+          declarations.push(`${indent}const char *${localVar};`);
+          statements.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
+          statements.push(`${indent}${localVar} = lr_eval_string("{_uuid}");`);
         } else if (valExpr.includes('time(NULL)')) {
-          converted.push(`${indent}char ${localVar}[64];`);
-          converted.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
+          declarations.push(`${indent}char ${localVar}[64];`);
+          statements.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
         } else {
-          converted.push(`${indent}const char *${localVar} = ${valExpr};`);
+          // Split: declare pointer, then assign (satisfies C89 declaration-before-statement rule).
+          declarations.push(`${indent}const char *${localVar};`);
+          statements.push(`${indent}${localVar} = ${valExpr};`);
         }
         continue;
       }
 
-      // log.* → silently drop (no noise in output)
+      // log.* → silently drop
       if (/^log\.(info|debug|warn|error)\s*\(/.test(line)) continue;
 
-      // Anything else — drop and count
       skipped++;
     }
 
-    if (converted.length === 0 && skipped === 0) return '';
+    if (declarations.length === 0 && statements.length === 0 && skipped === 0) return '';
 
     const lines = [];
     if (skipped > 0) {
-      // Single compact note — no inline TODO spam
       lines.push(`${indent}/* TODO: JSR223 ${phase}-processor (${langLabel}) — ${skipped} line${skipped > 1 ? 's' : ''} need manual conversion. Review original JMX. */`);
     }
-    lines.push(...converted);
+    // Declarations MUST come before statements (C89 requirement).
+    lines.push(...declarations);
+    lines.push(...statements);
     return lines.join('\n') + '\n';
   }
 
