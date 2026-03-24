@@ -57,6 +57,11 @@ class JmxConverter {
     //    Must run BEFORE filterJmxCollectionVars removes the path variables.
     this.resolveCsvFilenames(csvDataSets, collection.variable || []);
 
+    // 2b. If any CSVDataSet has empty variableNames, read column headers from
+    //     the uploaded CSV file (JMeter's own behaviour: first row = headers
+    //     when variableNames is blank).
+    await this.enrichCsvVariableNames(csvDataSets);
+
     // 3. Remove JMX-internal variables from the collection so they never reach
     //    the generator's classifyVariables().  Without this, vars like
     //    nrThreads=50, csvFile1=users.csv, lines1=100 become spurious Tier 2
@@ -428,6 +433,36 @@ class JmxConverter {
    * Inject CSV column variable names as empty placeholders so 3-tier
    * classification marks them as Tier 3 (iteration parameters).
    */
+  /**
+   * If a CSVDataSet has no variableNames, try to read the first line of the
+   * uploaded CSV file as column headers (mirrors JMeter's behaviour).
+   * csvFilePaths is a map of originalname → tmpPath populated by the web server.
+   */
+  async enrichCsvVariableNames(csvDataSets) {
+    const csvFilePaths = this.options.csvFilePaths || {};
+    if (!csvDataSets.length || !Object.keys(csvFilePaths).length) return;
+
+    for (const ds of csvDataSets) {
+      if (ds.variableNames) continue;   // already has column names
+      const filename = (ds.filename || '').replace(/\\/g, '/').split('/').pop();
+      if (!filename) continue;
+
+      // Find the uploaded file by basename (case-insensitive)
+      const matchedPath = csvFilePaths[filename]
+        || csvFilePaths[Object.keys(csvFilePaths).find(k => k.toLowerCase() === filename.toLowerCase())];
+      if (!matchedPath) continue;
+
+      try {
+        const content = await fs.readFile(matchedPath, 'utf8');
+        const firstLine = content.split(/\r?\n/)[0].trim();
+        if (firstLine) {
+          ds.variableNames = firstLine;
+          console.log(`  ✓ Auto-detected CSV columns for "${filename}": ${firstLine}`);
+        }
+      } catch { /* silently skip unreadable files */ }
+    }
+  }
+
   injectCsvVariables(csvDataSets, environmentVars) {
     for (const ds of csvDataSets) {
       const cols = (ds.variableNames || '').split(',').map(s => s.trim()).filter(Boolean);
