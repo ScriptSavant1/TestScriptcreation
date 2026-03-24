@@ -4,6 +4,65 @@ All notable changes to the Bruno to DevWeb Converter will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [2.8.x] - 2026-03-24
+
+### Fixed — JMX: WLM Excel Corruption on Open
+
+Excel reported "we found a problem with some content" on every generated `.xlsx`.
+Root cause: ExcelJS writes `header` values into **row 1** when `ws.columns` includes
+a `header` property, conflicting with the already-merged title cell in row 1.
+Fix: removed `header` from all three `ws.columns` definitions in `workloadExcelGenerator.js`.
+Column headers are now set only in their manually-assigned header rows (row 3 / row 4).
+
+### Added — JMX: setUp/tearDown Thread Group Lifecycle Routing
+
+JMeter setUp and tearDown thread groups are now correctly mapped to LoadRunner
+lifecycle sections instead of being treated as regular action scripts:
+
+**HTTP Samplers** in setUp/tearDown TGs:
+- DevWeb → placed in `initialize()` / `finalize()` function
+- VuGen  → placed in `vuser_init.c` / `vuser_end.c`
+
+**JSR223 / BeanShell Samplers** in setUp/tearDown TGs:
+- Cannot be auto-converted (Groovy/Java ↔ Node.js/C runtime incompatibility)
+- Emit a single compact `// TODO: JSR223 setUp-sampler "<name>" (<lang>) — manual conversion required`
+- Unconverted lines are silently dropped (no inline TODO spam per line)
+
+**Multi-script mode**: setUp/tearDown TGs generate their own directory but
+`action()` / `Action()` is empty — all content appears in init/finalize sections.
+
+**Parser change** (`jmxParser.js`): standalone JSR223/BeanShell samplers
+(not pre/post-processors) now carry `threadGroupType` so the converter can
+route them to the correct lifecycle section.
+
+### Fixed — JMX: Wrong collection_data.csv Content
+
+`collection_data.csv` and `parameters.yml` were populated with JMeter-internal
+variables (`nrThreads`, `rampUp`, `csvFile1`, `lines1`, etc.) instead of
+real test data parameters.
+
+**Root cause**: `buildCollection()` converts ALL JMX User Defined Variables into
+`collection.variable[]`. Without filtering, vars like `nrThreads=50` and
+`csvFile1=users.csv` entered `classifyVariables()` as Tier 2 Config params.
+
+**Fix 1 — `resolveCsvFilenames()`** (`jmxConverter.js`):
+Resolves `filename={{csvFile1}}` → `filename=users.csv` using the UDV lookup
+before those path-variables are removed. Ensures `parameters.yml` points to
+the real CSV filename.
+
+**Fix 2 — `filterJmxCollectionVars()`** (`jmxConverter.js`):
+Removes three categories from `collection.variable` before `classifyVariables()` runs:
+- (A) Vars whose value ends in `.csv` (CSV path indirection vars)
+- (B) Known JMeter execution/scheduling property names (nrThreads, rampUp, duration, loopCount, etc.)
+- (C) Numeric-count pattern names (lines1, lineCount, rowCount, records1, etc.)
+
+### Fixed — JMX: DevWeb showing 0 parameters
+
+`getAnalysisReport()` in `advancedScriptGenerator.js` was reading
+`this.paramEngine.getReport()` for parameter count. The raw `ParameterizationEngine`
+scanner never sees JMX CSV-injected variables, so it always returned 0 for JMX files.
+Fix: `totalParameters` now uses `this.parameters.size` (the generator's classified Map).
+
 ## [2.8.x] - 2026-03-23
 
 ### Fixed — JMX: Regex Pattern String Escaping
