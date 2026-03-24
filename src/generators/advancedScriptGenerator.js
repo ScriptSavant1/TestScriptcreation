@@ -1286,7 +1286,25 @@ ${jwtBlock}${ntlmBlock}
 
     const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
     const converted = [];
+    // Track which local variable names were successfully converted to JS constants.
+    // Used to allow safe cross-line references in vars.put("k", localVar).
+    const declaredLocalVars = new Set();
     let skipped = 0;
+
+    // Java/Groovy patterns with no JavaScript equivalent — skip the whole line.
+    const JAVA_ONLY = /=~|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|Files?\b|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
+
+    // After conversion, if the expression still has Java class-style calls → skip.
+    const JAVA_RESIDUAL = /[A-Z][a-zA-Z0-9_]+\s*\.\s*[a-z]/;
+
+    // Safe JS r-values after conversion: string, number, DevWeb API, or a declared local var.
+    const isSafeJsValue = (expr, localVars) =>
+      /^["'`]/.test(expr) ||
+      /^\d/.test(expr) ||
+      /^load\./.test(expr) ||
+      /^Date\.now\(\)/.test(expr) ||
+      /^load\.utils\.uuid\(\)/.test(expr) ||
+      localVars.has(expr.trim());
 
     for (const rawLine of code.split('\n')) {
       const line = rawLine.trim();
@@ -1295,19 +1313,35 @@ ${jwtBlock}${ntlmBlock}
       // vars.put / props.put → load.global.*
       const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
       if (putMatch) {
-        converted.push(`${indent}load.global.${this.sanitizeVarName(putMatch[1])} = ${this._convertJavaExpr(putMatch[2])};`);
+        const rawVal  = putMatch[2].trim();
+        if (JAVA_ONLY.test(rawVal)) { skipped++; continue; }
+        const valExpr = this._convertJavaExpr(rawVal);
+        if (JAVA_RESIDUAL.test(valExpr)) { skipped++; continue; }
+        if (isSafeJsValue(valExpr, declaredLocalVars)) {
+          converted.push(`${indent}load.global.${this.sanitizeVarName(putMatch[1])} = ${valExpr};`);
+        } else {
+          skipped++;
+        }
         continue;
       }
 
       // Java typed variable declaration: String x = <expr>; / def x = <expr>;
       const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
       if (typeAssignMatch) {
-        const valExpr = this._convertJavaExpr(typeAssignMatch[2].trim());
-        // Skip if the expression is still Java (new ClassName, JMeter context APIs, etc.)
-        if (/new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|JsonSlurper|groovy\.|apache\.|java\./.test(valExpr)) {
+        const localVar = typeAssignMatch[1];
+        const rawVal   = typeAssignMatch[2].trim();
+        if (JAVA_ONLY.test(rawVal)) { skipped++; continue; }
+        const valExpr  = this._convertJavaExpr(rawVal);
+        if (JAVA_RESIDUAL.test(valExpr) ||
+            /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)) {
           skipped++; continue;
         }
-        converted.push(`${indent}const ${typeAssignMatch[1]} = ${valExpr};`);
+        if (isSafeJsValue(valExpr, declaredLocalVars)) {
+          converted.push(`${indent}const ${localVar} = ${valExpr};`);
+          declaredLocalVars.add(localVar);
+        } else {
+          skipped++;
+        }
         continue;
       }
 
@@ -1318,12 +1352,10 @@ ${jwtBlock}${ntlmBlock}
       skipped++;
     }
 
-    // Nothing converted at all and nothing to note — skip block entirely
     if (converted.length === 0 && skipped === 0) return '';
 
     const lines = [];
     if (skipped > 0) {
-      // Single compact note — no inline TODO spam
       lines.push(`${indent}// TODO: JSR223 ${phase}-processor (${langLabel}) — ${skipped} line${skipped > 1 ? 's' : ''} need manual conversion. Review original JMX.`);
     }
     lines.push(...converted);
@@ -1346,7 +1378,10 @@ ${jwtBlock}${ntlmBlock}
       .replace(/\$\{([^}]+)\}/g, '${load.global.$1}')
       // vars.get("x") inline → load.global.x
       .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g,
-               (_, n) => `load.global.${this.sanitizeVarName(n)}`);
+               (_, n) => `load.global.${this.sanitizeVarName(n)}`)
+      // Strip Java string-concatenation-with-empty-string idiom: value + ""  or  "" + value
+      .replace(/\s*\+\s*""\s*/g, '')
+      .replace(/\s*""\s*\+\s*/g, '');
   }
 
   generateGlobalVariablesInit() {
