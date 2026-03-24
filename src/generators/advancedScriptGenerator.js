@@ -2203,11 +2203,14 @@ ${jwtRefreshBlock}
     str = str.replace('"{{MULTIPART}}"', "new load.MultipartBody([...])");
 
     // Strip quotes from extractor code (new load.XXXExtractor(...))
-    // JSON.stringify escapes inner quotes as \", so match those too, then unescape
+    // JSON.stringify double-escapes inner backslashes (\" → \\\" in JSON text).
+    // Use JSON.parse to fully unescape the captured content rather than a
+    // partial replace(/\\"/g, '"') that would leave leading \\ in \\\" sequences.
     str = str.replace(
       /"(new load\.\w+Extractor\((?:[^"\\]|\\.)*\))"/g,
       (match, code) => {
-        return code.replace(/\\"/g, '"');
+        try { return JSON.parse('"' + code + '"'); }
+        catch (e) { return code.replace(/\\"/g, '"'); }
       },
     );
 
