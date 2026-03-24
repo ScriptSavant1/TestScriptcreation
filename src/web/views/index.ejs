@@ -912,10 +912,10 @@ footer {
     <div class="drop-zone dz-secondary" id="dz-cert"
          ondragover="onDrag(event,'dz-cert')" ondragleave="offDrag('dz-cert')"
          ondrop="onDropCert(event)">
-      <input type="file" id="fi-cert" accept=".jks,.p12,.cer,.crt,.key,.pem,.pfx,.jar,.properties" multiple onchange="onPickCert()">
+      <input type="file" id="fi-cert" accept=".jks,.p12,.cer,.crt,.key,.pem,.pfx" multiple onchange="onPickCert()">
       <div class="dz-icon-wrap" style="font-size:1.1rem">🔒</div>
-      <div class="dz-label" style="font-size:0.82rem">Certs / JARs / Properties <span style="color:var(--text-3);font-weight:400">(optional)</span></div>
-      <div class="dz-sub">.jks .p12 .cer .key .pem .jar .properties</div>
+      <div class="dz-label" style="font-size:0.82rem">Certificate Files <span style="color:var(--text-3);font-weight:400">(optional)</span></div>
+      <div class="dz-sub">.jks .p12 .cer .crt .key .pem .pfx</div>
       <div id="lbl-cert" class="dz-name"></div>
     </div>
   </div>
