@@ -74,6 +74,13 @@ class WebHttpScriptGenerator {
     this.hasJwt = false;
     this.jwtVarNames = [];    // variable names the pre-request script stores the token into
 
+    // NTLM/Kerberos detection — populated by detectNtlmKerberos() during analyze()
+    this.hasNtlm = false;
+    this.ntlmAuthType = null; // 'ntlm' | 'kerberos'
+
+    // mTLS cert detection — populated by detectMtlsCert() during analyze()
+    this.mtlsCertFile = null; // basename of uploaded cert file (non-JWT)
+
     // Per-request dynamic variables (UUID/nonce/random generated fresh per request)
     this.perRequestVars = new Map(); // varName → { generationType, requestNames[] }
 
@@ -137,6 +144,45 @@ class WebHttpScriptGenerator {
     }
 
     return null;
+  }
+
+  /**
+   * Detect NTLM or Kerberos authentication in any request (typically from JMX AuthManager).
+   * Sets this.hasNtlm and this.ntlmAuthType when found.
+   */
+  detectNtlmKerberos() {
+    for (const req of this.requests) {
+      const authType = (req.auth?.type || '').toLowerCase();
+      if (authType === 'kerberos') {
+        this.hasNtlm = true;
+        this.ntlmAuthType = 'kerberos';
+        console.log('  ✓ Kerberos authentication detected');
+        return;
+      }
+      if (authType === 'ntlm') {
+        this.hasNtlm = true;
+        this.ntlmAuthType = 'ntlm';
+        console.log('  ✓ NTLM authentication detected');
+        return;
+      }
+    }
+  }
+
+  /**
+   * Detect uploaded mTLS client certificate files (non-JWT).
+   * Checks options.csvFilePaths for .pem/.p12/.pfx/.crt files.
+   * Sets this.mtlsCertFile to the filename when found.
+   */
+  detectMtlsCert() {
+    const paths = this.options.csvFilePaths || {};
+    for (const filename of Object.keys(paths)) {
+      const lc = filename.toLowerCase();
+      if (lc.endsWith('.pem') || lc.endsWith('.p12') || lc.endsWith('.pfx') || lc.endsWith('.crt')) {
+        this.mtlsCertFile = filename;
+        console.log(`  ✓ Client certificate detected: ${filename}`);
+        return;
+      }
+    }
   }
 
   // ─── Variable Map ────────────────────────────────────────────────────────────
@@ -368,7 +414,7 @@ class WebHttpScriptGenerator {
     const dataFileNames = Array.from(this.extractedDataFiles.values()).map(f => f.fileName);
     await this.mandatoryFilesGen.generateAll(
       outputDir, this.parameters, this.transactionNames, dataFileNames,
-      this.hasJwt, this.detectProxyConfig()
+      this.hasJwt, this.detectProxyConfig(), this.hasNtlm, this.mtlsCertFile
     );
 
     // 8. If JWT detected: copy jsrsasign.js + transport.pem from project root.
@@ -389,6 +435,17 @@ class WebHttpScriptGenerator {
       if (fs.existsSync(pemSrc)) {
         fs.copyFileSync(pemSrc, path.join(outputDir, 'transport.pem'));
         console.log('✓ Copied transport.pem');
+      }
+    }
+
+    // 9. If mTLS cert detected (non-JWT): copy uploaded cert file to output directory.
+    if (this.mtlsCertFile) {
+      const srcPath = (this.options.csvFilePaths || {})[this.mtlsCertFile];
+      if (srcPath && fs.existsSync(srcPath)) {
+        fs.copyFileSync(srcPath, path.join(outputDir, this.mtlsCertFile));
+        console.log(`✓ Copied mTLS certificate: ${this.mtlsCertFile}`);
+      } else {
+        console.warn(`  ⚠  mTLS cert ${this.mtlsCertFile} not found in uploaded files.`);
       }
     }
 
@@ -489,6 +546,12 @@ class WebHttpScriptGenerator {
         console.log(`  ✓ CSRF header "${h.key}" → per-request gen_csrf_token("_${varName}")`);
       });
     });
+
+    // Detect NTLM/Kerberos auth (from JMX AuthManager or collection auth)
+    this.detectNtlmKerberos();
+
+    // Detect mTLS client certificate files uploaded alongside the collection
+    this.detectMtlsCert();
 
     // Large base64 extraction — scan after parameterization so replaceParameters() works
     this.scanForLargeBase64();
@@ -648,6 +711,28 @@ static void gen_hex64(const char *param_name) {
      * iteration via web_js_run() + jsrsasign.js. No setup needed here. */
 ` : '';
 
+    // NTLM / Kerberos authentication block
+    const ntlmBlock = this.hasNtlm ? `
+    /* ${this.ntlmAuthType === 'kerberos' ? 'Kerberos' : 'NTLM'} authentication detected.
+     * web_set_user() passes credentials to the LoadRunner HTTP engine.
+     * Replace {ntlmUsername} / {ntlmPassword} / {ntlmDomain} with your actual
+     * parameter names or literal values from collection_data.dat.
+     * IntegratedAuthentication=1 is already set in default.cfg. */
+    web_set_user("{ntlmUsername}", "{ntlmPassword}", "{ntlmDomain}");
+` : '';
+
+    // mTLS client certificate block (when a cert was uploaded but JWT is NOT active)
+    const certBlock = (this.mtlsCertFile && !this.hasJwt) ? `
+    /* mTLS client certificate — loaded once at vuser init.
+     * Replace CertFilePath / KeyFilePath if your cert and key are in separate files. */
+    web_set_certificate_ex(
+        "CertFilePath=${this.mtlsCertFile}",
+        "CertFormat=${this.mtlsCertFile.toLowerCase().endsWith('.p12') || this.mtlsCertFile.toLowerCase().endsWith('.pfx') ? 'PFX' : 'PEM'}",
+        "KeyFilePath=${this.mtlsCertFile}",
+        "KeyFormat=${this.mtlsCertFile.toLowerCase().endsWith('.p12') || this.mtlsCertFile.toLowerCase().endsWith('.pfx') ? 'PFX' : 'PEM'}",
+        LAST);
+` : '';
+
     // ── SetUp Thread Group content ────────────────────────────────────────────
     // HTTP requests from JMeter setUp TG go here. JSR223 samplers become TODOs.
     const setupRequests = this.options.setupRequests || [];
@@ -683,7 +768,7 @@ static void gen_hex64(const char *param_name) {
 
 vuser_init()
 {
-${jwtNote}${setupBlock}
+${jwtNote}${ntlmBlock}${certBlock}${setupBlock}
 ${hasSetup ? '' : `    /* ------------------------------------------------------------------
      * One-time authentication example (OAuth2 client_credentials).
      * NOTE: web_reg_save_param_json MUST come BEFORE web_custom_request.
@@ -691,7 +776,7 @@ ${hasSetup ? '' : `    /* ------------------------------------------------------
      * are set in collection_data.dat before running.
      * ------------------------------------------------------------------ */
     /*
-    web_reg_save_param_json("_accessToken",
+    web_reg_save_param_json("ParamName=_accessToken",
         "QueryString=$.access_token",
         "Ord=1",
         LAST);
@@ -1192,7 +1277,8 @@ ${jwtSetup}${autoHeaderBlock}
         case 'token':
         case 'id':
         case 'sessionId':
-          code += `${indent}web_reg_save_param_json("${corr.name}",\n`;
+          // web_reg_save_param_json: first arg is "ParamName=xxx"
+          code += `${indent}web_reg_save_param_json("ParamName=${corr.name}",\n`;
           code += `${indent}    "QueryString=${jsonPath}",\n`;
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
@@ -1202,7 +1288,7 @@ ${jwtSetup}${autoHeaderBlock}
           // Extract from response header — web_reg_save_param with Search=Headers
           // extractPath holds the header name (e.g. "x-csrf-token")
           const headerName = corr.extractPath || corrBase;
-          code += `${indent}web_reg_save_param("${corr.name}",\n`;
+          code += `${indent}web_reg_save_param("ParamName=${corr.name}",\n`;
           code += `${indent}    "LB=${this.escapeCString(headerName)}: ",\n`;
           code += `${indent}    "RB=\\r\\n",\n`;
           code += `${indent}    "Search=Headers",\n`;
@@ -1214,7 +1300,7 @@ ${jwtSetup}${autoHeaderBlock}
         case 'cookie': {
           // Extract from response cookie
           const cookieName = corr.extractPath || corrBase;
-          code += `${indent}web_reg_save_param("${corr.name}",\n`;
+          code += `${indent}web_reg_save_param("ParamName=${corr.name}",\n`;
           code += `${indent}    "LB=${this.escapeCString(cookieName)}=",\n`;
           code += `${indent}    "RB=;",\n`;
           code += `${indent}    "Search=Headers",\n`;
@@ -1224,21 +1310,26 @@ ${jwtSetup}${autoHeaderBlock}
         }
 
         case 'boundary':
-        case 'csrf':
-          code += `${indent}web_reg_save_param("${corr.name}",\n`;
+        case 'csrf': {
+          // web_reg_save_param: Search=Body by default (omit for body, explicit for others)
+          const bScope = this._vugenSearchFilter(corr.scope || corr.extractorScope);
+          code += `${indent}web_reg_save_param("ParamName=${corr.name}",\n`;
           if (corr.leftBoundary)  code += `${indent}    "LB=${this.escapeCString(corr.leftBoundary)}",\n`;
           if (corr.rightBoundary) code += `${indent}    "RB=${this.escapeCString(corr.rightBoundary)}",\n`;
+          if (bScope) code += `${indent}    "Search=${bScope}",\n`;
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
           break;
+        }
 
         case 'regex':
         case 'regexp': {
-          // Map JMX scope → VuGen Search filter
-          const vScope = this._vugenSearchFilter(corr.scope || corr.extractorScope);
-          code += `${indent}web_reg_save_param_regexp("${corr.name}",\n`;
+          // web_reg_save_param_regexp: uses "Scope=" (not "Search="), default is Body.
+          // Map JMX useHeaders value → VuGen Scope= value.
+          const vScope = this._vugenRegexpScope(corr.scope || corr.extractorScope);
+          code += `${indent}web_reg_save_param_regexp("ParamName=${corr.name}",\n`;
           code += `${indent}    "RegExp=${this.escapeCString(corr.pattern || `${corrBase}=([^&"'\\s]+)`)}",\n`;
-          if (vScope) code += `${indent}    "Search=${vScope}",\n`;
+          if (vScope) code += `${indent}    "Scope=${vScope}",\n`;
           // matchNo: 1 = first, -1 = random (use 1 for VuGen)
           const matchNo = Math.max(1, parseInt(corr.matchNumber || '1', 10));
           code += `${indent}    "Ord=${matchNo}",\n`;
@@ -1248,7 +1339,7 @@ ${jwtSetup}${autoHeaderBlock}
 
         default:
           // Fallback: JSON path using variable name as field
-          code += `${indent}web_reg_save_param_json("${corr.name}",\n`;
+          code += `${indent}web_reg_save_param_json("ParamName=${corr.name}",\n`;
           code += `${indent}    "QueryString=${jsonPath}",\n`;
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
@@ -1509,8 +1600,9 @@ ${jwtSetup}${autoHeaderBlock}
     const converted = [];
     let skipped = 0;
 
-    // Patterns that indicate Java/Groovy-only expressions with no C equivalent
-    const JAVA_ONLY_EXPR = /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser/;
+    // Patterns that indicate Java/Groovy-only expressions or complex operations with no C equivalent.
+    // Lines matching this are skipped with a TODO count (not emitted as broken C code).
+    const JAVA_ONLY_EXPR = /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|CryptoJS|getBytes\s*\(|\.sign\s*\(|\.verify\s*\(|JwtBuilder|Jwts\b|Claims\b|signWith\s*\(|\.replace\s*\(|\.substring\s*\(|\.substr\s*\(|\.indexOf\s*\(|\.lastIndexOf\s*\(|\.split\s*\(|\.join\s*\(|\.trim\s*\(\)|\.toLowerCase\s*\(\)|\.toUpperCase\s*\(\)|\.startsWith\s*\(|\.endsWith\s*\(|\.charAt\s*\(|\.slice\s*\(/;
 
     for (const rawLine of code.split('\n')) {
       const line = rawLine.trim();
@@ -1524,7 +1616,13 @@ ${jwtSetup}${autoHeaderBlock}
         // Skip if value uses Java/Groovy-only API (regex matchers, etc.)
         if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
         const valExpr = this._convertJavaExprC(rawVal);
-        converted.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
+        if (valExpr.includes('__VUGEN_UUID__')) {
+          // UUID: generate into param then save to LR parameter
+          converted.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
+          converted.push(`${indent}lr_save_string(lr_eval_string("{_uuid}"), "${varName}");`);
+        } else {
+          converted.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
+        }
         continue;
       }
 
@@ -1540,9 +1638,10 @@ ${jwtSetup}${autoHeaderBlock}
         if (/new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|JsonSlurper|groovy\.|apache\.|java\./.test(valExpr)) {
           skipped++; continue;
         }
-        if (valExpr.includes('lr_gen_unique_id()')) {
-          converted.push(`${indent}char ${localVar}[64];`);
-          converted.push(`${indent}strcpy(${localVar}, lr_gen_unique_id());`);
+        if (valExpr.includes('__VUGEN_UUID__')) {
+          // UUID: lr_param_sprintf stores into LR param; lr_eval_string reads it back as char*
+          converted.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
+          converted.push(`${indent}const char *${localVar} = lr_eval_string("{_uuid}");`);
         } else if (valExpr.includes('time(NULL)')) {
           converted.push(`${indent}char ${localVar}[64];`);
           converted.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
@@ -1571,9 +1670,11 @@ ${jwtSetup}${autoHeaderBlock}
   }
 
   _convertJavaExprC(expr) {
+    // Use a sentinel for UUID so convertJsr223Script() can emit the correct two-line C idiom.
+    // lr_param_sprintf() is void — it stores into a LR parameter, not usable as an expression.
     return expr
-      .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'lr_gen_unique_id()')
-      .replace(/java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g, 'lr_gen_unique_id()')
+      .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, '__VUGEN_UUID__')
+      .replace(/java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g, '__VUGEN_UUID__')
       .replace(/System\.currentTimeMillis\(\)/g, '(long)time(NULL)*1000')
       .replace(/new\s+Date\(\)\.getTime\(\)/g, '(long)time(NULL)*1000')
       .replace(/String\.valueOf\s*\(([^)]+)\)/g, '$1')
@@ -1594,16 +1695,35 @@ ${jwtSetup}${autoHeaderBlock}
 
   /**
    * Map JMX extractor scope → VuGen Search= filter string (or '' for body default).
-   * VuGen web_reg_save_param_regexp Search values:
-   *   Body (default), Headers, All (body+headers), Noresource
+   * VuGen web_reg_save_param Search= values (boundary extractor):
+   *   Body (default when omitted), Headers, Noresource, ALL
    */
   _vugenSearchFilter(scope) {
+    // Used for web_reg_save_param (boundary / cookie / header extractors).
+    // Search=Body is the default when the parameter is omitted — only emit for non-body scopes.
     const map = {
       'response_headers': 'Headers',
       'request_headers':  'Headers',
       'url':              'Noresource',  // closest equivalent
       'headers':          'Headers',     // legacy
-      // 'response_code' / 'response_message' → no VuGen equivalent; use Body
+      // 'response_code' / 'response_message' → no VuGen equivalent; omit (body)
+    };
+    return map[scope] || '';
+  }
+
+  /**
+   * Map JMX extractor scope → VuGen Scope= value for web_reg_save_param_regexp.
+   * web_reg_save_param_regexp uses "Scope=" (NOT "Search=").
+   * Valid Scope values: Body (default), Headers, All, Cookies, NewHeaders.
+   * Omit the parameter to use the default (Body).
+   */
+  _vugenRegexpScope(scope) {
+    const map = {
+      'response_headers': 'Headers',
+      'request_headers':  'Headers',
+      'headers':          'Headers',     // legacy
+      'url':              'All',         // closest: no URL-only scope in regexp; use All
+      // body / blank → omit (default is Body)
     };
     return map[scope] || '';
   }

@@ -66,6 +66,13 @@ class AdvancedScriptGenerator {
     this.hasJwt = false;
     this.jwtVarNames = []; // token variable names set by JWT pre-request scripts
 
+    // NTLM/Kerberos detection — populated by detectNtlmKerberos() during analyze()
+    this.hasNtlm = false;
+    this.ntlmAuthType = null; // 'ntlm' | 'kerberos'
+
+    // mTLS cert detection — populated by detectMtlsCert() during analyze()
+    this.mtlsCertFile = null; // basename of uploaded cert file (non-JWT)
+
     // Per-request dynamic variables — generated fresh before each request (e.g. UUID, nonce).
     // Map: varName → { generationType: 'uuid'|'random'|'timestamp'|'nonce', requestNames: string[] }
     // These are NOT static params and NOT response correlations — they are inline-generated.
@@ -186,6 +193,45 @@ class AdvancedScriptGenerator {
     }
 
     return null; // no proxy found
+  }
+
+  /**
+   * Detect NTLM or Kerberos authentication in any request (typically from JMX AuthManager).
+   * Sets this.hasNtlm and this.ntlmAuthType when found.
+   */
+  detectNtlmKerberos() {
+    for (const req of this.requests) {
+      const authType = (req.auth?.type || '').toLowerCase();
+      if (authType === 'kerberos') {
+        this.hasNtlm = true;
+        this.ntlmAuthType = 'kerberos';
+        console.log('  ✓ Kerberos authentication detected');
+        return;
+      }
+      if (authType === 'ntlm') {
+        this.hasNtlm = true;
+        this.ntlmAuthType = 'ntlm';
+        console.log('  ✓ NTLM authentication detected');
+        return;
+      }
+    }
+  }
+
+  /**
+   * Detect uploaded mTLS client certificate files (non-JWT).
+   * Checks options.csvFilePaths for .pem/.p12/.pfx/.crt files.
+   * Sets this.mtlsCertFile to the filename when found.
+   */
+  detectMtlsCert() {
+    const paths = this.options.csvFilePaths || {};
+    for (const filename of Object.keys(paths)) {
+      const lc = filename.toLowerCase();
+      if (lc.endsWith('.pem') || lc.endsWith('.p12') || lc.endsWith('.pfx') || lc.endsWith('.crt')) {
+        this.mtlsCertFile = filename;
+        console.log(`  ✓ Client certificate detected: ${filename}`);
+        return;
+      }
+    }
   }
 
   /**
@@ -691,8 +737,22 @@ ${finalizeSection}
           transactionNames: this.transactionNames || [],
           hasJwt: this.hasJwt || false,
           proxy: this.detectProxyConfig(),
+          mtlsCertFile: this.mtlsCertFile,
         },
       );
+
+      // Copy mTLS client certificate to output directory
+      if (this.mtlsCertFile) {
+        const fs = require("fs");
+        const path = require("path");
+        const srcPath = (this.options.csvFilePaths || {})[this.mtlsCertFile];
+        if (srcPath && fs.existsSync(srcPath)) {
+          fs.copyFileSync(srcPath, path.join(outputDir, this.mtlsCertFile));
+          console.log(`✓ Copied mTLS certificate: ${this.mtlsCertFile}`);
+        } else {
+          console.warn(`  ⚠  mTLS cert ${this.mtlsCertFile} not found in uploaded files.`);
+        }
+      }
 
       // Write extracted base64 data files to data/ subfolder
       if (this.extractedDataFiles.size > 0) {
@@ -759,6 +819,12 @@ ${finalizeSection}
 
     // Detect JWT usage in pre-request scripts (sets this.hasJwt and this.jwtVarNames)
     this.detectJwtUsage();
+
+    // Detect NTLM/Kerberos auth (from JMX AuthManager or collection auth)
+    this.detectNtlmKerberos();
+
+    // Detect mTLS client certificate files uploaded alongside the collection
+    this.detectMtlsCert();
 
     // Scan for large base64 values in request bodies
     this.scanForLargeBase64();
@@ -918,11 +984,15 @@ ${finalizeSection}
     // These run ONCE when the script loads — before any lifecycle function.
 
     const jwtRequire = this.hasJwt
-      ? `// JWT Helper — fast token generation using Node.js built-in crypto (no npm install)\nconst { getJWTToken } = require('./jwt-helper.js');\n`
+      ? `// JWT Helper — fast token generation using Node.js built-in crypto (no npm install)\nconst { getJwtToken } = require('./jwt-helper.js');\n`
       : "";
 
-    const certSetup = this.hasJwt
-      ? `// Transport certificate for mutual TLS authentication\nload.setUserCertificate('./transport.pem', './transport.pem');\n\n`
+    // JWT uses transport.pem; a separately-uploaded cert overrides with its own file.
+    const certFile = this.mtlsCertFile && !this.hasJwt
+      ? this.mtlsCertFile
+      : this.hasJwt ? 'transport.pem' : null;
+    const certSetup = certFile
+      ? `// Client certificate for mutual TLS authentication\nload.setUserCertificate('./${certFile}', './${certFile}');\n\n`
       : "";
 
     // Static browser baseline + static collection headers
@@ -1010,13 +1080,24 @@ ${
     // cert + require declared at module level; only token fetch here.
     const jwtBlock = this.hasJwt
       ? `
-    load.global.jwt_token = getJWTToken(load.params);
+    load.global.jwt_token = getJwtToken(load.params);
     load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000); // refresh at 9 min
 `
       : "";
 
+    // NTLM / Kerberos note — DevWeb enables integrated auth via rts.yml.
+    // No extra code is needed in initialize(); the note explains the setup.
+    const ntlmBlock = this.hasNtlm
+      ? `
+    // ${this.ntlmAuthType === 'kerberos' ? 'Kerberos' : 'NTLM'} authentication detected.
+    // DevWeb uses enableIntegratedAuthentication: true in rts.yml (already configured).
+    // Ensure the LRE agent / load generator runs under a domain account with the
+    // appropriate ${this.ntlmAuthType === 'kerberos' ? 'Kerberos ticket / SPN' : 'NTLM credentials'} configured.
+`
+      : "";
+
     let code = `load.initialize('Initialize', async function() {
-${jwtBlock}
+${jwtBlock}${ntlmBlock}
     // Dynamic variables — populated at runtime from API responses
     ${this.generateGlobalVariablesInit()}
 `;
@@ -1301,7 +1382,7 @@ ${jwtBlock}
     });
 
     // Add script-set dynamic variables not already covered by correlations.
-    // Skip JWT output vars — already set by getJWTToken() in initialize().
+    // Skip JWT output vars — already set by getJwtToken() in initialize().
     const jwtOutputVars = new Set(this.jwtVarNames || []);
     this.dynamicVarNames.forEach((name) => {
       if (!seen.has(name) && !isLibraryName(name) && !jwtOutputVars.has(name)) {
@@ -1353,7 +1434,7 @@ ${jwtBlock}
   generateAction() {
     // Pre-compute transaction names so generateHeader() can emit module-level declarations
     this.buildTransactionMap();
-    // JWT auto-refresh — uses getJWTToken from module-level require.
+    // JWT auto-refresh — uses getJwtToken from module-level require.
     // Also re-syncs dynamic auth headers in defaults after token refresh.
     const authHeaderUpdate =
       this._authGlobalHeaders && this._authGlobalHeaders.size > 0
@@ -1368,7 +1449,7 @@ ${jwtBlock}
       ? `
     // Auto-refresh JWT token if expired (for long-running tests)
     if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
-        load.global.jwt_token = getJWTToken(load.params);
+        load.global.jwt_token = getJwtToken(load.params);
         load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);${authHeaderUpdate}
     }
 `
