@@ -1332,13 +1332,15 @@ ${jwtSetup}${autoHeaderBlock}
         case 'regexp': {
           // web_reg_save_param_regexp: uses "Scope=" (not "Search="), default is Body.
           // Map JMX useHeaders value → VuGen Scope= value.
+          // Attribute name is "Ordinal=" (not "Ord=") per VuGen 25.x docs.
           const vScope = this._vugenRegexpScope(corr.scope || corr.extractorScope);
           code += `${indent}web_reg_save_param_regexp("ParamName=${corr.name}",\n`;
           code += `${indent}    "RegExp=${this.escapeCString(corr.pattern || `${corrBase}=([^&"'\\s]+)`)}",\n`;
+          code += `${indent}    "Group=1",\n`;
           if (vScope) code += `${indent}    "Scope=${vScope}",\n`;
           // matchNo: 1 = first, -1 = random (use 1 for VuGen)
           const matchNo = Math.max(1, parseInt(corr.matchNumber || '1', 10));
-          code += `${indent}    "Ord=${matchNo}",\n`;
+          code += `${indent}    "Ordinal=${matchNo}",\n`;
           code += `${indent}    LAST);\n`;
           break;
         }
@@ -1604,15 +1606,36 @@ ${jwtSetup}${autoHeaderBlock}
 
     const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
     // C89 rule: ALL declarations must precede ALL statements within a block.
-    // We collect declarations and statements separately so the final output is always
-    // declarations-first, satisfying C89 regardless of original script order.
-    const declarations = [];  // const char * / char [] — must come first
+    // Collect declarations and statements separately — always emit declarations first.
+    const declarations = [];  // const char * / char[] — must come first in block
     const statements   = [];  // lr_save_string, lr_param_sprintf, etc.
+    // Track which local variable names we successfully emitted C declarations for.
+    // Used to allow safe cross-line references in vars.put("k", localVar).
+    const declaredLocalVars = new Set();
     let skipped = 0;
 
-    // Patterns that indicate Java/Groovy-only expressions or complex operations with no C equivalent.
-    // Lines matching this are skipped with a TODO count (not emitted as broken C code).
-    const JAVA_ONLY_EXPR = /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|CryptoJS|getBytes\s*\(|\.sign\s*\(|\.verify\s*\(|JwtBuilder|Jwts\b|Claims\b|signWith\s*\(|\.replace\s*\(|\.substring\s*\(|\.substr\s*\(|\.indexOf\s*\(|\.lastIndexOf\s*\(|\.split\s*\(|\.join\s*\(|\.trim\s*\(\)|\.toLowerCase\s*\(\)|\.toUpperCase\s*\(\)|\.startsWith\s*\(|\.endsWith\s*\(|\.charAt\s*\(|\.slice\s*\(/;
+    // Patterns in raw Java/Groovy value expressions that have NO C equivalent.
+    // Any line whose value matches this is skipped entirely (counted in TODO note).
+    const JAVA_ONLY_EXPR = /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|CryptoJS|getBytes\s*\(|\.sign\s*\(|\.verify\s*\(|JwtBuilder|Jwts\b|Claims\b|signWith\s*\(|\.replace\s*\(|\.substring\s*\(|\.substr\s*\(|\.indexOf\s*\(|\.lastIndexOf\s*\(|\.split\s*\(|\.join\s*\(|\.trim\s*\(\)|\.toLowerCase\s*\(\)|\.toUpperCase\s*\(\)|\.startsWith\s*\(|\.endsWith\s*\(|\.charAt\s*\(|\.slice\s*\(|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|File\b|Files\.|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
+
+    // After _convertJavaExprC(), check if the result still contains Java constructs.
+    // Catches anything the explicit rules above missed (e.g. custom Java classes).
+    // Pattern: UpperCaseIdentifier.lowerCaseMethod — typical Java static call style.
+    const JAVA_RESIDUAL = /[A-Z][a-zA-Z0-9_]+\s*\.\s*[a-z]/;
+
+    // What makes a safe C r-value after conversion?
+    //   • string literal  "..."
+    //   • number          123
+    //   • lr_eval_string(...) — LR param read
+    //   • (long)time(NULL) — timestamp
+    //   • a local var previously declared in this same block
+    const isSafeCValue = (expr, localVars) =>
+      /^"[^"]*"$/.test(expr) ||
+      /^\d/.test(expr) ||
+      /^lr_eval_string\(/.test(expr) ||
+      /^\(long\)time\(NULL\)/.test(expr) ||
+      expr === '__VUGEN_UUID__' ||
+      localVars.has(expr.trim());
 
     for (const rawLine of code.split('\n')) {
       const line = rawLine.trim();
@@ -1622,14 +1645,18 @@ ${jwtSetup}${autoHeaderBlock}
       const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
       if (putMatch) {
         const varName = putMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
-        const rawVal = putMatch[2];
+        const rawVal  = putMatch[2].trim();
         if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
         const valExpr = this._convertJavaExprC(rawVal);
+        if (JAVA_RESIDUAL.test(valExpr)) { skipped++; continue; }
         if (valExpr.includes('__VUGEN_UUID__')) {
           statements.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
           statements.push(`${indent}lr_save_string(lr_eval_string("{_uuid}"), "${varName}");`);
-        } else {
+        } else if (isSafeCValue(valExpr, declaredLocalVars)) {
           statements.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
+        } else {
+          // Value is an identifier that was never declared as a C variable — skip safely.
+          skipped++;
         }
         continue;
       }
@@ -1640,23 +1667,31 @@ ${jwtSetup}${autoHeaderBlock}
       if (typeAssignMatch) {
         const localVar = typeAssignMatch[1];
         const rawVal   = typeAssignMatch[2].trim();
+        // First: check raw value for Java-only patterns
         if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
         const valExpr  = this._convertJavaExprC(rawVal);
-        if (/new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|JsonSlurper|groovy\.|apache\.|java\./.test(valExpr)) {
+        // Second: check converted expression for Java residuals or JMeter-context APIs
+        if (JAVA_RESIDUAL.test(valExpr) ||
+            /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)) {
           skipped++; continue;
         }
         if (valExpr.includes('__VUGEN_UUID__')) {
-          // Declaration first; lr_param_sprintf + pointer assignment as statements.
           declarations.push(`${indent}const char *${localVar};`);
           statements.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
           statements.push(`${indent}${localVar} = lr_eval_string("{_uuid}");`);
+          declaredLocalVars.add(localVar);
         } else if (valExpr.includes('time(NULL)')) {
           declarations.push(`${indent}char ${localVar}[64];`);
           statements.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
-        } else {
-          // Split: declare pointer, then assign (satisfies C89 declaration-before-statement rule).
+          declaredLocalVars.add(localVar);
+        } else if (isSafeCValue(valExpr, declaredLocalVars)) {
+          // Only emit if the r-value is a recognisably safe C expression.
           declarations.push(`${indent}const char *${localVar};`);
           statements.push(`${indent}${localVar} = ${valExpr};`);
+          declaredLocalVars.add(localVar);
+        } else {
+          // Expression doesn't look like safe C — skip to avoid garbage in output.
+          skipped++;
         }
         continue;
       }
@@ -1689,7 +1724,11 @@ ${jwtSetup}${autoHeaderBlock}
       .replace(/new\s+Date\(\)\.getTime\(\)/g, '(long)time(NULL)*1000')
       .replace(/String\.valueOf\s*\(([^)]+)\)/g, '$1')
       .replace(/\$\{([^}]+)\}/g, 'lr_eval_string("{$1}")')
-      .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, 'lr_eval_string("{$1}")');
+      .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, 'lr_eval_string("{$1}")')
+      // Strip Java string-concatenation-with-empty-string idiom used for toString():
+      // "value" + ""  or  "" + "value"  → just "value"
+      .replace(/\s*\+\s*""\s*/g, '')
+      .replace(/\s*""\s*\+\s*/g, '');
   }
 
   /**

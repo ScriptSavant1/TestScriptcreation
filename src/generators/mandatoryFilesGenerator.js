@@ -193,12 +193,21 @@ tearDown: 0      #Not used
       return null;
     }
 
-    const headers = Array.from(parameters.keys());
+    // Only include params that belong to collection_data.csv.
+    // JMX CSVDataSet params reference their own file (users.csv, tokens.csv, etc.)
+    // and must NOT be written here — they are provided by the user.
+    const entries = Array.from(parameters.entries())
+      .filter(([, cfg]) => (cfg.fileName || 'collection_data.csv') === 'collection_data.csv');
+
+    if (entries.length === 0) {
+      return null;
+    }
+
+    const headers = entries.map(([name]) => name);
     let csv = headers.join(',') + '\n';
 
     // Single row with actual values from collection/environment
-    const row = headers.map(header => {
-      const param = parameters.get(header);
+    const row = entries.map(([, param]) => {
       const value = String(param.paramValue || '');
       // CSV quoting: if value contains comma, double-quote, or newline, wrap in quotes
       if (value.includes(',') || value.includes('"') || value.includes('\n')) {
