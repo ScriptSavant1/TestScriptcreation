@@ -82,6 +82,10 @@ class AdvancedScriptGenerator {
     // Maps requestName → { txVar: "T01", txName: "T01_GetAccessToken" }
     this.requestTxMap = new Map();
 
+    // Module-level JSR223 local variable names — collected during analyze(), declared as
+    // `let` before initialize() so they are never re-declared across multiple requests.
+    this.jsr223ModuleVars = new Set();
+
     this.buildVariableMap();
   }
 
@@ -230,6 +234,44 @@ class AdvancedScriptGenerator {
         this.mtlsCertFile = filename;
         console.log(`  ✓ Client certificate detected: ${filename}`);
         return;
+      }
+    }
+  }
+
+  /**
+   * Scan all JSR223 pre/post scripts and collect local variable names that will be
+   * converted to JavaScript. These are declared as `let` at module level (before
+   * initialize()) so they are never re-declared inside action() across requests.
+   */
+  collectJsr223ModuleVars() {
+    this.jsr223ModuleVars.clear();
+    const JAVA_ONLY = /=~|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|Files?\b|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
+    const JAVA_RESIDUAL = /[A-Z][a-zA-Z0-9_]+\s*\.\s*[a-z]/;
+
+    const allScripts = [];
+    for (const req of this.requests) {
+      for (const sc of (req.preScripts || [])) allScripts.push(sc);
+      for (const sc of (req.postScripts || [])) allScripts.push(sc);
+    }
+
+    for (const scriptObj of allScripts) {
+      if (!scriptObj) continue;
+      const code = typeof scriptObj === 'string' ? scriptObj : (scriptObj.code || '');
+      if (!code.trim()) continue;
+      for (const rawLine of code.split('\n')) {
+        const line = rawLine.trim();
+        const m = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
+        if (!m) continue;
+        const rawVal = m[2].trim();
+        if (JAVA_ONLY.test(rawVal)) continue;
+        // Quick expression conversion (mirrors _convertJavaExpr)
+        const converted = rawVal
+          .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'load.utils.uuid()')
+          .replace(/System\.currentTimeMillis\(\)/g, 'Date.now()')
+          .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, (_, n) => `load.global.${n}`)
+          .replace(/\s*\+\s*""\s*/g, '').replace(/\s*""\s*\+\s*/g, '');
+        if (JAVA_RESIDUAL.test(converted)) continue;
+        this.jsr223ModuleVars.add(m[1]);
       }
     }
   }
@@ -826,6 +868,9 @@ ${finalizeSection}
     // Detect mTLS client certificate files uploaded alongside the collection
     this.detectMtlsCert();
 
+    // Collect JSR223 local variable names so they can be declared at module level
+    this.collectJsr223ModuleVars();
+
     // Scan for large base64 values in request bodies
     this.scanForLargeBase64();
   }
@@ -1068,6 +1113,12 @@ ${
         )
         .join("\n")
     : "// (no transactions — useTransactions is disabled)"
+}
+${
+  this.jsr223ModuleVars && this.jsr223ModuleVars.size > 0
+    ? `\n// ── JSR223 script variables — declared at module level to avoid re-declaration ─\n` +
+      Array.from(this.jsr223ModuleVars).map(v => `let ${v};`).join('\n') + '\n'
+    : ''
 }
 `;
   }
@@ -1337,7 +1388,10 @@ ${jwtBlock}${ntlmBlock}
           skipped++; continue;
         }
         if (isSafeJsValue(valExpr, declaredLocalVars)) {
-          converted.push(`${indent}const ${localVar} = ${valExpr};`);
+          // If declared at module level → plain assignment; otherwise const (local scope)
+          const decl = (this.jsr223ModuleVars && this.jsr223ModuleVars.has(localVar))
+            ? '' : 'const ';
+          converted.push(`${indent}${decl}${localVar} = ${valExpr};`);
           declaredLocalVars.add(localVar);
         } else {
           skipped++;
@@ -1744,15 +1798,13 @@ ${jwtRefreshBlock}
     }
 
     // Emit converted JSR223 pre-processor scripts (JMX only).
-    // Wrapped in { } so `const` declarations are block-scoped — prevents
-    // "Identifier already declared" when multiple requests use the same local variable names.
+    // Variables are declared as `let` at module level (see generateHeader) so no
+    // block-scope wrapper is needed here — plain assignment is used in action().
     if (request.preScripts && request.preScripts.length) {
-      const ind = this.indent('', indentLevel + 1);
-      const open  = this.indent('{', indentLevel);
-      const close = this.indent('}', indentLevel);
+      const ind = this.indent('', indentLevel);
       for (const sc of request.preScripts) {
         const block = this.convertJsr223Script(sc, 'Pre', ind);
-        if (block) code += `\n${open}\n${block}${close}\n`;
+        if (block) code += `\n${block}`;
       }
     }
 
@@ -1792,14 +1844,11 @@ ${jwtRefreshBlock}
     }
 
     // Emit converted JSR223 post-processor scripts (JMX only).
-    // Wrapped in { } for same reason as pre-processor above.
     if (request.postScripts && request.postScripts.length) {
-      const ind = this.indent('', indentLevel + 1);
-      const open  = this.indent('{', indentLevel);
-      const close = this.indent('}', indentLevel);
+      const ind = this.indent('', indentLevel);
       for (const sc of request.postScripts) {
         const block = this.convertJsr223Script(sc, 'Post', ind);
-        if (block) code += `\n${open}\n${block}${close}\n`;
+        if (block) code += `\n${block}`;
       }
     }
 

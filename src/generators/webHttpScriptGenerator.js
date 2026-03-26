@@ -1091,13 +1091,9 @@ ${jwtSetup}${autoHeaderBlock}
       code += `${indent}/* ${request.name} */\n`;
     }
 
-    // Open a C block scope so duplicate local variable declarations across requests
-    // don't conflict (C89 requires unique names within the same scope).
-    code += `${indent}{\n`;
-
     // 0. JSR223 Pre-processor (JMX only) — runs before the request.
-    // Wrapped in { } so C89 declarations inside don't bleed into the outer scope,
-    // and don't conflict with declarations in other requests' pre-processors.
+    // Each script is wrapped in its own { } so C89 declarations inside are block-scoped
+    // and don't conflict with declarations from other requests' pre-processors.
     if (request.preScripts && request.preScripts.length) {
       for (const sc of request.preScripts) {
         const block = this.convertJsr223Script(sc, 'Pre', indent + '    ');
@@ -1121,9 +1117,8 @@ ${jwtSetup}${autoHeaderBlock}
     // 4. Web function
     code += this.generateWebFunction(request, indent);
 
-    // 5. JSR223 Post-processor (JMX only) — runs after the request
-    // Wrap in inner block so const char * declarations are valid C89 (declarations
-    // cannot follow statements in C89 — each post-processor gets its own scope).
+    // 5. JSR223 Post-processor (JMX only) — runs after the request.
+    // Each script is wrapped in its own { } so C89 declarations are block-scoped.
     if (request.postScripts && request.postScripts.length) {
       for (const sc of request.postScripts) {
         const block = this.convertJsr223Script(sc, 'Post', indent + '    ');
@@ -1134,9 +1129,6 @@ ${jwtSetup}${autoHeaderBlock}
         }
       }
     }
-
-    // Close the per-request C block scope
-    code += `${indent}}\n`;
 
     return code;
   }

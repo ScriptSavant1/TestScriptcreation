@@ -122,6 +122,9 @@ class JmxConverter {
       }
     );
 
+    if (typeof generator.generate !== 'function') {
+      throw new Error(`Generator class ${GeneratorClass.name} does not expose a generate() method. Check that the module exported correctly.`);
+    }
     const { script, analysis } = await generator.generate(this.options.outputDir);
 
     if (!isWebHttp) {
@@ -239,6 +242,9 @@ class JmxConverter {
         generatorOpts
       );
 
+      if (typeof generator.generate !== 'function') {
+        throw new Error(`Generator class ${GeneratorClass.name} does not expose a generate() method. Check that the module exported correctly.`);
+      }
       const { script, analysis } = await generator.generate(tgOutputDir);
       if (!firstAnalysis) firstAnalysis = analysis;
 
