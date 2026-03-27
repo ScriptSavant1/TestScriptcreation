@@ -82,6 +82,12 @@ class AdvancedScriptGenerator {
     // Maps requestName → { txVar: "T01", txName: "T01_GetAccessToken" }
     this.requestTxMap = new Map();
 
+    // Pre-computed common header analysis — populated by analyze() so both
+    // generateHeader() and generateAction() see the same values.
+    this._staticGlobalHeaders = new Map();  // safe to emit at module level
+    this._authGlobalHeaders    = new Map();  // must be set inside action() after runtime init
+    this._perRequestHeaderKeys = new Set();
+
     // Module-level JSR223 local variable names — collected during analyze(), declared as
     // `let` before initialize() so they are never re-declared across multiple requests.
     this.jsr223ModuleVars = new Set();
@@ -871,6 +877,13 @@ ${finalizeSection}
     // Collect JSR223 local variable names so they can be declared at module level
     this.collectJsr223ModuleVars();
 
+    // Pre-compute common header analysis once so generateHeader() and generateAction()
+    // both see the same maps without re-running the analysis.
+    const { staticGlobal, authGlobal, perRequestKeys } = this.analyzeCommonHeaders();
+    this._staticGlobalHeaders = staticGlobal;
+    this._authGlobalHeaders   = authGlobal;
+    this._perRequestHeaderKeys = perRequestKeys;
+
     // Scan for large base64 values in request bodies
     this.scanForLargeBase64();
   }
@@ -1007,8 +1020,12 @@ ${finalizeSection}
       const needsTpl = valueExpr.includes("${");
       const quoted = needsTpl ? `\`${valueExpr}\`` : `"${valueExpr}"`;
 
-      // Dynamic vars (load.global.X) → authGlobal (set after token is fetched)
-      if (valueExpr.includes("load.global.") || valueExpr.includes("Bearer")) {
+      // Dynamic vars (load.global.X) and per-iteration params (load.params.X) must
+      // NOT be emitted at module level — DevWeb only populates these during lifecycle
+      // execution (initialize/action), so they go into authGlobal (applied in action()).
+      // Static literals with no variable refs are safe at module level → staticGlobal.
+      if (valueExpr.includes("load.global.") || valueExpr.includes("Bearer") ||
+          valueExpr.includes("load.params.")) {
         authGlobal.set(key, quoted);
       } else {
         staticGlobal.set(key, quoted);
@@ -1023,7 +1040,10 @@ ${finalizeSection}
     const collectionName =
       this.collection.info?.name || this.collection.name || "Unknown";
 
-    const { staticGlobal, authGlobal } = this.analyzeCommonHeaders();
+    // Use pre-computed maps from analyze() — avoids re-running the analysis and
+    // ensures generateAction() (called before generateHeader()) sees identical values.
+    const staticGlobal = this._staticGlobalHeaders;
+    const authGlobal   = this._authGlobalHeaders;
 
     // ── Module-level declarations ────────────────────────────────────────────
     // These run ONCE when the script loads — before any lifecycle function.
@@ -1072,38 +1092,13 @@ ${finalizeSection}
     // after the token has been fetched — see the Object.assign block in generateAction().
     const authDefaultsBlock = ""; // empty at module level — applied in action() start
 
-    // Store for use in action() (avoid recomputing)
-    this._authGlobalHeaders = authGlobal;
-    this._staticGlobalHeaders = staticGlobal;
-    this._perRequestHeaderKeys = this.analyzeCommonHeaders().perRequestKeys;
+    // Pre-computed in analyze() — nothing to reassign here.
 
-    return `/**
- * DevWeb Performance Test Script
- * Auto-generated from: ${collectionName}
- * Generated on: ${timestamp}
- *
- * Features enabled:
- * - Transactions: ${this.options.useTransactions}
- * - Correlation: ${this.options.useCorrelation}
- * - Parameterization: ${this.options.useParameterization}
- * - Authentication: ${this.options.useAuthentication}
- *
- * Statistics:
- * - Total Requests: ${this.requests.length}
- * - Correlations: ${this.correlations.length}
- * - Parameters: ${this.parameters.size}
- * - Think Time: ${this.options.thinkTime}s
- */
-
-${jwtRequire}${certSetup}// ── Default request options (applied to ALL requests) ────────────────────
-load.WebRequest.defaults.returnBody = false;
+    return `${jwtRequire}${certSetup}load.WebRequest.defaults.returnBody = false;
 load.WebRequest.defaults.headers = {
 ${staticHeaderLines}
 };
 ${authDefaultsBlock}
-// ── Transaction objects — declared once at module level ──────────────────
-// All transactions are pre-declared here (before initialize) so they are
-// available in action() without re-allocating on every iteration.
 ${
   this.requestTxMap && this.requestTxMap.size > 0
     ? Array.from(this.requestTxMap.values())
@@ -1112,12 +1107,11 @@ ${
             `const ${txVar} = new load.Transaction("${txName}");`,
         )
         .join("\n")
-    : "// (no transactions — useTransactions is disabled)"
+    : ""
 }
 ${
   this.jsr223ModuleVars && this.jsr223ModuleVars.size > 0
-    ? `\n// ── JSR223 script variables — declared at module level to avoid re-declaration ─\n` +
-      Array.from(this.jsr223ModuleVars).map(v => `let ${v};`).join('\n') + '\n'
+    ? Array.from(this.jsr223ModuleVars).map(v => `let ${v};`).join('\n') + '\n'
     : ''
 }
 `;
@@ -1132,30 +1126,22 @@ ${
     const jwtBlock = this.hasJwt
       ? `
     load.global.jwt_token = getJwtToken(load.params);
-    load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000); // refresh at 9 min
+    load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
 `
       : "";
 
     // NTLM / Kerberos note — DevWeb enables integrated auth via rts.yml.
     // No extra code is needed in initialize(); the note explains the setup.
-    const ntlmBlock = this.hasNtlm
-      ? `
-    // ${this.ntlmAuthType === 'kerberos' ? 'Kerberos' : 'NTLM'} authentication detected.
-    // DevWeb uses enableIntegratedAuthentication: true in rts.yml (already configured).
-    // Ensure the LRE agent / load generator runs under a domain account with the
-    // appropriate ${this.ntlmAuthType === 'kerberos' ? 'Kerberos ticket / SPN' : 'NTLM credentials'} configured.
-`
-      : "";
+    const ntlmBlock = "";
 
     let code = `load.initialize('Initialize', async function() {
 ${jwtBlock}${ntlmBlock}
-    // Dynamic variables — populated at runtime from API responses
     ${this.generateGlobalVariablesInit()}
 `;
 
     // Load external data files (large base64 values extracted from request bodies)
     if (this.extractedDataFiles.size > 0) {
-      code += `\n    // Load external data files\n`;
+      code += `\n`;
       code += `    const fs = require("fs");\n`;
       const seen = new Set();
       for (const [hash, fileInfo] of this.extractedDataFiles.entries()) {
@@ -1185,17 +1171,7 @@ ${jwtBlock}${ntlmBlock}
     const setupRequests = this.options.setupRequests || [];
     const setupScripts  = this.options.setupScripts  || [];
 
-    if (setupRequests.length || setupScripts.length) {
-      code += `\n    // ── SetUp Thread Group (runs once before all iterations) ──\n`;
-    }
-
-    for (const sc of setupScripts) {
-      const lang = sc.lang || 'groovy';
-      code += `    // TODO: JSR223 setUp-sampler "${sc.name}" (${lang}) — manual conversion required. Review original JMX.\n`;
-    }
-
     for (const req of setupRequests) {
-      code += `\n    // SetUp request: ${req.name}\n`;
       code += this.generateRequestCode(req, 1);
     }
 
@@ -1406,14 +1382,8 @@ ${jwtBlock}${ntlmBlock}
       skipped++;
     }
 
-    if (converted.length === 0 && skipped === 0) return '';
-
-    const lines = [];
-    if (skipped > 0) {
-      lines.push(`${indent}// TODO: JSR223 ${phase}-processor (${langLabel}) — ${skipped} line${skipped > 1 ? 's' : ''} need manual conversion. Review original JMX.`);
-    }
-    lines.push(...converted);
-    return lines.join('\n') + '\n';
+    if (converted.length === 0) return '';
+    return converted.join('\n') + '\n';
   }
 
   /**
@@ -1466,7 +1436,7 @@ ${jwtBlock}${ntlmBlock}
       if (!seen.has(corr.name) && !isLibraryName(corr.name)) {
         seen.add(corr.name);
         const safe = this.sanitizeVarName(corr.name);
-        vars.push(`load.global.${safe} = null; // Correlated: ${corr.type || corr.extractorType}`);
+        vars.push(`load.global.${safe} = null;`);
       }
     });
 
@@ -1481,7 +1451,7 @@ ${jwtBlock}${ntlmBlock}
       }
     });
 
-    return vars.length > 0 ? vars.join("\n    ") : "// No dynamic variables";
+    return vars.join("\n    ");
   }
 
   /**
@@ -1497,13 +1467,8 @@ ${jwtBlock}${ntlmBlock}
     const assign = (requests) => {
       requests.forEach((req) => {
         const seqNum = String(counter).padStart(2, "0");
-        const rawLabel = this.generateTransactionVarName(req.name).replace(
-          /^t?[0-9]+/i,
-          "",
-        );
-        const txLabel = rawLabel || `Req${seqNum}`;
-        const txVar = `T${seqNum}`;
-        const txName = `${txVar}_${txLabel}`;
+        const txName = this.formatTransactionName(req.name, counter);
+        const txVar = `SC01_${seqNum}`;
         this.requestTxMap.set(req.name, { txVar, txName });
         counter++;
       });
@@ -1523,35 +1488,42 @@ ${jwtBlock}${ntlmBlock}
   generateAction() {
     // Pre-compute transaction names so generateHeader() can emit module-level declarations
     this.buildTransactionMap();
-    // JWT auto-refresh — uses getJwtToken from module-level require.
-    // Also re-syncs dynamic auth headers in defaults after token refresh.
-    const authHeaderUpdate =
-      this._authGlobalHeaders && this._authGlobalHeaders.size > 0
-        ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${Array.from(
-            this._authGlobalHeaders.entries(),
-          )
-            .map(([k, v]) => `            "${k}": ${v}`)
-            .join(",\n")}\n        });`
-        : "";
+    // Split authGlobal headers into two buckets:
+    //  - paramsEntries: load.params.xxx — must re-apply EVERY iteration (CSV advances each row)
+    //  - globalEntries: load.global.xxx / Bearer — only needed when token changes
+    const allAuthEntries = Array.from((this._authGlobalHeaders || new Map()).entries());
+    const paramsEntries  = allAuthEntries.filter(([, v]) => v.includes('load.params.'));
+    const globalEntries  = allAuthEntries.filter(([, v]) => !v.includes('load.params.'));
+
+    // Block to apply per-iteration CSV param headers — runs unconditionally every action() call
+    const paramsHeaderBlock = paramsEntries.length > 0
+      ? `\n    Object.assign(load.WebRequest.defaults.headers, {\n${
+          paramsEntries.map(([k, v]) => `        "${k}": ${v}`).join(',\n')
+        }\n    });\n`
+      : '';
+
+    // Block to apply dynamic auth headers — runs on token refresh
+    const globalHeaderUpdate = globalEntries.length > 0
+      ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${
+          globalEntries.map(([k, v]) => `            "${k}": ${v}`).join(',\n')
+        }\n        });`
+      : '';
 
     const jwtRefreshBlock = this.hasJwt
       ? `
-    // Auto-refresh JWT token if expired (for long-running tests)
     if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
         load.global.jwt_token = getJwtToken(load.params);
-        load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);${authHeaderUpdate}
+        load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);${globalHeaderUpdate}
     }
 `
-      : authHeaderUpdate
-        ? `\n    // Refresh dynamic auth headers\n    Object.assign(load.WebRequest.defaults.headers, {\n${Array.from(
-            (this._authGlobalHeaders || new Map()).entries(),
-          )
-            .map(([k, v]) => `        "${k}": ${v}`)
-            .join(",\n")}\n    });\n`
-        : "";
+      : globalEntries.length > 0
+        ? `\n    Object.assign(load.WebRequest.defaults.headers, {\n${
+            globalEntries.map(([k, v]) => `        "${k}": ${v}`).join(',\n')
+          }\n    });\n`
+        : '';
 
     let code = `load.action('Action', async function() {
-${jwtRefreshBlock}
+${jwtRefreshBlock}${paramsHeaderBlock}
 `;
 
     if (this.options.groupByFolder && this.options.useTransactions) {
@@ -1588,9 +1560,6 @@ ${jwtRefreshBlock}
     // Here we only emit .start() and .stop() — no inline "let T01 = new load.Transaction()" declarations.
     const groupEntries = Object.entries(grouped);
     groupEntries.forEach(([folder, requests], groupIndex) => {
-      if (folder && this.options.addComments) {
-        code += `\n    // ── ${folder} ──────────────────────────────────────────`;
-      }
       requests.forEach((request, reqIndex) => {
         const tx = this.requestTxMap.get(request.name);
         const txVar = tx ? tx.txVar : null;
@@ -1779,24 +1748,6 @@ ${jwtRefreshBlock}
   generateRequestCode(request, indentLevel = 1) {
     let code = "";
 
-    // Add comment
-    if (this.options.addComments) {
-      code += `\n${this.indent(`// ${request.name}`, indentLevel)}`;
-      if (request.description) {
-        // Handle multi-line descriptions by commenting each line
-        const descriptionLines = request.description.split("\n");
-        descriptionLines.forEach((line) => {
-          code += `\n${this.indent(`// ${line}`, indentLevel)}`;
-        });
-      }
-    }
-
-    // Check for correlation dependencies
-    const dependencies = this.getCorrelationDependencies(request);
-    if (dependencies.length > 0 && this.options.addComments) {
-      code += `\n${this.indent(`// Depends on: ${dependencies.join(", ")}`, indentLevel)}`;
-    }
-
     // Emit converted JSR223 pre-processor scripts (JMX only).
     // Variables are declared as `let` at module level (see generateHeader) so no
     // block-scope wrapper is needed here — plain assignment is used in action().
@@ -1837,9 +1788,6 @@ ${jwtRefreshBlock}
         const safeCorrName = this.sanitizeVarName(corr.name);
         // Extractor registered as safeCorrName AND accessed with same name — must be identical
         code += `\n${this.indent(`load.global.${safeCorrName} = ${responseVar}.extractors["${safeCorrName}"];`, indentLevel)}`;
-        if (this.options.addComments) {
-          code += ` // Extracted ${corr.type || corr.extractorType}`;
-        }
       });
     }
 
@@ -2453,19 +2401,7 @@ ${jwtRefreshBlock}
 
     let code = `load.finalize('Finalize', async function() {\n`;
 
-    if (teardownRequests.length || teardownScripts.length) {
-      code += `    // ── TearDown Thread Group (runs once after all iterations) ──\n`;
-    } else {
-      code += `    // Cleanup code here if needed\n`;
-    }
-
-    for (const sc of teardownScripts) {
-      const lang = sc.lang || 'groovy';
-      code += `    // TODO: JSR223 tearDown-sampler "${sc.name}" (${lang}) — manual conversion required. Review original JMX.\n`;
-    }
-
     for (const req of teardownRequests) {
-      code += `\n    // TearDown request: ${req.name}\n`;
       code += this.generateRequestCode(req, 1);
     }
 
@@ -2513,6 +2449,15 @@ ${jwtRefreshBlock}
       byMethod[req.method] = (byMethod[req.method] || 0) + 1;
     });
     return byMethod;
+  }
+
+  formatTransactionName(rawName, seqNum) {
+    const padded = String(seqNum).padStart(2, '0');
+    let name = rawName.replace(/-/g, '_');
+    name = name.replace(/^[Tt]\d+[-_]/i, '');
+    name = name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    name = name ? name.toUpperCase() : `REQ${padded}`;
+    return `SC01_${padded}_${name}`;
   }
 
   /**
