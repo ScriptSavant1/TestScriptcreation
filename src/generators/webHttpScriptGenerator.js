@@ -84,6 +84,10 @@ class WebHttpScriptGenerator {
     // Per-request dynamic variables (UUID/nonce/random generated fresh per request)
     this.perRequestVars = new Map(); // varName → { generationType, requestNames[] }
 
+    // JSR223 script variables declared globally (before Action()) to satisfy C89 scoping rules.
+    // varName → cType ('const char *' | 'char[64]')
+    this.jsr223GlobalVars = new Map();
+
     this.buildVariableMap();
   }
 
@@ -555,6 +559,55 @@ class WebHttpScriptGenerator {
 
     // Large base64 extraction — scan after parameterization so replaceParameters() works
     this.scanForLargeBase64();
+
+    // Collect JSR223 variable names/types so they can be declared globally before Action().
+    const allReqsForScan = [
+      ...this.requests,
+      ...(this.options.setupRequests    || []),
+      ...(this.options.teardownRequests || []),
+    ];
+    this.scanJsr223Vars(allReqsForScan);
+  }
+
+  /**
+   * Scan all JSR223 pre/post scripts across the given requests and populate
+   * this.jsr223GlobalVars with the C variable names and types that will be
+   * needed at global scope (before Action(), vuser_init(), vuser_end()).
+   */
+  scanJsr223Vars(requests) {
+    const JAVA_ONLY_EXPR = /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|CryptoJS|getBytes\s*\(|\.sign\s*\(|\.verify\s*\(|JwtBuilder|Jwts\b|Claims\b|signWith\s*\(|\.replace\s*\(|\.substring\s*\(|\.substr\s*\(|\.indexOf\s*\(|\.lastIndexOf\s*\(|\.split\s*\(|\.join\s*\(|\.trim\s*\(\)|\.toLowerCase\s*\(\)|\.toUpperCase\s*\(\)|\.startsWith\s*\(|\.endsWith\s*\(|\.charAt\s*\(|\.slice\s*\(|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|File\b|Files\.|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
+    const JAVA_RESIDUAL  = /[A-Z][a-zA-Z0-9_]+\s*\.\s*[a-z]/;
+
+    const processScript = (scriptObj) => {
+      const { code } = (typeof scriptObj === 'string')
+        ? { code: scriptObj, lang: 'groovy' } : (scriptObj || {});
+      if (!code?.trim()) return;
+
+      for (const rawLine of code.split('\n')) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
+
+        const m = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
+        if (!m) continue;
+        const localVar = m[1];
+        const rawVal   = m[2].trim();
+        if (JAVA_ONLY_EXPR.test(rawVal)) continue;
+        const valExpr = this._convertJavaExprC(rawVal);
+        if (JAVA_RESIDUAL.test(valExpr) ||
+            /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)) continue;
+
+        if (valExpr.includes('time(NULL)')) {
+          this.jsr223GlobalVars.set(localVar, 'char[64]');
+        } else {
+          this.jsr223GlobalVars.set(localVar, 'const char *');
+        }
+      }
+    };
+
+    for (const req of requests) {
+      for (const sc of (req.preScripts  || [])) processScript(sc);
+      for (const sc of (req.postScripts || [])) processScript(sc);
+    }
   }
 
   // ─── C Source File Generation ────────────────────────────────────────────────
@@ -573,6 +626,17 @@ class WebHttpScriptGenerator {
       ? Array.from(this.dynamicVarNames).map(n => ` *     {${n}}  (extracted at runtime by web_reg_save_param_*)`).join('\n')
       : ' *     (no correlation parameters)';
 
+    // JSR223 script variables — declared globally so they are visible across
+    // the entire Action() / vuser_init() / vuser_end() scope (C89 requirement).
+    const jsr223Decls = this.jsr223GlobalVars.size > 0
+      ? Array.from(this.jsr223GlobalVars.entries())
+          .map(([name, cType]) =>
+            cType === 'char[64]'
+              ? `static char          ${name}[64];`
+              : `static const char   *${name} = NULL;`)
+          .join('\n') + '\n'
+      : '';
+
     return `#ifndef _GLOBALS_H
 #define _GLOBALS_H
 
@@ -580,7 +644,7 @@ class WebHttpScriptGenerator {
 #include "web_api.h"
 #include "lrw_custom_body.h"
 
-static void gen_uuid(const char *param_name) {
+${jsr223Decls}static void gen_uuid(const char *param_name) {
     lr_param_sprintf(param_name,
         "%08x-%04x-4%03x-%04x-%04x%08x",
         rand(),
@@ -1379,12 +1443,9 @@ ${jwtSetup}${autoHeaderBlock}
     if (!code || !code.trim()) return '';
 
     const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
-    // C89 rule: ALL declarations must precede ALL statements within a block.
-    // Collect declarations and statements separately — always emit declarations first.
-    const declarations = [];  // const char * / char[] — must come first in block
-    const statements   = [];  // lr_save_string, lr_param_sprintf, etc.
-    // Track which local variable names we successfully emitted C declarations for.
-    // Used to allow safe cross-line references in vars.put("k", localVar).
+    // Variables declared globally in globals.h — only emit assignments here.
+    const statements        = [];  // lr_save_string, lr_param_sprintf, assignments, etc.
+    // Track vars assigned so far — allows safe cross-line reference in vars.put("k", localVar).
     const declaredLocalVars = new Set();
     let skipped = 0;
 
@@ -1436,35 +1497,28 @@ ${jwtSetup}${autoHeaderBlock}
       }
 
       // Type declarations: String x = expr; / def x = expr; / int x = expr;
-      // Split into declaration + assignment so declarations always precede statements (C89).
+      // Variables are declared globally in globals.h (by scanJsr223Vars) — emit assignment only.
       const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
       if (typeAssignMatch) {
         const localVar = typeAssignMatch[1];
         const rawVal   = typeAssignMatch[2].trim();
-        // First: check raw value for Java-only patterns
         if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
         const valExpr  = this._convertJavaExprC(rawVal);
-        // Second: check converted expression for Java residuals or JMeter-context APIs
         if (JAVA_RESIDUAL.test(valExpr) ||
             /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)) {
           skipped++; continue;
         }
         if (valExpr.includes('__VUGEN_UUID__')) {
-          declarations.push(`${indent}const char *${localVar};`);
           statements.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
           statements.push(`${indent}${localVar} = lr_eval_string("{_uuid}");`);
           declaredLocalVars.add(localVar);
         } else if (valExpr.includes('time(NULL)')) {
-          declarations.push(`${indent}char ${localVar}[64];`);
           statements.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
           declaredLocalVars.add(localVar);
-        } else if (isSafeCValue(valExpr, declaredLocalVars)) {
-          // Only emit if the r-value is a recognisably safe C expression.
-          declarations.push(`${indent}const char *${localVar};`);
+        } else if (isSafeCValue(valExpr, declaredLocalVars) || this.jsr223GlobalVars.has(localVar)) {
           statements.push(`${indent}${localVar} = ${valExpr};`);
           declaredLocalVars.add(localVar);
         } else {
-          // Expression doesn't look like safe C — skip to avoid garbage in output.
           skipped++;
         }
         continue;
@@ -1476,13 +1530,9 @@ ${jwtSetup}${autoHeaderBlock}
       skipped++;
     }
 
-    if (declarations.length === 0 && statements.length === 0) return '';
+    if (statements.length === 0) return '';
 
-    const lines = [];
-    // Declarations MUST come before statements (C89 requirement).
-    lines.push(...declarations);
-    lines.push(...statements);
-    return lines.join('\n') + '\n';
+    return statements.join('\n') + '\n';
   }
 
   _convertJavaExprC(expr) {
