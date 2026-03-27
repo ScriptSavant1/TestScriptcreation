@@ -88,6 +88,7 @@ class WebHttpScriptGenerator {
     // varName → cType ('const char *' | 'char[64]')
     this.jsr223GlobalVars = new Map();
 
+    this.hostVarMap = new Map(); // hostname → LR param name (ServerHost, ...)
     this.buildVariableMap();
   }
 
@@ -567,6 +568,9 @@ class WebHttpScriptGenerator {
       ...(this.options.teardownRequests || []),
     ];
     this.scanJsr223Vars(allReqsForScan);
+
+    // Build hostname → variable name map for server host parameterization
+    this.buildHostVarMap();
   }
 
   /**
@@ -705,9 +709,15 @@ static void gen_hex64(const char *param_name) {
 
     const hasSetup = setupRequests.length || setupScripts.length;
 
+    const hostSaveStrings = this.hostVarMap && this.hostVarMap.size > 0
+      ? Array.from(this.hostVarMap.entries())
+          .map(([host, varName]) => `    lr_save_string("${host}", "${varName}");`)
+          .join('\n') + '\n\n'
+      : '';
+
     return `vuser_init()
 {
-${jwtNote}${ntlmBlock}${certBlock}${setupBlock}
+${hostSaveStrings}${jwtNote}${ntlmBlock}${certBlock}${setupBlock}
     return 0;
 }
 `;
@@ -816,7 +826,7 @@ ${teardownBlock}
     // Global persistent headers — applied to ALL subsequent requests automatically.
     // web_add_auto_header() persists until explicitly removed, unlike web_add_header().
     const autoHeaderLines = Array.from(globalHeaders.entries())
-      .map(([k, v]) => `    web_add_auto_header("${k}", "${v.replace(/"/g, '\\"')}");`)
+      .map(([k, v]) => `    web_add_auto_header("${k}", "${this.applyHostVars(v).replace(/"/g, '\\"')}");`)
       .join('\n');
     const autoHeaderBlock = globalHeaders.size > 0
       ? `\n${autoHeaderLines}\n`
@@ -887,8 +897,7 @@ ${jwtSetup}${autoHeaderBlock}
         code += this.generateRequestBlock(request, 1);
         code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
 
-        // Think time between requests in same folder (not after last)
-        if (idx < requests.length - 1 && this.options.thinkTime > 0) {
+        if (this.options.thinkTime > 0) {
           code += `\n    lr_think_time(${this.options.thinkTime});\n`;
         }
         code += '\n';
@@ -916,7 +925,7 @@ ${jwtSetup}${autoHeaderBlock}
       code += this.generateRequestBlock(request, 1);
       code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
 
-      if (idx < this.requests.length - 1 && this.options.thinkTime > 0) {
+      if (this.options.thinkTime > 0) {
         code += `\n    lr_think_time(${this.options.thinkTime});\n`;
       }
       code += '\n';
@@ -1233,7 +1242,7 @@ ${jwtSetup}${autoHeaderBlock}
     if (headers.length === 0) return '';
 
     return headers.map(h =>
-      `${indent}web_add_header("${h.key}", "${this.replaceParameters(String(h.value))}");\n`
+      `${indent}web_add_header("${h.key}", "${this.applyHostVars(this.replaceParameters(String(h.value)))}");\n`
     ).join('');
   }
 
@@ -1291,7 +1300,7 @@ ${jwtSetup}${autoHeaderBlock}
 
   generateWebUrl(request, url, snapshot, indent) {
     let code = `${indent}web_url("${this.sanitizeCName(request.name)}",\n`;
-    code += `${indent}    "URL=${url}",\n`;
+    code += `${indent}    "URL=${this.applyHostVars(url)}",\n`;
     code += `${indent}    "Resource=0",\n`;
     code += `${indent}    "RecContentType=application/json",\n`;
     code += `${indent}    "Referer=",\n`;
@@ -1305,7 +1314,7 @@ ${jwtSetup}${autoHeaderBlock}
     const bodyResult = this.generateBodyForC(request);
 
     let code = `${indent}web_custom_request("${this.sanitizeCName(request.name)}",\n`;
-    code += `${indent}    "URL=${url}",\n`;
+    code += `${indent}    "URL=${this.applyHostVars(url)}",\n`;
     code += `${indent}    "Method=${method}",\n`;
     code += `${indent}    "Resource=0",\n`;
     code += `${indent}    "RecContentType=application/json",\n`;
@@ -1533,6 +1542,69 @@ ${jwtSetup}${autoHeaderBlock}
     if (statements.length === 0) return '';
 
     return statements.join('\n') + '\n';
+  }
+
+  /**
+   * Scan all request URLs and header values to extract unique hostnames.
+   * Builds this.hostVarMap: hostname → LR param name (ServerHost, ServerHost1, ...).
+   */
+  buildHostVarMap() {
+    const hostFreq = new Map();
+
+    const extractHosts = (str) => {
+      if (!str) return;
+      const matches = String(str).match(/https?:\/\/([^\/\s"'`?#{}]+)/g) || [];
+      for (const m of matches) {
+        const host = m.replace(/^https?:\/\//, '');
+        if (!host || /[{$]/.test(host)) continue;
+        if (/^localhost$|^127\.|^::1$|^\d+\.\d+\.\d+\.\d+$/.test(host)) continue;
+        hostFreq.set(host, (hostFreq.get(host) || 0) + 1);
+      }
+    };
+
+    const allReqs = [
+      ...this.requests,
+      ...(this.options.setupRequests    || []),
+      ...(this.options.teardownRequests || []),
+    ];
+
+    for (const req of allReqs) {
+      extractHosts(req.url);
+      for (const h of (req.headers || [])) {
+        if (h.value && !h.disabled) extractHosts(String(h.value));
+      }
+      if (req.body?.urlencoded) {
+        for (const p of req.body.urlencoded) extractHosts(p.value || '');
+      }
+      if (req.body?.raw) extractHosts(req.body.raw);
+    }
+
+    if (this.variableMap) {
+      for (const [, val] of this.variableMap) extractHosts(String(val || ''));
+    }
+
+    const sorted = [...hostFreq.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
+    this.hostVarMap = new Map();
+    let counter = 0;
+    for (const [host] of sorted) {
+      // VuGen LR param names: ServerHost, ServerHost1, ServerHost2, ...
+      const varName = counter === 0 ? 'ServerHost' : `ServerHost${counter}`;
+      this.hostVarMap.set(host, varName);
+      counter++;
+    }
+  }
+
+  /**
+   * Replace known hostnames with {ServerHost} LR parameter references.
+   */
+  applyHostVars(str) {
+    if (!str || !this.hostVarMap || this.hostVarMap.size === 0) return str;
+    let result = String(str);
+    for (const [host, varName] of this.hostVarMap) {
+      result = result.split(host).join(`{${varName}}`);
+    }
+    return result;
   }
 
   _convertJavaExprC(expr) {
