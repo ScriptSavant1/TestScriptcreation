@@ -1491,7 +1491,7 @@ ${jwtBlock}${ntlmBlock}
       requests.forEach((req) => {
         const seqNum = String(counter).padStart(2, "0");
         const txName = this.formatTransactionName(req.name, counter);
-        const txVar = `SC01_${seqNum}`;
+        const txVar = `TS${seqNum}`;
         this.requestTxMap.set(req.name, { txVar, txName });
         counter++;
       });
