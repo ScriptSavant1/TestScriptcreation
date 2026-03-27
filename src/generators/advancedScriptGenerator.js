@@ -92,6 +92,7 @@ class AdvancedScriptGenerator {
     // `let` before initialize() so they are never re-declared across multiple requests.
     this.jsr223ModuleVars = new Set();
 
+    this.hostVarMap = new Map(); // hostname → JS variable name (SERVER_HOST, ...)
     this.buildVariableMap();
   }
 
@@ -886,6 +887,9 @@ ${finalizeSection}
 
     // Scan for large base64 values in request bodies
     this.scanForLargeBase64();
+
+    // Build hostname → variable name map for server host parameterization
+    this.buildHostVarMap();
   }
 
   /**
@@ -1065,10 +1069,22 @@ ${finalizeSection}
     const collectionHeaderLines = collectionHeaders
       .filter((h) => h.key && h.value && !h.disabled)
       .map((h) => {
-        const v = this.replaceParameters(h.value);
+        const v = this.applyHostVars(this.replaceParameters(h.value));
         const q = v.includes("${") ? `\`${v}\`` : `"${v}"`;
         return `    "${h.key}": ${q}`;
       });
+
+    // Helper: apply host vars to an already-quoted value string
+    const reHostQuoted = (quoted) => {
+      if (!this.hostVarMap || this.hostVarMap.size === 0) return quoted;
+      const isBacktick = quoted.startsWith('`') && quoted.endsWith('`');
+      const isDouble   = quoted.startsWith('"') && quoted.endsWith('"');
+      if (!isBacktick && !isDouble) return quoted;
+      const inner     = quoted.slice(1, -1);
+      const processed = this.applyHostVars(inner);
+      if (processed === inner) return quoted;
+      return processed.includes('${') ? '`' + processed + '`' : '"' + processed + '"';
+    };
 
     // Merge browser defaults + detected static globals + collection headers
     const staticHeaderLines = [
@@ -1082,7 +1098,7 @@ ${finalizeSection}
               k.toLowerCase(),
             ),
         )
-        .map(([k, v]) => `    "${k}": ${v}`),
+        .map(([k, v]) => `    "${k}": ${reHostQuoted(v)}`),
       ...collectionHeaderLines,
     ].join(",\n");
 
@@ -1094,7 +1110,14 @@ ${finalizeSection}
 
     // Pre-computed in analyze() — nothing to reassign here.
 
-    return `${jwtRequire}${certSetup}load.WebRequest.defaults.returnBody = false;
+    // Server host variable declarations — update these to target different environments
+    const hostVarDecls = this.hostVarMap && this.hostVarMap.size > 0
+      ? Array.from(this.hostVarMap.entries())
+          .map(([host, varName]) => `let ${varName} = '${host}';`)
+          .join('\n') + '\n\n'
+      : '';
+
+    return `${jwtRequire}${certSetup}${hostVarDecls}load.WebRequest.defaults.returnBody = false;
 load.WebRequest.defaults.headers = {
 ${staticHeaderLines}
 };
@@ -1564,19 +1587,19 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
         const tx = this.requestTxMap.get(request.name);
         const txVar = tx ? tx.txVar : null;
 
-        if (txVar) code += `\n    ${txVar}.start();`;
+        if (txVar) code += `\n    ${txVar}.start();\n`;
         code += this.generateRequestCode(request, 1);
         if (txVar)
           code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
 
-        if (reqIndex < requests.length - 1 && this.options.thinkTime > 0) {
+        if (this.options.thinkTime > 0) {
           code += `\n    load.sleep(${this.options.thinkTime});`;
         }
-        code += "\n";
+        code += "\n\n";
       });
 
       if (groupIndex < groupEntries.length - 1 && this.options.thinkTime > 0) {
-        code += `\n    load.sleep(${this.options.thinkTime});\n`;
+        code += `    load.sleep(${this.options.thinkTime});\n\n`;
       }
     });
 
@@ -1728,14 +1751,14 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
       const tx = this.requestTxMap.get(request.name);
       const txVar = tx ? tx.txVar : null;
 
-      if (txVar) code += `\n    ${txVar}.start();`;
+      if (txVar) code += `\n    ${txVar}.start();\n`;
       code += this.generateRequestCode(request, 1);
       if (txVar) code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
 
-      if (index < this.requests.length - 1 && this.options.thinkTime > 0) {
+      if (this.options.thinkTime > 0) {
         code += `\n    load.sleep(${this.options.thinkTime});`;
       }
-      code += `\n`;
+      code += `\n\n`;
     });
 
     return code;
@@ -1847,7 +1870,7 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
   generateRequestOptions(request) {
     const options = {
       id: ++this.requestIdCounter,
-      url: this.replaceParameters(this.getBaseUrl(request.url)),
+      url: this.applyHostVars(this.replaceParameters(this.getBaseUrl(request.url))),
       method: request.method,
     };
 
@@ -1967,7 +1990,7 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
         .forEach((h) => {
           // Skip headers already handled by global defaults (case-insensitive)
           if (globalKeys.has(h.key.toLowerCase())) return;
-          headers[h.key] = this.replaceParameters(h.value);
+          headers[h.key] = this.applyHostVars(this.replaceParameters(h.value));
         });
     }
 
@@ -2033,7 +2056,7 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
         body.urlencoded
           .filter((item) => !item.disabled)
           .forEach((item) => {
-            formData[item.key] = this.replaceParameters(item.value);
+            formData[item.key] = this.applyHostVars(this.replaceParameters(item.value));
           });
         return formData;
 
@@ -2297,6 +2320,73 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
         result[key] = value;
       }
     });
+    return result;
+  }
+
+  /**
+   * Scan all request URLs and header values to extract unique hostnames,
+   * then build this.hostVarMap: hostname → JS variable name (SERVER_HOST, SERVER_HOST1, ...).
+   * Called during analyze(). Results used in generateHeader() and URL/header generation.
+   */
+  buildHostVarMap() {
+    const hostFreq = new Map();
+    const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const extractHosts = (str) => {
+      if (!str) return;
+      const matches = String(str).match(/https?:\/\/([^\/\s"'`?#{}]+)/g) || [];
+      for (const m of matches) {
+        const host = m.replace(/^https?:\/\//, '');
+        if (!host || /[{$]/.test(host)) continue;          // skip variable refs
+        if (/^localhost$|^127\.|^::1$|^\d+\.\d+\.\d+\.\d+$/.test(host)) continue;
+        hostFreq.set(host, (hostFreq.get(host) || 0) + 1);
+      }
+    };
+
+    const allReqs = [
+      ...this.requests,
+      ...(this.options.setupRequests    || []),
+      ...(this.options.teardownRequests || []),
+    ];
+
+    for (const req of allReqs) {
+      extractHosts(req.url);
+      for (const h of (req.headers || [])) {
+        if (h.value && !h.disabled) extractHosts(String(h.value));
+      }
+      if (req.body?.urlencoded) {
+        for (const p of req.body.urlencoded) extractHosts(p.value || '');
+      }
+      if (req.body?.raw) extractHosts(req.body.raw);
+    }
+
+    // Also scan collection-level variables for URL-valued vars
+    if (this.variableMap) {
+      for (const [, val] of this.variableMap) extractHosts(String(val || ''));
+    }
+
+    // Sort by frequency desc, then alpha
+    const sorted = [...hostFreq.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
+    this.hostVarMap = new Map();
+    let counter = 0;
+    for (const [host] of sorted) {
+      const varName = counter === 0 ? 'SERVER_HOST' : `SERVER_HOST${counter}`;
+      this.hostVarMap.set(host, varName);
+      counter++;
+    }
+  }
+
+  /**
+   * Replace known hostnames in a string with ${SERVER_HOST} JS template variable references.
+   * formatOptionsObject() will automatically convert strings containing ${...} to backtick literals.
+   */
+  applyHostVars(str) {
+    if (!str || !this.hostVarMap || this.hostVarMap.size === 0) return str;
+    let result = String(str);
+    for (const [host, varName] of this.hostVarMap) {
+      result = result.split(host).join(`\${${varName}}`);
+    }
     return result;
   }
 

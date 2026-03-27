@@ -162,7 +162,7 @@ tearDown: 0      #Not used
    */
   generateParametersYml(parameters) {
     if (!parameters || parameters.size === 0) {
-      return `# No parameters defined\nparameters: []\n`;
+      return `parameters: []\n`;
     }
 
     let yaml = `# Parameters Configuration\n`;
@@ -552,12 +552,13 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
     fs.writeFileSync(path.join(outputDir, 'scenario.yml'), this.generateScenarioYml(), 'utf8');
     console.log('✓ Generated scenario.yml');
 
-    // 4. parameters.yml + collection_data.csv
-    if (parameters && parameters.size > 0) {
-      fs.writeFileSync(path.join(outputDir, 'parameters.yml'),
-        this.generateParametersYml(parameters), 'utf8');
-      console.log('✓ Generated parameters.yml');
+    // 4. parameters.yml — always written so VuGen can open the project without error
+    fs.writeFileSync(path.join(outputDir, 'parameters.yml'),
+      this.generateParametersYml(parameters), 'utf8');
+    console.log('✓ Generated parameters.yml');
 
+    // collection_data.csv — only if there are parameters to fill in
+    if (parameters && parameters.size > 0) {
       const csv = this.generateCollectionDataCSV(parameters);
       if (csv) {
         fs.writeFileSync(path.join(outputDir, 'collection_data.csv'), csv, 'utf8');
@@ -598,6 +599,13 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
       this.copyFromProjectRoot(outputDir, 'transport.pem');
       console.log('✓ Copied transport.pem  (replace with your actual private key)');
     }
+
+    // 11. Action.c, vuser_init.c, vuser_end.c stubs — required for VuGen to open a DevWeb project
+    const cStub = (fnName) => `${fnName}()\n{\n\treturn 0;\n}\n`;
+    fs.writeFileSync(path.join(outputDir, 'Action.c'),     cStub('Action'),     'utf8');
+    fs.writeFileSync(path.join(outputDir, 'vuser_init.c'), cStub('vuser_init'), 'utf8');
+    fs.writeFileSync(path.join(outputDir, 'vuser_end.c'),  cStub('vuser_end'),  'utf8');
+    console.log('✓ Generated Action.c, vuser_init.c, vuser_end.c');
 
     return files;
   }
