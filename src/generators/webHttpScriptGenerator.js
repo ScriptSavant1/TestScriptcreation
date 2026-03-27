@@ -709,15 +709,9 @@ static void gen_hex64(const char *param_name) {
 
     const hasSetup = setupRequests.length || setupScripts.length;
 
-    const hostSaveStrings = this.hostVarMap && this.hostVarMap.size > 0
-      ? Array.from(this.hostVarMap.entries())
-          .map(([host, varName]) => `    lr_save_string("${host}", "${varName}");`)
-          .join('\n') + '\n\n'
-      : '';
-
     return `vuser_init()
 {
-${hostSaveStrings}${jwtNote}${ntlmBlock}${certBlock}${setupBlock}
+${jwtNote}${ntlmBlock}${certBlock}${setupBlock}
     return 0;
 }
 `;
@@ -832,10 +826,16 @@ ${teardownBlock}
       ? `\n${autoHeaderLines}\n`
       : '';
 
+    const hostSaveStrings = this.hostVarMap && this.hostVarMap.size > 0
+      ? Array.from(this.hostVarMap.entries())
+          .map(([host, varName]) => `    lr_save_string("${host}", "${varName}");`)
+          .join('\n') + '\n'
+      : '';
+
     let code = `Action()
 {
     web_set_sockets_option("SSL_VERSION", "AUTO");
-${jwtSetup}${autoHeaderBlock}
+${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
 
 `;
 
@@ -895,7 +895,7 @@ ${jwtSetup}${autoHeaderBlock}
         // Per-request transaction wrapper
         code += `    lr_start_transaction("${txName}");\n\n`;
         code += this.generateRequestBlock(request, 1);
-        code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
+        code += `\n\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
 
         if (this.options.thinkTime > 0) {
           code += `\n    lr_think_time(${this.options.thinkTime});\n`;
