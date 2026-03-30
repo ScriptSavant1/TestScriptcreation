@@ -230,12 +230,17 @@ tearDown: 0      #Not used
     let csv = headers.join(',') + '\n';
 
     // Single row with actual values from collection/environment.
-    // Decode HTML entities before writing — values may contain &amp; &quot; &#10; etc.
-    // from web-exported collections or JMX XML encoding.
+    // Decode HTML entities first (&amp; &quot; &#10; etc. from web-exported/JMX collections),
+    // then escape actual newlines to \n so multi-line PEM keys stay on one CSV row.
+    // Without the newline escape VuGen fails to read collection_data.csv because
+    // it sees extra rows where the PEM block line-wraps break the record boundary.
     const row = entries.map(([, param]) => {
-      const value = this.decodeHtmlEntities(String(param.paramValue || ''));
-      // CSV quoting: if value contains comma, double-quote, or newline, wrap in quotes
-      if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      const value = this.decodeHtmlEntities(String(param.paramValue || ''))
+        .replace(/\r\n/g, '\\r\\n')  // CRLF → literal \r\n (keep on one line)
+        .replace(/\r/g,   '\\r')     // bare CR
+        .replace(/\n/g,   '\\n');    // LF   → literal \n  (PEM key newlines)
+      // CSV quoting: if value contains comma, double-quote, or backslash-n, wrap in quotes
+      if (value.includes(',') || value.includes('"')) {
         return `"${value.replace(/"/g, '""')}"`;
       }
       return value;
