@@ -1085,8 +1085,8 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
             break;
           case 'xpath':
           case 'xpath2':
-            corr = { ...base, extractorType: 'boundary',
-                     leftBound: `<${name}>`, rightBound: `</${name}>` };
+            corr = { ...base, extractorType: 'xpath',
+                     xpathQuery: extractor.xpath || `//${name}` };
             break;
           default:
             corr = { ...base, extractorType: 'regex', pattern: '(.+?)' };
@@ -1188,6 +1188,16 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
           // matchNo: 1 = first, -1 = random (use 1 for VuGen)
           const matchNo = Math.max(1, parseInt(corr.matchNumber || '1', 10));
           code += `${indent}    "Ordinal=${matchNo}",\n`;
+          code += `${indent}    LAST);\n`;
+          break;
+        }
+
+        case 'xpath': {
+          // web_reg_save_param_xpath: extracts from XML/HTML body using XPath expression
+          const xpathQuery = corr.xpathQuery || `//${corrBase}`;
+          code += `${indent}web_reg_save_param_xpath("ParamName=${corr.name}",\n`;
+          code += `${indent}    "QueryString=${this.escapeCString(xpathQuery)}",\n`;
+          code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
           break;
         }

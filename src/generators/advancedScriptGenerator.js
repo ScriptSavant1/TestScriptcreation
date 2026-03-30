@@ -2153,9 +2153,8 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
             break;
           case 'xpath':
           case 'xpath2':
-            // XPath → BoundaryExtractor fallback (XPath not in DevWeb SDK)
-            corr = { ...base, extractorType: 'boundary',
-                     leftBound: `<${name}>`, rightBound: `</${name}>` };
+            corr = { ...base, extractorType: 'xpath',
+                     xpathQuery: extractor.xpath || `//${name}` };
             break;
           default:
             corr = { ...base, extractorType: 'regex', pattern: '(.+?)' };
