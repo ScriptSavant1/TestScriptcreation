@@ -878,6 +878,10 @@ ${finalizeSection}
     // Collect JSR223 local variable names so they can be declared at module level
     this.collectJsr223ModuleVars();
 
+    // Detect UUID-generating headers ({{$guid}}, x-fapi-interaction-id, x-request-id, etc.)
+    // Must run BEFORE analyzeCommonHeaders() so the registered perRequestVars are visible.
+    this.detectUuidHeaders();
+
     // Pre-compute common header analysis once so generateHeader() and generateAction()
     // both see the same maps without re-running the analysis.
     const { staticGlobal, authGlobal, perRequestKeys } = this.analyzeCommonHeaders();
@@ -1852,7 +1856,7 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
   perRequestGenExpression(generationType) {
     switch (generationType) {
       case "uuid":
-        return "crypto.randomUUID()";
+        return "load.utils.uuid()";
       case "nonce":
         return "require('crypto').randomBytes(16).toString('hex')";
       case "random":
@@ -1860,8 +1864,85 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
       case "timestamp":
         return "Date.now().toString()";
       default:
-        return "crypto.randomUUID()";
+        return "load.utils.uuid()";
     }
+  }
+
+  /**
+   * Scan all request headers for UUID-generating patterns and register them as
+   * per-request dynamic variables so load.utils.uuid() is called before each request.
+   *
+   * Three triggers handled here:
+   *   1. Header value is {{$guid}} or {{$randomUUID}} (Postman built-in) —
+   *      a stable var name is synthesized from the header key and the header value
+   *      is mutated to {{varName}} so the existing per-request machinery takes over.
+   *   2. Header key matches a known UUID-generating pattern (x-fapi-interaction-id,
+   *      x-request-id, x-correlation-id, etc.) and value is a {{varName}} template —
+   *      that var is registered as generationType:'uuid' if not already a correlation.
+   *
+   * Must be called BEFORE analyzeCommonHeaders() so the new perRequestVars are
+   * visible when headers are classified as per-request vs. global.
+   */
+  detectUuidHeaders() {
+    const UUID_HEADER_RE = /^(x-fapi-interaction-id|x-request-id|x-correlation-id|x-trace-id|x-interaction-id|x-idempotency-key|idempotency-key|x-b3-traceid|request-id|correlation-id)$/i;
+    const GUID_BUILTIN   = /^\{\{\s*\$(guid|randomUUID)\s*\}\}$/i;
+
+    const allRequests = [
+      ...this.requests,
+      ...(this.options.setupRequests    || []),
+      ...(this.options.teardownRequests || []),
+    ];
+
+    allRequests.forEach(req => {
+      (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
+        const val = String(h.value).trim();
+
+        // ── Trigger 1: value is {{$guid}} or {{$randomUUID}} ───────────────────
+        if (GUID_BUILTIN.test(val)) {
+          const varName = this._headerKeyToVarName(h.key) || 'requestGuid';
+          if (!this.perRequestVars.has(varName) && !this.dynamicVarNames.has(varName)) {
+            this.perRequestVars.set(varName, { generationType: 'uuid', requestNames: [] });
+            this.scriptSetVarNames.add(varName);
+            console.log(`  ✓ UUID header "${h.key}: {{$guid}}" → per-request load.utils.uuid() as "${varName}"`);
+          }
+          if (this.perRequestVars.has(varName)) {
+            this.perRequestVars.get(varName).requestNames.push(req.name);
+          }
+          // Mutate the header value so replaceParameters() treats it as a normal dynamic var
+          h.value = `{{${varName}}}`;
+          return;
+        }
+
+        // ── Trigger 2: UUID-generating header key with {{varName}} value ───────
+        if (!UUID_HEADER_RE.test(h.key)) return;
+        const m = val.match(/^\{\{([^}$][^}]*)\}\}$/);
+        if (!m) return;
+        const varName = m[1].trim();
+        if (!varName) return;
+
+        // Skip if already handled as correlation target, per-request var, or static param
+        if (this.perRequestVars.has(varName)) return;
+        if (this.correlations && this.correlations.some(c => c.name === varName)) return;
+        if (this.parameters  && this.parameters.has(varName)) return;
+
+        this.perRequestVars.set(varName, { generationType: 'uuid', requestNames: [req.name] });
+        this.scriptSetVarNames.add(varName);
+        console.log(`  ✓ UUID header "${h.key}" → per-request load.utils.uuid() as "${varName}"`);
+      });
+    });
+  }
+
+  /**
+   * Convert a header key (kebab-case / snake_case) to a camelCase JS identifier.
+   * Used to synthesize a stable variable name from a header key.
+   *   x-fapi-interaction-id → xFapiInteractionId
+   *   x-request-id          → xRequestId
+   */
+  _headerKeyToVarName(key) {
+    const camel = String(key).toLowerCase()
+      .replace(/[^a-z0-9]+([a-z0-9])/g, (_, c) => c.toUpperCase());
+    // Ensure it starts with a valid JS identifier character
+    return /^[a-zA-Z_$]/.test(camel) ? camel : `_${camel}`;
   }
 
   /**
@@ -2275,9 +2356,10 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
    */
   resolvePostmanDynamicVar(varName) {
     const dynamicVars = {
-      $guid: "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx",
-      $timestamp: "Date.now()",
-      $randomInt: "Math.floor(Math.random() * 1000)",
+      $guid:       "${load.utils.uuid()}",
+      $randomUUID: "${load.utils.uuid()}",
+      $timestamp: "${Date.now()}",
+      $randomInt: "${Math.floor(Math.random() * 1000)}",
       $randomCompanyName: "TestCompany",
       $randomFirstName: "John",
       $randomLastName: "Doe",
@@ -2289,7 +2371,6 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
       $randomCountry: "US",
       $randomColor: "blue",
       $randomBoolean: "true",
-      $randomUUID: "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx",
     };
     return dynamicVars[varName] || `TODO_${varName.replace("$", "")}`;
   }

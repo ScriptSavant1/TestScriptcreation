@@ -552,6 +552,56 @@ class WebHttpScriptGenerator {
       });
     });
 
+    // UUID header detection — covers {{$guid}}/{{$randomUUID}} Postman built-ins AND
+    // known UUID-generating header keys (x-fapi-interaction-id, x-request-id, etc.).
+    // Runs after CSRF scan so we don't duplicate already-classified CSRF vars.
+    // Must run BEFORE analyzeCommonHeaders() so new perRequestVars are seen there.
+    {
+      const UUID_HEADER_RE = /^(x-fapi-interaction-id|x-request-id|x-correlation-id|x-trace-id|x-interaction-id|x-idempotency-key|idempotency-key|x-b3-traceid|request-id|correlation-id)$/i;
+      const GUID_BUILTIN   = /^\{\{\s*\$(guid|randomUUID)\s*\}\}$/i;
+
+      const allReqsUuid = [
+        ...this.requests,
+        ...(this.options.setupRequests    || []),
+        ...(this.options.teardownRequests || []),
+      ];
+
+      allReqsUuid.forEach(req => {
+        (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
+          const val = String(h.value).trim();
+
+          // Trigger 1: value is {{$guid}} or {{$randomUUID}} — any header key
+          if (GUID_BUILTIN.test(val)) {
+            const varName = this._headerKeyToVarName(h.key) || 'requestGuid';
+            if (!this.perRequestVars.has(varName) && !this.dynamicVarNames.has(varName)) {
+              this.perRequestVars.set(varName, { generationType: 'uuid', requestNames: [] });
+              this.scriptSetVarNames.add(varName);
+              console.log(`  ✓ UUID header "${h.key}: {{$guid}}" → per-request gen_uuid("_${varName}")`);
+            }
+            if (this.perRequestVars.has(varName)) {
+              this.perRequestVars.get(varName).requestNames.push(req.name);
+            }
+            // Mutate so replaceParameters() emits {_varName} for this header
+            h.value = `{{${varName}}}`;
+            return;
+          }
+
+          // Trigger 2: UUID-generating header key with {{varName}} value
+          if (!UUID_HEADER_RE.test(h.key)) return;
+          const m = val.match(/^\{\{([^}$][^}]*)\}\}$/);
+          if (!m) return;
+          const varName = m[1].trim();
+          if (!varName) return;
+          if (this.perRequestVars.has(varName)) return;
+          if (this.parameters.has(varName)) return;
+
+          this.perRequestVars.set(varName, { generationType: 'uuid', requestNames: [req.name] });
+          this.scriptSetVarNames.add(varName);
+          console.log(`  ✓ UUID header "${h.key}" → per-request gen_uuid("_${varName}")`);
+        });
+      });
+    }
+
     // Detect NTLM/Kerberos auth (from JMX AuthManager or collection auth)
     this.detectNtlmKerberos();
 
@@ -1632,6 +1682,18 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
       // "value" + ""  or  "" + "value"  → just "value"
       .replace(/\s*\+\s*""\s*/g, '')
       .replace(/\s*""\s*\+\s*/g, '');
+  }
+
+  /**
+   * Convert a header key (kebab-case / snake_case) to a camelCase C-safe identifier.
+   * Used to synthesize a stable LR parameter name from a header key.
+   *   x-fapi-interaction-id → xFapiInteractionId
+   *   x-request-id          → xRequestId
+   */
+  _headerKeyToVarName(key) {
+    const camel = String(key).toLowerCase()
+      .replace(/[^a-z0-9]+([a-z0-9])/g, (_, c) => c.toUpperCase());
+    return /^[a-zA-Z_]/.test(camel) ? camel : `_${camel}`;
   }
 
   /**

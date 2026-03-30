@@ -1,7 +1,7 @@
 # Bruno / Postman / JMeter to LoadRunner Converter — Full Functionality Reference
 
 > **Version:** 2.8.x (branch: Jmeter)
-> **Last updated:** 2026-03-30
+> **Last updated:** 2026-03-30 (UUID/GUID header handling — v2.8.1)
 > **Protocols supported:** DevWeb (JavaScript) · VuGen Web HTTP/HTML (C)
 
 ---
@@ -332,7 +332,96 @@ web_reg_save_param_xpath("ParamName=tokenName",
     LAST);
 ```
 
-### 6.7 Global Variable Access After Extraction
+### 6.7 Per-Request UUID / GUID / CSRF Generation
+
+Some headers must carry a **fresh unique value on every request** — not extracted from a response, but generated client-side. The converter detects these automatically and wires up the correct generation call in both protocols.
+
+#### Three Detection Triggers (both generators, applied to all requests including setUp/tearDown)
+
+**Trigger 1 — Script-set UUID variable**
+A pre-request script (Postman/Bruno or JMX JSR223) calls a UUID function:
+```js
+pm.variables.set('interactionId', crypto.randomUUID())
+pm.variables.set('xsrfToken', uuidv4())
+vars.put("requestId", UUID.randomUUID().toString())   // Groovy/Java
+```
+`CustomScriptParser.detectPerRequestDynamicVars()` detects these patterns and registers the variable as `generationType: 'uuid'` in `perRequestVars`.
+
+**Trigger 2 — `{{$guid}}` or `{{$randomUUID}}` Postman built-in in a header value**
+```
+x-fapi-interaction-id: {{$guid}}
+x-request-id: {{$randomUUID}}
+```
+`detectUuidHeaders()` (DevWeb) / UUID header scan (VuGen) finds these, synthesizes a stable variable name from the header key (e.g. `x-fapi-interaction-id` → `xFapiInteractionId`), registers it as `generationType: 'uuid'`, and **mutates the header value** to `{{xFapiInteractionId}}` so the standard per-request machinery takes over seamlessly.
+
+**Trigger 3 — UUID-generating header key with `{{varName}}` value**
+Header keys that always carry a per-request UUID regardless of what variable they reference:
+`x-fapi-interaction-id`, `x-request-id`, `x-correlation-id`, `x-trace-id`, `x-interaction-id`, `x-idempotency-key`, `idempotency-key`, `x-b3-traceid`, `request-id`, `correlation-id`
+```
+x-fapi-interaction-id: {{fapiId}}   ← fapiId registered as uuid perRequestVar
+```
+Skipped if the variable is already a correlation target or static parameter.
+
+**Trigger 4 — CSRF/XSRF-named header with `{{varName}}` value** (VuGen only, pre-existing)
+Header key matches: `x-csrf-token`, `x-xsrf-token`, `x-csrftoken`, `csrf-token`, `__requestverificationtoken`, `x-request-token`, or any key matching `/csrf|xsrf|antiforg|request.?verif/i`.
+Registered as `generationType: 'csrf'` → generates a 32-char hex token (not UUID format).
+
+#### What Gets Generated
+
+**DevWeb** — before each request that uses the variable:
+```js
+load.global.xFapiInteractionId = load.utils.uuid();
+// used in the request:
+headers: { "x-fapi-interaction-id": `${load.global.xFapiInteractionId}` }
+```
+`load.utils.uuid()` is the DevWeb SDK function — not `crypto.randomUUID()` (which is a Node.js API not available in the DevWeb runtime).
+
+**VuGen** — before each request that uses the variable (`globals.h` contains the helper functions):
+```c
+/* For uuid generationType: */
+gen_uuid("_xFapiInteractionId");
+/* used in the request: */
+web_add_header("x-fapi-interaction-id", lr_eval_string("{_xFapiInteractionId}"));
+
+/* For csrf generationType: */
+gen_csrf_token("_csrfToken");
+```
+
+`gen_uuid()` in `globals.h` uses `lr_param_sprintf` with the UUID v4 bit-masked format:
+```c
+static void gen_uuid(const char *param_name) {
+    lr_param_sprintf(param_name,
+        "%08x-%04x-4%03x-%04x-%04x%08x",
+        rand(),
+        rand() & 0xffff,
+        rand() & 0x0fff,
+        (rand() & 0x3fff) | 0x8000,
+        rand() & 0xffff,
+        rand());
+}
+```
+This produces a valid UUID v4 format. `rand()` in VuGen is seeded per Vuser so concurrent Vusers produce different sequences. Source: OpenText community accepted solution for UUID generation in VuGen C.
+
+`gen_csrf_token()` produces a 32-char hex string (128-bit random):
+```c
+static void gen_csrf_token(const char *param_name) {
+    lr_param_sprintf(param_name, "%08x%08x%08x%08x", rand(), rand(), rand(), rand());
+}
+```
+
+#### Fallback — `{{$guid}}` / `{{$randomUUID}}` in URLs or Body (DevWeb only)
+After header mutation in `detectUuidHeaders()`, any remaining `{{$guid}}` in a URL or body (rare) is resolved by `resolvePostmanDynamicVar()` which returns `${load.utils.uuid()}` — a live call embedded in the template literal:
+```js
+url: `https://api.example.com/items/${load.utils.uuid()}`
+```
+
+#### Guards — What is Never Overridden
+- If the variable is already a **correlation target** (extracted from a response) → no UUID gen registered
+- If the variable is already in **`perRequestVars`** from script detection → not re-registered
+- If the variable is already a **static parameter** → not overridden
+- CSRF-named headers are handled first by the CSRF scan; UUID scan runs after and skips already-classified vars
+
+### 6.8 Global Variable Access After Extraction
 
 **DevWeb:**
 ```js
