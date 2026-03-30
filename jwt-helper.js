@@ -41,38 +41,27 @@ function generateJWT(header, payload, privateKey) {
   return `${signatureInput}.${signature}`;
 }
 
-// Generate UUID v4
-
-function uuidv4() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0;
-    const v = c == "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
 // get Jwt Token - auto-generates or refreshes if expired
 // call this function whenever you need a JWT token
 function getJwtToken(params) {
-  if (global.jwtToken && Date.now() < global.jwtExpiresAt) {
-    return global.jwt_Token; // Return cached token
+  if (load.global.jwt_Token && Date.now() < load.global.jwt_expires_at) {
+    return load.global.jwt_Token; // Return cached token
   }
 
-  //Token expired or doesn't exist - generate new one
-  load.log("Generating JWT token", loadLogLevel.Info);
+  // Token expired or doesn't exist — generate new one
   const header = {
     kid: params.signingKid,
     typ: "JWT",
     alg: "PS256",
   };
-  const now = Math.floor(Date.now() / 1000); // Refresh at 9 min
+  const now = Math.floor(Date.now() / 1000);
   const payload = {
     aud: params.aud,
     iss: params.clientId,
     sub: params.clientId,
     iat: now,
     exp: now + 60 * 10, // 10 minutes
-    jti: uuidv4(),
+    jti: load.utils.uuid(), // DevWeb SDK — cryptographically random UUID v4
   };
 
   let prvkey = params.secret || "";
@@ -84,4 +73,4 @@ function getJwtToken(params) {
   return load.global.jwt_Token;
 }
 
-module.exports = { generateJWT, uuidv4, getJwtToken };
+module.exports = { generateJWT, getJwtToken };
