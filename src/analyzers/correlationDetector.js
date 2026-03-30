@@ -822,6 +822,13 @@ class CorrelationDetector {
         return `new load.TextCheckExtractor(${n}, { text: ${JSON.stringify(text)}, scope: ${tscope}, failOn: ${failOn} })`;
       }
 
+      case 'xpath': {
+        const xpathQuery = JSON.stringify(correlation.xpathQuery || `//${correlation.name}`);
+        return scopeConst
+          ? `new load.XPathExtractor(${n}, ${xpathQuery}, ${scopeConst})`
+          : `new load.XPathExtractor(${n}, ${xpathQuery})`;
+      }
+
       case 'header': {
         const headerName = correlation.extractPath || correlation.name.replace(/^_/, '');
         return `new load.BoundaryExtractor(${n}, ${JSON.stringify(headerName + ': ')}, "\\r\\n", load.ExtractorScope.Headers)`;
