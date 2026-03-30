@@ -215,12 +215,23 @@ Every variable found in the collection is classified into exactly one tier. Clas
 Variables that came from a JMX `CSVDataSetConfig` column are always Tier 3. They are injected as empty strings before classification so Rule 4 would otherwise misclassify them as Tier 1 — Rule 0 prevents this.
 
 **Rule 1 — Script-set variables → Tier 1 Dynamic**
-Variables explicitly assigned in Postman/Bruno scripts via:
-`bru.setEnv()`, `pm.environment.set()`, `pm.globals.set()`, `pm.collectionVariables.set()`, `context.set()`, `vars.set()`
-These are always runtime-assigned values, so they must be Tier 1 regardless of whether they have a value in the collection.
+Variables explicitly assigned in Postman/Bruno scripts via any of these APIs are always Tier 1:
+- `bru.setEnv()`, `bru.setEnvVar()`, `bru.setVar()`, `bru.setGlobalVar()`, `bru.setNextEnvVar()`
+- `pm.environment.set()`, `pm.globals.set()`, `pm.collectionVariables.set()`, `pm.variables.set()`
+- `postman.setEnvironmentVariable()`, `postman.setGlobalVariable()` ← legacy Postman 2.x API
+- `context.set()`, `vars.set()`, `env.set()`
+
+These are always runtime-assigned values, so they must be Tier 1 regardless of whether they have a value in the collection. This prevents variables like `jwt-token` (set via `postman.setEnvironmentVariable`) from being placed in the CSV parameter file.
 
 **Rule 2 — Correlation targets → Tier 1 Dynamic**
 Variables that the correlation detector has identified as produced by a response extractor. The fact that a response produces this value means it changes every run.
+
+**Rule 2.5 — Private / cryptographic key variables → Tier 1 Dynamic (never parameterize)**
+Variables whose names match a cryptographic key pattern are always Tier 1 and are NEVER written to `collection_data.csv` or `ParameterFile.prm`. This prevents VuGen from failing to open the parameter file when a PEM key is present.
+
+Pattern: `private-key`, `signing-key`, `secret-key`, `rsa-key`, `client-secret`, `signing-secret`, `jwt-secret`, `pem-key`, `key-pem`, `pkcs`, `p12-key` (and case-insensitive variants with dashes, underscores, or no separator).
+
+These values are only ever used in pre-request scripts (JWT signing); they must be handled as `load.global` / C string variables, never as parameterized test data.
 
 **Rule 3 — Underscore prefix → Tier 1 Dynamic**
 Variables whose names start with `_` (e.g. `_accessToken`, `_sessionId`) are treated as private/internal regardless of their value. This is a naming convention in many API collections.
@@ -601,6 +612,21 @@ When JWT is detected:
 - `transport.pem` is copied from the project root
 - Both are listed in `[ManuallyExtraFiles]` in the `.usr` file
 - The generated `vuser_init.c` includes a JWT generation stub using the jsrsasign library
+
+### 12.4 jsrsasign Library-Fetch Request Filtering
+
+Some Postman/Bruno collections include a **first HTTP request** that downloads the jsrsasign library at runtime:
+```
+GET http://kjur.github.io/jsrassign/jsrassign-latest-all-min.js
+```
+This is a Postman pre-request workaround to load jsrsasign into the Postman sandbox before generating a JWT. In our converted scripts the library is shipped as a local file (`jsrassign.js`) — so this HTTP request must **never** be converted into a `web_custom_request()` / `load.WebRequest` call.
+
+The converter filters these requests out during `analyze()` in both generators. Detection is by URL pattern OR request name pattern:
+- URL contains `jsrsasign` or `jsrassign` (handles typo variant)
+- URL domain contains `kjur.github`
+- Request name contains `jsrsasign` or `jsrassign`
+
+This correctly handles **parameterized hostnames** such as `{{jsrsasignHost}}/jsrassign-latest-all-min.js` — the path pattern is matched regardless of the hostname.
 
 ---
 

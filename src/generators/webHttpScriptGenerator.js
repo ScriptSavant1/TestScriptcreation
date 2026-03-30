@@ -222,9 +222,10 @@ class WebHttpScriptGenerator {
   }
 
   detectScriptSetVariables() {
-    // All Postman + Bruno runtime variable setter APIs — groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
-    // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
-    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
+    // Groups: 1=pm.*/context (modern), 2=postman.set* (legacy Postman 2.x), 3=bru.set*, 4=env/vars legacy
+    // postman.setEnvironmentVariable / postman.setGlobalVariable are the Postman 2.x API —
+    // not the same as pm.environment.set() — must be matched separately.
+    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|postman\.(?:setEnvironmentVariable|setGlobalVariable)\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
     const scan = (item) => {
       // Support both raw collection (item.event) and normalized request (item.tests)
       const events = item.event || item.tests || [];
@@ -234,7 +235,8 @@ class WebHttpScriptGenerator {
             const text = Array.isArray(ev.script.exec) ? ev.script.exec.join('\n') : ev.script.exec;
             let m;
             while ((m = setPattern.exec(text)) !== null) {
-              const varName = m[1] || m[2] || m[3];
+              // group 1=pm.*/context, 2=postman.set* legacy, 3=bru.set*, 4=env/vars legacy
+              const varName = m[1] || m[2] || m[3] || m[4];
               if (varName) this.scriptSetVarNames.add(varName);
             }
           }
@@ -252,7 +254,8 @@ class WebHttpScriptGenerator {
           const text = Array.isArray(ev.script.exec) ? ev.script.exec.join('\n') : ev.script.exec;
           let m;
           while ((m = setPattern.exec(text)) !== null) {
-            const varName = m[1] || m[2] || m[3];
+            // group 1=pm.*/context, 2=postman.set* legacy, 3=bru.set*, 4=env/vars legacy
+            const varName = m[1] || m[2] || m[3] || m[4];
             if (varName) this.scriptSetVarNames.add(varName);
           }
         }
@@ -270,6 +273,11 @@ class WebHttpScriptGenerator {
   classifyVariables() {
     const credentialPattern = /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
 
+    // Private key / cryptographic secret — must NEVER appear in ParameterFile.prm or collection_data.dat.
+    // PEM-encoded keys are multi-line, contain special chars that break CSV parsing, and must not be
+    // stored in plain-text parameter files. Treated as dynamic so they stay as LR params only.
+    const privateKeyPattern = /private.?key|signing.?key|secret.?key|rsa.?key|client.?secret|signing.?secret|jwt.?secret|pem.?key|key.?pem|pkcs|p12.?key/i;
+
     // RULE 0 — JMX CSVDataSet columns → always Tier 3 (EachIteration parameter in ParameterFile.prm)
     // These have empty values from injectCsvVariables() and would fall into Rule 4 (Dynamic) otherwise.
     // They must NOT be Dynamic — they're read from a file by VuGen at runtime via {varName}.
@@ -282,6 +290,12 @@ class WebHttpScriptGenerator {
 
     // RULE 2 — Script-set variables → dynamic
     this.scriptSetVarNames.forEach(name => this.dynamicVarNames.add(name));
+
+    // RULE 2.5 — Private key / cryptographic secret → always dynamic (never in ParameterFile.prm)
+    // PEM keys are multi-line, contain special chars that break CSV, must not be in plain-text files.
+    for (const [name] of this.variableMap.entries()) {
+      if (privateKeyPattern.test(name)) this.dynamicVarNames.add(name);
+    }
 
     // RULE 3 — _ prefix → always dynamic
     for (const [name] of this.variableMap.entries()) {
@@ -471,6 +485,18 @@ class WebHttpScriptGenerator {
   }
 
   async analyze() {
+    // Filter out jsrsasign library-loading requests (kjur.github.io/jsrassign).
+    // These are script-runner HTTP fetches used by Postman/Bruno pre-request scripts to
+    // load the jsrsasign JWT library. In our generated scripts we ship jsrassign.js as a
+    // local file, so the library-fetch request must never become a web_custom_request().
+    {
+      const beforeFilter = this.requests.length;
+      this.requests = this.requests.filter(r => !this._isJsrsasignLoadRequest(r));
+      if (this.requests.length < beforeFilter) {
+        console.log(`  ✓ Skipped ${beforeFilter - this.requests.length} jsrsasign library-loading request(s)`);
+      }
+    }
+
     // Correlations
     if (this.options.useCorrelation) {
       this.correlations = this.correlationDetector.analyzeRequests(this.requests);
@@ -1694,6 +1720,18 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
     const camel = String(key).toLowerCase()
       .replace(/[^a-z0-9]+([a-z0-9])/g, (_, c) => c.toUpperCase());
     return /^[a-zA-Z_]/.test(camel) ? camel : `_${camel}`;
+  }
+
+  /**
+   * Returns true if the request is a jsrsasign library-fetch that must be skipped.
+   * Postman/Bruno pre-request scripts load jsrsasign at runtime via HTTP before signing.
+   * Our converted scripts ship jsrassign.js locally, so the fetch must not become a C request.
+   * Handles parameterized hostnames (e.g. {{jsrsasignHost}}/jsrassign-latest-all-min.js).
+   */
+  _isJsrsasignLoadRequest(req) {
+    const url  = (typeof req.url === 'string' ? req.url : req.url?.raw || '').toLowerCase();
+    const name = (req.name || '').toLowerCase();
+    return /jsrs?asign/.test(url) || /kjur\.github/.test(url) || /jsrs?asign/.test(name);
   }
 
   /**

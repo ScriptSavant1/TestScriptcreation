@@ -338,10 +338,11 @@ class AdvancedScriptGenerator {
    *          env.set() — Bruno 1.x legacy, vars.set() — Bruno legacy
    */
   detectScriptSetVariables() {
-    // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
-    // Groups: 1=pm.*/context, 2=bru.set*, 3=env/vars legacy
+    // Groups: 1=pm.*/context (modern), 2=postman.set* (legacy Postman 2.x), 3=bru.set*, 4=env/vars legacy
+    // postman.setEnvironmentVariable / postman.setGlobalVariable are the Postman 2.x API —
+    // not the same as pm.environment.set() — must be matched separately.
     const setPattern =
-      /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
+      /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|postman\.(?:setEnvironmentVariable|setGlobalVariable)\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
 
     const scanItem = (item) => {
       // Check events (pre-request, test scripts)
@@ -353,8 +354,8 @@ class AdvancedScriptGenerator {
               : event.script.exec;
             let match;
             while ((match = setPattern.exec(scriptText)) !== null) {
-              // group 1 = pm.*/context, group 2 = bru.set*, group 3 = env/vars legacy
-              const varName = match[1] || match[2] || match[3];
+              // group 1=pm.*/context, 2=postman.set* legacy, 3=bru.set*, 4=env/vars legacy
+              const varName = match[1] || match[2] || match[3] || match[4];
               if (varName) this.scriptSetVarNames.add(varName);
             }
           }
@@ -385,7 +386,7 @@ class AdvancedScriptGenerator {
         if (!text) return;
         let m;
         while ((m = setPattern.exec(text)) !== null) {
-          const varName = m[1] || m[2] || m[3];
+          const varName = m[1] || m[2] || m[3] || m[4];
           if (varName) this.scriptSetVarNames.add(varName);
         }
       });
@@ -459,6 +460,12 @@ class AdvancedScriptGenerator {
     const credentialPattern =
       /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
 
+    // Private key / cryptographic secret — must NEVER appear in parameters.yml or collection_data.csv.
+    // These variables contain PEM-encoded keys or secrets that are multi-line, contain special chars
+    // that break CSV parsing, and must not be stored in plain-text parameter files.
+    // Treated as Tier 1 Dynamic so they stay in load.global and are never parameterized.
+    const privateKeyPattern = /private.?key|signing.?key|secret.?key|rsa.?key|client.?secret|signing.?secret|jwt.?secret|pem.?key|key.?pem|pkcs|p12.?key/i;
+
     // RULE 0 — JMX CSVDataSet columns → always Tier 3 (nextValue: iteration, parameters.yml)
     // These have empty values from injectCsvVariables() and would fall into Rule 4 (Dynamic)
     // without this early guard. They are read from a CSV file by DevWeb at runtime.
@@ -473,6 +480,12 @@ class AdvancedScriptGenerator {
     // RULE 2 — Script-set variables: always Tier 1 (dynamic)
     // Any variable explicitly set by a script (pm.*.set, bru.setEnv, etc.) is runtime.
     this.scriptSetVarNames.forEach((name) => this.dynamicVarNames.add(name));
+
+    // RULE 2.5 — Private key / cryptographic secret → always Tier 1 (never parameterize)
+    // PEM keys are multi-line, contain special chars that break CSV, must not be in plain-text files.
+    for (const [name] of this.variableMap.entries()) {
+      if (privateKeyPattern.test(name)) this.dynamicVarNames.add(name);
+    }
 
     // RULE 3 — _ prefix: always Tier 1 regardless of value
     // Postman/Bruno convention: underscore prefix = correlation placeholder.
@@ -828,9 +841,38 @@ ${finalizeSection}
   }
 
   /**
+   * Return true if a request is a jsrsasign library-loading request that should be skipped.
+   *
+   * In Postman/Bruno collections, users sometimes add a request to load the jsrsasign
+   * library from kjur.github.io before their JWT-signing pre-request script runs.
+   * We replace this with our own jwt-helper.js / jsrsasign.js, so the request itself
+   * must be dropped — it would otherwise generate a meaningless HTTP call in the script.
+   *
+   * Detection is intentionally broad to handle parameterized hostnames, e.g.:
+   *   http://kjur.github.io/jsrassign/jsrassign-latest-all-min.js   (direct)
+   *   {{jsrsasignHost}}/jsrassign-latest-all-min.js                 (parameterized host)
+   *   https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/...          (CDN)
+   */
+  _isJsrsasignLoadRequest(req) {
+    const url  = (typeof req.url === 'string' ? req.url : req.url?.raw || '').toLowerCase();
+    const name = (req.name || '').toLowerCase();
+    // Match the jsrsasign filename pattern in path OR the kjur.github.io hostname
+    return /jsrs?asign/.test(url) || /kjur\.github/.test(url) || /jsrs?asign/.test(name);
+  }
+
+  /**
    * Analyze collection for correlations, parameters, and auth
    */
   async analyze() {
+    // Remove jsrsasign library-loading requests — these are Postman/Bruno pre-flight requests
+    // that load the JWT library at runtime. We provide jwt-helper.js instead, so these
+    // requests must be dropped before any further processing.
+    const beforeFilter = this.requests.length;
+    this.requests = this.requests.filter(r => !this._isJsrsasignLoadRequest(r));
+    if (this.requests.length < beforeFilter) {
+      console.log(`  ✓ Skipped ${beforeFilter - this.requests.length} jsrsasign library-loading request(s)`);
+    }
+
     // Detect correlations (must run before variable classification)
     if (this.options.useCorrelation) {
       this.correlations = this.correlationDetector.analyzeRequests(
