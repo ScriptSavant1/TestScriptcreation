@@ -462,18 +462,52 @@ class CustomScriptParser {
                            /base64url|header\.payload/.test(script);
 
     // ── Java / Groovy JWT patterns (JSR223 / BeanShell in JMeter) ────────────
-    // JJWT library: import io.jsonwebtoken.Jwts / Jwts.builder()...signWith(...)
+
+    // JJWT (io.jsonwebtoken) — Jwts.builder()...signWith(...).compact()
     const isJjwt = /import\s+io\.jsonwebtoken/.test(script) ||
-                   /Jwts\.builder\s*\(\s*\)/.test(script);
-    // Manual Java HMAC-SHA256
-    const isJavaHmac = /Mac\.getInstance\s*\(\s*["']HmacSHA256["']\s*\)/.test(script) ||
-                       /HmacSHA256/.test(script);
-    // BouncyCastle / Java RSA signing
-    const isJavaRsa  = /Signature\.getInstance/.test(script) &&
-                       (/SHA256withRSA|SHA256withRSAandMGF1|RSA/.test(script));
-    // Java Base64 URL encoding patterns (common in manual JWT creation)
-    const isJavaJwt  = (isJjwt || isJavaHmac || isJavaRsa) ||
-                       (/Base64\.getUrlEncoder/.test(script) && /\.sign\s*\(/.test(script));
+                   /Jwts\.builder\s*\(/.test(script) ||
+                   /\.signWith\s*\(/.test(script) && /\.compact\s*\(/.test(script);
+
+    // nimbus-jose-jwt (com.nimbusds) — most popular Java JWT lib
+    const isNimbus = /import\s+com\.nimbusds\.(?:jose|jwt)/.test(script) ||
+                     /new\s+JWTClaimsSet\.Builder\s*\(/.test(script) ||
+                     /new\s+SignedJWT\s*\(/.test(script) ||
+                     /RSASSASigner|ECDSASigner|MACSigner/.test(script) ||
+                     /JWSHeader(?:\.Builder)?\s*\(/.test(script) ||
+                     /signedJWT\.(?:serialize|sign)\s*\(/.test(script);
+
+    // Auth0 java-jwt — JWT.create().sign(Algorithm.*)
+    const isAuth0 = /import\s+com\.auth0\.jwt/.test(script) ||
+                    /JWT\.create\s*\(/.test(script) ||
+                    /Algorithm\.(?:RSA|HMAC|ECDSA)\d+/.test(script);
+
+    // BouncyCastle — org.bouncycastle (often combined with nimbus or manual)
+    const isBouncyCastle = /import\s+org\.bouncycastle/.test(script) ||
+                           /PEMParser|JcaPEMKeyConverter/.test(script);
+
+    // Manual Java RSA signing via JCA (Signature.getInstance + SHA256withRSA/PS256)
+    const isJavaRsa = /Signature\.getInstance\s*\(\s*["'](?:SHA256withRSA|SHA256withRSAandMGF1|SHA384withRSA|SHA512withRSA|SHA256withECDSA)["']/.test(script);
+
+    // Manual Java HMAC-SHA signing
+    const isJavaHmac = /Mac\.getInstance\s*\(\s*["']Hmac(?:SHA256|SHA384|SHA512)["']/.test(script);
+
+    // PEM key loading — strong corroborating signal that JWT signing is happening
+    const hasPemInScript = /-----BEGIN\s+(?:RSA\s+)?(?:EC\s+)?PRIVATE\s+KEY-----/.test(script) ||
+                           /PKCS8EncodedKeySpec/.test(script) ||
+                           /KeyFactory\.getInstance\s*\(\s*["'](?:RSA|EC)["']/.test(script);
+
+    // JWT claim keywords — weak signal, only used as corroboration
+    const jwtClaimCount = [/"iss"/, /"sub"/, /"aud"/, /"exp"/, /"iat"/, /"jti"/]
+      .filter(p => p.test(script)).length;
+    const hasJwtClaims = jwtClaimCount >= 3;
+
+    // Manual Java JWT assembly: Base64 URL-encode header.payload then sign
+    const isJavaManual = (/Base64\.getUrlEncoder/.test(script) && /\.sign\s*\(/.test(script)) ||
+                         (hasPemInScript && hasJwtClaims) ||
+                         (hasPemInScript && /\.sign\s*\(/.test(script));
+
+    const isJavaJwt = isJjwt || isNimbus || isAuth0 || isBouncyCastle ||
+                      isJavaRsa || isJavaHmac || isJavaManual;
 
     const isJwt = isJsrsasign || isJsonwebtoken || isJose || isManualCrypto || isJavaJwt;
     if (!isJwt) return { isJwt: false, library: null, outputVars: [], algorithm: 'RS256' };
@@ -484,46 +518,72 @@ class CustomScriptParser {
     else if (isJsonwebtoken) library = 'jsonwebtoken';
     else if (isJose)         library = 'jose';
     else if (isManualCrypto) library = 'crypto';
-    else if (isJjwt)         library = 'jjwt-groovy';
-    else if (isJavaJwt)      library = 'java-manual';
+    else if (isNimbus)       library = 'nimbus-jose-jwt';
+    else if (isAuth0)        library = 'auth0-java-jwt';
+    else if (isJjwt)         library = 'jjwt';
+    else if (isBouncyCastle) library = 'bouncycastle';
+    else if (isJavaRsa || isJavaHmac || isJavaManual) library = 'java-manual';
 
     // ── Extract algorithm — JS and Java/Groovy patterns ─────────────────────
     const algMatch =
       // JS: alg: "PS256" or algorithm: "RS256"
-      script.match(/['"]alg['"]\s*:\s*['"]([A-Z0-9]+)['"]/i)          ||
-      script.match(/algorithm\s*[:=]\s*['"]([A-Z0-9]+)['"]/i)         ||
-      // JJWT: SignatureAlgorithm.RS256 / .PS256 / .HS256
-      script.match(/SignatureAlgorithm\.([A-Z0-9]+)/)                  ||
-      // Java getInstance: "SHA256withRSAandMGF1" → PS256
-      //                    "SHA256withRSA"        → RS256
-      //                    "HmacSHA256"           → HS256
-      script.match(/getInstance\s*\(\s*["'](SHA256withRSAandMGF1|SHA256withRSA|HmacSHA256)["']/);
+      script.match(/['"]alg['"]\s*:\s*['"]([A-Z0-9]+)['"]/i)                                ||
+      script.match(/algorithm\s*[:=]\s*['"]([A-Z0-9]+)['"]/i)                               ||
+      // JJWT: SignatureAlgorithm.RS256 / .PS256 / .HS256 / Algorithms.RS256
+      script.match(/(?:SignatureAlgorithm|Algorithms)\.([A-Z][A-Z0-9]+)/)                   ||
+      // nimbus JWSAlgorithm.RS256
+      script.match(/JWSAlgorithm\.([A-Z][A-Z0-9]+)/)                                        ||
+      // Auth0: Algorithm.RSA256(...) / Algorithm.HMAC256(...)
+      script.match(/Algorithm\.([A-Z]+\d+)\s*\(/)                                           ||
+      // Java getInstance: "SHA256withRSAandMGF1" → PS256, "SHA256withRSA" → RS256, etc.
+      script.match(/getInstance\s*\(\s*["'](SHA\d+with(?:RSAandMGF1|RSA|ECDSA)|Hmac(?:SHA\d+))["']/i);
 
     let algorithm = 'RS256';
     if (algMatch) {
       const raw = algMatch[1].toUpperCase();
-      // Map Java algorithm names to JWT alg identifiers
+      // Map Java/Auth0 algorithm names to JWT alg identifiers
       const javaAlgMap = {
         'SHA256WITHRSA':           'RS256',
-        'SHA256WITHRSAANDMGF1':    'PS256',
-        'HMACSHA256':              'HS256',
         'SHA384WITHRSA':           'RS384',
         'SHA512WITHRSA':           'RS512',
-        'SHA256WITHECDSA':         'ES256'
+        'SHA256WITHRSAANDMGF1':    'PS256',
+        'SHA384WITHRSAANDMGF1':    'PS384',
+        'SHA512WITHRSAANDMGF1':    'PS512',
+        'SHA256WITHECDSA':         'ES256',
+        'SHA384WITHECDSA':         'ES384',
+        'SHA512WITHECDSA':         'ES512',
+        'HMACSHA256':              'HS256',
+        'HMACSHA384':              'HS384',
+        'HMACSHA512':              'HS512',
+        // Auth0 naming
+        'RSA256':                  'RS256',
+        'RSA384':                  'RS384',
+        'RSA512':                  'RS512',
+        'HMAC256':                 'HS256',
+        'HMAC384':                 'HS384',
+        'HMAC512':                 'HS512',
+        'ECDSA256':                'ES256',
+        'ECDSA384':                'ES384',
+        'ECDSA512':                'ES512',
       };
       algorithm = javaAlgMap[raw] || raw;
     }
 
     // ── Extract output variable names (variables set after JWT is generated) ─
     const setPattern  = /(?:pm\.environment|pm\.globals|pm\.collectionVariables|pm\.variables)\.set\s*\(\s*['"]([^'"]+)['"]/g;
-    const bruPattern  = /bru\.(?:setVar|setEnvVar)\s*\(\s*['"]([^'"]+)['"]/g;
-    // JMeter Groovy/BeanShell: vars.put("varName", ...) or props.put("varName", ...)
-    const varsPattern = /(?:vars|props)\.put\s*\(\s*["']([^"']+)["']/g;
+    const bruPattern  = /bru\.(?:setVar|setEnvVar|setEnv|setGlobalVar)\s*\(\s*['"]([^'"]+)['"]/g;
+    const postmanPattern = /postman\.(?:setEnvironmentVariable|setGlobalVariable)\s*\(\s*['"]([^'"]+)['"]/g;
+    // JMeter Groovy/BeanShell: vars.put / vars.putObject / vars.putEncoded / props.put
+    const varsPattern = /(?:vars|props)\.put(?:Object|Encoded)?\s*\(\s*["']([^"']+)["']/g;
+    // JMeter context.set() (some Groovy scripts use SampleContext)
+    const ctxPattern  = /context\.set\s*\(\s*["']([^"']+)["']/g;
     const outputVars = [];
     let m;
-    while ((m = setPattern.exec(script))  !== null) outputVars.push(m[1]);
-    while ((m = bruPattern.exec(script))  !== null) outputVars.push(m[1]);
-    while ((m = varsPattern.exec(script)) !== null) outputVars.push(m[1]);
+    while ((m = setPattern.exec(script))     !== null) outputVars.push(m[1]);
+    while ((m = bruPattern.exec(script))     !== null) outputVars.push(m[1]);
+    while ((m = postmanPattern.exec(script)) !== null) outputVars.push(m[1]);
+    while ((m = varsPattern.exec(script))    !== null) outputVars.push(m[1]);
+    while ((m = ctxPattern.exec(script))     !== null) outputVars.push(m[1]);
 
     return { isJwt: true, library, outputVars, algorithm };
   }
