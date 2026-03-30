@@ -470,11 +470,13 @@ RunLogicObjectKind="Action"
 
     for (const [name, config] of parameters.entries()) {
       const generateNewVal = config.nextValue === 'iteration' ? 'EachIteration' : 'Once';
-      // Decode HTML entities — VuGen cannot parse ParameterFile.prm if values contain &amp; &quot; &#10; etc.
+      // Decode HTML entities then escape actual newlines — PEM keys must stay on one line in the
+      // INI file. VuGen's parameter parser treats each line as a separate field; a multi-line
+      // OriginalValue corrupts the section and prevents the Parameters panel from opening.
       const originalValue  = this.decodeHtmlEntities(
         (config.paramValue !== undefined && config.paramValue !== null)
           ? String(config.paramValue) : ''
-      );
+      ).replace(/\r\n/g, '\\r\\n').replace(/\r/g, '\\r').replace(/\n/g, '\\n');
       // CSV vars from JMX CSVDataSet point to their actual file; others use collection_data.dat
       const tableFile  = config.fileName && config.fileName !== 'collection_data.dat'
         ? config.fileName : 'collection_data.dat';
@@ -520,10 +522,16 @@ RunLogicObjectKind="Action"
     const header = names.map(n => this.csvEscape(n)).join(',');
     const values = names.map(name => {
       const config = parameters.get(name);
-      // Decode HTML entities — &amp; &quot; &#10; etc. break VuGen parameter parsing
+      // Decode HTML entities then escape actual newlines — PEM keys must stay on one CSV row.
+      // VuGen reads collection_data.dat line by line; an un-escaped newline inside a PEM key
+      // creates phantom extra rows that break the parameter table.
       const raw = config.paramValue !== undefined && config.paramValue !== null
         ? String(config.paramValue) : '';
-      return this.csvEscape(this.decodeHtmlEntities(raw));
+      const clean = this.decodeHtmlEntities(raw)
+        .replace(/\r\n/g, '\\r\\n')
+        .replace(/\r/g,   '\\r')
+        .replace(/\n/g,   '\\n');
+      return this.csvEscape(clean);
     }).join(',');
 
     return `${header}\n${values}\n`;

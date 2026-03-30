@@ -1828,10 +1828,13 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
       }
     }
 
-    // Emit per-request dynamic variable generation (UUID/nonce for headers like x-fapi-interaction-id).
-    // These must run BEFORE the request so the fresh value is ready for use in headers.
+    // Emit pre-request generation for CSRF/nonce/random vars (NOT uuid).
+    // UUID vars are now inlined directly as load.utils.uuid() inside the header value
+    // via replaceParameters(), so no pre-request global assignment is needed.
+    // CSRF/nonce types must still use load.global so the same value can appear in
+    // both the request header and the body within the same request.
     this.perRequestVars.forEach((info, varName) => {
-      // Only emit for requests that actually use this variable in their headers or body
+      if (info.generationType === 'uuid') return; // inlined via replaceParameters — skip
       const usesVar = this.requestUsesVar(request, varName);
       if (usesVar) {
         const genExpr = this.perRequestGenExpression(info.generationType);
@@ -2359,6 +2362,19 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
         return this.resolvePostmanDynamicVar(trimmedName);
       }
 
+      // Per-request dynamic vars (UUID, CSRF, nonce) — detected by detectUuidHeaders()
+      // which runs AFTER classifyVariables(), so these may NOT be in dynamicVarNames.
+      // UUID type → inlined as load.utils.uuid() directly in the header value (no global var).
+      // Other types (csrf, nonce) → still use load.global so the same value can be
+      // referenced in both header and body within the same request.
+      if (this.perRequestVars && this.perRequestVars.has(trimmedName)) {
+        const { generationType } = this.perRequestVars.get(trimmedName);
+        const safeName = this.sanitizeVarName(trimmedName);
+        return generationType === 'uuid'
+          ? '${load.utils.uuid()}'
+          : `\${load.global.${safeName}}`;
+      }
+
       // Dynamic variable → load.global (set by scripts/correlation at runtime)
       if (this.dynamicVarNames.has(trimmedName)) {
         // Sanitize: hyphens and special chars are invalid JS identifiers
@@ -2528,6 +2544,13 @@ ${jwtRefreshBlock}${paramsHeaderBlock}
       }
       return match;
     });
+
+    // Unwrap pure single-expression template literals: `${expr}` → expr
+    // When a header value is ONLY an expression (e.g. load.utils.uuid() or load.global.token),
+    // the backtick wrapper is redundant — the bare expression is cleaner and avoids
+    // unnecessary string coercion. Mixed strings like `Bearer ${token}` are unaffected
+    // because they don't start immediately with ${ after the opening backtick.
+    str = str.replace(/`\$\{([^`]+)\}`/g, '$1');
 
     // Replace "{{MULTIPART}}" with actual multipart code
     str = str.replace('"{{MULTIPART}}"', "new load.MultipartBody([...])");
