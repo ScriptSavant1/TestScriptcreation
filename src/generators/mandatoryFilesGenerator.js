@@ -23,6 +23,29 @@ class MandatoryFilesGenerator {
   }
 
   /**
+   * Decode HTML entities in a parameter value before writing to CSV or YAML.
+   * Parameter values can arrive with entities when:
+   *   - The collection was exported from a web UI that HTML-encoded special chars
+   *   - A JMX file stored PEM keys in XML attributes (&#10; for newlines, &amp; for &)
+   *   - Double-encoded values from browser copy-paste into Postman/Bruno web interface
+   * Handles numeric character references (&#10; &#xA;) for newlines in PEM keys.
+   */
+  decodeHtmlEntities(value) {
+    if (typeof value !== 'string') return value;
+    return value
+      .replace(/&amp;/g,    '&')
+      .replace(/&lt;/g,     '<')
+      .replace(/&gt;/g,     '>')
+      .replace(/&quot;/g,   '"')
+      .replace(/&#39;/g,    "'")
+      .replace(/&apos;/g,   "'")
+      .replace(/&#x0*A;/gi, '\n')   // &#xA; or &#x000A; — newlines in PEM keys
+      .replace(/&#0*10;/g,  '\n')   // &#10;
+      .replace(/&#x0*D;/gi, '\r')   // &#xD;
+      .replace(/&#0*13;/g,  '\r');  // &#13;
+  }
+
+  /**
    * Generate tsconfig.json
    */
   generateTsConfig() {
@@ -206,9 +229,11 @@ tearDown: 0      #Not used
     const headers = entries.map(([name]) => name);
     let csv = headers.join(',') + '\n';
 
-    // Single row with actual values from collection/environment
+    // Single row with actual values from collection/environment.
+    // Decode HTML entities before writing — values may contain &amp; &quot; &#10; etc.
+    // from web-exported collections or JMX XML encoding.
     const row = entries.map(([, param]) => {
-      const value = String(param.paramValue || '');
+      const value = this.decodeHtmlEntities(String(param.paramValue || ''));
       // CSV quoting: if value contains comma, double-quote, or newline, wrap in quotes
       if (value.includes(',') || value.includes('"') || value.includes('\n')) {
         return `"${value.replace(/"/g, '""')}"`;

@@ -6,6 +6,27 @@
 const crypto = require("crypto");
 
 /**
+ * Decode HTML entities that may have been introduced when the private key was stored
+ * in a web-exported Postman/Bruno collection or a JMX XML file.
+ * Without this, crypto.createPrivateKey() throws "DECODER routines:: unsupported"
+ * because the PEM structure is corrupted (e.g. newlines encoded as &#10;).
+ */
+function decodeHtmlEntities(str) {
+  if (typeof str !== "string") return str;
+  return str
+    .replace(/&amp;/g,    "&")
+    .replace(/&lt;/g,     "<")
+    .replace(/&gt;/g,     ">")
+    .replace(/&quot;/g,   '"')
+    .replace(/&#39;/g,    "'")
+    .replace(/&apos;/g,   "'")
+    .replace(/&#x0*A;/gi, "\n")   // &#xA; or &#x000A; — newlines in PEM blocks
+    .replace(/&#0*10;/g,  "\n")   // &#10;
+    .replace(/&#x0*D;/gi, "\r")   // &#xD;
+    .replace(/&#0*13;/g,  "\r");  // &#13;
+}
+
+/**
  * Generate JWT token with RS256 algorithm
  */
 function generateJWT(header, payload, privateKey) {
@@ -65,6 +86,7 @@ function getJwtToken(params) {
   };
 
   let prvkey = params.secret || "";
+  prvkey = decodeHtmlEntities(prvkey);   // Decode HTML entities before crypto use (fixes "DECODER routines:: unsupported")
   prvkey = prvkey.replace(/\\n/g, "\n"); // Handle escaped newlines
 
   load.global.jwt_Token = generateJWT(header, payload, prvkey);

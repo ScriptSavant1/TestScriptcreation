@@ -588,14 +588,28 @@ When no proxy is detected, the proxy section is emitted with `useProxy: false` (
 
 ### 12.1 Detection
 
-`customScriptParser.detectJwtUsage(script)` fingerprints scripts for JWT generation patterns:
-- `jsrsasign` library import
-- `KJUR.jws.JWS.sign(` call
-- `require('jsonwebtoken')` + `.sign(` call
-- `require('jose')` import
-- `crypto.sign(` + `base64url` combination
+`customScriptParser.detectJwtUsage(script)` fingerprints scripts for JWT generation patterns across **JavaScript/Node.js** (Postman/Bruno pre-request) and **Java/Groovy** (JMeter JSR223/BeanShell):
 
-If none of these are found, `hasJwt = false` and zero JWT code is generated.
+**JavaScript libraries:**
+- `jsrsasign` / `KJUR.jws.JWS.sign(` — jsrsasign library
+- `require('jsonwebtoken')` + `.sign(` — jsonwebtoken npm package
+- `require('jose')` — jose npm package
+- `crypto.createSign(` + `base64url` — manual Node.js crypto JWT
+
+**Java / Groovy libraries (JMeter JSR223 / BeanShell):**
+- **nimbus-jose-jwt** — `com.nimbusds.jose/jwt`, `JWTClaimsSet.Builder`, `new SignedJWT(`, `RSASSASigner`, `ECDSASigner`, `MACSigner`, `JWSAlgorithm.*`, `signedJWT.serialize()`
+- **Auth0 java-jwt** — `com.auth0.jwt`, `JWT.create()`, `Algorithm.RSA256/HMAC256/ECDSA256`
+- **JJWT** — `io.jsonwebtoken`, `Jwts.builder()`, `.signWith()+.compact()`
+- **BouncyCastle** — `org.bouncycastle`, `PEMParser`, `JcaPEMKeyConverter`
+- **JCA manual RSA** — `Signature.getInstance("SHA256withRSA/SHA256withRSAandMGF1/SHA256withECDSA")`
+- **JCA manual HMAC** — `Mac.getInstance("HmacSHA256/HmacSHA384/HmacSHA512")`
+- **PEM + claims signal** — `-----BEGIN PRIVATE KEY-----` present AND 3+ of `"iss"` `"sub"` `"aud"` `"exp"` `"iat"` `"jti"` present
+
+**Output variable extraction** (variables set after JWT is generated):
+- JS: `pm.environment.set()`, `pm.globals.set()`, `bru.setEnvVar()`, `postman.setEnvironmentVariable()`
+- JMeter Groovy: `vars.put()`, `vars.putObject()`, `vars.putEncoded()`, `props.put()`, `context.set()`
+
+All extracted output variable names are added to `scriptSetVarNames` → always Tier 1 Dynamic (never parameterized). If none of the above patterns match, `hasJwt = false` and zero JWT code is generated.
 
 ### 12.2 DevWeb JWT
 
@@ -916,7 +930,45 @@ The memory interceptor only activates inside `runWithMemoryFs()` context. CLI us
 
 ---
 
-## 20. Known Limitations
+## 20. HTML Entity Decoding in Parameter Files
+
+### 20.1 Problem
+
+Parameter values can arrive with HTML entities from multiple sources:
+- **Web-exported collections**: Postman/Bruno web UIs HTML-encode `&`, `"`, `<`, `>` when displaying values
+- **JMX XML attributes**: PEM private key newlines stored as `&#10;` or `&#xA;` in JMX XML
+- **Browser copy-paste**: Double-encoded values (`&amp;amp;`) when pasting into web collection editors
+
+Without decoding, two critical failures occur:
+1. **VuGen Parameters panel won't open** — `ParameterFile.prm` / `collection_data.dat` contain `&amp;` / `&quot;` which VuGen's INI parser cannot interpret
+2. **JWT crypto fails with "DECODER routines:: unsupported"** — PEM private key has its newlines encoded as `&#10;`, making it one corrupted long line instead of 64-char-wrapped blocks
+
+### 20.2 Entities Decoded
+
+| Entity | Character | Use case |
+|--------|-----------|----------|
+| `&amp;` | `&` | General values |
+| `&lt;` | `<` | PEM header/footer markers |
+| `&gt;` | `>` | PEM header/footer markers |
+| `&quot;` | `"` | String values |
+| `&#39;` / `&apos;` | `'` | String values |
+| `&#10;` / `&#xA;` | `\n` | PEM block newlines (critical for RSA keys) |
+| `&#13;` / `&#xD;` | `\r` | Windows CRLF in PEM keys |
+
+### 20.3 Where Decoding Is Applied
+
+| File | Method | Fixes |
+|------|--------|-------|
+| `mandatoryFilesGenerator.js` | `generateCollectionDataCSV()` | DevWeb `collection_data.csv` |
+| `webHttpMandatoryFilesGenerator.js` | `generateCollectionDataDat()` | VuGen `collection_data.dat` |
+| `webHttpMandatoryFilesGenerator.js` | `generateParameterFilePrm()` (`OriginalValue` field) | VuGen `ParameterFile.prm` |
+| `jwt-helper.js` | `getJwtToken()` — before `replace(/\\n/)` | Runtime JWT signing (OpenSSL decode error) |
+
+The `decodeHtmlEntities()` helper is defined identically in each file it is used. It handles both named entities and numeric character references, including hex variants (`&#x0*A;`).
+
+---
+
+## 21. Known Limitations
 
 | Area | Limitation |
 |---|---|

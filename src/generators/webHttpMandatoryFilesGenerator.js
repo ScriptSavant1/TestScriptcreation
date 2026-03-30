@@ -470,8 +470,11 @@ RunLogicObjectKind="Action"
 
     for (const [name, config] of parameters.entries()) {
       const generateNewVal = config.nextValue === 'iteration' ? 'EachIteration' : 'Once';
-      const originalValue  = (config.paramValue !== undefined && config.paramValue !== null)
-        ? String(config.paramValue) : '';
+      // Decode HTML entities — VuGen cannot parse ParameterFile.prm if values contain &amp; &quot; &#10; etc.
+      const originalValue  = this.decodeHtmlEntities(
+        (config.paramValue !== undefined && config.paramValue !== null)
+          ? String(config.paramValue) : ''
+      );
       // CSV vars from JMX CSVDataSet point to their actual file; others use collection_data.dat
       const tableFile  = config.fileName && config.fileName !== 'collection_data.dat'
         ? config.fileName : 'collection_data.dat';
@@ -517,11 +520,10 @@ RunLogicObjectKind="Action"
     const header = names.map(n => this.csvEscape(n)).join(',');
     const values = names.map(name => {
       const config = parameters.get(name);
-      return this.csvEscape(
-        config.paramValue !== undefined && config.paramValue !== null
-          ? String(config.paramValue)
-          : ''
-      );
+      // Decode HTML entities — &amp; &quot; &#10; etc. break VuGen parameter parsing
+      const raw = config.paramValue !== undefined && config.paramValue !== null
+        ? String(config.paramValue) : '';
+      return this.csvEscape(this.decodeHtmlEntities(raw));
     }).join(',');
 
     return `${header}\n${values}\n`;
@@ -578,6 +580,31 @@ ${jwtEntries}${dataFileEntries}  </GeneralFiles>
       return `"${s.replace(/"/g, '""')}"`;
     }
     return s;
+  }
+
+  /**
+   * Decode HTML entities in a parameter value before writing to ParameterFile.prm or .dat.
+   * Parameter values can arrive with entities when:
+   *   - The collection was exported from a web UI that HTML-encoded special chars
+   *   - A JMX file stored PEM keys in XML attributes (&#10; for newlines, &amp; for &)
+   *   - Double-encoded values from browser copy-paste into Postman/Bruno web interface
+   * Handles numeric character references (&#10; &#xA;) for newlines in PEM keys.
+   * Without this, VuGen fails to open the Parameters panel and JWT crypto throws
+   * "DECODER routines:: unsupported" because the PEM key is corrupted.
+   */
+  decodeHtmlEntities(value) {
+    if (typeof value !== 'string') return value;
+    return value
+      .replace(/&amp;/g,    '&')
+      .replace(/&lt;/g,     '<')
+      .replace(/&gt;/g,     '>')
+      .replace(/&quot;/g,   '"')
+      .replace(/&#39;/g,    "'")
+      .replace(/&apos;/g,   "'")
+      .replace(/&#x0*A;/gi, '\n')   // &#xA; or &#x000A; — newlines in PEM keys
+      .replace(/&#0*10;/g,  '\n')   // &#10;
+      .replace(/&#x0*D;/gi, '\r')   // &#xD;
+      .replace(/&#0*13;/g,  '\r');  // &#13;
   }
 }
 
