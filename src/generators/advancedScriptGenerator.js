@@ -69,6 +69,7 @@ class AdvancedScriptGenerator {
     // NTLM/Kerberos detection — populated by detectNtlmKerberos() during analyze()
     this.hasNtlm = false;
     this.ntlmAuthType = null; // 'ntlm' | 'kerberos'
+    this.ntlmHost = '';       // hostname without port for load.setUserCredentials()
 
     // mTLS cert detection — populated by detectMtlsCert() during analyze()
     this.mtlsCertFile = null; // basename of uploaded cert file (non-JWT)
@@ -211,18 +212,64 @@ class AdvancedScriptGenerator {
    * Sets this.hasNtlm and this.ntlmAuthType when found.
    */
   detectNtlmKerberos() {
+    // Resolve a credential value:
+    // - If '{{AuthUsername}}', look up 'AuthUsername' in variableMap → return its value
+    // - If a literal string (JMX), return it as-is
+    const resolve = (val) => {
+      if (!val) return '';
+      const m = String(val).match(/^\{\{([^}]+)\}\}$/);
+      return m ? (this.variableMap.get(m[1]) || '') : String(val);
+    };
+
     for (const req of this.requests) {
       const authType = (req.auth?.type || '').toLowerCase();
-      if (authType === 'kerberos') {
+      if (authType === 'kerberos' || authType === 'ntlm') {
         this.hasNtlm = true;
-        this.ntlmAuthType = 'kerberos';
-        console.log('  ✓ Kerberos authentication detected');
-        return;
-      }
-      if (authType === 'ntlm') {
-        this.hasNtlm = true;
-        this.ntlmAuthType = 'ntlm';
-        console.log('  ✓ NTLM authentication detected');
+        this.ntlmAuthType = authType;
+
+        // --- Host extraction ---
+        // JMX AuthManager provides req.auth.hostport (hostname only, no port after parser fix)
+        let host = req.auth?.hostport || '';
+        if (!host) {
+          // Postman/Bruno: extract hostname from the request URL
+          const urlStr = typeof req.url === 'string' ? req.url : (req.url?.raw || '');
+          try {
+            const u = new URL(urlStr.replace(/\{\{[^}]+\}\}/g, 'placeholder'));
+            host = u.hostname;
+          } catch {
+            const m = urlStr.match(/^https?:\/\/([^/:?#]+)/i);
+            host = m ? m[1] : '';
+          }
+        }
+        this.ntlmHost = host;
+
+        // --- Credential extraction ---
+        // JMX format: req.auth.username/password/domain are direct literal values
+        // Postman format: req.auth[authType] is [{key, value}] where value = '{{AuthUsername}}'
+        let rawUsername = req.auth?.username || null;
+        let rawPassword = req.auth?.password || null;
+        let rawDomain   = req.auth?.domain   || null;
+        const authArr = req.auth?.[authType];
+        if (Array.isArray(authArr)) {
+          authArr.forEach(item => {
+            if (item.key === 'username') rawUsername = item.value;
+            if (item.key === 'password') rawPassword = item.value;
+            if (item.key === 'domain')   rawDomain   = item.value;
+          });
+        }
+
+        // Always store under standard keys username/password/domain.
+        // Resolves {{AuthUsername}} → looks up actual value in variableMap.
+        // This ensures parameters.yml always uses 'username'/'password'/'domain'
+        // regardless of what variable names the collection used.
+        const usernameVal = resolve(rawUsername);
+        const passwordVal = resolve(rawPassword);
+        const domainVal   = resolve(rawDomain);
+        if (usernameVal) this.variableMap.set('username', usernameVal);
+        if (passwordVal) this.variableMap.set('password', passwordVal);
+        if (domainVal)   this.variableMap.set('domain',   domainVal);
+
+        console.log(`  ✓ ${authType.toUpperCase()} authentication detected — host: ${host || '(unknown)'}`);
         return;
       }
     }
@@ -898,6 +945,10 @@ ${finalizeSection}
       console.log(`✓ Parsed ${this.customScripts.size} custom script(s)`);
     }
 
+    // Detect NTLM/Kerberos auth BEFORE classifyVariables() so that credential values
+    // injected into variableMap (from JMX AuthManager) are picked up for parameterization.
+    this.detectNtlmKerberos();
+
     // Classify all variables into dynamic vs parameterized
     // Must run AFTER correlations and scripts are detected
     if (this.options.useParameterization) {
@@ -910,9 +961,6 @@ ${finalizeSection}
 
     // Detect JWT usage in pre-request scripts (sets this.hasJwt and this.jwtVarNames)
     this.detectJwtUsage();
-
-    // Detect NTLM/Kerberos auth (from JMX AuthManager or collection auth)
-    this.detectNtlmKerberos();
 
     // Detect mTLS client certificate files uploaded alongside the collection
     this.detectMtlsCert();
@@ -1199,9 +1247,15 @@ ${
 `
       : "";
 
-    // NTLM / Kerberos note — DevWeb enables integrated auth via rts.yml.
-    // No extra code is needed in initialize(); the note explains the setup.
-    const ntlmBlock = "";
+    // NTLM / Kerberos — set integrated credentials once in initialize()
+    const ntlmBlock = this.hasNtlm ? `
+    load.setUserCredentials({
+        username: load.params['username'],
+        password: load.params['password'],
+        domain:   load.params['domain'],
+        host:     '${this.ntlmHost}'
+    });
+` : '';
 
     let code = `load.initialize('Initialize', async function() {
 ${jwtBlock}${ntlmBlock}

@@ -466,10 +466,11 @@ Authentication is detected from collection-level auth config and/or pre-request 
 | **Basic Auth** | `Authorization: Basic base64(user:pass)` header | `web_set_user()` or manual header |
 | **API Key** | Added as header or query param as configured | `web_add_header()` or URL param |
 | **AWS Signature v4** | `load.utils.awsSign()` helper | Manual HMAC calculation stub |
-| **Digest Auth** | `web_set_user()` equivalent | `web_set_user()` |
+| **Digest Auth** | `load.setUserCredentials({ username, password })` | `web_set_user()` |
+| **NTLM / Kerberos** | `load.setUserCredentials({ username, password, domain, host })` in `initialize()` | `web_set_user("{username}", "{password}", "hostname")` in `vuser_init.c` |
 | **JWT** | Uses `jwt-helper.js` — see §12 | Uses `jsrsasign.js` — see §12 |
 
-**Not yet implemented:** Cookie jar management, NTLM (stubs declared but empty).
+**Not yet implemented:** Cookie jar management.
 
 ### 7.2 OAuth2 Token Flow
 
@@ -477,6 +478,35 @@ For OAuth2 client credentials:
 1. Token request is generated in `initialize()` (DevWeb) or `vuser_init.c` (VuGen)
 2. The `access_token` field is extracted from the JSON response
 3. All subsequent requests that reference `{{accessToken}}` or `{{access_token}}` automatically use the correlated value
+
+### 7.3 NTLM / Kerberos Authentication
+
+Detected from: Postman/Bruno `auth.type = ntlm|kerberos`, or JMeter `HTTP Authorization Manager` with NTLM/Kerberos mechanism.
+
+**Credential parameterization** — credentials are always stored under the standard parameter names `username`, `password`, `domain` regardless of what variable names the source collection used (e.g. `AuthUsername`). The converter resolves `{{AuthUsername}}` → looks up the actual value in the variable map → injects as `username`. For JMX AuthManager literal values are injected directly.
+
+**DevWeb** (`initialize()`):
+```js
+load.setUserCredentials({
+    username: load.params['username'],
+    password: load.params['password'],
+    domain:   load.params['domain'],
+    host:     'hostname.domain.com'      // no port — LR 26.1 requires hostname only
+});
+```
+
+**VuGen** (`vuser_init.c`):
+```c
+web_set_user("{username}", "{password}", "hostname.domain.com");
+```
+
+**Parameter files** — `username`, `password`, `domain` are automatically added to `parameters.yml` (DevWeb) and `ParameterFile.prm` (VuGen). `username`/`password` → Tier 3 (iteration), `domain` → Tier 2 (once).
+
+**Host** — port is always stripped (`u.hostname` not `u.host`). LR 26.1 rejects hosts that include a port number in `setUserCredentials`.
+
+**Runtime Settings required (manual step):**
+- VuGen: Runtime Settings → Internet Protocol → Enable Integrated Authentication
+- Kerberos additionally: `SPNCNameLookup=1` in `default.cfg`
 
 ---
 
@@ -844,7 +874,7 @@ Type="Table"
 - `[WEB] SimulateCache=1`
 - `[Log] LogOptions=LogBrief` — brief logging for replay performance
 - `[General] ContinueOnError=0` — stop on first error
-- NTLM flags (`UseNativeNTLM`, `IntegratedAuthentication`) auto-set when NTLM auth detected
+- NTLM/Kerberos flags (`UseNativeNTLM`, `IntegratedAuthentication`) auto-set when NTLM/Kerberos auth detected
 - Proxy section: auto-populated when proxy detected, defaults to `ProxyUseBrowser=1`
 
 ### 17.5 Snapshot Counter
@@ -973,7 +1003,7 @@ The `decodeHtmlEntities()` helper is defined identically in each file it is used
 | Area | Limitation |
 |---|---|
 | **CSS Selector extractor** | JMeter `HtmlExtractor` has no native LoadRunner equivalent. Mapped to boundary extraction (left = CSS expression + `>`, right = `</`). May not work for complex selectors. |
-| **NTLM auth** | `authenticationHandler.js` has an empty NTLM stub. `default.cfg` sets the NTLM flags but no token-generation code is emitted. |
+| **NTLM auth** | Fully implemented. Credentials injected as `username`/`password`/`domain` parameters. Enable Integrated Authentication in Runtime Settings manually. |
 | **Cookie jar** | No explicit cookie jar management. VuGen handles cookies automatically via the runtime; DevWeb requires manual `load.CookieJar` calls which are not generated. |
 | **Multipart bodies (VuGen)** | `web_custom_request()` does not support multipart `Body=` parameter. A `// TODO` comment with a `console.warn` is emitted. |
 | **WebSocket** | Not supported. Only HTTP/HTTPS requests are converted. |

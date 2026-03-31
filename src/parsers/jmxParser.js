@@ -276,7 +276,7 @@ function parseAuthManager(nodeChildren) {
 }
 
 function extractHostPort(urlStr) {
-  try { const u = new URL(urlStr || ''); return u.host || urlStr; }
+  try { const u = new URL(urlStr || ''); return u.hostname || urlStr; }
   catch { return urlStr || ''; }
 }
 
