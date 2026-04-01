@@ -87,12 +87,13 @@ a { color: var(--primary); }
 .har-count-badge.visible { display: inline-block; }
 .btn-theme {
   background: rgba(255,255,255,.1); color: #e0e7ff;
-  border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
-  width: 36px; height: 36px; font-size: 16px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background .15s;
+  border: 1px solid rgba(255,255,255,.22); border-radius: var(--radius);
+  padding: 5px 11px; font-size: 12px; font-weight: 600;
+  font-family: var(--sans); cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px;
+  line-height: 1.4; transition: background .15s, border-color .15s;
 }
-.btn-theme:hover { background: rgba(255,255,255,.2); }
+.btn-theme:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.35); }
 
 /* ═══════════════════════════════════════════════════════════
    PHASE LAYOUT
@@ -477,8 +478,8 @@ pre#code-body {
     <span class="opt-label">Output Format</span>
     <div class="fmt-btns">
       <button class="fmt-btn" id="fmt-web" onclick="setFmt('webhttp')">Web HTTP/HTML</button>
-      <button class="fmt-btn" id="fmt-dev" onclick="setFmt('devweb')">DevWeb</button>
-      <button class="fmt-btn active" id="fmt-both" onclick="setFmt('both')">Both</button>
+      <button class="fmt-btn active" id="fmt-dev" onclick="setFmt('devweb')">DevWeb</button>
+      <button class="fmt-btn" id="fmt-both" onclick="setFmt('both')" style="display:none">Both</button>
     </div>
     <span class="sep"></span>
     <span id="mode-badge" style="font-size:12px;color:var(--text-2)">Mode: <b style="color:var(--warning)">Pattern</b> (1 HAR)</span>
@@ -607,7 +608,7 @@ const S = {
   params: [],        // detected parameterization candidates (user-entered values)
   harWarning: '',    // HAR quality warning message
   scripts: {},       // {ac, vi, ve, gh, mj}
-  format: 'both',
+  format: 'devweb',
   mode: 'single',
   tab: 'ac',
   auth: null,         // detected auth {type, host, port, hostport, realm?, username?}
