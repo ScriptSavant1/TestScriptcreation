@@ -158,6 +158,7 @@ The "Both formats" output option in Recorder and Script Studio is currently hidd
 | [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | End users — step-by-step instructions, FAQ, glossary |
 | [docs/TECHNICAL-REFERENCE.md](docs/TECHNICAL-REFERENCE.md) | Developers — architecture, rules, edge cases, memory model |
 | [docs/FUNCTIONAL-SPEC.md](docs/FUNCTIONAL-SPEC.md) | Team — what each tool does, detection rules, output spec |
+| [docs/DEPLOYMENT-GUIDE.md](docs/DEPLOYMENT-GUIDE.md) | Administrators — IIS + iisnode deployment, permissions, troubleshooting |
 
 ---
 
