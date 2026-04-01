@@ -37,18 +37,36 @@ class WebServer {
   setupMiddleware() {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
+
+    // Block direct .html file access — only clean routes are allowed
+    this.app.use((req, res, next) => {
+      if (req.method === 'GET' && req.path.toLowerCase().endsWith('.html')) {
+        return res.status(404).sendFile(path.join(__dirname, 'views', '404.html'));
+      }
+      next();
+    });
+
     this.app.use(express.static(path.join(__dirname, 'public')));
     this.app.set('view engine', 'ejs');
     this.app.set('views', path.join(__dirname, 'views'));
   }
 
   setupRoutes() {
-    // ── Home page ─────────────────────────────────────────────────────────────
-    this.app.get('/', (req, res) => {
+    // ── Converter ─────────────────────────────────────────────────────────────
+    this.app.get('/converter', (req, res) => {
       res.render('index', {
         title:   'Bruno / Postman → LoadRunner Converter',
         version: require('../../package.json').version
       });
+    });
+
+    // ── Tool routes (no .html extension so they pass the block middleware) ─────
+    this.app.get('/tools/recorder', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'VuGen-Recorder.html'));
+    });
+
+    this.app.get('/tools/studio', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'VuGen-Script-Studio.html'));
     });
 
     // ── Convert ───────────────────────────────────────────────────────────────
@@ -112,7 +130,7 @@ class WebServer {
 
           res.json({
             success:     true,
-            downloadUrl: `download/${token}`,
+            downloadUrl: `/download/${token}`,
             analysis:    results.analysis,
             protocol:    options.protocol,
             mode:        options.mode
@@ -251,7 +269,7 @@ class WebServer {
 
           res.json({
             success:      true,
-            downloadUrl:  `download/${token}`,
+            downloadUrl:  `/download/${token}`,
             analysis:     results.analysis,
             threadGroups: results.threadGroups,
             scripts:      results.scripts || null,   // non-null only in multi mode
@@ -275,6 +293,11 @@ class WebServer {
       res.json({ status: 'ok', version: require('../../package.json').version });
     });
 
+    // ── Catch-all 404 ─────────────────────────────────────────────────────────
+    this.app.use((req, res) => {
+      res.status(404).sendFile(path.join(__dirname, 'views', '404.html'));
+    });
+
     // ── JSON error handler ────────────────────────────────────────────────────
     // MUST be last and have 4 params (err, req, res, next) for Express to treat
     // it as an error handler.  Without this, Express returns an HTML error page
@@ -292,7 +315,7 @@ class WebServer {
   async start(port = this.port) {
     return new Promise((resolve) => {
       this.server = this.app.listen(port, () => {
-        console.log(`\n🌐  Converter UI  →  http://localhost:${port}\n`);
+        console.log(`\n🌐  Converter UI  →  http://localhost:${port}/converter\n`);
         resolve(this.server);
       });
     });
