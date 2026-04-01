@@ -1042,6 +1042,43 @@ footer {
 .hw-step-ttl { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
 .hw-step-txt { font-size: 12px; color: var(--text-2); line-height: 1.6; }
 
+/* ── Decision guide ──────────────────────────────────────────────────── */
+.decision-grid {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; width: 100%;
+}
+@media (max-width: 740px) { .decision-grid { grid-template-columns: 1fr; } }
+.decision-card {
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg); padding: 24px 20px 22px;
+  display: flex; flex-direction: column; gap: 12px;
+  backdrop-filter: blur(16px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.decision-card:hover { border-color: rgba(79,142,247,0.25); box-shadow: var(--shadow); transform: translateY(-3px); }
+.decision-q {
+  font-size: 13.5px; font-weight: 600; color: var(--text); line-height: 1.5;
+  min-height: 52px;
+}
+.decision-arrow {
+  font-size: 20px; color: var(--text-3); text-align: center; line-height: 1;
+}
+.decision-a {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 14px 16px; border-radius: var(--r-md); border: 1px solid transparent;
+}
+.tc-blue-a   { background: var(--primary-dim); border-color: rgba(79,142,247,0.20); }
+.tc-green-a  { background: rgba(52,209,122,0.08); border-color: rgba(52,209,122,0.18); }
+.tc-purple-a { background: rgba(124,92,252,0.09); border-color: rgba(124,92,252,0.18); }
+.decision-tool {
+  font-size: 13px; font-weight: 700; letter-spacing: -.1px;
+}
+.tc-blue-a   .decision-tool { color: var(--primary); }
+.tc-green-a  .decision-tool { color: var(--success); }
+.tc-purple-a .decision-tool { color: #b39dfa; }
+.decision-hint {
+  font-size: 12px; color: var(--text-2); line-height: 1.55;
+}
+
 /* ── Comparison table ─────────────────────────────────────────────────── */
 .cmp-section { width: 100%; margin-bottom: 44px; }
 .cmp-table {
@@ -1071,6 +1108,132 @@ footer {
 .cmp-th-blue   { color: var(--primary) !important; }
 .cmp-th-green  { color: var(--success) !important; }
 .cmp-th-purple { color: #b39dfa !important; }
+
+/* ══ Help Panel ══════════════════════════════════════════════════════════ */
+#portal-help {
+  width: 100%; justify-content: center;
+}
+.help-wrap {
+  width: 100%; max-width: 860px;
+  display: flex; flex-direction: column;
+  padding-bottom: 80px;
+}
+.help-page-title {
+  text-align: center; padding: 44px 0 36px;
+  animation: fadeDown 0.45s cubic-bezier(0.4,0,0.2,1) both;
+}
+.help-h1 {
+  font-size: clamp(24px, 3.5vw, 36px); font-weight: 800;
+  letter-spacing: -0.8px; color: var(--text); margin-bottom: 12px;
+}
+.help-intro {
+  font-size: 15px; color: var(--text-2); line-height: 1.7;
+  max-width: 620px; margin: 0 auto;
+}
+.help-section {
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--r-xl); padding: 32px 36px;
+  margin-bottom: 20px; backdrop-filter: blur(16px);
+}
+@media (max-width: 600px) { .help-section { padding: 24px 20px; } }
+.help-tool-badge {
+  display: inline-flex; align-items: center;
+  padding: 4px 14px; border-radius: 99px; margin-bottom: 12px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+}
+.help-badge-blue   { background: var(--primary-dim); color: var(--primary); border: 1px solid rgba(79,142,247,0.25); }
+.help-badge-green  { background: rgba(52,209,122,0.10); color: var(--success); border: 1px solid rgba(52,209,122,0.22); }
+.help-badge-purple { background: rgba(124,92,252,0.12); color: #b39dfa; border: 1px solid rgba(124,92,252,0.22); }
+.help-h2 {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.4px;
+  color: var(--text); margin-bottom: 14px;
+}
+.help-h3 {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  margin: 22px 0 8px; letter-spacing: -0.1px;
+}
+.help-p {
+  font-size: 14px; color: var(--text-2); line-height: 1.72;
+  margin-bottom: 12px;
+}
+.help-p:last-child { margin-bottom: 0; }
+.help-list, .help-steps-list {
+  margin: 0 0 14px 0; padding-left: 22px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.help-list li, .help-steps-list li {
+  font-size: 13.5px; color: var(--text-2); line-height: 1.6;
+}
+.help-steps-list { list-style: decimal; }
+.help-steps-list li::marker { color: var(--primary); font-weight: 700; }
+.help-list li strong, .help-steps-list li strong { color: var(--text); }
+code {
+  font-family: var(--mono); font-size: 12.5px;
+  background: var(--surface2); color: var(--primary);
+  padding: 1px 6px; border-radius: 4px;
+  border: 1px solid var(--glass-border);
+}
+.help-callout {
+  border-radius: var(--r-md); padding: 14px 18px;
+  font-size: 13px; line-height: 1.6; margin-top: 16px;
+  border-left: 3px solid;
+}
+.help-callout strong { display: block; margin-bottom: 3px; }
+.help-callout-blue   { background: var(--primary-dim); border-color: var(--primary); color: var(--text-2); }
+.help-callout-amber  { background: rgba(245,158,11,0.10); border-color: var(--warn); color: var(--text-2); }
+.help-callout-green  { background: rgba(52,209,122,0.08); border-color: var(--success); color: var(--text-2); }
+.help-formats {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px; margin: 12px 0 14px;
+}
+@media (max-width: 580px) { .help-formats { grid-template-columns: 1fr; } }
+.help-format-card {
+  border-radius: var(--r-md); padding: 18px 20px;
+  border: 1px solid var(--glass-border);
+}
+.help-format-blue   { background: var(--primary-dim); border-color: rgba(79,142,247,0.22); }
+.help-format-orange { background: rgba(240,136,62,0.08); border-color: rgba(240,136,62,0.22); }
+.help-format-purple1{ background: rgba(124,92,252,0.08); border-color: rgba(124,92,252,0.20); }
+.help-format-purple2{ background: rgba(124,92,252,0.14); border-color: rgba(124,92,252,0.30); }
+.help-format-title {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  margin-bottom: 8px;
+}
+.help-format-desc {
+  font-size: 13px; color: var(--text-2); line-height: 1.6;
+  margin-bottom: 8px;
+}
+.help-format-rec {
+  font-size: 12.5px; color: var(--text-3); line-height: 1.5;
+}
+.help-format-rec strong { color: var(--text-2); }
+/* Glossary */
+.help-glossary {
+  display: flex; flex-direction: column; gap: 0;
+}
+.help-glossary dt {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--glass-border);
+}
+.help-glossary dt:first-child { border-top: none; padding-top: 0; }
+.help-glossary dd {
+  font-size: 13.5px; color: var(--text-2); line-height: 1.65;
+  margin: 0; padding-bottom: 2px;
+}
+/* FAQ */
+.help-faq { display: flex; flex-direction: column; gap: 0; }
+.help-faq-item {
+  border-top: 1px solid var(--glass-border); padding: 16px 0;
+}
+.help-faq-item:first-child { border-top: none; padding-top: 0; }
+.help-faq-q {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  margin-bottom: 7px; letter-spacing: -0.1px;
+}
+.help-faq-a {
+  font-size: 13.5px; color: var(--text-2); line-height: 1.68;
+}
 </style>
 </head>
 
@@ -1083,7 +1246,7 @@ footer {
       <div class="nav-logo">⚡</div>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span class="nav-title">LRE Toolkit</span>
-        <span class="nav-subtitle">Performance Engineering · v<%= version %></span>
+        <span class="nav-subtitle">Performance Engineering</span>
       </div>
     </div>
     <!-- Portal navigation tabs — centered via absolute CSS -->
@@ -1099,6 +1262,9 @@ footer {
       </button>
       <button class="ptab" id="ptab-studio" onclick="switchPortalTab('studio')">
         🧪&nbsp;<span class="ptab-label"><span>Script Studio</span><span class="ptab-sub">Correlation</span></span>
+      </button>
+      <button class="ptab" id="ptab-help" onclick="switchPortalTab('help')">
+        📖&nbsp;<span class="ptab-label"><span>Help</span><span class="ptab-sub">Documentation</span></span>
       </button>
     </div>
     <div class="nav-actions">
@@ -1130,7 +1296,7 @@ footer {
   <header class="home-hero">
     <div class="home-hero-badge">⚡ LoadRunner Performance Engineering Toolkit</div>
     <h1>LRE Script Generation Toolkit</h1>
-    <p class="home-hero-sub">Three integrated tools that eliminate 70% of manual VuGen scripting effort. Convert API collections, record HAR traffic, and auto-correlate dynamic values — generating production-ready LoadRunner scripts in seconds.</p>
+    <p class="home-hero-sub">Three tools that generate production-ready LoadRunner VuGen scripts without writing code manually. Pick the tool that matches your starting point below.</p>
     <div class="hero-badges">
       <span class="chip">📂 Postman · Bruno · JMeter</span>
       <span class="chip">🟦 DevWeb JS</span>
@@ -1139,162 +1305,110 @@ footer {
     </div>
   </header>
 
-  <!-- Stats -->
-  <div class="home-stats">
-    <div class="home-stat">
-      <div class="home-stat-num">5</div>
-      <div class="home-stat-lbl">Input Formats</div>
-    </div>
-    <div class="home-stat">
-      <div class="home-stat-num">2</div>
-      <div class="home-stat-lbl">Output Protocols</div>
-    </div>
-    <div class="home-stat">
-      <div class="home-stat-num">70%</div>
-      <div class="home-stat-lbl">Less Scripting</div>
-    </div>
-    <div class="home-stat">
-      <div class="home-stat-num">0</div>
-      <div class="home-stat-lbl">Files Stored</div>
-    </div>
-  </div>
-
   <!-- Tool Cards -->
   <div class="tool-cards">
 
-    <!-- Collection + JMX Converter — entire card is clickable -->
+    <!-- Converter card -->
     <div class="tool-card tc-blue" role="button" tabindex="0"
          onclick="switchPortalTab('converter')"
          onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('converter')">
       <div class="tc-icon tc-icon-blue">📂</div>
       <span class="tc-tag tc-tag-blue">Collections &amp; JMX → VuGen</span>
-      <div class="tc-title">Collection Converter</div>
-      <div class="tc-desc">Convert Postman/Bruno API collections <strong>and</strong> JMeter (.jmx) scripts into production-ready LoadRunner scripts. Two conversion modes, 5 input formats, full parameterization and auth handling.</div>
+      <div class="tc-title">Converter</div>
+      <div class="tc-desc">Convert your existing Postman/Bruno API collections or JMeter scripts into VuGen scripts. No scripting knowledge needed — upload your file, choose your output format, and download.</div>
       <ul class="tc-features">
-        <li>Postman v2.1 JSON, Bruno JSON/YAML/Folder, .bru</li>
-        <li>JMeter JMX — thread groups, CSVDataSet, JSR223</li>
-        <li>DevWeb (JavaScript) and VuGen Web HTTP/HTML (C)</li>
-        <li>Auto-correlation of tokens, session IDs, CSRF tokens</li>
-        <li>OAuth2, Basic, Bearer, API Key, AWS Sig v4, JWT auth</li>
-        <li>Multi-script mode — one script per folder/thread group</li>
+        <li>Postman v2.1 JSON · Bruno JSON, YAML, .bru · JMeter .jmx</li>
+        <li>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
+        <li>Authentication: OAuth2, Basic, Bearer, API Key, JWT, AWS Sig v4</li>
+        <li>Multi-script mode — one script per folder or thread group</li>
       </ul>
       <div class="tc-cta">
-        <span class="tc-cta-text">⚡ Open Converter</span>
+        <span class="tc-cta-text">Open Converter</span>
         <span class="tc-cta-arrow">→</span>
       </div>
     </div>
 
-    <!-- HAR Script Generator / Recorder — entire card is clickable -->
+    <!-- Recorder card -->
     <div class="tool-card tc-green" role="button" tabindex="0"
          onclick="switchPortalTab('recorder')"
          onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('recorder')">
       <div class="tc-icon tc-icon-green">🎙</div>
-      <span class="tc-tag tc-tag-green">Recorded Traffic → VuGen</span>
-      <div class="tc-title">HAR Script Generator</div>
-      <div class="tc-desc">When VuGen can't record traffic due to antivirus or policy blocks, record a HAR file and this tool converts it into a fully correlated VuGen script automatically.</div>
+      <span class="tc-tag tc-tag-green">HAR File → VuGen Script</span>
+      <div class="tc-title">Recorder</div>
+      <div class="tc-desc">VuGen recording is unavailable on VCSE machines. This tool bypasses that entirely. Install the bookmarklet, record your browser journey, export a HAR from DevTools, and get a ready-to-open VuGen script — no VuGen needed for recording.</div>
       <ul class="tc-features">
-        <li>Works on any server — no proxy or certificate issues</li>
-        <li>Drag transactions to map transaction boundaries</li>
-        <li>Smart domain filtering and data asset detection</li>
-        <li>Auto-detects dynamic IDs, session tokens, bearer tokens</li>
-        <li>Supports Chrome/Firefox export for multi-tab recording</li>
-        <li>Download ready-to-open VuGen script ZIP file</li>
+        <li>No VuGen installation required to record</li>
+        <li>Works with Chrome and Firefox DevTools exports</li>
+        <li>Filter domains and mark transaction boundaries visually</li>
+        <li>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
       </ul>
       <div class="tc-cta">
-        <span class="tc-cta-text">🎙 Open Recorder</span>
+        <span class="tc-cta-text">Open Recorder</span>
         <span class="tc-cta-arrow">→</span>
       </div>
     </div>
 
-    <!-- Script Studio — entire card is clickable -->
+    <!-- Script Studio card -->
     <div class="tool-card tc-purple" role="button" tabindex="0"
          onclick="switchPortalTab('studio')"
          onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('studio')">
       <div class="tc-icon tc-icon-purple">🧪</div>
-      <span class="tc-tag tc-tag-purple">Dynamic Correlation Engine</span>
+      <span class="tc-tag tc-tag-purple">HAR Correlation Engine</span>
       <div class="tc-title">Script Studio</div>
-      <div class="tc-desc">The most advanced tool in the kit. Record or paste scripts with different data scenarios, click Analyze, and this engine automatically identifies every dynamic value and generates fully correlated scripts.</div>
+      <div class="tc-desc">Upload one or two HAR files to generate a correlated script. With two HAR files (same journey recorded twice), it compares both recordings and identifies every dynamic value — producing far more complete correlation than a single recording can.</div>
       <ul class="tc-features">
-        <li>Side-by-side comparison — complete two-recording analysis</li>
-        <li>Pattern-based mode with regex match filter for quick scans</li>
-        <li>Detects/extracts JSON, CSV, HTML, boundary, cookie extraction</li>
-        <li>Parameterization inputs (login, search, payment fields)</li>
-        <li>JSON path, XPath, boundary and cookie auto-extraction</li>
-        <li>Generates complete correlated VuGen C or DevWeb JS scripts</li>
+        <li>1 HAR — pattern-based correlation (faster, fewer correlations)</li>
+        <li>2 HARs — diff analysis (deeper, more complete correlation)</li>
+        <li>Auto-extracts JSON paths, XPath, boundaries, cookies, headers</li>
+        <li>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
       </ul>
       <div class="tc-cta">
-        <span class="tc-cta-text">🧪 Open Script Studio</span>
+        <span class="tc-cta-text">Open Script Studio</span>
         <span class="tc-cta-arrow">→</span>
       </div>
     </div>
 
   </div>
 
-  <!-- How It Works -->
+  <!-- Which tool do I need? -->
   <div class="hw-section">
-    <div class="hw-section-title">How It Works</div>
-    <div class="hw-steps">
-      <div class="hw-step">
-        <div class="hw-step-num">1</div>
-        <div class="hw-step-icon">📡</div>
-        <div class="hw-step-ttl">Capture Traffic</div>
-        <div class="hw-step-txt">Export a Postman/Bruno collection, or record a HAR file using Recorder, or use Script Studio for two-recording comparison analysis.</div>
-      </div>
-      <div class="hw-step">
-        <div class="hw-step-num">2</div>
-        <div class="hw-step-icon">🛠</div>
-        <div class="hw-step-ttl">Choose Your Tool</div>
-        <div class="hw-step-txt">Use Converter for API collections, Recorder for single HAR files, or Script Studio for complex multi-recording correlation analysis.</div>
-      </div>
-      <div class="hw-step">
-        <div class="hw-step-num">3</div>
-        <div class="hw-step-icon">⚙️</div>
-        <div class="hw-step-ttl">Upload &amp; Generate</div>
-        <div class="hw-step-txt">Choose DevWeb (JavaScript) or Web HTTP/HTML (C) output, configure options, and generate correlated scripts from your files.</div>
-      </div>
-      <div class="hw-step">
-        <div class="hw-step-num">4</div>
-        <div class="hw-step-icon">🚀</div>
-        <div class="hw-step-ttl">Open in VuGen</div>
-        <div class="hw-step-txt">Download the ZIP, extract, and double-click the .usr file to open directly in VuGen or upload to LoadRunner Enterprise.</div>
-      </div>
-    </div>
-  </div>
+    <div class="hw-section-title">Which tool do I need?</div>
+    <div class="decision-grid">
 
-  <!-- Which Tool Should I Use? -->
-  <div class="cmp-section">
-    <div class="hw-section-title">Which Tool Should I Use?</div>
-    <div style="overflow-x:auto">
-      <table class="cmp-table">
-        <thead>
-          <tr>
-            <th>Scenario</th>
-            <th class="cmp-th-blue">⚡ Converter</th>
-            <th class="cmp-th-green">🎙 Recorder</th>
-            <th class="cmp-th-purple">🧪 Script Studio</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>I have a Postman or Bruno collection</td><td class="cmp-best">✓ Best choice</td><td class="cmp-none">—</td><td class="cmp-none">—</td></tr>
-          <tr><td>I have a JMeter (.jmx) script to convert</td><td class="cmp-best">✓ Best choice</td><td class="cmp-none">—</td><td class="cmp-none">—</td></tr>
-          <tr><td>VuGen can't record (antivirus / policy blocks)</td><td class="cmp-none">—</td><td class="cmp-best">✓ Best choice</td><td class="cmp-ok">✓ With correlation</td></tr>
-          <tr><td>I need auto-correlation of dynamic values</td><td class="cmp-ok">✓ Basic</td><td class="cmp-none">—</td><td class="cmp-best">✓ Advanced</td></tr>
-          <tr><td>Quick script from a single recording</td><td class="cmp-none">—</td><td class="cmp-best">✓ Fastest</td><td class="cmp-ok">✓ Feature-rich</td></tr>
-          <tr><td>Complex app with login, CSRF, OAuth, ViewState</td><td class="cmp-none">—</td><td class="cmp-none">— Basic only</td><td class="cmp-best">✓ Best choice</td></tr>
-          <tr><td>Multi-script mode (split by folder/scenario)</td><td class="cmp-ok">✓ Supported</td><td class="cmp-none">—</td><td class="cmp-none">—</td></tr>
-          <tr><td>Output DevWeb (JavaScript)</td><td class="cmp-ok">✓</td><td class="cmp-ok">✓</td><td class="cmp-ok">✓</td></tr>
-          <tr><td>Output Web HTTP/HTML (C)</td><td class="cmp-ok">✓</td><td class="cmp-ok">✓</td><td class="cmp-ok">✓</td></tr>
-        </tbody>
-      </table>
+      <div class="decision-card">
+        <div class="decision-q">I have a Postman collection, Bruno collection, or JMeter (.jmx) script</div>
+        <div class="decision-arrow">↓</div>
+        <div class="decision-a tc-blue-a">
+          <span class="decision-tool">⚡ Converter</span>
+          <span class="decision-hint">Upload your file, choose output format, download ZIP, open in VuGen.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-q">I need to record a new user journey but VuGen recording doesn't work on my machine</div>
+        <div class="decision-arrow">↓</div>
+        <div class="decision-a tc-green-a">
+          <span class="decision-tool">🎙 Recorder → then 🧪 Script Studio</span>
+          <span class="decision-hint">Use Recorder to create a HAR file from your browser. Then use Script Studio to turn it into a correlated script.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-q">I already have a HAR file and want to generate a script with correlations</div>
+        <div class="decision-arrow">↓</div>
+        <div class="decision-a tc-purple-a">
+          <span class="decision-tool">🧪 Script Studio</span>
+          <span class="decision-hint">Upload 1 HAR for basic correlation. Record the journey twice and upload 2 HARs for deeper, more complete correlation.</span>
+        </div>
+      </div>
+
     </div>
   </div>
 
   <!-- Footer for home panel -->
   <footer>
     <div class="footer-links">
-      <span>LR Performance Engineering Toolkit</span>
-      <span class="footer-sep">·</span>
-      <span>v<%= version %></span>
+      <span>LRE Toolkit · Performance Engineering</span>
       <span class="footer-sep">·</span>
       <span>Files processed in-memory — nothing stored on server</span>
     </div>
@@ -1664,6 +1778,214 @@ footer {
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- PORTAL: HELP PANEL                                                      -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="portal-help" style="display:none" class="portal-content-panel">
+<div class="help-wrap">
+
+  <!-- Page title -->
+  <div class="help-page-title">
+    <div class="home-hero-badge" style="margin-bottom:16px">📖 Documentation</div>
+    <h1 class="help-h1">Help &amp; User Guide</h1>
+    <p class="help-intro">Everything you need to use this toolkit — from first-time setup to advanced correlation. Designed for both technical and non-technical users.</p>
+  </div>
+
+  <!-- ── SECTION: What is this toolkit? ──────────────────────────────────── -->
+  <section class="help-section">
+    <h2 class="help-h2">What is this toolkit?</h2>
+    <p class="help-p">This is a set of three browser-based tools that help performance engineers create LoadRunner VuGen scripts — without having to write code from scratch.</p>
+    <p class="help-p">LoadRunner Enterprise (LRE) uses <strong>VuGen</strong> to simulate users. VuGen scripts are what describe the user journey — clicking buttons, submitting forms, making API calls. Writing these scripts manually is time-consuming. This toolkit generates them automatically from files you already have (API collections, browser recordings, or JMeter scripts).</p>
+    <div class="help-callout help-callout-blue">
+      <strong>No files are stored on the server.</strong> Everything you upload is processed in-memory and immediately discarded. The only thing that leaves the server is your downloaded ZIP file.
+    </div>
+  </section>
+
+  <!-- ── SECTION: Output formats ─────────────────────────────────────────── -->
+  <section class="help-section">
+    <h2 class="help-h2">Output formats — which should I choose?</h2>
+    <p class="help-p">All three tools can generate scripts in either of two formats:</p>
+    <div class="help-formats">
+      <div class="help-format-card help-format-blue">
+        <div class="help-format-title">🟦 DevWeb · JavaScript</div>
+        <p class="help-format-desc">The modern LoadRunner protocol. Scripts are written in JavaScript and run in a Node.js-like environment. Generates a <code>main.js</code> file.</p>
+        <p class="help-format-rec"><strong>Choose this if:</strong> your team uses LRE 2021 or later, or you are comfortable with JavaScript.</p>
+      </div>
+      <div class="help-format-card help-format-orange">
+        <div class="help-format-title">🟧 Web HTTP/HTML · C</div>
+        <p class="help-format-desc">The classic VuGen protocol. Scripts are written in C and use familiar VuGen functions like <code>web_url()</code> and <code>web_custom_request()</code>. Generates an <code>Action.c</code> file.</p>
+        <p class="help-format-rec"><strong>Choose this if:</strong> your team uses older LRE versions or prefers the traditional VuGen scripting style.</p>
+      </div>
+    </div>
+    <p class="help-p">Not sure? Ask your LRE administrator which protocol your project uses. When in doubt, choose <strong>DevWeb</strong> — it is the current default for new projects.</p>
+  </section>
+
+  <!-- ── SECTION: Converter ──────────────────────────────────────────────── -->
+  <section class="help-section">
+    <div class="help-tool-badge help-badge-blue">⚡ Converter</div>
+    <h2 class="help-h2">Converter — Collections &amp; JMX to VuGen</h2>
+    <p class="help-p">Use this tool when you already have an API collection (Postman or Bruno) or an existing JMeter script (.jmx) and want to convert it into a VuGen script.</p>
+
+    <h3 class="help-h3">Postman / Bruno Collections</h3>
+    <p class="help-p"><strong>Supported file formats:</strong></p>
+    <ul class="help-list">
+      <li><strong>Postman v2.1</strong> — export from Postman as a Collection v2.1 JSON file</li>
+      <li><strong>Bruno JSON</strong> — the <code>.json</code> export from Bruno</li>
+      <li><strong>Bruno YAML</strong> — <code>.yml</code> or <code>.yaml</code> files</li>
+      <li><strong>Bruno folder</strong> — a directory containing <code>.bru</code> files (export as zip then upload)</li>
+      <li><strong>Single .bru file</strong> — a single Bruno request file</li>
+    </ul>
+    <p class="help-p">You can also upload an <strong>Environment file</strong> alongside your collection. This fills in variable values (like base URLs, API keys, usernames) in the generated script.</p>
+
+    <h3 class="help-h3">JMeter Scripts (.jmx)</h3>
+    <p class="help-p">Upload a JMeter <code>.jmx</code> file exported from Apache JMeter. You can also upload:</p>
+    <ul class="help-list">
+      <li><strong>CSV files</strong> — if your JMeter script uses CSVDataSet elements to read test data</li>
+      <li><strong>Certificate files</strong> — if your script uses client certificates for authentication</li>
+    </ul>
+
+    <h3 class="help-h3">Step-by-step</h3>
+    <ol class="help-steps-list">
+      <li>Click <strong>Converter</strong> in the top navigation.</li>
+      <li>Select the tab matching your input: <strong>Postman / Bruno</strong> or <strong>JMeter (.jmx)</strong>.</li>
+      <li>Choose your output format: <strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>.</li>
+      <li>Drag and drop your file into the upload area, or click to browse.</li>
+      <li>Adjust options (transactions, correlation, parameterization, think time) as needed.</li>
+      <li>Click <strong>Convert</strong>.</li>
+      <li>When conversion completes, click <strong>Download ZIP</strong>.</li>
+      <li>Extract the ZIP and open the <code>.usr</code> file in VuGen, or upload it directly to LoadRunner Enterprise.</li>
+    </ol>
+
+    <div class="help-callout help-callout-amber">
+      <strong>Multi-script mode:</strong> If your collection has multiple folders (Postman) or thread groups (JMeter), enable <em>Multi-script mode</em> to generate one separate script per folder/group instead of one combined script.
+    </div>
+  </section>
+
+  <!-- ── SECTION: Recorder ───────────────────────────────────────────────── -->
+  <section class="help-section">
+    <div class="help-tool-badge help-badge-green">🎙 Recorder</div>
+    <h2 class="help-h2">Recorder — HAR File to VuGen Script</h2>
+    <p class="help-p">On VCSE machines, VuGen's built-in recording does not work. The proxy cannot be installed and browser events do not get captured. The Recorder tool solves this by letting you record your user journey using only your browser — no VuGen installation needed for recording.</p>
+
+    <h3 class="help-h3">What is a HAR file?</h3>
+    <p class="help-p">A HAR (HTTP Archive) file is a recording of all the network requests your browser made during a session. Every modern browser's Developer Tools (F12) can export one. It contains all the URLs, request headers, request bodies, and responses for everything that happened during your recording.</p>
+
+    <h3 class="help-h3">Step-by-step</h3>
+    <ol class="help-steps-list">
+      <li>Open the <strong>Recorder</strong> tab and follow the <em>Bookmarklet Setup</em> instructions to install the recording helper in your browser bookmarks bar. You only need to do this once.</li>
+      <li>Open your browser and navigate to the application you want to test.</li>
+      <li>Open <strong>DevTools</strong> (press F12) and go to the <strong>Network</strong> tab. Make sure recording is on (the red circle should be active).</li>
+      <li>Perform your complete user journey — log in, navigate pages, submit forms — exactly as a real user would.</li>
+      <li>When done, in DevTools Network tab click the <strong>Export HAR</strong> button (the download icon) and save the <code>.har</code> file.</li>
+      <li>Come back to the Recorder tool and drag the <code>.har</code> file into the drop zone, or click to browse.</li>
+      <li>Use the <strong>Domain Filter</strong> to uncheck domains you do not want in your script (e.g. analytics, CDNs, fonts).</li>
+      <li>Drag request rows to group them into named <strong>transactions</strong> if needed.</li>
+      <li>Choose your output format (<strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>) and click <strong>Generate Script</strong>.</li>
+      <li>Download the ZIP and open it in VuGen.</li>
+    </ol>
+
+    <div class="help-callout help-callout-green">
+      <strong>Tip:</strong> For deeper correlation (auto-detection of dynamic values like tokens and session IDs), take your HAR file into <strong>Script Studio</strong> after recording. Record the same journey twice and upload both HAR files to Script Studio for the most complete result.
+    </div>
+  </section>
+
+  <!-- ── SECTION: Script Studio ──────────────────────────────────────────── -->
+  <section class="help-section">
+    <div class="help-tool-badge help-badge-purple">🧪 Script Studio</div>
+    <h2 class="help-h2">Script Studio — HAR Correlation Engine</h2>
+    <p class="help-p">Script Studio takes HAR files and generates VuGen scripts with <strong>correlation</strong> already built in. Correlation means the script automatically captures dynamic values (like login tokens, session IDs, CSRF tokens, and order IDs) from server responses and reuses them in later requests — just like a real user's browser does.</p>
+
+    <h3 class="help-h3">What is correlation and why does it matter?</h3>
+    <p class="help-p">When you log in to a web application, the server sends back a token or session ID. Every request after that must include this token. If your script has the token hard-coded from your recording session, it will fail when run again because the server issues a new token each time. Correlation solves this by extracting the token dynamically at runtime and passing it forward automatically.</p>
+    <p class="help-p">Without correlation, your script will fail on replay. Script Studio generates the extraction and substitution code for you automatically.</p>
+
+    <h3 class="help-h3">1 HAR vs 2 HARs — what is the difference?</h3>
+    <div class="help-formats">
+      <div class="help-format-card help-format-purple1">
+        <div class="help-format-title">1 HAR file</div>
+        <p class="help-format-desc">Script Studio uses pattern-based analysis to find values that look dynamic (UUIDs, tokens, long random strings, timestamps). This is fast and works well for simple applications.</p>
+        <p class="help-format-rec"><strong>Use when:</strong> you have one recording and want a quick result. Some correlations may need manual adjustment.</p>
+      </div>
+      <div class="help-format-card help-format-purple2">
+        <div class="help-format-title">2 HAR files (recommended)</div>
+        <p class="help-format-desc">Record the exact same user journey twice with different data (e.g. two different logins). Script Studio compares both recordings and finds every value that changed between runs — these are guaranteed to be dynamic. This produces far more complete and accurate correlation.</p>
+        <p class="help-format-rec"><strong>Use when:</strong> you want the most reliable script. This is the recommended approach for any application with login, tokens, or session management.</p>
+      </div>
+    </div>
+
+    <h3 class="help-h3">Step-by-step</h3>
+    <ol class="help-steps-list">
+      <li>Use the <strong>Recorder</strong> tool (or browser DevTools directly) to create your HAR file(s).</li>
+      <li>For 2-HAR mode: record the same journey twice using different test credentials or data.</li>
+      <li>Open <strong>Script Studio</strong> from the navigation.</li>
+      <li>Drag your first HAR file into the <strong>Recording 1</strong> drop zone. For 2-HAR mode, drag the second into the <strong>Recording 2</strong> drop zone.</li>
+      <li>Choose your output format: <strong>DevWeb</strong>, <strong>Web HTTP/HTML</strong>, or <strong>Both</strong>.</li>
+      <li>Click <strong>Analyze</strong>.</li>
+      <li>Review the correlation and parameterization results shown.</li>
+      <li>Click <strong>Download ZIP</strong> and open the script in VuGen.</li>
+    </ol>
+  </section>
+
+  <!-- ── SECTION: Glossary ────────────────────────────────────────────────── -->
+  <section class="help-section">
+    <h2 class="help-h2">Glossary</h2>
+    <dl class="help-glossary">
+      <dt>VuGen</dt>
+      <dd>Virtual User Generator — the tool in LoadRunner Enterprise used to create and edit performance test scripts that simulate real users.</dd>
+      <dt>LRE / LoadRunner Enterprise</dt>
+      <dd>The performance testing platform. Scripts created by this toolkit are designed to run on LRE.</dd>
+      <dt>DevWeb</dt>
+      <dd>A modern LoadRunner protocol where scripts are written in JavaScript. Scripts run as <code>main.js</code>.</dd>
+      <dt>Web HTTP/HTML (C)</dt>
+      <dd>The classic LoadRunner protocol where scripts are written in C. Scripts run as <code>Action.c</code>.</dd>
+      <dt>HAR file</dt>
+      <dd>HTTP Archive — a JSON file exported from your browser's Developer Tools that contains a complete recording of all network requests made during a session.</dd>
+      <dt>Correlation</dt>
+      <dd>The process of capturing a dynamic value (like a token or session ID) from a server response and automatically inserting it into later requests, so the script works correctly on every run.</dd>
+      <dt>Parameterization</dt>
+      <dd>Replacing a hard-coded value (like a username or password) in a script with a variable that reads from a data file, so different virtual users use different data.</dd>
+      <dt>Transaction</dt>
+      <dd>A named measurement boundary in a VuGen script. LoadRunner records response time for each transaction separately, so you can see performance for specific user actions (e.g. "Login", "Search", "Checkout").</dd>
+      <dt>CSVDataSet (JMeter)</dt>
+      <dd>A JMeter feature that reads test data from a CSV file at runtime. When converting a JMX file, upload any CSV files your script references alongside the .jmx.</dd>
+    </dl>
+  </section>
+
+  <!-- ── SECTION: FAQ ─────────────────────────────────────────────────────── -->
+  <section class="help-section">
+    <h2 class="help-h2">Frequently Asked Questions</h2>
+
+    <div class="help-faq">
+      <div class="help-faq-item">
+        <div class="help-faq-q">Which output format should I choose — DevWeb or Web HTTP/HTML?</div>
+        <div class="help-faq-a">Ask your LRE administrator or project lead. If you are starting a new project on LRE 2021 or later, DevWeb (JavaScript) is recommended. For existing projects or older LRE versions, use Web HTTP/HTML (C).</div>
+      </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">My download failed or the ZIP is empty. What happened?</div>
+        <div class="help-faq-a">The download link is single-use and expires after 5 minutes. If you waited too long or clicked the link more than once, go back and run the conversion again — it only takes a few seconds.</div>
+      </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">My script runs but fails with "invalid token" or "session expired" errors.</div>
+        <div class="help-faq-a">This means the script has a hard-coded value that needs to be correlated. Use Script Studio with 2 HAR files (record the same journey twice) for the most complete correlation. The diff-based analysis will find the values causing the failure.</div>
+      </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">Can I upload files from a shared drive or network path?</div>
+        <div class="help-faq-a">Yes — the upload areas accept any file you can access from your machine. Just browse to the file location as normal.</div>
+      </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">Are my files stored on the server?</div>
+        <div class="help-faq-a">No. Files are processed entirely in memory and are never written to disk. Nothing persists on the server between requests. Your data is not accessible to anyone else.</div>
+      </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">The conversion completed but the script doesn't look right. What should I check?</div>
+        <div class="help-faq-a">Check that you uploaded the correct file format (e.g. Postman v2.1, not v2.0). For Bruno collections, make sure you exported from Bruno correctly. For JMeter, ensure the .jmx file is from a supported JMeter version and includes all referenced CSV files.</div>
+      </div>
+    </div>
+  </section>
+
+</div><!-- /.help-wrap -->
+</div><!-- /#portal-help -->
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
 <script>
 /* ── Theme toggle ────────────────────────────────────────────────────────── */
 function toggleTheme() {
@@ -1686,7 +2008,7 @@ const F  = { collection:null, environment:null };
 const JX = { proto:'devweb', mode:'single', tt:1, wlm:true, file:null, csvFiles:[], certFiles:[] };
 
 /* ── Portal tab switching ───────────────────────────────────────────────── */
-const PORTAL_PANELS    = ['home','converter','recorder','studio'];
+const PORTAL_PANELS    = ['home','converter','recorder','studio','help'];
 const PORTAL_IFRAMES   = { recorder: '/tools/recorder', studio: '/tools/studio' };
 let   _iframeLoaded    = {};
 
@@ -1702,11 +2024,13 @@ function switchPortalTab(tab) {
   const converter = document.getElementById('portal-converter');
   const recorder  = document.getElementById('portal-recorder');
   const studio    = document.getElementById('portal-studio');
+  const help      = document.getElementById('portal-help');
 
   home.style.display      = tab === 'home'      ? 'flex'  : 'none';
   converter.style.display = tab === 'converter' ? 'flex'  : 'none';
-  recorder.style.display  = tab === 'recorder'  ? 'flex' : 'none';
-  studio.style.display    = tab === 'studio'    ? 'flex' : 'none';
+  recorder.style.display  = tab === 'recorder'  ? 'flex'  : 'none';
+  studio.style.display    = tab === 'studio'    ? 'flex'  : 'none';
+  help.style.display      = tab === 'help'      ? 'flex'  : 'none';
 
   // Lazy-load iframes on first visit, then init portal theme
   if (PORTAL_IFRAMES[tab] && !_iframeLoaded[tab]) {
@@ -1730,6 +2054,7 @@ function switchPortalTab(tab) {
   document.getElementById('portal-converter').style.display = 'none';
   document.getElementById('portal-recorder').style.display  = 'none';
   document.getElementById('portal-studio').style.display    = 'none';
+  document.getElementById('portal-help').style.display      = 'none';
 })();
 
 /* ── Converter tab switching ────────────────────────────────────────────── */
