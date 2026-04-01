@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LRE Toolkit — Performance Engineering · v<%= version %></title>
+<title>LRE Toolkit — Performance Engineering</title>
 <script>/* prevent FOUC */(function(){const t=localStorage.getItem('lr-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1309,7 +1309,7 @@ code {
   <div class="tool-cards">
 
     <!-- Converter card -->
-    <div class="tool-card tc-blue" role="button" tabindex="0"
+    <div class="tool-card tc-blue" id="tc-converter" role="button" tabindex="0"
          onclick="switchPortalTab('converter')"
          onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('converter')">
       <div class="tc-icon tc-icon-blue">📂</div>
@@ -1329,7 +1329,7 @@ code {
     </div>
 
     <!-- Recorder card -->
-    <div class="tool-card tc-green" role="button" tabindex="0"
+    <div class="tool-card tc-green" id="tc-recorder" role="button" tabindex="0"
          onclick="switchPortalTab('recorder')"
          onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('recorder')">
       <div class="tc-icon tc-icon-green">🎙</div>
@@ -1349,7 +1349,7 @@ code {
     </div>
 
     <!-- Script Studio card -->
-    <div class="tool-card tc-purple" role="button" tabindex="0"
+    <div class="tool-card tc-purple" id="tc-studio" role="button" tabindex="0"
          onclick="switchPortalTab('studio')"
          onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('studio')">
       <div class="tc-icon tc-icon-purple">🧪</div>
@@ -1743,9 +1743,7 @@ code {
 <!-- ── Footer ──────────────────────────────────────────────────────────── -->
 <footer>
   <div class="footer-links">
-    <span>Performance Engineering Toolkit</span>
-    <span class="footer-sep">·</span>
-    <span>v<%= version %></span>
+    <span>LRE Toolkit · Performance Engineering</span>
     <span class="footer-sep">·</span>
     <span>Files processed in-memory — nothing stored on server</span>
   </div>
@@ -2007,33 +2005,43 @@ const S  = { proto:'devweb', mode:'single', tt:1, ll:'info' };
 const F  = { collection:null, environment:null };
 const JX = { proto:'devweb', mode:'single', tt:1, wlm:true, file:null, csvFiles:[], certFiles:[] };
 
+/* ── Feature Flags ──────────────────────────────────────────────────────────
+ * To disable a tool/tab: set enabled: false.
+ * The tool's HTML and code are fully preserved — only the UI entry point is
+ * hidden. Re-enable at any time by setting enabled: true.
+ * ────────────────────────────────────────────────────────────────────────── */
+const PORTAL_CONFIG = {
+  tabs: {
+    home:      { enabled: true  },
+    converter: { enabled: true  },
+    recorder:  { enabled: true  },
+    studio:    { enabled: true  },
+    help:      { enabled: true  }
+  },
+  iframes: { recorder: '/tools/recorder', studio: '/tools/studio' }
+};
+
 /* ── Portal tab switching ───────────────────────────────────────────────── */
-const PORTAL_PANELS    = ['home','converter','recorder','studio','help'];
-const PORTAL_IFRAMES   = { recorder: '/tools/recorder', studio: '/tools/studio' };
-let   _iframeLoaded    = {};
+const PORTAL_PANELS = Object.keys(PORTAL_CONFIG.tabs);
+let   _iframeLoaded = {};
 
 function switchPortalTab(tab) {
-  // Update tab button classes
+  if (!PORTAL_CONFIG.tabs[tab]?.enabled) return; // guard: disabled tab
+
+  // Update tab button active state
   PORTAL_PANELS.forEach(t => {
     const btn = document.getElementById('ptab-' + t);
     if (btn) btn.className = 'ptab' + (t === tab ? ' ptab-active' : '');
   });
 
   // Show/hide panels
-  const home      = document.getElementById('portal-home');
-  const converter = document.getElementById('portal-converter');
-  const recorder  = document.getElementById('portal-recorder');
-  const studio    = document.getElementById('portal-studio');
-  const help      = document.getElementById('portal-help');
-
-  home.style.display      = tab === 'home'      ? 'flex'  : 'none';
-  converter.style.display = tab === 'converter' ? 'flex'  : 'none';
-  recorder.style.display  = tab === 'recorder'  ? 'flex'  : 'none';
-  studio.style.display    = tab === 'studio'    ? 'flex'  : 'none';
-  help.style.display      = tab === 'help'      ? 'flex'  : 'none';
+  PORTAL_PANELS.forEach(t => {
+    const panel = document.getElementById('portal-' + t);
+    if (panel) panel.style.display = (t === tab) ? 'flex' : 'none';
+  });
 
   // Lazy-load iframes on first visit, then init portal theme
-  if (PORTAL_IFRAMES[tab] && !_iframeLoaded[tab]) {
+  if (PORTAL_CONFIG.iframes[tab] && !_iframeLoaded[tab]) {
     _iframeLoaded[tab] = true;
     const iframeEl = document.getElementById('iframe-' + tab);
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
@@ -2042,19 +2050,27 @@ function switchPortalTab(tab) {
         iframeEl.contentWindow.lrePortalInit(currentTheme);
       }
     };
-    iframeEl.src = PORTAL_IFRAMES[tab];
+    iframeEl.src = PORTAL_CONFIG.iframes[tab];
   }
 
-  // Scroll to top when switching
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// Initialise: show home, hide rest
+// Initialise: apply feature flags, then show home
 (function initPortal() {
-  document.getElementById('portal-converter').style.display = 'none';
-  document.getElementById('portal-recorder').style.display  = 'none';
-  document.getElementById('portal-studio').style.display    = 'none';
-  document.getElementById('portal-help').style.display      = 'none';
+  PORTAL_PANELS.forEach(t => {
+    const enabled = PORTAL_CONFIG.tabs[t].enabled;
+    // Hide tab nav button for disabled tools
+    const btn = document.getElementById('ptab-' + t);
+    if (btn) btn.style.display = enabled ? '' : 'none';
+    // Hide home-page tool card for disabled tools (cards use id="tc-{tab}")
+    const card = document.getElementById('tc-' + t);
+    if (card) card.style.display = enabled ? '' : 'none';
+    // Hide all panels — switchPortalTab('home') will reveal home
+    const panel = document.getElementById('portal-' + t);
+    if (panel && t !== 'home') panel.style.display = 'none';
+  });
+  switchPortalTab('home');
 })();
 
 /* ── Converter tab switching ────────────────────────────────────────────── */
