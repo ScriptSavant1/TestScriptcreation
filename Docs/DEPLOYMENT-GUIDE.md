@@ -143,7 +143,16 @@ Do **not** copy the following to the server:
 | `.git\` | Version control history — not needed on server |
 | `test\` | Unit tests — not needed on server |
 | `Docs\` | Documentation files — not needed on server |
+| `uploads\` | Local test artifacts — not needed on server |
+| `output\` | Local test output — not needed on server |
+| `devweb-prompts\` | AI prompt files — not needed on server |
+| `collection-examples\` | Sample collections — not needed on server |
+| `examples\` | Example scripts — not needed on server |
 | `*.md` files in root | Documentation — not needed on server |
+| `Dockerfile` | Docker config — not applicable to IIS deployment |
+| `install.bat`, `install.ps1`, `install.sh` | Local install scripts — not needed on server |
+| `regression_test.js` | Local test runner — not needed on server |
+| `*.pdf` files | Reference PDFs — not needed on server |
 
 ---
 
