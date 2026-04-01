@@ -1957,7 +1957,10 @@ async function doConvert() {
 
   try {
     const r = await fetch('/convert', { method: 'POST', body: fd });
-    const d = await r.json();
+    const ct = r.headers.get('content-type') || '';
+    const d = ct.includes('application/json')
+      ? await r.json()
+      : (await r.text(), { error: `Server error (${r.status}): ${r.statusText}. Check server logs for details.` });
     clearInterval(prog.tick); prog.fill(); prog.hide();
     resetBtn(); showResult(r.ok ? d : null, r.ok ? null : d.error);
   } catch(e) {
@@ -1999,7 +2002,10 @@ async function doConvertJmx() {
 
   try {
     const r = await fetch('/convert-jmx', { method: 'POST', body: fd });
-    const d = await r.json();
+    const ct = r.headers.get('content-type') || '';
+    const d = ct.includes('application/json')
+      ? await r.json()
+      : (await r.text(), { error: `Server error (${r.status}): ${r.statusText}. Check server logs for details.` });
     clearInterval(prog.tick); prog.fill(); prog.hide();
     resetJmxBtn(); showJmxResult(r.ok ? d : null, r.ok ? null : d.error);
   } catch(e) {
