@@ -3,64 +3,82 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LR Script Converter · v<%= version %></title>
+<title>LRE Toolkit — Performance Engineering · v<%= version %></title>
 <script>/* prevent FOUC */(function(){const t=localStorage.getItem('lr-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ── Dark tokens (default) ──────────────────────────────────────────────── */
 :root {
-  --bg:           #080c14;
-  --bg2:          #0d1220;
-  --nav-bg:       rgba(8,12,20,0.90);
-  --glass:        rgba(255,255,255,0.04);
-  --glass-border: rgba(255,255,255,0.08);
+  /* backgrounds */
+  --bg:           #060b15;
+  --bg2:          #0b1221;
+  --nav-bg:       rgba(6,11,21,0.92);
+  /* glass surfaces */
+  --glass:        rgba(255,255,255,0.045);
+  --glass-border: rgba(255,255,255,0.09);
   --glass-hover:  rgba(255,255,255,0.07);
-  --surface:      rgba(13,18,32,0.85);
-  --text:         #e8edf5;
-  --text-2:       #a8b3c8;
-  --text-3:       #5a6a82;
+  --surface:      rgba(11,18,33,0.88);
+  /* text */
+  --text:         #eaf0fb;
+  --text-2:       #8fa3c0;
+  --text-3:       #4a5a72;
+  /* brand colours */
   --primary:      #4f8ef7;
-  --primary-glow: rgba(79,142,247,0.30);
-  --primary-dim:  rgba(79,142,247,0.12);
+  --primary-glow: rgba(79,142,247,0.28);
+  --primary-dim:  rgba(79,142,247,0.11);
   --accent:       #7c5cfc;
+  --accent-glow:  rgba(124,92,252,0.25);
+  /* protocol colours */
   --vugen:        #f0883e;
-  --vugen-glow:   rgba(240,136,62,0.30);
-  --vugen-dim:    rgba(240,136,62,0.12);
+  --vugen-glow:   rgba(240,136,62,0.28);
+  --vugen-dim:    rgba(240,136,62,0.11);
+  /* status */
   --success:      #34d17a;
-  --success-glow: rgba(52,209,122,0.25);
-  --success-dim:  rgba(52,209,122,0.10);
+  --success-glow: rgba(52,209,122,0.22);
+  --success-dim:  rgba(52,209,122,0.09);
   --danger:       #f06464;
+  --danger-dim:   rgba(240,100,100,0.10);
   --warn:         #f0c040;
-  --mono:         'JetBrains Mono', monospace;
-  --sans:         'Inter', system-ui, -apple-system, sans-serif;
-  --r-sm:  8px;  --r-md: 14px;  --r-lg: 20px;  --r-xl: 28px;
-  --shadow:    0 8px 32px rgba(0,0,0,0.40);
-  --shadow-lg: 0 24px 64px rgba(0,0,0,0.60);
+  /* typography */
+  --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  /* shape */
+  --r-xs: 5px; --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px; --r-2xl: 32px;
+  /* elevation */
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.30);
+  --shadow:    0 8px 32px rgba(0,0,0,0.45);
+  --shadow-lg: 0 24px 64px rgba(0,0,0,0.65);
+  /* timing */
   --tr: 0.2s cubic-bezier(0.4,0,0.2,1);
+  --tr-spring: 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  /* misc */
   --knob: var(--text-3);
 }
 /* ── Light tokens ───────────────────────────────────────────────────────── */
 [data-theme="light"] {
-  --bg:           #f0f4f9;
-  --bg2:          #e4ecf6;
-  --nav-bg:       rgba(255,255,255,0.92);
-  --glass:        rgba(255,255,255,0.65);
+  --bg:           #f0f4fa;
+  --bg2:          #e2eaf6;
+  --nav-bg:       rgba(255,255,255,0.94);
+  --glass:        rgba(255,255,255,0.70);
   --glass-border: rgba(0,0,0,0.08);
-  --glass-hover:  rgba(0,0,0,0.035);
-  --surface:      rgba(255,255,255,0.90);
-  --text:         #0d1220;
-  --text-2:       #3d4a60;
-  --text-3:       #8896ac;
-  --primary-glow: rgba(79,142,247,0.18);
+  --glass-hover:  rgba(0,0,0,0.04);
+  --surface:      rgba(255,255,255,0.92);
+  --text:         #0b1221;
+  --text-2:       #334560;
+  --text-3:       #7a90ab;
+  --primary-glow: rgba(79,142,247,0.16);
   --primary-dim:  rgba(79,142,247,0.09);
-  --vugen-glow:   rgba(240,136,62,0.18);
+  --accent-glow:  rgba(124,92,252,0.14);
+  --vugen-glow:   rgba(240,136,62,0.16);
   --vugen-dim:    rgba(240,136,62,0.09);
-  --success-glow: rgba(52,209,122,0.15);
+  --success-glow: rgba(52,209,122,0.14);
   --success-dim:  rgba(52,209,122,0.08);
-  --shadow:    0 4px 20px rgba(0,0,0,0.08);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.14);
+  --danger-dim:   rgba(220,38,38,0.08);
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.07);
+  --shadow:    0 4px 20px rgba(0,0,0,0.09);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.13);
   --knob: #94a3b8;
 }
 
@@ -93,9 +111,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 54px 16px 48px;   /* 54px = nav height */
+  padding: 58px 20px 60px;   /* 58px = nav height + gap */
   position: relative;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* ── Animated background mesh ───────────────────────────────────────────── */
@@ -106,16 +127,17 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 60% at 10%  0%, rgba(79,142,247,0.12) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 90% 10%, rgba(124,92,252,0.10) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 40% at 50% 90%, rgba(240,136,62,0.07) 0%, transparent 60%);
-  transition: background 0.40s ease;
+    radial-gradient(ellipse 70% 55% at  8%  5%, rgba(79,142,247,0.13) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 92% 12%, rgba(124,92,252,0.11) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 35% at 50% 95%, rgba(240,136,62,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 85% 75%, rgba(52,209,122,0.05) 0%, transparent 55%);
+  transition: background 0.5s ease;
 }
 [data-theme="light"] body::before {
   background:
-    radial-gradient(ellipse 80% 60% at 10%  0%, rgba(79,142,247,0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 90% 10%, rgba(124,92,252,0.05) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 40% at 50% 90%, rgba(240,136,62,0.04) 0%, transparent 60%);
+    radial-gradient(ellipse 70% 55% at  8%  5%, rgba(79,142,247,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 92% 12%, rgba(124,92,252,0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 35% at 50% 95%, rgba(240,136,62,0.04) 0%, transparent 60%);
 }
 body > * { position: relative; z-index: 1; }
 
@@ -124,27 +146,40 @@ body > * { position: relative; z-index: 1; }
   position: fixed;
   top: 0; left: 0; right: 0;
   z-index: 200;
-  height: 54px;
+  height: 58px;
   background: var(--nav-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
   border-bottom: 1px solid var(--glass-border);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 1px 0 var(--glass-border), var(--shadow-sm);
 }
 .nav-inner {
   width: 100%;
-  max-width: 932px;
-  padding: 0 16px;
+  max-width: 1100px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: relative;
 }
 .nav-brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+.nav-brand:hover .nav-title { color: var(--primary); }
+.nav-brand:hover .nav-logo  { box-shadow: 0 4px 20px var(--primary-glow); transform: scale(1.05); }
+.nav-logo { transition: box-shadow var(--tr), transform var(--tr-spring); }
+.nav-title { transition: color var(--tr); }
+.nav-subtitle {
+  font-size: 9.5px; font-weight: 500; color: var(--text-3);
+  letter-spacing: .04em; line-height: 1;
 }
 .nav-logo {
   width: 30px; height: 30px;
@@ -292,37 +327,43 @@ body > * { position: relative; z-index: 1; }
   background: var(--surface);
   border: 1px solid var(--glass-border);
   border-radius: 0 0 var(--r-xl) var(--r-xl);
-  padding: 32px;
-  backdrop-filter: blur(20px);
+  padding: 28px 32px 32px;
+  backdrop-filter: blur(24px);
   margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
 }
-.card.standalone { border-radius: var(--r-xl); margin-top: 16px; }
+.card.standalone {
+  border-radius: var(--r-xl); margin-top: 16px;
+  border-top: 1px solid var(--glass-border);
+}
 
 .section-label {
   display: flex; align-items: center; gap: 10px;
-  font-size: 11px; font-weight: 700;
+  font-size: 10.5px; font-weight: 700;
   color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 1.2px;
-  margin-bottom: 16px;
+  text-transform: uppercase; letter-spacing: 1.4px;
+  margin-bottom: 18px;
 }
 .section-label::before {
   content: '';
-  width: 3px; height: 16px;
+  width: 3px; height: 14px;
   border-radius: 2px;
   background: linear-gradient(to bottom, var(--primary), var(--accent));
   flex-shrink: 0;
 }
 .section-num {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px;
-  border-radius: 6px;
-  background: var(--primary-dim); color: var(--primary);
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--primary-dim), rgba(124,92,252,0.10));
+  color: var(--primary);
   font-size: 10px; font-weight: 800;
+  border: 1px solid rgba(79,142,247,0.18);
 }
 
 /* ── Protocol selector ──────────────────────────────────────────────────── */
 .proto-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
   margin-bottom: 28px;
 }
 @media (max-width: 560px) { .proto-grid { grid-template-columns: 1fr; } }
@@ -336,7 +377,9 @@ body > * { position: relative; z-index: 1; }
   user-select: none;
   background: var(--glass);
   position: relative; overflow: hidden;
+  transition: border-color var(--tr), box-shadow var(--tr), transform var(--tr-spring);
 }
+.proto-card:hover { transform: translateY(-2px); }
 .proto-card:hover { border-color: rgba(79,142,247,0.30); transform: translateY(-1px); }
 [data-theme="light"] .proto-card:hover { border-color: rgba(79,142,247,0.40); }
 .proto-card.active-devweb {
@@ -424,30 +467,32 @@ body > * { position: relative; z-index: 1; }
 
 /* ── Options ────────────────────────────────────────────────────────────── */
 .options-grid {
-  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;
+  display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
 }
 .opt-group {
   background: var(--glass); border: 1px solid var(--glass-border);
   border-radius: var(--r-md); padding: 14px 16px;
-  flex: 1; min-width: 140px;
+  flex: 1; min-width: 150px;
 }
 .opt-label {
-  font-size: 10.5px; color: var(--text-3); display: block;
-  margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700;
+  font-size: 10px; color: var(--text-3); display: block;
+  margin-bottom: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
 }
-.seg-btns { display: flex; gap: 4px; }
+.seg-btns { display: flex; gap: 3px; }
 .seg-btn {
   flex: 1; padding: 7px 10px;
   border: 1px solid var(--glass-border);
   background: transparent; color: var(--text-3);
-  border-radius: var(--r-sm); font-size: 12px;
+  border-radius: var(--r-xs); font-size: 12px;
   font-family: var(--sans); cursor: pointer;
   white-space: nowrap; font-weight: 500;
+  transition: background var(--tr), border-color var(--tr), color var(--tr);
 }
-.seg-btn:hover { border-color: rgba(79,142,247,0.40); color: var(--primary); }
+.seg-btn:hover { border-color: rgba(79,142,247,0.35); color: var(--text-2); }
 .seg-btn.active {
-  background: var(--primary-dim); border-color: var(--primary);
+  background: var(--primary-dim); border-color: rgba(79,142,247,0.40);
   color: var(--primary); font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(79,142,247,0.12) inset;
 }
 
 /* ── Advanced panel ─────────────────────────────────────────────────────── */
@@ -667,12 +712,365 @@ body > * { position: relative; z-index: 1; }
 
 /* ── Footer ─────────────────────────────────────────────────────────────── */
 footer {
-  color: var(--text-3); font-size: 11.5px;
-  text-align: center; margin-top: 24px; padding-bottom: 8px;
+  color: var(--text-3); font-size: 11px;
+  text-align: center; margin-top: 32px; padding-bottom: 16px;
   display: flex; flex-direction: column; align-items: center; gap: 8px;
+  width: 100%;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 20px;
 }
-.footer-links { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-.footer-sep   { color: var(--text-3); }
+.footer-links {
+  display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+  letter-spacing: 0.02em;
+}
+.footer-sep { color: var(--glass-border); }
+
+/* ══ Portal Nav Tabs — centered underline style ═══════════════════════════ */
+.portal-tabs {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: stretch; gap: 0;
+  height: 58px;
+}
+.ptab {
+  padding: 0 22px; border: none; border-radius: 0;
+  background: transparent; color: var(--text-3);
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  display: flex; align-items: center; gap: 8px;
+  position: relative;
+  transition: color 0.18s ease;
+  letter-spacing: -0.1px;
+}
+/* underline bar — slides in from centre */
+.ptab::after {
+  content: ''; position: absolute;
+  bottom: 0; left: 50%; right: 50%; height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 2px 2px 0 0;
+  transition: left 0.24s cubic-bezier(0.4,0,0.2,1),
+              right 0.24s cubic-bezier(0.4,0,0.2,1);
+}
+.ptab:hover { color: var(--text-2); }
+.ptab.ptab-active { color: var(--text); font-weight: 700; }
+.ptab.ptab-active::after { left: 8px; right: 8px; }
+
+/* subtitles on tabs */
+.ptab-sub {
+  font-size: 9.5px; font-weight: 500; color: inherit;
+  opacity: 0.50; letter-spacing: .02em; line-height: 1;
+}
+.ptab-label { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+
+/* ══ Converter / content panel — centers all children ═══════════════════ */
+.portal-content-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* Ensure hero inside converter is constrained */
+.portal-content-panel .hero {
+  width: 100%;
+  max-width: 900px;
+}
+
+/* ══ Iframe panels (Recorder / Studio) ═══════════════════════════════════ */
+.portal-iframe-panel {
+  display: none; position: fixed;
+  top: 58px; left: 0; right: 0; bottom: 0;
+  z-index: 150; background: var(--bg);
+  flex-direction: column;
+}
+.portal-iframe-panel iframe {
+  flex: 1; width: 100%; border: none; min-height: 0;
+}
+/* Chrome bar that sits above each iframe tool */
+.iframe-chrome {
+  height: 42px; flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px);
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 16px;
+}
+.iframe-back-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--glass); color: var(--text-2);
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: background var(--tr), border-color var(--tr), color var(--tr);
+}
+.iframe-back-btn:hover { background: var(--primary-dim); border-color: rgba(79,142,247,0.35); color: var(--primary); }
+.iframe-tool-title {
+  font-size: 13px; font-weight: 700; color: var(--text); flex: 1;
+}
+.iframe-tool-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 9px; border-radius: 99px;
+  border: 1px solid var(--glass-border); background: var(--glass); color: var(--text-3);
+}
+
+/* ══ Home Panel ══════════════════════════════════════════════════════════ */
+#portal-home {
+  width: 100%; max-width: 1040px;
+  display: flex; flex-direction: column; align-items: center;
+  padding-bottom: 60px;
+}
+
+/* Hero */
+.home-hero {
+  text-align: center; padding: 52px 0 40px; width: 100%;
+}
+.home-hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 16px; border-radius: 99px; margin-bottom: 22px;
+  background: var(--primary-dim); border: 1px solid rgba(79,142,247,0.30);
+  color: var(--primary); font-size: 11.5px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  animation: fadeDown 0.5s cubic-bezier(0.4,0,0.2,1) both;
+}
+.home-hero h1 {
+  font-size: clamp(28px, 4vw, 44px); font-weight: 800;
+  letter-spacing: -1px; line-height: 1.12;
+  margin-bottom: 18px;
+  background: linear-gradient(135deg, var(--text) 0%, var(--primary) 55%, var(--accent) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: fadeDown 0.5s cubic-bezier(0.4,0,0.2,1) 0.08s both;
+}
+.home-hero-sub {
+  font-size: 15.5px; color: var(--text-2); line-height: 1.7;
+  max-width: 600px; margin: 0 auto 28px;
+  animation: fadeDown 0.5s cubic-bezier(0.4,0,0.2,1) 0.14s both;
+}
+@keyframes fadeDown {
+  from { opacity:0; transform: translateY(-14px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+/* Stats row */
+.home-stats {
+  display: flex; align-items: stretch; justify-content: center;
+  gap: 0; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg); backdrop-filter: blur(20px);
+  margin-bottom: 44px; overflow: hidden; width: 100%; max-width: 760px;
+  animation: fadeUp 0.5s cubic-bezier(0.4,0,0.2,1) 0.2s both;
+  box-shadow: var(--shadow);
+}
+.home-stat {
+  flex: 1; min-width: 130px;
+  padding: 22px 16px; text-align: center;
+  border-right: 1px solid var(--glass-border);
+  transition: background var(--tr);
+}
+.home-stat:last-child { border-right: none; }
+.home-stat:hover { background: var(--glass-hover); }
+.home-stat-num {
+  font-size: 34px; font-weight: 800; letter-spacing: -1.5px;
+  line-height: 1; margin-bottom: 5px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.home-stat-lbl {
+  font-size: 10.5px; font-weight: 600; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(16px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+/* ── Tool cards — FULLY CLICKABLE ───────────────────────────────────────── */
+.tool-cards {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: 20px; width: 100%; margin-bottom: 52px;
+}
+@media (max-width: 740px)  { .tool-cards { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) and (min-width: 741px) { .tool-cards { grid-template-columns: repeat(2,1fr); } }
+
+.tool-card {
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--r-xl); padding: 28px 24px 22px;
+  display: flex; flex-direction: column;
+  backdrop-filter: blur(20px);
+  position: relative; overflow: hidden;
+  cursor: pointer; user-select: none; outline: none;
+  /* smooth all transitions */
+  transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.22s ease,
+              border-color 0.22s ease;
+}
+/* coloured top accent — always visible at 3px */
+.tool-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+}
+.tool-card.tc-blue::before  { background: linear-gradient(90deg, var(--primary), var(--accent)); }
+.tool-card.tc-green::before { background: linear-gradient(90deg, #34d17a, #22b5c0); }
+.tool-card.tc-purple::before{ background: linear-gradient(90deg, var(--accent), #e040fb); }
+
+/* glow on hover — colour-matched per card */
+.tool-card.tc-blue:hover  {
+  transform: translateY(-8px) scale(1.012);
+  border-color: rgba(79,142,247,0.55);
+  box-shadow: 0 20px 60px rgba(79,142,247,0.18), 0 8px 24px rgba(0,0,0,0.45);
+}
+.tool-card.tc-green:hover {
+  transform: translateY(-8px) scale(1.012);
+  border-color: rgba(52,209,122,0.55);
+  box-shadow: 0 20px 60px rgba(52,209,122,0.15), 0 8px 24px rgba(0,0,0,0.45);
+}
+.tool-card.tc-purple:hover {
+  transform: translateY(-8px) scale(1.012);
+  border-color: rgba(124,92,252,0.55);
+  box-shadow: 0 20px 60px rgba(124,92,252,0.18), 0 8px 24px rgba(0,0,0,0.45);
+}
+/* press/active feedback */
+.tool-card:active {
+  transform: translateY(-2px) scale(0.99) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35) !important;
+  transition-duration: 0.08s !important;
+}
+/* staggered entrance */
+@keyframes cardIn {
+  from { opacity:0; transform: translateY(28px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+.tool-card:nth-child(1) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.25s both; }
+.tool-card:nth-child(2) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.35s both; }
+.tool-card:nth-child(3) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.45s both; }
+
+/* icon */
+.tc-icon {
+  width: 52px; height: 52px; border-radius: 15px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; margin-bottom: 16px; flex-shrink: 0;
+  transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
+}
+.tool-card:hover .tc-icon { transform: scale(1.12); }
+.tc-icon-blue  { background: linear-gradient(135deg, rgba(79,142,247,0.22), rgba(124,92,252,0.16)); border: 1px solid rgba(79,142,247,0.28); }
+.tc-icon-green { background: linear-gradient(135deg, rgba(52,209,122,0.18), rgba(34,181,192,0.12)); border: 1px solid rgba(52,209,122,0.24); }
+.tc-icon-purple{ background: linear-gradient(135deg, rgba(124,92,252,0.20), rgba(224,64,251,0.12)); border: 1px solid rgba(124,92,252,0.24); }
+
+/* badge tag */
+.tc-tag {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 99px; margin-bottom: 10px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+}
+.tc-tag-blue   { background: var(--primary-dim); color: var(--primary); border: 1px solid rgba(79,142,247,0.22); }
+.tc-tag-green  { background: rgba(52,209,122,0.09); color: var(--success); border: 1px solid rgba(52,209,122,0.18); }
+.tc-tag-purple { background: rgba(124,92,252,0.11); color: #b39dfa; border: 1px solid rgba(124,92,252,0.20); }
+
+.tc-title {
+  font-size: 17px; font-weight: 700; color: var(--text);
+  margin-bottom: 9px; letter-spacing: -0.3px;
+}
+.tc-desc {
+  font-size: 13px; color: var(--text-2); line-height: 1.62;
+  margin-bottom: 18px;
+}
+.tc-features {
+  list-style: none; display: flex; flex-direction: column; gap: 8px;
+  margin-bottom: 20px; flex: 1;
+}
+.tc-features li {
+  font-size: 12.5px; color: var(--text-2);
+  display: flex; align-items: flex-start; gap: 9px; line-height: 1.45;
+}
+.tc-features li::before {
+  content: '✓'; font-size: 10.5px; font-weight: 800;
+  flex-shrink: 0; margin-top: 2px;
+}
+.tool-card.tc-blue   .tc-features li::before { color: var(--primary); }
+.tool-card.tc-green  .tc-features li::before { color: var(--success); }
+.tool-card.tc-purple .tc-features li::before { color: #b39dfa; }
+
+/* CTA footer inside card */
+.tc-cta {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 18px; margin-top: auto;
+  border-top: 1px solid var(--glass-border);
+}
+.tc-cta-text {
+  font-size: 13px; font-weight: 700;
+  transition: color 0.18s ease;
+}
+.tool-card.tc-blue   .tc-cta-text { color: var(--primary); }
+.tool-card.tc-green  .tc-cta-text { color: var(--success); }
+.tool-card.tc-purple .tc-cta-text { color: #b39dfa; }
+
+.tc-cta-arrow {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
+  transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), background 0.18s ease;
+}
+.tool-card.tc-blue   .tc-cta-arrow { background: var(--primary-dim); color: var(--primary); }
+.tool-card.tc-green  .tc-cta-arrow { background: rgba(52,209,122,0.10); color: var(--success); }
+.tool-card.tc-purple .tc-cta-arrow { background: rgba(124,92,252,0.10); color: #b39dfa; }
+.tool-card:hover .tc-cta-arrow { transform: translateX(5px); }
+
+/* ── How it works ─────────────────────────────────────────────────────── */
+.hw-section { width: 100%; margin-bottom: 52px; }
+.hw-section-title {
+  font-size: 24px; font-weight: 800; letter-spacing: -0.5px;
+  text-align: center; margin-bottom: 32px; color: var(--text);
+}
+.hw-steps {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+}
+@media (max-width: 700px) { .hw-steps { grid-template-columns: repeat(2, 1fr); } }
+.hw-step {
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg); padding: 24px 18px 22px;
+  text-align: center; backdrop-filter: blur(16px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.hw-step:hover { border-color: rgba(79,142,247,0.25); box-shadow: var(--shadow); transform: translateY(-3px); }
+.hw-step-num {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #fff; font-size: 13px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 14px; box-shadow: 0 3px 10px var(--primary-glow);
+}
+.hw-step-icon { font-size: 28px; margin-bottom: 12px; }
+.hw-step-ttl { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.hw-step-txt { font-size: 12px; color: var(--text-2); line-height: 1.6; }
+
+/* ── Comparison table ─────────────────────────────────────────────────── */
+.cmp-section { width: 100%; margin-bottom: 44px; }
+.cmp-table {
+  width: 100%; border-collapse: collapse;
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg); overflow: hidden; backdrop-filter: blur(16px);
+  font-size: 13px; box-shadow: var(--shadow);
+}
+.cmp-table th {
+  padding: 15px 18px; text-align: center;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.03);
+}
+.cmp-table th:first-child { text-align: left; color: var(--text-3); }
+.cmp-table td {
+  padding: 13px 18px; text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text-2);
+}
+.cmp-table td:first-child { text-align: left; color: var(--text); font-weight: 500; }
+.cmp-table tr:last-child td { border-bottom: none; }
+.cmp-table tr:hover td { background: var(--glass-hover); }
+.cmp-best   { color: var(--primary); font-weight: 700; }
+.cmp-ok     { color: var(--success); font-weight: 600; }
+.cmp-manual { color: var(--warn); font-weight: 600; }
+.cmp-none   { color: var(--text-3); }
+.cmp-th-blue   { color: var(--primary) !important; }
+.cmp-th-green  { color: var(--success) !important; }
+.cmp-th-purple { color: #b39dfa !important; }
 </style>
 </head>
 
@@ -681,10 +1079,27 @@ footer {
 <!-- ── Fixed Navigation ─────────────────────────────────────────────────── -->
 <nav class="topnav">
   <div class="nav-inner">
-    <div class="nav-brand">
+    <div class="nav-brand" onclick="switchPortalTab('home')" title="Go to Home">
       <div class="nav-logo">⚡</div>
-      <span class="nav-title">LR Script Converter</span>
-      <span class="nav-ver">v<%= version %></span>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <span class="nav-title">LRE Toolkit</span>
+        <span class="nav-subtitle">Performance Engineering · v<%= version %></span>
+      </div>
+    </div>
+    <!-- Portal navigation tabs — centered via absolute CSS -->
+    <div class="portal-tabs">
+      <button class="ptab ptab-active" id="ptab-home"      onclick="switchPortalTab('home')">
+        🏠&nbsp;<span class="ptab-label"><span>Home</span></span>
+      </button>
+      <button class="ptab" id="ptab-converter" onclick="switchPortalTab('converter')">
+        ⚡&nbsp;<span class="ptab-label"><span>Converter</span><span class="ptab-sub">Collections</span></span>
+      </button>
+      <button class="ptab" id="ptab-recorder" onclick="switchPortalTab('recorder')">
+        🎙&nbsp;<span class="ptab-label"><span>Recorder</span><span class="ptab-sub">HAR Scripts</span></span>
+      </button>
+      <button class="ptab" id="ptab-studio" onclick="switchPortalTab('studio')">
+        🧪&nbsp;<span class="ptab-label"><span>Script Studio</span><span class="ptab-sub">Correlation</span></span>
+      </button>
     </div>
     <div class="nav-actions">
       <span class="nav-status"><span class="nav-dot"></span>Live</span>
@@ -706,13 +1121,203 @@ footer {
   </div>
 </nav>
 
-<!-- ── Hero ────────────────────────────────────────────────────────────────-->
-<header class="hero">
-  <p class="hero-sub">Convert Postman, Bruno &amp; JMeter test scripts into production-ready LoadRunner Enterprise scripts — in seconds.</p>
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- PORTAL: HOME PANEL                                                     -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="portal-home">
+
+  <!-- Hero -->
+  <header class="home-hero">
+    <div class="home-hero-badge">⚡ LoadRunner Performance Engineering Toolkit</div>
+    <h1>LRE Script Generation Toolkit</h1>
+    <p class="home-hero-sub">Three integrated tools that eliminate 70% of manual VuGen scripting effort. Convert API collections, record HAR traffic, and auto-correlate dynamic values — generating production-ready LoadRunner scripts in seconds.</p>
+    <div class="hero-badges">
+      <span class="chip">📂 Postman · Bruno · JMeter</span>
+      <span class="chip">🟦 DevWeb JS</span>
+      <span class="chip">🟧 VuGen C</span>
+      <span class="chip">🔒 In-memory only</span>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="home-stats">
+    <div class="home-stat">
+      <div class="home-stat-num">5</div>
+      <div class="home-stat-lbl">Input Formats</div>
+    </div>
+    <div class="home-stat">
+      <div class="home-stat-num">2</div>
+      <div class="home-stat-lbl">Output Protocols</div>
+    </div>
+    <div class="home-stat">
+      <div class="home-stat-num">70%</div>
+      <div class="home-stat-lbl">Less Scripting</div>
+    </div>
+    <div class="home-stat">
+      <div class="home-stat-num">0</div>
+      <div class="home-stat-lbl">Files Stored</div>
+    </div>
+  </div>
+
+  <!-- Tool Cards -->
+  <div class="tool-cards">
+
+    <!-- Collection + JMX Converter — entire card is clickable -->
+    <div class="tool-card tc-blue" role="button" tabindex="0"
+         onclick="switchPortalTab('converter')"
+         onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('converter')">
+      <div class="tc-icon tc-icon-blue">📂</div>
+      <span class="tc-tag tc-tag-blue">Collections &amp; JMX → VuGen</span>
+      <div class="tc-title">Collection Converter</div>
+      <div class="tc-desc">Convert Postman/Bruno API collections <strong>and</strong> JMeter (.jmx) scripts into production-ready LoadRunner scripts. Two conversion modes, 5 input formats, full parameterization and auth handling.</div>
+      <ul class="tc-features">
+        <li>Postman v2.1 JSON, Bruno JSON/YAML/Folder, .bru</li>
+        <li>JMeter JMX — thread groups, CSVDataSet, JSR223</li>
+        <li>DevWeb (JavaScript) and VuGen Web HTTP/HTML (C)</li>
+        <li>Auto-correlation of tokens, session IDs, CSRF tokens</li>
+        <li>OAuth2, Basic, Bearer, API Key, AWS Sig v4, JWT auth</li>
+        <li>Multi-script mode — one script per folder/thread group</li>
+      </ul>
+      <div class="tc-cta">
+        <span class="tc-cta-text">⚡ Open Converter</span>
+        <span class="tc-cta-arrow">→</span>
+      </div>
+    </div>
+
+    <!-- HAR Script Generator / Recorder — entire card is clickable -->
+    <div class="tool-card tc-green" role="button" tabindex="0"
+         onclick="switchPortalTab('recorder')"
+         onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('recorder')">
+      <div class="tc-icon tc-icon-green">🎙</div>
+      <span class="tc-tag tc-tag-green">Recorded Traffic → VuGen</span>
+      <div class="tc-title">HAR Script Generator</div>
+      <div class="tc-desc">When VuGen can't record traffic due to antivirus or policy blocks, record a HAR file and this tool converts it into a fully correlated VuGen script automatically.</div>
+      <ul class="tc-features">
+        <li>Works on any server — no proxy or certificate issues</li>
+        <li>Drag transactions to map transaction boundaries</li>
+        <li>Smart domain filtering and data asset detection</li>
+        <li>Auto-detects dynamic IDs, session tokens, bearer tokens</li>
+        <li>Supports Chrome/Firefox export for multi-tab recording</li>
+        <li>Download ready-to-open VuGen script ZIP file</li>
+      </ul>
+      <div class="tc-cta">
+        <span class="tc-cta-text">🎙 Open Recorder</span>
+        <span class="tc-cta-arrow">→</span>
+      </div>
+    </div>
+
+    <!-- Script Studio — entire card is clickable -->
+    <div class="tool-card tc-purple" role="button" tabindex="0"
+         onclick="switchPortalTab('studio')"
+         onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('studio')">
+      <div class="tc-icon tc-icon-purple">🧪</div>
+      <span class="tc-tag tc-tag-purple">Dynamic Correlation Engine</span>
+      <div class="tc-title">Script Studio</div>
+      <div class="tc-desc">The most advanced tool in the kit. Record or paste scripts with different data scenarios, click Analyze, and this engine automatically identifies every dynamic value and generates fully correlated scripts.</div>
+      <ul class="tc-features">
+        <li>Side-by-side comparison — complete two-recording analysis</li>
+        <li>Pattern-based mode with regex match filter for quick scans</li>
+        <li>Detects/extracts JSON, CSV, HTML, boundary, cookie extraction</li>
+        <li>Parameterization inputs (login, search, payment fields)</li>
+        <li>JSON path, XPath, boundary and cookie auto-extraction</li>
+        <li>Generates complete correlated VuGen C or DevWeb JS scripts</li>
+      </ul>
+      <div class="tc-cta">
+        <span class="tc-cta-text">🧪 Open Script Studio</span>
+        <span class="tc-cta-arrow">→</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- How It Works -->
+  <div class="hw-section">
+    <div class="hw-section-title">How It Works</div>
+    <div class="hw-steps">
+      <div class="hw-step">
+        <div class="hw-step-num">1</div>
+        <div class="hw-step-icon">📡</div>
+        <div class="hw-step-ttl">Capture Traffic</div>
+        <div class="hw-step-txt">Export a Postman/Bruno collection, or record a HAR file using Recorder, or use Script Studio for two-recording comparison analysis.</div>
+      </div>
+      <div class="hw-step">
+        <div class="hw-step-num">2</div>
+        <div class="hw-step-icon">🛠</div>
+        <div class="hw-step-ttl">Choose Your Tool</div>
+        <div class="hw-step-txt">Use Converter for API collections, Recorder for single HAR files, or Script Studio for complex multi-recording correlation analysis.</div>
+      </div>
+      <div class="hw-step">
+        <div class="hw-step-num">3</div>
+        <div class="hw-step-icon">⚙️</div>
+        <div class="hw-step-ttl">Upload &amp; Generate</div>
+        <div class="hw-step-txt">Choose DevWeb (JavaScript) or Web HTTP/HTML (C) output, configure options, and generate correlated scripts from your files.</div>
+      </div>
+      <div class="hw-step">
+        <div class="hw-step-num">4</div>
+        <div class="hw-step-icon">🚀</div>
+        <div class="hw-step-ttl">Open in VuGen</div>
+        <div class="hw-step-txt">Download the ZIP, extract, and double-click the .usr file to open directly in VuGen or upload to LoadRunner Enterprise.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Which Tool Should I Use? -->
+  <div class="cmp-section">
+    <div class="hw-section-title">Which Tool Should I Use?</div>
+    <div style="overflow-x:auto">
+      <table class="cmp-table">
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th class="cmp-th-blue">⚡ Converter</th>
+            <th class="cmp-th-green">🎙 Recorder</th>
+            <th class="cmp-th-purple">🧪 Script Studio</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>I have a Postman or Bruno collection</td><td class="cmp-best">✓ Best choice</td><td class="cmp-none">—</td><td class="cmp-none">—</td></tr>
+          <tr><td>I have a JMeter (.jmx) script to convert</td><td class="cmp-best">✓ Best choice</td><td class="cmp-none">—</td><td class="cmp-none">—</td></tr>
+          <tr><td>VuGen can't record (antivirus / policy blocks)</td><td class="cmp-none">—</td><td class="cmp-best">✓ Best choice</td><td class="cmp-ok">✓ With correlation</td></tr>
+          <tr><td>I need auto-correlation of dynamic values</td><td class="cmp-ok">✓ Basic</td><td class="cmp-none">—</td><td class="cmp-best">✓ Advanced</td></tr>
+          <tr><td>Quick script from a single recording</td><td class="cmp-none">—</td><td class="cmp-best">✓ Fastest</td><td class="cmp-ok">✓ Feature-rich</td></tr>
+          <tr><td>Complex app with login, CSRF, OAuth, ViewState</td><td class="cmp-none">—</td><td class="cmp-none">— Basic only</td><td class="cmp-best">✓ Best choice</td></tr>
+          <tr><td>Multi-script mode (split by folder/scenario)</td><td class="cmp-ok">✓ Supported</td><td class="cmp-none">—</td><td class="cmp-none">—</td></tr>
+          <tr><td>Output DevWeb (JavaScript)</td><td class="cmp-ok">✓</td><td class="cmp-ok">✓</td><td class="cmp-ok">✓</td></tr>
+          <tr><td>Output Web HTTP/HTML (C)</td><td class="cmp-ok">✓</td><td class="cmp-ok">✓</td><td class="cmp-ok">✓</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Footer for home panel -->
+  <footer>
+    <div class="footer-links">
+      <span>LR Performance Engineering Toolkit</span>
+      <span class="footer-sep">·</span>
+      <span>v<%= version %></span>
+      <span class="footer-sep">·</span>
+      <span>Files processed in-memory — nothing stored on server</span>
+    </div>
+  </footer>
+</div><!-- /#portal-home -->
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- PORTAL: CONVERTER PANEL                                                -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="portal-converter" style="display:none" class="portal-content-panel">
+
+<!-- ── Converter Hero ───────────────────────────────────────────────────── -->
+<header class="hero" style="text-align:center;padding:36px 0 24px">
+  <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:99px;margin-bottom:14px;background:var(--primary-dim);border:1px solid rgba(79,142,247,0.28);color:var(--primary);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">
+    ⚡ Collection Converter
+  </div>
+  <p class="hero-sub" style="font-size:15px;margin-bottom:16px">Convert Postman, Bruno &amp; JMeter collections into production-ready LoadRunner Enterprise scripts in seconds.</p>
   <div class="hero-badges">
+    <span class="chip">📂 Postman / Bruno</span>
+    <span class="chip">♨ JMeter .jmx</span>
     <span class="chip">🟦 DevWeb JS</span>
     <span class="chip">🟧 VuGen C</span>
-    <span class="chip">🔒 Files never stored</span>
+    <span class="chip">🔒 In-memory only</span>
   </div>
 </header>
 
@@ -1032,6 +1637,32 @@ footer {
   </div>
 </footer>
 
+</div><!-- /#portal-converter -->
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- PORTAL: RECORDER PANEL (iframe, lazy-loaded)                           -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="portal-recorder" class="portal-iframe-panel">
+  <div class="iframe-chrome">
+    <button class="iframe-back-btn" onclick="switchPortalTab('home')">← Back to Portal</button>
+    <span class="iframe-tool-title">🎙 HAR Script Generator</span>
+    <span class="iframe-tool-badge">Recorded Traffic → VuGen</span>
+  </div>
+  <iframe id="iframe-recorder" src="" title="VuGen HAR Script Generator"></iframe>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- PORTAL: SCRIPT STUDIO PANEL (iframe, lazy-loaded)                      -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="portal-studio" class="portal-iframe-panel">
+  <div class="iframe-chrome">
+    <button class="iframe-back-btn" onclick="switchPortalTab('home')">← Back to Portal</button>
+    <span class="iframe-tool-title">🧪 Script Studio</span>
+    <span class="iframe-tool-badge">Dynamic Correlation Engine</span>
+  </div>
+  <iframe id="iframe-studio" src="" title="VuGen Script Studio"></iframe>
+</div>
+
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <script>
 /* ── Theme toggle ────────────────────────────────────────────────────────── */
@@ -1040,6 +1671,13 @@ function toggleTheme() {
   const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   html.setAttribute('data-theme', next);
   localStorage.setItem('lr-theme', next);
+  // Sync theme to any loaded iframe tools
+  ['recorder','studio'].forEach(function(t) {
+    const f = document.getElementById('iframe-' + t);
+    if (f && f.contentWindow && f.contentWindow.lreSetTheme) {
+      f.contentWindow.lreSetTheme(next);
+    }
+  });
 }
 
 /* ── State ──────────────────────────────────────────────────────────────── */
@@ -1047,7 +1685,54 @@ const S  = { proto:'devweb', mode:'single', tt:1, ll:'info' };
 const F  = { collection:null, environment:null };
 const JX = { proto:'devweb', mode:'single', tt:1, wlm:true, file:null, csvFiles:[], certFiles:[] };
 
-/* ── Tab switching ──────────────────────────────────────────────────────── */
+/* ── Portal tab switching ───────────────────────────────────────────────── */
+const PORTAL_PANELS    = ['home','converter','recorder','studio'];
+const PORTAL_IFRAMES   = { recorder: '/tools/recorder', studio: '/tools/studio' };
+let   _iframeLoaded    = {};
+
+function switchPortalTab(tab) {
+  // Update tab button classes
+  PORTAL_PANELS.forEach(t => {
+    const btn = document.getElementById('ptab-' + t);
+    if (btn) btn.className = 'ptab' + (t === tab ? ' ptab-active' : '');
+  });
+
+  // Show/hide panels
+  const home      = document.getElementById('portal-home');
+  const converter = document.getElementById('portal-converter');
+  const recorder  = document.getElementById('portal-recorder');
+  const studio    = document.getElementById('portal-studio');
+
+  home.style.display      = tab === 'home'      ? 'flex'  : 'none';
+  converter.style.display = tab === 'converter' ? 'flex'  : 'none';
+  recorder.style.display  = tab === 'recorder'  ? 'flex' : 'none';
+  studio.style.display    = tab === 'studio'    ? 'flex' : 'none';
+
+  // Lazy-load iframes on first visit, then init portal theme
+  if (PORTAL_IFRAMES[tab] && !_iframeLoaded[tab]) {
+    _iframeLoaded[tab] = true;
+    const iframeEl = document.getElementById('iframe-' + tab);
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    iframeEl.onload = function() {
+      if (iframeEl.contentWindow && iframeEl.contentWindow.lrePortalInit) {
+        iframeEl.contentWindow.lrePortalInit(currentTheme);
+      }
+    };
+    iframeEl.src = PORTAL_IFRAMES[tab];
+  }
+
+  // Scroll to top when switching
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Initialise: show home, hide rest
+(function initPortal() {
+  document.getElementById('portal-converter').style.display = 'none';
+  document.getElementById('portal-recorder').style.display  = 'none';
+  document.getElementById('portal-studio').style.display    = 'none';
+})();
+
+/* ── Converter tab switching ────────────────────────────────────────────── */
 function switchTab(tab) {
   document.getElementById('panel-bruno').style.display = tab === 'bruno' ? '' : 'none';
   document.getElementById('panel-jmx').style.display   = tab === 'jmx'   ? '' : 'none';
@@ -1271,7 +1956,7 @@ async function doConvert() {
   fd.append('addComments',         document.getElementById('opt-cmt').checked);
 
   try {
-    const r = await fetch('convert', { method: 'POST', body: fd });
+    const r = await fetch('/convert', { method: 'POST', body: fd });
     const d = await r.json();
     clearInterval(prog.tick); prog.fill(); prog.hide();
     resetBtn(); showResult(r.ok ? d : null, r.ok ? null : d.error);
@@ -1313,7 +1998,7 @@ async function doConvertJmx() {
   for (const f of JX.certFiles) fd.append('certFiles', f);
 
   try {
-    const r = await fetch('convert-jmx', { method: 'POST', body: fd });
+    const r = await fetch('/convert-jmx', { method: 'POST', body: fd });
     const d = await r.json();
     clearInterval(prog.tick); prog.fill(); prog.hide();
     resetJmxBtn(); showJmxResult(r.ok ? d : null, r.ok ? null : d.error);
