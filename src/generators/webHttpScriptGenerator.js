@@ -480,23 +480,24 @@ class WebHttpScriptGenerator {
     const dataFileNames = Array.from(this.extractedDataFiles.values()).map(f => f.fileName);
     await this.mandatoryFilesGen.generateAll(
       outputDir, this.parameters, this.transactionNames, dataFileNames,
-      this.hasJwt, this.detectProxyConfig(), this.hasNtlm, this.mtlsCertFile
+      this.hasJwt, this.detectProxyConfig(), this.hasNtlm, this.mtlsCertFile,
+      this.hasDpop
     );
 
-    // 8. If JWT detected: copy jsrsasign.js + transport.pem from project root.
-    //    jsrsasign.js is the JWT signing library for VuGen (listed in [ManuallyExtraFiles]).
-    //    transport.pem is the private key file used for signing.
-    if (this.hasJwt) {
+    // 8. If JWT or DPoP detected: copy lre-crypto.js + transport.pem from project root.
+    //    lre-crypto.js replaces jsrsasign.js (340KB) + dpop.js with a single 19KB file.
+    //    It provides createJWT() (PS256) and initDpopKey/generateDpopProof() (ES256).
+    if (this.hasJwt || this.hasDpop) {
       const PROJECT_ROOT = path.join(__dirname, '..', '..');
-      const jsrsasignSrc = path.join(PROJECT_ROOT, 'jsrsasign.js');
-      if (fs.existsSync(jsrsasignSrc)) {
-        fs.copyFileSync(jsrsasignSrc, path.join(outputDir, 'jsrsasign.js'));
-        console.log('✓ Copied jsrsasign.js');
+      const lreCryptoSrc = path.join(PROJECT_ROOT, 'lre-crypto.js');
+      if (fs.existsSync(lreCryptoSrc)) {
+        fs.copyFileSync(lreCryptoSrc, path.join(outputDir, 'lre-crypto.js'));
+        console.log('✓ Copied lre-crypto.js');
       } else {
-        console.warn('  ⚠  jsrsasign.js not found in project root. Add it there and re-run.');
+        console.warn('  ⚠  lre-crypto.js not found in project root.');
       }
 
-      // Copy transport.pem from project root
+      // Copy transport.pem from project root (used for mTLS alongside JWT)
       const pemSrc = path.join(PROJECT_ROOT, 'transport.pem');
       if (fs.existsSync(pemSrc)) {
         fs.copyFileSync(pemSrc, path.join(outputDir, 'transport.pem'));
@@ -921,9 +922,9 @@ ${teardownBlock}
     // Analyse common headers for this collection
     const { globalHeaders } = this.analyzeCommonHeaders();
 
-    // JWT setup block — certificate + token generation via jsrsasign.js
-    // web_js_run() executes JavaScript using VuGen's built-in JS engine.
-    // createJWT() is a function expected inside jsrsasign.js.
+    // JWT setup block — PS256 token generation via lre-crypto.js.
+    // createJWT(clientId, aud, scope, signingKid, secret) — matches jwt-helper.js param style.
+    // lre-crypto.js is 19KB (vs jsrsasign.js 340KB) — same result, 17x less parse overhead.
     const jwtSetup = this.hasJwt ? `
     web_set_certificate_ex(
         "CertFilePath=transport.pem",
@@ -933,10 +934,10 @@ ${teardownBlock}
         LAST);
 
     web_js_run(
-        "Code=createJWT(LR.getParam('client_id'),LR.getParam('token_url'),LR.getParam('scope'),LR.getParam('signing_private_key'));",
-        "ResultParam=_jwt_token",
+        "Code=createJWT(LR.getParam('client_id'),LR.getParam('aud'),LR.getParam('scope'),LR.getParam('signing_kid'),LR.getParam('secret'));",
+        "ResultParam=jwt_token",
         SOURCES,
-        "File=jsrsasign.js",
+        "File=lre-crypto.js",
         ENDITEM,
         LAST);
 ` : '';

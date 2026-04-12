@@ -36,18 +36,20 @@ class WebHttpMandatoryFilesGenerator {
    * @param {Map}      parameters
    * @param {string[]} transactionNames
    * @param {string[]} dataFiles  - Large body data files extracted to data/ subfolder
-   * @param {boolean}  hasJwt    - If true, add jsrsasign.js to [ManuallyExtraFiles]
+   * @param {boolean}  hasJwt    - If true, add lre-crypto.js to [ManuallyExtraFiles]
    * @param {Object}   proxy     - Proxy config { enabled, host, port, username, password } or null
+   * @param {boolean}  hasDpop   - If true, also add lre-crypto.js (DPoP-only scripts)
    */
-  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = [], hasJwt = false, proxy = null, hasNtlm = false, mtlsCertFile = null) {
+  async generateAll(outputDir, parameters, transactionNames = [], dataFiles = [], hasJwt = false, proxy = null, hasNtlm = false, mtlsCertFile = null, hasDpop = false) {
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
     const safeScriptName = this.sanitizeName(this.scriptName);
 
+    const needsCrypto = hasJwt || hasDpop;
     this.writeFile(outputDir, `${safeScriptName}.usr`,
-      this.generateUsrFile(safeScriptName, transactionNames, dataFiles, hasJwt, mtlsCertFile));
+      this.generateUsrFile(safeScriptName, transactionNames, dataFiles, needsCrypto, mtlsCertFile));
     this.writeFile(outputDir, 'default.cfg',
       this.generateDefaultCfg(proxy, hasNtlm));
     if (proxy && proxy.enabled) console.log(`  ✓ Proxy configured in default.cfg: ${proxy.host}:${proxy.port}`);
@@ -58,7 +60,7 @@ class WebHttpMandatoryFilesGenerator {
     this.writeFile(outputDir, 'collection_data.dat',
       this.generateCollectionDataDat(parameters));
     this.writeFile(outputDir, 'ScriptUploadMetadata.xml',
-      this.generateScriptUploadMetadata(safeScriptName, dataFiles, hasJwt));
+      this.generateScriptUploadMetadata(safeScriptName, dataFiles, needsCrypto));
 
     console.log(`✓ Generated VuGen config files (${safeScriptName}.usr, default.cfg, default.usp, ParameterFile.prm, collection_data.dat, ScriptUploadMetadata.xml)`);
   }
@@ -159,7 +161,7 @@ LastReplayStatus=0
 [ActiveReplay]
 LastReplayedRunName=
 ActiveRunName=
-${txOrder}${txSection}${hasJwt ? '\n[ManuallyExtraFiles]\njsrsasign.js=\ntransport.pem=\n' : (mtlsCertFile ? `\n[ManuallyExtraFiles]\n${mtlsCertFile}=\n` : '')}`;
+${txOrder}${txSection}${hasJwt ? '\n[ManuallyExtraFiles]\nlre-crypto.js=\ntransport.pem=\n' : (mtlsCertFile ? `\n[ManuallyExtraFiles]\n${mtlsCertFile}=\n` : '')}`;
   }
 
   // ─── default.cfg (INI) ───────────────────────────────────────────────────────
@@ -547,7 +549,7 @@ RunLogicObjectKind="Action"
 
     // JWT helper files bundled with the script for LRE upload
     const jwtEntries = hasJwt
-      ? `    <FileEntry Name="jsrsasign.js" Filter="2" />\n    <FileEntry Name="transport.pem" Filter="2" />\n`
+      ? `    <FileEntry Name="lre-crypto.js" Filter="2" />\n    <FileEntry Name="transport.pem" Filter="2" />\n`
       : '';
 
     return `<?xml version="1.0" encoding="utf-8"?>
