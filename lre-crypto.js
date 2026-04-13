@@ -136,9 +136,14 @@ function _decodeHtmlEntities(str) {
 }
 
 // ─── BigInt helpers ───────────────────────────────────────────────────────────
+// VuGen's embedded V8 does not support BigInt literal suffix (0n, 1n, etc.).
+// Use BigInt() constructor calls throughout instead.
+var _BI = BigInt;
+var _B0 = _BI(0), _B1 = _BI(1), _B2 = _BI(2), _B3 = _BI(3);
+
 function _bytesToBigInt(bytes) {
-  if(!bytes||!bytes.length)return 0n;
-  return BigInt('0x'+_bytesToHex(bytes));
+  if(!bytes||!bytes.length)return _B0;
+  return _BI('0x'+_bytesToHex(bytes));
 }
 function _bigIntToBytes(n, len) {
   var h=n.toString(16);
@@ -151,14 +156,14 @@ function _bigIntToBytes(n, len) {
   return b;
 }
 function _modPow(base,exp,mod){
-  var r=1n;base=((base%mod)+mod)%mod;
-  while(exp>0n){if(exp&1n)r=r*base%mod;exp>>=1n;base=base*base%mod;}
+  var r=_B1;base=((base%mod)+mod)%mod;
+  while(exp>_B0){if(exp&_B1)r=r*base%mod;exp>>=_B1;base=base*base%mod;}
   return r;
 }
 function _modInv(a,m){
-  a=((a%m)+m)%m;var m0=m,x0=0n,x1=1n;
-  while(a>1n){var q=a/m0,t=m0;m0=a%m0;a=t;t=x0;x0=x1-q*x0;x1=t;}
-  return x1<0n?x1+m:x1;
+  a=((a%m)+m)%m;var m0=m,x0=_B0,x1=_B1;
+  while(a>_B1){var q=a/m0,t=m0;m0=a%m0;a=t;t=x0;x0=x1-q*x0;x1=t;}
+  return x1<_B0?x1+m:x1;
 }
 
 // ─── EC P-256 (ES256 for DPoP) — Jacobian coordinates for performance ────────
@@ -172,46 +177,47 @@ var _P256 = (function () {
   var Gy = BigInt('0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5');
 
   function mp(x){ return ((x%p)+p)%p; }
+  var _B4=_BI(4), _B8=_BI(8);
 
   // Jacobian point doubling — a=-3 optimised (saves 1 field multiplication)
   function jDbl(X,Y,Z){
-    if(Z===0n)return[0n,1n,0n];
+    if(Z===_B0)return[_B0,_B1,_B0];
     var YY=mp(Y*Y), ZZ=mp(Z*Z);
-    var alpha=mp(3n*mp((X-ZZ)*(X+ZZ)));   // 3(X-Z²)(X+Z²) because a=-3
+    var alpha=mp(_B3*mp((X-ZZ)*(X+ZZ)));   // 3(X-Z²)(X+Z²) because a=-3
     var beta =mp(X*YY);
-    var X3   =mp(alpha*alpha - 8n*beta);
+    var X3   =mp(alpha*alpha - _B8*beta);
     var Z3   =mp((Y+Z)*(Y+Z) - YY - ZZ);
-    var Y3   =mp(alpha*(4n*beta - X3) - 8n*YY*YY);
+    var Y3   =mp(alpha*(_B4*beta - X3) - _B8*YY*YY);
     return[X3,Y3,Z3];
   }
 
-  // Jacobian point addition — mixed (P2 affine Z2=1 for first call after init)
+  // Jacobian point addition
   function jAdd(X1,Y1,Z1,X2,Y2,Z2){
-    if(Z1===0n)return[X2,Y2,Z2];
-    if(Z2===0n)return[X1,Y1,Z1];
+    if(Z1===_B0)return[X2,Y2,Z2];
+    if(Z2===_B0)return[X1,Y1,Z1];
     var Z1Z1=mp(Z1*Z1), Z2Z2=mp(Z2*Z2);
     var U1=mp(X1*Z2Z2), U2=mp(X2*Z1Z1);
     var S1=mp(Y1*Z2*Z2Z2), S2=mp(Y2*Z1*Z1Z1);
     var H=mp(U2-U1);
-    if(H===0n){ return mp(S2-S1)===0n ? jDbl(X1,Y1,Z1) : [0n,1n,0n]; }
-    var I=mp(2n*H); I=mp(I*I);
-    var J=mp(H*I), r=mp(2n*(S2-S1)), V=mp(U1*I);
-    var X3=mp(r*r - J - 2n*V);
-    var Y3=mp(r*(V-X3) - 2n*S1*J);
+    if(H===_B0){ return mp(S2-S1)===_B0 ? jDbl(X1,Y1,Z1) : [_B0,_B1,_B0]; }
+    var I=mp(_B2*H); I=mp(I*I);
+    var J=mp(H*I), r=mp(_B2*(S2-S1)), V=mp(U1*I);
+    var X3=mp(r*r - J - _B2*V);
+    var Y3=mp(r*(V-X3) - _B2*S1*J);
     var Z3=mp(((Z1+Z2)*(Z1+Z2) - Z1Z1 - Z2Z2)*H);
     return[X3,Y3,Z3];
   }
 
-  // Scalar multiplication (double-and-add in Jacobian, single affine conversion at end)
+  // Scalar multiplication (Jacobian, single affine conversion at end)
   function jMul(k,Px,Py){
-    var RX=0n,RY=1n,RZ=0n, QX=Px,QY=Py,QZ=1n;
-    while(k>0n){
-      if(k&1n){var t=jAdd(RX,RY,RZ,QX,QY,QZ);RX=t[0];RY=t[1];RZ=t[2];}
+    var RX=_B0,RY=_B1,RZ=_B0, QX=Px,QY=Py,QZ=_B1;
+    while(k>_B0){
+      if(k&_B1){var t=jAdd(RX,RY,RZ,QX,QY,QZ);RX=t[0];RY=t[1];RZ=t[2];}
       var q=jDbl(QX,QY,QZ);QX=q[0];QY=q[1];QZ=q[2];
-      k>>=1n;
+      k>>=_B1;
     }
-    if(RZ===0n)return null;
-    var zI=_modInv(RZ,p), zI2=mp(zI*zI);   // single modular inversion here
+    if(RZ===_B0)return null;
+    var zI=_modInv(RZ,p), zI2=mp(zI*zI);
     return[mp(RX*zI2), mp(RY*mp(zI*zI2))];
   }
 
@@ -229,7 +235,7 @@ var _P256 = (function () {
     for(var att=0;att<100;att++){
       V=_hmacSha256(K,V);
       var k=_bytesToBigInt(V);
-      if(k>=1n&&k<n)return k;
+      if(k>=_B1&&k<n)return k;
       K=_hmacSha256(K,V.concat([0]));V=_hmacSha256(K,V);
     }
     throw new Error('RFC6979: no valid k found');
@@ -241,10 +247,10 @@ var _P256 = (function () {
     var k=detK(dBytes,hashBytes.slice(0,32));
     var R=jMul(k,Gx,Gy);
     var r=R[0]%n;
-    if(r===0n)throw new Error('ECDSA: r is zero');
+    if(r===_B0)throw new Error('ECDSA: r is zero');
     var s=_modInv(k,n)*(((z+r*d)%n)+n)%n;
-    if(s>n/2n)s=n-s;  // low-S normalisation
-    if(s===0n)throw new Error('ECDSA: s is zero');
+    if(s>n/_B2)s=n-s;  // low-S normalisation
+    if(s===_B0)throw new Error('ECDSA: s is zero');
     return[r,s];
   }
   function mulG(k){ return jMul(k,Gx,Gy); }
@@ -320,7 +326,7 @@ function _rsaPssSign(key,msgBytes){
   var nHex=key.n.toString(16);
   var modBits=(nHex.length-1)*4+Math.floor(Math.log2(parseInt(nHex[0],16)+1)|0)+1;
   // Recount accurately
-  var tmp=key.n,modBits=0; while(tmp>0n){tmp>>=1n;modBits++;}
+  var tmp=key.n,modBits=0; while(tmp>_B0){tmp>>=_B1;modBits++;}
 
   var hLen=32,sLen=32; // SHA-256, salt = digest length (RSA_PSS_SALTLEN_DIGEST)
   var emLen=Math.ceil((modBits-1)/8);
@@ -401,7 +407,7 @@ function _generateDpopKeyPair() {
     dBytes = [];
     for (var i = 0; i < 32; i++) dBytes.push(Math.floor(Math.random() * 256));
     d = _bytesToBigInt(dBytes);
-  } while (d < 1n || d >= n);
+  } while (d < _B1 || d >= n);
 
   dpopPrivateKeyBytes = _bigIntToBytes(d, 32);
 
