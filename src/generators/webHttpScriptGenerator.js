@@ -6,14 +6,14 @@
  * Config files delegated to: WebHttpMandatoryFilesGenerator
  */
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const CorrelationDetector = require('../analyzers/correlationDetector');
-const ParameterizationEngine = require('../analyzers/parameterizationEngine');
-const AuthenticationHandler = require('../analyzers/authenticationHandler');
-const CustomScriptParser = require('../analyzers/customScriptParser');
-const WebHttpMandatoryFilesGenerator = require('./webHttpMandatoryFilesGenerator');
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const CorrelationDetector = require("../analyzers/correlationDetector");
+const ParameterizationEngine = require("../analyzers/parameterizationEngine");
+const AuthenticationHandler = require("../analyzers/authenticationHandler");
+const CustomScriptParser = require("../analyzers/customScriptParser");
+const WebHttpMandatoryFilesGenerator = require("./webHttpMandatoryFilesGenerator");
 
 class WebHttpScriptGenerator {
   constructor(requests, collection, options = {}) {
@@ -28,8 +28,8 @@ class WebHttpScriptGenerator {
       thinkTime: options.thinkTime || 1,
       groupByFolder: options.groupByFolder !== false,
       addComments: options.addComments !== false,
-      logLevel: options.logLevel || 'info',
-      ...options
+      logLevel: options.logLevel || "info",
+      ...options,
     };
 
     // Analyzers — same as AdvancedScriptGenerator, reused unchanged
@@ -38,7 +38,8 @@ class WebHttpScriptGenerator {
     this.authHandler = new AuthenticationHandler();
     this.scriptParser = new CustomScriptParser();
     this.mandatoryFilesGen = new WebHttpMandatoryFilesGenerator({
-      scriptName: this.collection.info?.name || this.collection.name || 'VuGenScript'
+      scriptName:
+        this.collection.info?.name || this.collection.name || "VuGenScript",
     });
 
     // Analysis results
@@ -49,8 +50,8 @@ class WebHttpScriptGenerator {
 
     // Variable classification
     this.variableMap = new Map();
-    this.dynamicVarNames = new Set();  // Correlation targets — stored as LR params via reg functions
-    this.paramVarNames = new Set();    // Static params from collection → {varName}
+    this.dynamicVarNames = new Set(); // Correlation targets — stored as LR params via reg functions
+    this.paramVarNames = new Set(); // Static params from collection → {varName}
     this.scriptSetVarNames = new Set();
     // CSV column names from JMX CSVDataSet configs — always Tier 3 (EachIteration params)
     this.csvVarNames = new Map(); // varName → { fileName, colIndex, delimiter, recycle }
@@ -59,7 +60,7 @@ class WebHttpScriptGenerator {
     // VuGen C uses BodyFilePath= instead of Body= for large data files.
     // BodyFilePath= reads the file at runtime and performs {param} substitution within it.
     this.extractedDataFiles = new Map(); // hash → { varName, fileName, content, size, usedBy[] }
-    this.largeValueIndex = new Map();    // "requestName::__raw__|__json__" → hash
+    this.largeValueIndex = new Map(); // "requestName::__raw__|__json__" → hash
     this.BASE64_THRESHOLD = 500;
 
     // Transaction names collected during generateGroupedRequests() — passed to .usr file
@@ -72,12 +73,20 @@ class WebHttpScriptGenerator {
 
     // JWT detection — set in detectJwtUsage() after script scanning
     this.hasJwt = false;
-    this.jwtVarNames = [];    // variable names the pre-request script stores the token into
+    this.jwtClaimMap = null;
+    this.jwtVarNames = []; // variable names the pre-request script stores the token into
+
+    //DPoP detection — set in detectDpopUsage() after script scanning
+    this.hasDpop = false;
+    this.dpopVarNames = []; // variable names the pre-request script stores the proof into
+    this.dpopKeyVar = null; // dpop_jwk variable name
+    this._dpopPfGenerated = false; // track if dpop-pf has been generated (should only be once)
+    this._dpopBatchActive = false; // true when batch DPoP is active (skip per-request web_js_run)
 
     // NTLM/Kerberos detection — populated by detectNtlmKerberos() during analyze()
     this.hasNtlm = false;
     this.ntlmAuthType = null; // 'ntlm' | 'kerberos'
-    this.ntlmHost = '';       // hostname without port for web_set_user()
+    this.ntlmHost = ""; // hostname without port for web_set_user()
 
     // mTLS cert detection — populated by detectMtlsCert() during analyze()
     this.mtlsCertFile = null; // basename of uploaded cert file (non-JWT)
@@ -99,20 +108,43 @@ class WebHttpScriptGenerator {
    * @returns {{ enabled:true, host:string, port:number, username:string, password:string }|null}
    */
   detectProxyConfig() {
-    const urlVarNames  = ['proxy','proxyUrl','proxy_url','proxyURI','proxy_uri',
-                          'http_proxy','HTTP_PROXY','https_proxy','HTTPS_PROXY',
-                          'proxyServer','proxy_server','httpProxy','httpsProxy'];
-    const hostVarNames = ['proxyHost','proxy_host','proxyHostname'];
-    const portVarNames = ['proxyPort','proxy_port'];
-    const userVarNames = ['proxyUser','proxy_user','proxyUsername','proxy_username','proxyUserName'];
-    const passVarNames = ['proxyPassword','proxy_password','proxyPass','proxy_pass'];
+    const urlVarNames = [
+      "proxy",
+      "proxyUrl",
+      "proxy_url",
+      "proxyURI",
+      "proxy_uri",
+      "http_proxy",
+      "HTTP_PROXY",
+      "https_proxy",
+      "HTTPS_PROXY",
+      "proxyServer",
+      "proxy_server",
+      "httpProxy",
+      "httpsProxy",
+    ];
+    const hostVarNames = ["proxyHost", "proxy_host", "proxyHostname"];
+    const portVarNames = ["proxyPort", "proxy_port"];
+    const userVarNames = [
+      "proxyUser",
+      "proxy_user",
+      "proxyUsername",
+      "proxy_username",
+      "proxyUserName",
+    ];
+    const passVarNames = [
+      "proxyPassword",
+      "proxy_password",
+      "proxyPass",
+      "proxy_pass",
+    ];
 
     const get = (names) => {
       for (const n of names) {
         const v = this.variableMap.get(n);
         if (v && String(v).trim()) return String(v).trim();
       }
-      return '';
+      return "";
     };
 
     for (const name of urlVarNames) {
@@ -120,23 +152,33 @@ class WebHttpScriptGenerator {
       if (!raw || !String(raw).trim()) continue;
       const val = String(raw).trim();
       try {
-        const urlStr = val.startsWith('http') ? val : `http://${val}`;
+        const urlStr = val.startsWith("http") ? val : `http://${val}`;
         const u = new URL(urlStr);
-        const host     = u.hostname;
-        const port     = u.port ? parseInt(u.port) : 8080;
-        const username = decodeURIComponent(u.username || '') || get(userVarNames);
-        const password = decodeURIComponent(u.password || '') || get(passVarNames);
+        const host = u.hostname;
+        const port = u.port ? parseInt(u.port) : 8080;
+        const username =
+          decodeURIComponent(u.username || "") || get(userVarNames);
+        const password =
+          decodeURIComponent(u.password || "") || get(passVarNames);
         if (host) {
-          console.log(`  ✓ Proxy detected: ${host}:${port}${username ? ' (authenticated)' : ''}`);
+          console.log(
+            `  ✓ Proxy detected: ${host}:${port}${username ? " (authenticated)" : ""}`,
+          );
           return { enabled: true, host, port, username, password };
         }
       } catch {
-        if (val.includes(':')) {
-          const [host, rawPort] = val.split(':');
+        if (val.includes(":")) {
+          const [host, rawPort] = val.split(":");
           const port = parseInt(rawPort) || 8080;
-          if (host && host.includes('.')) {
+          if (host && host.includes(".")) {
             console.log(`  ✓ Proxy detected: ${host}:${port}`);
-            return { enabled: true, host, port, username: get(userVarNames), password: get(passVarNames) };
+            return {
+              enabled: true,
+              host,
+              port,
+              username: get(userVarNames),
+              password: get(passVarNames),
+            };
           }
         }
       }
@@ -146,7 +188,13 @@ class WebHttpScriptGenerator {
     if (host) {
       const port = parseInt(get(portVarNames)) || 8080;
       console.log(`  ✓ Proxy detected: ${host}:${port}`);
-      return { enabled: true, host, port, username: get(userVarNames), password: get(passVarNames) };
+      return {
+        enabled: true,
+        host,
+        port,
+        username: get(userVarNames),
+        password: get(passVarNames),
+      };
     }
 
     return null;
@@ -161,29 +209,30 @@ class WebHttpScriptGenerator {
     // - If '{{AuthUsername}}', look up 'AuthUsername' in variableMap → return its value
     // - If a literal string (JMX), return it as-is
     const resolve = (val) => {
-      if (!val) return '';
+      if (!val) return "";
       const m = String(val).match(/^\{\{([^}]+)\}\}$/);
-      return m ? (this.variableMap.get(m[1]) || '') : String(val);
+      return m ? this.variableMap.get(m[1]) || "" : String(val);
     };
 
     for (const req of this.requests) {
-      const authType = (req.auth?.type || '').toLowerCase();
-      if (authType === 'kerberos' || authType === 'ntlm') {
+      const authType = (req.auth?.type || "").toLowerCase();
+      if (authType === "kerberos" || authType === "ntlm") {
         this.hasNtlm = true;
         this.ntlmAuthType = authType;
 
         // --- Host extraction ---
         // JMX AuthManager provides req.auth.hostport (hostname only, no port after parser fix)
-        let host = req.auth?.hostport || '';
+        let host = req.auth?.hostport || "";
         if (!host) {
           // Postman/Bruno: extract hostname from the request URL
-          const urlStr = typeof req.url === 'string' ? req.url : (req.url?.raw || '');
+          const urlStr =
+            typeof req.url === "string" ? req.url : req.url?.raw || "";
           try {
-            const u = new URL(urlStr.replace(/\{\{[^}]+\}\}/g, 'placeholder'));
+            const u = new URL(urlStr.replace(/\{\{[^}]+\}\}/g, "placeholder"));
             host = u.hostname;
           } catch {
             const m = urlStr.match(/^https?:\/\/([^/:?#]+)/i);
-            host = m ? m[1] : '';
+            host = m ? m[1] : "";
           }
         }
         this.ntlmHost = host;
@@ -193,13 +242,13 @@ class WebHttpScriptGenerator {
         // Postman format: req.auth[authType] is [{key, value}] where value = '{{AuthUsername}}'
         let rawUsername = req.auth?.username || null;
         let rawPassword = req.auth?.password || null;
-        let rawDomain   = req.auth?.domain   || null;
+        let rawDomain = req.auth?.domain || null;
         const authArr = req.auth?.[authType];
         if (Array.isArray(authArr)) {
-          authArr.forEach(item => {
-            if (item.key === 'username') rawUsername = item.value;
-            if (item.key === 'password') rawPassword = item.value;
-            if (item.key === 'domain')   rawDomain   = item.value;
+          authArr.forEach((item) => {
+            if (item.key === "username") rawUsername = item.value;
+            if (item.key === "password") rawPassword = item.value;
+            if (item.key === "domain") rawDomain = item.value;
           });
         }
 
@@ -209,12 +258,14 @@ class WebHttpScriptGenerator {
         // regardless of what variable names the collection used.
         const usernameVal = resolve(rawUsername);
         const passwordVal = resolve(rawPassword);
-        const domainVal   = resolve(rawDomain);
-        if (usernameVal) this.variableMap.set('username', usernameVal);
-        if (passwordVal) this.variableMap.set('password', passwordVal);
-        if (domainVal)   this.variableMap.set('domain',   domainVal);
+        const domainVal = resolve(rawDomain);
+        if (usernameVal) this.variableMap.set("username", usernameVal);
+        if (passwordVal) this.variableMap.set("password", passwordVal);
+        if (domainVal) this.variableMap.set("domain", domainVal);
 
-        console.log(`  ✓ ${authType.toUpperCase()} authentication detected — host: ${host || '(unknown)'}`);
+        console.log(
+          `  ✓ ${authType.toUpperCase()} authentication detected — host: ${host || "(unknown)"}`,
+        );
         return;
       }
     }
@@ -229,7 +280,12 @@ class WebHttpScriptGenerator {
     const paths = this.options.csvFilePaths || {};
     for (const filename of Object.keys(paths)) {
       const lc = filename.toLowerCase();
-      if (lc.endsWith('.pem') || lc.endsWith('.p12') || lc.endsWith('.pfx') || lc.endsWith('.crt')) {
+      if (
+        lc.endsWith(".pem") ||
+        lc.endsWith(".p12") ||
+        lc.endsWith(".pfx") ||
+        lc.endsWith(".crt")
+      ) {
         this.mtlsCertFile = filename;
         console.log(`  ✓ Client certificate detected: ${filename}`);
         return;
@@ -241,28 +297,38 @@ class WebHttpScriptGenerator {
 
   buildVariableMap() {
     if (this.collection.variable) {
-      this.collection.variable.forEach(v => this.variableMap.set(v.key, v.value));
+      this.collection.variable.forEach((v) =>
+        this.variableMap.set(v.key, v.value),
+      );
     }
     if (this.collection.environment) {
-      Object.entries(this.collection.environment).forEach(([k, v]) => this.variableMap.set(k, v));
+      Object.entries(this.collection.environment).forEach(([k, v]) =>
+        this.variableMap.set(k, v),
+      );
     }
     if (this.options.environmentVars) {
-      Object.entries(this.options.environmentVars).forEach(([k, v]) => this.variableMap.set(k, v));
+      Object.entries(this.options.environmentVars).forEach(([k, v]) =>
+        this.variableMap.set(k, v),
+      );
     }
     // Build csvVarNames from JMX CSVDataSet configs so they are always classified
     // as Tier 3 iteration parameters (never treated as Dynamic via Rule 4).
-    const csvDataSets = this.options.csvDataSets || this.collection.csvDataSets || [];
+    const csvDataSets =
+      this.options.csvDataSets || this.collection.csvDataSets || [];
     for (const ds of csvDataSets) {
-      const cols = (ds.variableNames || '').split(',').map(s => s.trim()).filter(Boolean);
+      const cols = (ds.variableNames || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       cols.forEach((col, idx) => {
         this.csvVarNames.set(col, {
-          fileName:  ds.filename || `${col}.csv`,
-          colIndex:  idx + 1,
-          delimiter: ds.delimiter || ',',
-          recycle:   ds.recycle !== false,
+          fileName: ds.filename || `${col}.csv`,
+          colIndex: idx + 1,
+          delimiter: ds.delimiter || ",",
+          recycle: ds.recycle !== false,
         });
         // Ensure the var is in variableMap (may have been injected as '' already)
-        if (!this.variableMap.has(col)) this.variableMap.set(col, '');
+        if (!this.variableMap.has(col)) this.variableMap.set(col, "");
       });
     }
     this.detectScriptSetVariables();
@@ -272,14 +338,17 @@ class WebHttpScriptGenerator {
     // Groups: 1=pm.*/context (modern), 2=postman.set* (legacy Postman 2.x), 3=bru.set*, 4=env/vars legacy
     // postman.setEnvironmentVariable / postman.setGlobalVariable are the Postman 2.x API —
     // not the same as pm.environment.set() — must be matched separately.
-    const setPattern = /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|postman\.(?:setEnvironmentVariable|setGlobalVariable)\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
+    const setPattern =
+      /(?:context|pm\.environment|pm\.collectionVariables|pm\.globals|pm\.variables)\.set\s*\(\s*["']([^"']+)["']|postman\.(?:setEnvironmentVariable|setGlobalVariable)\s*\(\s*["']([^"']+)["']|bru\.(?:setEnv|setEnvVar|setVar|setGlobalVar|setNextEnvVar)\s*\(\s*["']([^"']+)["']|(?:^|[^a-zA-Z0-9_$])(?:env|vars)\.set\s*\(\s*["']([^"']+)["']/gm;
     const scan = (item) => {
       // Support both raw collection (item.event) and normalized request (item.tests)
       const events = item.event || item.tests || [];
       if (Array.isArray(events)) {
-        events.forEach(ev => {
+        events.forEach((ev) => {
           if (ev.script && ev.script.exec) {
-            const text = Array.isArray(ev.script.exec) ? ev.script.exec.join('\n') : ev.script.exec;
+            const text = Array.isArray(ev.script.exec)
+              ? ev.script.exec.join("\n")
+              : ev.script.exec;
             let m;
             while ((m = setPattern.exec(text)) !== null) {
               // group 1=pm.*/context, 2=postman.set* legacy, 3=bru.set*, 4=env/vars legacy
@@ -294,11 +363,13 @@ class WebHttpScriptGenerator {
     };
     scan(this.collection);
     // Also scan normalized requests (req.tests = brunoParser normalized events)
-    this.requests.forEach(req => {
+    this.requests.forEach((req) => {
       const events = req.tests || req.event || [];
-      events.forEach(ev => {
+      events.forEach((ev) => {
         if (ev.script && ev.script.exec) {
-          const text = Array.isArray(ev.script.exec) ? ev.script.exec.join('\n') : ev.script.exec;
+          const text = Array.isArray(ev.script.exec)
+            ? ev.script.exec.join("\n")
+            : ev.script.exec;
           let m;
           while ((m = setPattern.exec(text)) !== null) {
             // group 1=pm.*/context, 2=postman.set* legacy, 3=bru.set*, 4=env/vars legacy
@@ -318,12 +389,14 @@ class WebHttpScriptGenerator {
    * - Static params → defined in ParameterFile.prm, read from collection_data.dat
    */
   classifyVariables() {
-    const credentialPattern = /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
+    const credentialPattern =
+      /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
 
     // Private key / cryptographic secret — must NEVER appear in ParameterFile.prm or collection_data.dat.
     // PEM-encoded keys are multi-line, contain special chars that break CSV parsing, and must not be
     // stored in plain-text parameter files. Treated as dynamic so they stay as LR params only.
-    const privateKeyPattern = /private.?key|signing.?key|secret.?key|rsa.?key|client.?secret|signing.?secret|jwt.?secret|pem.?key|key.?pem|pkcs|p12.?key/i;
+    const privateKeyPattern =
+      /private.?key|signing.?key|secret.?key|rsa.?key|client.?secret|signing.?secret|jwt.?secret|pem.?key|key.?pem|pkcs|p12.?key/i;
 
     // RULE 0 — JMX CSVDataSet columns → always Tier 3 (EachIteration parameter in ParameterFile.prm)
     // These have empty values from injectCsvVariables() and would fall into Rule 4 (Dynamic) otherwise.
@@ -333,10 +406,10 @@ class WebHttpScriptGenerator {
     }
 
     // RULE 1 — Correlation targets → dynamic (VuGen: web_reg_save_param_* handles them)
-    this.correlations.forEach(corr => this.dynamicVarNames.add(corr.name));
+    this.correlations.forEach((corr) => this.dynamicVarNames.add(corr.name));
 
     // RULE 2 — Script-set variables → dynamic
-    this.scriptSetVarNames.forEach(name => this.dynamicVarNames.add(name));
+    this.scriptSetVarNames.forEach((name) => this.dynamicVarNames.add(name));
 
     // RULE 2.5 — Private key / cryptographic secret → always dynamic (never in ParameterFile.prm)
     // PEM keys are multi-line, contain special chars that break CSV, must not be in plain-text files.
@@ -346,7 +419,7 @@ class WebHttpScriptGenerator {
 
     // RULE 3 — _ prefix → always dynamic
     for (const [name] of this.variableMap.entries()) {
-      if (name.startsWith('_')) this.dynamicVarNames.add(name);
+      if (name.startsWith("_")) this.dynamicVarNames.add(name);
     }
 
     // RULE 4 (GENERIC) — Empty value in collection/environment → dynamic.
@@ -354,9 +427,9 @@ class WebHttpScriptGenerator {
     // Skip variables already committed to paramVarNames by Rule 0 (CSV columns).
     for (const [name, value] of this.variableMap.entries()) {
       if (this.dynamicVarNames.has(name)) continue;
-      if (this.paramVarNames.has(name)) continue;        // already a param (Rule 0)
-      if (name.startsWith('$')) continue;
-      const isEmpty = value === '' || value === null || value === undefined;
+      if (this.paramVarNames.has(name)) continue; // already a param (Rule 0)
+      if (name.startsWith("$")) continue;
+      const isEmpty = value === "" || value === null || value === undefined;
       if (isEmpty && !credentialPattern.test(name)) {
         this.dynamicVarNames.add(name);
       }
@@ -366,41 +439,43 @@ class WebHttpScriptGenerator {
     let usernameParam = null;
     for (const [name] of this.variableMap.entries()) {
       if (this.dynamicVarNames.has(name)) continue;
-      if (name.startsWith('$')) continue;
+      if (name.startsWith("$")) continue;
       this.paramVarNames.add(name);
-      if (/^(username|user|user_?name|email|login|account)$/i.test(name)) usernameParam = name;
+      if (/^(username|user|user_?name|email|login|account)$/i.test(name))
+        usernameParam = name;
     }
 
     // Build parameters map for ParameterFile.prm
     // Rule 0 CSV columns get their actual file/column info; all others use collection_data.dat
     for (const name of this.paramVarNames) {
-      const value      = this.variableMap.get(name);
-      const csvInfo    = this.csvVarNames.get(name);
+      const value = this.variableMap.get(name);
+      const csvInfo = this.csvVarNames.get(name);
       const isCredential = credentialPattern.test(name);
       if (csvInfo) {
         // From a JMX CSVDataSet — point to the actual CSV file
         this.parameters.set(name, {
           name,
-          type:      'csv',
-          fileName:  csvInfo.fileName,
+          type: "csv",
+          fileName: csvInfo.fileName,
           columnName: name,
-          colIndex:  csvInfo.colIndex,
+          colIndex: csvInfo.colIndex,
           delimiter: csvInfo.delimiter,
-          nextValue: 'iteration',        // CSVDataSet is always per-iteration in JMeter
-          nextRow:   'sequential',
-          onEnd:     csvInfo.recycle ? 'loop' : 'last',
-          paramValue: ''
+          nextValue: "iteration", // CSVDataSet is always per-iteration in JMeter
+          nextRow: "sequential",
+          onEnd: csvInfo.recycle ? "loop" : "last",
+          paramValue: "",
         });
       } else {
         this.parameters.set(name, {
           name,
-          type: 'csv',
-          fileName: 'collection_data.dat',
+          type: "csv",
+          fileName: "collection_data.dat",
           columnName: name,
-          nextValue: isCredential ? 'iteration' : 'once',
-          nextRow: 'sequential',
-          onEnd: 'loop',
-          paramValue: value !== undefined && value !== null ? String(value) : ''
+          nextValue: isCredential ? "iteration" : "once",
+          nextRow: "sequential",
+          onEnd: "loop",
+          paramValue:
+            value !== undefined && value !== null ? String(value) : "",
         });
       }
     }
@@ -424,7 +499,10 @@ class WebHttpScriptGenerator {
     // Legacy: Link password-like params to username for non-CSV params
     if (usernameParam) {
       for (const [name, config] of this.parameters.entries()) {
-        if (/^(password|pwd|passwd)$/i.test(name) && !this.csvVarNames.has(name)) {
+        if (
+          /^(password|pwd|passwd)$/i.test(name) &&
+          !this.csvVarNames.has(name)
+        ) {
           config.nextRow = `same as ${usernameParam}`;
         }
       }
@@ -436,7 +514,9 @@ class WebHttpScriptGenerator {
     // Note: {jwt_token} uses NO underscore (web_js_run ResultParam convention differs from
     // web_reg_save_param_* which uses the _ prefix correlation convention).
 
-    console.log(`✓ Classified variables: ${this.paramVarNames.size} parameterized, ${this.dynamicVarNames.size} dynamic (correlations)`);
+    console.log(
+      `✓ Classified variables: ${this.paramVarNames.size} parameterized, ${this.dynamicVarNames.size} dynamic (correlations)`,
+    );
   }
 
   // ─── Main Entry ─────────────────────────────────────────────────────────────
@@ -455,53 +535,104 @@ class WebHttpScriptGenerator {
 
     // 4. Generate remaining C source files (vuser_init uses this.parameters for logging)
     const vuserInitC = this.generateVuserInitC();
-    const vuserEndC  = this.generateVuserEndC();
-    const globalsH   = this.generateGlobalsH();
+    const vuserEndC = this.generateVuserEndC();
+    const globalsH = this.generateGlobalsH();
 
     // 5. Write C files
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-    fs.writeFileSync(path.join(outputDir, 'Action.c'), actionC, 'utf8');
-    fs.writeFileSync(path.join(outputDir, 'vuser_init.c'), vuserInitC, 'utf8');
-    fs.writeFileSync(path.join(outputDir, 'vuser_end.c'), vuserEndC, 'utf8');
-    fs.writeFileSync(path.join(outputDir, 'globals.h'), globalsH, 'utf8');
+    fs.writeFileSync(path.join(outputDir, "Action.c"), actionC, "utf8");
+    fs.writeFileSync(path.join(outputDir, "vuser_init.c"), vuserInitC, "utf8");
+    fs.writeFileSync(path.join(outputDir, "vuser_end.c"), vuserEndC, "utf8");
+    fs.writeFileSync(path.join(outputDir, "globals.h"), globalsH, "utf8");
 
     // 6. Write extracted base64/body data files to data/ subfolder
     if (this.extractedDataFiles.size > 0) {
-      const dataDir = path.join(outputDir, 'data');
+      const dataDir = path.join(outputDir, "data");
       if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
       for (const [, fileInfo] of this.extractedDataFiles.entries()) {
-        fs.writeFileSync(path.join(dataDir, fileInfo.fileName), fileInfo.content, 'utf8');
-        console.log(`✓ Extracted: data/${fileInfo.fileName} (${(fileInfo.size / 1024).toFixed(1)} KB, used by ${fileInfo.usedBy.length} request(s))`);
+        fs.writeFileSync(
+          path.join(dataDir, fileInfo.fileName),
+          fileInfo.content,
+          "utf8",
+        );
+        console.log(
+          `✓ Extracted: data/${fileInfo.fileName} (${(fileInfo.size / 1024).toFixed(1)} KB, used by ${fileInfo.usedBy.length} request(s))`,
+        );
       }
     }
 
     // 7. Generate config/metadata files — pass data file names so they appear in .usr and ScriptUploadMetadata.xml
-    const dataFileNames = Array.from(this.extractedDataFiles.values()).map(f => f.fileName);
+    const dataFileNames = Array.from(this.extractedDataFiles.values()).map(
+      (f) => f.fileName,
+    );
     await this.mandatoryFilesGen.generateAll(
-      outputDir, this.parameters, this.transactionNames, dataFileNames,
-      this.hasJwt, this.detectProxyConfig(), this.hasNtlm, this.mtlsCertFile,
-      this.hasDpop
+      outputDir,
+      this.parameters,
+      this.transactionNames,
+      dataFileNames,
+      this.hasJwt,
+      this.detectProxyConfig(),
+      this.hasNtlm,
+      this.mtlsCertFile,
+      this.hasDpop,
     );
 
-    // 8. If JWT or DPoP detected: copy lre-crypto.js + transport.pem from project root.
-    //    lre-crypto.js replaces jsrsasign.js (340KB) + dpop.js with a single 19KB file.
-    //    It provides createJWT() (PS256) and initDpopKey/generateDpopProof() (ES256).
-    if (this.hasJwt || this.hasDpop) {
-      const PROJECT_ROOT = path.join(__dirname, '..', '..');
-      const lreCryptoSrc = path.join(PROJECT_ROOT, 'lre-crypto.js');
-      if (fs.existsSync(lreCryptoSrc)) {
-        fs.copyFileSync(lreCryptoSrc, path.join(outputDir, 'lre-crypto.js'));
-        console.log('✓ Copied lre-crypto.js');
-      } else {
-        console.warn('  ⚠  lre-crypto.js not found in project root.');
+    // 8. If JWT detected: copy lre-utils.dat + transport.pem from project root.
+    //    lre-utils.dat provides createJWT() for VuGen (listed in [ManuallyExtraFiles]).
+    //    transport.pem is the private key file used for signing.
+    if (this.hasJwt) {
+      const PROJECT_ROOT = path.join(__dirname, "..", "..");
+      // lre-utils.dat may already be copied by DPoP block below — only copy if not present
+      const lreCryptoDest = path.join(outputDir, "lre-utils.dat");
+      if (!fs.existsSync(lreCryptoDest)) {
+        const lreCryptoSrc = path.join(PROJECT_ROOT, "lre-utils-helper.js");
+        if (fs.existsSync(lreCryptoSrc)) {
+          fs.copyFileSync(lreCryptoSrc, lreCryptoDest);
+          console.log("✓ Copied lre-utils.dat (JWT signing for VuGen)");
+        } else {
+          console.warn(
+            "  ⚠  lre-utils.dat not found in project root. JWT signing requires it.",
+          );
+        }
       }
 
-      // Copy transport.pem from project root (used for mTLS alongside JWT)
-      const pemSrc = path.join(PROJECT_ROOT, 'transport.pem');
+      // Copy transport.pem from project root
+      const pemSrc = path.join(PROJECT_ROOT, "transport.pem");
       if (fs.existsSync(pemSrc)) {
-        fs.copyFileSync(pemSrc, path.join(outputDir, 'transport.pem'));
-        console.log('✓ Copied transport.pem');
+        fs.copyFileSync(pemSrc, path.join(outputDir, "transport.pem"));
+        console.log("✓ Copied transport.pem");
+      } else {
+        // Create empty placeholder so VuGen can open the project without errors.
+        // User replaces with their actual private key.
+        fs.writeFileSync(
+          path.join(outputDir, "transport.pem"),
+          "# Replace this file with your actual RSA private key (PEM format)\n",
+          "utf8",
+        );
+        console.log(
+          "✓ Created transport.pem placeholder (replace with your actual private key)",
+        );
+      }
+    }
+
+    // 8.5. If DPoP detected: copy lre-utils.dat from project root
+    //      (may already be copied by JWT block above)
+    if (this.hasDpop) {
+      const PROJECT_ROOT = path.join(__dirname, "..", "..");
+      const lreCryptoDest = path.join(outputDir, "lre-utils.dat");
+      if (!fs.existsSync(lreCryptoDest)) {
+        const lreCryptoSrc = path.join(PROJECT_ROOT, "lre-utils-helper.js");
+        if (fs.existsSync(lreCryptoSrc)) {
+          fs.copyFileSync(lreCryptoSrc, lreCryptoDest);
+          console.log(
+            "✓ Copied lre-utils.dat (unified DPoP + JWT crypto for VuGen)",
+          );
+        } else {
+          console.warn(
+            "  ⚠  lre-utils.dat not found in project root. DPoP signing requires it.",
+          );
+        }
       }
     }
 
@@ -512,12 +643,17 @@ class WebHttpScriptGenerator {
         fs.copyFileSync(srcPath, path.join(outputDir, this.mtlsCertFile));
         console.log(`✓ Copied mTLS certificate: ${this.mtlsCertFile}`);
       } else {
-        console.warn(`  ⚠  mTLS cert ${this.mtlsCertFile} not found in uploaded files.`);
+        console.warn(
+          `  ⚠  mTLS cert ${this.mtlsCertFile} not found in uploaded files.`,
+        );
       }
     }
 
-    const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
-    console.log(`✓ Generated Web HTTP/HTML script "${scriptName}": ${outputDir}`);
+    const scriptName =
+      this.collection.info?.name || this.collection.name || "VuGenScript";
+    console.log(
+      `✓ Generated Web HTTP/HTML script "${scriptName}": ${outputDir}`,
+    );
 
     return {
       script: actionC,
@@ -525,77 +661,128 @@ class WebHttpScriptGenerator {
         requests: { total: this.requests.length },
         correlations: { totalCorrelations: this.correlations.length },
         parameters: { totalParameters: this.parameters.size },
-        authentication: { totalConfigs: 0 }
+        authentication: { totalConfigs: 0 },
       },
       mandatoryFiles: true,
-      extractedDataFiles: dataFileNames
+      extractedDataFiles: dataFileNames,
     };
   }
 
   async analyze() {
-    // Filter out jsrsasign library-loading requests (kjur.github.io/jsrassign).
+    // Filter out jsrsasign library-loading requests (kjur.github.io/jsrsasign).
     // These are script-runner HTTP fetches used by Postman/Bruno pre-request scripts to
-    // load the jsrsasign JWT library. In our generated scripts we ship jsrassign.js as a
+    // load the jsrsasign JWT library. In our generated scripts we ship jsrsasign.js as a
     // local file, so the library-fetch request must never become a web_custom_request().
     {
       const beforeFilter = this.requests.length;
-      this.requests = this.requests.filter(r => !this._isJsrsasignLoadRequest(r));
+      this.requests = this.requests.filter(
+        (r) => !this._isJsrsasignLoadRequest(r),
+      );
       if (this.requests.length < beforeFilter) {
-        console.log(`  ✓ Skipped ${beforeFilter - this.requests.length} jsrsasign library-loading request(s)`);
+        console.log(
+          `  ✓ Skipped ${beforeFilter - this.requests.length} jsrsasign library-loading request(s)`,
+        );
       }
     }
 
     // Correlations
     if (this.options.useCorrelation) {
-      this.correlations = this.correlationDetector.analyzeRequests(this.requests);
+      this.correlations = this.correlationDetector.analyzeRequests(
+        this.requests,
+      );
       // Inject JMX-explicit extractors (RegexExtractor, BoundaryExtractor, etc.)
       this.injectJmxExtractors();
-      console.log(`✓ Detected ${this.correlations.length} correlations`);
+      console.log(` ✓ Detected ${this.correlations.length} correlations`);
     }
 
     // Custom scripts — parsed for variable detection and JWT fingerprinting.
     // brunoParser normalizes Postman/Bruno events into req.tests[] (listen + script).
     // Some code paths store them as req.event[]. Support both to be generic.
     if (this.options.useCustomScripts) {
-      this.requests.forEach(req => {
+      this.requests.forEach((req) => {
         const events = req.tests || req.event || [];
-        const preScript = events.find(e => e.listen === 'prerequest')?.script?.exec;
-        const testScript = events.find(e => e.listen === 'test')?.script?.exec;
-        const preText = Array.isArray(preScript) ? preScript.join('\n') : (preScript || '');
-        const testText = Array.isArray(testScript) ? testScript.join('\n') : (testScript || '');
+        const preScript = events.find((e) => e.listen === "prerequest")?.script
+          ?.exec;
+        const testScript = events.find((e) => e.listen === "test")?.script
+          ?.exec;
+        const preText = Array.isArray(preScript)
+          ? preScript.join("\n")
+          : preScript || "";
+        const testText = Array.isArray(testScript)
+          ? testScript.join("\n")
+          : testScript || "";
 
         if (preText || testText) {
           this.customScripts.set(req.id || req.name, {
-            preRequest: preText ? this.scriptParser.parsePreRequestScript(preText, req.name) : null,
-            test: testText ? this.scriptParser.parseTestScript(testText, req.name) : null
-          });
-
-          // JWT detection — scan all scripts (pre, test, and JMX JSR223 pre/post).
-          // JMX JSR223 scripts (Java/Groovy) may also contain JWT signing logic.
-          const allScriptTexts = [preText, testText,
-            ...(req.preScripts  || []).map(s => typeof s === 'string' ? s : (s?.code || '')),
-            ...(req.postScripts || []).map(s => typeof s === 'string' ? s : (s?.code || '')),
-          ];
-          for (const txt of allScriptTexts.filter(Boolean)) {
-            const jwtInfo = CustomScriptParser.detectJwtUsage(txt);
-            if (jwtInfo.isJwt) {
-              this.hasJwt = true;
-              this.jwtVarNames.push(...jwtInfo.outputVars);
-              console.log(`  ✓ JWT detected in "${req.name}" (library: ${jwtInfo.library}, algorithm: ${jwtInfo.algorithm})`);
-              break; // one detection per request is enough
-            }
-          }
-
-          // Per-request dynamic vars (UUID/nonce/random generated per request — not from responses)
-          const perReqVars = CustomScriptParser.detectPerRequestDynamicVars(preText);
-          perReqVars.forEach(({ varName, generationType }) => {
-            if (!this.perRequestVars.has(varName)) {
-              this.perRequestVars.set(varName, { generationType, requestNames: [] });
-              this.scriptSetVarNames.add(varName); // ensure Tier 1 dynamic, never parameterized
-            }
-            this.perRequestVars.get(varName).requestNames.push(req.name);
+            preRequest: preText
+              ? this.scriptParser.parsePreRequestScript(preText, req.name)
+              : null,
+            test: testText
+              ? this.scriptParser.parseTestScript(testText, req.name)
+              : null,
           });
         }
+
+        // JWT detection — scan all scripts (pre, test, and JMX JSR223 pre/post).
+        // JMX JSR223 scripts (Java/Groovy) may also contain JWT signing logic.
+        const allScriptTexts = [
+          preText,
+          testText,
+          ...(req.preScripts || []).map((s) =>
+            typeof s === "string" ? s : s?.code || "",
+          ),
+          ...(req.postScripts || []).map((s) =>
+            typeof s === "string" ? s : s?.code || "",
+          ),
+        ];
+        for (const txt of allScriptTexts.filter(Boolean)) {
+          // Check for JWT patterns
+          const jwtInfo = CustomScriptParser.detectJwtUsage(txt);
+          if (jwtInfo.isJwt) {
+            this.hasJwt = true;
+            this.jwtVarNames.push(...jwtInfo.outputVars);
+            const map = CustomScriptParser.extractJwtClaimMap(txt);
+            if (
+              map &&
+              Object.keys(map).length >
+                (this.jwtClaimMap ? Object.keys(this.jwtClaimMap).length : 0)
+            ) {
+              this.jwtClaimMap = map;
+            }
+            console.log(
+              `    ✓ JWT detected in "${req.name}" (library: ${jwtInfo.library}, algorithm: ${jwtInfo.algorithm})`,
+            );
+          }
+
+          // Check for DPoP patterns
+          const dpopInfo = CustomScriptParser.detectDpopUsage(txt);
+          if (dpopInfo.isDpop) {
+            this.hasDpop = true;
+            this.dpopVarNames.push(...dpopInfo.outputVars);
+            if (dpopInfo.keyVar) {
+              this.dpopKeyVar = dpopInfo.keyVar;
+            }
+            console.log(
+              `    ✓ DPoP detected in "${req.name}" (key variable: ${dpopInfo.keyVar})`,
+            );
+          }
+
+          if (jwtInfo.isJwt || dpopInfo.isDpop) break; // one detection per request is enough
+        }
+
+        // Per-request dynamic vars (UUID/nonce/random generated per request — not from responses)
+        const perReqVars =
+          CustomScriptParser.detectPerRequestDynamicVars(preText);
+        perReqVars.forEach(({ varName, generationType }) => {
+          if (!this.perRequestVars.has(varName)) {
+            this.perRequestVars.set(varName, {
+              generationType,
+              requestNames: [],
+            });
+            this.scriptSetVarNames.add(varName); // ensure Tier 1 dynamic, never parameterized
+          }
+          this.perRequestVars.get(varName).requestNames.push(req.name);
+        });
       });
     }
 
@@ -611,23 +798,30 @@ class WebHttpScriptGenerator {
     // CSRF/XSRF header detection — scan all request headers for known CSRF pattern names.
     // If a header key matches the CSRF pattern AND its value is a template variable,
     // mark the variable as per-request generated using gen_csrf_token() in C.
-    this.requests.forEach(req => {
-      (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
-        if (!CustomScriptParser.isCsrfHeaderName(h.key)) return;
+    this.requests.forEach((req) => {
+      (req.headers || [])
+        .filter((h) => h.key && h.value && !h.disabled)
+        .forEach((h) => {
+          if (!CustomScriptParser.isCsrfHeaderName(h.key)) return;
 
-        // Extract the variable name from the header value {{varName}}
-        const m = String(h.value).match(/\{\{([^}]+)\}\}/);
-        if (!m) return;
-        const varName = m[1].trim();
+          // Extract the variable name from the header value {{varName}}
+          const m = String(h.value).match(/\{\{([^}]+)\}\}/);
+          if (!m) return;
+          const varName = m[1].trim();
 
-        // Only mark as per-request if it's not already classified and not a static param
-        if (this.perRequestVars.has(varName)) return;
-        if (this.parameters.has(varName)) return;
+          // Only mark as per-request if it's not already classified and not a static param
+          if (this.perRequestVars.has(varName)) return;
+          if (this.parameters.has(varName)) return;
 
-        this.perRequestVars.set(varName, { generationType: 'csrf', requestNames: [req.name] });
-        this.scriptSetVarNames.add(varName);  // ensure Tier 1 dynamic, never in ParameterFile.prm
-        console.log(`  ✓ CSRF header "${h.key}" → per-request gen_csrf_token("_${varName}")`);
-      });
+          this.perRequestVars.set(varName, {
+            generationType: "csrf",
+            requestNames: [req.name],
+          });
+          this.scriptSetVarNames.add(varName); // ensure Tier 1 dynamic, never in ParameterFile.prm
+          console.log(
+            `  ✓ CSRF header "${h.key}" → per-request gen_csrf_token("_${varName}")`,
+          );
+        });
     });
 
     // UUID header detection — covers {{$guid}}/{{$randomUUID}} Postman built-ins AND
@@ -635,53 +829,85 @@ class WebHttpScriptGenerator {
     // Runs after CSRF scan so we don't duplicate already-classified CSRF vars.
     // Must run BEFORE analyzeCommonHeaders() so new perRequestVars are seen there.
     {
-      const UUID_HEADER_RE = /^(x-fapi-interaction-id|x-request-id|x-correlation-id|x-trace-id|x-interaction-id|x-idempotency-key|idempotency-key|x-b3-traceid|request-id|correlation-id)$/i;
-      const GUID_BUILTIN   = /^\{\{\s*\$(guid|randomUUID)\s*\}\}$/i;
+      const UUID_HEADER_RE =
+        /^(x-fapi-interaction-id|x-request-id|x-correlation-id|x-trace-id|x-interaction-id|x-idempotency-key|idempotency-key|x-b3-traceid|request-id|correlation-id)$/i;
+      const GUID_BUILTIN = /^\{\{\s*\$(guid|randomUUID)\s*\}\}$/i;
 
       const allReqsUuid = [
         ...this.requests,
-        ...(this.options.setupRequests    || []),
+        ...(this.options.setupRequests || []),
         ...(this.options.teardownRequests || []),
       ];
 
-      allReqsUuid.forEach(req => {
-        (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
-          const val = String(h.value).trim();
+      allReqsUuid.forEach((req) => {
+        (req.headers || [])
+          .filter((h) => h.key && h.value && !h.disabled)
+          .forEach((h) => {
+            const val = String(h.value).trim();
 
-          // Trigger 1: value is {{$guid}} or {{$randomUUID}} — any header key
-          if (GUID_BUILTIN.test(val)) {
-            const varName = this._headerKeyToVarName(h.key) || 'requestGuid';
-            if (!this.perRequestVars.has(varName) && !this.dynamicVarNames.has(varName)) {
-              this.perRequestVars.set(varName, { generationType: 'uuid', requestNames: [] });
-              this.scriptSetVarNames.add(varName);
-              console.log(`  ✓ UUID header "${h.key}: {{$guid}}" → per-request gen_uuid("_${varName}")`);
+            // Trigger 1: value is {{$guid}} or {{$randomUUID}} — any header key
+            if (GUID_BUILTIN.test(val)) {
+              const varName = this._headerKeyToVarName(h.key) || "requestGuid";
+              if (
+                !this.perRequestVars.has(varName) &&
+                !this.dynamicVarNames.has(varName)
+              ) {
+                this.perRequestVars.set(varName, {
+                  generationType: "uuid",
+                  requestNames: [],
+                });
+                this.scriptSetVarNames.add(varName);
+                console.log(
+                  `  ✓ UUID header "${h.key}: {{$guid}}" → per-request gen_uuid("_${varName}")`,
+                );
+              }
+              if (this.perRequestVars.has(varName)) {
+                this.perRequestVars.get(varName).requestNames.push(req.name);
+              }
+              // Mutate so replaceParameters() emits {_varName} for this header
+              h.value = `{{${varName}}}`;
+              return;
             }
-            if (this.perRequestVars.has(varName)) {
-              this.perRequestVars.get(varName).requestNames.push(req.name);
-            }
-            // Mutate so replaceParameters() emits {_varName} for this header
-            h.value = `{{${varName}}}`;
-            return;
-          }
 
-          // Trigger 2: UUID-generating header key with {{varName}} value
-          if (!UUID_HEADER_RE.test(h.key)) return;
-          const m = val.match(/^\{\{([^}$][^}]*)\}\}$/);
-          if (!m) return;
-          const varName = m[1].trim();
-          if (!varName) return;
-          if (this.perRequestVars.has(varName)) return;
-          if (this.parameters.has(varName)) return;
+            // Trigger 2: UUID-generating header key with {{varName}} value
+            if (!UUID_HEADER_RE.test(h.key)) return;
+            const m = val.match(/^\{\{([^}$][^}]*)\}\}$/);
+            if (!m) return;
+            const varName = m[1].trim();
+            if (!varName) return;
+            if (this.perRequestVars.has(varName)) return;
+            if (this.parameters.has(varName)) return;
 
-          this.perRequestVars.set(varName, { generationType: 'uuid', requestNames: [req.name] });
-          this.scriptSetVarNames.add(varName);
-          console.log(`  ✓ UUID header "${h.key}" → per-request gen_uuid("_${varName}")`);
-        });
+            this.perRequestVars.set(varName, {
+              generationType: "uuid",
+              requestNames: [req.name],
+            });
+            this.scriptSetVarNames.add(varName);
+            console.log(
+              `  ✓ UUID header "${h.key}" → per-request gen_uuid("_${varName}")`,
+            );
+          });
       });
     }
 
     // Detect mTLS client certificate files uploaded alongside the collection
     this.detectMtlsCert();
+
+    // Detect DPoP from request headers — covers collections/HARs where DPoP proofs
+    // are hardcoded in headers with no pre-request script (browser-generated DPoP).
+    // Must run AFTER script scanning which also sets this.hasDpop from scripts.
+    if (!this.hasDpop) {
+      for (const req of this.requests) {
+        if (this.requestUsesDpop(req)) {
+          this.hasDpop = true;
+          if (!this.dpopKeyVar) this.dpopKeyVar = "dpop_jwk";
+          console.log(
+            `  \u2713 DPoP detected from request headers ("${req.name}")`,
+          );
+          break;
+        }
+      }
+    }
 
     // Large base64 extraction — scan after parameterization so replaceParameters() works
     this.scanForLargeBase64();
@@ -689,7 +915,7 @@ class WebHttpScriptGenerator {
     // Collect JSR223 variable names/types so they can be declared globally before Action().
     const allReqsForScan = [
       ...this.requests,
-      ...(this.options.setupRequests    || []),
+      ...(this.options.setupRequests || []),
       ...(this.options.teardownRequests || []),
     ];
     this.scanJsr223Vars(allReqsForScan);
@@ -704,67 +930,96 @@ class WebHttpScriptGenerator {
    * needed at global scope (before Action(), vuser_init(), vuser_end()).
    */
   scanJsr223Vars(requests) {
-    const JAVA_ONLY_EXPR = /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|CryptoJS|getBytes\s*\(|\.sign\s*\(|\.verify\s*\(|JwtBuilder|Jwts\b|Claims\b|signWith\s*\(|\.replace\s*\(|\.substring\s*\(|\.substr\s*\(|\.indexOf\s*\(|\.lastIndexOf\s*\(|\.split\s*\(|\.join\s*\(|\.trim\s*\(\)|\.toLowerCase\s*\(\)|\.toUpperCase\s*\(\)|\.startsWith\s*\(|\.endsWith\s*\(|\.charAt\s*\(|\.slice\s*\(|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|File\b|Files\.|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
-    const JAVA_RESIDUAL  = /[A-Z][a-zA-Z0-9_]+\s*\.\s*[a-z]/;
+    const JAVA_ONLY_EXPR =
+      /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|CryptoJS|getBytes\s*\(|\.sign\s*\(|\.verify\s*\(|JwtBuilder|Jwts\b|Claims\b|signWith\s*\(|\.replace\s*\(|\.substring\s*\(|\.substr\s*\(|\.indexOf\s*\(|\.lastIndexOf\s*\(|\.split\s*\(|\.join\s*\(|\.trim\s*\(\)|\.toLowerCase\s*\(\)|\.toUpperCase\s*\(\)|\.startsWith\s*\(|\.endsWith\s*\(|\.charAt\s*\(|\.slice\s*\(|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|File\b|Files\.|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
+    const JAVA_RESIDUAL = /[A-Z][a-zA-Z0-9_]+\s*\.\s*[a-z]/;
 
     const processScript = (scriptObj) => {
-      const { code } = (typeof scriptObj === 'string')
-        ? { code: scriptObj, lang: 'groovy' } : (scriptObj || {});
+      const { code } =
+        typeof scriptObj === "string"
+          ? { code: scriptObj, lang: "groovy" }
+          : scriptObj || {};
       if (!code?.trim()) return;
 
-      for (const rawLine of code.split('\n')) {
+      for (const rawLine of code.split("\n")) {
         const line = rawLine.trim();
-        if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
+        if (
+          !line ||
+          line.startsWith("//") ||
+          line.startsWith("import ") ||
+          line.startsWith("package ")
+        )
+          continue;
 
-        const m = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
+        const m = line.match(
+          /^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/,
+        );
         if (!m) continue;
         const localVar = m[1];
-        const rawVal   = m[2].trim();
+        const rawVal = m[2].trim();
         if (JAVA_ONLY_EXPR.test(rawVal)) continue;
         const valExpr = this._convertJavaExprC(rawVal);
-        if (JAVA_RESIDUAL.test(valExpr) ||
-            /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)) continue;
+        if (
+          JAVA_RESIDUAL.test(valExpr) ||
+          /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(
+            valExpr,
+          )
+        )
+          continue;
 
-        if (valExpr.includes('time(NULL)')) {
-          this.jsr223GlobalVars.set(localVar, 'char[64]');
+        if (valExpr.includes("time(NULL)")) {
+          this.jsr223GlobalVars.set(localVar, "char[64]");
         } else {
-          this.jsr223GlobalVars.set(localVar, 'const char *');
+          this.jsr223GlobalVars.set(localVar, "const char *");
         }
       }
     };
 
     for (const req of requests) {
-      for (const sc of (req.preScripts  || [])) processScript(sc);
-      for (const sc of (req.postScripts || [])) processScript(sc);
+      for (const sc of req.preScripts || []) processScript(sc);
+      for (const sc of req.postScripts || []) processScript(sc);
     }
   }
 
   // ─── C Source File Generation ────────────────────────────────────────────────
 
   generateGlobalsH() {
-    const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
+    const scriptName =
+      this.collection.info?.name || this.collection.name || "VuGenScript";
 
     // Build a comment listing all static parameters so the engineer knows what's available
-    const paramList = this.parameters.size > 0
-      ? Array.from(this.parameters.entries())
-          .map(([n, c]) => ` *     {${n}}  [${c.nextValue === 'iteration' ? 'per-iteration' : 'once'}]  ${c.paramValue ? `default="${c.paramValue}"` : '(fill in collection_data.dat)'}`)
-          .join('\n')
-      : ' *     (no static parameters defined)';
+    const paramList =
+      this.parameters.size > 0
+        ? Array.from(this.parameters.entries())
+            .map(
+              ([n, c]) =>
+                ` *     {${n}}  [${c.nextValue === "iteration" ? "per-iteration" : "once"}]  ${c.paramValue ? `default="${c.paramValue}"` : "(fill in collection_data.dat)"}`,
+            )
+            .join("\n")
+        : " *     (no static parameters defined)";
 
-    const corrList = this.dynamicVarNames.size > 0
-      ? Array.from(this.dynamicVarNames).map(n => ` *     {${n}}  (extracted at runtime by web_reg_save_param_*)`).join('\n')
-      : ' *     (no correlation parameters)';
+    const corrList =
+      this.dynamicVarNames.size > 0
+        ? Array.from(this.dynamicVarNames)
+            .map(
+              (n) =>
+                ` *     {${n}}  (extracted at runtime by web_reg_save_param_*)`,
+            )
+            .join("\n")
+        : " *     (no correlation parameters)";
 
     // JSR223 script variables — declared globally so they are visible across
     // the entire Action() / vuser_init() / vuser_end() scope (C89 requirement).
-    const jsr223Decls = this.jsr223GlobalVars.size > 0
-      ? Array.from(this.jsr223GlobalVars.entries())
-          .map(([name, cType]) =>
-            cType === 'char[64]'
-              ? `static char          ${name}[64];`
-              : `static const char   *${name} = NULL;`)
-          .join('\n') + '\n'
-      : '';
+    const jsr223Decls =
+      this.jsr223GlobalVars.size > 0
+        ? Array.from(this.jsr223GlobalVars.entries())
+            .map(([name, cType]) =>
+              cType === "char[64]"
+                ? `static char          ${name}[64];`
+                : `static const char   *${name} = NULL;`,
+            )
+            .join("\n") + "\n"
+        : "";
 
     return `#ifndef _GLOBALS_H
 #define _GLOBALS_H
@@ -801,56 +1056,75 @@ static void gen_hex64(const char *param_name) {
   }
 
   generateVuserInitC() {
-    const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
+    const scriptName =
+      this.collection.info?.name || this.collection.name || "VuGenScript";
 
     // JWT vars detected — build active validation block for each JWT variable.
-    // JWT note: web_js_run() in Action() handles JWT generation via jsrsasign.js.
+    // JWT note: web_js_run() in Action() handles JWT generation via lre-utils.dat.
     // No pre-generation or validation needed in vuser_init.c.
-    const jwtNote = '';
+    const jwtNote = "";
 
     // NTLM / Kerberos authentication block
-    const ntlmBlock = this.hasNtlm ? `
-    web_set_user("{username}", "{password}", "${this.ntlmHost}");
-` : '';
+    const ntlmBlock = this.hasNtlm
+      ? `web_set_user("{username}", "{password}", "${this.ntlmHost}");`
+      : "";
 
     // mTLS client certificate block (when a cert was uploaded but JWT is NOT active)
-    const certBlock = (this.mtlsCertFile && !this.hasJwt) ? `
-    web_set_certificate_ex(
-        "CertFilePath=${this.mtlsCertFile}",
-        "CertFormat=${this.mtlsCertFile.toLowerCase().endsWith('.p12') || this.mtlsCertFile.toLowerCase().endsWith('.pfx') ? 'PFX' : 'PEM'}",
-        "KeyFilePath=${this.mtlsCertFile}",
-        "KeyFormat=${this.mtlsCertFile.toLowerCase().endsWith('.p12') || this.mtlsCertFile.toLowerCase().endsWith('.pfx') ? 'PFX' : 'PEM'}",
-        LAST);
-` : '';
+    const certBlock =
+      this.mtlsCertFile && !this.hasJwt
+        ? `
+web_set_certificate_ex(
+  "CertFilePath=${this.mtlsCertFile}",
+  "CertFormat=${this.mtlsCertFile.toLowerCase().endsWith(".p12") || this.mtlsCertFile.toLowerCase().endsWith(".pfx") ? "PFX" : "PEM"}",
+  "KeyFilePath=${this.mtlsCertFile}",
+  "KeyFormat=${this.mtlsCertFile.toLowerCase().endsWith(".p12") || this.mtlsCertFile.toLowerCase().endsWith(".pfx") ? "PFX" : "PEM"}",
+  LAST);
+`
+        : "";
 
-    // ── SetUp Thread Group content ────────────────────────────────────────────
+    // DPoP optimization: Load lre-utils.dat once in vuser_init for performance
+    // This eliminates file I/O overhead from Action.c iterations (15 TPS → 200+ TPS)
+    const dpopInitBlock = this.hasDpop
+      ? // Load lre-utils.dat ONCE and initialize DPoP engine
+        `web_js_run(
+  "Code=initDpopKey(LR.getParam('${this.dpopKeyVar || "dpop_jwk"}')); 'DPoP engine initialized successfully';",
+  "ResultParam=dpop_init_result",
+  SOURCES,
+  "File=lre-utils.dat", ENDITEM,
+  LAST);
+
+lr_output_message("DPoP Initialization: %s", lr_eval_string("{dpop_init_result}"));
+`
+      : "";
+
+    // — SetUp Thread Group content ————————————————
     // HTTP requests from JMeter setUp TG go here. JSR223 samplers become TODOs.
     const setupRequests = this.options.setupRequests || [];
-    const setupScripts  = this.options.setupScripts  || [];
-    let setupBlock = '';
+    const setupScripts = this.options.setupScripts || [];
+    let setupBlock = "";
     for (const req of setupRequests) {
-      setupBlock += this.generateWebFunction(req, '    ');
+      setupBlock += this.generateWebFunction(req, "    ");
     }
 
     const hasSetup = setupRequests.length || setupScripts.length;
 
     return `vuser_init()
 {
-${jwtNote}${ntlmBlock}${certBlock}${setupBlock}
-    return 0;
+${jwtNote}${ntlmBlock}${certBlock}${dpopInitBlock}${setupBlock}
+  return 0;
 }
 `;
   }
-
   generateVuserEndC() {
-    const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
+    const scriptName =
+      this.collection.info?.name || this.collection.name || "VuGenScript";
 
     // ── TearDown Thread Group content ─────────────────────────────────────────
     const teardownRequests = this.options.teardownRequests || [];
-    const teardownScripts  = this.options.teardownScripts  || [];
-    let teardownBlock = '';
+    const teardownScripts = this.options.teardownScripts || [];
+    let teardownBlock = "";
     for (const req of teardownRequests) {
-      teardownBlock += this.generateWebFunction(req, '    ');
+      teardownBlock += this.generateWebFunction(req, "    ");
     }
 
     const hasTeardown = teardownRequests.length || teardownScripts.length;
@@ -874,39 +1148,59 @@ ${teardownBlock}
   analyzeCommonHeaders() {
     if (this._cachedCommonHeaders) return this._cachedCommonHeaders;
 
-    const headerFreq    = new Map();
+    const headerFreq = new Map();
     const totalRequests = this.requests.length || 1;
 
-    this.requests.forEach(req => {
-      (req.headers || []).filter(h => h.key && h.value && !h.disabled).forEach(h => {
-        if (!headerFreq.has(h.key)) headerFreq.set(h.key, { count: 0, values: new Map() });
-        const entry = headerFreq.get(h.key);
-        entry.count++;
-        const raw = String(h.value);
-        entry.values.set(raw, (entry.values.get(raw) || 0) + 1);
-      });
+    this.requests.forEach((req) => {
+      (req.headers || [])
+        .filter((h) => h.key && h.value && !h.disabled)
+        .forEach((h) => {
+          if (!headerFreq.has(h.key))
+            headerFreq.set(h.key, { count: 0, values: new Map() });
+          const entry = headerFreq.get(h.key);
+          entry.count++;
+          const raw = String(h.value);
+          entry.values.set(raw, (entry.values.get(raw) || 0) + 1);
+        });
     });
 
-    const globalHeaders  = new Map();  // key → replaceParameters(value) for web_add_auto_header
+    const globalHeaders = new Map(); // key → replaceParameters(value) for web_add_auto_header
     const perRequestKeys = new Set();
-    const THRESHOLD      = 0.7;
+    const THRESHOLD = 0.7;
 
     headerFreq.forEach((entry, key) => {
       // Content-Type varies by body type — always per-request
-      if (key.toLowerCase() === 'content-type') { perRequestKeys.add(key); return; }
+      if (key.toLowerCase() === "content-type") {
+        perRequestKeys.add(key);
+        return;
+      }
 
       const freq = entry.count / totalRequests;
-      if (freq < THRESHOLD) { perRequestKeys.add(key); return; }
+      if (freq < THRESHOLD) {
+        perRequestKeys.add(key);
+        return;
+      }
 
       // Find dominant value
-      let dominantRaw = '';
+      let dominantRaw = "";
       let best = 0;
-      entry.values.forEach((cnt, val) => { if (cnt > best) { dominantRaw = val; best = cnt; } });
+      entry.values.forEach((cnt, val) => {
+        if (cnt > best) {
+          dominantRaw = val;
+          best = cnt;
+        }
+      });
 
       // If value uses a per-request UUID var → per-request
-      const isPerReq = this.perRequestVars &&
-        Array.from(this.perRequestVars.keys()).some(v => dominantRaw.includes(`{{${v}}}`));
-      if (isPerReq) { perRequestKeys.add(key); return; }
+      const isPerReq =
+        this.perRequestVars &&
+        Array.from(this.perRequestVars.keys()).some((v) =>
+          dominantRaw.includes(`{{${v}}}`),
+        );
+      if (isPerReq) {
+        perRequestKeys.add(key);
+        return;
+      }
 
       globalHeaders.set(key, this.replaceParameters(dominantRaw));
     });
@@ -916,52 +1210,79 @@ ${teardownBlock}
   }
 
   generateActionC() {
-    const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
+    const scriptName =
+      this.collection.info?.name || this.collection.name || "VuGenScript";
     const timestamp = new Date().toISOString();
 
     // Analyse common headers for this collection
     const { globalHeaders } = this.analyzeCommonHeaders();
 
-    // JWT setup block — PS256 token generation via lre-crypto.js.
-    // createJWT(clientId, aud, scope, signingKid, secret) — matches jwt-helper.js param style.
-    // lre-crypto.js is 19KB (vs jsrsasign.js 340KB) — same result, 17x less parse overhead.
-    const jwtSetup = this.hasJwt ? `
-    web_set_certificate_ex(
-        "CertFilePath=transport.pem",
-        "CertFormat=PEM",
-        "KeyFilePath=transport.pem",
-        "KeyFormat=PEM",
-        LAST);
+    // JWT setup block — certificate + token generation via lre-utils.dat
+    // web_js_run() executes JavaScript using VuGen's built-in JS engine.
+    // createJWT() is a function inside lre-utils.dat.
+    const jwtSetup = this.hasJwt
+      ? (() => {
+          const cm = this.jwtClaimMap || {};
+          const clientIdParam = cm.iss || cm.sub || "client_id";
+          const audParam = cm.aud || "token_url";
+          const scopeParam = cm.scope || "scope";
+          const kidParam = cm.kid || "signing_key_id";
+          const secretParam = cm.secret || "signing_private_key";
+          const outputParam = cm.output || "jwt";
+          const resultParam = outputParam.startsWith("_")
+            ? outputParam
+            : "_" + outputParam;
+          return `
+web_set_certificate_ex(
+  "CertFilePath=transport.pem",
+  "CertFormat=PEM",
+  "KeyFilePath=transport.pem",
+  "KeyFormat=PEM",
+  LAST);
 
-    web_js_run(
-        "Code=createJWT(LR.getParam('client_id'),LR.getParam('aud'),LR.getParam('scope'),LR.getParam('signing_kid'),LR.getParam('secret'));",
-        "ResultParam=jwt_token",
-        SOURCES,
-        "File=lre-crypto.js",
-        ENDITEM,
-        LAST);
-` : '';
+web_js_run(
+  "Code=createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'));",
+  "ResultParam=${resultParam}",
+  SOURCES,
+  "File=lre-utils.dat", ENDITEM,
+  LAST);
+`;
+        })()
+      : "";
+
+    // DPoP: init is done inline per-request (combined with proof generation)
+    const dpopSetup = "";
 
     // Global persistent headers — applied to ALL subsequent requests automatically.
     // web_add_auto_header() persists until explicitly removed, unlike web_add_header().
     const autoHeaderLines = Array.from(globalHeaders.entries())
-      .map(([k, v]) => `    web_add_auto_header("${k}", "${this.applyHostVars(v).replace(/"/g, '\\"')}");`)
-      .join('\n');
-    const autoHeaderBlock = globalHeaders.size > 0
-      ? `\n${autoHeaderLines}\n`
-      : '';
+      .map(([k, v]) => {
+        const tc = k
+          .split("-")
+          .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+          .join("-");
+        return `    web_add_auto_header("${tc}", "${this.applyHostVars(v).replace(/"/g, '\\"')}");`;
+      })
+      .join("\n");
+    const autoHeaderBlock =
+      globalHeaders.size > 0 ? `\n${autoHeaderLines}\n` : "";
 
-    const hostSaveStrings = this.hostVarMap && this.hostVarMap.size > 0
-      ? Array.from(this.hostVarMap.entries())
-          .map(([host, varName]) => `    lr_save_string("${host}", "${varName}");`)
-          .join('\n') + '\n'
-      : '';
+    const hostSaveStrings =
+      this.hostVarMap && this.hostVarMap.size > 0
+        ? Array.from(this.hostVarMap.entries())
+            .map(
+              ([host, varName]) =>
+                `    lr_save_string("${host}", "${varName}");`,
+            )
+            .join("\n") + "\n"
+        : "";
 
     let code = `Action()
 {
-    web_set_sockets_option("SSL_VERSION", "AUTO");
-${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
-
+  web_set_sockets_option("SSL_VERSION", "AUTO");
+${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}
+  return 0;
+}
 `;
 
     if (this.options.useTransactions && this.options.groupByFolder) {
@@ -981,8 +1302,8 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
 
   groupRequestsByFolder() {
     const groups = new Map();
-    this.requests.forEach(req => {
-      const folder = req.folder || 'Default';
+    this.requests.forEach((req) => {
+      const folder = req.folder || "Default";
       if (!groups.has(folder)) groups.set(folder, []);
       groups.get(folder).push(req);
     });
@@ -1001,16 +1322,80 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    *   Folder Products:  T03_Get_Products,       T04_Create_Product
    *   Sub-folder A/B:   T05_Get_Items  (uses sanitized request name)
    *
-   * All transaction names collected in this.transactionNames for .usr file.
+   *  * All transaction names collected in this.transactionNames for .usr file.
    */
+  /**
+   * Generate a batched web_js_run block that creates all DPoP proofs needed
+   * for a group of requests in a single JS engine invocation.
+   * Optimized: No file loading since lre-utils.dat was loaded in vuser_init.c
+   */
+  generateDpopBatchBlock(requests, indent) {
+    if (!this.hasDpop) return "";
+    const bearerVar = this.findBearerTokenVar();
+    const specs = [];
+    let seqCounter = 0;
+
+    for (const req of requests) {
+      if (!this.requestUsesDpop(req)) continue;
+      const rawUrl = typeof req.url === "string" ? req.url : req.url?.raw || "";
+      const htu = this.replaceParameters(rawUrl.split("?")[0]);
+      const htm = req.method || "POST";
+      const dpopKeys = this.getDpopHeaderKeys(req);
+
+      for (const dk of dpopKeys) {
+        if (dk === "dpop-pf" && this._dpopPfGenerated) continue;
+        seqCounter++;
+        const paramName =
+          dk === "dpop-pf" ? "_dpop_pf_proof" : `_dpop_proof_${seqCounter}`;
+        // Tag the request so generateAddHeaders knows which param to use
+        if (!req._dpopParamMap) req._dpopParamMap = {};
+        req._dpopParamMap[dk] = paramName;
+        const ath = dk === "dpop" ? `\${${bearerVar}}` : "";
+        specs.push({ htu, htm, ath, paramName });
+        if (dk === "dpop-pf") this._dpopPfGenerated = true;
+      }
+    }
+
+    if (specs.length === 0) return "";
+    if (specs.length === 1) {
+      // Single proof — use direct approach (no file loading needed)
+      const s = specs[0];
+      const athArg = s.ath ? `, LR.getParam('${bearerVar}')` : "";
+      let code = `${indent}web_js_run(\n`;
+      code += `${indent}    "Code=generateDpopProof('${s.htu}', '${s.htm}'${athArg});",\n`;
+      code += `${indent}    "ResultParam=${s.paramName}",\n`;
+      code += `${indent}    LAST);\n`;
+      return code;
+    }
+
+    // Build the Code string with proper LR.getParam() calls for ath
+    const specParts = specs.map((s) => {
+      const athVal = s.ath ? `\${${bearerVar}}` : "";
+      return `{"htu":"${s.htu}","htm":"${s.htm}","ath":"${athVal}","paramName":"${s.paramName}"}`;
+    });
+    const codeStr = `generateDpopProofs('[${specParts.join(",")}]');`;
+
+    let code = `${indent}// Batch DPoP proof generation — ${specs.length} proofs (optimized: no file loading)\n`;
+    code += `${indent}web_js_run(\n`;
+    code += `${indent}    "Code=${this.escapeCString(codeStr)}",\n`;
+    code += `${indent}    "ResultParam=_dpop_batch_status",\n`;
+    code += `${indent}    LAST);\n`;
+    return code;
+  }
   generateGroupedRequests() {
     const groups = this.groupRequestsByFolder();
-    let code = '';
+    let code = "";
     let txCounter = 1;
-    this.transactionNames = [];  // Reset — will hold ALL per-request tx names
+    this.transactionNames = []; // Reset — will hold ALL per-request tx names
 
     const groupEntries = Array.from(groups.entries());
     groupEntries.forEach(([folder, requests], groupIndex) => {
+      // Batch DPoP proof generation for all requests in this folder group
+      const dpopBatch = this.generateDpopBatchBlock(requests, "      ");
+      if (dpopBatch) {
+        code += dpopBatch + "\n";
+        this._dpopBatchActive = true;
+      }
 
       requests.forEach((request, idx) => {
         const txName = this.formatTransactionName(request.name, txCounter);
@@ -1018,19 +1403,19 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
         txCounter++;
 
         // Per-request transaction wrapper
-        code += `    lr_start_transaction("${txName}");\n\n`;
+        code += `      lr_start_transaction("${txName}");\n\n`;
         code += this.generateRequestBlock(request, 1);
-        code += `\n\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
+        code += `\n\n      lr_end_transaction("${txName}", LR_AUTO);\n`;
 
         if (this.options.thinkTime > 0) {
-          code += `\n    lr_think_time(${this.options.thinkTime});\n`;
+          code += `\n      lr_think_time(${this.options.thinkTime});\n`;
         }
-        code += '\n';
+        code += "\n";
       });
 
       // Think time between folder groups (not after last group)
       if (groupIndex < groupEntries.length - 1 && this.options.thinkTime > 0) {
-        code += `    lr_think_time(${this.options.thinkTime});\n\n`;
+        code += `      lr_think_time(${this.options.thinkTime});\n\n`;
       }
     });
 
@@ -1038,26 +1423,33 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
   }
 
   generateSequentialRequests() {
-    let code = '';
+    let code = "";
     let txCounter = 1;
     this.transactionNames = [];
+
+    // Batch DPoP proof generation for ALL requests in one call
+    const dpopBatch = this.generateDpopBatchBlock(this.requests, "    ");
+    if (dpopBatch) {
+      code += dpopBatch + "\n";
+      this._dpopBatchActive = true;
+    }
+
     this.requests.forEach((request, idx) => {
       const txName = this.formatTransactionName(request.name, txCounter);
       this.transactionNames.push(txName);
       txCounter++;
 
-      code += `    lr_start_transaction("${txName}");\n\n`;
+      code += `      lr_start_transaction("${txName}");\n\n`;
       code += this.generateRequestBlock(request, 1);
-      code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
+      code += `\n      lr_end_transaction("${txName}", LR_AUTO);\n`;
 
       if (this.options.thinkTime > 0) {
-        code += `\n    lr_think_time(${this.options.thinkTime});\n`;
+        code += `\n      lr_think_time(${this.options.thinkTime});\n`;
       }
-      code += '\n';
+      code += "\n";
     });
     return code;
   }
-
   // ─── Single Request Block ────────────────────────────────────────────────────
 
   /**
@@ -1068,15 +1460,15 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    *   4. web_url() or web_custom_request()
    */
   generateRequestBlock(request, indentLevel = 1) {
-    const indent = '    '.repeat(indentLevel);
-    let code = '';
+    const indent = "    ".repeat(indentLevel);
+    let code = "";
 
     // 0. JSR223 Pre-processor (JMX only) — runs before the request.
     // Each script is wrapped in its own { } so C89 declarations inside are block-scoped
     // and don't conflict with declarations from other requests' pre-processors.
     if (request.preScripts && request.preScripts.length) {
       for (const sc of request.preScripts) {
-        const block = this.convertJsr223Script(sc, 'Pre', indent + '    ');
+        const block = this.convertJsr223Script(sc, "Pre", indent + "    ");
         if (block) {
           code += `${indent}{\n`;
           code += block;
@@ -1087,6 +1479,39 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
 
     // 1. Per-request dynamic variable generation (e.g. x-fapi-interaction-id UUID)
     code += this.generatePerRequestVarCode(request, indent);
+
+    // 1. Per-request dynamic variable generation (e.g. x-fapi-interaction-id UUID)
+    code += this.generatePerRequestVarCode(request, indent);
+
+    // 1.5. DPoP proof generation — optimized to use persistent context from vuser_init
+    // No file loading needed since lre-utils.dat was loaded once in vuser_init.c
+    if (
+      this.hasDpop &&
+      this.requestUsesDpop(request) &&
+      !this._dpopBatchActive
+    ) {
+      const rawUrl =
+        typeof request.url === "string" ? request.url : request.url?.raw || "";
+      const htu = this.replaceParameters(rawUrl.split("?")[0]);
+      const htm = request.method || "POST";
+      const dpopKeys = this.getDpopHeaderKeys(request);
+
+      const filteredKeys = dpopKeys.filter((dk) => {
+        if (dk === "dpop-pf" && this._dpopPfGenerated) return false;
+        return true;
+      });
+
+      for (const dk of filteredKeys) {
+        const resultParam = dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof";
+        const athArg =
+          dk === "dpop" ? `, LR.getParam('${this.findBearerTokenVar()}')` : "";
+        code += `${indent}web_js_run(\n`;
+        code += `${indent}    "Code=generateDpopProof('${htu}', '${htm}'${athArg});",\n`;
+        code += `${indent}    "ResultParam=${resultParam}",\n`;
+        code += `${indent}    LAST);\n`;
+        if (dk === "dpop-pf") this._dpopPfGenerated = true;
+      }
+    }
 
     // 2. Correlation registrations (must come BEFORE the producing request)
     code += this.generateCorrelationRegistrations(request, indent);
@@ -1101,7 +1526,7 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
     // Each script is wrapped in its own { } so C89 declarations are block-scoped.
     if (request.postScripts && request.postScripts.length) {
       for (const sc of request.postScripts) {
-        const block = this.convertJsr223Script(sc, 'Post', indent + '    ');
+        const block = this.convertJsr223Script(sc, "Post", indent + "    ");
         if (block) {
           code += `${indent}{\n`;
           code += block;
@@ -1124,30 +1549,30 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    *     lr_save_string(_interaction_id, "_interaction_id"); }
    */
   generatePerRequestVarCode(request, indent) {
-    if (!this.perRequestVars || this.perRequestVars.size === 0) return '';
+    if (!this.perRequestVars || this.perRequestVars.size === 0) return "";
 
-    let code = '';
+    let code = "";
     this.perRequestVars.forEach((info, varName) => {
       if (!this.requestUsesVar(request, varName)) return;
 
-      const paramName = `_${varName}`;  // _ prefix = VuGen convention for dynamic LR params
-      const genType   = info.generationType;
+      const paramName = `_${varName}`; // _ prefix = VuGen convention for dynamic LR params
+      const genType = info.generationType;
 
       // Call the appropriate generator function defined in globals.h.
       // These are proper C functions (not macros) — one call per request that needs a fresh value.
-      if (genType === 'uuid') {
+      if (genType === "uuid") {
         // gen_uuid() — UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
         code += `${indent}gen_uuid("${paramName}");\n`;
-      } else if (genType === 'csrf' || genType === 'hex32') {
+      } else if (genType === "csrf" || genType === "hex32") {
         // gen_csrf_token() — 32-char hex (16 bytes): for CSRF/XSRF tokens
         code += `${indent}gen_csrf_token("${paramName}");\n`;
-      } else if (genType === 'hex64' || genType === 'nonce') {
+      } else if (genType === "hex64" || genType === "nonce") {
         // gen_hex64() — 64-char hex (32 bytes): for high-entropy nonces
         code += `${indent}gen_hex64("${paramName}");\n`;
-      } else if (genType === 'random' || genType === 'alphanumeric') {
+      } else if (genType === "random" || genType === "alphanumeric") {
         // Default: use UUID format (widely compatible)
         code += `${indent}gen_uuid("${paramName}");\n`;
-      } else if (genType === 'timestamp') {
+      } else if (genType === "timestamp") {
         // Timestamp as decimal string
         code += `${indent}{ char _ts[32]; sprintf(_ts, "%ld", (long)time(NULL)); lr_save_string(_ts, "${paramName}"); }\n`;
       }
@@ -1156,13 +1581,89 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
   }
 
   /**
+   * Check if a request uses DPoP headers (DPoP or dpop header present)
+   */
+  requestUsesDpop(request) {
+    if (!request.headers) return false;
+    return request.headers.some(
+      (h) => h.key && !h.disabled && /^dpop(-pf)?$/i.test(h.key.trim()),
+    );
+  }
+
+  /**
+   * Get all DPoP header keys on a request (e.g. ['dpop'], ['dpop-pf']).
+   */
+  getDpopHeaderKeys(request) {
+    if (!request.headers) return [];
+    return request.headers
+      .filter((h) => h.key && !h.disabled && /^dpop(-pf)?$/i.test(h.key.trim()))
+      .map((h) => h.key.trim().toLowerCase());
+  }
+
+  /**
+   * Extract HTU (HTTP Target URI) for DPoP proof from request URL
+   */
+  extractDpopHtu(request) {
+    const url =
+      typeof request.url === "string" ? request.url : request.url?.raw || "";
+    // Remove query parameters for HTU
+    const baseUrl = url.split("?")[0];
+    return this.replaceParameters(baseUrl);
+  }
+
+  /**
+   * Find the correlation variable name used as the Bearer token in Authorization headers.
+   * Scans all requests for Authorization: Bearer {{varName}} and returns the first match.
+   */
+  findBearerTokenVar() {
+    if (this._bearerTokenVar) return this._bearerTokenVar;
+    // Check request headers for Authorization: Bearer {{varName}}
+    for (const req of this.requests) {
+      for (const h of req.headers || []) {
+        if (!h.key || h.disabled) continue;
+        if (h.key.toLowerCase() !== "authorization") continue;
+        const m = String(h.value).match(/Bearer\s+\{\{([^}]+)\}\}/i);
+        if (m) {
+          this._bearerTokenVar = m[1].trim().replace(/[^a-zA-Z0-9_]/g, "_");
+          return this._bearerTokenVar;
+        }
+      }
+      if (req.auth?.type === "bearer") {
+        const token =
+          req.auth.bearer?.token ||
+          (Array.isArray(req.auth.bearer)
+            ? req.auth.bearer.find((e) => e.key === "token")?.value
+            : null);
+        if (token) {
+          const m = String(token).match(/\{\{([^}]+)\}\}/);
+          if (m) {
+            this._bearerTokenVar = m[1].trim().replace(/[^a-zA-Z0-9_]/g, "_");
+            return this._bearerTokenVar;
+          }
+        }
+      }
+    }
+
+    for (const name of this.dynamicVarNames) {
+      if (/^_?access.?token$|^_?token$|^_?bearer.?token$/i.test(name)) {
+        this._bearerTokenVar = name;
+        return this._bearerTokenVar;
+      }
+    }
+
+    this._bearerTokenVar = "AccessToken";
+    return this._bearerTokenVar;
+  }
+
+  /**
    * Check if a request uses a given variable name ({{varName}}) in URL, headers, or body.
    */
   requestUsesVar(request, varName) {
     const pattern = new RegExp(`\\{\\{\\s*${varName}\\s*\\}\\}`);
-    const url = typeof request.url === 'string' ? request.url : (request.url?.raw || '');
+    const url =
+      typeof request.url === "string" ? request.url : request.url?.raw || "";
     if (pattern.test(url)) return true;
-    if (request.headers?.some(h => pattern.test(h.value || ''))) return true;
+    if (request.headers?.some((h) => pattern.test(h.value || ""))) return true;
     if (request.body?.raw && pattern.test(request.body.raw)) return true;
     return false;
   }
@@ -1174,10 +1675,10 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * calls are emitted for them automatically.
    */
   injectJmxExtractors() {
-    const seenNames = new Set(this.correlations.map(c => c.name));
+    const seenNames = new Set(this.correlations.map((c) => c.name));
     for (const request of this.requests) {
-      for (const item of (request.extractors || [])) {
-        if (item.listen !== 'extractor' || !item.extractor) continue;
+      for (const item of request.extractors || []) {
+        if (item.listen !== "extractor" || !item.extractor) continue;
         const extractor = item.extractor;
         const name = extractor.name;
         if (!name || seenNames.has(name)) continue;
@@ -1185,36 +1686,49 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
 
         const base = {
           name,
-          producerRequest:  request.name,
+          producerRequest: request.name,
           consumerRequests: [],
-          scope:       extractor.scope       || 'body',
-          matchNumber: extractor.matchNumber || '1',
+          scope: extractor.scope || "body",
+          matchNumber: extractor.matchNumber || "1",
         };
 
         let corr;
-        switch ((extractor.type || '').toLowerCase()) {
-          case 'regex':
-          case 'regexp':
-            corr = { ...base, extractorType: 'regex',
-                     pattern: extractor.regex || '(.+?)' };
+        switch ((extractor.type || "").toLowerCase()) {
+          case "regex":
+          case "regexp":
+            corr = {
+              ...base,
+              extractorType: "regex",
+              pattern: extractor.regex || "(.+?)",
+            };
             break;
-          case 'jsonpath':
-          case 'json':
-            corr = { ...base, extractorType: 'json',
-                     extractPath: extractor.jsonPath || extractor.expression || `$.${name}` };
+          case "jsonpath":
+          case "json":
+            corr = {
+              ...base,
+              extractorType: "json",
+              extractPath:
+                extractor.jsonPath || extractor.expression || `$.${name}`,
+            };
             break;
-          case 'boundary':
-            corr = { ...base, extractorType: 'boundary',
-                     leftBound:  extractor.leftBoundary  || extractor.lowerBound || '',
-                     rightBound: extractor.rightBoundary || extractor.upperBound || '' };
+          case "boundary":
+            corr = {
+              ...base,
+              extractorType: "boundary",
+              leftBound: extractor.leftBoundary || extractor.lowerBound || "",
+              rightBound: extractor.rightBoundary || extractor.upperBound || "",
+            };
             break;
-          case 'xpath':
-          case 'xpath2':
-            corr = { ...base, extractorType: 'xpath',
-                     xpathQuery: extractor.xpath || `//${name}` };
+          case "xpath":
+          case "xpath2":
+            corr = {
+              ...base,
+              extractorType: "xpath",
+              xpathQuery: extractor.xpath || `//${name}`,
+            };
             break;
           default:
-            corr = { ...base, extractorType: 'regex', pattern: '(.+?)' };
+            corr = { ...base, extractorType: "regex", pattern: "(.+?)" };
         }
         this.correlations.push(corr);
       }
@@ -1222,47 +1736,48 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
   }
 
   generateCorrelationRegistrations(request, indent) {
-    const produced = this.correlations.filter(c =>
-      c.producerRequest === request.name || c.producerRequest === request.id
+    const produced = this.correlations.filter(
+      (c) =>
+        c.producerRequest === request.name || c.producerRequest === request.id,
     );
-    if (produced.length === 0) return '';
+    if (produced.length === 0) return "";
 
     // Deduplicate: keep only the FIRST (best-quality) correlation per variable name.
     // The correlation detector may assign the same variable to the same request multiple
     // times (e.g. _endpoint from heuristic + script detection). VuGen only needs one.
     const seen = new Set();
-    const unique = produced.filter(corr => {
+    const unique = produced.filter((corr) => {
       if (seen.has(corr.name)) return false;
       seen.add(corr.name);
       return true;
     });
 
-    let code = '';
-    unique.forEach(corr => {
+    let code = "";
+    unique.forEach((corr) => {
       // Determine the best JSON path for the extraction.
       // corr.extractPath may be: '$.access_token' (good), '$' (root only — bad), or empty.
       // When the path is missing or just '$', derive it from the variable name.
-      const rawPath  = corr.extractPath || '';
-      const corrBase = corr.name.replace(/^_/, '');  // strip leading _ for path guess
+      const rawPath = corr.extractPath || "";
+      const corrBase = corr.name.replace(/^_/, ""); // strip leading _ for path guess
 
       // A valid specific path has at least one dot after $ (e.g. $.access_token, $[0].id)
-      const hasValidPath = rawPath.startsWith('$') && rawPath.length > 1 && rawPath !== '$';
+      const hasValidPath =
+        rawPath.startsWith("$") && rawPath.length > 1 && rawPath !== "$";
       const jsonPath = hasValidPath ? rawPath : `$.${corrBase}`;
 
       switch (corr.type || corr.extractorType) {
-        case 'json':
-        case 'jsonpath':
-        case 'token':
-        case 'id':
-        case 'sessionId':
+        case "json":
+        case "jsonpath":
+        case "token":
+        case "id":
+        case "sessionId":
           // web_reg_save_param_json: first arg is "ParamName=xxx"
           code += `${indent}web_reg_save_param_json("ParamName=${corr.name}",\n`;
           code += `${indent}    "QueryString=${jsonPath}",\n`;
-          code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
           break;
 
-        case 'header': {
+        case "header": {
           // Extract from response header — web_reg_save_param with Search=Headers
           // extractPath holds the header name (e.g. "x-csrf-token")
           const headerName = corr.extractPath || corrBase;
@@ -1275,7 +1790,7 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
           break;
         }
 
-        case 'cookie': {
+        case "cookie": {
           // Extract from response cookie
           const cookieName = corr.extractPath || corrBase;
           code += `${indent}web_reg_save_param("ParamName=${corr.name}",\n`;
@@ -1287,37 +1802,43 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
           break;
         }
 
-        case 'boundary':
-        case 'csrf': {
+        case "boundary":
+        case "csrf": {
           // web_reg_save_param: Search=Body by default (omit for body, explicit for others)
-          const bScope = this._vugenSearchFilter(corr.scope || corr.extractorScope);
+          const bScope = this._vugenSearchFilter(
+            corr.scope || corr.extractorScope,
+          );
           code += `${indent}web_reg_save_param("ParamName=${corr.name}",\n`;
-          if (corr.leftBoundary)  code += `${indent}    "LB=${this.escapeCString(corr.leftBoundary)}",\n`;
-          if (corr.rightBoundary) code += `${indent}    "RB=${this.escapeCString(corr.rightBoundary)}",\n`;
+          if (corr.leftBoundary)
+            code += `${indent}    "LB=${this.escapeCString(corr.leftBoundary)}",\n`;
+          if (corr.rightBoundary)
+            code += `${indent}    "RB=${this.escapeCString(corr.rightBoundary)}",\n`;
           if (bScope) code += `${indent}    "Search=${bScope}",\n`;
           code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
           break;
         }
 
-        case 'regex':
-        case 'regexp': {
+        case "regex":
+        case "regexp": {
           // web_reg_save_param_regexp: uses "Scope=" (not "Search="), default is Body.
           // Map JMX useHeaders value → VuGen Scope= value.
           // Attribute name is "Ordinal=" (not "Ord=") per VuGen 25.x docs.
-          const vScope = this._vugenRegexpScope(corr.scope || corr.extractorScope);
+          const vScope = this._vugenRegexpScope(
+            corr.scope || corr.extractorScope,
+          );
           code += `${indent}web_reg_save_param_regexp("ParamName=${corr.name}",\n`;
           code += `${indent}    "RegExp=${this.escapeCString(corr.pattern || `${corrBase}=([^&"'\\s]+)`)}",\n`;
           code += `${indent}    "Group=1",\n`;
           if (vScope) code += `${indent}    "Scope=${vScope}",\n`;
           // matchNo: 1 = first, -1 = random (use 1 for VuGen)
-          const matchNo = Math.max(1, parseInt(corr.matchNumber || '1', 10));
+          const matchNo = Math.max(1, parseInt(corr.matchNumber || "1", 10));
           code += `${indent}    "Ordinal=${matchNo}",\n`;
           code += `${indent}    LAST);\n`;
           break;
         }
 
-        case 'xpath': {
+        case "xpath": {
           // web_reg_save_param_xpath: extracts from XML/HTML body using XPath expression
           const xpathQuery = corr.xpathQuery || `//${corrBase}`;
           code += `${indent}web_reg_save_param_xpath("ParamName=${corr.name}",\n`;
@@ -1331,54 +1852,81 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
           // Fallback: JSON path using variable name as field
           code += `${indent}web_reg_save_param_json("ParamName=${corr.name}",\n`;
           code += `${indent}    "QueryString=${jsonPath}",\n`;
-          code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
       }
     });
     return code;
   }
 
-  // ─── Headers ─────────────────────────────────────────────────────────────────
-
+  // —— Headers ——————————————————————————————————————
   generateAddHeaders(request, indent) {
     // Global headers are already set via web_add_auto_header() at the start of Action().
     // Only emit web_add_header() for headers that are:
-    //   - Specific to this request (not in globalHeaders), OR
-    //   - Per-request dynamic (UUID etc.)
+    //   — Specific to this request (not in globalHeaders), OR
+    //   — Per-request dynamic (UUID etc.)
     const { globalHeaders } = this.analyzeCommonHeaders();
-    const globalKeys = new Set(Array.from(globalHeaders.keys()).map(k => k.toLowerCase()));
+    const globalKeys = new Set(
+      Array.from(globalHeaders.keys()).map((k) => k.toLowerCase()),
+    );
 
     const headers = [];
 
     // Collection-level headers (skip those already handled as global auto-headers)
     if (this.collection.collectionHeaders) {
-      this.collection.collectionHeaders.forEach(h => {
-        if (h.key && h.value && !h.disabled && !globalKeys.has(h.key.toLowerCase()))
+      this.collection.collectionHeaders.forEach((h) => {
+        if (
+          h.key &&
+          h.value &&
+          !h.disabled &&
+          !globalKeys.has(h.key.toLowerCase())
+        )
           headers.push(h);
       });
     }
 
     // Request-level headers (skip global ones — they're already persistent via auto-header)
     if (request.headers && Array.isArray(request.headers)) {
-      request.headers.forEach(h => {
-        if (h.key && h.value && !h.disabled && !globalKeys.has(h.key.toLowerCase()))
+      request.headers.forEach((h) => {
+        if (
+          h.key &&
+          h.value &&
+          !h.disabled &&
+          !globalKeys.has(h.key.toLowerCase())
+        )
           headers.push(h);
       });
     }
 
     // Auth header injection — only if not already in global auto-headers
-    const hasExplicitAuth = headers.some(h => h.key?.toLowerCase() === 'authorization');
-    const authInGlobal    = globalKeys.has('authorization');
+    const hasExplicitAuth = headers.some(
+      (h) => h.key?.toLowerCase() === "authorization",
+    );
+    const authInGlobal = globalKeys.has("authorization");
     if (!hasExplicitAuth && !authInGlobal) {
       const authHeader = this.getAuthHeader(request);
       if (authHeader) headers.push(authHeader);
     }
 
-    if (headers.length === 0) return '';
+    if (headers.length === 0) return "";
 
-    return headers.map(h =>
-      `${indent}web_add_header("${h.key}", "${this.applyHostVars(this.replaceParameters(String(h.value)))}");\n`
-    ).join('');
+    return headers
+      .map((h) => {
+        const hdrKey = h.key
+          .split("-")
+          .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+          .join("-");
+        // DPoP headers: replace hardcoded proof token with dynamic LR param
+        if (this.hasDpop && /^dpop(-pf)?$/i.test(h.key)) {
+          const dk = h.key.toLowerCase();
+          // Use batch-assigned param name if available, otherwise default
+          const batchParam = request._dpopParamMap && request._dpopParamMap[dk];
+          const paramName =
+            batchParam || (dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof");
+          return `${indent}web_add_header("${hdrKey}", "{${paramName}}");\n`;
+        }
+        return `${indent}web_add_header("${hdrKey}", "${this.applyHostVars(this.replaceParameters(String(h.value)))}");\n`;
+      })
+      .join("");
   }
 
   /**
@@ -1388,25 +1936,26 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    */
   getAuthValue(authSection, key) {
     if (!authSection) return undefined;
-    if (Array.isArray(authSection)) return authSection.find(e => e.key === key)?.value;
+    if (Array.isArray(authSection))
+      return authSection.find((e) => e.key === key)?.value;
     return authSection[key];
   }
 
   getAuthHeader(request) {
     const auth = request.auth || this.collection.auth;
-    if (!auth || !auth.type || auth.type === 'noauth') return null;
+    if (!auth || !auth.type || auth.type === "noauth") return null;
 
     switch (auth.type) {
-      case 'bearer': {
-        const token = this.getAuthValue(auth.bearer, 'token');
-        if (token) return { key: 'Authorization', value: `Bearer ${token}` };
+      case "bearer": {
+        const token = this.getAuthValue(auth.bearer, "token");
+        if (token) return { key: "Authorization", value: `Bearer ${token}` };
         break;
       }
-      case 'apikey': {
-        const keyName   = this.getAuthValue(auth.apikey, 'key');
-        const keyVal    = this.getAuthValue(auth.apikey, 'value');
-        const placement = this.getAuthValue(auth.apikey, 'in');
-        if (keyName && keyVal && placement !== 'query') {
+      case "apikey": {
+        const keyName = this.getAuthValue(auth.apikey, "key");
+        const keyVal = this.getAuthValue(auth.apikey, "value");
+        const placement = this.getAuthValue(auth.apikey, "in");
+        if (keyName && keyVal && placement !== "query") {
           return { key: keyName, value: keyVal };
         }
         break;
@@ -1418,7 +1967,7 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
   // ─── Web Functions ────────────────────────────────────────────────────────────
 
   generateWebFunction(request, indent) {
-    const method = (request.method || 'GET').toUpperCase();
+    const method = (request.method || "GET").toUpperCase();
     const url = this.buildUrl(request);
     const contentType = this.getContentType(request);
 
@@ -1426,10 +1975,17 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
     // VuGen records the response body in this file during replay for viewing in the UI.
     const snapshot = `t${++this.snapshotCounter}.inf`;
 
-    if (method === 'GET' || method === 'HEAD') {
+    if (method === "GET" || method === "HEAD") {
       return this.generateWebUrl(request, url, snapshot, indent);
     } else {
-      return this.generateWebCustomRequest(request, url, method, contentType, snapshot, indent);
+      return this.generateWebCustomRequest(
+        request,
+        url,
+        method,
+        contentType,
+        snapshot,
+        indent,
+      );
     }
   }
 
@@ -1445,7 +2001,14 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
     return code;
   }
 
-  generateWebCustomRequest(request, url, method, contentType, snapshot, indent) {
+  generateWebCustomRequest(
+    request,
+    url,
+    method,
+    contentType,
+    snapshot,
+    indent,
+  ) {
     const bodyResult = this.generateBodyForC(request);
 
     let code = `${indent}web_custom_request("${this.sanitizeCName(request.name)}",\n`;
@@ -1474,20 +2037,23 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
   // ─── URL & Body ──────────────────────────────────────────────────────────────
 
   buildUrl(request) {
-    let url = request.url || '';
+    let url = request.url || "";
 
     // Split off query string manually (never use new URL() — breaks {{variables}})
-    const qIdx = url.indexOf('?');
+    const qIdx = url.indexOf("?");
     let base = qIdx >= 0 ? url.substring(0, qIdx) : url;
-    let query = qIdx >= 0 ? url.substring(qIdx + 1) : '';
+    let query = qIdx >= 0 ? url.substring(qIdx + 1) : "";
 
     // Merge explicit query params from request.query
     if (request.query && Array.isArray(request.query)) {
-      const enabled = request.query.filter(q => !q.disabled && q.key);
+      const enabled = request.query.filter((q) => !q.disabled && q.key);
       if (enabled.length > 0) {
-        const qStr = enabled.map(q =>
-          `${encodeURIComponent(q.key)}=${this.vuGenEncodeValue(q.value || '')}`
-        ).join('&');
+        const qStr = enabled
+          .map(
+            (q) =>
+              `${encodeURIComponent(q.key)}=${this.vuGenEncodeValue(q.value || "")}`,
+          )
+          .join("&");
         query = query ? `${query}&${qStr}` : qStr;
       }
     }
@@ -1511,18 +2077,22 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
 
     const { mode, raw, urlencoded, formdata } = request.body;
 
-    if (mode === 'raw' && raw) {
+    if (mode === "raw" && raw) {
       // Case 1: Entire raw body was detected as large base64 — use BodyFilePath
       const rawKey = `${request.name}::__raw__`;
       if (this.largeValueIndex.has(rawKey)) {
-        const fileInfo = this.extractedDataFiles.get(this.largeValueIndex.get(rawKey));
+        const fileInfo = this.extractedDataFiles.get(
+          this.largeValueIndex.get(rawKey),
+        );
         return { bodyFile: `data/${fileInfo.fileName}` };
       }
 
       // Case 2: JSON body with embedded large base64 field(s) — use BodyFilePath
       const jsonKey = `${request.name}::__json__`;
       if (this.largeValueIndex.has(jsonKey)) {
-        const fileInfo = this.extractedDataFiles.get(this.largeValueIndex.get(jsonKey));
+        const fileInfo = this.extractedDataFiles.get(
+          this.largeValueIndex.get(jsonKey),
+        );
         return { bodyFile: `data/${fileInfo.fileName}` };
       }
 
@@ -1535,18 +2105,23 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
       }
     }
 
-    if (mode === 'urlencoded' && urlencoded) {
+    if (mode === "urlencoded" && urlencoded) {
       const parts = urlencoded
-        .filter(p => !p.disabled && p.key)
-        .map(p => `${encodeURIComponent(p.key)}=${this.vuGenEncodeValue(p.value || '')}`);
-      return { body: parts.join('&') };
+        .filter((p) => !p.disabled && p.key)
+        .map(
+          (p) =>
+            `${encodeURIComponent(p.key)}=${this.vuGenEncodeValue(p.value || "")}`,
+        );
+      return { body: parts.join("&") };
     }
 
-    if (mode === 'formdata' && formdata) {
+    if (mode === "formdata" && formdata) {
       // Multipart/form-data cannot be represented in web_custom_request Body=.
       // VuGen Web HTTP/HTML does not support multipart uploads via the C API body string.
       // The request is generated without a body — adapt manually in Action.c if needed.
-      console.warn(`  ⚠  "${request.name}": multipart/form-data body cannot be represented in web_custom_request Body= — request generated without body. Convert to raw JSON or urlencoded manually in Action.c.`);
+      console.warn(
+        `  ⚠  "${request.name}": multipart/form-data body cannot be represented in web_custom_request Body= — request generated without body. Convert to raw JSON or urlencoded manually in Action.c.`,
+      );
       return null;
     }
 
@@ -1570,7 +2145,7 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    */
   escapeCBodyString(str) {
     return str
-      .replace(/\r/g, '')     // strip carriage returns (CRLF → LF, lone CR → gone)
+      .replace(/\r/g, "") // strip carriage returns (CRLF → LF, lone CR → gone)
       .replace(/"/g, '\\"');
   }
 
@@ -1580,22 +2155,29 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * all other lines become TODO comments.
    */
   convertJsr223Script(scriptObj, phase, indent) {
-    if (!scriptObj) return '';
-    const { code, lang } = (typeof scriptObj === 'string')
-      ? { code: scriptObj, lang: 'groovy' }
-      : scriptObj;
-    if (!code || !code.trim()) return '';
+    if (!scriptObj) return "";
+    const { code, lang } =
+      typeof scriptObj === "string"
+        ? { code: scriptObj, lang: "groovy" }
+        : scriptObj;
+    if (!code || !code.trim()) return "";
 
-    const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
+    const langLabel =
+      lang === "javascript"
+        ? "JavaScript"
+        : lang === "beanshell"
+          ? "BeanShell"
+          : "Groovy";
     // Variables declared globally in globals.h — only emit assignments here.
-    const statements        = [];  // lr_save_string, lr_param_sprintf, assignments, etc.
+    const statements = []; // lr_save_string, lr_param_sprintf, assignments, etc.
     // Track vars assigned so far — allows safe cross-line reference in vars.put("k", localVar).
     const declaredLocalVars = new Set();
     let skipped = 0;
 
     // Patterns in raw Java/Groovy value expressions that have NO C equivalent.
     // Any line whose value matches this is skipped entirely (counted in TODO note).
-    const JAVA_ONLY_EXPR = /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|CryptoJS|getBytes\s*\(|\.sign\s*\(|\.verify\s*\(|JwtBuilder|Jwts\b|Claims\b|signWith\s*\(|\.replace\s*\(|\.substring\s*\(|\.substr\s*\(|\.indexOf\s*\(|\.lastIndexOf\s*\(|\.split\s*\(|\.join\s*\(|\.trim\s*\(\)|\.toLowerCase\s*\(\)|\.toUpperCase\s*\(\)|\.startsWith\s*\(|\.endsWith\s*\(|\.charAt\s*\(|\.slice\s*\(|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|File\b|Files\.|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
+    const JAVA_ONLY_EXPR =
+      /=~|\bm\b|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.compile\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|new\s+Pattern|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|CryptoJS|getBytes\s*\(|\.sign\s*\(|\.verify\s*\(|JwtBuilder|Jwts\b|Claims\b|signWith\s*\(|\.replace\s*\(|\.substring\s*\(|\.substr\s*\(|\.indexOf\s*\(|\.lastIndexOf\s*\(|\.split\s*\(|\.join\s*\(|\.trim\s*\(\)|\.toLowerCase\s*\(\)|\.toUpperCase\s*\(\)|\.startsWith\s*\(|\.endsWith\s*\(|\.charAt\s*\(|\.slice\s*\(|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|File\b|Files\.|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
 
     // After _convertJavaExprC(), check if the result still contains Java constructs.
     // Catches anything the explicit rules above missed (e.g. custom Java classes).
@@ -1613,24 +2195,42 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
       /^\d/.test(expr) ||
       /^lr_eval_string\(/.test(expr) ||
       /^\(long\)time\(NULL\)/.test(expr) ||
-      expr === '__VUGEN_UUID__' ||
+      expr === "__VUGEN_UUID__" ||
       localVars.has(expr.trim());
 
-    for (const rawLine of code.split('\n')) {
+    for (const rawLine of code.split("\n")) {
       const line = rawLine.trim();
-      if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
+      if (
+        !line ||
+        line.startsWith("//") ||
+        line.startsWith("import ") ||
+        line.startsWith("package ")
+      )
+        continue;
 
       // vars.put / props.put → lr_save_string (pure statements — no declarations needed)
-      const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
+      const putMatch = line.match(
+        /^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/,
+      );
       if (putMatch) {
-        const varName = putMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
-        const rawVal  = putMatch[2].trim();
-        if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
+        const varName = putMatch[1].replace(/[^a-zA-Z0-9_]/g, "_");
+        const rawVal = putMatch[2].trim();
+        if (JAVA_ONLY_EXPR.test(rawVal)) {
+          skipped++;
+          continue;
+        }
         const valExpr = this._convertJavaExprC(rawVal);
-        if (JAVA_RESIDUAL.test(valExpr)) { skipped++; continue; }
-        if (valExpr.includes('__VUGEN_UUID__')) {
-          statements.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
-          statements.push(`${indent}lr_save_string(lr_eval_string("{_uuid}"), "${varName}");`);
+        if (JAVA_RESIDUAL.test(valExpr)) {
+          skipped++;
+          continue;
+        }
+        if (valExpr.includes("__VUGEN_UUID__")) {
+          statements.push(
+            `${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`,
+          );
+          statements.push(
+            `${indent}lr_save_string(lr_eval_string("{_uuid}"), "${varName}");`,
+          );
         } else if (isSafeCValue(valExpr, declaredLocalVars)) {
           statements.push(`${indent}lr_save_string(${valExpr}, "${varName}");`);
         } else {
@@ -1642,24 +2242,39 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
 
       // Type declarations: String x = expr; / def x = expr; / int x = expr;
       // Variables are declared globally in globals.h (by scanJsr223Vars) — emit assignment only.
-      const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
+      const typeAssignMatch = line.match(
+        /^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/,
+      );
       if (typeAssignMatch) {
         const localVar = typeAssignMatch[1];
-        const rawVal   = typeAssignMatch[2].trim();
-        if (JAVA_ONLY_EXPR.test(rawVal)) { skipped++; continue; }
-        const valExpr  = this._convertJavaExprC(rawVal);
-        if (JAVA_RESIDUAL.test(valExpr) ||
-            /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)) {
-          skipped++; continue;
+        const rawVal = typeAssignMatch[2].trim();
+        if (JAVA_ONLY_EXPR.test(rawVal)) {
+          skipped++;
+          continue;
         }
-        if (valExpr.includes('__VUGEN_UUID__')) {
-          statements.push(`${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`);
+        const valExpr = this._convertJavaExprC(rawVal);
+        if (
+          JAVA_RESIDUAL.test(valExpr) ||
+          /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(
+            valExpr,
+          )
+        ) {
+          skipped++;
+          continue;
+        }
+        if (valExpr.includes("__VUGEN_UUID__")) {
+          statements.push(
+            `${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`,
+          );
           statements.push(`${indent}${localVar} = lr_eval_string("{_uuid}");`);
           declaredLocalVars.add(localVar);
-        } else if (valExpr.includes('time(NULL)')) {
+        } else if (valExpr.includes("time(NULL)")) {
           statements.push(`${indent}sprintf(${localVar}, "%ld", ${valExpr});`);
           declaredLocalVars.add(localVar);
-        } else if (isSafeCValue(valExpr, declaredLocalVars) || this.jsr223GlobalVars.has(localVar)) {
+        } else if (
+          isSafeCValue(valExpr, declaredLocalVars) ||
+          this.jsr223GlobalVars.has(localVar)
+        ) {
           statements.push(`${indent}${localVar} = ${valExpr};`);
           declaredLocalVars.add(localVar);
         } else {
@@ -1674,9 +2289,9 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
       skipped++;
     }
 
-    if (statements.length === 0) return '';
+    if (statements.length === 0) return "";
 
-    return statements.join('\n') + '\n';
+    return statements.join("\n") + "\n";
   }
 
   /**
@@ -1690,41 +2305,44 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
       if (!str) return;
       const matches = String(str).match(/https?:\/\/([^\/\s"'`?#{}]+)/g) || [];
       for (const m of matches) {
-        const host = m.replace(/^https?:\/\//, '');
+        const host = m.replace(/^https?:\/\//, "");
         if (!host || /[{$]/.test(host)) continue;
-        if (/^localhost$|^127\.|^::1$|^\d+\.\d+\.\d+\.\d+$/.test(host)) continue;
+        if (/^localhost$|^127\.|^::1$|^\d+\.\d+\.\d+\.\d+$/.test(host))
+          continue;
         hostFreq.set(host, (hostFreq.get(host) || 0) + 1);
       }
     };
 
     const allReqs = [
       ...this.requests,
-      ...(this.options.setupRequests    || []),
+      ...(this.options.setupRequests || []),
       ...(this.options.teardownRequests || []),
     ];
 
     for (const req of allReqs) {
       extractHosts(req.url);
-      for (const h of (req.headers || [])) {
+      for (const h of req.headers || []) {
         if (h.value && !h.disabled) extractHosts(String(h.value));
       }
       if (req.body?.urlencoded) {
-        for (const p of req.body.urlencoded) extractHosts(p.value || '');
+        for (const p of req.body.urlencoded) extractHosts(p.value || "");
       }
       if (req.body?.raw) extractHosts(req.body.raw);
     }
 
     if (this.variableMap) {
-      for (const [, val] of this.variableMap) extractHosts(String(val || ''));
+      for (const [, val] of this.variableMap) extractHosts(String(val || ""));
     }
 
-    const sorted = [...hostFreq.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const sorted = [...hostFreq.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
 
     this.hostVarMap = new Map();
     let counter = 0;
     for (const [host] of sorted) {
       // VuGen LR param names: ServerHost, ServerHost1, ServerHost2, ...
-      const varName = counter === 0 ? 'ServerHost' : `ServerHost${counter}`;
+      const varName = counter === 0 ? "ServerHost" : `ServerHost${counter}`;
       this.hostVarMap.set(host, varName);
       counter++;
     }
@@ -1745,18 +2363,26 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
   _convertJavaExprC(expr) {
     // Use a sentinel for UUID so convertJsr223Script() can emit the correct two-line C idiom.
     // lr_param_sprintf() is void — it stores into a LR parameter, not usable as an expression.
-    return expr
-      .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, '__VUGEN_UUID__')
-      .replace(/java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g, '__VUGEN_UUID__')
-      .replace(/System\.currentTimeMillis\(\)/g, '(long)time(NULL)*1000')
-      .replace(/new\s+Date\(\)\.getTime\(\)/g, '(long)time(NULL)*1000')
-      .replace(/String\.valueOf\s*\(([^)]+)\)/g, '$1')
-      .replace(/\$\{([^}]+)\}/g, 'lr_eval_string("{$1}")')
-      .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, 'lr_eval_string("{$1}")')
-      // Strip Java string-concatenation-with-empty-string idiom used for toString():
-      // "value" + ""  or  "" + "value"  → just "value"
-      .replace(/\s*\+\s*""\s*/g, '')
-      .replace(/\s*""\s*\+\s*/g, '');
+    return (
+      expr
+        .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, "__VUGEN_UUID__")
+        .replace(
+          /java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g,
+          "__VUGEN_UUID__",
+        )
+        .replace(/System\.currentTimeMillis\(\)/g, "(long)time(NULL)*1000")
+        .replace(/new\s+Date\(\)\.getTime\(\)/g, "(long)time(NULL)*1000")
+        .replace(/String\.valueOf\s*\(([^)]+)\)/g, "$1")
+        .replace(/\$\{([^}]+)\}/g, 'lr_eval_string("{$1}")')
+        .replace(
+          /(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g,
+          'lr_eval_string("{$1}")',
+        )
+        // Strip Java string-concatenation-with-empty-string idiom used for toString():
+        // "value" + ""  or  "" + "value"  → just "value"
+        .replace(/\s*\+\s*""\s*/g, "")
+        .replace(/\s*""\s*\+\s*/g, "")
+    );
   }
 
   /**
@@ -1766,7 +2392,8 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    *   x-request-id          → xRequestId
    */
   _headerKeyToVarName(key) {
-    const camel = String(key).toLowerCase()
+    const camel = String(key)
+      .toLowerCase()
       .replace(/[^a-z0-9]+([a-z0-9])/g, (_, c) => c.toUpperCase());
     return /^[a-zA-Z_]/.test(camel) ? camel : `_${camel}`;
   }
@@ -1778,9 +2405,15 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * Handles parameterized hostnames (e.g. {{jsrsasignHost}}/jsrassign-latest-all-min.js).
    */
   _isJsrsasignLoadRequest(req) {
-    const url  = (typeof req.url === 'string' ? req.url : req.url?.raw || '').toLowerCase();
-    const name = (req.name || '').toLowerCase();
-    return /jsrs?asign/.test(url) || /kjur\.github/.test(url) || /jsrs?asign/.test(name);
+    const url = (
+      typeof req.url === "string" ? req.url : req.url?.raw || ""
+    ).toLowerCase();
+    const name = (req.name || "").toLowerCase();
+    return (
+      /jsrs?asign/.test(url) ||
+      /kjur\.github/.test(url) ||
+      /jsrs?asign/.test(name)
+    );
   }
 
   /**
@@ -1788,10 +2421,10 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    */
   escapeCString(str) {
     return String(str)
-      .replace(/\\/g, '\\\\')
+      .replace(/\\/g, "\\\\")
       .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r');
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r");
   }
 
   /**
@@ -1803,13 +2436,13 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
     // Used for web_reg_save_param (boundary / cookie / header extractors).
     // Search=Body is the default when the parameter is omitted — only emit for non-body scopes.
     const map = {
-      'response_headers': 'Headers',
-      'request_headers':  'Headers',
-      'url':              'Noresource',  // closest equivalent
-      'headers':          'Headers',     // legacy
+      response_headers: "Headers",
+      request_headers: "Headers",
+      url: "Noresource", // closest equivalent
+      headers: "Headers", // legacy
       // 'response_code' / 'response_message' → no VuGen equivalent; omit (body)
     };
-    return map[scope] || '';
+    return map[scope] || "";
   }
 
   /**
@@ -1820,25 +2453,26 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    */
   _vugenRegexpScope(scope) {
     const map = {
-      'response_headers': 'Headers',
-      'request_headers':  'Headers',
-      'headers':          'Headers',     // legacy
-      'url':              'All',         // closest: no URL-only scope in regexp; use All
+      response_headers: "Headers",
+      request_headers: "Headers",
+      headers: "Headers", // legacy
+      url: "All", // closest: no URL-only scope in regexp; use All
       // body / blank → omit (default is Body)
     };
-    return map[scope] || '';
+    return map[scope] || "";
   }
 
   getContentType(request) {
     if (!request.headers) return null;
-    const ct = request.headers.find(h =>
-      h.key && h.key.toLowerCase() === 'content-type' && !h.disabled
+    const ct = request.headers.find(
+      (h) => h.key && h.key.toLowerCase() === "content-type" && !h.disabled,
     );
     if (ct) return ct.value;
 
     // Infer from body mode
-    if (request.body?.mode === 'raw') return 'application/json';
-    if (request.body?.mode === 'urlencoded') return 'application/x-www-form-urlencoded';
+    if (request.body?.mode === "raw") return "application/json";
+    if (request.body?.mode === "urlencoded")
+      return "application/x-www-form-urlencoded";
     return null;
   }
 
@@ -1862,7 +2496,8 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    */
   scanForUndeclaredParams(cCode) {
     const varPattern = /\{([a-zA-Z][a-zA-Z0-9_]*)\}/g;
-    const credentialPattern = /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
+    const credentialPattern =
+      /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
     let match;
     let added = 0;
 
@@ -1870,31 +2505,33 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
       const varName = match[1];
 
       // Skip already-classified variables and dynamic/per-request vars
-      if (this.parameters.has(varName))             continue;
-      if (this.dynamicVarNames.has(varName))        continue;
+      if (this.parameters.has(varName)) continue;
+      if (this.dynamicVarNames.has(varName)) continue;
       // Per-request vars use _ prefix in generated code — _varName won't be a parameter
-      if (varName.startsWith('_'))                  continue;
+      if (varName.startsWith("_")) continue;
       // Skip per-request vars that were renamed with _ prefix
-      const baseVarName = varName.replace(/^_/, '');
+      const baseVarName = varName.replace(/^_/, "");
       if (this.perRequestVars && this.perRequestVars.has(baseVarName)) continue;
 
       // Add to parameters map so it appears in ParameterFile.prm and collection_data.dat
       const isCredential = credentialPattern.test(varName);
       this.parameters.set(varName, {
-        name:       varName,
-        type:       'csv',
-        fileName:   'collection_data.dat',
+        name: varName,
+        type: "csv",
+        fileName: "collection_data.dat",
         columnName: varName,
-        nextValue:  isCredential ? 'iteration' : 'once',
-        nextRow:    'sequential',
-        onEnd:      'loop',
-        paramValue: ''  // empty — user must fill in collection_data.dat
+        nextValue: isCredential ? "iteration" : "once",
+        nextRow: "sequential",
+        onEnd: "loop",
+        paramValue: "", // empty — user must fill in collection_data.dat
       });
       added++;
     }
 
     if (added > 0) {
-      console.log(`  ⚠  Auto-detected ${added} undeclared parameter(s) in Action.c — added to ParameterFile.prm with empty values. Fill them in collection_data.dat.`);
+      console.log(
+        `  ⚠  Auto-detected ${added} undeclared parameter(s) in Action.c — added to ParameterFile.prm with empty values. Fill them in collection_data.dat.`,
+      );
     }
   }
 
@@ -1905,20 +2542,22 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * Both correlation targets and static params use the same {varName} syntax in C.
    */
   replaceParameters(str) {
-    if (!str || typeof str !== 'string') return str;
+    if (!str || typeof str !== "string") return str;
 
     // Strip DevWeb-format references: ${load.global.varName} / ${load.params.varName} → {{varName}}
     // These appear when JMX files were generated from or alongside DevWeb scripts.
-    str = str.replace(/\$\{load\.(?:global|params)\.([^}]+)\}/g, '{{$1}}');
+    str = str.replace(/\$\{load\.(?:global|params)\.([^}]+)\}/g, "{{$1}}");
 
     return str.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
       const trimmed = varName.trim();
       // Skip Postman built-in dynamic variables ($guid, $timestamp, etc.)
-      if (trimmed.startsWith('$')) return match;
+      if (trimmed.startsWith("$")) return match;
       // Per-request dynamic vars use _ prefix in VuGen (generated inline before the request)
-      if (this.perRequestVars && this.perRequestVars.has(trimmed)) return `{_${trimmed}}`;
+      if (this.perRequestVars && this.perRequestVars.has(trimmed))
+        return `{_${trimmed}}`;
       // Dynamic/correlated vars also use _ prefix by convention
-      if (this.dynamicVarNames && this.dynamicVarNames.has(trimmed)) return `{_${trimmed}}`;
+      if (this.dynamicVarNames && this.dynamicVarNames.has(trimmed))
+        return `{_${trimmed}}`;
       return `{${trimmed}}`;
     });
   }
@@ -1936,8 +2575,8 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
     if (str === null || str === undefined) return str;
     const withParams = this.replaceParameters(String(str));
     return encodeURIComponent(withParams)
-      .replace(/%7B/gi, '{')
-      .replace(/%7D/gi, '}');
+      .replace(/%7B/gi, "{")
+      .replace(/%7D/gi, "}");
   }
 
   // ─── Large Base64 Extraction ─────────────────────────────────────────────────
@@ -1947,8 +2586,8 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * Must be >= BASE64_THRESHOLD chars and contain only base64 characters.
    */
   isBase64(str) {
-    if (!str || typeof str !== 'string') return false;
-    const stripped = str.replace(/\s/g, '');
+    if (!str || typeof str !== "string") return false;
+    const stripped = str.replace(/\s/g, "");
     if (stripped.length < this.BASE64_THRESHOLD) return false;
     return /^[A-Za-z0-9+/=]+$/.test(stripped);
   }
@@ -1957,14 +2596,18 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * Generate a short MD5 hash prefix for deduplication (12 hex chars).
    */
   hashContent(content) {
-    return crypto.createHash('md5').update(content).digest('hex').substring(0, 12);
+    return crypto
+      .createHash("md5")
+      .update(content)
+      .digest("hex")
+      .substring(0, 12);
   }
 
   /**
    * Generate a safe file name for an extracted data file.
    */
   safeDataFileName(requestName, suffix) {
-    return this.sanitizeCName(requestName) + '_' + suffix;
+    return this.sanitizeCName(requestName) + "_" + suffix;
   }
 
   /**
@@ -1985,13 +2628,13 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
     let totalFound = 0;
     let deduplicated = 0;
 
-    this.requests.forEach(request => {
+    this.requests.forEach((request) => {
       if (!request.body) return;
-      const method = (request.method || 'GET').toUpperCase();
-      if (!['POST', 'PUT', 'PATCH'].includes(method)) return;
+      const method = (request.method || "GET").toUpperCase();
+      if (!["POST", "PUT", "PATCH"].includes(method)) return;
 
       const { mode, raw } = request.body;
-      if (mode !== 'raw' || !raw) return;
+      if (mode !== "raw" || !raw) return;
 
       // Case 1: Entire raw body is large base64
       if (this.isBase64(raw)) {
@@ -2002,10 +2645,14 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
           this.largeValueIndex.set(indexKey, hash);
           deduplicated++;
         } else {
-          const varName = this.safeDataFileName(request.name, 'body');
+          const varName = this.safeDataFileName(request.name, "body");
           const fileName = `${varName}.b64`;
           this.extractedDataFiles.set(hash, {
-            varName, fileName, content: raw, size: raw.length, usedBy: [request.name]
+            varName,
+            fileName,
+            content: raw,
+            size: raw.length,
+            usedBy: [request.name],
           });
           this.largeValueIndex.set(indexKey, hash);
           totalFound++;
@@ -2017,7 +2664,9 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
       try {
         const parsed = JSON.parse(raw);
         let hasLargeBase64 = false;
-        this._scanObjectForBase64(parsed, request.name, '', () => { hasLargeBase64 = true; });
+        this._scanObjectForBase64(parsed, request.name, "", () => {
+          hasLargeBase64 = true;
+        });
 
         if (hasLargeBase64) {
           // Write entire processed JSON (with {varName} LR params for non-base64 fields)
@@ -2029,10 +2678,14 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
             this.largeValueIndex.set(indexKey, hash);
             deduplicated++;
           } else {
-            const varName = this.safeDataFileName(request.name, 'body');
+            const varName = this.safeDataFileName(request.name, "body");
             const fileName = `${varName}.dat`;
             this.extractedDataFiles.set(hash, {
-              varName, fileName, content: processedContent, size: processedContent.length, usedBy: [request.name]
+              varName,
+              fileName,
+              content: processedContent,
+              size: processedContent.length,
+              usedBy: [request.name],
             });
             this.largeValueIndex.set(indexKey, hash);
             totalFound++;
@@ -2044,7 +2697,9 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
     });
 
     if (totalFound > 0 || deduplicated > 0) {
-      console.log(`✓ Extracted ${totalFound + deduplicated} large body/base64 value(s) to data/ folder (${totalFound} unique, ${deduplicated} deduplicated)`);
+      console.log(
+        `✓ Extracted ${totalFound + deduplicated} large body/base64 value(s) to data/ folder (${totalFound} unique, ${deduplicated} deduplicated)`,
+      );
     }
   }
 
@@ -2053,17 +2708,22 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * Calls onFound(fieldPath, value) for each match found.
    */
   _scanObjectForBase64(obj, requestName, currentPath, onFound) {
-    if (typeof obj === 'string') {
+    if (typeof obj === "string") {
       if (this.isBase64(obj)) onFound(currentPath, obj);
       return;
     }
     if (Array.isArray(obj)) {
       obj.forEach((item, i) =>
-        this._scanObjectForBase64(item, requestName, `${currentPath}[${i}]`, onFound)
+        this._scanObjectForBase64(
+          item,
+          requestName,
+          `${currentPath}[${i}]`,
+          onFound,
+        ),
       );
       return;
     }
-    if (typeof obj === 'object' && obj !== null) {
+    if (typeof obj === "object" && obj !== null) {
       Object.entries(obj).forEach(([key, value]) => {
         const p = currentPath ? `${currentPath}.${key}` : key;
         this._scanObjectForBase64(value, requestName, p, onFound);
@@ -2074,10 +2734,13 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
   // ─── Utilities ────────────────────────────────────────────────────────────────
 
   formatTransactionName(rawName, seqNum) {
-    const padded = String(seqNum).padStart(2, '0');
-    let name = rawName.replace(/-/g, '_');
-    name = name.replace(/^[Tt]\d+[-_]/i, '');
-    name = name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    const padded = String(seqNum).padStart(2, "0");
+    let name = rawName.replace(/-/g, "_");
+    name = name.replace(/^[Tt]\d+[-_]/i, "");
+    name = name
+      .replace(/[^a-zA-Z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "");
     name = name ? name.toUpperCase() : `REQ${padded}`;
     return `SC01_${padded}_${name}`;
   }
@@ -2086,12 +2749,14 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * Create a safe C identifier: spaces and non-alphanumeric chars → underscores.
    */
   sanitizeCName(name) {
-    return String(name)
-      .replace(/[^a-zA-Z0-9_]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '')
-      .replace(/^[0-9]+/, '')  // C identifiers cannot start with a digit
-      || 'request';
+    return (
+      String(name)
+        .replace(/[^a-zA-Z0-9_]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "")
+        .replace(/^[0-9]+/, "") || // C identifiers cannot start with a digit
+      "request"
+    );
   }
 
   // ─── JWT Pre-generation Helper ────────────────────────────────────────────────
@@ -2102,7 +2767,7 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    * paste the token into collection_data.dat (jwtToken column).
    *
    * Uses jwt-helper.js (the same library as DevWeb scripts).
-   * Placed in the output folder alongside jsrsasign.js + transport.pem.
+   * Placed in the output folder alongside jwt-utils.dat + transport.pem.
    *
    * Usage:
    *   node generate_jwt.js
@@ -2112,7 +2777,8 @@ ${hostSaveStrings}${jwtSetup}${autoHeaderBlock}
    *   node generate_jwt.js >> tokens.dat  (repeat for each user row)
    */
   generateJwtHelperScript() {
-    const scriptName = this.collection.info?.name || this.collection.name || 'VuGenScript';
+    const scriptName =
+      this.collection.info?.name || this.collection.name || "VuGenScript";
     return `#!/usr/bin/env node
 /**
  * generate_jwt.js — Pre-generate JWT token for VuGen Web HTTP/HTML scripts.
