@@ -3,23 +3,24 @@
  * Generates all required configuration files (tsconfig.json, rts.yml, scenario.yml, parameters.yml)
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const PROJECT_ROOT = path.join(__dirname, '..', '..');
+const PROJECT_ROOT = path.join(__dirname, "..", "..");
 
 class MandatoryFilesGenerator {
   constructor(options = {}) {
     this.options = options;
-    this.scriptName = options.scriptName || 'DevWebScript';
+    this.scriptName = options.scriptName || "DevWebScript";
   }
 
   sanitizeName(name) {
-    return String(name)
-      .replace(/[<>:"/\\|?* ]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '')
-      || 'DevWebScript';
+    return (
+      String(name)
+        .replace(/[<>:"/\\|?* ]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "") || "DevWebScript"
+    );
   }
 
   /**
@@ -31,18 +32,41 @@ class MandatoryFilesGenerator {
    * Handles numeric character references (&#10; &#xA;) for newlines in PEM keys.
    */
   decodeHtmlEntities(value) {
-    if (typeof value !== 'string') return value;
+    if (typeof value !== "string") return value;
     return value
-      .replace(/&amp;/g,    '&')
-      .replace(/&lt;/g,     '<')
-      .replace(/&gt;/g,     '>')
-      .replace(/&quot;/g,   '"')
-      .replace(/&#39;/g,    "'")
-      .replace(/&apos;/g,   "'")
-      .replace(/&#x0*A;/gi, '\n')   // &#xA; or &#x000A; — newlines in PEM keys
-      .replace(/&#0*10;/g,  '\n')   // &#10;
-      .replace(/&#x0*D;/gi, '\r')   // &#xD;
-      .replace(/&#0*13;/g,  '\r');  // &#13;
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&#x0*A;/gi, "\n") // &#xA; or &#x000A; — newlines in PEM keys
+      .replace(/&#0*10;/g, "\n") // &#10;
+      .replace(/&#x0*D;/gi, "\r") // &#xD;
+      .replace(/&#0*13;/g, "\r"); // &#13;
+  }
+
+  /**
+   * Format JWT parameters as YAML userArguments block.
+   * PEM private keys use YAML block scalar (>-) to preserve multi-line content.
+   */
+  _formatUserArguments(args) {
+    let yaml = "\n";
+    for (const [key, value] of Object.entries(args)) {
+      const strVal = String(value || "");
+      // PEM keys need YAML literal block scalar (|) to preserve newlines exactly.
+      // crypto.createPrivateKey() requires real newlines between PEM header/footer
+      // and the base64 lines — >- collapses them and breaks the key.
+      if (strVal.includes("-----BEGIN") && strVal.includes("-----END")) {
+        yaml += `  ${key}: |\n`;
+        for (const line of strVal.split(/\r?\n/)) {
+          if (line) yaml += `    ${line}\n`;
+        }
+      } else {
+        yaml += `  ${key}: ${strVal}\n`;
+      }
+    }
+    return yaml;
   }
 
   /**
@@ -57,31 +81,32 @@ class MandatoryFilesGenerator {
         lib: ["es2020"],
         module: "commonjs",
         moduleResolution: "node",
-        target: "es2020"
+        target: "es2020",
       },
       files: ["DevWebSdk.d.ts"],
       include: ["./*.js"],
-      exclude: ["*.d.ts"]
+      exclude: ["*.d.ts"],
     };
   }
 
   /**
    * Generate rts.yml (Runtime Settings) — canonical version matching DevWeb2 reference
    */
-  generateRtsYml(proxy = null) {
+  generateRtsYml(proxy = null, jwtUserArgs = null) {
     // Build proxy section — defaults disabled; populated when proxy detected in collection
-    const proxySection = proxy && proxy.enabled
-      ? `proxy:
+    const proxySection =
+      proxy && proxy.enabled
+        ? `proxy:
   usePAC: false
   pacAddress: ''
   useProxy: true
   proxyServer: '${proxy.host}:${proxy.port}'
   proxyDomain: ''
-  proxyUser: '${proxy.username || ''}'
-  proxyPassword: '${proxy.password || ''}'
-  proxyAuthenticationType: '${proxy.username ? 'basic' : ''}'
+  proxyUser: '${proxy.username || ""}'
+  proxyPassword: '${proxy.password || ""}'
+  proxyAuthenticationType: '${proxy.username ? "basic" : ""}'
   excludedHosts: []`
-      : `proxy:
+        : `proxy:
   usePAC: false
   pacAddress: ''
   useProxy: false
@@ -159,7 +184,7 @@ openTelemetry:
   tlsCertificate: ''
   authenticationHeader: ''
   vusersRate: 100
-userArguments: {}
+userArguments: ${jwtUserArgs && object.keys(jwtUserArgs).length > 0 ? this._formatUserArguments(jwtUserArgs) : "{}"}
 `;
   }
 
@@ -195,13 +220,13 @@ tearDown: 0      #Not used
 
     for (const [name, config] of parameters.entries()) {
       yaml += `  - name: ${name}\n`;
-      yaml += `    type: ${config.type || 'csv'}\n`;
-      yaml += `    fileName: ${config.fileName || 'collection_data.csv'}\n`;
+      yaml += `    type: ${config.type || "csv"}\n`;
+      yaml += `    fileName: ${config.fileName || "collection_data.csv"}\n`;
       yaml += `    columnName: ${config.columnName || name}\n`;
-      yaml += `    nextValue: ${config.nextValue || 'once'}\n`;
-      yaml += `    nextRow: ${config.nextRow || 'sequential'}\n`;
-      yaml += `    onEnd: ${config.onEnd || 'loop'}\n`;
-      yaml += '\n';
+      yaml += `    nextValue: ${config.nextValue || "once"}\n`;
+      yaml += `    nextRow: ${config.nextRow || "sequential"}\n`;
+      yaml += `    onEnd: ${config.onEnd || "loop"}\n`;
+      yaml += "\n";
     }
 
     return yaml;
@@ -219,15 +244,17 @@ tearDown: 0      #Not used
     // Only include params that belong to collection_data.csv.
     // JMX CSVDataSet params reference their own file (users.csv, tokens.csv, etc.)
     // and must NOT be written here — they are provided by the user.
-    const entries = Array.from(parameters.entries())
-      .filter(([, cfg]) => (cfg.fileName || 'collection_data.csv') === 'collection_data.csv');
+    const entries = Array.from(parameters.entries()).filter(
+      ([, cfg]) =>
+        (cfg.fileName || "collection_data.csv") === "collection_data.csv",
+    );
 
     if (entries.length === 0) {
       return null;
     }
 
     const headers = entries.map(([name]) => name);
-    let csv = headers.join(',') + '\n';
+    let csv = headers.join(",") + "\n";
 
     // Single row with actual values from collection/environment.
     // Decode HTML entities first (&amp; &quot; &#10; etc. from web-exported/JMX collections),
@@ -235,17 +262,17 @@ tearDown: 0      #Not used
     // Without the newline escape VuGen fails to read collection_data.csv because
     // it sees extra rows where the PEM block line-wraps break the record boundary.
     const row = entries.map(([, param]) => {
-      const value = this.decodeHtmlEntities(String(param.paramValue || ''))
-        .replace(/\r\n/g, '\\r\\n')  // CRLF → literal \r\n (keep on one line)
-        .replace(/\r/g,   '\\r')     // bare CR
-        .replace(/\n/g,   '\\n');    // LF   → literal \n  (PEM key newlines)
+      const value = this.decodeHtmlEntities(String(param.paramValue || ""))
+        .replace(/\r\n/g, "\\r\\n") // CRLF → literal \r\n (keep on one line)
+        .replace(/\r/g, "\\r") // bare CR
+        .replace(/\n/g, "\\n"); // LF   → literal \n  (PEM key newlines)
       // CSV quoting: if value contains comma, double-quote, or backslash-n, wrap in quotes
-      if (value.includes(',') || value.includes('"')) {
+      if (value.includes(",") || value.includes('"')) {
         return `"${value.replace(/"/g, '""')}"`;
       }
       return value;
     });
-    csv += row.join(',') + '\n';
+    csv += row.join(",") + "\n";
 
     return csv;
   }
@@ -256,27 +283,27 @@ tearDown: 0      #Not used
   generateSampleValue(param, index) {
     if (!param) return `value${index}`;
 
-    const type = param.detectedType || 'string';
+    const type = param.detectedType || "string";
 
     switch (type) {
-      case 'email':
+      case "email":
         return `user${index}@example.com`;
-      case 'url':
+      case "url":
         return `https://example.com/resource${index}`;
-      case 'uuid':
-        return `${index}00000-0000-0000-0000-000000000${String(index).padStart(3, '0')}`;
-      case 'number':
+      case "uuid":
+        return `${index}00000-0000-0000-0000-000000000${String(index).padStart(3, "0")}`;
+      case "number":
         return String(index * 10);
-      case 'boolean':
-        return index % 2 === 0 ? 'true' : 'false';
-      case 'token':
+      case "boolean":
+        return index % 2 === 0 ? "true" : "false";
+      case "token":
         return `token_${this.generateRandomString(32)}`;
-      case 'username':
+      case "username":
         return `user${index}`;
-      case 'password':
+      case "password":
         return `Pass${index}@123`;
       default:
-        return `${param.name || 'value'}_${index}`;
+        return `${param.name || "value"}_${index}`;
     }
   }
 
@@ -284,8 +311,9 @@ tearDown: 0      #Not used
    * Generate random string for tokens
    */
   generateRandomString(length) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
+    const chars =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let result = "";
     for (let i = 0; i < length; i++) {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -301,14 +329,16 @@ tearDown: 0      #Not used
    * Returns true on success, false if source not found (logs warning, does NOT generate a stub).
    */
   copyFromProjectRoot(outputDir, filename) {
-    const src  = path.join(PROJECT_ROOT, filename);
+    const src = path.join(PROJECT_ROOT, filename);
     const dest = path.join(outputDir, filename);
     try {
       if (fs.existsSync(src)) {
         fs.copyFileSync(src, dest);
         return true;
       }
-      console.warn(`  ⚠  ${filename} not found in project root (${PROJECT_ROOT}). Place it there and re-run.`);
+      console.warn(
+        `  ⚠  ${filename} not found in project root (${PROJECT_ROOT}). Place it there and re-run.`,
+      );
       return false;
     } catch (err) {
       console.error(`  ✗  Failed to copy ${filename}: ${err.message}`);
@@ -322,15 +352,32 @@ tearDown: 0      #Not used
    * @param {string}   scriptName        - Sanitized script name (no spaces/special chars)
    * @param {string[]} transactionNames  - Transaction names for [TransactionsOrder]
    * @param {boolean}  hasJwt            - Add jwt-helper.js + transport.pem to [ManuallyExtraFiles]
+   * @param {boolean}  hasDpop            - Add dpop-helper.js to [ManuallyExtraFiles]
    * @param {string}   [mtlsCertFile]    - mTLS cert filename to add to [ManuallyExtraFiles]
    */
-  generateDevWebUsrFile(scriptName, transactionNames = [], hasJwt = false, mtlsCertFile = null) {
-    const txOrder = transactionNames.length > 0
-      ? transactionNames.join('__*delimiter*__')
-      : '';
+  generateDevWebUsrFile(
+    scriptName,
+    transactionNames = [],
+    hasJwt = false,
+    hasDpop = false,
+    mtlsCertFile = null,
+  ) {
+    const txOrder =
+      transactionNames.length > 0
+        ? transactionNames.join("__*delimiter*__")
+        : "";
 
-    let manualExtras = hasJwt ? `jwt-helper.js=\ntransport.pem=\n` : '';
-    if (mtlsCertFile && !hasJwt) manualExtras += `${mtlsCertFile}=\n`;
+    let manualExtras = "";
+    if (hasJwt) {
+      manualExtras += `jwt-helper.js=\ntransport.pem=\n`;
+    }
+    if (hasDpop) {
+      manualExtras += `dpop-helper.js=\n`;
+    }
+
+    if (mtlsCertFile && !hasJwt) {
+      manualExtras += `${mtlsCertFile}=\n`;
+    }
 
     return `[General]
 Type=DevWeb
@@ -388,7 +435,7 @@ LastReplayStatus=0
 [ActiveReplay]
 LastReplayedRunName=
 ActiveRunName=
-${manualExtras ? `\n[ManuallyExtraFiles]\n${manualExtras}` : ''}`;
+${manualExtras ? `\n[ManuallyExtraFiles]\n${manualExtras}` : ""}`;
   }
 
   /**
@@ -513,11 +560,20 @@ RunLogicObjectKind="Action"
    * Lists all files for LRE upload.
    * @param {string}  scriptName - Sanitized script name
    * @param {boolean} hasJwt     - Include jwt-helper.js + transport.pem entries
+   * @param {boolean} hasDpop    - Include dpop-helper.js entry
    */
-  generateDevWebScriptUploadMetadata(scriptName, hasJwt = false) {
-    const jwtEntries = hasJwt
-      ? `    <FileEntry Name="jwt-helper.js" Filter="2" />\n    <FileEntry Name="transport.pem" Filter="2" />\n`
-      : '';
+  generateDevWebScriptUploadMetadata(
+    scriptName,
+    hasJwt = false,
+    hasDpop = false,
+  ) {
+    let extarEntries = "";
+    if (hasJwt) {
+      extarEntries += `    <FileEntry Name="jwt-helper.js" Filter="2" />\n    <FileEntry Name="transport.pem" Filter="2" />\n`;
+    }
+    if (hasDpop) {
+      extarEntries += `    <FileEntry Name="dpop-helper.js" Filter="2" />\n`;
+    }
 
     return `<?xml version="1.0" encoding="utf-8"?>
 <VugenScriptMetadata>
@@ -532,7 +588,7 @@ RunLogicObjectKind="Action"
     <FileEntry Name="default.usp" Filter="4" />
     <FileEntry Name="parameters.yml" Filter="2" />
     <FileEntry Name="rts.yml" Filter="2" />
-${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
+${extarEntries}    <FileEntry Name="Action.c" Filter="1" />
     <FileEntry Name="Bookmarks.xml" Filter="1" />
     <FileEntry Name="Breakpoints.xml" Filter="1" />
     <FileEntry Name="DevWebSdk.d.ts" Filter="1" />
@@ -559,9 +615,49 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
    */
   async generateAll(outputDir, parameters = null, options = null) {
     // Back-compat: if 3rd arg is a string it's the legacy examplesPath — ignore it
-    if (typeof options === 'string') options = {};
+    if (typeof options === "string") options = {};
     options = options || {};
-    const { transactionNames = [], hasJwt = false, proxy = null, mtlsCertFile = null } = options;
+
+    const {
+      transactionNames = [],
+      hasJwt = false,
+      hasDpop = false,
+      proxy = null,
+      mtlsCertFile = null,
+      jwtClaimMap = null,
+    } = options;
+
+    // Extract JWT-related parameter names from the claim map.
+    // These go into rts.yml userArguments instead of CSV/parameters.yml.
+    const jwtParamNames = new Set();
+    let jwtUserArgs = null;
+
+    if (hasJwt && jwtClaimMap && parameters) {
+      jwtUserArgs = {};
+      // Collect all parameter names referenced by the claim map
+      for (const [claim, paramName] of Object.entries(jwtClaimMap)) {
+        if (claim === "output") continue; // output var is dynamic, not a parameter
+        if (parameters.has(paramName)) {
+          const cfg = parameters.get(paramName);
+          jwtUserArgs[paramName] = this.decodeHtmlEntities(
+            String(cfg.paramValue || ""),
+          );
+          jwtParamNames.add(paramName);
+        }
+      }
+      if (Object.keys(jwtUserArgs).length === 0) jwtUserArgs = null;
+    }
+
+    // Filter parameters: JWT params go to rts.yml userArguments only (accessed
+    // via load.config.user.args at runtime). Exclude them from CSV/parameters.yml.
+    let csvParameters = parameters;
+    let ymlParameters = parameters;
+    if (jwtParamNames.size > 0 && parameters) {
+      csvParameters = new Map(
+        [...parameters].filter(([name]) => !jwtParamNames.has(name)),
+      );
+      ymlParameters = csvParameters;
+    }
 
     const files = {};
     const safeScriptName = this.sanitizeName(this.scriptName);
@@ -569,73 +665,137 @@ ${jwtEntries}    <FileEntry Name="Action.c" Filter="1" />
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
     // 1. tsconfig.json
-    fs.writeFileSync(path.join(outputDir, 'tsconfig.json'),
-      JSON.stringify(this.generateTsConfig(), null, 2), 'utf8');
-    console.log('✓ Generated tsconfig.json');
+    fs.writeFileSync(
+      path.join(outputDir, "tsconfig.json"),
+      JSON.stringify(this.generateTsConfig(), null, 2),
+      "utf8",
+    );
+    console.log("✓ Generated tsconfig.json");
 
     // 2. rts.yml (canonical 11-section version matching DevWeb2 reference)
-    fs.writeFileSync(path.join(outputDir, 'rts.yml'), this.generateRtsYml(proxy), 'utf8');
-    if (proxy && proxy.enabled) console.log(`  ✓ Proxy configured in rts.yml: ${proxy.host}:${proxy.port}`);
-    console.log('✓ Generated rts.yml');
+    fs.writeFileSync(
+      path.join(outputDir, "rts.yml"),
+      this.generateRtsYml(proxy, jwtUserArgs),
+      "utf8",
+    );
+    if (proxy && proxy.enabled)
+      console.log(
+        `  ✓ Proxy configured in rts.yml: ${proxy.host}:${proxy.port}`,
+      );
+    if (jwtUserArgs)
+      console.log(
+        `  ✓ JWT parameters added to rts.yml userArguments: ${Object.keys(jwtUserArgs).length} params)`,
+      );
+    console.log("✓ Generated rts.yml");
 
     // 3. scenario.yml
-    fs.writeFileSync(path.join(outputDir, 'scenario.yml'), this.generateScenarioYml(), 'utf8');
-    console.log('✓ Generated scenario.yml');
+    fs.writeFileSync(
+      path.join(outputDir, "scenario.yml"),
+      this.generateScenarioYml(),
+      "utf8",
+    );
+    console.log("✓ Generated scenario.yml");
 
     // 4. parameters.yml — always written so VuGen can open the project without error
-    fs.writeFileSync(path.join(outputDir, 'parameters.yml'),
-      this.generateParametersYml(parameters), 'utf8');
-    console.log('✓ Generated parameters.yml');
+    fs.writeFileSync(
+      path.join(outputDir, "parameters.yml"),
+      this.generateParametersYml(ymlParameters),
+      "utf8",
+    );
+    console.log("✓ Generated parameters.yml");
 
-    // collection_data.csv — only if there are parameters to fill in
-    if (parameters && parameters.size > 0) {
-      const csv = this.generateCollectionDataCSV(parameters);
+    // collection_data.csv — only if there are non-JWT parameters to fill in
+    if (csvParameters && csvParameters.size > 0) {
+      const csv = this.generateCollectionDataCSV(csvParameters);
       if (csv) {
-        fs.writeFileSync(path.join(outputDir, 'collection_data.csv'), csv, 'utf8');
-        console.log('✓ Generated collection_data.csv');
+        fs.writeFileSync(
+          path.join(outputDir, "collection_data.csv"),
+          csv,
+          "utf8",
+        );
+        console.log("✓ Generated collection_data.csv");
       }
     }
 
     // 5. [ScriptName].usr (DevWeb format)
-    fs.writeFileSync(path.join(outputDir, `${safeScriptName}.usr`),
-      this.generateDevWebUsrFile(safeScriptName, transactionNames, hasJwt, mtlsCertFile), 'utf8');
+    fs.writeFileSync(
+      path.join(outputDir, `${safeScriptName}.usr`),
+      this.generateDevWebUsrFile(
+        safeScriptName,
+        transactionNames,
+        hasJwt,
+        hasDpop,
+        mtlsCertFile,
+      ),
+      "utf8",
+    );
     console.log(`✓ Generated ${safeScriptName}.usr`);
 
     // 6. default.cfg (DevWeb format — differs from VuGen)
-    fs.writeFileSync(path.join(outputDir, 'default.cfg'),
-      this.generateDevWebDefaultCfg(), 'utf8');
-    console.log('✓ Generated default.cfg');
+    fs.writeFileSync(
+      path.join(outputDir, "default.cfg"),
+      this.generateDevWebDefaultCfg(),
+      "utf8",
+    );
+    console.log("✓ Generated default.cfg");
 
     // 7. default.usp (DevWeb run logic — Main only, no vuser_init/end children)
-    fs.writeFileSync(path.join(outputDir, 'default.usp'),
-      this.generateDevWebDefaultUsp(), 'utf8');
-    console.log('✓ Generated default.usp');
+    fs.writeFileSync(
+      path.join(outputDir, "default.usp"),
+      this.generateDevWebDefaultUsp(),
+      "utf8",
+    );
+    console.log("✓ Generated default.usp");
 
     // 8. ScriptUploadMetadata.xml (DevWeb format)
-    fs.writeFileSync(path.join(outputDir, 'ScriptUploadMetadata.xml'),
-      this.generateDevWebScriptUploadMetadata(safeScriptName, hasJwt), 'utf8');
-    console.log('✓ Generated ScriptUploadMetadata.xml');
+    fs.writeFileSync(
+      path.join(outputDir, "ScriptUploadMetadata.xml"),
+      this.generateDevWebScriptUploadMetadata(safeScriptName, hasJwt, hasDpop),
+      "utf8",
+    );
+    console.log("✓ Generated ScriptUploadMetadata.xml");
 
     // 9. Copy DevWebSdk.d.ts from project root (canonical source — do NOT generate a stub)
-    this.copyFromProjectRoot(outputDir, 'DevWebSdk.d.ts');
-    console.log('✓ Copied DevWebSdk.d.ts');
+    this.copyFromProjectRoot(outputDir, "DevWebSdk.d.ts");
+    console.log("✓ Copied DevWebSdk.d.ts");
 
     // 10. Copy jwt-helper.js + transport.pem from project root when JWT is used.
     //     These files MUST be placed in the project root by the user.
     //     jwt-helper.js is the DevWeb-specific JWT helper (uses Node.js built-in crypto).
     if (hasJwt) {
-      this.copyFromProjectRoot(outputDir, 'jwt-helper.js');
-      console.log('✓ Copied jwt-helper.js  (place jwt-helper.js in project root if missing)');
-      this.copyFromProjectRoot(outputDir, 'transport.pem');
-      console.log('✓ Copied transport.pem  (replace with your actual private key)');
+      this.copyFromProjectRoot(outputDir, "jwt-helper.js");
+      console.log(
+        "✓ Copied jwt-helper.js  (place jwt-helper.js in project root if missing)",
+      );
+      this.copyFromProjectRoot(outputDir, "transport.pem");
+      // If transport.pem wasn't found in the project root, create an empty placeholder
+      // so VuGen can open the project without errors. User replaces with their actual key.
+      if (!fs.existsSync(path.join(outputDir, "transport.pem"))) {
+        fs.writeFileSync(
+          path.join(outputDir, "transport.pem"),
+          "# Replace this file with your actual RSA private key (PEM format)\n",
+          "utf8",
+        );
+      }
+      console.log(
+        "✓ Copied transport.pem  (replace with your actual private key)",
+      );
     }
 
     // 11. Action.c, vuser_init.c, vuser_end.c stubs — required for VuGen to open a DevWeb project
     const cStub = (fnName) => `${fnName}()\n{\n\treturn 0;\n}\n`;
-    fs.writeFileSync(path.join(outputDir, 'Action.c'),     cStub('Action'),     'utf8');
-    fs.writeFileSync(path.join(outputDir, 'vuser_init.c'), cStub('vuser_init'), 'utf8');
-    fs.writeFileSync(path.join(outputDir, 'vuser_end.c'),  cStub('vuser_end'),  'utf8');
-    console.log('✓ Generated Action.c, vuser_init.c, vuser_end.c');
+    fs.writeFileSync(path.join(outputDir, "Action.c"), cStub("Action"), "utf8");
+    fs.writeFileSync(
+      path.join(outputDir, "vuser_init.c"),
+      cStub("vuser_init"),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(outputDir, "vuser_end.c"),
+      cStub("vuser_end"),
+      "utf8",
+    );
+    console.log("✓ Generated Action.c, vuser_init.c, vuser_end.c");
 
     return files;
   }
