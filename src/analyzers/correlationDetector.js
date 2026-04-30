@@ -283,10 +283,12 @@ class CorrelationDetector {
     }
 
     // Resolve a source expression using the local variable map.
-    // Handles two cases:
+    // Handles three cases:
     //   1. Simple variable:  bru.setEnv("x", id)          — resolves `id` to `body?.access_token`
     //   2. Property chain:   env.set("x", body2.field)     — resolves `body2` prefix to its source
     //                        (e.g. body2 = pm.response.json()) → pm.response.json().field
+    //   3. Array access:     env.set("x", match[1])        — resolves `match` prefix to its source
+    //                        (e.g. match = body.match(/re/)) → body.match(/re/)[1]
     const resolveSource = (src) => {
       const trimmed = src.trim().replace(/;$/, '');
 
@@ -305,6 +307,16 @@ class CorrelationDetector {
         }
       }
 
+      // Case 3: varName[index] — bracket array access (e.g. match[1])
+      const bracketIdx = trimmed.search(/\[/);
+      if (bracketIdx > 0) {
+        const prefix = trimmed.substring(0, bracketIdx);
+        const rest   = trimmed.substring(bracketIdx);
+        if (localVarMap.has(prefix)) {
+          return `${localVarMap.get(prefix)}${rest}`;
+        }
+      }
+
       return trimmed;
     };
 
@@ -315,16 +327,24 @@ class CorrelationDetector {
 
       // Choose the right path extractor based on source type
       let extractPath;
+      let extraFields = {};
       if (extractorType === 'header') {
         extractPath = this.extractHeaderName(source);
       } else if (extractorType === 'cookie') {
         extractPath = this.extractCookieName(source);
+      } else if (extractorType === 'regex') {
+        extractPath = '$';
+        const pat = this.extractRegexPattern(source);
+        if (pat) extraFields.pattern = pat;
+      } else if (extractorType === 'xpath') {
+        extractPath = this.extractXPathQuery(source);
+        if (extractPath) extraFields.xpathQuery = extractPath;
       } else {
         extractPath = this.extractJsonPath(source);
       }
 
       if (!variables.find(v => v.name === varName)) {
-        variables.push({ name: varName, source, extractorType, extractPath });
+        variables.push({ name: varName, source, extractorType, extractPath, ...extraFields });
       }
     };
 
@@ -364,6 +384,12 @@ class CorrelationDetector {
     const varsSetPattern = /(?:^|[^a-zA-Z0-9_])vars\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
     while ((match = varsSetPattern.exec(script)) !== null) addVar(match[1], match[2]);
 
+    // ── Postman legacy: postman.setEnvironmentVariable() / postman.setGlobalVariable() ──
+    const postmanSetEnvPattern = /postman\.setEnvironmentVariable\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = postmanSetEnvPattern.exec(script)) !== null) addVar(match[1], match[2]);
+    const postmanSetGlobalPattern = /postman\.setGlobalVariable\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = postmanSetGlobalPattern.exec(script)) !== null) addVar(match[1], match[2]);
+
     return variables;
   }
 
@@ -379,11 +405,26 @@ class CorrelationDetector {
   determineExtractorType(source) {
     if (!source) return 'json';
 
+    // ── Regex extraction: .match(/pattern/) or .match("pattern") ─────────────
+    if (/\.match\s*\(/.test(source)) return 'regex';
+
+    // ── XML extraction: xml2js / cheerio / DOMParser ──────────────────────────
+    if (/xml2js|parseString|cheerio|DOMParser|getElementsByTagName|xpath\.|XPath/.test(source)) return 'xpath';
+
     // ── Header detection (must check BEFORE body to avoid false match on "headers") ──
     if (/(?:res|response|pm\.response)\.headers|getResponseHeader|pm\.response\.headers/.test(source)) return 'header';
 
+    // ── Bruno: res.getHeader("name") ──────────────────────────────────────────
+    if (/res\.getHeader\s*\(/.test(source)) return 'header';
+
     // ── Cookie detection ──────────────────────────────────────────────────────
     if (/(?:res|response)\.cookies|pm\.cookies/.test(source)) return 'cookie';
+
+    // ── Bruno: bru.cookies.get("name") ────────────────────────────────────────
+    if (/bru\.cookies\.get\s*\(/.test(source)) return 'cookie';
+
+    // ── Bruno: res.getBody() — JSON body ──────────────────────────────────────
+    if (/res\.getBody\s*\(/.test(source)) return 'json';
 
     // ── JSON body detection (Bruno and Postman patterns) ──────────────────────
     if (/res\.body|body\??\.|jsonData|responseBody|JSON\.parse|json\.|pm\.response\.json|res\.json/.test(source)) return 'json';
@@ -404,6 +445,9 @@ class CorrelationDetector {
    */
   extractHeaderName(source) {
     if (!source) return null;
+    // Bruno: res.getHeader("name")
+    const getHeaderMatch = source.match(/res\.getHeader\s*\(["']([^"']+)["']\)/);
+    if (getHeaderMatch) return getHeaderMatch[1];
     // bracket notation: res.headers["name"] or response.headers["name"]
     const bracketMatch = source.match(/headers\s*\[["']([^"']+)["']\]/);
     if (bracketMatch) return bracketMatch[1];
@@ -423,10 +467,18 @@ class CorrelationDetector {
    */
   extractCookieName(source) {
     if (!source) return null;
+    // Bruno: bru.cookies.get("name") or pm.cookies.jar().get(url, "name")
+    const bruCookieMatch = source.match(/bru\.cookies\.get\s*\(["']([^"']+)["']\)/);
+    if (bruCookieMatch) return bruCookieMatch[1];
+    const pmJarMatch = source.match(/pm\.cookies\.jar\(\)\.get\s*\([^,]+,\s*["']([^"']+)["']\)/);
+    if (pmJarMatch) return pmJarMatch[1];
+    // bracket notation: cookies["name"]
     const bracketMatch = source.match(/cookies\s*\[["']([^"']+)["']\]/);
     if (bracketMatch) return bracketMatch[1];
+    // .get() notation: pm.cookies.get("name") or cookies.get("name")
     const getMatch = source.match(/cookies\.get\s*\(["']([^"']+)["']\)/);
     if (getMatch) return getMatch[1];
+    // dot notation: cookies.session_id
     const dotMatch = source.match(/cookies\??\.([\w_-]+)/);
     if (dotMatch) return dotMatch[1];
     return null;
@@ -453,6 +505,13 @@ class CorrelationDetector {
       .replace(/\.(pop|shift|trim|toString|toLowerCase|toUpperCase)\(\)/g, '')
       .replace(/\.$/, '')
       .trim();
+
+    // ── Bruno: res.getBody().field ────────────────────────────────────────────
+    const getBodyMatch = source.match(/res\.getBody\s*\(\s*\)\s*\??\.([\w$[\]?.]+[^;,)\s]*)/);
+    if (getBodyMatch) {
+      const path = cleanPath(getBodyMatch[1]);
+      if (path) return `$.${path}`;
+    }
 
     // ── Bruno: res.body.field or res.body?.field or response.body.field ───────
     const resBodyMatch = source.match(/(?:res|response)\.body\??\.?([\w$[\]?.]+[^;,)\s]*)/);
@@ -485,6 +544,44 @@ class CorrelationDetector {
 
     // ── Fallback: infer from variable name ────────────────────────────────────
     return this.inferPathFromVarName(null, source);
+  }
+
+  /**
+   * Extract the regex pattern string from a .match() call.
+   * e.g. body.match(/access_token":"([^"]+)"/)[1]  → access_token":"([^"]+)"
+   *      text.match(/"token":"(.+?)"/)              → "token":"(.+?)"
+   */
+  extractRegexPattern(source) {
+    if (!source) return null;
+    // /regex/ literal
+    const regexLiteral = source.match(/\.match\s*\(\s*\/((?:[^/\\]|\\.)*)\/[gimsuy]*\s*\)/);
+    if (regexLiteral) return regexLiteral[1];
+    // "string" or 'string' pattern passed to match()
+    const stringPattern = source.match(/\.match\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (stringPattern) return stringPattern[1];
+    return null;
+  }
+
+  /**
+   * Derive an XPath query from xml2js / cheerio / DOM access expressions.
+   * Returns a best-effort path string (e.g. //root/element/text()).
+   * e.g. result.root.token[0]._  → //root/token
+   *      $("div.token").text()   → //div[@class="token"]
+   */
+  extractXPathQuery(source) {
+    if (!source) return null;
+    // Cheerio: $("selector") — convert to rough xpath comment
+    const cheerioMatch = source.match(/\$\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (cheerioMatch) return `//${cheerioMatch[1].replace(/\s+/g, '/')}`;
+    // xml2js result path: result.RootEl.ChildEl[0]._ or result.root.el[0]
+    const xml2jsMatch = source.match(/\w+\.(\w+)\.(\w+)/);
+    if (xml2jsMatch) return `//${xml2jsMatch[1]}/${xml2jsMatch[2]}`;
+    // DOM: getElementsByTagName("name") / querySelector("name")
+    const domTagMatch = source.match(/getElementsByTagName\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (domTagMatch) return `//${domTagMatch[1]}`;
+    const querySelectorMatch = source.match(/querySelector\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (querySelectorMatch) return `//${querySelectorMatch[1]}`;
+    return '$';
   }
 
   /**
@@ -793,9 +890,10 @@ class CorrelationDetector {
       case 'boundary': {
         const lb = JSON.stringify(correlation.leftBound  || '<');
         const rb = JSON.stringify(correlation.rightBound || '>');
-        return scopeConst
-          ? `new load.BoundaryExtractor(${n}, ${lb}, ${rb}, ${scopeConst})`
-          : `new load.BoundaryExtractor(${n}, ${lb}, ${rb})`;
+        if (scopeConst) {
+          return `new load.BoundaryExtractor(${n}, { leftBoundary: ${lb}, rightBoundary: ${rb}, scope: ${scopeConst} })`;
+        }
+        return `new load.BoundaryExtractor(${n}, ${lb}, ${rb})`;
       }
 
       case 'regex':
@@ -803,12 +901,12 @@ class CorrelationDetector {
         const pat     = JSON.stringify(correlation.pattern || '(.+)');
         // JMeter matchNumber: 1 = first, -1 = random, 0 = all occurrences
         const matchNo = this._parseMatchNo(correlation.matchNumber);
-        if (scopeConst) {
-          // DevWeb: RegexpExtractor(name, pattern, matchNo, scope)
-          return `new load.RegexpExtractor(${n}, ${pat}, ${matchNo}, ${scopeConst})`;
-        }
-        if (matchNo !== 1) {
-          return `new load.RegexpExtractor(${n}, ${pat}, ${matchNo})`;
+        if (scopeConst || matchNo !== 1) {
+          // Use options form — positional form 3rd arg is regex flags string, not occurrence
+          const opts = [`expression: ${pat}`];
+          if (matchNo !== 1) opts.push(`occurrence: ${matchNo}`);
+          if (scopeConst) opts.push(`scope: ${scopeConst}`);
+          return `new load.RegexpExtractor(${n}, { ${opts.join(', ')} })`;
         }
         return `new load.RegexpExtractor(${n}, ${pat})`;
       }
@@ -823,20 +921,21 @@ class CorrelationDetector {
       }
 
       case 'xpath': {
+        // XpathExtractor (lowercase 'p') — SDK does not support scope for XPath
         const xpathQuery = JSON.stringify(correlation.xpathQuery || `//${correlation.name}`);
-        return scopeConst
-          ? `new load.XPathExtractor(${n}, ${xpathQuery}, ${scopeConst})`
-          : `new load.XPathExtractor(${n}, ${xpathQuery})`;
+        return `new load.XpathExtractor(${n}, ${xpathQuery})`;
       }
 
       case 'header': {
+        // Use options form — positional BoundaryExtractor has no scope arg
         const headerName = correlation.extractPath || correlation.name.replace(/^_/, '');
-        return `new load.BoundaryExtractor(${n}, ${JSON.stringify(headerName + ': ')}, "\\r\\n", load.ExtractorScope.Headers)`;
+        return `new load.BoundaryExtractor(${n}, { leftBoundary: ${JSON.stringify(headerName + ': ')}, rightBoundary: "\\r\\n", scope: load.ExtractorScope.Headers })`;
       }
 
       case 'cookie': {
+        // Use dedicated CookieExtractor — extracts from response cookie jar by name
         const cookieName = correlation.extractPath || correlation.name.replace(/^_/, '');
-        return `new load.BoundaryExtractor(${n}, ${JSON.stringify(cookieName + '=')}, ";", load.ExtractorScope.Headers)`;
+        return `new load.CookieExtractor(${n}, { cookieName: ${JSON.stringify(cookieName)} })`;
       }
 
       default:
