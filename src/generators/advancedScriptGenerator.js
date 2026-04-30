@@ -65,18 +65,18 @@ class AdvancedScriptGenerator {
     // JWT detection — populated by detectJwtUsage() during analyze()
     this.hasJwt = false;
     this.jwtVarNames = []; // token variable names set by JWT pre-request scripts
-    this.jwtClaimMap = null; //{ kid:'signing_kid', iss:'client_id', ... } extracted from pre-request script
+    this.jwtClaimMap = null; // { kid:'signing_kid', iss:'client_id', ... } extracted from pre-request script
 
-    //DPOP detection - populated by detectDpopUsage() during analyze()
+    // DPoP detection -- populated by detectDpopUsage() during analyze()
     this.hasDpop = false;
-    this.dpopVarNames = []; // dpop_proof variable names set by DPOP pre-request scripts
+    this.dpopVarNames = []; // dpop_proof variable names set by DPoP pre-request scripts
     this.dpopKeyVar = null; // dpop_jwk variable name
     this.dpopPfUsed = false; // track if dpop-pf has been used (should only be used once)
 
     // NTLM/Kerberos detection — populated by detectNtlmKerberos() during analyze()
     this.hasNtlm = false;
     this.ntlmAuthType = null; // 'ntlm' | 'kerberos'
-    this.ntlmHost = ""; // hostname without port for load.setUserCredentials()
+    this.ntlmHost = ''; // hostname without port for load.setUserCredentials()
 
     // mTLS cert detection — populated by detectMtlsCert() during analyze()
     this.mtlsCertFile = null; // basename of uploaded cert file (non-JWT)
@@ -92,8 +92,8 @@ class AdvancedScriptGenerator {
 
     // Pre-computed common header analysis — populated by analyze() so both
     // generateHeader() and generateAction() see the same values.
-    this._staticGlobalHeaders = new Map(); // safe to emit at module level
-    this._authGlobalHeaders = new Map(); // must be set inside action() after runtime init
+    this._staticGlobalHeaders = new Map();  // safe to emit at module level
+    this._authGlobalHeaders = new Map();  // must be set inside action() after runtime init
     this._perRequestHeaderKeys = new Set();
 
     // Module-level JSR223 local variable names — collected during analyze(), declared as
@@ -223,30 +223,29 @@ class AdvancedScriptGenerator {
     // - If '{{AuthUsername}}', look up 'AuthUsername' in variableMap → return its value
     // - If a literal string (JMX), return it as-is
     const resolve = (val) => {
-      if (!val) return "";
+      if (!val) return '';
       const m = String(val).match(/^\{\{([^}]+)\}\}$/);
-      return m ? this.variableMap.get(m[1]) || "" : String(val);
+      return m ? (this.variableMap.get(m[1]) || '') : String(val);
     };
 
     for (const req of this.requests) {
-      const authType = (req.auth?.type || "").toLowerCase();
-      if (authType === "kerberos" || authType === "ntlm") {
+      const authType = (req.auth?.type || '').toLowerCase();
+      if (authType === 'kerberos' || authType === 'ntlm') {
         this.hasNtlm = true;
         this.ntlmAuthType = authType;
 
         // --- Host extraction ---
         // JMX AuthManager provides req.auth.hostport (hostname only, no port after parser fix)
-        let host = req.auth?.hostport || "";
+        let host = req.auth?.hostport || '';
         if (!host) {
           // Postman/Bruno: extract hostname from the request URL
-          const urlStr =
-            typeof req.url === "string" ? req.url : req.url?.raw || "";
+          const urlStr = typeof req.url === 'string' ? req.url : (req.url?.raw || '');
           try {
-            const u = new URL(urlStr.replace(/\{\{[^}]+\}\}/g, "placeholder"));
+            const u = new URL(urlStr.replace(/\{\{[^}]+\}\}/g, 'placeholder'));
             host = u.hostname;
           } catch {
             const m = urlStr.match(/^https?:\/\/([^/:?#]+)/i);
-            host = m ? m[1] : "";
+            host = m ? m[1] : '';
           }
         }
         this.ntlmHost = host;
@@ -260,9 +259,9 @@ class AdvancedScriptGenerator {
         const authArr = req.auth?.[authType];
         if (Array.isArray(authArr)) {
           authArr.forEach((item) => {
-            if (item.key === "username") rawUsername = item.value;
-            if (item.key === "password") rawPassword = item.value;
-            if (item.key === "domain") rawDomain = item.value;
+            if (item.key === 'username') rawUsername = item.value;
+            if (item.key === 'password') rawPassword = item.value;
+            if (item.key === 'domain') rawDomain = item.value;
           });
         }
 
@@ -273,12 +272,12 @@ class AdvancedScriptGenerator {
         const usernameVal = resolve(rawUsername);
         const passwordVal = resolve(rawPassword);
         const domainVal = resolve(rawDomain);
-        if (usernameVal) this.variableMap.set("username", usernameVal);
-        if (passwordVal) this.variableMap.set("password", passwordVal);
-        if (domainVal) this.variableMap.set("domain", domainVal);
+        if (usernameVal) this.variableMap.set('username', usernameVal);
+        if (passwordVal) this.variableMap.set('password', passwordVal);
+        if (domainVal) this.variableMap.set('domain', domainVal);
 
         console.log(
-          `  ✓ ${authType.toUpperCase()} authentication detected — host: ${host || "(unknown)"}`,
+          `  ✓ ${authType.toUpperCase()} authentication detected — host: ${host || '(unknown)'}`,
         );
         return;
       }
@@ -314,39 +313,32 @@ class AdvancedScriptGenerator {
    */
   collectJsr223ModuleVars() {
     this.jsr223ModuleVars.clear();
-    const JAVA_ONLY =
-      /=~|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|Files?\b|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
+    const JAVA_ONLY = /=~|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|Files?\b|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
     const JAVA_RESIDUAL = /[A-Z][a-zA-Z0-9_]+\s*\.\s*[a-z]/;
 
     const allScripts = [];
     for (const req of this.requests) {
-      for (const sc of req.preScripts || []) allScripts.push(sc);
-      for (const sc of req.postScripts || []) allScripts.push(sc);
+      for (const sc of (req.preScripts || [])) allScripts.push(sc);
+      for (const sc of (req.postScripts || [])) allScripts.push(sc);
     }
 
     for (const scriptObj of allScripts) {
       if (!scriptObj) continue;
       const code =
-        typeof scriptObj === "string" ? scriptObj : scriptObj.code || "";
+        typeof scriptObj === 'string' ? scriptObj : (scriptObj.code || '');
       if (!code.trim()) continue;
-      for (const rawLine of code.split("\n")) {
+      for (const rawLine of code.split('\n')) {
         const line = rawLine.trim();
-        const m = line.match(
-          /^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/,
-        );
+        const m = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
         if (!m) continue;
         const rawVal = m[2].trim();
         if (JAVA_ONLY.test(rawVal)) continue;
         // Quick expression conversion (mirrors _convertJavaExpr)
         const converted = rawVal
-          .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, "load.utils.uuid()")
-          .replace(/System\.currentTimeMillis\(\)/g, "Date.now()")
-          .replace(
-            /(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g,
-            (_, n) => `load.global.${n}`,
-          )
-          .replace(/\s*\+\s*""\s*/g, "")
-          .replace(/\s*""\s*\+\s*/g, "");
+          .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'load.utils.uuid()')
+          .replace(/System\.currentTimeMillis\(\)/g, 'Date.now()')
+          .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, (_, n) => `load.global.${n}`)
+          .replace(/\s*\+\s*""\s*/g, '').replace(/\s*""\s*\+\s*/g, '');
         if (JAVA_RESIDUAL.test(converted)) continue;
         this.jsr223ModuleVars.add(m[1]);
       }
@@ -380,13 +372,9 @@ class AdvancedScriptGenerator {
 
     // Build csvVarNames from JMX CSVDataSet configs so they are always classified
     // as Tier 3 iteration parameters (never treated as Dynamic via Rule 4).
-    const csvDataSets =
-      this.options.csvDataSets || this.collection.csvDataSets || [];
+    const csvDataSets = this.options.csvDataSets || this.collection.csvDataSets || [];
     for (const ds of csvDataSets) {
-      const cols = (ds.variableNames || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const cols = (ds.variableNames || '').split(',').map(s => s.trim()).filter(Boolean);
       cols.forEach((col, idx) => {
         this.csvVarNames.set(col, {
           fileName: ds.filename || `${col}.csv`,
@@ -394,7 +382,7 @@ class AdvancedScriptGenerator {
           delimiter: ds.delimiter || ",",
           recycle: ds.recycle !== false,
         });
-        if (!this.variableMap.has(col)) this.variableMap.set(col, "");
+        if (!this.variableMap.has(col)) this.variableMap.set(col, '');
       });
     }
 
@@ -468,7 +456,7 @@ class AdvancedScriptGenerator {
   }
 
   /**
-   * Scan all request pre-request scripts for JWT  and DPOP generation patterns (jsrsasign, jsonwebtoken, etc.).
+   * Scan all request pre-request scripts for JWT  and DPoP generation patterns (jsrsasign, jsonwebtoken, etc.).
    * Sets this.hasJwt/ this.hasDpop = true and populates output variables when detected.
    * Output variables are added to scriptSetVarNames so classifyVariables() marks them dynamic.
    */
@@ -478,7 +466,7 @@ class AdvancedScriptGenerator {
     const scanScriptText = (text, itemName) => {
       if (!text) return;
 
-      //Check for JWT Patterns
+      // Check for JWT Patterns
       const jwtResult = CustomScriptParser.detectJwtUsage(text);
       if (jwtResult.isJwt) {
         this.hasJwt = true;
@@ -486,7 +474,7 @@ class AdvancedScriptGenerator {
           this.jwtVarNames.push(v);
           this.scriptSetVarNames.add(v); // ensure they're Tier 1 dynamic
         });
-        //Extract claim-to-parameter mapping from the JWT-detected script.
+        // Extract claim-to-parameter mappings from the JWT-detected script.
         const map = CustomScriptParser.extractJwtClaimMapping(text);
         if (
           map &&
@@ -494,16 +482,14 @@ class AdvancedScriptGenerator {
             (this.jwtClaimMap ? Object.keys(this.jwtClaimMap).length : 0)
         ) {
           this.jwtClaimMap = map;
-          console.log(
-            `  ✓ JWT claim map extracted: ${JSON.stringify(this.jwtClaimMap)}`,
-          );
+          console.log(`  ✓ JWT claim map extracted: ${JSON.stringify(this.jwtClaimMap)}`);
         }
         console.log(
-          `  ✓ JWT detected (library: ${jwtResult.library}, algorithm: ${result.algorithm})`,
+          `  ✓ JWT detected (library: ${jwtResult.library}, algorithm: ${jwtResult.algorithm})`,
         );
       }
 
-      //Check for DPOP patterns
+      // Check for DPoP patterns
       const dpopResult = CustomScriptParser.detectDpopUsage(text);
       if (dpopResult.isDpop) {
         this.hasDpop = true;
@@ -515,21 +501,17 @@ class AdvancedScriptGenerator {
           this.dpopKeyVar = dpopResult.keyVar;
           this.scriptSetVarNames.add(dpopResult.keyVar); // JWK is also dynamic
         }
-        console.log(`  ✓ DPOP detected (key variable: ${dpopResult.keyVar})`);
+        console.log(`  ✓ DPoP detected (key variable: ${dpopResult.keyVar})`);
       }
 
       // Per-request dynamic var detection (UUID/nonce/random generated per request)
       const perReqVars = CustomScriptParser.detectPerRequestDynamicVars(text);
       perReqVars.forEach(({ varName, generationType }) => {
         if (!this.perRequestVars.has(varName)) {
-          this.perRequestVars.set(varName, {
-            generationType,
-            requestNames: [],
-          });
+          this.perRequestVars.set(varName, { generationType, requestNames: [] });
           this.scriptSetVarNames.add(varName);
         }
-        if (itemName)
-          this.perRequestVars.get(varName).requestNames.push(itemName);
+        if (itemName) this.perRequestVars.get(varName).requestNames.push(itemName);
       });
     };
 
@@ -539,7 +521,7 @@ class AdvancedScriptGenerator {
       events.forEach((event) => {
         // For JWT: scan pre-request scripts + all scripts (JSR223 post-processors can generate JWT too)
         const exec = event.script?.exec;
-        const text = Array.isArray(exec) ? exec.join("\n") : exec || "";
+        const text = Array.isArray(exec) ? exec.join('\n') : exec || '';
         scanScriptText(text, item.name);
       });
 
@@ -553,11 +535,8 @@ class AdvancedScriptGenerator {
     // Also directly scan JMX preScripts / postScripts stored as { code, lang } objects
     // These are identical scripts but easier to access on the request object directly.
     for (const req of this.requests) {
-      for (const sc of [
-        ...(req.preScripts || []),
-        ...(req.postScripts || []),
-      ]) {
-        const text = typeof sc === "string" ? sc : sc?.code || "";
+      for (const sc of [...(req.preScripts || []), ...(req.postScripts || [])]) {
+        const text = typeof sc === 'string' ? sc : sc?.code || '';
         scanScriptText(text, req.name);
       }
     }
@@ -575,8 +554,7 @@ class AdvancedScriptGenerator {
     // These variables contain PEM-encoded keys or secrets that are multi-line, contain special chars
     // that break CSV parsing, and must not be stored in plain-text parameter files.
     // Treated as Tier 1 Dynamic so they stay in load.global and are never parameterized.
-    const privateKeyPattern =
-      /private.?key|signing.?key|secret.?key|rsa.?key|client.?secret|signing.?secret|jwt.?secret|pem.?key|key.?pem|pkcs|p12.?key/i;
+    const privateKeyPattern = /private.?key|signing.?key|secret.?key|rsa.?key|client.?secret|signing.?secret|jwt.?secret|pem.?key|key.?pem|pkcs|p12.?key/i;
 
     // RULE 0 — JMX CSVDataSet columns → always Tier 3 (nextValue: iteration, parameters.yml)
     // These have empty values from injectCsvVariables() and would fall into Rule 4 (Dynamic)
@@ -663,8 +641,7 @@ class AdvancedScriptGenerator {
           nextValue: isCredential ? "iteration" : "once",
           nextRow: "sequential",
           onEnd: "loop",
-          paramValue:
-            value !== undefined && value !== null ? String(value) : "",
+          paramValue: value !== undefined && value !== null ? String(value) : "",
         });
       }
     }
@@ -689,10 +666,7 @@ class AdvancedScriptGenerator {
     // 6b. Legacy: Link password-like params to username (same as) for non-CSV params
     if (usernameParam) {
       for (const [name, config] of this.parameters.entries()) {
-        if (
-          /^(password|pwd|passwd)$/i.test(name) &&
-          !this.csvVarNames.has(name)
-        ) {
+        if (/^(password|pwd|passwd)$/i.test(name) && !this.csvVarNames.has(name)) {
           config.nextRow = `same as ${usernameParam}`;
         }
       }
@@ -930,9 +904,7 @@ ${finalizeSection}
           fs.copyFileSync(srcPath, path.join(outputDir, this.mtlsCertFile));
           console.log(`✓ Copied mTLS certificate: ${this.mtlsCertFile}`);
         } else {
-          console.warn(
-            `  ⚠  mTLS cert ${this.mtlsCertFile} not found in uploaded files.`,
-          );
+          console.warn(`  ⚠  mTLS cert ${this.mtlsCertFile} not found in uploaded files.`);
         }
       }
 
@@ -956,22 +928,17 @@ ${finalizeSection}
         ).map((f) => f.fileName);
       }
 
-      //Copy DPOP helper file if DPOP is detected
+      // Copy DPoP helper file if DPoP is detected
       if (this.hasDpop) {
         const fs = require("fs");
         const path = require("path");
-        const PROJECT_ROOT = path.join(__dirname, "..", "..");
-        const dpopHelperSrc = path.join(PROJECT_ROOT, "dpop-helper.js");
+        const PROJECT_ROOT = path.join(__dirname, '..', '..');
+        const dpopHelperSrc = path.join(PROJECT_ROOT, 'dpop-helper.js');
         if (!fs.existsSync(dpopHelperSrc)) {
-          fs.copyFileSync(
-            dpopHelperSrc,
-            path.join(outputDir, "dpop-helper.js"),
-          );
+          fs.copyFileSync(dpopHelperSrc, path.join(outputDir, 'dpop-helper.js'));
           console.log(`✓ Copied dpop-helper.js`);
         } else {
-          console.warn(
-            `  ⚠  dpop-helper.js not found in project root. Add it there and re-run`,
-          );
+          console.warn(`  ⚠  dpop-helper.js not found in project root. Add it there and re-run`);
         }
       }
     }
@@ -993,16 +960,10 @@ ${finalizeSection}
    *   https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/...          (CDN)
    */
   _isJsrsasignLoadRequest(req) {
-    const url = (
-      typeof req.url === "string" ? req.url : req.url?.raw || ""
-    ).toLowerCase();
-    const name = (req.name || "").toLowerCase();
+    const url = (typeof req.url === 'string' ? req.url : req.url?.raw || '').toLowerCase();
+    const name = (req.name || '').toLowerCase();
     // Match the jsrsasign filename pattern in path OR the kjur.github.io hostname
-    return (
-      /jsrs?asign/.test(url) ||
-      /kjur\.github/.test(url) ||
-      /jsrs?asign/.test(name)
-    );
+    return (/jsrs?asign/.test(url) || /kjur\.github/.test(url) || /jsrs?asign/.test(name));
   }
 
   /**
@@ -1013,13 +974,9 @@ ${finalizeSection}
     // that load the JWT library at runtime. We provide jwt-helper.js instead, so these
     // requests must be dropped before any further processing.
     const beforeFilter = this.requests.length;
-    this.requests = this.requests.filter(
-      (r) => !this._isJsrsasignLoadRequest(r),
-    );
+    this.requests = this.requests.filter(r => !this._isJsrsasignLoadRequest(r));
     if (this.requests.length < beforeFilter) {
-      console.log(
-        `  ✓ Skipped ${beforeFilter - this.requests.length} jsrsasign library-loading request(s)`,
-      );
+      console.log(`  ✓ Skipped ${beforeFilter - this.requests.length} jsrsasign library-loading request(s)`);
     }
 
     // Detect correlations (must run before variable classification)
@@ -1064,17 +1021,15 @@ ${finalizeSection}
     // Detect JWT usage in pre-request scripts (sets this.hasJwt and this.jwtVarNames)
     this.detectJwtUsage();
 
-    // Detect DPOP from request headers - cover collections/HARs where DPoP proofs
+    // Detect DPoP from request headers - covers collections/HARs where DPoP proofs
     // are hardcoded in headers with no pre-request script (browser-generated DPoP).
     // Must run AFTER detectJwtUsage() which also sets this.hasDpop from scripts.
     if (!this.hasDpop) {
       for (const req of this.requests) {
         if (this.requestUsesDpop(req)) {
           this.hasDpop = true;
-          if (!this.dpopKeyVar) this.dpopKeyVar = "dpop_jwk"; // default key variable if not set by script
-          console.log(
-            `✓ DPOP usage detected from request headers (${req.name})`,
-          );
+          if (!this.dpopKeyVar) this.dpopKeyVar = 'dpop_jwk'; // default key variable if not set by script
+          console.log(`✓ DPOP usage detected from request headers (${req.name})`);
           break;
         }
       }
@@ -1092,23 +1047,20 @@ ${finalizeSection}
 
     // Pre-compute common header analysis once so generateHeader() and generateAction()
     // both see the same maps without re-running the analysis.
-    const { staticGlobal, authGlobal, perRequestKeys } =
-      this.analyzeCommonHeaders();
+    const { staticGlobal, authGlobal, perRequestKeys } = this.analyzeCommonHeaders();
     this._staticGlobalHeaders = staticGlobal;
     this._authGlobalHeaders = authGlobal;
     this._perRequestHeaderKeys = perRequestKeys;
 
     // Route sensitive collection-level headers to authGlobal (applied in action())
     // instead of letting them land in static module-level defaults.
-    const SENSITIVE_HDR_RE =
-      /^(authorization|private-token|x-api-key|api-key|apikey|x-auth-token|x-access-token|cookie|set-cookie|proxy-authorization|www-authenticate|x-xsrf-token|x-xsrf-token)$/i;
-    const SENSITIVE_NAME_RE =
-      /token|secret|key|auth|credential|password|session/i;
-    for (const h of this.collection.collectionHeaders || []) {
+    const SENSITIVE_HDR_RE = /^(authorization|private-token|x-api-key|api-key|apikey|x-auth-token|x-access-token|cookie|set-cookie|proxy-authorization|www-authenticate|x-csrf-token|x-xsrf-token)$/i;
+    const SENSITIVE_NAME_RE = /token|secret|key|auth|credential|password|session/i;
+    for (const h of (this.collection.collectionHeaders || [])) {
       if (!h.key || !h.value || h.disabled) continue;
       if (SENSITIVE_HDR_RE.test(h.key) || SENSITIVE_NAME_RE.test(h.key)) {
         const v = this.replaceParameters(h.value);
-        const q = v.includes("${") ? `\`${v}\`` : `"${v}"`;
+        const q = v.includes('${') ? `\`${v}\`` : `"${v}"`;
         this._authGlobalHeaders.set(h.key, q);
       }
     }
@@ -1238,10 +1190,10 @@ ${finalizeSection}
       });
 
       // Only promote to global if the dominant value itself convers >= 70% of requests.
-      // A header ket that appears in 100% of requests but with 5 different values
+      // A header key that appears in 100% of requests but with 5 different values
       // should NOT be global - each request needs its own value.
       const dominantFreq = dominantCount / totalRequests;
-      if (dominantFreq < THRESHOLD) return; // dominant value not common enough — per-request
+      if (dominantFreq < THRESHOLD) return;
 
       // Check if this header uses a per-request dynamic var (UUID/nonce)
       const isPerRequestVar =
@@ -1259,13 +1211,10 @@ ${finalizeSection}
       const quoted = needsTpl ? `\`${valueExpr}\`` : `"${valueExpr}"`;
 
       // Sensitive / auth-related header names must NEVER be in static module-level
-      // defaults -they conatins credentials, tokens, or API keys that should be
-      // parameterized or set automatically at runtime.
+      // defaults - they conatin credentials, tokens, or API keys that should be
+      // parameterized or set dynamically at runtime.
       const keyLower = key.toLowerCase();
-      const isSensitiveKey =
-        /^(authorization|private-token|x-api-key|api-key|apikey|x-auth-token|x-access-token|cookie|set-cookie|proxy-authorization|www-authenticate|x-xsrf-token|x-xsrf-token)$/.test(
-          keyLower,
-        ) ||
+      const isSensitiveKey = /^(authorization|private-token|x-api-key|api-key|apikey|x-auth-token|x-access-token|cookie|set-cookie|proxy-authorization|www-authenticate|x-csrf-token|x-xsrf-token)$/.test(keyLower) ||
         /token|secret|key|auth|credential|password|session/i.test(keyLower);
 
       // Dynamic vars (load.global.X) and per-iteration params (load.params.X) must
@@ -1273,12 +1222,8 @@ ${finalizeSection}
       // execution (initialize/action), so they go into authGlobal (applied in action()).
       // Sensitive headers also go to authGlobal regardless of value type.
       // Static literals with no variable refs are safe at module level → staticGlobal.
-      if (
-        isSensitiveKey ||
-        valueExpr.includes("load.global.") ||
-        valueExpr.includes("Bearer") ||
-        valueExpr.includes("load.params.")
-      ) {
+      if (isSensitiveKey || valueExpr.includes("load.global.") || valueExpr.includes("Bearer") ||
+        valueExpr.includes("load.params.")) {
         authGlobal.set(key, quoted);
       } else {
         staticGlobal.set(key, quoted);
@@ -1306,21 +1251,18 @@ ${finalizeSection}
       : "";
 
     const dpopRequire = this.hasDpop
-      ? `// DPOP Helper — EC P-256 key generation and DPoP proof signing\nconst { getDpopProof } = require('./dpop-helper.js');\n`
+      ? `// DPoP Helper — EC P-256 key generation and DPoP proof signing\nconst { getDpopProof } = require('./dpop-helper.js');\n`
       : "";
 
     // JWT uses transport.pem; a separately-uploaded cert overrides with its own file.
-    const certFile =
-      this.mtlsCertFile && !this.hasJwt
+    const certFile = this.mtlsCertFile && !this.hasJwt
         ? this.mtlsCertFile
-        : this.hasJwt
-          ? "transport.pem"
-          : null;
+        : this.hasJwt ? 'transport.pem' : null;
     const certSetup = certFile
       ? `// Client certificate for mutual TLS authentication\nload.setUserCertificate('./${certFile}', './${certFile}');\n\n`
       : "";
 
-    // Static browser baseline + static collection headers
+    // Static browser baseline + static collection headers.
     // Sensitive collection headers were already routed to authGlobal during analyze().
     const collectionHeaders = this.collection.collectionHeaders || [];
     const collectionHeaderLines = collectionHeaders
@@ -1335,15 +1277,13 @@ ${finalizeSection}
     // Helper: apply host vars to an already-quoted value string
     const reHostQuoted = (quoted) => {
       if (!this.hostVarMap || this.hostVarMap.size === 0) return quoted;
-      const isBacktick = quoted.startsWith("`") && quoted.endsWith("`");
+      const isBacktick = quoted.startsWith('`') && quoted.endsWith('`');
       const isDouble = quoted.startsWith('"') && quoted.endsWith('"');
       if (!isBacktick && !isDouble) return quoted;
       const inner = quoted.slice(1, -1);
       const processed = this.applyHostVars(inner);
       if (processed === inner) return quoted;
-      return processed.includes("${")
-        ? "`" + processed + "`"
-        : '"' + processed + '"';
+      return processed.includes('${') ? '`' + processed + '`' : '"' + processed + '"';
     };
 
     // Merge browser defaults + detected static globals + collection headers
@@ -1371,8 +1311,7 @@ ${finalizeSection}
     // Pre-computed in analyze() — nothing to reassign here.
 
     // Server host variable declarations — update these to target different environments
-    const hostVarDecls =
-      this.hostVarMap && this.hostVarMap.size > 0
+    const hostVarDecls = this.hostVarMap && this.hostVarMap.size > 0
         ? Array.from(this.hostVarMap.entries())
             .map(([host, varName]) => `let ${varName} = '${host}';`)
             .join("\n") + "\n\n"
@@ -1395,10 +1334,8 @@ ${
 }
 ${
   this.jsr223ModuleVars && this.jsr223ModuleVars.size > 0
-    ? Array.from(this.jsr223ModuleVars)
-        .map((v) => `let ${v};`)
-        .join("\n") + "\n"
-    : ""
+    ? Array.from(this.jsr223ModuleVars).map((v) => `let ${v};`).join('\n') + '\n'
+    : ''
 }
 `;
   }
@@ -1411,30 +1348,28 @@ ${
     // cert + require declared at module level; only token fetch here.
     const jwtBlock = this.hasJwt
       ? `
-    load.global.jwt_token = getJwtToken(load.params${this.jwtClaimMap ? ", " + JSON.stringify(this.jwtClaimMap) : ""});
+    load.global.jwt_token = getJwtToken(load.params${this.jwtClaimMap ? ', ' + JSON.stringify(this.jwtClaimMap) : ''});
     load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
 `
       : "";
 
-    //DPoP initialization - only when DPoP signing detected.
+    // DPoP initialization - only when DPoP signing detected.
     const dpopBlock = this.hasDpop
       ? `
     // Initialize DPoP key pair and proof generation
-    load.global["${this.dpopKeyVar || "dpop_jwk"}"] = load.global["${this.dpopKeyVar || "dpop_jwk"}"] || null;
+    load.global.${this.dpopKeyVar || 'dpop_jwk'}" = load.global.${this.dpopKeyVar || 'dpop_jwk'} || null;
     `
       : "";
 
     // NTLM / Kerberos — set integrated credentials once in initialize()
-    const ntlmBlock = this.hasNtlm
-      ? `
+    const ntlmBlock = this.hasNtlm ? `
     load.setUserCredentials({
         username: load.params['username'],
         password: load.params['password'],
         domain:   load.params['domain'],
         host:     '${this.ntlmHost}'
     });
-`
-      : "";
+` : '';
 
     let code = `load.initialize('Initialize', async function() {
 ${jwtBlock}${dpopBlock}${ntlmBlock}
@@ -1607,19 +1542,14 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
    *  3. Remaining lines are emitted as TODO comments for manual review
    */
   convertJsr223Script(scriptObj, phase, indent) {
-    if (!scriptObj) return "";
+    if (!scriptObj) return '';
     const { code, lang } =
-      typeof scriptObj === "string"
-        ? { code: scriptObj, lang: "groovy" }
+      typeof scriptObj === 'string'
+        ? { code: scriptObj, lang: 'groovy' }
         : scriptObj;
-    if (!code || !code.trim()) return "";
+    if (!code || !code.trim()) return '';
 
-    const langLabel =
-      lang === "javascript"
-        ? "JavaScript"
-        : lang === "beanshell"
-          ? "BeanShell"
-          : "Groovy";
+    const langLabel = lang === 'javascript' ? 'JavaScript' : lang === 'beanshell' ? 'BeanShell' : 'Groovy';
     const converted = [];
     // Track which local variable names were successfully converted to JS constants.
     // Used to allow safe cross-line references in vars.put("k", localVar).
@@ -1627,8 +1557,7 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
     let skipped = 0;
 
     // Java/Groovy patterns with no JavaScript equivalent — skip the whole line.
-    const JAVA_ONLY =
-      /=~|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|Files?\b|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
+    const JAVA_ONLY = /=~|\bPattern\b|\bMatcher\b|\.group\s*\(|\.matcher\s*\(|\.matches\s*\(|\.find\s*\(|Pattern\.compile|groovy\.xml|JsonSlurper|XMLSlurper|XmlParser|Base64|MessageDigest|HmacSHA|SecretKey|KeySpec|KeyFactory|Cipher\b|Mac\b|Signature\b|KeyPair|\bRSA\b|\bAES\b|\bDES\b|PKCS|DigestUtils|System\.|Runtime\.|Thread\.|Process\.|ClassLoader\.|Files?\b|Paths?\.|Arrays\.|Collections\.|Properties\b|getProperty\b|getenv\b/;
 
     // After conversion, if the expression still has Java class-style calls → skip.
     const JAVA_RESIDUAL = /[A-Z][a-zA-Z0-9_]+\s*\.\s*[a-z]/;
@@ -1642,35 +1571,19 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
       /^load\.utils\.uuid\(\)/.test(expr) ||
       localVars.has(expr.trim());
 
-    for (const rawLine of code.split("\n")) {
+    for (const rawLine of code.split('\n')) {
       const line = rawLine.trim();
-      if (
-        !line ||
-        line.startsWith("//") ||
-        line.startsWith("import ") ||
-        line.startsWith("package ")
-      )
-        continue;
+      if (!line || line.startsWith('//') || line.startsWith('import ') || line.startsWith('package ')) continue;
 
       // vars.put / props.put → load.global.*
-      const putMatch = line.match(
-        /^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/,
-      );
+      const putMatch = line.match(/^(?:vars|props)\.put\s*\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\);\s*$/);
       if (putMatch) {
         const rawVal = putMatch[2].trim();
-        if (JAVA_ONLY.test(rawVal)) {
-          skipped++;
-          continue;
-        }
+        if (JAVA_ONLY.test(rawVal)) { skipped++; continue; }
         const valExpr = this._convertJavaExpr(rawVal);
-        if (JAVA_RESIDUAL.test(valExpr)) {
-          skipped++;
-          continue;
-        }
+        if (JAVA_RESIDUAL.test(valExpr)) { skipped++; continue;}
         if (isSafeJsValue(valExpr, declaredLocalVars)) {
-          converted.push(
-            `${indent}load.global.${this.sanitizeVarName(putMatch[1])} = ${valExpr};`,
-          );
+          converted.push(`${indent}load.global.${this.sanitizeVarName(putMatch[1])} = ${valExpr};`);
         } else {
           skipped++;
         }
@@ -1678,32 +1591,20 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
       }
 
       // Java typed variable declaration: String x = <expr>; / def x = <expr>;
-      const typeAssignMatch = line.match(
-        /^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/,
-      );
+      const typeAssignMatch = line.match(/^(?:String|int|long|double|Object|def|var)\s+(\w+)\s*=\s*(.+?);\s*$/);
       if (typeAssignMatch) {
         const localVar = typeAssignMatch[1];
         const rawVal = typeAssignMatch[2].trim();
-        if (JAVA_ONLY.test(rawVal)) {
-          skipped++;
-          continue;
-        }
+        if (JAVA_ONLY.test(rawVal)) { skipped++; continue;}
         const valExpr = this._convertJavaExpr(rawVal);
-        if (
-          JAVA_RESIDUAL.test(valExpr) ||
-          /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(
-            valExpr,
-          )
-        ) {
-          skipped++;
-          continue;
+        if (JAVA_RESIDUAL.test(valExpr) ||
+          /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)) {
+          skipped++; continue;
         }
         if (isSafeJsValue(valExpr, declaredLocalVars)) {
           // If declared at module level → plain assignment; otherwise const (local scope)
-          const decl =
-            this.jsr223ModuleVars && this.jsr223ModuleVars.has(localVar)
-              ? ""
-              : "const ";
+          const decl = (this.jsr223ModuleVars && this.jsr223ModuleVars.has(localVar))
+              ? '' : 'const ';
           converted.push(`${indent}${decl}${localVar} = ${valExpr};`);
           declaredLocalVars.add(localVar);
         } else {
@@ -1719,40 +1620,30 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
       skipped++;
     }
 
-    if (converted.length === 0) return "";
-    return converted.join("\n") + "\n";
+    if (converted.length === 0) return '';
+    return converted.join("\n") + '\n';
   }
 
   /**
    * Convert a Java/Groovy expression fragment to its DevWeb JavaScript equivalent.
    */
   _convertJavaExpr(expr) {
-    return (
-      expr
-        .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, "load.utils.uuid()")
-        .replace(
-          /java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g,
-          "load.utils.uuid()",
-        )
-        .replace(/System\.currentTimeMillis\(\)/g, "Date.now()")
-        .replace(/new\s+Date\(\)\.getTime\(\)/g, "Date.now()")
-        .replace(
-          /new\s+Date\(\)\.toInstant\(\)\.toEpochMilli\(\)/g,
-          "Date.now()",
-        )
-        .replace(/String\.valueOf\s*\(([^)]+)\)/g, "String($1)")
-        .replace(/Integer\.toString\s*\(([^)]+)\)/g, "String($1)")
-        .replace(/Long\.toString\s*\(([^)]+)\)/g, "String($1)")
-        .replace(/\$\{([^}]+)\}/g, "${load.global.$1}")
+    return expr
+        .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'load.utils.uuid()')
+        .replace(/java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g,'load.utils.uuid()')
+        .replace(/System\.currentTimeMillis\(\)/g,  'Date.now()')
+        .replace(/new\s+Date\(\)\.getTime\(\)/g, 'Date.now()')
+        .replace(/new\s+Date\(\)\.toInstant\(\)\.toEpochMilli\(\)/g, 'Date.now()')
+        .replace(/String\.valueOf\s*\(([^)]+)\)/g, 'String($1)')
+        .replace(/Integer\.toString\s*\(([^)]+)\)/g, 'String($1)')
+        .replace(/Long\.toString\s*\(([^)]+)\)/g, 'String($1)')
+        .replace(/\$\{([^}]+)\}/g, '${load.global.$1}')
         // vars.get("x") inline → load.global.x
-        .replace(
-          /(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g,
-          (_, n) => `load.global.${this.sanitizeVarName(n)}`,
-        )
+        .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, 
+          (_, n) => `load.global.${this.sanitizeVarName(n)}`)
         // Strip Java string-concatenation-with-empty-string idiom: value + ""  or  "" + value
-        .replace(/\s*\+\s*""\s*/g, "")
-        .replace(/\s*""\s*\+\s*/g, "")
-    );
+        .replace(/\s*\+\s*""\s*/g, '')
+        .replace(/\s*""\s*\+\s*/g, '');
   }
 
   generateGlobalVariablesInit() {
@@ -1838,53 +1729,46 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
     // Split authGlobal headers into two buckets:
     //  - paramsEntries: load.params.xxx — must re-apply EVERY iteration (CSV advances each row)
     //  - globalEntries: load.global.xxx / Bearer — only needed when token changes
-    const allAuthEntries = Array.from(
-      (this._authGlobalHeaders || new Map()).entries(),
-    );
-    const paramsEntries = allAuthEntries.filter(([, v]) =>
-      v.includes("load.params."),
-    );
-    const globalEntries = allAuthEntries.filter(
-      ([, v]) => !v.includes("load.params."),
-    );
+    const allAuthEntries = Array.from((this._authGlobalHeaders || new Map()).entries());
+    const paramsEntries = allAuthEntries.filter(([, v]) => v.includes("load.params."));
+    const globalEntries = allAuthEntries.filter(([, v]) => !v.includes("load.params."));
 
     // Block to apply per-iteration CSV param headers — runs unconditionally every action() call
     const paramsHeaderBlock =
       paramsEntries.length > 0
-        ? `\n    Object.assign(load.WebRequest.defaults.headers, {\n${paramsEntries
-            .map(([k, v]) => `        "${k}": ${v}`)
-            .join(",\n")}\n    });\n`
-        : "";
+        ? `\n    Object.assign(load.WebRequest.defaults.headers, {\n${
+          paramsEntries.map(([k, v]) => `        "${k}": ${v}`).join(',\n')
+        }\n    });\n`
+        : '';
 
     // Block to apply dynamic auth headers — runs on token refresh
     const globalHeaderUpdate =
       globalEntries.length > 0
-        ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${globalEntries
-            .map(([k, v]) => `            "${k}": ${v}`)
-            .join(",\n")}\n        });`
-        : "";
+        ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${
+          globalEntries.map(([k, v]) => `            "${k}": ${v}`)
+            .join(',\n')}\n        });`
+        : '';
 
     const jwtRefreshBlock = this.hasJwt
       ? `
     if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
-        load.global.jwt_token = getJwtToken(load.params${this.jwtClaimMap ? ", " + JSON.stringify(this.jwtClaimMap) : ""});
+        load.global.jwt_token = getJwtToken(load.params${this.jwtClaimMap ? ', ' + JSON.stringify(this.jwtClaimMap) : ''});
         load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);${globalHeaderUpdate}
     }
 `
       : globalEntries.length > 0
-        ? `\n    Object.assign(load.WebRequest.defaults.headers, {\n${globalEntries
-            .map(([k, v]) => `        "${k}": ${v}`)
-            .join(",\n")}\n    });\n`
-        : "";
+        ? `\n    Object.assign(load.WebRequest.defaults.headers, {\n${
+          globalEntries.map(([k, v]) => `        "${k}": ${v}`)
+            .join(',\n')}\n    });\n`
+        : '';
 
     //DPoP proof generation - generate fresh proof for each request that needs it
-    const dpopProofBlock =
-      this.hasDpop && !this.hasJwt
+    const dpopProofBlock = this.hasDpop && !this.hasJwt
         ? `
     // Generate DPoP proof for requests that need it
     // This will be called per-request based on header detection
     `
-        : "";
+        : '';
 
     let code = `load.action('Action', async function() {
 ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
@@ -2116,9 +2000,9 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
     // Variables are declared as `let` at module level (see generateHeader) so no
     // block-scope wrapper is needed here — plain assignment is used in action().
     if (request.preScripts && request.preScripts.length) {
-      const ind = this.indent("", indentLevel);
+      const ind = this.indent('', indentLevel);
       for (const sc of request.preScripts) {
-        const block = this.convertJsr223Script(sc, "Pre", ind);
+        const block = this.convertJsr223Script(sc, 'Pre', ind);
         if (block) code += `\n${block}`;
       }
     }
@@ -2129,7 +2013,7 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
     // CSRF/nonce types must still use load.global so the same value can appear in
     // both the request header and the body within the same request.
     this.perRequestVars.forEach((info, varName) => {
-      if (info.generationType === "uuid") return; // inlined via replaceParameters — skip
+      if (info.generationType === 'uuid') return; // inlined via replaceParameters — skip
       const usesVar = this.requestUsesVar(request, varName);
       if (usesVar) {
         const genExpr = this.perRequestGenExpression(info.generationType);
@@ -2140,19 +2024,19 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
     // Generate DPoP proof(s) if this request uses DPoP headers
     if (this.hasDpop && this.requestUsesDpop(request)) {
       const htu = this.extractDpopHtu(request);
-      const htm = request.method || "POST";
+      const htm = request.method || 'POST';
       const dpopKeys = this.getDpopHeaderKeys(request);
       for (const dk of dpopKeys) {
-        if (dk === "dpop-pf" && this.dpopPfUsed) {
+        // dpop-pf should only be used once per script execution
+        if (dk === 'dpop-pf' && this.dpopPfUsed) {
           continue; // skip dpop-pf if already used
         }
 
-        const varName = dk === "dpop-pf" ? "dpop_pf_proof" : "dpop_proof";
-        const athExpr =
-          dk === "dpop" ? `, load.global.${this.findBearerTokenVar()}` : "";
-        code += `\n${this.indent(`load.global.${varName} = getDpopProof('${htu}', '${htm}', load.global.${this.dpopKeyVar || "dpop_jwk"}${athExpr});`, indentLevel)}`;
+        const varName = dk === 'dpop-pf' ? 'dpop_pf_proof' : 'dpop_proof';
+        const athExpr = dk === 'dpop' ? `, load.global.${this.findBearerTokenVar()}` : '';
+        code += `\n${this.indent(`load.global.${varName} = getDpopProof('${htu}', '${htm}', load.global.${this.dpopKeyVar || 'dpop_jwk'}${athExpr});`, indentLevel)}`;
         // Mark dpop-pf as used
-        if (dk === "dpop-pf") {
+        if (dk === 'dpop-pf') {
           this.dpopPfUsed = true; // mark dpop-pf as used to avoid regenerating it for subsequent requests
         }
       }
@@ -2181,9 +2065,9 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
 
     // Emit converted JSR223 post-processor scripts (JMX only).
     if (request.postScripts && request.postScripts.length) {
-      const ind = this.indent("", indentLevel);
+      const ind = this.indent('', indentLevel);
       for (const sc of request.postScripts) {
-        const block = this.convertJsr223Script(sc, "Post", ind);
+        const block = this.convertJsr223Script(sc, 'Post', ind);
         if (block) code += `\n${block}`;
       }
     }
@@ -2199,8 +2083,8 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
    */
   requestUsesDpop(request) {
     if (!request.headers) return false;
-    return request.headers.some(
-      (h) => h.key && !h.disabled && /^dpop(-pf)?$/i.test(h.key.trim()),
+    return request.headers.some(h => 
+      h.key && !h.disabled && /^dpop(-pf)?$/i.test(h.key.trim())
     );
   }
 
@@ -2210,18 +2094,17 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
   getDpopHeaderKeys(request) {
     if (!request.headers) return [];
     return request.headers
-      .filter((h) => h.key && !h.disabled && /^dpop(-pf)?$/i.test(h.key.trim()))
-      .map((h) => h.key.trim().toLowerCase());
+      .filter(h => h.key && !h.disabled && /^dpop(-pf)?$/i.test(h.key.trim()))
+      .map(h => h.key.trim().toLowerCase());
   }
 
   /**
    * Extract HTU (HTTP Target URI) for DPoP proof from request URL
    */
   extractDpopHtu(request) {
-    const url =
-      typeof request.url === "string" ? request.url : request.url?.raw || "";
+    const url = typeof request.url === 'string' ? request.url : request.url?.raw || '';
     // Remove query parameters for HTU
-    const baseUrl = url.split("?")[0];
+    const baseUrl = url.split('?')[0];
     return this.replaceParameters(baseUrl);
   }
 
@@ -2234,9 +2117,9 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
     if (this._bearerTokenVar) return this._bearerTokenVar;
     // Check request headers for Authorization: Bearer {{varName}}
     for (const req of this.requests) {
-      for (const h of req.headers || []) {
+      for (const h of (req.headers || [])) {
         if (!h.key || h.disabled) continue;
-        if (h.key.toLowerCase() !== "authorization") continue;
+        if (h.key.toLowerCase() !== 'authorization') continue;
         const m = String(h.value).match(/Bearer\s+\{\{([^}]+)\}\}/i);
         if (m) {
           this._bearerTokenVar = this.sanitizeVarName(m[1].trim());
@@ -2244,18 +2127,11 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
         }
       }
       // Also check auth config
-      if (req.auth?.type === "bearer") {
-        const token =
-          req.auth.bearer?.token ||
-          (Array.isArray(req.auth.bearer)
-            ? req.auth.bearer.find((e) => e.key === "token")?.value
-            : null);
+      if (req.auth?.type === 'bearer') {
+        const token = req.auth.bearer?.token || (Array.isArray(req.auth.bearer) ? req.auth.bearer.find((e) => e.key === 'token')?.value : null);
         if (token) {
           const m = String(token).match(/\{\{([^}]+)\}\}/);
-          if (m) {
-            this._bearerTokenVar = this.sanitizeVarName(m[1].trim());
-            return this._bearerTokenVar;
-          }
+          if (m) { this._bearerTokenVar = this.sanitizeVarName(m[1].trim()); return this._bearerTokenVar;}
         }
       }
     }
@@ -2323,8 +2199,7 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
    * visible when headers are classified as per-request vs. global.
    */
   detectUuidHeaders() {
-    const UUID_HEADER_RE =
-      /^(x-fapi-interaction-id|x-request-id|x-correlation-id|x-trace-id|x-interaction-id|x-idempotency-key|idempotency-key|x-b3-traceid|request-id|correlation-id)$/i;
+    const UUID_HEADER_RE = /^(x-fapi-interaction-id|x-request-id|x-correlation-id|x-trace-id|x-interaction-id|x-idempotency-key|idempotency-key|x-b3-traceid|request-id|correlation-id)$/i;
     const GUID_BUILTIN = /^\{\{\s*\$(guid|randomUUID)\s*\}\}$/i;
 
     const allRequests = [
@@ -2333,7 +2208,7 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
       ...(this.options.teardownRequests || []),
     ];
 
-    allRequests.forEach((req) => {
+    allRequests.forEach(req => {
       (req.headers || [])
         .filter((h) => h.key && h.value && !h.disabled)
         .forEach((h) => {
@@ -2341,19 +2216,11 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
 
           // ── Trigger 1: value is {{$guid}} or {{$randomUUID}} ───────────────────
           if (GUID_BUILTIN.test(val)) {
-            const varName = this._headerKeyToVarName(h.key) || "requestGuid";
-            if (
-              !this.perRequestVars.has(varName) &&
-              !this.dynamicVarNames.has(varName)
-            ) {
-              this.perRequestVars.set(varName, {
-                generationType: "uuid",
-                requestNames: [],
-              });
+            const varName = this._headerKeyToVarName(h.key) || 'requestGuid';
+            if (!this.perRequestVars.has(varName) && !this.dynamicVarNames.has(varName)) {
+              this.perRequestVars.set(varName, { generationType: 'uuid', requestNames: []});
               this.scriptSetVarNames.add(varName);
-              console.log(
-                `  ✓ UUID header "${h.key}: {{$guid}}" → per-request load.utils.uuid() as "${varName}"`,
-              );
+              console.log(`  ✓ UUID header "${h.key}: {{$guid}}" → per-request load.utils.uuid() as "${varName}"`);
             }
             if (this.perRequestVars.has(varName)) {
               this.perRequestVars.get(varName).requestNames.push(req.name);
@@ -2526,12 +2393,12 @@ ${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
     if (this._staticGlobalHeaders) {
       for (const [k, v] of this._staticGlobalHeaders) {
         // Stored values are quoted ("val" or 'val') — strip quotes for comparison
-        globalDefaults.set(k.toLowerCase(), v.replace(/^['"]|['"]$/g, ""));
+        globalDefaults.set(k.toLowerCase(), v.replace(/^["']|["']$/g, ''));
       }
     }
     if (this._authGlobalHeaders) {
       for (const [k, v] of this._authGlobalHeaders) {
-        globalDefaults.set(k.toLowerCase(), v.replace(/^['"]|['"]$/g, ""));
+        globalDefaults.set(k.toLowerCase(), v.replace(/^["']|["']$/g, ''));
       }
     }
 
