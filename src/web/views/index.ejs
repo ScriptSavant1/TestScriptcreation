@@ -1788,6 +1788,17 @@ code {
     <p class="help-intro">Everything you need to use this toolkit — from first-time setup to advanced correlation. Designed for both technical and non-technical users.</p>
   </div>
 
+  <!-- — SECTION: What Is This Toolkit? ————————————————————— -->
+    <section class="help-section">
+      <h2 class="help-h2">What is the LRE Toolkit?</h2>
+      <p class="help-p">The LRE Toolkit streamlines the creation of LoadRunner Enterprise performance test scripts by removing much of the manual effort traditionally required in VuGen. Instead of spending days recording, scripting, and refactoring, provide your existing API collections, browser recordings, or JMeter test plans – and receive a fully structured, VuGen-ready project within minutes.</p>
+      <p class="help-p">In a standard performance testing lifecycle, script development is the most time-consuming phase – identifying dynamic values for correlation, parameterising test data, and implementing authentication mechanisms such as OAuth2, JWT, Kerberos, or DPoP. The LRE Toolkit addresses these challenges directly: it analyses your inputs, applies best-practice correlation and parameterisation, and generates production-quality VuGen script code covering roughly <strong>80% of the scripting effort</strong>.</p>
+      <p class="help-p">Open the generated project in VuGen to validate, make application-specific adjustments, and add custom logic before uploading to LoadRunner Enterprise for execution.</p>
+      <div class="help-callout help-callout-blue">
+        <strong>🔒 No files are stored on the server.</strong> Everything you upload is processed in-memory and immediately discarded. The only thing that leaves the server is your downloaded ZIP file.
+      </div>
+    </section>
+
   <!-- ── SECTION: What is this toolkit? ──────────────────────────────────── -->
   <section class="help-section">
     <h2 class="help-h2">What is this toolkit?</h2>
@@ -1862,8 +1873,7 @@ code {
   <section class="help-section">
     <div class="help-tool-badge help-badge-green">🎙 Recorder</div>
     <h2 class="help-h2">Recorder — HAR File to VuGen Script</h2>
-    <p class="help-p">On VCSE machines, VuGen's built-in recording does not work. The proxy cannot be installed and browser events do not get captured. The Recorder tool solves this by letting you record your user journey using only your browser — no VuGen installation needed for recording.</p>
-
+    <p class="help-p">In a standard workflow, VuGen records user journeys directly via its built-in proxy. However, on some corporate VCSE and Azure virtual machines, VuGen recording does not function due to security policies and incomplete installations. The Recorder addresses this by capturing network traffic through your browser's Developer Tools (F12) as a HAR file, then converting it into a structured VuGen script. Open the generated script in VuGen to validate and enhance before uploading to LRE.</p>
     <h3 class="help-h3">What is a HAR file?</h3>
     <p class="help-p">A HAR (HTTP Archive) file is a recording of all the network requests your browser made during a session. Every modern browser's Developer Tools (F12) can export one. It contains all the URLs, request headers, request bodies, and responses for everything that happened during your recording.</p>
 
@@ -1923,6 +1933,69 @@ code {
     </ol>
   </section>
 
+   <!-- — SECTION: Capabilities ————————————————————————————— -->
+    <section class="help-section">
+      <h2 class="help-h2">What it handles automatically</h2>
+      <p class="help-p">The toolkit detects and generates code for the following – no manual configuration needed.</p>
+
+      <h3 class="help-h3">Authentication</h3>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin:12px 0">
+          <thead><tr style="border-bottom:2px solid var(--border)">
+            <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Method</th>
+            <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What the toolkit does</th>
+          </tr></thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">OAuth2</td><td style="padding:8px 12px">Client Credentials, Password Grant, Authorization Code flows</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JWT</td><td style="padding:8px 12px">Detects signing libraries (jsrsasign, jose, JJWT, nimbus), extracts claim mappings, generates token creation code</td></tr>
+            <tr style="border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06)"><td style="padding:8px 12px;font-weight:600">DPoP <span style="font-size:0.72rem;color:var(--primary);font-weight:700;margin-left:4px">NEW</span></td><td style="padding:8px 12px">RFC 9449 – generates unique cryptographic proofs per request using EC P-256 keys. Detected from <code>dpop</code> / <code>dpop-pf</code> headers.</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Kerberos / NTLM</td><td style="padding:8px 12px">Windows SSO – generates <code>web_set_user()</code> in VuGen, <code>setUserCredentials()</code> in DevWeb, configures runtime settings</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Basic / Bearer / API Key</td><td style="padding:8px 12px">Username/password, static or correlated tokens, header-based or query parameter keys</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">AWS Signature v4</td><td style="padding:8px 12px">AWS API request signing</td></tr>
+            <tr><td style="padding:8px 12px;font-weight:600">mTLS</td><td style="padding:8px 12px">Client certificate authentication – upload <code>.pem</code> or <code>.p12</code>files alongside your collection</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3 class="help-h3">Analysis &amp; optimisation</h3>
+      <ul class="help-list">
+        <li><strong>Correlation</strong> – finds dynamic values (tokens, session IDs, CSRF tokens) in responses and extracts them for reuse in later requests</li>
+        <li><strong>3-tier parameterisation</strong> – classifies variables as Dynamic (runtime), Config (environment), or Test Data (per-user)</li>
+        <li><strong>Server host detection</strong> – parameterises hostnames so you can switch environments (dev/test/prod) by changing one value</li>
+        <li><strong>Redirect detection</strong> – identifies HTTP 301/302/307 redirects that VuGen follows automatically and omits them from the script</li>
+      </ul>
+
+      <h3 class="help-h3">Accepted input formats</h3>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin:12px 0">
+          <thead><tr style="border-bottom:2px solid var(--border)">
+            <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Format</th>
+            <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Source</th>
+          </tr></thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight: 600">Postman Collection v2.1</td><td style="padding:8px 12px"><code>.json</code> – Postman → Export → Collection v2.1</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight: 600">Bruno Collection</td><td style="padding:8px 12px"><code>.json</code> / <code>.yml</code> / <code>.bru</code> / folder (zipped)</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight: 600">JMeter Test Plan</td><td style="padding:8px 12px"><code>.jmx</code> – with optional CSV data files and certificates</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight: 600">HAR file</td><td style="padding:8px 12px"><code>.har</code> – any browser → F12 → Network → Export HAR</td></tr>
+            <tr><td style="padding:8px 12px;font-weight: 600">Chrome NetLog</td><td style="padding:8px 12px"><code>.json</code> – chrome://net-export/ (captures all tabs including popups)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <!-- — SECTION: Technology & Privacy ————————————————————— -->
+    <section class="help-section">
+      <h2 class="help-h2">Technology & privacy</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0">
+        <div style="padding:14px 16px;border-radius:var(--r-md,8px);background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15)">
+          <div style="font-weight:700;font-size:0.85rem;margin-bottom:6px;color:var(--primary)">⚙ Built with</div>
+          <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0"><strong>Node.js</strong> server with <strong>Express</strong> web framework. Browser interface works in Chrome, Firefox, Edge, and Safari. Recorder and Script Studio run entirely client-side – no server calls for script generation.</p>
+        </div>
+        <div style="padding:14px 16px;border-radius:var(--r-md,8px);background:rgba(22,163,74,0.06);border:1px solid rgba(22,163,74,0.15)">
+          <div style="font-weight:700;font-size:0.85rem;margin-bottom:6px;color:var(--success,#16a34a)">🔒 Privacy model</div>
+          <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0">All file processing happens <strong>in memory</strong>. Nothing is written to disk. Nothing is stored between requests. Download links expire after 5 minutes and are single-use. No external services are called.</p>
+        </div>
+      </div>
+      <p class="help-p">For DPoP and JWT support, the toolkit includes <code>lre-utils-helper.js</code> – a self-contained cryptographic library designed for VuGen's JavaScript engine. It handles EC P-256 key generation, ECDSA signing, RSA-PSS signing, and SHA-256 hashing with zero external dependencies.</p>
+    </section>
   <!-- ── SECTION: Glossary ────────────────────────────────────────────────── -->
   <section class="help-section">
     <h2 class="help-h2">Glossary</h2>
@@ -1943,12 +2016,33 @@ code {
       <dd>Replacing a hard-coded value (like a username or password) in a script with a variable that reads from a data file, so different virtual users use different data.</dd>
       <dt>Transaction</dt>
       <dd>A named measurement boundary in a VuGen script. LoadRunner records response time for each transaction separately, so you can see performance for specific user actions (e.g. "Login", "Search", "Checkout").</dd>
+      <dt>OAuth2</dt>
+      <dd>An industry-standard authorization framework. Applications use it to obtain access tokens from an authorization server, which are then sent with each API request.</dd>
+      <dt>JWT (JSON Web Token)</dt>
+      <dd>A compact, signed token used for authentication. Contains claims (like client ID, audience, expiry) and is signed with a private key. The toolkit generates JWT creation code automatically when detected.</dd>
+      <dt>DPoP (Demonstrating Proof-of-Possession)</dt>
+      <dd>A security mechanism (RFC 9449) that binds an access token to a specific cryptographic key. Each request includes a unique signed proof – preventing stolen tokens from being reused by attackers.</dd>
+      <dt>mTLS (Mutual TLS)</dt>
+      <dd>Two-way certificate authentication where both the client and server present certificates. Upload your client certificate (<code>.pem</code> or <code>.p12</code>) alongside your collection.</dd>
+      <dt>CSRF token</dt>
+      <dd>Cross-Site Request Forgery token – a server-generated value included in forms and headers to prevent unauthorized requests. The toolkit extracts and correlates these automatically.</dd>
       <dt>CSVDataSet (JMeter)</dt>
       <dd>A JMeter feature that reads test data from a CSV file at runtime. When converting a JMX file, upload any CSV files your script references alongside the .jmx.</dd>
     </dl>
   </section>
 
   <!-- ── SECTION: FAQ ─────────────────────────────────────────────────────── -->
+  <!-- — SECTION: What's New + FAQ ————————————————————————— -->
+    <section class="help-section">
+      <h2 class="help-h2">What's new in v2.9.0</h2>
+      <ul class="help-list">
+        <li><strong>DPoP support (RFC 9449)</strong> – automatic detection and handling of <code>dpop</code> and <code>dpop-pf</code> headers across all tools. Generates cryptographic proof code automatically.</li>
+        <li><strong>VuGen DPoP performance</strong> – crypto library loaded once in <code>vuser_init.c</code>, reused across all iterations. Eliminates file I/O overhead per request.</li>
+        <li><strong>Recorder &amp; Script Studio</strong> – both browser-based tools now generate the same optimised DPoP pattern as the server-side converter.</li>
+        <li><strong>84 automated regression tests</strong> – comprehensive coverage across all tools, protocols, and authentication methods.</li>
+      </ul>
+    </section>
+
   <section class="help-section">
     <h2 class="help-h2">Frequently Asked Questions</h2>
 
@@ -1977,9 +2071,25 @@ code {
         <div class="help-faq-q">The conversion completed but the script doesn't look right. What should I check?</div>
         <div class="help-faq-a">Check that you uploaded the correct file format (e.g. Postman v2.1, not v2.0). For Bruno collections, make sure you exported from Bruno correctly. For JMeter, ensure the .jmx file is from a supported JMeter version and includes all referenced CSV files.</div>
       </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">My application uses DPoP – will the generated script handle it?</div>
+        <div class="help-faq-a">Yes. If your application sends <code>dpop</code> or <code>dpop-pf</code> headers, the toolkit detects them automatically and generates the cryptographic proof code. For VuGen scripts, it loads the crypto library once in <code>vuser_init.c</code> for best performance. No manual setup is needed – just convert or record as normal.</div>
+      </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">My application uses Kerberos / NTLM / Windows SSO – is that supported?</div>
+        <div class="help-faq-a">Yes. The toolkit detects Negotiate, Kerberos, and NTLM authentication from response headers and generates the appropriate <code>web_set_user()</code> call in VuGen or <code>setUserCredentials()</code> in DevWeb. It also configures the runtime settings (<code>IntegratedAuthentication=1</code>) automatically.</div>
+      </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">My application uses JWT tokens in pre-request scripts – will those be converted?</div>
+        <div class="help-faq-a">Yes. The toolkit scans pre-request scripts for JWT signing patterns (jsrsasign, jsonwebtoken, jose, Java JJWT, nimbus-jose-jwt, and others). It extracts the claim mappings and generates equivalent JWT code using <code>lre-utils-helper.js</code> for VuGen or <code>jwt-helper.js</code> for DevWeb.</div>
+      </div>
+      <div class="help-faq-item">
+        <div class="help-faq-q">Why can't I record in VuGen on my VCSE / Azure machine?</div>
+        <div class="help-faq-a">Corporate security policies and incomplete VuGen installations on VCSE and some Azure machines prevent the built-in proxy-based recording from functioning. Use the Recorder tool instead – it captures traffic through your browser's Developer Tools (F12) as a HAR file, which is then converted into a VuGen script. Open the generated script in VuGen to validate and enhance before uploading to LRE.</div>
+      </div>
     </div>
-  </section>
-
+  </div>
+</section>
 </div><!-- /.help-wrap -->
 </div><!-- /#portal-help -->
 
@@ -2010,6 +2120,16 @@ const JX = { proto:'devweb', mode:'single', tt:1, wlm:true, file:null, csvFiles:
  * The tool's HTML and code are fully preserved — only the UI entry point is
  * hidden. Re-enable at any time by setting enabled: true.
  * ────────────────────────────────────────────────────────────────────────── */
+// — Base path detection ————————————————————————————————————
+  // Under IIS virtual dir 'converter', browser URL is /converter → base = '/converter'.
+  // Standalone (localhost:3000/converter), base = '/converter'.
+  // Standalone root (/), base = ''.
+  const BASE_PATH = (function() {
+    const p = window.location.pathname.replace(/\/+$/, '');
+    if (p === '' || p === '/') return '';
+    return p; // e.g. '/converter'
+  })();
+
 const PORTAL_CONFIG = {
   tabs: {
     home:      { enabled: true  },
@@ -2018,7 +2138,7 @@ const PORTAL_CONFIG = {
     studio:    { enabled: true  },
     help:      { enabled: true  }
   },
-  iframes: { recorder: '/tools/recorder', studio: '/tools/studio' }
+  iframes: { recorder: BASE_PATH + '/recorder', studio: BASE_PATH + '/studio' }
 };
 
 /* ── Portal tab switching ───────────────────────────────────────────────── */
@@ -2297,7 +2417,7 @@ async function doConvert() {
   fd.append('addComments',         document.getElementById('opt-cmt').checked);
 
   try {
-    const r = await fetch('/convert', { method: 'POST', body: fd });
+    const r = await fetch(BASE_PATH + '/convert', { method: 'POST', body: fd });
     const ct = r.headers.get('content-type') || '';
     const d = ct.includes('application/json')
       ? await r.json()
@@ -2342,7 +2462,7 @@ async function doConvertJmx() {
   for (const f of JX.certFiles) fd.append('certFiles', f);
 
   try {
-    const r = await fetch('/convert-jmx', { method: 'POST', body: fd });
+    const r = await fetch(BASE_PATH + '/convert-jmx', { method: 'POST', body: fd });
     const ct = r.headers.get('content-type') || '';
     const d = ct.includes('application/json')
       ? await r.json()

@@ -3,18 +3,18 @@
  * Entry point for programmatic usage
  */
 
-const BrunoParser = require('./parsers/brunoParser');
-const AdvancedScriptGenerator = require('./generators/advancedScriptGenerator');
-const WebHttpScriptGenerator = require('./generators/webHttpScriptGenerator');
-const fs = require('fs').promises;
-const path = require('path');
-const yaml = require('js-yaml');
+const BrunoParser = require("./parsers/brunoParser");
+const AdvancedScriptGenerator = require("./generators/advancedScriptGenerator");
+const WebHttpScriptGenerator = require("./generators/webHttpScriptGenerator");
+const fs = require("fs").promises;
+const path = require("path");
+const yaml = require("js-yaml");
 
 class BrunoDevWebConverter {
   constructor(options = {}) {
     this.options = {
       inputFile: options.inputFile,
-      outputDir: options.outputDir || './devweb-script',
+      outputDir: options.outputDir || "./devweb-script",
       useTransactions: options.useTransactions !== false,
       useCorrelation: options.useCorrelation !== false,
       useParameterization: options.useParameterization !== false,
@@ -23,11 +23,13 @@ class BrunoDevWebConverter {
       thinkTime: options.thinkTime || 1,
       groupByFolder: options.groupByFolder !== false,
       addComments: options.addComments !== false,
-      logLevel: options.logLevel || 'info',
+      logLevel: options.logLevel || "info",
       generateDataFiles: options.generateDataFiles !== false,
       failOnError: options.failOnError || false,
-      examplesPath: options.examplesPath || path.join(__dirname, '..', 'devweb-examples-code'),
-      ...options
+      examplesPath:
+        options.examplesPath ||
+        path.join(__dirname, "..", "devweb-examples-code"),
+      ...options,
     };
 
     this.results = null;
@@ -37,7 +39,7 @@ class BrunoDevWebConverter {
    * Main conversion method — dispatches to single or multi mode
    */
   async convert() {
-    if (this.options.mode === 'multi') {
+    if (this.options.mode === "multi") {
       return this.convertMulti();
     }
     return this.convertSingle();
@@ -47,8 +49,8 @@ class BrunoDevWebConverter {
    * Single-mode conversion (original behavior — one script for entire collection)
    */
   async convertSingle() {
-    console.log('🚀 Bruno to DevWeb Converter v2.0');
-    console.log('=====================================\n');
+    console.log("🚀 Bruno to DevWeb Converter v2.0");
+    console.log("=====================================\n");
 
     try {
       // Step 1: Parse collection
@@ -57,35 +59,42 @@ class BrunoDevWebConverter {
       const requests = await parser.parse();
       const metadata = parser.getMetadata();
 
-      console.log(`✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`);
+      console.log(
+        `✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`,
+      );
 
       // Step 1b: Load environment file if provided
       const environmentVars = await this.loadEnvironmentFile();
 
       // Step 2: Select generator based on protocol
-      const isWebHttp = this.options.protocol === 'web-http';
-      const GeneratorClass = isWebHttp ? WebHttpScriptGenerator : AdvancedScriptGenerator;
-      const generator = new GeneratorClass(
-        requests,
-        parser.collection,
-        { ...this.options, environmentVars }
-      );
+      const isWebHttp = this.options.protocol === "web-http";
+      const GeneratorClass = isWebHttp
+        ? WebHttpScriptGenerator
+        : AdvancedScriptGenerator;
+      const generator = new GeneratorClass(requests, parser.collection, {
+        ...this.options,
+        environmentVars,
+      });
 
       // Step 3: Create output directory
       await fs.mkdir(this.options.outputDir, { recursive: true });
 
       // Step 4: Generate script and mandatory files
-      const { script, analysis } = await generator.generate(this.options.outputDir);
+      const { script, analysis } = await generator.generate(
+        this.options.outputDir,
+      );
 
       let scriptPath;
       if (isWebHttp) {
         // Web HTTP/HTML: C files already written by generator.generate()
-        scriptPath = path.join(this.options.outputDir, 'Action.c');
-        console.log(`✓ Generated Action.c, vuser_init.c, vuser_end.c, globals.h`);
+        scriptPath = path.join(this.options.outputDir, "Action.c");
+        console.log(
+          `✓ Generated Action.c, vuser_init.c, vuser_end.c, globals.h`,
+        );
       } else {
         // DevWeb: write main.js and DevWeb-specific config files
-        scriptPath = path.join(this.options.outputDir, 'main.js');
-        await fs.writeFile(scriptPath, script, 'utf8');
+        scriptPath = path.join(this.options.outputDir, "main.js");
+        await fs.writeFile(scriptPath, script, "utf8");
         console.log(`✓ Generated main.js`);
 
         // Step 6: Generate config.yml
@@ -94,7 +103,10 @@ class BrunoDevWebConverter {
 
         // Mandatory files already generated by generator.generate()
         // Step 7: Generate additional data files if needed
-        if (this.options.generateDataFiles && analysis.parameters.totalParameters > 0) {
+        if (
+          this.options.generateDataFiles &&
+          analysis.parameters.totalParameters > 0
+        ) {
           await this.generateDataFiles(generator.paramEngine);
           console.log(`✓ Generated additional parameter data files`);
         }
@@ -117,21 +129,20 @@ class BrunoDevWebConverter {
         outputDir: this.options.outputDir,
         scriptPath,
         analysis,
-        metadata
+        metadata,
       };
 
-      console.log('\n✨ Conversion completed successfully!');
+      console.log("\n✨ Conversion completed successfully!");
       console.log(`📁 Output directory: ${this.options.outputDir}\n`);
 
       return this.results;
-
     } catch (error) {
-      console.error('\n❌ Conversion failed:', error.message);
+      console.error("\n❌ Conversion failed:", error.message);
       console.error(error.stack);
 
       this.results = {
         success: false,
-        error: error.message
+        error: error.message,
       };
 
       throw error;
@@ -142,8 +153,8 @@ class BrunoDevWebConverter {
    * Multi-mode conversion — one script per top-level folder
    */
   async convertMulti() {
-    console.log('🚀 Bruno to DevWeb Converter v2.0 (Multi-Script Mode)');
-    console.log('=======================================================\n');
+    console.log("🚀 Bruno to DevWeb Converter v2.0 (Multi-Script Mode)");
+    console.log("=======================================================\n");
 
     try {
       // Step 1: Parse collection
@@ -151,7 +162,9 @@ class BrunoDevWebConverter {
       const parser = new BrunoParser(this.options.inputFile);
       const requests = await parser.parse();
       const metadata = parser.getMetadata();
-      console.log(`✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`);
+      console.log(
+        `✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`,
+      );
 
       // Step 2: Load environment file if provided
       const environmentVars = await this.loadEnvironmentFile();
@@ -160,19 +173,24 @@ class BrunoDevWebConverter {
       const folderGroups = this.groupByTopLevelFolder(requests);
       const folderNames = Object.keys(folderGroups);
 
-      if (folderNames.length <= 1 && folderNames[0] === '_Root') {
-        console.log('⚠  No folders found in collection. Falling back to single-script mode.\n');
+      if (folderNames.length <= 1 && folderNames[0] === "_Root") {
+        console.log(
+          "⚠  No folders found in collection. Falling back to single-script mode.\n",
+        );
         return this.convertSingle();
       }
 
       console.log(`📂 Found ${folderNames.length} top-level folder(s):`);
-      folderNames.forEach(name => {
+      folderNames.forEach((name) => {
         console.log(`   - ${name} (${folderGroups[name].length} requests)`);
       });
       console.log();
 
       // Step 4: Detect cross-folder correlations
-      const crossFolderWarnings = this.detectCrossFolderDependencies(requests, folderGroups);
+      const crossFolderWarnings = this.detectCrossFolderDependencies(
+        requests,
+        folderGroups,
+      );
 
       // Step 5: Generate script for each top-level folder
       await fs.mkdir(this.options.outputDir, { recursive: true });
@@ -180,22 +198,29 @@ class BrunoDevWebConverter {
 
       for (const folderName of folderNames) {
         const folderRequests = folderGroups[folderName];
-        const safeFolderName = folderName.replace(/[<>:"/\\|?*]/g, '_');
-        const scriptOutputDir = path.join(this.options.outputDir, safeFolderName);
+        const safeFolderName = folderName.replace(/[<>:"/\\|?*]/g, "_");
+        const scriptOutputDir = path.join(
+          this.options.outputDir,
+          safeFolderName,
+        );
 
-        console.log(`\n${'─'.repeat(60)}`);
-        console.log(`📝 Generating script: ${folderName}/ (${folderRequests.length} requests)`);
-        console.log(`${'─'.repeat(60)}`);
+        console.log(`\n${"─".repeat(60)}`);
+        console.log(
+          `📝 Generating script: ${folderName}/ (${folderRequests.length} requests)`,
+        );
+        console.log(`${"─".repeat(60)}`);
 
         await fs.mkdir(scriptOutputDir, { recursive: true });
 
         // Create generator with only this folder's requests
-        const isWebHttp = this.options.protocol === 'web-http';
-        const GeneratorClass = isWebHttp ? WebHttpScriptGenerator : AdvancedScriptGenerator;
+        const isWebHttp = this.options.protocol === "web-http";
+        const GeneratorClass = isWebHttp
+          ? WebHttpScriptGenerator
+          : AdvancedScriptGenerator;
         const generator = new GeneratorClass(
           folderRequests,
           parser.collection,
-          { ...this.options, environmentVars }
+          { ...this.options, environmentVars },
         );
 
         // Generate script and mandatory files
@@ -203,19 +228,23 @@ class BrunoDevWebConverter {
 
         let mainScriptPath;
         if (isWebHttp) {
-          mainScriptPath = path.join(scriptOutputDir, 'Action.c');
-          console.log(`✓ Generated Action.c, vuser_init.c, vuser_end.c, globals.h`);
+          mainScriptPath = path.join(scriptOutputDir, "Action.c");
+          console.log(
+            `✓ Generated Action.c, vuser_init.c, vuser_end.c, globals.h`,
+          );
         } else {
-          mainScriptPath = path.join(scriptOutputDir, 'main.js');
-          await fs.writeFile(mainScriptPath, script, 'utf8');
+          mainScriptPath = path.join(scriptOutputDir, "main.js");
+          await fs.writeFile(mainScriptPath, script, "utf8");
           console.log(`✓ Generated main.js`);
 
           // Write cross-folder dependency comments if any
-          const folderWarnings = crossFolderWarnings.filter(w => w.consumerFolder === folderName);
+          const folderWarnings = crossFolderWarnings.filter(
+            (w) => w.consumerFolder === folderName,
+          );
           if (folderWarnings.length > 0) {
             const depComment = this.generateDependencyComment(folderWarnings);
             const scriptWithDeps = depComment + script;
-            await fs.writeFile(mainScriptPath, scriptWithDeps, 'utf8');
+            await fs.writeFile(mainScriptPath, scriptWithDeps, "utf8");
           }
         }
 
@@ -224,7 +253,7 @@ class BrunoDevWebConverter {
           outputDir: scriptOutputDir,
           requests: folderRequests.length,
           correlations: analysis.correlations.totalCorrelations,
-          parameters: analysis.parameters.totalParameters
+          parameters: analysis.parameters.totalParameters,
         });
       }
 
@@ -232,28 +261,36 @@ class BrunoDevWebConverter {
       if (crossFolderWarnings.length > 0) {
         // Deduplicate for console output
         const seen = new Set();
-        const uniqueWarnings = crossFolderWarnings.filter(w => {
+        const uniqueWarnings = crossFolderWarnings.filter((w) => {
           const key = `${w.variable}::${w.producerFolder}::${w.consumerFolder}`;
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
         });
 
-        console.log(`\n${'─'.repeat(60)}`);
-        console.log('⚠  Cross-Folder Dependencies Detected:');
-        console.log(`${'─'.repeat(60)}`);
-        uniqueWarnings.forEach(w => {
-          console.log(`   ${w.variable}: ${w.producerFolder}/ → ${w.consumerFolder}/`);
+        console.log(`\n${"─".repeat(60)}`);
+        console.log("⚠  Cross-Folder Dependencies Detected:");
+        console.log(`${"─".repeat(60)}`);
+        uniqueWarnings.forEach((w) => {
+          console.log(
+            `   ${w.variable}: ${w.producerFolder}/ → ${w.consumerFolder}/`,
+          );
           console.log(`     Producer: "${w.producerRequest}"`);
         });
-        console.log('\n   In LRE, each script runs with its own vusers.');
-        console.log('   Consider: include auth requests in each script, or parameterize shared tokens.');
+        console.log("\n   In LRE, each script runs with its own vusers.");
+        console.log(
+          "   Consider: include auth requests in each script, or parameterize shared tokens.",
+        );
       }
 
       // Deduplicate warnings for result summary
-      const uniqueWarningStrings = [...new Set(
-        crossFolderWarnings.map(w => `${w.variable}: ${w.producerFolder}/ → ${w.consumerFolder}/`)
-      )];
+      const uniqueWarningStrings = [
+        ...new Set(
+          crossFolderWarnings.map(
+            (w) => `${w.variable}: ${w.producerFolder}/ → ${w.consumerFolder}/`,
+          ),
+        ),
+      ];
 
       this.results = {
         success: true,
@@ -261,16 +298,17 @@ class BrunoDevWebConverter {
         scripts: scriptSummaries,
         totalRequests: requests.length,
         crossFolderWarnings: uniqueWarningStrings,
-        metadata
+        metadata,
       };
 
-      console.log(`\n✨ Multi-script conversion completed! Generated ${scriptSummaries.length} scripts.`);
+      console.log(
+        `\n✨ Multi-script conversion completed! Generated ${scriptSummaries.length} scripts.`,
+      );
       console.log(`📁 Output directory: ${this.options.outputDir}\n`);
 
       return this.results;
-
     } catch (error) {
-      console.error('\n❌ Conversion failed:', error.message);
+      console.error("\n❌ Conversion failed:", error.message);
       console.error(error.stack);
       this.results = { success: false, error: error.message };
       throw error;
@@ -283,15 +321,46 @@ class BrunoDevWebConverter {
   async loadEnvironmentFile() {
     if (!this.options.environmentFile) return null;
 
-    console.log(`📖 Loading environment: ${this.options.environmentFile}`);
-    const envContent = await fs.readFile(this.options.environmentFile, 'utf8');
-    const envData = JSON.parse(envContent);
+    console.log("📋 Loading environment: ${this.options.environmentFile}");
+    const envContent = await fs.readFile(this.options.environmentFile, "utf8");
     const environmentVars = {};
-    const values = envData.values || [];
-    values.filter(v => v.enabled !== false).forEach(v => {
-      environmentVars[v.key] = v.value;
-    });
-    console.log(`✓ Loaded ${Object.keys(environmentVars).length} environment variable(s)\n`);
+
+    // Detect format: Bruno .bru or JSON (Postman/Bruno JSON export)
+    if (envContent.trim().startsWith("vars {")) {
+      // Bruno .bru format
+      const varsMatch = envContent.match(/vars\s*\{([^}]*)\}/s);
+      if (varsMatch) {
+        const varsBlock = varsMatch[1];
+        const lines = varsBlock.split("\n");
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("//")) continue;
+          const colonIdx = trimmed.indexOf(":");
+          if (colonIdx > 0) {
+            const key = trimmed.substring(0, colonIdx).trim();
+            let value = trimmed.substring(colonIdx + 1).trim();
+            // Remove trailing comma if present
+            if (value.endsWith(",")) {
+              value = value.slice(0, -1).trim();
+            }
+            environmentVars[key] = value;
+          }
+        }
+      }
+    } else {
+      // JSON format (Postman or Bruno JSON export)
+      const envData = JSON.parse(envContent);
+      const values = envData.values || envData.variables || [];
+      values
+        .filter((v) => v.enabled !== false)
+        .forEach((v) => {
+          environmentVars[v.key || v.name] = v.value;
+        });
+    }
+
+    console.log(
+      `✓ Loaded ${Object.keys(environmentVars).length} environment variable(s)\n`,
+    );
     return environmentVars;
   }
 
@@ -303,9 +372,9 @@ class BrunoDevWebConverter {
   groupByTopLevelFolder(requests) {
     const groups = {};
 
-    requests.forEach(request => {
-      const folder = request.folder || '';
-      const topLevel = folder ? folder.split('/')[0] : '_Root';
+    requests.forEach((request) => {
+      const folder = request.folder || "";
+      const topLevel = folder ? folder.split("/")[0] : "_Root";
 
       if (!groups[topLevel]) {
         groups[topLevel] = [];
@@ -325,28 +394,32 @@ class BrunoDevWebConverter {
 
     // Build a map of which folder each request belongs to
     const requestFolderMap = new Map();
-    requests.forEach(r => {
-      const topLevel = r.folder ? r.folder.split('/')[0] : '_Root';
+    requests.forEach((r) => {
+      const topLevel = r.folder ? r.folder.split("/")[0] : "_Root";
       requestFolderMap.set(r.name, topLevel);
     });
 
     // Run a quick correlation analysis across ALL requests
-    const CorrelationDetector = require('./analyzers/correlationDetector');
+    const CorrelationDetector = require("./analyzers/correlationDetector");
     const detector = new CorrelationDetector();
     const allCorrelations = detector.analyzeRequests(requests);
 
     // Check which correlations cross folder boundaries
-    allCorrelations.forEach(corr => {
+    allCorrelations.forEach((corr) => {
       const producerFolder = requestFolderMap.get(corr.producerRequest);
       const consumerFolder = requestFolderMap.get(corr.consumerRequest);
 
-      if (producerFolder && consumerFolder && producerFolder !== consumerFolder) {
+      if (
+        producerFolder &&
+        consumerFolder &&
+        producerFolder !== consumerFolder
+      ) {
         warnings.push({
           variable: corr.name,
           producerFolder,
           consumerFolder,
           producerRequest: corr.producerRequest,
-          consumerRequest: corr.consumerRequest
+          consumerRequest: corr.consumerRequest,
         });
       }
     });
@@ -360,7 +433,7 @@ class BrunoDevWebConverter {
   generateDependencyComment(warnings) {
     // Deduplicate by variable + producerFolder
     const seen = new Set();
-    const unique = warnings.filter(w => {
+    const unique = warnings.filter((w) => {
       const key = `${w.variable}::${w.producerFolder}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -368,7 +441,7 @@ class BrunoDevWebConverter {
     });
 
     let comment = `/**\n * ⚠  CROSS-FOLDER DEPENDENCIES:\n * This script uses variables produced by other scripts:\n`;
-    unique.forEach(w => {
+    unique.forEach((w) => {
       comment += ` *   - ${w.variable}: produced in "${w.producerFolder}/" by "${w.producerRequest}"\n`;
     });
     comment += ` * \n * In LRE, each script runs independently. Options:\n`;
@@ -386,37 +459,37 @@ class BrunoDevWebConverter {
       general: {
         scriptName: "Generated DevWeb Script",
         logLevel: this.options.logLevel,
-        description: "Auto-generated from Bruno/Postman collection"
+        description: "Auto-generated from Bruno/Postman collection",
       },
       runtime: {
         iterations: 1,
         pacing: 0,
-        thinkTime: this.options.thinkTime
+        thinkTime: this.options.thinkTime,
       },
       features: {
         transactions: this.options.useTransactions,
         correlation: this.options.useCorrelation,
         parameterization: this.options.useParameterization,
-        authentication: this.options.useAuthentication
+        authentication: this.options.useAuthentication,
       },
       statistics: {
         totalRequests: analysis.requests.total,
         correlations: analysis.correlations.totalCorrelations,
         parameters: analysis.parameters.totalParameters,
-        authConfigs: analysis.authentication.totalConfigs
-      }
+        authConfigs: analysis.authentication.totalConfigs,
+      },
     };
 
     const yamlContent = yaml.dump(config, { indent: 2, lineWidth: -1 });
-    const configPath = path.join(this.options.outputDir, 'config.yml');
-    await fs.writeFile(configPath, yamlContent, 'utf8');
+    const configPath = path.join(this.options.outputDir, "config.yml");
+    await fs.writeFile(configPath, yamlContent, "utf8");
   }
 
   /**
    * Generate parameters.yml file
    */
   async generateParametersFile(paramEngine) {
-    const paramPath = path.join(this.options.outputDir, 'parameters.yml');
+    const paramPath = path.join(this.options.outputDir, "parameters.yml");
     await paramEngine.generateParameterFile(paramPath);
   }
 
@@ -424,11 +497,11 @@ class BrunoDevWebConverter {
    * Generate data files for parameters
    */
   async generateDataFiles(paramEngine) {
-    const dataDir = path.join(this.options.outputDir, 'data');
+    const dataDir = path.join(this.options.outputDir, "data");
     await fs.mkdir(dataDir, { recursive: true });
 
     const params = Array.from(paramEngine.parameters.values());
-    
+
     for (const param of params) {
       // Generate sample data
       const sampleData = paramEngine.generateSampleData(param, 10);
@@ -447,15 +520,15 @@ class BrunoDevWebConverter {
       description: "Auto-generated DevWeb performance test script",
       main: "main.js",
       scripts: {
-        test: "echo \"Run with DevWeb runner\""
+        test: 'echo "Run with DevWeb runner"',
       },
       keywords: ["devweb", "loadrunner", "performance-testing"],
       author: "Bruno DevWeb Converter",
-      license: "MIT"
+      license: "MIT",
     };
 
-    const pkgPath = path.join(this.options.outputDir, 'package.json');
-    await fs.writeFile(pkgPath, JSON.stringify(packageJson, null, 2), 'utf8');
+    const pkgPath = path.join(this.options.outputDir, "package.json");
+    await fs.writeFile(pkgPath, JSON.stringify(packageJson, null, 2), "utf8");
   }
 
   /**
@@ -472,7 +545,7 @@ Auto-generated from **${metadata.type}** collection: **${metadata.name}**
 - **Transactions**: ${Object.keys(analysis.requests.byFolder).length}
 - **Correlations**: ${analysis.correlations.totalCorrelations}
 - **Parameters**: ${analysis.parameters.totalParameters}
-- **Authentication**: ${analysis.authentication.totalConfigs > 0 ? 'Enabled' : 'None'}
+- **Authentication**: ${analysis.authentication.totalConfigs > 0 ? "Enabled" : "None"}
 - **Custom Scripts**: ${analysis.customScripts.total} (${analysis.customScripts.preRequest} pre-request, ${analysis.customScripts.test} test)
 
 ## 🚀 Usage
@@ -561,8 +634,8 @@ See \`ANALYSIS.md\` for detailed analysis including:
 Generated script is provided as-is for performance testing purposes.
 `;
 
-    const readmePath = path.join(this.options.outputDir, 'README.md');
-    await fs.writeFile(readmePath, readme, 'utf8');
+    const readmePath = path.join(this.options.outputDir, "README.md");
+    await fs.writeFile(readmePath, readme, "utf8");
   }
 
   /**
@@ -581,9 +654,9 @@ Generated script is provided as-is for performance testing purposes.
 ## Request Breakdown
 
 ### By HTTP Method
-${Object.entries(analysis.requests.byMethod).map(([method, count]) => 
-  `- **${method}**: ${count} request(s)`
-).join('\n')}
+${Object.entries(analysis.requests.byMethod)
+  .map(([method, count]) => `- **${method}**: ${count} request(s)`)
+  .join("\n")}
 
 ### By Folder/Transaction
 - **Total Folders**: ${analysis.requests.byFolder}
@@ -592,62 +665,89 @@ ${Object.entries(analysis.requests.byMethod).map(([method, count]) =>
 
 **Total Correlations Detected**: ${analysis.correlations.totalCorrelations}
 
-${analysis.correlations.correlations.length > 0 ? `
+${
+  analysis.correlations.correlations.length > 0
+    ? `
 ### Detected Correlations
-${analysis.correlations.correlations.map((corr, i) => `
+${analysis.correlations.correlations
+  .map(
+    (corr, i) => `
 ${i + 1}. **${corr.name}** (${corr.type})
    - Producer: ${corr.producerRequest}
    - Consumer: ${corr.consumerRequest}
    - Extractor Type: ${corr.extractorType}
    - Extract Path: ${corr.extractPath}
-`).join('\n')}
-` : '- No correlations detected'}
+`,
+  )
+  .join("\n")}
+`
+    : "- No correlations detected"
+}
 
 ### Recommendations
-${analysis.correlations.summary.recommendations.map(r => `- ${r}`).join('\n')}
+${analysis.correlations.summary.recommendations.map((r) => `- ${r}`).join("\n")}
 
 ## Parameterization Analysis
 
 **Total Parameters**: ${analysis.parameters.totalParameters}
 
 ### By Source
-${Object.entries(analysis.parameters.bySource).map(([source, count]) => 
-  `- **${source}**: ${count} parameter(s)`
-).join('\n')}
+${Object.entries(analysis.parameters.bySource)
+  .map(([source, count]) => `- **${source}**: ${count} parameter(s)`)
+  .join("\n")}
 
 ### By Type
-${Object.entries(analysis.parameters.byType).map(([type, count]) => 
-  `- **${type}**: ${count} parameter(s)`
-).join('\n')}
+${Object.entries(analysis.parameters.byType)
+  .map(([type, count]) => `- **${type}**: ${count} parameter(s)`)
+  .join("\n")}
 
-${analysis.parameters.parameters.length > 0 ? `
+${
+  analysis.parameters.parameters.length > 0
+    ? `
 ### Parameter Details
-${analysis.parameters.parameters.slice(0, 10).map((param, i) => `
+${analysis.parameters.parameters
+  .slice(0, 10)
+  .map(
+    (param, i) => `
 ${i + 1}. **${param.key}** (${param.type})
    - Source: ${param.source}
    - Description: ${param.description}
    - Value: ${param.value}
-`).join('\n')}
-${analysis.parameters.parameters.length > 10 ? `\n... and ${analysis.parameters.parameters.length - 10} more` : ''}
-` : ''}
+`,
+  )
+  .join("\n")}
+${analysis.parameters.parameters.length > 10 ? `\n... and ${analysis.parameters.parameters.length - 10} more` : ""}
+`
+    : ""
+}
 
 ## Authentication Analysis
 
 **Total Auth Configurations**: ${analysis.authentication.totalConfigs}
 
 ### By Type
-${Object.entries(analysis.authentication.byType).map(([type, count]) =>
-  `- **${type.toUpperCase()}**: ${count} configuration(s)`
-).join('\n')}
+${Object.entries(analysis.authentication.byType)
+  .map(
+    ([type, count]) => `- **${type.toUpperCase()}**: ${count} configuration(s)`,
+  )
+  .join("\n")}
 
-${analysis.authentication.configs.length > 0 ? `
+${
+  analysis.authentication.configs.length > 0
+    ? `
 ### Auth Configuration Details
-${analysis.authentication.configs.map((auth, i) => `
+${analysis.authentication.configs
+  .map(
+    (auth, i) => `
 ${i + 1}. **${auth.name}**
    - Type: ${auth.type.toUpperCase()}
-   - Folder: ${auth.folder || 'Global'}
-`).join('\n')}
-` : '- No authentication configured'}
+   - Folder: ${auth.folder || "Global"}
+`,
+  )
+  .join("\n")}
+`
+    : "- No authentication configured"
+}
 
 ## Custom Scripts Analysis
 
@@ -656,13 +756,20 @@ ${i + 1}. **${auth.name}**
 - **Pre-request Scripts**: ${analysis.customScripts.preRequest}
 - **Test/Post-response Scripts**: ${analysis.customScripts.test}
 
-${analysis.customScripts.warnings && analysis.customScripts.warnings.length > 0 ? `
+${
+  analysis.customScripts.warnings && analysis.customScripts.warnings.length > 0
+    ? `
 ### ⚠️  Conversion Warnings
-${analysis.customScripts.warnings.slice(0, 10).map(w => `- ${w}`).join('\n')}
-${analysis.customScripts.warnings.length > 10 ? `\n... and ${analysis.customScripts.warnings.length - 10} more warnings` : ''}
+${analysis.customScripts.warnings
+  .slice(0, 10)
+  .map((w) => `- ${w}`)
+  .join("\n")}
+${analysis.customScripts.warnings.length > 10 ? `\n... and ${analysis.customScripts.warnings.length - 10} more warnings` : ""}
 
 **Note**: Some custom scripts may require manual review and conversion. Check generated code for TODO comments.
-` : '- All custom scripts converted successfully'}
+`
+    : "- All custom scripts converted successfully"
+}
 
 ## Conversion Options
 
@@ -684,8 +791,8 @@ ${JSON.stringify(analysis.options, null, 2)}
 *Generated by Bruno to DevWeb Converter v2.0*
 `;
 
-    const reportPath = path.join(this.options.outputDir, 'ANALYSIS.md');
-    await fs.writeFile(reportPath, report, 'utf8');
+    const reportPath = path.join(this.options.outputDir, "ANALYSIS.md");
+    await fs.writeFile(reportPath, report, "utf8");
   }
 
   /**
