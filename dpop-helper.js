@@ -78,7 +78,7 @@ function getDpopProof(htu, htm, jwk, accessToken) {
       "Invalid or incomplete JWK, generating new EC P-256 key pair for DPoP...",
     );
     privateJwk = generateEcP256KeyPair();
-    // Store the generated key back to load.global for reuse
+    // Store generated key back to load.global for reuse
     if (typeof load !== "undefined" && load.global) {
       load.global.dpop_jwk = JSON.stringify(privateJwk);
     }
@@ -142,7 +142,7 @@ function getDpopProof(htu, htm, jwk, accessToken) {
   });
 
   // Node.js crypto.sign() returns DER-encoded ECDSA signature, but JWS (RFC 7515)
-  // requires raw R||S format (64 bytes for P-256). Convert DER -> raw.
+  // requires raw R||S format (64 bytes for P-256). Convert DER → raw.
   const derSig = crypto.sign("sha256", Buffer.from(signingInput), privateKey);
   const rawSig = derToRawEcdsa(derSig, 32); // 32 bytes per component for P-256
   const encodedSignature = rawSig
@@ -158,7 +158,7 @@ function getDpopProof(htu, htm, jwk, accessToken) {
  * Convert a DER-encoded ECDSA signature to raw R||S format.
  * DER: 0x30 <len> 0x02 <rLen> <R> 0x02 <sLen> <S>
  * Raw: <R padded to componentLen> <S padded to componentLen>
- * @param {Buffer} der - DER-encoded signature
+ * @param {Buffer} der          - DER-encoded signature
  * @param {number} componentLen - Byte length of each component (32 for P-256)
  * @returns {Buffer} Raw R||S signature
  */
