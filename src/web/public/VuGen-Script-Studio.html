@@ -3702,7 +3702,7 @@
           case "boundary":
           default:
             // web_reg_save_param (NOT _ex): default searches Body — no Search= needed
-            return `${t}web_reg_save_param("${name}",\n${t}\t"LB=${escJs(cfg.lb)}",\n${t}\t"RB=${escJs(cfg.rb || '"')}",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+            return `${t}web_reg_save_param("ParamName=${name}",\n${t}\t"LB=${escJs(cfg.lb)}",\n${t}\t"RB=${escJs(cfg.rb || '"')}",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
         }
       }
 
