@@ -123,10 +123,12 @@ class WebServer {
       this.upload.fields([
         { name: "collection", maxCount: 1 },
         { name: "environment", maxCount: 1 },
+        { name: "certFiles", maxCount: 10 },
       ]),
       async (req, res) => {
         const collectionFile = req.files?.collection?.[0];
         const environmentFile = req.files?.environment?.[0];
+        const certFiles = req.files?.certFiles || [];
 
         if (!collectionFile) {
           return res
@@ -148,6 +150,18 @@ class WebServer {
             )
           : null;
 
+        // Write cert files to a temp support dir so generators can read them by path
+        const tmpCertDir = path.join(os.tmpdir(), `lr-cert-${Date.now()}`);
+        const csvFilePaths = {}; // originalname → tmpPath
+        if (certFiles.length) {
+          await fs.mkdir(tmpCertDir, { recursive: true });
+          for (const f of certFiles) {
+            const tmpPath = path.join(tmpCertDir, f.originalname);
+            await fs.writeFile(tmpPath, f.buffer);
+            csvFilePaths[f.originalname] = tmpPath;
+          }
+        }
+
         try {
           await fs.writeFile(tmpCollection, collectionFile.buffer);
           if (tmpEnvironment)
@@ -168,6 +182,7 @@ class WebServer {
             thinkTime: parseFloat(req.body.thinkTime) || 1,
             addComments: req.body.addComments !== "false",
             logLevel: req.body.logLevel || "info",
+            csvFilePaths, // cert file name → tmp path for generator use
           };
 
           // Run conversion — all fs WRITES go to the in-memory Map, not disk
@@ -176,9 +191,18 @@ class WebServer {
             converter.convert(),
           );
 
+          // Add uploaded cert files directly into the in-memory ZIP map
+          for (const f of certFiles) {
+            const dest = path.join(outputDir, f.originalname).replace(/\\/g, "/");
+            files.set(dest, f.buffer);
+          }
+
           // Input temp files no longer needed
           await fs.unlink(tmpCollection).catch(() => {});
           if (tmpEnvironment) await fs.unlink(tmpEnvironment).catch(() => {});
+          // Clean up cert temp dir
+          for (const p of Object.values(csvFilePaths)) await fs.unlink(p).catch(() => {});
+          await fs.rmdir(tmpCertDir).catch(() => {});
 
           // Register single-use download token (5-minute TTL)
           const token = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -205,6 +229,8 @@ class WebServer {
         } catch (err) {
           await fs.unlink(tmpCollection).catch(() => {});
           if (tmpEnvironment) await fs.unlink(tmpEnvironment).catch(() => {});
+          for (const p of Object.values(csvFilePaths)) await fs.unlink(p).catch(() => {});
+          await fs.rmdir(tmpCertDir).catch(() => {});
 
           console.error("Conversion error:", err);
           res.status(500).json({ error: err.message });

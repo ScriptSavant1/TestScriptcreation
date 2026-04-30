@@ -79,7 +79,8 @@ class AdvancedScriptGenerator {
     this.ntlmHost = ''; // hostname without port for load.setUserCredentials()
 
     // mTLS cert detection — populated by detectMtlsCert() during analyze()
-    this.mtlsCertFile = null; // basename of uploaded cert file (non-JWT)
+    // Each entry: { certFile, keyFile, format: 'PEM'|'PFX' }
+    this.mtlsCertFiles = [];
 
     // Per-request dynamic variables — generated fresh before each request (e.g. UUID, nonce).
     // Map: varName → { generationType: 'uuid'|'random'|'timestamp'|'nonce', requestNames: string[] }
@@ -286,23 +287,42 @@ class AdvancedScriptGenerator {
 
   /**
    * Detect uploaded mTLS client certificate files (non-JWT).
-   * Checks options.csvFilePaths for .pem/.p12/.pfx/.crt files.
-   * Sets this.mtlsCertFile to the filename when found.
+   * Supports .p12 (self-contained), .pem (cert or cert+key), .key (private key).
+   * Pairs .pem + .key by matching basenames; unpaired .pem uses itself as key.
+   * Populates this.mtlsCertFiles array of { certFile, keyFile, format }.
    */
   detectMtlsCert() {
     const paths = this.options.csvFilePaths || {};
-    for (const filename of Object.keys(paths)) {
-      const lc = filename.toLowerCase();
-      if (
-        lc.endsWith(".pem") ||
-        lc.endsWith(".p12") ||
-        lc.endsWith(".pfx") ||
-        lc.endsWith(".crt")
-      ) {
-        this.mtlsCertFile = filename;
-        console.log(`  ✓ Client certificate detected: ${filename}`);
-        return;
+    const allFiles = Object.keys(paths);
+
+    const pemFiles = allFiles.filter(f => f.toLowerCase().endsWith('.pem') || f.toLowerCase().endsWith('.crt') || f.toLowerCase().endsWith('.cer'));
+    const keyFiles = allFiles.filter(f => f.toLowerCase().endsWith('.key'));
+    const p12Files = allFiles.filter(f => f.toLowerCase().endsWith('.p12') || f.toLowerCase().endsWith('.pfx'));
+
+    const usedKeys = new Set();
+
+    for (const pem of pemFiles) {
+      const base = pem.replace(/\.[^.]+$/, '').toLowerCase();
+      const matchedKey = keyFiles.find(k => k.replace(/\.[^.]+$/, '').toLowerCase() === base);
+      if (matchedKey) {
+        usedKeys.add(matchedKey);
+        this.mtlsCertFiles.push({ certFile: pem, keyFile: matchedKey, format: 'PEM' });
+        console.log(`  ✓ Client cert pair detected: ${pem} + ${matchedKey}`);
+      } else {
+        this.mtlsCertFiles.push({ certFile: pem, keyFile: pem, format: 'PEM' });
+        console.log(`  ✓ Client certificate detected: ${pem}`);
       }
+    }
+
+    for (const p12 of p12Files) {
+      this.mtlsCertFiles.push({ certFile: p12, keyFile: p12, format: 'PFX' });
+      console.log(`  ✓ Client certificate detected: ${p12}`);
+    }
+
+    // Standalone .key files with no matching .pem are skipped
+    const skipped = keyFiles.filter(k => !usedKeys.has(k));
+    if (skipped.length) {
+      console.warn(`  ⚠  Skipped standalone key file(s) with no matching .pem: ${skipped.join(', ')}`);
     }
   }
 
@@ -475,7 +495,7 @@ class AdvancedScriptGenerator {
           this.scriptSetVarNames.add(v); // ensure they're Tier 1 dynamic
         });
         // Extract claim-to-parameter mappings from the JWT-detected script.
-        const map = CustomScriptParser.extractJwtClaimMapping(text);
+        const map = CustomScriptParser.extractJwtClaimMap(text);
         if (
           map &&
           Object.keys(map).length >
@@ -891,20 +911,28 @@ ${finalizeSection}
           hasDpop: this.hasDpop || false,
           jwtClaimMap: this.jwtClaimMap || null,
           proxy: this.detectProxyConfig(),
-          mtlsCertFile: this.mtlsCertFile,
+          mtlsCertFiles: this.mtlsCertFiles,
         },
       );
 
-      // Copy mTLS client certificate to output directory
-      if (this.mtlsCertFile) {
+      // Copy all uploaded mTLS cert/key files to output directory
+      if (this.mtlsCertFiles.length > 0) {
         const fs = require("fs");
         const path = require("path");
-        const srcPath = (this.options.csvFilePaths || {})[this.mtlsCertFile];
-        if (srcPath && fs.existsSync(srcPath)) {
-          fs.copyFileSync(srcPath, path.join(outputDir, this.mtlsCertFile));
-          console.log(`✓ Copied mTLS certificate: ${this.mtlsCertFile}`);
-        } else {
-          console.warn(`  ⚠  mTLS cert ${this.mtlsCertFile} not found in uploaded files.`);
+        const csvPaths = this.options.csvFilePaths || {};
+        const copied = new Set();
+        for (const { certFile, keyFile } of this.mtlsCertFiles) {
+          for (const fname of [certFile, keyFile]) {
+            if (copied.has(fname)) continue;
+            copied.add(fname);
+            const srcPath = csvPaths[fname];
+            if (srcPath && fs.existsSync(srcPath)) {
+              fs.copyFileSync(srcPath, path.join(outputDir, fname));
+              console.log(`✓ Copied mTLS certificate: ${fname}`);
+            } else {
+              console.warn(`  ⚠  mTLS cert ${fname} not found in uploaded files.`);
+            }
+          }
         }
       }
 
@@ -1254,13 +1282,15 @@ ${finalizeSection}
       ? `// DPoP Helper — EC P-256 key generation and DPoP proof signing\nconst { getDpopProof } = require('./dpop-helper.js');\n`
       : "";
 
-    // JWT uses transport.pem; a separately-uploaded cert overrides with its own file.
-    const certFile = this.mtlsCertFile && !this.hasJwt
-        ? this.mtlsCertFile
-        : this.hasJwt ? 'transport.pem' : null;
-    const certSetup = certFile
-      ? `// Client certificate for mutual TLS authentication\nload.setUserCertificate('./${certFile}', './${certFile}');\n\n`
-      : "";
+    // Uploaded certs take precedence; JWT falls back to transport.pem when no certs uploaded.
+    let certSetup = '';
+    if (this.mtlsCertFiles.length > 0 && !this.hasJwt) {
+      certSetup = this.mtlsCertFiles
+        .map(c => `load.setUserCertificate('./${c.certFile}', './${c.keyFile}');`)
+        .join('\n') + '\n\n';
+    } else if (this.hasJwt) {
+      certSetup = `load.setUserCertificate('./transport.pem', './transport.pem');\n\n`;
+    }
 
     // Static browser baseline + static collection headers.
     // Sensitive collection headers were already routed to authGlobal during analyze().
@@ -1771,7 +1801,7 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
         : '';
 
     let code = `load.action('Action', async function() {
-${jwtRefreshBlock}${dpopRefreshBlock}${paramsHeaderBlock}
+${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 `;
 
     if (this.options.groupByFolder && this.options.useTransactions) {

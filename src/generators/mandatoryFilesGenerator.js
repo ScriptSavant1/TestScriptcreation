@@ -184,7 +184,7 @@ openTelemetry:
   tlsCertificate: ''
   authenticationHeader: ''
   vusersRate: 100
-userArguments: ${jwtUserArgs && object.keys(jwtUserArgs).length > 0 ? this._formatUserArguments(jwtUserArgs) : "{}"}
+userArguments: ${jwtUserArgs && Object.keys(jwtUserArgs).length > 0 ? this._formatUserArguments(jwtUserArgs) : "{}"}
 `;
   }
 
@@ -353,14 +353,14 @@ tearDown: 0      #Not used
    * @param {string[]} transactionNames  - Transaction names for [TransactionsOrder]
    * @param {boolean}  hasJwt            - Add jwt-helper.js + transport.pem to [ManuallyExtraFiles]
    * @param {boolean}  hasDpop            - Add dpop-helper.js to [ManuallyExtraFiles]
-   * @param {string}   [mtlsCertFile]    - mTLS cert filename to add to [ManuallyExtraFiles]
+   * @param {Array}    [mtlsCertFiles]   - mTLS cert pairs [{ certFile, keyFile, format }] to add to [ManuallyExtraFiles]
    */
   generateDevWebUsrFile(
     scriptName,
     transactionNames = [],
     hasJwt = false,
     hasDpop = false,
-    mtlsCertFile = null,
+    mtlsCertFiles = [],
   ) {
     const txOrder =
       transactionNames.length > 0
@@ -375,8 +375,13 @@ tearDown: 0      #Not used
       manualExtras += `dpop-helper.js=\n`;
     }
 
-    if (mtlsCertFile && !hasJwt) {
-      manualExtras += `${mtlsCertFile}=\n`;
+    if (mtlsCertFiles.length > 0 && !hasJwt) {
+      const certFilenames = new Set();
+      for (const { certFile, keyFile } of mtlsCertFiles) {
+        certFilenames.add(certFile);
+        certFilenames.add(keyFile);
+      }
+      for (const fname of certFilenames) manualExtras += `${fname}=\n`;
     }
 
     return `[General]
@@ -623,9 +628,11 @@ ${extarEntries}    <FileEntry Name="Action.c" Filter="1" />
       hasJwt = false,
       hasDpop = false,
       proxy = null,
-      mtlsCertFile = null,
+      mtlsCertFiles = [],
       jwtClaimMap = null,
     } = options;
+    // Back-compat: normalise legacy single-string form
+    const _mtlsCertFiles = Array.isArray(mtlsCertFiles) ? mtlsCertFiles : (mtlsCertFiles ? [{ certFile: mtlsCertFiles, keyFile: mtlsCertFiles, format: 'PEM' }] : []);
 
     // Extract JWT-related parameter names from the claim map.
     // These go into rts.yml userArguments instead of CSV/parameters.yml.
@@ -725,7 +732,7 @@ ${extarEntries}    <FileEntry Name="Action.c" Filter="1" />
         transactionNames,
         hasJwt,
         hasDpop,
-        mtlsCertFile,
+        _mtlsCertFiles,
       ),
       "utf8",
     );

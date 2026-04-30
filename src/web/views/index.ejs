@@ -465,6 +465,72 @@ body > * { position: relative; z-index: 1; }
 }
 .dz-clear:hover { color: var(--danger); border-color: rgba(240,100,100,0.40); background: rgba(240,100,100,0.10); }
 
+/* ── Cert upload zone (Bruno/Postman) ───────────────────────────────────── */
+.cert-zone-wrap { margin-bottom: 28px; }
+.cert-zone-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.cert-zone-title {
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  display: flex; align-items: center; gap: 6px;
+}
+.cert-zone-badge {
+  font-size: 10px; font-weight: 500; color: var(--text-3);
+  background: var(--glass); border: 1px solid var(--glass-border);
+  border-radius: 20px; padding: 2px 8px;
+}
+.dz-cert-full {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  min-height: unset; text-align: left;
+  flex-direction: row;
+}
+.dz-cert-full .dz-icon-wrap {
+  width: 38px; height: 38px; border-radius: 10px; margin: 0;
+  font-size: 16px; flex-shrink: 0;
+}
+.dz-cert-full .cert-zone-body { flex: 1; min-width: 0; }
+.dz-cert-full .dz-label  { font-size: 12.5px; margin-bottom: 2px; }
+.dz-cert-full .dz-sub    { font-size: 11px; }
+.cert-chip-list {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+  position: relative; z-index: 10; pointer-events: auto;
+}
+.cert-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--glass); border: 1px solid var(--glass-border);
+  border-radius: 20px; padding: 3px 6px 3px 8px;
+  font-size: 11px; font-weight: 500; color: var(--text-1);
+  position: relative; z-index: 10; pointer-events: auto;
+  max-width: 200px; transition: border-color .15s;
+}
+.cert-chip:hover { border-color: rgba(79,142,247,.35); }
+.cert-chip .chip-ext {
+  font-size: 9.5px; font-weight: 700; color: var(--primary);
+  background: rgba(79,142,247,.12); border-radius: 4px;
+  padding: 1px 5px; flex-shrink: 0; letter-spacing: .03em;
+}
+.cert-chip .chip-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cert-chip .chip-rm {
+  background: none; border: none; cursor: pointer; pointer-events: auto;
+  color: var(--text-3); font-size: 14px; line-height: 1;
+  padding: 0 2px; flex-shrink: 0; border-radius: 50%;
+}
+.cert-chip .chip-rm:hover { color: var(--danger); }
+.cert-add-hint {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-3); margin-top: 8px;
+  position: relative; z-index: 10; pointer-events: none;
+}
+.cert-count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; border-radius: 10px; padding: 0 6px;
+  background: rgba(52,209,122,.15); color: var(--success);
+  font-size: 11px; font-weight: 700;
+}
+
 /* ── Options ────────────────────────────────────────────────────────────── */
 .options-grid {
   display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
@@ -1497,6 +1563,36 @@ code {
     </div>
   </div>
 
+  <!-- 2b · Client Certificates -->
+  <div class="cert-zone-wrap">
+    <div class="cert-zone-header">
+      <span class="cert-zone-title">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-3)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Client Certificates
+      </span>
+      <span class="cert-zone-badge">Optional — mutual TLS authentication</span>
+    </div>
+    <div class="drop-zone dz-secondary dz-cert-full" id="dz-bru-cert"
+         ondragover="onDrag(event,'dz-bru-cert')" ondragleave="offDrag('dz-bru-cert')"
+         ondrop="onDropBrunoCert(event)">
+      <input type="file" id="fi-bru-cert" accept=".p12,.pem,.key" multiple
+             onchange="onPickBrunoCert()">
+      <div class="dz-icon-wrap">🛡️</div>
+      <div class="cert-zone-body">
+        <div class="dz-label">
+          Drop certificate files here
+          <span style="font-weight:400;color:var(--text-3);font-size:11px">&nbsp;or click to browse</span>
+        </div>
+        <div class="dz-sub">.p12 (PKCS12) &nbsp;·&nbsp; .pem (certificate) &nbsp;·&nbsp; .key (private key) &nbsp;·&nbsp; multiple files supported</div>
+        <div id="bru-cert-chips" class="cert-chip-list"></div>
+        <div id="bru-cert-hint" class="cert-add-hint" style="display:none">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Click or drag to add more certificates
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 3 · Options -->
   <div class="section-label"><span class="section-num">3</span>Configure Options</div>
   <div class="options-grid">
@@ -2112,7 +2208,7 @@ function toggleTheme() {
 
 /* ── State ──────────────────────────────────────────────────────────────── */
 const S  = { proto:'devweb', mode:'single', tt:1, ll:'info' };
-const F  = { collection:null, environment:null };
+const F  = { collection:null, environment:null, certFiles:[] };
 const JX = { proto:'devweb', mode:'single', tt:1, wlm:true, file:null, csvFiles:[], certFiles:[] };
 
 /* ── Feature Flags ──────────────────────────────────────────────────────────
@@ -2381,6 +2477,55 @@ function attachCertFiles(files) {
   };
 }
 
+/* ── Bruno/Postman cert files ───────────────────────────────────────────── */
+function onPickBrunoCert() {
+  const newFiles = Array.from(document.getElementById('fi-bru-cert').files);
+  if (newFiles.length) attachBrunoCerts(newFiles);
+  document.getElementById('fi-bru-cert').value = ''; // reset so same file can be re-selected
+}
+function onDropBrunoCert(e) {
+  e.preventDefault(); offDrag('dz-bru-cert');
+  const valid = ['.p12', '.pem', '.key'];
+  const files = Array.from(e.dataTransfer.files)
+    .filter(f => valid.some(ext => f.name.toLowerCase().endsWith(ext)));
+  if (files.length) attachBrunoCerts(files);
+}
+function attachBrunoCerts(newFiles) {
+  const existing = new Set(F.certFiles.map(f => f.name));
+  F.certFiles = [...F.certFiles, ...newFiles.filter(f => !existing.has(f.name))];
+  renderBrunoCertChips();
+}
+function removeBrunoCert(i) {
+  F.certFiles.splice(i, 1);
+  renderBrunoCertChips();
+}
+function renderBrunoCertChips() {
+  const dz   = document.getElementById('dz-bru-cert');
+  const list = document.getElementById('bru-cert-chips');
+  const hint = document.getElementById('bru-cert-hint');
+  list.innerHTML = '';
+  if (!F.certFiles.length) {
+    dz.classList.remove('loaded');
+    if (hint) hint.style.display = 'none';
+    return;
+  }
+  dz.classList.add('loaded');
+  F.certFiles.forEach((f, i) => {
+    const ext  = f.name.split('.').pop().toLowerCase();
+    const chip = document.createElement('div');
+    chip.className = 'cert-chip';
+    chip.innerHTML =
+      `<span class="chip-ext">.${ext}</span>` +
+      `<span class="chip-name" title="${f.name}">${f.name}</span>`;
+    const rm = document.createElement('button');
+    rm.className = 'chip-rm'; rm.title = 'Remove'; rm.textContent = '×';
+    rm.onclick = e => { e.stopPropagation(); removeBrunoCert(i); };
+    chip.appendChild(rm);
+    list.appendChild(chip);
+  });
+  if (hint) hint.style.display = 'flex';
+}
+
 /* ── Progress helper ────────────────────────────────────────────────────── */
 function startProgress(wrapId, fillId) {
   const pw = document.getElementById(wrapId);
@@ -2407,6 +2552,7 @@ async function doConvert() {
   const fd = new FormData();
   fd.append('collection', F.collection);
   if (F.environment) fd.append('environment', F.environment);
+  for (const f of F.certFiles) fd.append('certFiles', f);
   fd.append('protocol',            S.proto);
   fd.append('mode',                S.mode);
   fd.append('thinkTime',           S.tt);
