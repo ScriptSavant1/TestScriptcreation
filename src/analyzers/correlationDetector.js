@@ -534,6 +534,15 @@ class CorrelationDetector {
       const path = cleanPath(pmJsonMatch[1]);
       return path ? `$.${path}` : null;
     }
+    // Bare pm.response.json() with no field accessor → root of JSON body
+    if (/pm\.response\.json\s*\(\s*\)/.test(source)) return '$';
+
+    // ── JSON.parse(expr).field ────────────────────────────────────────────────
+    const jsonParseMatch = source.match(/JSON\.parse\s*\([^)]+\)\s*\??\.([\w$[\]?.]+[^;,)\s]*)/);
+    if (jsonParseMatch) {
+      const path = cleanPath(jsonParseMatch[1]);
+      if (path) return `$.${path}`;
+    }
 
     // ── Postman/Generic: jsonData.field, json.field, response.field, data.field
     const genericMatch = source.match(/(?:jsonData|responseBody|json|response|data)\??\.(.+)/);
