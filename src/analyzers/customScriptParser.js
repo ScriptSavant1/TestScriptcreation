@@ -19,18 +19,18 @@ class CustomScriptParser {
     }
 
     // Convert to string if necessary
-    if (typeof script !== "string") {
+    if (typeof script !== 'string') {
       if (Array.isArray(script)) {
-        script = script.join("\n");
-      } else if (typeof script === "object") {
+        script = script.join('\n');
+      } else if (typeof script === 'object') {
         // Try to extract script from object structure
-        script = script.exec?.join("\n") || JSON.stringify(script);
+        script = script.exec?.join('\n') || JSON.stringify(script);
       } else {
         script = String(script);
       }
     }
 
-    if (script.trim() === "") {
+    if (script.trim() === '') {
       return null;
     }
 
@@ -43,13 +43,13 @@ class CustomScriptParser {
     };
 
     try {
-      const lines = script.split("\n");
+      const lines = script.split('\n');
 
       for (let line of lines) {
         line = line.trim();
-        if (!line || line.startsWith("//")) continue;
+        if (!line || line.startsWith('//')) continue;
 
-        const converted = this.convertScriptLine(line, "pre-request");
+        const converted = this.convertScriptLine(line, 'pre-request');
         if (converted) {
           result.convertedCode.push(converted.code);
           if (converted.variables) {
@@ -66,9 +66,7 @@ class CustomScriptParser {
 
       return result;
     } catch (error) {
-      result.warnings.push(
-        `Failed to parse pre-request script: ${error.message}`,
-      );
+      result.warnings.push(`Failed to parse pre-request script: ${error.message}`);
       result.hasUnsupportedCode = true;
       return result;
     }
@@ -84,18 +82,18 @@ class CustomScriptParser {
     }
 
     // Convert to string if necessary
-    if (typeof script !== "string") {
+    if (typeof script !== 'string') {
       if (Array.isArray(script)) {
-        script = script.join("\n");
-      } else if (typeof script === "object") {
+        script = script.join('\n');
+      } else if (typeof script === 'object') {
         // Try to extract script from object structure
-        script = script.exec?.join("\n") || JSON.stringify(script);
+        script = script.exec?.join('\n') || JSON.stringify(script);
       } else {
         script = String(script);
       }
     }
 
-    if (script.trim() === "") {
+    if (script.trim() === '') {
       return null;
     }
 
@@ -106,17 +104,17 @@ class CustomScriptParser {
       assertions: [],
       variables: [],
       warnings: [],
-      hasUnsupportedCode: false,
+      hasUnsupportedCode: false
     };
 
     try {
-      const lines = script.split("\n");
+      const lines = script.split('\n');
 
       for (let line of lines) {
         line = line.trim();
-        if (!line || line.startsWith("//")) continue;
+        if (!line || line.startsWith('//')) continue;
 
-        const converted = this.convertScriptLine(line, "test");
+        const converted = this.convertScriptLine(line, 'test');
         if (converted) {
           if (converted.code) {
             result.convertedCode.push(converted.code);
@@ -152,77 +150,59 @@ class CustomScriptParser {
    */
   convertScriptLine(line, scriptType) {
     // Bruno variable setting: bru.setVar(), bru.setEnvVar()
-    if (line.includes("bru.setVar") || line.includes("bru.setEnvVar")) {
+    if (line.includes('bru.setVar') || line.includes('bru.setEnvVar')) {
       return this.convertBrunoSetVar(line);
     }
 
     // Bruno variable getting: bru.getVar(), bru.getEnvVar()
-    if (line.includes("bru.getVar") || line.includes("bru.getEnvVar")) {
+    if (line.includes('bru.getVar') || line.includes('bru.getEnvVar')) {
       return this.convertBrunoGetVar(line);
     }
 
     // Postman variable setting: pm.environment.set(), pm.collectionVariables.set(), pm.globals.set()
-    if (
-      line.includes("pm.environment.set") ||
-      line.includes("pm.collectionVariables.set") ||
-      line.includes("pm.globals.set") ||
-      line.includes("pm.variables.set")
-    ) {
+    if (line.includes('pm.environment.set') || line.includes('pm.collectionVariables.set') || line.includes('pm.globals.set') || line.includes('pm.variables.set')) {
       return this.convertPostmanSetVar(line);
     }
 
     // Postman variable getting
-    if (
-      line.includes("pm.environment.get") ||
-      line.includes("pm.collectionVariables.get") ||
-      line.includes("pm.globals.get") ||
-      line.includes("pm.variables.get")
-    ) {
+    if (line.includes('pm.environment.get') || line.includes('pm.collectionVariables.get') || line.includes('pm.globals.get') || line.includes('pm.variables.get')) {
       return this.convertPostmanGetVar(line);
     }
 
     // Response body access: res.body, pm.response.json()
-    if (
-      scriptType === "test" &&
-      (line.includes("res.body") || line.includes("pm.response.json()"))
-    ) {
+    if (scriptType === 'test' && (line.includes('res.body') || line.includes('pm.response.json()'))) {
       return this.convertResponseAccess(line);
     }
 
     // Assertions: pm.test(), expect(), pm.expect()
-    if (
-      scriptType === "test" &&
-      (line.includes("pm.test") ||
-        line.includes("expect(") ||
-        line.includes("pm.expect"))
-    ) {
+    if (scriptType === 'test' && (line.includes('pm.test') || line.includes('expect(') || line.includes('pm.expect'))) {
       return this.convertAssertion(line);
     }
 
     // Date/Time functions
-    if (line.includes("Date.now()") || line.includes("new Date()")) {
+    if (line.includes('Date.now()') || line.includes('new Date()')) {
       return this.convertDateFunction(line);
     }
 
     // Math.random()
-    if (line.includes("Math.random()")) {
-      return { code: line.replace(/const|let|var/, "const") };
+    if (line.includes('Math.random()')) {
+      return { code: line.replace(/const|let|var/, 'const') };
     }
 
     // Crypto operations
-    if (line.includes("crypto") || line.includes("CryptoJS")) {
+    if (line.includes('crypto') || line.includes('CryptoJS')) {
       return this.convertCryptoOperation(line);
     }
 
     // Console.log -> load.log
-    if (line.includes("console.log")) {
+    if (line.includes('console.log')) {
       return {
-        code: line.replace(/console\.log\((.*)\)/g, "load.log($1)"),
+        code: line.replace(/console\.log\((.*)\)/g, 'load.log($1)'),
       };
     }
 
     // JSON operations
-    if (line.includes("JSON.parse") || line.includes("JSON.stringify")) {
+    if (line.includes('JSON.parse') || line.includes('JSON.stringify')) {
       return { code: line };
     }
 
@@ -235,7 +215,7 @@ class CustomScriptParser {
     return {
       code: `// TODO: Manual conversion needed - ${line}`,
       warning: `Unsupported code pattern: ${line.substring(0, 50)}...`,
-      unsupported: true,
+      unsupported: true
     };
   }
 
@@ -245,13 +225,11 @@ class CustomScriptParser {
   convertBrunoSetVar(line) {
     // bru.setVar("name", value) -> load.global.name = value
     // bru.setEnvVar("name", value) -> load.global.name = value
-    const match = line.match(
-      /bru\.(?:setVar|setEnvVar)\s*\(\s*["']([^"']+)["']\s*,\s*(.+)\s*\)/,
-    );
+    const match = line.match(/bru\.(?:setVar|setEnvVar)\s*\(\s*["']([^"']+)["']\s*,\s*(.+)\s*\)/);
     if (match) {
       const [, varName, value] = match;
       return {
-        code: `load.global.${varName} = ${value.replace(/;$/, "")};`,
+        code: `load.global.${varName} = ${value.replace(/;$/, '')};`,
         variables: [varName],
       };
     }
@@ -266,7 +244,7 @@ class CustomScriptParser {
     // bru.getEnvVar("name") -> load.global.name
     const converted = line.replace(
       /bru\.(?:getVar|getEnvVar)\s*\(\s*["']([^"']+)["']\s*\)/g,
-      "load.global.$1",
+      'load.global.$1',
     );
     return { code: converted };
   }
@@ -276,13 +254,11 @@ class CustomScriptParser {
    */
   convertPostmanSetVar(line) {
     // pm.environment.set("name", value) -> load.global.name = value
-    const match = line.match(
-      /pm\.(?:environment|collectionVariables|globals|variables)\.set\s*\(\s*["']([^"']+)["']\s*,\s*(.+)\s*\)/,
-    );
+    const match = line.match(/pm\.(?:environment|collectionVariables|globals|variables)\.set\s*\(\s*["']([^"']+)["']\s*,\s*(.+)\s*\)/);
     if (match) {
       const [, varName, value] = match;
       return {
-        code: `load.global.${varName} = ${value.replace(/;$/, "")};`,
+        code: `load.global.${varName} = ${value.replace(/;$/, '')};`,
         variables: [varName],
       };
     }
@@ -296,7 +272,7 @@ class CustomScriptParser {
     // pm.environment.get("name") -> load.global.name
     const converted = line.replace(
       /pm\.(?:environment|collectionVariables|globals|variables)\.get\s*\(\s*["']([^"']+)["']\s*\)/g,
-      "load.global.$1",
+      'load.global.$1',
     );
     return { code: converted };
   }
@@ -309,8 +285,7 @@ class CustomScriptParser {
     // For now, add as a comment
     return {
       code: `// TODO: Convert response access - ${line}`,
-      warning:
-        "Response body access requires manual conversion with proper response variable",
+      warning: 'Response body access requires manual conversion with proper response variable',
       unsupported: true,
     };
   }
@@ -326,32 +301,31 @@ class CustomScriptParser {
         return {
           code: `// Assertion: ${match[1]}`,
           assertion: match[1],
-          warning:
-            "pm.test assertions need manual conversion to extractors and conditionals",
+          warning: 'pm.test assertions need manual conversion to extractors and conditionals'
         };
       }
     }
 
     // pm.expect(pm.response.code).to.equal(200)
-    if (line.includes("pm.response.code") && line.includes(".to.equal")) {
+    if (line.includes("pm.response.code") && line.includes('.to.equal')) {
       const match = line.match(/\.to\.equal\s*\(\s*(\d+)\s*\)/);
       if (match) {
         const statusCode = match[1];
         return {
           code: `// TODO: Add status code check\nif (response.status !== ${statusCode}) {\n    load.log("Expected status ${statusCode}, got " + response.status, load.LogLevel.error);\n}`,
-          assertion: `status equals ${statusCode}`,
+          assertion: `status equals ${statusCode}`
         };
       }
     }
 
     // expect(response).to.have.status(200)
-    if (line.includes("expect(") && line.includes(".to.have.status")) {
+    if (line.includes("expect(") && line.includes('.to.have.status')) {
       const match = line.match(/\.to\.have\.status\s*\(\s*(\d+)\s*\)/);
       if (match) {
         const statusCode = match[1];
         return {
           code: `// TODO: Add status code check\nif (response.status !== ${statusCode}) {\n    load.log("Expected status ${statusCode}, got " + response.status, load.LogLevel.error);\n}`,
-          assertion: `status equals ${statusCode}`,
+          assertion: `status equals ${statusCode}`
         };
       }
     }
@@ -359,7 +333,7 @@ class CustomScriptParser {
     return {
       code: `// TODO: Convert assertion - ${line}`,
       warning: `Complex assertion needs manual conversion: ${line.substring(0, 50)}`,
-      unsupported: true,
+      unsupported: true
     };
   }
 
@@ -376,16 +350,16 @@ class CustomScriptParser {
    */
   convertCryptoOperation(line) {
     // DevWeb supports Node.js crypto module
-    if (line.includes("require(") && line.includes("crypto")) {
+    if (line.includes('require(') && line.includes('crypto')) {
       return { code: line }; // Node crypto is available
     }
 
     // CryptoJS needs to be converted or flagged
-    if (line.includes("CryptoJS")) {
+    if (line.includes('CryptoJS')) {
       return {
         code: `// TODO: CryptoJS not available in DevWeb - use Node.js crypto module\n// ${line}`,
-        warning: "CryptoJS not supported - convert to Node.js crypto module",
-        unsupported: true,
+        warning: 'CryptoJS not supported - convert to Node.js crypto module',
+        unsupported: true
       };
     }
 
@@ -397,17 +371,17 @@ class CustomScriptParser {
    */
   generatePreRequestCode(parsedScript, indent = 2) {
     if (!parsedScript || parsedScript.convertedCode.length === 0) {
-      return "";
+      return '';
     }
 
-    const spaces = "    ".repeat(indent);
+    const spaces = '    '.repeat(indent);
     let code = `\n${spaces}// Pre-request Script\n`;
 
     if (parsedScript.hasUnsupportedCode) {
       code += `${spaces}// ⚠️  WARNING: Some code requires manual conversion\n`;
     }
 
-    parsedScript.convertedCode.forEach((line) => {
+    parsedScript.convertedCode.forEach(line => {
       code += `${spaces}${line}\n`;
     });
 
@@ -419,17 +393,17 @@ class CustomScriptParser {
    */
   generateTestCode(parsedScript, responseVarName, indent = 2) {
     if (!parsedScript || parsedScript.convertedCode.length === 0) {
-      return "";
+      return '';
     }
 
-    const spaces = "    ".repeat(indent);
+    const spaces = '    '.repeat(indent);
     let code = `\n${spaces}// Post-response Script\n`;
 
     if (parsedScript.hasUnsupportedCode) {
       code += `${spaces}// ⚠️  WARNING: Some code requires manual conversion\n`;
     }
 
-    parsedScript.convertedCode.forEach((line) => {
+    parsedScript.convertedCode.forEach(line => {
       // Replace generic "response" with actual variable name
       const replacedLine = line.replace(/\bresponse\b/g, responseVarName);
       code += `${spaces}${replacedLine}\n`;
@@ -468,21 +442,19 @@ class CustomScriptParser {
    * @returns {{ isDpop: boolean, outputVars: string[], keyVar: string }}
    */
   static detectDpopUsage(script) {
-    if (!script || typeof script !== "string") {
+    if (!script || typeof script !== 'string') {
       return { isDpop: false, outputVars: [], keyVar: null };
     }
 
     // DPoP detection patterns
-    const isDpop =
-      /dpop|DPoP/i.test(script) &&
-      (/jose|ES256|generateKeyPair|SignJWT/i.test(script) ||
-        /typ\s*:\s*["']dpop\+jwt["']/i.test(script));
+    const isDpop = /dpop|DPoP/i.test(script) &&
+               (/jose|ES256|generateKeyPair|SignJWT/i.test(script) ||
+                /typ\s*:\s*['"]dpop\+jwt['"]/i.test(script));
 
     if (!isDpop) return { isDpop: false, outputVars: [], keyVar: null };
 
     // Extract output variables (dpop_proof, dpop_result, etc.)
-    const setPattern =
-      /(?:pm\.(?:environment|globals|collectionVariables|variables)\.set|postman\.(?:setEnvironmentVariable|setGlobalVariable)|bru\.(?:setVar|setEnvVar))\s*\(\s*["']([^"']+)["']/g;
+    const setPattern = /(?:pm\.(?:environment|globals|collectionVariables|variables)\.set|postman\.(?:setEnvironmentVariable|setGlobalVariable)|bru\.(?:setVar|setEnvVar))\s*\(\s*['"]([^'"]+)['"]/g;
     const outputVars = [];
     let m;
     while ((m = setPattern.exec(script)) !== null) {
@@ -490,15 +462,14 @@ class CustomScriptParser {
     }
 
     // Extract JWK variable (dpop_jwk)
-    const jwkPattern =
-      /(?:pm\.(?:environment|globals|collectionVariables|variables)\.get|postman\.(?:getEnvironmentVariable|getGlobalVariable)|bru\.(?:getVar|getEnvVar))\s*\(\s*["']([^"']*jwk[^"']*)["']\s*\)/gi;
+    const jwkPattern = /(?:pm\.(?:environment|globals|collectionVariables|variables)\.get|postman\.(?:getEnvironmentVariable|getGlobalVariable)|bru\.(?:getVar|getEnvVar))\s*\(\s*['"]([^'"]*jwk[^'"]*)['"]\s*\)/gi;
     let keyVar = null;
     while ((m = jwkPattern.exec(script)) !== null) {
       keyVar = m[1];
       break; // Use first match
     }
 
-    return { isDpop: true, outputVars, keyVar: keyVar || "dpop_jwk" };
+    return { isDpop: true, outputVars, keyVar: keyVar || 'dpop_jwk' };
   }
 
   /**
@@ -516,38 +487,27 @@ class CustomScriptParser {
    *   crypto     — Node.js built-in sign via crypto (manual JWT)
    */
   static detectJwtUsage(script) {
-    if (!script || typeof script !== "string") {
-      return {
-        isJwt: false,
-        library: null,
-        outputVars: [],
-        algorithm: "RS256",
-      };
+    if (!script || typeof script !== 'string') {
+      return {isJwt: false, library: null, outputVars: [], algorithm: 'RS256'};
     }
 
     // ── Library fingerprints ────────────────────────────────────────────────
-    const isJsrsasign = /jsrsasign|KJUR\.jws\.JWS\.sign\s*\(|kjur/i.test(
-      script,
-    );
-    const isJsonwebtoken =
-      /require\s*\(\s*['"]jsonwebtoken['"]\s*\)/.test(script) &&
+    const isJsrsasign = /jsrsasign|KJUR\.jws\.JWS\.sign\s*\(|kjur/i.test(script);
+    const isJsonwebtoken = /require\s*\(\s*['"]jsonwebtoken['"]\s*\)/.test(script) &&
       /\.sign\s*\(/.test(script);
     const isJose = /require\s*\(\s*['"]jose['"]\s*\)/.test(script);
-    const isManualCrypto =
-      /crypto\.sign\s*\(|createSign\s*\(/.test(script) &&
+    const isManualCrypto = /crypto\.sign\s*\(|createSign\s*\(/.test(script) &&
       /base64url|header\.payload/.test(script);
 
     // ── Java / Groovy JWT patterns (JSR223 / BeanShell in JMeter) ────────────
 
     // JJWT (io.jsonwebtoken) — Jwts.builder()...signWith(...).compact()
-    const isJjwt =
-      /import\s+io\.jsonwebtoken/.test(script) ||
+    const isJjwt = /import\s+io\.jsonwebtoken/.test(script) ||
       /Jwts\.builder\s*\(/.test(script) ||
       (/\.signWith\s*\(/.test(script) && /\.compact\s*\(/.test(script));
 
     // nimbus-jose-jwt (com.nimbusds) — most popular Java JWT lib
-    const isNimbus =
-      /import\s+com\.nimbusds\.(?:jose|jwt)/.test(script) ||
+    const isNimbus = /import\s+com\.nimbusds\.(?:jose|jwt)/.test(script) ||
       /new\s+JWTClaimsSet\.Builder\s*\(/.test(script) ||
       /new\s+SignedJWT\s*\(/.test(script) ||
       /RSASSASigner|ECDSASigner|MACSigner/.test(script) ||
@@ -555,81 +515,52 @@ class CustomScriptParser {
       /signedJWT\.(?:serialize|sign)\s*\(/.test(script);
 
     // Auth0 java-jwt — JWT.create().sign(Algorithm.*)
-    const isAuth0 =
-      /import\s+com\.auth0\.jwt/.test(script) ||
+    const isAuth0 = /import\s+com\.auth0\.jwt/.test(script) ||
       /JWT\.create\s*\(/.test(script) ||
       /Algorithm\.(?:RSA|HMAC|ECDSA)\d+/.test(script);
 
     // BouncyCastle — org.bouncycastle (often combined with nimbus or manual)
-    const isBouncyCastle =
-      /import\s+org\.bouncycastle/.test(script) ||
+    const isBouncyCastle = /import\s+org\.bouncycastle/.test(script) ||
       /PEMParser|JcaPEMKeyConverter/.test(script);
 
     // Manual Java RSA signing via JCA (Signature.getInstance + SHA256withRSA/PS256)
-    const isJavaRsa =
-      /Signature\.getInstance\s*\(\s*["'](?:SHA256withRSA|SHA256withRSAandMGF1|SHA384withRSA|SHA512withRSA|SHA256withECDSA)["']/.test(
-        script,
-      );
+    const isJavaRsa = /Signature\.getInstance\s*\(\s*["'](?:SHA256withRSA|SHA256withRSAandMGF1|SHA384withRSA|SHA512withRSA|SHA256withECDSA)["']/.test(script);
 
     // Manual Java HMAC-SHA signing
-    const isJavaHmac =
-      /Mac\.getInstance\s*\(\s*["']Hmac(?:SHA256|SHA384|SHA512)["']/.test(
-        script,
-      );
+    const isJavaHmac = /Mac\.getInstance\s*\(\s*["']Hmac(?:SHA256|SHA384|SHA512)["']/.test(script);
 
     // PEM key loading — strong corroborating signal that JWT signing is happening
-    const hasPemInScript =
-      /-----BEGIN\s+(?:RSA\s+)?(?:EC\s+)?PRIVATE\s+KEY-----/.test(script) ||
+    const hasPemInScript = /-----BEGIN\s+(?:RSA\s+)?(?:EC\s+)?PRIVATE\s+KEY-----/.test(script) ||
       /PKCS8EncodedKeySpec/.test(script) ||
       /KeyFactory\.getInstance\s*\(\s*["'](?:RSA|EC)["']/.test(script);
 
     // JWT claim keywords — weak signal, only used as corroboration
-    const jwtClaimCount = [
-      /"iss"/,
-      /"sub"/,
-      /"aud"/,
-      /"exp"/,
-      /"iat"/,
-      /"jti"/,
-    ].filter((p) => p.test(script)).length;
+    const jwtClaimCount = [/"iss"/, /"sub"/, /"aud"/, /"exp"/, /"iat"/, /"jti"/]
+    .filter(p => p.test(script)).length;
     const hasJwtClaims = jwtClaimCount >= 3;
 
     // Manual Java JWT assembly: Base64 URL-encode header.payload then sign
-    const isJavaManual =
-      (/Base64\.getUrlEncoder/.test(script) && /\.sign\s*\(/.test(script)) ||
+    const isJavaManual = (/Base64\.getUrlEncoder/.test(script) && /\.sign\s*\(/.test(script)) ||
       (hasPemInScript && hasJwtClaims) ||
       (hasPemInScript && /\.sign\s*\(/.test(script));
 
-    const isJavaJwt =
-      isJjwt ||
-      isNimbus ||
-      isAuth0 ||
-      isBouncyCastle ||
-      isJavaRsa ||
-      isJavaHmac ||
-      isJavaManual;
+    const isJavaJwt = isJjwt || isNimbus || isAuth0 || isBouncyCastle || 
+        isJavaRsa || isJavaHmac || isJavaManual;
 
-    const isJwt =
-      isJsrsasign || isJsonwebtoken || isJose || isManualCrypto || isJavaJwt;
-    if (!isJwt)
-      return {
-        isJwt: false,
-        library: null,
-        outputVars: [],
-        algorithm: "RS256",
-      };
+    const isJwt = isJsrsasign || isJsonwebtoken || isJose || isManualCrypto || isJavaJwt;
+    if (!isJwt) return { isJwt: false, library: null, outputVars: [], algorithm: "RS256"};
 
     // ── Determine library ───────────────────────────────────────────────────
-    let library = "unknown";
-    if (isJsrsasign) library = "jsrsasign";
-    else if (isJsonwebtoken) library = "jsonwebtoken";
-    else if (isJose) library = "jose";
-    else if (isManualCrypto) library = "crypto";
-    else if (isNimbus) library = "nimbus-jose-jwt";
-    else if (isAuth0) library = "auth0-java-jwt";
-    else if (isJjwt) library = "jjwt";
-    else if (isBouncyCastle) library = "bouncycastle";
-    else if (isJavaRsa || isJavaHmac || isJavaManual) library = "java-manual";
+    let library = 'unknown';
+    if (isJsrsasign) library = 'jsrsasign';
+    else if (isJsonwebtoken) library = 'jsonwebtoken';
+    else if (isJose) library = 'jose';
+    else if (isManualCrypto) library = 'crypto';
+    else if (isNimbus) library = 'nimbus-jose-jwt';
+    else if (isAuth0) library = 'auth0-java-jwt';
+    else if (isJjwt) library = 'jjwt';
+    else if (isBouncyCastle) library = 'bouncycastle';
+    else if (isJavaRsa || isJavaHmac || isJavaManual) library = 'java-manual';
 
     // ── Extract algorithm — JS and Java/Groovy patterns ─────────────────────
     const algMatch =
@@ -644,50 +575,45 @@ class CustomScriptParser {
       script.match(/Algorithm\.([A-Z]+\d+)\s*\(/) ||
       // Java getInstance: "SHA256withRSAandMGF1" → PS256, "SHA256withRSA" → RS256, etc.
       script.match(
-        /getInstance\s*\(\s*["'](SHA\d+with(?:RSAandMGF1|RSA|ECDSA)|Hmac(?:SHA\d+))["']/i,
-      );
+        /getInstance\s*\(\s*["'](SHA\d+with(?:RSAandMGF1|RSA|ECDSA)|Hmac(?:SHA\d+))["']/i);
 
-    let algorithm = "RS256";
+    let algorithm = 'RS256';
     if (algMatch) {
       const raw = algMatch[1].toUpperCase();
       // Map Java/Auth0 algorithm names to JWT alg identifiers
       const javaAlgMap = {
-        SHA256WITHRSA: "RS256",
-        SHA384WITHRSA: "RS384",
-        SHA512WITHRSA: "RS512",
-        SHA256WITHRSAANDMGF1: "PS256",
-        SHA384WITHRSAANDMGF1: "PS384",
-        SHA512WITHRSAANDMGF1: "PS512",
-        SHA256WITHECDSA: "ES256",
-        SHA384WITHECDSA: "ES384",
-        SHA512WITHECDSA: "ES512",
-        HMACSHA256: "HS256",
-        HMACSHA384: "HS384",
-        HMACSHA512: "HS512",
+        SHA256WITHRSA: 'RS256',
+        SHA384WITHRSA: 'RS384',
+        SHA512WITHRSA: 'RS512',
+        SHA256WITHRSAANDMGF1: 'PS256',
+        SHA384WITHRSAANDMGF1: 'PS384',
+        SHA512WITHRSAANDMGF1: 'PS512',
+        SHA256WITHECDSA: 'ES256',
+        SHA384WITHECDSA: 'ES384',
+        SHA512WITHECDSA: 'ES512',
+        HMACSHA256: 'HS256',
+        HMACSHA384: 'HS384',
+        HMACSHA512: 'HS512',
         // Auth0 naming
-        RSA256: "RS256",
-        RSA384: "RS384",
-        RSA512: "RS512",
-        HMAC256: "HS256",
-        HMAC384: "HS384",
-        HMAC512: "HS512",
-        ECDSA256: "ES256",
-        ECDSA384: "ES384",
-        ECDSA512: "ES512",
+        RSA256: 'RS256',
+        RSA384: 'RS384',
+        RSA512: 'RS512',
+        HMAC256: 'HS256',
+        HMAC384: 'HS384',
+        HMAC512: 'HS512',
+        ECDSA256: 'ES256',
+        ECDSA384: 'ES384',
+        ECDSA512: 'ES512',
       };
       algorithm = javaAlgMap[raw] || raw;
     }
 
     // ── Extract output variable names (variables set after JWT is generated) ─
-    const setPattern =
-      /(?:pm\.environment|pm\.globals|pm\.collectionVariables|pm\.variables)\.set\s*\(\s*['"]([^'"]+)['"]/g;
-    const bruPattern =
-      /bru\.(?:setVar|setEnvVar|setEnv|setGlobalVar)\s*\(\s*['"]([^'"]+)['"]/g;
-    const postmanPattern =
-      /postman\.(?:setEnvironmentVariable|setGlobalVariable)\s*\(\s*['"]([^'"]+)['"]/g;
+    const setPattern = /(?:pm\.environment|pm\.globals|pm\.collectionVariables|pm\.variables)\.set\s*\(\s*['"]([^'"]+)['"]/g;
+    const bruPattern = /bru\.(?:setVar|setEnvVar|setEnv|setGlobalVar)\s*\(\s*['"]([^'"]+)['"]/g;
+    const postmanPattern = /postman\.(?:setEnvironmentVariable|setGlobalVariable)\s*\(\s*['"]([^'"]+)['"]/g;
     // JMeter Groovy/BeanShell: vars.put / vars.putObject / vars.putEncoded / props.put
-    const varsPattern =
-      /(?:vars|props)\.put(?:Object|Encoded)?\s*\(\s*["']([^"']+)["']/g;
+    const varsPattern = /(?:vars|props)\.put(?:Object|Encoded)?\s*\(\s*["']([^"']+)["']/g;
     // JMeter context.set() (some Groovy scripts use SampleContext)
     const ctxPattern = /context\.set\s*\(\s*["']([^"']+)["']/g;
     const outputVars = [];
@@ -723,29 +649,24 @@ class CustomScriptParser {
 
     // Regex that captures: "claim" : getter("paramName")  or  claim : getter('paramName')
     // Covers all Postman / Bruno / old-Postman getter APIs
-    const GETTER =
-      "(?:" +
-      [
-        "pm\\.(?:environment|globals|collectionVariables|variables)\\.get",
-        "postman\\.(?:getEnvironmentVariable|getGlobalVariable)",
-        "bru\\.(?:getVar|getEnvVar)",
-      ].join("|") +
-      ")\\s*\\(\\s*[\"']([^\"']+)[\"']\\s*\\)";
+    const GETTER = "(?:" + [
+        'pm\\.(?:environment|globals|collectionVariables|variables)\\.get',
+        'postman\\.(?:getEnvironmentVariable|getGlobalVariable)',
+        'bru\\.(?:getVar|getEnvVar)',
+      ].join('|') + ')\\s*\\(\\s*[\'"]([^\'"]+)[\'"]\\s*\\)';
 
     // Pattern: "claimName" : getter("paramName")  — with optional quotes on claim key
     const claimRe = new RegExp(
-      "[\"']?([\\w]+)[\"']?\\s*[=:]\\s*" + GETTER,
-      "g",
+      '["\']?([\\w]+)["\']?\\s*[:=]\\s*' + GETTER, 'g',
     );
+
     const map = {};
     let m;
     while ((m = claimRe.exec(script)) !== null) {
       const claim = m[1]; // e.g. kid, iss, sub, aud, scope
       const param = m[2]; // e.g. signing_kid, client_id, aud
       // Only map standard JWT claims + common extras
-      if (
-        /^(kid|typ|alg|iss|sub|aud|scope|iat|exp|jti|nbf|nonce)$/i.test(claim)
-      ) {
+      if (/^(kid|typ|alg|iss|sub|aud|scope|iat|exp|jti|nbf|nonce)$/i.test(claim)) {
         map[claim.toLowerCase()] = param;
       }
     }
@@ -753,24 +674,20 @@ class CustomScriptParser {
     // Detect private key: var/let/const <name> = getter("paramName")
     // where <name> is later used in .sign() or createSign()
     const keyAssignRe = new RegExp(
-      "(?:var|let|const)\\s+(\\w+)\\s*=\\s*" + GETTER,
-      "g",
+      '(?:var|let|const)\\s+(\\w+)\\s*=\\s*' + GETTER, 'g'
     );
     while ((m = keyAssignRe.exec(script)) !== null) {
       const varName = m[1]; // e.g. prvKey, privateKey, secret
       const paramName = m[2]; // e.g. secret, private_key
       // Heuristic: variable suggests a key, or it's used in .sign()
-      if (
-        /key|secret|prv|private|pem|cert|signing/i.test(varName) ||
-        new RegExp(varName + "\\s*\\)").test(script)
-      ) {
+      if (/key|secret|prv|private|pem|cert|signing/i.test(varName) ||
+        new RegExp(varName + "\\s*\\)").test(script)) {
         map.secret = paramName;
       }
     }
 
     // Detect output variable: pm.environment.set('jwt_token', ...) / postman.setEnvironmentVariable('jwt_token', ...)
-    const setRe =
-      /(?:pm\.(?:environment|globals|collectionVariables|variables)\.set|postman\.(?:setEnvironmentVariable|setGlobalVariable)|bru\.(?:setVar|setEnvVar))\s*\(\s*["']([^"']+)["']/g;
+    const setRe = /(?:pm\.(?:environment|globals|collectionVariables|variables)\.set|postman\.(?:setEnvironmentVariable|setGlobalVariable)|bru\.(?:setVar|setEnvVar))\s*\(\s*['"]([^'"]+)['"]/g;
     while ((m = setRe.exec(script)) !== null) {
       map.output = m[1];
     }
@@ -806,79 +723,54 @@ class CustomScriptParser {
     if (!headerKey) return false;
     const k = headerKey.toLowerCase();
     const KNOWN = new Set([
-      "x-csrf-token",
-      "x-xsrf-token",
-      "x-csrftoken",
-      "csrf-token",
-      "x-xsrf-header",
-      "x-csrf-header",
-      "x-anti-forgery-token",
-      "x-request-verification-token",
-      "__requestverificationtoken",
-      "x-antiforgery",
-      "requestverificationtoken",
+      'x-csrf-token', 'x-xsrf-token', 'x-csrftoken', 'csrf-token',
+      'x-xsrf-header', 'x-csrf-header', 'x-anti-forgery-token', 
+      'x-request-verification-token', '__requestverificationtoken',
+      'x-antiforgery', 'requestverificationtoken',
     ]);
     if (KNOWN.has(k)) return true;
     return /csrf|xsrf|antiforg|request.?verif/i.test(k);
   }
 
   static detectPerRequestDynamicVars(script) {
-    if (!script || typeof script !== "string") return [];
+    if (!script || typeof script !== 'string') return [];
 
     const results = [];
 
     // Pattern: pm.variables.set('varName', <generationExpression>)
     // Also: pm.environment.set / pm.globals.set / bru.setVar with dynamic RHS
-    const setPattern =
-      /pm\.(?:variables|environment|globals|collectionVariables)\.set\s*\(\s*['"]([^'"]+)['"]\s*,\s*([^)]+)\)/g;
-    const bruPattern =
-      /bru\.(?:setVar|setEnvVar)\s*\(\s*['"]([^'"]+)['"]\s*,\s*([^)]+)\)/g;
+    const setPattern = /pm\.(?:variables|environment|globals|collectionVariables)\.set\s*\(\s*['"]([^'"]+)['"]\s*,\s*([^)]+)\)/g;
+    const bruPattern = /bru\.(?:setVar|setEnvVar)\s*\(\s*['"]([^'"]+)['"]\s*,\s*([^)]+)\)/g;
 
     const classify = (varName, rhs) => {
       const r = rhs.trim();
 
       // UUID generation patterns — gen_uuid() in VuGen, crypto.randomUUID() in DevWeb
-      if (
-        /crypto\.randomUUID\s*\(|uuidv4\s*\(|uuid\s*\(|generateUUID\s*\(/i.test(
-          r,
-        )
-      ) {
-        return { varName, generationType: "uuid" };
+      if (/crypto\.randomUUID\s*\(|uuidv4\s*\(|uuid\s*\(|generateUUID\s*\(/i.test(r)) {
+        return { varName, generationType: 'uuid' };
       }
 
       // CSRF / hex token patterns — gen_csrf_token() in VuGen, randomBytes in DevWeb
       if (/crypto\.randomBytes\s*\(|randomBytes\s*\(/.test(r)) {
-        return { varName, generationType: "hex32" };
+        return { varName, generationType: 'hex32' };
       }
       if (/CryptoJS\.lib\.WordArray\.random|CryptoJS\.enc\./i.test(r)) {
-        return { varName, generationType: "csrf" }; // CryptoJS random → CSRF token
+        return { varName, generationType: 'csrf' }; // CryptoJS random → CSRF token
       }
 
       // High-entropy hex (64+ chars) — gen_hex64() in VuGen
-      if (
-        /\.toString\s*\(\s*16\s*\)|\.toString\s*\(\s*'hex'\s*\)|hex.*random|random.*hex/i.test(
-          r,
-        )
-      ) {
-        return { varName, generationType: "hex64" };
+      if (/\.toString\s*\(\s*16\s*\)|\.toString\s*\(\s*'hex'\s*\)|hex.*random|random.*hex/i.test(r)) {
+        return { varName, generationType: 'hex64' };
       }
 
       // Math.random() based — gen_uuid() in VuGen (best match), crypto.randomUUID in DevWeb
-      if (
-        /Math\.random\s*\(/.test(r) &&
-        !r.includes("pm.") &&
-        !r.includes("load.")
-      ) {
-        return { varName, generationType: "random" };
+      if (/Math\.random\s*\(/.test(r) && !r.includes('pm.') && !r.includes('load.')) {
+        return { varName, generationType: 'random' };
       }
 
       // Timestamp based
-      if (
-        /Date\.now\s*\(|new Date\s*\(/.test(r) &&
-        !r.includes("pm.") &&
-        !r.includes("load.")
-      ) {
-        return { varName, generationType: "timestamp" };
+      if (/Date\.now\s*\(|new Date\s*\(/.test(r) && !r.includes('pm.') && !r.includes('load.')) {
+        return { varName, generationType: 'timestamp' };
       }
 
       return null;
