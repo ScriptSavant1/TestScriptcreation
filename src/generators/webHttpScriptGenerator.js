@@ -1863,10 +1863,10 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}
 
         case "xpath": {
           // web_reg_save_param_xpath: extracts from XML/HTML body using XPath expression
+          // QueryString= is the correct attribute (same as JSON). No Ord= on this function.
           const xpathQuery = corr.xpathQuery || `//${corrBase}`;
           code += `${indent}web_reg_save_param_xpath("ParamName=${corr.name}",\n`;
           code += `${indent}    "QueryString=${this.escapeCString(xpathQuery)}",\n`;
-          code += `${indent}    "Ord=1",\n`;
           code += `${indent}    LAST);\n`;
           break;
         }
