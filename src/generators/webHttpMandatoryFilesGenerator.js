@@ -48,9 +48,12 @@ class WebHttpMandatoryFilesGenerator {
     hasJwt = false,
     proxy = null,
     hasNtlm = false,
-    mtlsCertFile = null,
+    mtlsCertFiles = [],
     hasDpop = false,
   ) {
+    // Back-compat: normalise legacy single-string form
+    const _mtlsCertFiles = Array.isArray(mtlsCertFiles) ? mtlsCertFiles : (mtlsCertFiles ? [{ certFile: mtlsCertFiles, keyFile: mtlsCertFiles, format: 'PEM' }] : []);
+
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -66,7 +69,7 @@ class WebHttpMandatoryFilesGenerator {
         transactionNames,
         dataFiles,
         hasJwt,
-        mtlsCertFile,
+        _mtlsCertFiles,
         hasDpop,
       ),
     );
@@ -126,7 +129,7 @@ class WebHttpMandatoryFilesGenerator {
     transactionNames = [],
     dataFiles = [],
     hasJwt = false,
-    mtlsCertFile = null,
+    mtlsCertFiles = [],
     hasDpop = false,
   ) {
     const txOrder =
@@ -153,8 +156,13 @@ class WebHttpMandatoryFilesGenerator {
     if (hasJwt) {
       manualExtras += "transport.pem=\n";
     }
-    if (mtlsCertFile && !hasJwt) {
-      manualExtras += `${mtlsCertFile}=\n`;
+    if (mtlsCertFiles.length > 0 && !hasJwt) {
+      const certFilenames = new Set();
+      for (const { certFile, keyFile } of mtlsCertFiles) {
+        certFilenames.add(certFile);
+        certFilenames.add(keyFile);
+      }
+      for (const fname of certFilenames) manualExtras += `${fname}=\n`;
     }
 
     const manualExtraSection = manualExtras

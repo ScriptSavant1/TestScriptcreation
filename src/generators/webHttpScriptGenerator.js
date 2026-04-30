@@ -89,7 +89,8 @@ class WebHttpScriptGenerator {
     this.ntlmHost = ""; // hostname without port for web_set_user()
 
     // mTLS cert detection — populated by detectMtlsCert() during analyze()
-    this.mtlsCertFile = null; // basename of uploaded cert file (non-JWT)
+    // Each entry: { certFile, keyFile, format: 'PEM'|'PFX' }
+    this.mtlsCertFiles = [];
 
     // Per-request dynamic variables (UUID/nonce/random generated fresh per request)
     this.perRequestVars = new Map(); // varName → { generationType, requestNames[] }
@@ -273,23 +274,41 @@ class WebHttpScriptGenerator {
 
   /**
    * Detect uploaded mTLS client certificate files (non-JWT).
-   * Checks options.csvFilePaths for .pem/.p12/.pfx/.crt files.
-   * Sets this.mtlsCertFile to the filename when found.
+   * Supports .p12 (self-contained), .pem (cert or cert+key), .key (private key).
+   * Pairs .pem + .key by matching basenames; unpaired .pem uses itself as key.
+   * Populates this.mtlsCertFiles array of { certFile, keyFile, format }.
    */
   detectMtlsCert() {
     const paths = this.options.csvFilePaths || {};
-    for (const filename of Object.keys(paths)) {
-      const lc = filename.toLowerCase();
-      if (
-        lc.endsWith(".pem") ||
-        lc.endsWith(".p12") ||
-        lc.endsWith(".pfx") ||
-        lc.endsWith(".crt")
-      ) {
-        this.mtlsCertFile = filename;
-        console.log(`  ✓ Client certificate detected: ${filename}`);
-        return;
+    const allFiles = Object.keys(paths);
+
+    const pemFiles = allFiles.filter(f => f.toLowerCase().endsWith('.pem') || f.toLowerCase().endsWith('.crt') || f.toLowerCase().endsWith('.cer'));
+    const keyFiles = allFiles.filter(f => f.toLowerCase().endsWith('.key'));
+    const p12Files = allFiles.filter(f => f.toLowerCase().endsWith('.p12') || f.toLowerCase().endsWith('.pfx'));
+
+    const usedKeys = new Set();
+
+    for (const pem of pemFiles) {
+      const base = pem.replace(/\.[^.]+$/, '').toLowerCase();
+      const matchedKey = keyFiles.find(k => k.replace(/\.[^.]+$/, '').toLowerCase() === base);
+      if (matchedKey) {
+        usedKeys.add(matchedKey);
+        this.mtlsCertFiles.push({ certFile: pem, keyFile: matchedKey, format: 'PEM' });
+        console.log(`  ✓ Client cert pair detected: ${pem} + ${matchedKey}`);
+      } else {
+        this.mtlsCertFiles.push({ certFile: pem, keyFile: pem, format: 'PEM' });
+        console.log(`  ✓ Client certificate detected: ${pem}`);
       }
+    }
+
+    for (const p12 of p12Files) {
+      this.mtlsCertFiles.push({ certFile: p12, keyFile: p12, format: 'PFX' });
+      console.log(`  ✓ Client certificate detected: ${p12}`);
+    }
+
+    const skipped = keyFiles.filter(k => !usedKeys.has(k));
+    if (skipped.length) {
+      console.warn(`  ⚠  Skipped standalone key file(s) with no matching .pem: ${skipped.join(', ')}`);
     }
   }
 
@@ -574,7 +593,7 @@ class WebHttpScriptGenerator {
       this.hasJwt,
       this.detectProxyConfig(),
       this.hasNtlm,
-      this.mtlsCertFile,
+      this.mtlsCertFiles,
       this.hasDpop,
     );
 
@@ -636,16 +655,22 @@ class WebHttpScriptGenerator {
       }
     }
 
-    // 9. If mTLS cert detected (non-JWT): copy uploaded cert file to output directory.
-    if (this.mtlsCertFile) {
-      const srcPath = (this.options.csvFilePaths || {})[this.mtlsCertFile];
-      if (srcPath && fs.existsSync(srcPath)) {
-        fs.copyFileSync(srcPath, path.join(outputDir, this.mtlsCertFile));
-        console.log(`✓ Copied mTLS certificate: ${this.mtlsCertFile}`);
-      } else {
-        console.warn(
-          `  ⚠  mTLS cert ${this.mtlsCertFile} not found in uploaded files.`,
-        );
+    // 9. If mTLS certs detected (non-JWT): copy all uploaded cert/key files to output directory.
+    if (this.mtlsCertFiles.length > 0) {
+      const csvPaths = this.options.csvFilePaths || {};
+      const copied = new Set();
+      for (const { certFile, keyFile } of this.mtlsCertFiles) {
+        for (const fname of [certFile, keyFile]) {
+          if (copied.has(fname)) continue;
+          copied.add(fname);
+          const srcPath = csvPaths[fname];
+          if (srcPath && fs.existsSync(srcPath)) {
+            fs.copyFileSync(srcPath, path.join(outputDir, fname));
+            console.log(`✓ Copied mTLS certificate: ${fname}`);
+          } else {
+            console.warn(`  ⚠  mTLS cert ${fname} not found in uploaded files.`);
+          }
+        }
       }
     }
 
@@ -1069,18 +1094,16 @@ static void gen_hex64(const char *param_name) {
       ? `web_set_user("{username}", "{password}", "${this.ntlmHost}");`
       : "";
 
-    // mTLS client certificate block (when a cert was uploaded but JWT is NOT active)
-    const certBlock =
-      this.mtlsCertFile && !this.hasJwt
-        ? `
+    // mTLS client certificate block (when certs uploaded but JWT is NOT active)
+    const certBlock = this.mtlsCertFiles.length > 0 && !this.hasJwt
+      ? this.mtlsCertFiles.map(c => `
 web_set_certificate_ex(
-  "CertFilePath=${this.mtlsCertFile}",
-  "CertFormat=${this.mtlsCertFile.toLowerCase().endsWith(".p12") || this.mtlsCertFile.toLowerCase().endsWith(".pfx") ? "PFX" : "PEM"}",
-  "KeyFilePath=${this.mtlsCertFile}",
-  "KeyFormat=${this.mtlsCertFile.toLowerCase().endsWith(".p12") || this.mtlsCertFile.toLowerCase().endsWith(".pfx") ? "PFX" : "PEM"}",
-  LAST);
-`
-        : "";
+  "CertFilePath=${c.certFile}",
+  "CertFormat=${c.format}",
+  "KeyFilePath=${c.keyFile}",
+  "KeyFormat=${c.format}",
+  LAST);`).join('\n')
+      : '';
 
     // DPoP optimization: Load lre-utils.dat once in vuser_init for performance
     // This eliminates file I/O overhead from Action.c iterations (15 TPS → 200+ TPS)
