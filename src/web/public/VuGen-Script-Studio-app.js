@@ -3437,6 +3437,18 @@ async function analyze() {
       S.correlations = singleHarCorrelate(S.entries1);
     }
 
+    // Phase 4: Value-based auto-correlation — catches non-standard header names
+    // and custom JSON paths that the pattern engine misses (e.g. x-xsrf-token,
+    // x-financial-id, custom session headers where we see the VALUE but not the name).
+    try {
+      var vbacCorrs = valueBasedCorrelate(S.entries1, S.correlations, S.entries2);
+      if (vbacCorrs && vbacCorrs.length) {
+        S.correlations = S.correlations.concat(vbacCorrs);
+      }
+    } catch (vbacErr) {
+      console.warn('[VBAC] Value-based correlation error (non-fatal):', vbacErr);
+    }
+
     setMsg(
       "Detecting parameters & authentication...",
       "Scanning for user-entered values and auth type",

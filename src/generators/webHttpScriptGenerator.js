@@ -325,10 +325,15 @@ class WebHttpScriptGenerator {
         this.variableMap.set(k, v),
       );
     }
+    // Supplement only — never overwrite a real collection/UDV value with an
+    // empty placeholder that injectRequestVariables() inserts for {{varName}} refs.
     if (this.options.environmentVars) {
-      Object.entries(this.options.environmentVars).forEach(([k, v]) =>
-        this.variableMap.set(k, v),
-      );
+      Object.entries(this.options.environmentVars).forEach(([k, v]) => {
+        const existing = this.variableMap.get(k);
+        if (existing === undefined || existing === null || existing === '') {
+          this.variableMap.set(k, v);
+        }
+      });
     }
     // Build csvVarNames from JMX CSVDataSet configs so they are always classified
     // as Tier 3 iteration parameters (never treated as Dynamic via Rule 4).
@@ -1300,9 +1305,18 @@ web_js_run(
             .join("\n") + "\n"
         : "";
 
+    // C89: all local variable declarations must appear at the TOP of Action()
+    // before any statements. Collect them here and emit as a block.
+    const localDecls = [];
+    const needsTs = this.perRequestVars && Array.from(this.perRequestVars.values())
+      .some(v => v.generationType === 'timestamp');
+    if (needsTs) localDecls.push('  char _ts[32];');
+
+    const declBlock = localDecls.length > 0 ? localDecls.join('\n') + '\n\n' : '';
+
     let code = `Action()
 {
-  web_set_sockets_option("SSL_VERSION", "AUTO");
+${declBlock}  web_set_sockets_option("SSL_VERSION", "AUTO");
 ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
 
     if (this.options.useTransactions && this.options.groupByFolder) {
@@ -1484,23 +1498,16 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     let code = "";
 
     // 0. JSR223 Pre-processor (JMX only) — runs before the request.
-    // Each script is wrapped in its own { } so C89 declarations inside are block-scoped
-    // and don't conflict with declarations from other requests' pre-processors.
+    // Variables used by these scripts are declared globally in globals.h (jsr223GlobalVars),
+    // so no declarations appear here — only assignments and LR API calls.
     if (request.preScripts && request.preScripts.length) {
       for (const sc of request.preScripts) {
-        const block = this.convertJsr223Script(sc, "Pre", indent + "    ");
-        if (block) {
-          code += `${indent}{\n`;
-          code += block;
-          code += `${indent}}\n`;
-        }
+        const block = this.convertJsr223Script(sc, "Pre", indent);
+        if (block) code += block;
       }
     }
 
-    // 1. Per-request dynamic variable generation (e.g. x-fapi-interaction-id UUID)
-    code += this.generatePerRequestVarCode(request, indent);
-
-    // 1. Per-request dynamic variable generation (e.g. x-fapi-interaction-id UUID)
+    // 1. Per-request dynamic variable generation (uuid / csrf / nonce / timestamp)
     code += this.generatePerRequestVarCode(request, indent);
 
     // 1.5. DPoP proof generation — optimized to use persistent context from vuser_init
@@ -1543,15 +1550,11 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     code += this.generateWebFunction(request, indent);
 
     // 5. JSR223 Post-processor (JMX only) — runs after the request.
-    // Each script is wrapped in its own { } so C89 declarations are block-scoped.
+    // Same as pre-processor: variables are in globals.h, no inline declarations needed.
     if (request.postScripts && request.postScripts.length) {
       for (const sc of request.postScripts) {
-        const block = this.convertJsr223Script(sc, "Post", indent + "    ");
-        if (block) {
-          code += `${indent}{\n`;
-          code += block;
-          code += `${indent}}\n`;
-        }
+        const block = this.convertJsr223Script(sc, "Post", indent);
+        if (block) code += block;
       }
     }
 
@@ -1593,8 +1596,9 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
         // Default: use UUID format (widely compatible)
         code += `${indent}gen_uuid("${paramName}");\n`;
       } else if (genType === "timestamp") {
-        // Timestamp as decimal string
-        code += `${indent}{ char _ts[32]; sprintf(_ts, "%ld", (long)time(NULL)); lr_save_string(_ts, "${paramName}"); }\n`;
+        // _ts[32] is declared at the top of Action() — just use it here
+        code += `${indent}sprintf(_ts, "%ld", (long)time(NULL));\n`;
+        code += `${indent}lr_save_string(_ts, "${paramName}");\n`;
       }
     });
     return code;

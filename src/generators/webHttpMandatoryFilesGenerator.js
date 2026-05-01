@@ -2,12 +2,19 @@
  * Mandatory Files Generator for VuGen Web HTTP/HTML Scripts
  *
  * Generates the required VuGen configuration files:
- *   [ScriptName].usr  — VuGen metadata (INI)
- *   default.cfg       — Runtime settings (INI)
- *   default.usp       — Run logic profile (INI)
- *   ParameterFile.prm — Parameter definitions (VuGen INI format)
- *   collection_data.dat — Parameter values (CSV)
+ *   [ScriptName].usr    — VuGen metadata (INI)
+ *   default.cfg         — Runtime settings (INI)
+ *   default.usp         — Run logic profile (INI)
+ *   GlobalVars.prm      — Global/config parameter definitions (once per run) — JMX UDVs / collection vars
+ *   collection_data.dat — Global parameter values (CSV, 1 data row)
+ *   ParameterFile.prm   — CSVDataSet test-data parameter definitions (per iteration)
  *   ScriptUploadMetadata.xml — LRE upload manifest (XML)
+ *
+ * Parameter file split rationale:
+ *   GlobalVars.prm  → parameters with no external file (JMX UDVs, Postman collection vars)
+ *                     Points to collection_data.dat — single row, read once, config values
+ *   ParameterFile.prm → CSVDataSet-linked parameters only
+ *                       Points to user-supplied CSV files — millions of rows, read per iteration
  */
 
 const fs = require("fs");
@@ -83,15 +90,26 @@ class WebHttpMandatoryFilesGenerator {
         `  ✓ Proxy configured in default.cfg: ${proxy.host}:${proxy.port}`,
       );
     this.writeFile(outputDir, "default.usp", this.generateDefaultUsp());
+    // Split parameters into two groups:
+    //   globalParams → collection-level vars (JMX UDVs, Postman collection vars) — read once
+    //   csvParams    → CSVDataSet-linked vars (external test-data files) — read per iteration
+    const globalParams = this.filterGlobalParams(parameters);
+    const csvParams    = this.filterCsvParams(parameters);
+
     this.writeFile(
       outputDir,
-      "ParameterFile.prm",
-      this.generateParameterFilePrm(parameters),
+      "GlobalVars.prm",
+      this.generateGlobalVarsPrm(globalParams),
     );
     this.writeFile(
       outputDir,
       "collection_data.dat",
-      this.generateCollectionDataDat(parameters),
+      this.generateCollectionDataDat(globalParams),
+    );
+    this.writeFile(
+      outputDir,
+      "ParameterFile.prm",
+      this.generateParameterFilePrm(csvParams),
     );
     this.writeFile(
       outputDir,
@@ -105,7 +123,7 @@ class WebHttpMandatoryFilesGenerator {
     );
 
     console.log(
-      `✓ Generated VuGen config files (${safeScriptName}.usr, default.cfg, default.usp, ParameterFile.prm, collection_data.dat, ScriptUploadMetadata.xml)`,
+      `✓ Generated VuGen config files (${safeScriptName}.usr, default.cfg, default.usp, GlobalVars.prm, collection_data.dat, ParameterFile.prm, ScriptUploadMetadata.xml)`,
     );
   }
 
@@ -173,7 +191,7 @@ class WebHttpMandatoryFilesGenerator {
 Type=Multi
 DefaultCfg=default.cfg
 ParameterFile=ParameterFile.prm
-GlobalParameterFile=
+GlobalParameterFile=GlobalVars.prm
 NewFunctionHeader=1
 RunType=cci
 ActionLogicExt=action_logic
@@ -516,6 +534,106 @@ RunLogicObjectKind="Action"
 `;
   }
 
+  // ─── Parameter file split helpers ───────────────────────────────────────────
+
+  /**
+   * Return only parameters that belong to collection_data.dat:
+   *   - JMX UDVs, Postman/Bruno collection variables, any var without an external fileName
+   * These are global config values read once per test run.
+   */
+  filterGlobalParams(parameters) {
+    if (!parameters || parameters.size === 0) return new Map();
+    const result = new Map();
+    try {
+      for (const [name, cfg] of parameters.entries()) {
+        if (!cfg.fileName || cfg.fileName === 'collection_data.dat') {
+          result.set(name, cfg);
+        }
+      }
+    } catch (err) {
+      console.warn('[WebHttpMandatoryFilesGenerator] filterGlobalParams error:', err.message);
+    }
+    return result;
+  }
+
+  /**
+   * Return only parameters linked to external CSVDataSet files.
+   * These are test-data values read per iteration (millions of rows).
+   */
+  filterCsvParams(parameters) {
+    if (!parameters || parameters.size === 0) return new Map();
+    const result = new Map();
+    try {
+      for (const [name, cfg] of parameters.entries()) {
+        if (cfg.fileName && cfg.fileName !== 'collection_data.dat') {
+          result.set(name, cfg);
+        }
+      }
+    } catch (err) {
+      console.warn('[WebHttpMandatoryFilesGenerator] filterCsvParams error:', err.message);
+    }
+    return result;
+  }
+
+  /**
+   * Generate GlobalVars.prm — global/config parameter definitions.
+   * Contains JMX UDVs and Postman/Bruno collection-level variables.
+   * All entries point to collection_data.dat (1 data row, read once per run).
+   * Referenced by [General] GlobalParameterFile= in the .usr file.
+   */
+  generateGlobalVarsPrm(parameters) {
+    let ini = '; GlobalVars.prm — VuGen Global Parameter Definitions\n';
+    ini += '; Generated by Bruno to DevWeb Converter\n';
+    ini += ';\n';
+    ini += '; Contains: JMX User Defined Variables, Postman/Bruno collection-level variables\n';
+    ini += '; These are configuration values read ONCE per test run (base URLs, client IDs, API keys).\n';
+    ini += '; Values are stored in collection_data.dat (single row — edit that file to change values).\n';
+    ini += ';\n';
+    ini += '; JWT parameters: include client_id, token_url, scope, signing_key_id,\n';
+    ini += ';   signing_private_key here — accessed as {param_name} inside web_js_run.\n';
+    ini += ';\n';
+
+    if (!parameters || parameters.size === 0) {
+      ini += '; No global parameters defined.\n';
+      return ini;
+    }
+
+    try {
+      for (const [name, config] of parameters.entries()) {
+        const generateNewVal = config.nextValue === 'iteration' ? 'EachIteration' : 'Once';
+        const originalValue = this.decodeHtmlEntities(
+          config.paramValue !== undefined && config.paramValue !== null
+            ? String(config.paramValue) : '',
+        )
+          .replace(/\r\n/g, '\\r\\n')
+          .replace(/\r/g, '\\r')
+          .replace(/\n/g, '\\n');
+
+        ini += `[parameter:${name}]\n`;
+        ini += `ColumnName="${name}"\n`;
+        ini += `Column="${config.colIndex || 1}"\n`;
+        ini += `Delimiter="${config.delimiter || ','}"\n`;
+        ini += `GenerateNewVal="${generateNewVal}"\n`;
+        ini += `OriginalValue="${originalValue}"\n`;
+        ini += `OutOfRangePolicy="ContinueWithLast"\n`;
+        ini += `ParamName="${name}"\n`;
+        ini += `SelectNextRow="Sequential"\n`;
+        ini += `StartRow="1"\n`;
+        ini += `Table="collection_data.dat"\n`;
+        ini += `TableLocation="Local"\n`;
+        ini += `Type="Table"\n`;
+        ini += `auto_allocate_block_size="1"\n`;
+        ini += `value_for_each_vuser=""\n`;
+        ini += '\n';
+      }
+    } catch (err) {
+      console.warn('[WebHttpMandatoryFilesGenerator] generateGlobalVarsPrm error:', err.message);
+      ini += `; Error generating entries: ${err.message}\n`;
+    }
+
+    return ini;
+  }
+
   // ─── ParameterFile.prm (VuGen INI format) ───────────────────────────────────
   //
   // This is the format that VuGen's GUI produces via "Replace with Parameter".
@@ -532,12 +650,19 @@ RunLogicObjectKind="Action"
 
   generateParameterFilePrm(parameters) {
     if (!parameters || parameters.size === 0) {
-      return "; VuGen Parameter File\n; No parameters defined\n";
+      return "; ParameterFile.prm — VuGen Web HTTP/HTML Test-Data Parameter Definitions\n" +
+             "; Generated by Bruno to DevWeb Converter\n;\n" +
+             "; No CSVDataSet test-data parameters defined.\n" +
+             "; Global config parameters are in GlobalVars.prm.\n";
     }
 
     let ini =
-      "; ParameterFile.prm — VuGen Web HTTP/HTML Parameter Definitions\n";
+      "; ParameterFile.prm — VuGen Web HTTP/HTML Test-Data Parameter Definitions\n";
     ini += "; Generated by Bruno to DevWeb Converter\n";
+    ini += ";\n";
+    ini += "; Contains: CSVDataSet-linked test-data parameters (usernames, passwords, etc.)\n";
+    ini += "; These point to user-supplied CSV files and are read per iteration.\n";
+    ini += "; Global config parameters (JMX UDVs, base URLs) are in GlobalVars.prm.\n";
     ini += ";\n";
     ini += "; HOW TO UPDATE VALUES:\n";
     ini +=
@@ -673,8 +798,9 @@ RunLogicObjectKind="Action"
     <FileEntry Name="${this.xmlEscape(scriptName)}.usr" Filter="4" />
     <FileEntry Name="default.cfg" Filter="4" />
     <FileEntry Name="default.usp" Filter="4" />
-    <FileEntry Name="ParameterFile.prm" Filter="4" />
+    <FileEntry Name="GlobalVars.prm" Filter="4" />
     <FileEntry Name="collection_data.dat" Filter="4" />
+    <FileEntry Name="ParameterFile.prm" Filter="4" />
 ${extraEntries}${dataFileEntries}  </GeneralFiles>
 </VugenScriptMetadata>
 `;
