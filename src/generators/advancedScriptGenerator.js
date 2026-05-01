@@ -383,10 +383,15 @@ class AdvancedScriptGenerator {
       });
     }
 
-    // Merge environment file variables (overrides collection variables)
+    // Merge environment file variables — supplement only, never overwrite a real value
+    // from collection.variable (JMX UDVs) with an empty placeholder injected by
+    // injectRequestVariables() when it sees {{varName}} in request bodies.
     if (this.options.environmentVars) {
       Object.entries(this.options.environmentVars).forEach(([key, value]) => {
-        this.variableMap.set(key, value);
+        const existing = this.variableMap.get(key);
+        if (existing === undefined || existing === null || existing === '') {
+          this.variableMap.set(key, value);
+        }
       });
     }
 

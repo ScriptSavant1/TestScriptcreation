@@ -314,7 +314,7 @@ to `VuGen-Script-Studio-app.js` (3,869 lines). The HTML is now pure markup at 32
 
 ### Phase 4 — Value-Based Auto-Correlation (NEW FEATURE)
 
-**Status: FUTURE — do after Phase 3 is complete and stable**
+**Status: COMPLETE ✅ — implemented 2026-05-01**
 
 **Target file:** `VuGen-Script-Studio-correlation.js` — add new function at the bottom
 

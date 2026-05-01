@@ -1716,3 +1716,405 @@ function twoHarCorrelate(entries1, entries2) {
   return corrs;
 }
 
+// ─── Phase 4: Value-Based Auto-Correlation (Request-First Engine) ────────────
+//
+// Starts from REQUESTS — extracts dynamic-looking values from request
+// headers/body/URL using smart heuristics, then traces each value backward
+// to the specific earlier response that produced it.
+//
+// Design principles (performance-tester's perspective):
+//   1. Request-first  — start from what's in requests, not response index
+//   2. Smart selection — known token field names + isDynamic() heuristics
+//   3. Cookie skip    — VuGen cookie jar handles Cookie: header automatically
+//   4. HTML/JSON/XML  — all three response content types supported
+//   5. Two-HAR aware  — values unchanged between sessions are static → skip
+//   6. Frequency cap  — value in > 3 requests is likely a static API token
+//   7. Zero false positives — unknown fields require isDynamic() to pass
+//
+// @param {Array}  entries   - Primary HAR entries (parseHar / parseNetLog)
+// @param {Array}  existing  - Correlations already found (avoid duplicates)
+// @param {Array}  [entries2]- Second HAR (two-HAR mode) for change validation
+// @returns {Array} New correlation objects, same shape as singleHarCorrelate
+//
+function valueBasedCorrelate(entries, existing, entries2) {
+  if (!Array.isArray(entries) || entries.length < 2) return [];
+
+  var MIN_LEN    = 8;  // values shorter than this are never dynamic tokens
+  var MAX_USAGES = 3;  // value in > 3 distinct requests → probably static CDN/API token
+
+  // ── Known dynamic token request HEADER names (lowercase) ─────────────────
+  var KNOWN_TOKEN_HDRS = {
+    'authorization': true,
+    'x-csrf-token': true,
+    'x-xsrf-token': true,
+    'x-anti-forgery-token': true,
+    'x-request-id': true,
+    'x-correlation-id': true,
+    'x-auth-token': true,
+    'x-access-token': true,
+    'x-session-token': true,
+    'x-session-id': true,
+    'x-api-key': true,
+    'x-api-token': true,
+    'x-token': true,
+    'x-id-token': true,
+    'x-refresh-token': true,
+    'x-client-id': true,
+    'x-trace-id': true,
+    'x-b3-traceid': true,
+    'x-b3-spanid': true,
+    'x-amz-security-token': true,
+    'x-aws-access-token': true,
+    'if-none-match': true,
+  };
+
+  // ── Known dynamic URL query parameter names (lowercase) ──────────────────
+  var KNOWN_TOKEN_PARAMS = {
+    'access_token': true, 'token': true, 'id_token': true,
+    'refresh_token': true, 'session_token': true, 'code': true,
+    'state': true, 'nonce': true, 'auth_code': true, 'authcode': true,
+    'oauth_token': true, 'oauth_verifier': true, 'sessionid': true,
+    'session_id': true, 'sid': true, 'requesttoken': true,
+    'request_token': true, 'csrftoken': true, 'csrf_token': true,
+    'xsrf_token': true, 'jwt': true, 'assertion': true,
+    'client_assertion': true, 'device_code': true, 'user_code': true,
+  };
+
+  // ── Known dynamic JSON request body field names (lowercase) ──────────────
+  var KNOWN_TOKEN_FIELDS = {
+    'access_token': true, 'token': true, 'id_token': true,
+    'refresh_token': true, 'auth_token': true, 'accesstoken': true,
+    'idtoken': true, 'refreshtoken': true, 'sessiontoken': true,
+    'sessionid': true, 'code': true, 'state': true, 'nonce': true,
+    'authcode': true, 'auth_code': true, 'assertion': true,
+    'client_assertion': true, 'device_code': true, 'user_code': true,
+    'grant_token': true, 'authorization_code': true, 'exchange_token': true,
+    'session': true, 'csrf': true, 'csrftoken': true, 'csrf_token': true,
+    'xsrf_token': true, 'requestverificationtoken': true,
+    '__requestverificationtoken': true, '_token': true, 'authenticity_token': true,
+  };
+
+  // ── Known dynamic form-body field names (lowercase) ───────────────────────
+  var KNOWN_FORM_FIELDS = {
+    '__requestverificationtoken': true, '__viewstate': true,
+    '__eventvalidation': true, '__viewstategenerator': true,
+    '_token': true, 'csrf': true, 'csrf_token': true, 'xsrf_token': true,
+    'csrfmiddlewaretoken': true, 'authenticity_token': true,
+    'form_key': true, 'nonce': true, 'state': true, 'code': true,
+    'session_id': true, 'sessionid': true, 'sid': true,
+  };
+
+  // ── Already-correlated values — deduplicate against pattern engine ─────────
+  var alreadyCorrelated = {};
+  try {
+    for (var ci = 0; ci < (existing || []).length; ci++) {
+      var ec = existing[ci];
+      for (var ui = 0; ui < (ec.usages || []).length; ui++) {
+        var eu = ec.usages[ui];
+        if (eu.originalValue) alreadyCorrelated[String(eu.originalValue)] = true;
+        if (eu.tokenValue)    alreadyCorrelated[String(eu.tokenValue)]    = true;
+      }
+    }
+  } catch (e) { /* non-fatal */ }
+
+  // ── Two-HAR: collect values from session 2 for static-value detection ─────
+  // A value that is IDENTICAL in both sessions is a static token → skip it.
+  var session2Values = null;
+  if (Array.isArray(entries2) && entries2.length > 0) {
+    session2Values = {};
+    try {
+      for (var si = 0; si < entries2.length; si++) {
+        var se = entries2[si];
+        if (!se || se.filtered || se.isMarker) continue;
+        var seHdrs = se.reqHdrs || [];
+        for (var shi = 0; shi < seHdrs.length; shi++) {
+          var sh = seHdrs[shi];
+          if (!sh || !sh.value) continue;
+          var shn = (sh.name || '').toLowerCase();
+          if (shn === 'cookie') continue;
+          if (!KNOWN_TOKEN_HDRS[shn] && shn.indexOf('x-') !== 0) continue;
+          var shv = String(sh.value);
+          var am2 = /^(Bearer|Basic|Token)\s+(\S.*)$/i.exec(shv);
+          session2Values[am2 ? am2[2] : shv] = true;
+        }
+        var seUrl = se.url || '';
+        var seQ = seUrl.indexOf('?');
+        if (seQ >= 0) {
+          var seQs = seUrl.slice(seQ + 1).split('#')[0].split('&');
+          for (var sqi = 0; sqi < seQs.length; sqi++) {
+            var sqEq = seQs[sqi].indexOf('=');
+            if (sqEq < 0) continue;
+            var sqName = seQs[sqi].slice(0, sqEq).toLowerCase();
+            var sqVal  = seQs[sqi].slice(sqEq + 1);
+            try { sqVal = decodeURIComponent(sqVal.replace(/\+/g, ' ')); } catch(e2) {}
+            if (KNOWN_TOKEN_PARAMS[sqName] && sqVal.length >= MIN_LEN) {
+              session2Values[sqVal] = true;
+            }
+          }
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+  }
+
+  // ── Helper: should this value be considered a correlation candidate? ───────
+  function isCorrelatable(val, forceByName) {
+    if (!val) return false;
+    var v = String(val).trim();
+    if (v.length < MIN_LEN) return false;
+    if (alreadyCorrelated[v]) return false;
+    if (/^(true|false|null|undefined|none|n\/a)$/i.test(v)) return false;
+    if (/^[0-9]{1,15}$/.test(v)) return false;               // plain integer
+    if (/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(v)) return false; // ISO date
+    if (/^(text|application|image|audio|video|font|multipart)\//i.test(v)) return false;
+    if (/^https?:\/\//i.test(v)) return false;                // bare URL
+    if (forceByName) return true;   // known field name → trust it
+    return isDynamic(v);            // unknown field → must be structurally dynamic
+  }
+
+  // ── Helper: JSON walker ───────────────────────────────────────────────────
+  function walkJson(obj, path, cb) {
+    if (obj === null || obj === undefined) return;
+    try {
+      if (typeof obj === 'string') { cb(obj, path); return; }
+      if (typeof obj === 'number') { cb(String(obj), path); return; }
+      if (Array.isArray(obj)) {
+        for (var ai = 0; ai < obj.length; ai++) {
+          walkJson(obj[ai], path + '[' + ai + ']', cb);
+        }
+      } else if (typeof obj === 'object') {
+        var ks = Object.keys(obj);
+        for (var ki = 0; ki < ks.length; ki++) {
+          walkJson(obj[ks[ki]], path ? path + '.' + ks[ki] : ks[ki], cb);
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // ── Pass 1: Extract candidate dynamic values FROM requests ────────────────
+  // Map: value → { reqIdxList, location, fieldName, prefix, forceByName }
+  var candidates = {};
+  var candidateOrder = []; // preserve insertion order (ES5 safe)
+
+  function addCandidate(val, reqIdx, location, fieldName, prefix, forceByName) {
+    try {
+      var s = String(val || '').trim();
+      if (!isCorrelatable(s, forceByName)) return;
+      // Two-HAR: if the same value appears in session 2 → it is static → skip
+      if (session2Values && session2Values[s]) return;
+      if (!candidates[s]) {
+        candidates[s] = {
+          reqIdxList:  [reqIdx],
+          location:    location,
+          fieldName:   fieldName || '',
+          prefix:      prefix || '',
+          forceByName: !!forceByName,
+        };
+        candidateOrder.push(s);
+      } else {
+        var cnd = candidates[s];
+        if (cnd.reqIdxList.indexOf(reqIdx) < 0) {
+          cnd.reqIdxList.push(reqIdx);
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+  }
+
+  for (var j = 1; j < entries.length; j++) {
+    var reqEntry = entries[j];
+    if (!reqEntry || reqEntry.filtered || reqEntry.isMarker) continue;
+
+    // ── Request headers ────────────────────────────────────────────────────
+    try {
+      var reqHdrs = reqEntry.reqHdrs || [];
+      for (var rhi = 0; rhi < reqHdrs.length; rhi++) {
+        var rh = reqHdrs[rhi];
+        if (!rh || !rh.name || !rh.value) continue;
+        var rhName = rh.name.toLowerCase();
+
+        // ALWAYS skip Cookie: header — VuGen cookie jar manages this automatically
+        if (rhName === 'cookie') continue;
+
+        var rhVal = String(rh.value || '');
+
+        if (rhName === 'authorization') {
+          // Strip Bearer/Basic/Token scheme — correlate the credential, not the scheme
+          var authM = /^(Bearer|Basic|Token)\s+(\S.*)$/i.exec(rhVal);
+          if (authM) {
+            addCandidate(authM[2], j, 'header', rh.name, authM[1] + ' ', true);
+          } else if (rhVal.length >= MIN_LEN) {
+            addCandidate(rhVal, j, 'header', rh.name, '', true);
+          }
+        } else if (KNOWN_TOKEN_HDRS[rhName]) {
+          // Known token header name → accept if long enough
+          if (rhVal.length >= MIN_LEN) {
+            addCandidate(rhVal, j, 'header', rh.name, '', true);
+          }
+        } else if (rhName.indexOf('x-') === 0) {
+          // Other X-* headers → require isDynamic (structural check)
+          addCandidate(rhVal, j, 'header', rh.name, '', false);
+        }
+        // Standard headers (Accept, Content-Type, User-Agent, etc.) → intentionally ignored
+      }
+    } catch (e) { /* non-fatal */ }
+
+    // ── URL query parameters ───────────────────────────────────────────────
+    try {
+      var qIdx = (reqEntry.url || '').indexOf('?');
+      if (qIdx >= 0) {
+        var qs = reqEntry.url.slice(qIdx + 1).split('#')[0];
+        var pairs = qs.split('&');
+        for (var pi = 0; pi < pairs.length; pi++) {
+          var eq = pairs[pi].indexOf('=');
+          if (eq < 0) continue;
+          var pKey = pairs[pi].slice(0, eq);
+          var pVal = pairs[pi].slice(eq + 1);
+          try { pVal = decodeURIComponent(pVal.replace(/\+/g, ' ')); } catch (e2) {}
+          addCandidate(pVal, j, 'query', pKey, '', !!KNOWN_TOKEN_PARAMS[pKey.toLowerCase()]);
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+
+    // ── Request body — JSON ────────────────────────────────────────────────
+    var reqCt = (reqEntry.ct || reqEntry.reqCt || '').toLowerCase();
+    if (reqEntry.body && reqCt.indexOf('json') >= 0) {
+      try {
+        var raw = '';
+        if (typeof reqEntry.body === 'string') raw = reqEntry.body;
+        else if (reqEntry.body && reqEntry.body.raw) raw = reqEntry.body.raw;
+        if (raw) {
+          var reqJson = null;
+          try { reqJson = JSON.parse(raw); } catch (pe) {}
+          if (reqJson) {
+            (function(jIdx) {
+              walkJson(reqJson, '', function(val, path) {
+                var leafKey = path.replace(/^.*[.\[]/, '').replace(/\]$/, '').toLowerCase();
+                addCandidate(val, jIdx, 'body_json', path, '', !!KNOWN_TOKEN_FIELDS[leafKey]);
+              });
+            }(j));
+          }
+        }
+      } catch (e) { /* non-fatal */ }
+    }
+
+    // ── Request body — form-urlencoded ─────────────────────────────────────
+    try {
+      var formParams = (reqEntry.body && reqEntry.body.urlencoded)
+        ? reqEntry.body.urlencoded : [];
+      for (var fi = 0; fi < formParams.length; fi++) {
+        var fp = formParams[fi];
+        if (!fp || !fp.value) continue;
+        var fpKey = (fp.key || '').toLowerCase();
+        addCandidate(fp.value, j, 'body_form', fp.key || '', '', !!KNOWN_FORM_FIELDS[fpKey]);
+      }
+    } catch (e) { /* non-fatal */ }
+
+    // ── URL path segments — UUID / long-hex style dynamic IDs ─────────────
+    try {
+      var urlPath = (reqEntry.url || '').split('?')[0].split('#')[0];
+      var segments = urlPath.split('/');
+      for (var sgi = 0; sgi < segments.length; sgi++) {
+        var seg = segments[sgi];
+        if (seg.length < MIN_LEN) continue;
+        // Only accept UUID or long hex (32+ hex chars) — very high confidence dynamic IDs
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg) ||
+            /^[0-9a-f]{32,}$/i.test(seg)) {
+          addCandidate(seg, j, 'url_path', 'PathId', '', true);
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+  }
+
+  if (candidateOrder.length === 0) return [];
+
+  // ── Pass 2: Trace each candidate back to the earliest producing response ──
+  var counter = {};
+  var newCorrs = [];
+
+  for (var ci2 = 0; ci2 < candidateOrder.length; ci2++) {
+    var value = candidateOrder[ci2];
+    var cand  = candidates[value];
+    if (!cand) continue;
+
+    try {
+      // Frequency guard — value in > MAX_USAGES distinct requests → static token
+      if (cand.reqIdxList.length > MAX_USAGES) continue;
+
+      var firstReqIdx = cand.reqIdxList[0];
+      var sourceEntry = null;
+      var sourceIdx   = -1;
+
+      // Search backward through all entries BEFORE the first usage
+      for (var ri = 0; ri < firstReqIdx; ri++) {
+        var re = entries[ri];
+        if (!re || re.filtered || re.isMarker) continue;
+        if (!re.status || re.status < 200 || re.status >= 400) continue;
+        if (!re.respBody && (!re.respHdrsMap || !Object.keys(re.respHdrsMap).length)) continue;
+
+        var found = false;
+
+        // Check response body first (most common extraction point)
+        if (re.respBody && re.respBody.indexOf(value) >= 0) {
+          found = true;
+        }
+
+        // Check response headers (excluding Set-Cookie — cookie jar handles those)
+        if (!found && re.respHdrsMap) {
+          var rHdrKeys = Object.keys(re.respHdrsMap);
+          for (var rk = 0; rk < rHdrKeys.length; rk++) {
+            var rkn = rHdrKeys[rk];
+            if (rkn === 'set-cookie') continue;  // skip — cookie jar handles cookies
+            var rkv = String(re.respHdrsMap[rkn] || '');
+            if (rkv.indexOf(value) >= 0) { found = true; break; }
+          }
+        }
+
+        if (found) {
+          sourceEntry = re;
+          sourceIdx   = ri;
+          break; // use the EARLIEST occurrence (best extraction point)
+        }
+      }
+
+      if (!sourceEntry) continue; // value not in any earlier response → skip
+
+      // Get extraction config using the existing response-analysis engine
+      var extraction = null;
+      try { extraction = findValueInResponse(value, sourceEntry); } catch (e) {}
+      if (!extraction) continue;
+
+      // Skip cookie-type extraction — VuGen cookie jar handles this automatically
+      if (extraction.type === 'cookie') continue;
+
+      // Build parameter name from the request field name (most descriptive hint)
+      var nameHint  = cand.fieldName
+        ? sanitizeCandHint(cand.fieldName)
+        : sanitizeCandHint('DynParam');
+      var paramName = genParamName(nameHint, counter);
+
+      // Build one usage entry per request that sends this value
+      var usages = [];
+      for (var ui2 = 0; ui2 < cand.reqIdxList.length; ui2++) {
+        usages.push({
+          reqIdx:        cand.reqIdxList[ui2],
+          location:      cand.location,
+          key:           cand.fieldName,
+          originalValue: value,
+          tokenValue:    value,
+          prefix:        cand.prefix,
+        });
+      }
+
+      newCorrs.push({
+        name:            paramName,
+        sourceIdx:       sourceIdx,
+        extractorType:   extraction.type,
+        extractorConfig: extraction.config,
+        usages:          usages,
+        _vbac:           true,  // produced by value-based engine (for UI annotation)
+      });
+
+    } catch (e) { /* non-fatal — skip this candidate */ }
+  }
+
+  return newCorrs;
+}
