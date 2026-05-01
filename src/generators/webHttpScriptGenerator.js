@@ -1303,10 +1303,7 @@ web_js_run(
     let code = `Action()
 {
   web_set_sockets_option("SSL_VERSION", "AUTO");
-${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}
-  return 0;
-}
-`;
+${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
 
     if (this.options.useTransactions && this.options.groupByFolder) {
       code += this.generateGroupedRequests();
@@ -1315,7 +1312,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}
     }
 
     code += `
-    return 0;
+  return 0;
 }
 `;
     return code;
