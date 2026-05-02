@@ -1073,6 +1073,20 @@ function genMainJS(entries, correlations) {
     o += `        host: ${hostArg}\n`;
     o += `    });\n\n`;
   }
+  // PKCE (RFC 7636) — generate fresh code_verifier + code_challenge per iteration.
+  // Uses Web Crypto API (crypto.subtle.digest) which is always available in DevWeb's Node runtime.
+  if (S.hasPkce) {
+    o += "    // PKCE — generate fresh code_verifier + code_challenge for this iteration\n";
+    o += "    {\n";
+    o += "        const _pkceChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';\n";
+    o += "        const _vBytes = crypto.getRandomValues(new Uint8Array(32));\n";
+    o += "        load.global.pkce_verifier = Array.from(_vBytes).map(b => _pkceChars[b % _pkceChars.length]).join('');\n";
+    o += "        const _hBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(load.global.pkce_verifier));\n";
+    o += "        load.global.pkce_challenge = btoa(String.fromCharCode(...new Uint8Array(_hBuf)))\n";
+    o += "            .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\n";
+    o += "    }\n\n";
+  }
+
   // Helper functions for generate-type correlations.
   const genCorrsMj = correlations.filter(
     (c) => c.extractorType === "generate",
@@ -1598,8 +1612,11 @@ function genMainJS(entries, correlations) {
       for (const [k, h] of Object.entries(extraHdrs)) {
         if (h.dynamic) o += `            "${escJs(k)}": \`${h.expr}\`,\n`;
         else if (h.todo) {
-          o += `            // TODO: Add extractor for "${k}" on the response that sets it.\n`;
-          o += `            "${escJs(k)}": \`\${load.global.${h.todo}}\`,\n`;
+          // Preserve scheme prefix (Bearer / Token) if present in the original value
+          const _schemeMatch = h.value && /^(Bearer|Token|Digest)\s/i.exec(h.value);
+          const _prefix = _schemeMatch ? _schemeMatch[0] : "";
+          o += `            // TODO: corr — add extractor on the response that issues this token.\n`;
+          o += `            "${escJs(k)}": \`${_prefix}\${load.global.${h.todo}}\`,\n`;
         } else
           o += `            "${escJs(k)}": ${subHdrValMj(h.value, mjHostVarMap)},\n`;
       }
@@ -2089,6 +2106,18 @@ function genActionC(entries, correlations) {
     o += `\tweb_add_auto_header("${hdrTitleCase(k)}", "${escJs(subHdrValC(v, acHostVarMap))}");\n`;
   }
   if (Object.keys(autoHdrs).length) o += "\n";
+
+  // PKCE (RFC 7636) — generate code_verifier + code_challenge at start of each iteration.
+  // generatePkce() is defined in lre-utils.dat (loaded once in vuser_init).
+  // It calls LR.setParam so {pkce_verifier} and {pkce_challenge} are available for this iteration.
+  if (S.hasPkce) {
+    o += "\t// PKCE — generate fresh code_verifier and code_challenge for this iteration\n";
+    o += "\tweb_js_run(\n";
+    o += '\t\t"Code=generatePkce();",\n';
+    o += '\t\t"ResultParam=pkce_verifier",\n';
+    o += "\t\tLAST);\n\n";
+  }
+
   let snap = 1;
   const hasMarkers = entries.some((e) => e.isMarker);
 
@@ -2309,10 +2338,13 @@ function genActionC(entries, correlations) {
         }
       }
       if (candHint) {
-        // Dynamic header — emit active call with param token. Tester must add the extractor.
-        o += `\t// TODO: Add web_reg_save_param BEFORE the request that returns "${hdrTitleCase(k)}".\n`;
-        o += `\t// Example (cookie source): web_reg_save_param("ParamName=${candHint}", "LB=${k.toUpperCase().replace(/-/g, "_")}=", "RB=;", "Search=Headers", "Ord=1", LAST);\n`;
-        o += `\tweb_add_header("${hdrTitleCase(k)}", "{${candHint}}");\n`;
+        // Dynamic header — source response not captured in HAR; tester must add the extractor.
+        // Preserve scheme prefix (Bearer / Token) if present in original header value.
+        const _cSchemeMatch = h.value && /^(Bearer|Token|Digest)\s/i.exec(h.value);
+        const _cPrefix = _cSchemeMatch ? _cSchemeMatch[0] : "";
+        o += `\t// TODO: corr — add web_reg_save_param BEFORE the request that returns "${hdrTitleCase(k)}".\n`;
+        o += `\t// Example: web_reg_save_param("${candHint}", "LB=\\"access_token\\":\\"", "RB=\\"", "Search=Body", "Ord=1", LAST);\n`;
+        o += `\tweb_add_header("${hdrTitleCase(k)}", "${_cPrefix}{${candHint}}");\n`;
       } else {
         // Substitute any correlated token values embedded in this header
         // (e.g. Authorization: Bearer <token> where <token> was extracted by web_reg_save_param)
@@ -2657,6 +2689,19 @@ function genVuserInit() {
       "\treturn 0;\n}\n\n"
     );
   }
+  if (S.hasPkce) {
+    return (
+      "vuser_init()\n{\n\n" +
+      "\t// Load lre-utils.dat ONCE — provides generatePkce() for all Action() iterations\n" +
+      "\tweb_js_run(\n" +
+      '\t\t"Code=\'lre-utils loaded\';",\n' +
+      '\t\t"ResultParam=_lre_init",\n' +
+      "\t\tSOURCES,\n" +
+      '\t\t\t"File=lre-utils.dat", ENDITEM,\n' +
+      "\t\tLAST);\n\n" +
+      "\treturn 0;\n}\n\n"
+    );
+  }
   return "vuser_init()\n{\n\treturn 0;\n}\n\n";
 }
 function genVuserEnd() {
@@ -2735,7 +2780,7 @@ LastReplayStatus=0
 [ActiveReplay]
 LastReplayedRunName=
 ActiveRunName=
-${txnLines}${S.hasDpop ? "\n[ManuallyExtraFiles]\nlre-utils.dat=\n" : ""}`;
+${txnLines}${S.hasDpop || S.hasPkce ? "\n[ManuallyExtraFiles]\nlre-utils.dat=\n" : ""}`;
 }
 
 function genScriptUploadMetadata(scriptName) {
@@ -2762,7 +2807,7 @@ ${paramEntries}    <FileEntry Name="Bookmarks.xml" Filter="1" />
     <FileEntry Name="custom_body_variables.txt" Filter="1" />
     <FileEntry Name="lrw_custom_body.h" Filter="1" />
     <FileEntry Name="ScriptUploadMetadata.xml" Filter="1" />
-  ${S.hasDpop ? '\t<FileEntry Name="lre-utils.dat" Filter="2" />\n' : ""}</GeneralFiles>
+  ${S.hasDpop || S.hasPkce ? '\t<FileEntry Name="lre-utils.dat" Filter="2" />\n' : ""}</GeneralFiles>
 </VugenScriptMetadata>`;
 }
 
@@ -2880,8 +2925,8 @@ async function dlZip(fmt) {
       '<?xml version="1.0" encoding="utf-8"?><Bookmarks />',
     );
     zip.file("Breakpoints.xml", '<BreakpointsRoot Version="1" />');
-    // DPoP helper for VuGen (lre-utils.dat — unified DPoP + JWT crypto)
-    if (S.hasDpop) {
+    // lre-utils.dat — shared crypto utilities for VuGen (DPoP proofs, PKCE generation, JWT signing)
+    if (S.hasDpop || S.hasPkce) {
       try {
         const _bp = window.location.pathname.replace(/\/[^\\/]*$/, "");
         let r = await fetch(_bp + "/lre-utils-helper.js");
@@ -3523,6 +3568,74 @@ async function analyze() {
           S.dpopTokenVar = c.name;
           break;
         }
+      }
+    }
+
+    // PKCE detection — scan for code_challenge in URL query params or code_verifier in POST form body.
+    // Both indicate an OAuth2 PKCE flow (RFC 7636). Values are client-generated, so we add special
+    // "pkce" correlations that instruct the code generator to produce runtime generation code instead
+    // of replaying hardcoded values.
+    S.hasPkce = false;
+    {
+      const _pkceByName = new Map();
+      for (let _pi = 0; _pi < S.entries1.length; _pi++) {
+        const _pe = S.entries1[_pi];
+        if (_pe.filtered || _pe.isMarker) continue;
+        // code_challenge in URL query string (GET /authorize?...&code_challenge=xxx)
+        const _pqs = (_pe.url || "").includes("?")
+          ? (_pe.url || "").split("?")[1]
+          : "";
+        const _ccm = /(?:^|&)code_challenge=([^&]{32,})/.exec(_pqs);
+        if (_ccm) {
+          S.hasPkce = true;
+          const _cv = decodeURIComponent(_ccm[1]);
+          if (!_pkceByName.has("pkce_challenge")) {
+            _pkceByName.set("pkce_challenge", {
+              name: "pkce_challenge",
+              sourceIdx: -1,
+              extractorType: "pkce",
+              extractorConfig: { role: "challenge" },
+              usages: [],
+            });
+          }
+          _pkceByName.get("pkce_challenge").usages.push({
+            reqIdx: _pi,
+            location: "query",
+            key: "code_challenge",
+            tokenValue: _cv,
+            originalValue: _cv,
+          });
+        }
+        // code_verifier in form body (POST /token body: code_verifier=xxx&...)
+        const _bmt = (_pe.body && _pe.body.mimeType) || "";
+        const _btext = (_pe.body && _pe.body.text) || "";
+        if (_bmt.includes("form") || _bmt.includes("urlencoded")) {
+          const _cvm = /(?:^|&)code_verifier=([^&]{32,})/.exec(_btext);
+          if (_cvm) {
+            S.hasPkce = true;
+            const _vv = decodeURIComponent(_cvm[1]);
+            if (!_pkceByName.has("pkce_verifier")) {
+              _pkceByName.set("pkce_verifier", {
+                name: "pkce_verifier",
+                sourceIdx: -1,
+                extractorType: "pkce",
+                extractorConfig: { role: "verifier" },
+                usages: [],
+              });
+            }
+            _pkceByName.get("pkce_verifier").usages.push({
+              reqIdx: _pi,
+              location: "body_form",
+              key: "code_verifier",
+              tokenValue: _vv,
+              originalValue: _vv,
+            });
+          }
+        }
+      }
+      // Inject PKCE correlations so body/URL injectors can substitute the hardcoded values
+      if (S.hasPkce) {
+        for (const [, _pc] of _pkceByName) S.correlations.push(_pc);
       }
     }
 

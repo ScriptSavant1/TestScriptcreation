@@ -803,6 +803,9 @@ function singleHarCorrelate(entries) {
   const corrs = [];
   const counter = {};
   const seen = new Set(); // avoid duplicate correlations for same source+name
+  // Unresolved: dynamic values found in requests but source response not captured in HAR.
+  // Exposed via S.candidates so the codegen emits TODO hints instead of hardcoded strings.
+  const unresolvedCandidates = [];
 
   for (let idx = 0; idx < entries.length; idx++) {
     const e = entries[idx];
@@ -837,6 +840,16 @@ function singleHarCorrelate(entries) {
           originalValue: h.value,
           prefix,
           tokenValue: token,
+        });
+      } else {
+        // Source response not found in HAR (body not captured or response missing).
+        // Add to unresolved so codegen can emit a TODO comment + load.global placeholder.
+        const hintName = k === "authorization" ? "AccessToken" : sanitizeCandHint(k.replace(/^x-/, ""));
+        unresolvedCandidates.push({
+          hint: hintName,
+          prefix: prefix,
+          value: token.substring(0, 80),
+          usages: [{ location: "header", key: h.name, reqUrl: e.url || "" }],
         });
       }
     }
@@ -1099,7 +1112,25 @@ function singleHarCorrelate(entries) {
     }
   }
 
-  // Merge usages for same parameter name
+  // Expose unresolved dynamic headers so the codegen can emit TODO hints
+  // instead of hardcoded token strings. Dedup against corrs that were fully resolved.
+  if (unresolvedCandidates.length > 0) {
+    const resolvedKeys = new Set(
+      corrs.flatMap((c) =>
+        c.usages
+          .filter((u) => u.location === "header")
+          .map((u) => (u.key || "").toLowerCase()),
+      ),
+    );
+    const filtered = unresolvedCandidates.filter(
+      (uc) =>
+        !resolvedKeys.has((uc.usages[0] && uc.usages[0].key || "").toLowerCase()),
+    );
+    if (filtered.length > 0) {
+      S.candidates = (S.candidates || []).concat(filtered);
+    }
+  }
+
   return corrs;
 }
 
