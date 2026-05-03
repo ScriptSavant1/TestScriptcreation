@@ -94,7 +94,7 @@ body, .topnav, .card, .tab-bar, .tab-btn, .hero,
 }
 /* Restore pointer/transform transitions for interactive elements */
 .btn-convert, .btn-dl, .proto-card, .step, .tab-btn,
-.btn-reset, .seg-btn, .dz-clear, .theme-btn {
+.btn-reset, .seg-btn, .dz-clear, .theme-btn, .btn-clear {
   transition: background-color 0.30s ease, background 0.30s ease,
               border-color 0.30s ease, color 0.30s ease,
               transform var(--tr), filter var(--tr), box-shadow var(--tr) !important;
@@ -245,6 +245,27 @@ body > * { position: relative; z-index: 1; }
 .theme-btn:hover svg { transform: rotate(20deg); }
 [data-theme="dark"]  .icon-moon { display: none; }
 [data-theme="light"] .icon-sun  { display: none; }
+/* ── Global Clear button ─────────────────────────────────────────────────── */
+.btn-clear {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 11px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 12px; font-weight: 600;
+  font-family: var(--sans);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.btn-clear:hover {
+  background: rgba(240,100,100,0.10);
+  border-color: rgba(240,100,100,0.35);
+  color: var(--danger);
+}
+.btn-clear svg { width: 12px; height: 12px; flex-shrink: 0; pointer-events: none; }
 
 /* ── Hero / Page header ─────────────────────────────────────────────────── */
 .hero {
@@ -1335,6 +1356,13 @@ code {
     </div>
     <div class="nav-actions">
       <span class="nav-status"><span class="nav-dot"></span>Live</span>
+      <button class="btn-clear" id="btn-global-clear" onclick="globalClear()" title="Clear all inputs and reset this tool" style="display:none" aria-label="Clear">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
+          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+        </svg>
+        Clear
+      </button>
       <button class="theme-btn" onclick="toggleTheme()" title="Toggle light / dark mode" aria-label="Toggle theme">
         <!-- sun — shown in dark mode -->
         <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1895,15 +1923,6 @@ code {
       </div>
     </section>
 
-  <!-- ── SECTION: What is this toolkit? ──────────────────────────────────── -->
-  <section class="help-section">
-    <h2 class="help-h2">What is this toolkit?</h2>
-    <p class="help-p">This is a set of three browser-based tools that help performance engineers create LoadRunner VuGen scripts — without having to write code from scratch.</p>
-    <p class="help-p">LoadRunner Enterprise (LRE) uses <strong>VuGen</strong> to simulate users. VuGen scripts are what describe the user journey — clicking buttons, submitting forms, making API calls. Writing these scripts manually is time-consuming. This toolkit generates them automatically from files you already have (API collections, browser recordings, or JMeter scripts).</p>
-    <div class="help-callout help-callout-blue">
-      <strong>No files are stored on the server.</strong> Everything you upload is processed in-memory and immediately discarded. The only thing that leaves the server is your downloaded ZIP file.
-    </div>
-  </section>
 
   <!-- ── SECTION: Output formats ─────────────────────────────────────────── -->
   <section class="help-section">
@@ -2044,7 +2063,8 @@ code {
           <tbody>
             <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">OAuth2</td><td style="padding:8px 12px">Client Credentials, Password Grant, Authorization Code flows</td></tr>
             <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JWT</td><td style="padding:8px 12px">Detects signing libraries (jsrsasign, jose, JJWT, nimbus), extracts claim mappings, generates token creation code</td></tr>
-            <tr style="border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06)"><td style="padding:8px 12px;font-weight:600">DPoP <span style="font-size:0.72rem;color:var(--primary);font-weight:700;margin-left:4px">NEW</span></td><td style="padding:8px 12px">RFC 9449 – generates unique cryptographic proofs per request using EC P-256 keys. Detected from <code>dpop</code> / <code>dpop-pf</code> headers.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06)"><td style="padding:8px 12px;font-weight:600">DPoP</td><td style="padding:8px 12px">RFC 9449 – generates unique cryptographic proofs per request using EC P-256 keys. Detected from <code>dpop</code> / <code>dpop-pf</code> headers.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06)"><td style="padding:8px 12px;font-weight:600">PKCE <span style="font-size:0.72rem;color:var(--primary);font-weight:700;margin-left:4px">NEW</span></td><td style="padding:8px 12px">RFC 7636 – generates <code>code_verifier</code> + <code>code_challenge</code> per iteration. Detected from <code>code_challenge</code> in auth URLs and <code>code_verifier</code> in token exchange bodies.</td></tr>
             <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Kerberos / NTLM</td><td style="padding:8px 12px">Windows SSO – generates <code>web_set_user()</code> in VuGen, <code>setUserCredentials()</code> in DevWeb, configures runtime settings</td></tr>
             <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Basic / Bearer / API Key</td><td style="padding:8px 12px">Username/password, static or correlated tokens, header-based or query parameter keys</td></tr>
             <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">AWS Signature v4</td><td style="padding:8px 12px">AWS API request signing</td></tr>
@@ -2090,7 +2110,7 @@ code {
           <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0">All file processing happens <strong>in memory</strong>. Nothing is written to disk. Nothing is stored between requests. Download links expire after 5 minutes and are single-use. No external services are called.</p>
         </div>
       </div>
-      <p class="help-p">For DPoP and JWT support, the toolkit includes <code>lre-utils-helper.js</code> – a self-contained cryptographic library designed for VuGen's JavaScript engine. It handles EC P-256 key generation, ECDSA signing, RSA-PSS signing, and SHA-256 hashing with zero external dependencies.</p>
+      <p class="help-p">For DPoP, PKCE, and JWT support, the toolkit includes <code>lre-utils.dat</code> – a self-contained cryptographic utility file designed for VuGen's JavaScript engine. It handles EC P-256 key generation, ECDSA signing, RSA-PSS signing, SHA-256 hashing, and PKCE code generation with zero external dependencies. DevWeb uses the built-in Node.js <code>crypto</code> module instead.</p>
     </section>
   <!-- ── SECTION: Glossary ────────────────────────────────────────────────── -->
   <section class="help-section">
@@ -2118,6 +2138,8 @@ code {
       <dd>A compact, signed token used for authentication. Contains claims (like client ID, audience, expiry) and is signed with a private key. The toolkit generates JWT creation code automatically when detected.</dd>
       <dt>DPoP (Demonstrating Proof-of-Possession)</dt>
       <dd>A security mechanism (RFC 9449) that binds an access token to a specific cryptographic key. Each request includes a unique signed proof – preventing stolen tokens from being reused by attackers.</dd>
+      <dt>PKCE (Proof Key for Code Exchange)</dt>
+      <dd>A security extension to the OAuth2 Authorization Code flow (RFC 7636). The client generates a random <code>code_verifier</code> and sends a derived <code>code_challenge</code> in the authorization request, then proves it knows the verifier in the token exchange. Prevents authorization code interception attacks. Generated fresh each iteration — not correlated from a server response.</dd>
       <dt>mTLS (Mutual TLS)</dt>
       <dd>Two-way certificate authentication where both the client and server present certificates. Upload your client certificate (<code>.pem</code> or <code>.p12</code>) alongside your collection.</dd>
       <dt>CSRF token</dt>
@@ -2130,12 +2152,17 @@ code {
   <!-- ── SECTION: FAQ ─────────────────────────────────────────────────────── -->
   <!-- — SECTION: What's New + FAQ ————————————————————————— -->
     <section class="help-section">
-      <h2 class="help-h2">What's new in v2.9.0</h2>
+      <h2 class="help-h2">What's new in v2.9.2</h2>
       <ul class="help-list">
-        <li><strong>DPoP support (RFC 9449)</strong> – automatic detection and handling of <code>dpop</code> and <code>dpop-pf</code> headers across all tools. Generates cryptographic proof code automatically.</li>
-        <li><strong>VuGen DPoP performance</strong> – crypto library loaded once in <code>vuser_init.c</code>, reused across all iterations. Eliminates file I/O overhead per request.</li>
+        <li><strong>PKCE support (RFC 7636)</strong> – automatic detection of <code>code_challenge</code> / <code>code_verifier</code> patterns. Generates per-iteration PKCE pair creation code (not correlated — client-generated). Works in both Converter and Script Studio, for DevWeb and VuGen.</li>
+        <li><strong>lre-utils.dat shared by DPoP + PKCE</strong> – the same crypto utility file now provides <code>generatePkce()</code> alongside the existing DPoP and JWT functions. No new dependencies.</li>
+      </ul>
+      <h2 class="help-h2" style="margin-top:20px">v2.9.0 highlights</h2>
+      <ul class="help-list">
+        <li><strong>DPoP support (RFC 9449)</strong> – automatic detection and handling of <code>dpop</code> and <code>dpop-pf</code> headers across all tools. Generates EC P-256 key pair + per-request proof JWT code automatically.</li>
+        <li><strong>VuGen DPoP performance</strong> – <code>lre-utils.dat</code> crypto library loaded once in <code>vuser_init.c</code>, reused across all iterations. Eliminates file I/O overhead per request.</li>
         <li><strong>Recorder &amp; Script Studio</strong> – both browser-based tools now generate the same optimised DPoP pattern as the server-side converter.</li>
-        <li><strong>84 automated regression tests</strong> – comprehensive coverage across all tools, protocols, and authentication methods.</li>
+        <li><strong>HTML entity decoding</strong> – PEM keys with <code>&amp;amp;</code>, <code>&amp;#10;</code> from Postman/JMX exports are correctly decoded before crypto operations and parameter files.</li>
       </ul>
     </section>
 
@@ -2172,12 +2199,16 @@ code {
         <div class="help-faq-a">Yes. If your application sends <code>dpop</code> or <code>dpop-pf</code> headers, the toolkit detects them automatically and generates the cryptographic proof code. For VuGen scripts, it loads the crypto library once in <code>vuser_init.c</code> for best performance. No manual setup is needed – just convert or record as normal.</div>
       </div>
       <div class="help-faq-item">
+        <div class="help-faq-q">My application uses PKCE in its OAuth2 flow – is that handled?</div>
+        <div class="help-faq-a">Yes. The toolkit detects <code>code_challenge</code> in authorization URLs and <code>code_verifier</code> in token exchange bodies. Because these values are client-generated (not server-issued), the script generates a fresh PKCE pair at the start of each iteration using <code>crypto.subtle</code> (DevWeb) or <code>generatePkce()</code> in <code>lre-utils.dat</code> (VuGen). No manual coding is needed.</div>
+      </div>
+      <div class="help-faq-item">
         <div class="help-faq-q">My application uses Kerberos / NTLM / Windows SSO – is that supported?</div>
         <div class="help-faq-a">Yes. The toolkit detects Negotiate, Kerberos, and NTLM authentication from response headers and generates the appropriate <code>web_set_user()</code> call in VuGen or <code>setUserCredentials()</code> in DevWeb. It also configures the runtime settings (<code>IntegratedAuthentication=1</code>) automatically.</div>
       </div>
       <div class="help-faq-item">
         <div class="help-faq-q">My application uses JWT tokens in pre-request scripts – will those be converted?</div>
-        <div class="help-faq-a">Yes. The toolkit scans pre-request scripts for JWT signing patterns (jsrsasign, jsonwebtoken, jose, Java JJWT, nimbus-jose-jwt, and others). It extracts the claim mappings and generates equivalent JWT code using <code>lre-utils-helper.js</code> for VuGen or <code>jwt-helper.js</code> for DevWeb.</div>
+        <div class="help-faq-a">Yes. The toolkit scans pre-request scripts for JWT signing patterns (jsrsasign, jsonwebtoken, jose, Java JJWT, nimbus-jose-jwt, BouncyCastle, JCA, and others). It extracts the claim mappings and generates equivalent JWT code using <code>lre-utils.dat</code> for VuGen or <code>jwt-helper.js</code> for DevWeb.</div>
       </div>
       <div class="help-faq-item">
         <div class="help-faq-q">Why can't I record in VuGen on my VCSE / Azure machine?</div>
@@ -2240,9 +2271,16 @@ const PORTAL_CONFIG = {
 /* ── Portal tab switching ───────────────────────────────────────────────── */
 const PORTAL_PANELS = Object.keys(PORTAL_CONFIG.tabs);
 let   _iframeLoaded = {};
+let   _activeTab    = 'home';
 
 function switchPortalTab(tab) {
   if (!PORTAL_CONFIG.tabs[tab]?.enabled) return; // guard: disabled tab
+
+  _activeTab = tab;
+
+  // Show/hide the global Clear button — only on tool tabs
+  const clearBtn = document.getElementById('btn-global-clear');
+  if (clearBtn) clearBtn.style.display = ['converter','recorder','studio'].includes(tab) ? 'flex' : 'none';
 
   // Update tab button active state
   PORTAL_PANELS.forEach(t => {
@@ -2270,6 +2308,76 @@ function switchPortalTab(tab) {
   }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── Global Clear ───────────────────────────────────────────────────────── */
+function globalClear() {
+  if (_activeTab === 'converter') {
+    _clearConverter();
+  } else if (_activeTab === 'recorder' || _activeTab === 'studio') {
+    _clearIframeTool(_activeTab);
+  }
+}
+
+function _clearConverter() {
+  // Reset file state objects
+  F.collection = null; F.environment = null; F.certFiles = [];
+  JX.file = null; JX.csvFiles = []; JX.certFiles = [];
+
+  // Clear Bruno/Postman collection + environment drop zones
+  ['dz-col','dz-env'].forEach(function(id) {
+    const dz = document.getElementById(id); if (!dz) return;
+    dz.classList.remove('loaded');
+    const x = dz.querySelector('.dz-clear'); if (x) x.remove();
+  });
+  const lblCol = document.getElementById('lbl-col'); if (lblCol) lblCol.textContent = '';
+  const lblEnv = document.getElementById('lbl-env'); if (lblEnv) lblEnv.textContent = '';
+
+  // Clear cert chips (Bruno panel)
+  const chips = document.getElementById('bru-cert-chips'); if (chips) chips.innerHTML = '';
+  const hint  = document.getElementById('bru-cert-hint');  if (hint)  hint.style.display = 'none';
+
+  // Clear JMX file drop zone
+  const dzJmx = document.getElementById('dz-jmx');
+  if (dzJmx) {
+    dzJmx.classList.remove('loaded');
+    const x = dzJmx.querySelector('.dz-clear'); if (x) x.remove();
+    const lbl = document.getElementById('lbl-jmx'); if (lbl) lbl.textContent = '';
+  }
+
+  // Clear JMX supporting files (CSV, cert)
+  ['dz-csv','dz-cert'].forEach(function(id) {
+    const dz = document.getElementById(id); if (!dz) return;
+    dz.classList.remove('loaded');
+    const x = dz.querySelector('.dz-clear'); if (x) x.remove();
+  });
+  const lblCsv  = document.getElementById('lbl-csv');  if (lblCsv)  lblCsv.textContent  = '';
+  const lblCert = document.getElementById('lbl-cert'); if (lblCert) lblCert.textContent = '';
+
+  // Reset all file input elements so the same file can be re-selected
+  ['fi-col','fi-env','fi-bru-cert','fi-jmx','fi-csv','fi-cert'].forEach(function(id) {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+
+  // Hide results + reset convert buttons
+  hideResults();
+  resetBtn();
+  resetJmxBtn();
+}
+
+function _clearIframeTool(toolName) {
+  const iframeEl = document.getElementById('iframe-' + toolName);
+  if (!iframeEl) return;
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  iframeEl.onload = function() {
+    if (iframeEl.contentWindow && iframeEl.contentWindow.lrePortalInit) {
+      iframeEl.contentWindow.lrePortalInit(currentTheme);
+    }
+    _iframeLoaded[toolName] = true;
+  };
+  // Reload the iframe — definitive reset of all client-side state
+  iframeEl.src = PORTAL_CONFIG.iframes[toolName];
+  _iframeLoaded[toolName] = true; // prevent duplicate load on next tab switch
 }
 
 // Initialise: apply feature flags, then show home

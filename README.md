@@ -1,58 +1,45 @@
 # LRE Toolkit — Performance Engineering
 
-A browser-based toolkit that generates production-ready **LoadRunner VuGen scripts** automatically — from Postman/Bruno collections, JMeter scripts, or HAR browser recordings.
+> Convert Postman/Bruno collections, JMeter scripts, and browser recordings into production-ready LoadRunner Enterprise VuGen scripts — automatically.
 
-Deployed as a Node.js/Express application on IIS. All processing is in-memory; no uploaded files are ever stored on disk.
-
----
-
-## Tools
-
-### ⚡ Converter
-Convert existing API collections or JMeter test scripts into VuGen scripts.
-
-**Supported inputs:**
-- Postman v2.1 JSON
-- Bruno JSON, YAML (single file or folder), `.bru`
-- Apache JMeter `.jmx` (with optional CSV and certificate files)
-
-**Features:** OAuth2, Basic, Bearer, API Key, JWT, AWS Sig v4, NTLM/Kerberos auth · Auto-correlation · 3-tier parameterization · Multi-script mode · Workload model Excel (JMX)
+**Version:** 2.9.2 | **Internal tool — bank's performance engineering platform**
 
 ---
 
-### 🎙 Recorder
-Convert a browser HAR recording into a VuGen script — no VuGen installation required for recording.
+## What it does
 
-Designed for VCSE machines where VuGen's built-in proxy recording is blocked by policy. Install the bookmarklet, record your journey in Chrome/Firefox, export a HAR from DevTools, upload here.
+The LRE Toolkit eliminates ~80% of manual VuGen scripting effort by automatically generating:
 
-**Features:** Domain filtering · Transaction boundary marking · Static asset filtering
+- **Correlation** — extracts all dynamic values (tokens, session IDs, CSRF tokens) from responses
+- **3-tier parameterization** — classifies every variable as Dynamic / Config / Test Data
+- **Authentication** — OAuth2, JWT signing, DPoP (RFC 9449), PKCE (RFC 7636), NTLM/Kerberos, Basic, Bearer, API Key, AWS Sig v4, mTLS
+- **All mandatory files** — `.usr`, `rts.yml`, `scenario.yml`, `parameters.yml`, `Action.c`, `vuser_init.c`, parameter files, etc.
+- **Per-request transactions** — sequential naming (`T01_Login`, `T02_GetAccount`)
 
 ---
 
-### 🧪 Script Studio
-Generate deeply correlated VuGen scripts from 1 or 2 HAR files.
+## Three Tools
 
-**1 HAR** — pattern-based analysis (fast, good for simple apps).
-**2 HARs** — diff-based analysis (recommended — records same journey twice with different data, finds every value that changes between runs).
-
-**Features:** JSON path / XPath / boundary / cookie / header extractors · Auth detection · Parameterization candidates · Diff-based correlation engine
+| Tool | Input | Best for |
+|---|---|---|
+| **Converter** | Postman v2.1, Bruno JSON/YAML/.bru, JMeter .jmx | Convert existing API collections or JMeter scripts |
+| **Recorder** | Browser HAR export | Record journeys on VCSE/Azure VMs where VuGen proxy recording is blocked |
+| **Script Studio** | 1 or 2 HAR files | Maximum-accuracy correlation using diff-based analysis |
 
 ---
 
 ## Output Formats
 
-Both formats are supported by all three tools:
-
-| Format | Protocol | Main file | Use when |
-|--------|----------|-----------|----------|
-| 🟦 **DevWeb** | JavaScript | `main.js` | LRE 2021+, new projects |
+| Format | Protocol | Entry file | Choose when |
+|---|---|---|---|
+| 🟦 **DevWeb** | JavaScript | `main.js` | New projects, LRE 2021+ |
 | 🟧 **Web HTTP/HTML** | C | `Action.c` | All LRE versions, existing projects |
 
 ---
 
 ## Quick Start
 
-### Run locally
+### Local development
 
 ```bash
 npm install
@@ -60,126 +47,19 @@ npm start
 # → http://localhost:3000/converter
 ```
 
-### Run on a custom port
+### Custom port
 
 ```bash
 PORT=8080 npm start
 ```
 
-### Run with Node directly
+### Run directly
 
 ```bash
 node src/web/server.js
 ```
 
----
-
-## IIS Deployment
-
-The app is designed for IIS + iisnode. All files are processed in-memory — no temp files accumulate on the server between requests. Concurrent users are safe.
-
-1. Install [iisnode](https://github.com/Azure/iisnode)
-2. Point your IIS site to the project root
-3. Set the iisnode handler for `server.js` in `web.config`
-4. Navigate to `http://<your-site>/converter`
-
----
-
-## Privacy Model
-
-| Stage | What happens |
-|-------|-------------|
-| File upload | `multer.memoryStorage()` — files stay in RAM, never touch disk |
-| Conversion | `memoryFsInterceptor.js` intercepts all `fs.writeFile` calls → in-memory Map |
-| Download | ZIP streamed directly from Map → browser via `archiver.pipe(res)` |
-| After download | Token deleted immediately; Map garbage-collected |
-
-Nothing is persisted on the server between requests.
-
----
-
-## Project Structure
-
-```
-src/
-├── index.js                          # BrunoDevWebConverter entry point
-├── converters/jmxConverter.js        # JMeter conversion orchestrator
-├── parsers/
-│   ├── brunoParser.js                # Postman / Bruno / YAML / .bru parser
-│   └── jmxParser.js                  # JMeter .jmx XML parser
-├── generators/
-│   ├── advancedScriptGenerator.js    # DevWeb main.js generator
-│   ├── webHttpScriptGenerator.js     # VuGen Action.c generator
-│   ├── mandatoryFilesGenerator.js    # DevWeb config files
-│   └── webHttpMandatoryFilesGenerator.js
-├── analyzers/
-│   ├── correlationDetector.js        # 2-pass correlation engine
-│   ├── parameterizationEngine.js     # Variable value scanner
-│   ├── authenticationHandler.js      # Auth detection + code gen
-│   └── customScriptParser.js         # Pre/post-request script analysis
-├── lib/
-│   ├── memoryFsInterceptor.js        # AsyncLocalStorage fs interceptor
-│   └── jmxDependencyResolver.js      # CSV dependency checker
-└── web/
-    ├── server.js                     # Express server
-    ├── views/index.ejs               # Portal SPA
-    └── public/
-        ├── VuGen-Recorder.html       # HAR Script Generator
-        ├── VuGen-Script-Studio.html  # Correlation Engine
-        └── jszip.min.js              # JSZip v3.10.1 (shared)
-```
-
----
-
-## Configuration — Feature Flags
-
-To temporarily hide a tool tab without deleting any code, edit `PORTAL_CONFIG` in `src/web/views/index.ejs`:
-
-```js
-const PORTAL_CONFIG = {
-  tabs: {
-    home:      { enabled: true  },
-    converter: { enabled: true  },
-    recorder:  { enabled: true  },  // set false to hide
-    studio:    { enabled: true  },  // set false to hide
-    help:      { enabled: true  }
-  }
-};
-```
-
-The "Both formats" output option in Recorder and Script Studio is currently hidden (`style="display:none"`). To re-enable, remove that attribute from `#fc-both` (Recorder) and `#fmt-both` (Studio).
-
----
-
-## Documentation
-
-| File | Audience |
-|------|----------|
-| [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | End users — step-by-step instructions, FAQ, glossary |
-| [docs/TECHNICAL-REFERENCE.md](docs/TECHNICAL-REFERENCE.md) | Developers — architecture, rules, edge cases, memory model |
-| [docs/FUNCTIONAL-SPEC.md](docs/FUNCTIONAL-SPEC.md) | Team — what each tool does, detection rules, output spec |
-| [docs/DEPLOYMENT-GUIDE.md](docs/DEPLOYMENT-GUIDE.md) | Administrators — IIS + iisnode deployment, permissions, troubleshooting |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Server | Node.js + Express |
-| Template | EJS |
-| File upload | multer (memoryStorage) |
-| ZIP streaming | archiver |
-| Client-side ZIP | JSZip v3.10.1 |
-| Deployment | IIS + iisnode |
-| XML parsing | fast-xml-parser |
-| Excel output | ExcelJS |
-
----
-
-## CLI Usage
-
-The converter can also be used from the command line (bypasses the web server entirely):
+### CLI (no web server)
 
 ```bash
 node src/index.js \
@@ -189,4 +69,212 @@ node src/index.js \
   --mode single
 ```
 
-The CLI writes output directly to disk. The `memoryFsInterceptor` is not active in CLI mode.
+---
+
+## IIS Deployment (Production)
+
+The application runs on IIS + iisnode (standard Windows Server stack).
+
+### Prerequisites
+
+- Windows Server 2019/2022 with IIS 10
+- Node.js 18 LTS
+- iisnode 0.2.26
+- IIS URL Rewrite Module 2.1
+
+### Quick Deploy Steps
+
+```powershell
+# 1. Create site directory
+mkdir C:\inetpub\lre-toolkit
+
+# 2. Copy application files to C:\inetpub\lre-toolkit\
+
+# 3. Install dependencies
+cd C:\inetpub\lre-toolkit
+npm install --production
+
+# 4. Set permissions (NetworkService reads app code, writes iisnode logs)
+icacls "C:\inetpub\lre-toolkit" /grant "NetworkService:(OI)(CI)R"
+mkdir C:\inetpub\lre-toolkit\iisnode
+icacls "C:\inetpub\lre-toolkit\iisnode" /grant "NetworkService:(OI)(CI)F"
+
+# 5. In IIS Manager:
+#    - Create Application Pool "lre-toolkit-pool" (No Managed Code)
+#    - Create Site pointing to C:\inetpub\lre-toolkit
+#    - Application Pool: lre-toolkit-pool
+```
+
+The `web.config` in the repository is already configured for iisnode. See [Docs/deployment/DEPLOYMENT-IIS.md](Docs/deployment/DEPLOYMENT-IIS.md) for the complete step-by-step guide.
+
+---
+
+## Privacy Model
+
+All file processing is **entirely in-memory**. Nothing is ever written to disk.
+
+| Stage | What happens |
+|---|---|
+| Upload | `multer.memoryStorage()` — files stay in RAM |
+| Conversion | `AsyncLocalStorage` fs interceptor redirects all `fs.writeFile` calls → in-memory Map |
+| Download | ZIP streamed from Map → browser via `archiver.pipe(res)` — no ZIP file on disk |
+| After download | Token deleted; Map garbage-collected |
+
+Each request has its own isolated `AsyncLocalStorage` context — no cross-request contamination.
+
+---
+
+## Project Structure
+
+```
+bruno-devweb-converter/
+│
+├── app.js                    ← IIS entry point
+├── package.json
+├── web.config                ← IIS + iisnode configuration
+│
+├── DevWebSdk.d.ts            ← TypeScript defs (included in output)
+├── jwt-helper.js             ← DevWeb JWT signing helper (included in output)
+├── jsrsasign.js              ← RSA/EC crypto for VuGen JS (included in output)
+├── lre-utils.js              ← DPoP + PKCE + JWT crypto source (→ lre-utils.dat)
+├── transport.pem             ← Placeholder PEM key (included in JWT output)
+│
+├── src/
+│   ├── index.js              ← CLI entry point
+│   ├── parsers/
+│   │   ├── brunoParser.js    ← Postman v2.1 + Bruno all formats
+│   │   └── jmxParser.js      ← JMeter .jmx XML
+│   ├── analyzers/
+│   │   ├── correlationDetector.js
+│   │   ├── parameterizationEngine.js
+│   │   ├── authenticationHandler.js
+│   │   └── customScriptParser.js  ← JWT/DPoP library fingerprinting
+│   ├── generators/
+│   │   ├── advancedScriptGenerator.js       ← DevWeb main.js
+│   │   ├── mandatoryFilesGenerator.js       ← DevWeb config files
+│   │   ├── webHttpScriptGenerator.js        ← VuGen Action.c
+│   │   └── webHttpMandatoryFilesGenerator.js
+│   ├── converters/
+│   │   └── jmxConverter.js
+│   └── lib/
+│       ├── memoryFsInterceptor.js    ← AsyncLocalStorage fs → RAM
+│       └── jmxDependencyResolver.js
+│
+└── src/web/
+    ├── server.js             ← Express app
+    ├── views/index.ejs       ← Portal SPA
+    └── public/
+        ├── VuGen-Recorder.html
+        ├── VuGen-Script-Studio.html
+        ├── VuGen-Script-Studio-app.js        ← Studio code generator
+        ├── VuGen-Script-Studio-correlation.js ← Studio correlation engine
+        └── jszip.min.js
+```
+
+---
+
+## Feature Overview
+
+### Authentication — Auto-detected and generated
+
+| Method | Detection |
+|---|---|
+| OAuth2 (CC, Password, Auth Code) | `auth.type`, token endpoint, `grant_type` |
+| JWT signing (8 library signatures) | jsrsasign, jose, JJWT, nimbus, BouncyCastle, JCA, Auth0 java-jwt |
+| **DPoP (RFC 9449)** | `dpop` / `dpop-pf` headers |
+| **PKCE (RFC 7636)** | `code_challenge=` in URL, `code_verifier=` in body |
+| NTLM / Kerberos | `auth.type=ntlm`, variable name patterns |
+| Basic | `auth.type=basic` |
+| Bearer Token | `Authorization: Bearer` header |
+| API Key | `X-API-Key`, `api_key` query param |
+| AWS Signature v4 | `AWS4-HMAC-SHA256` authorization |
+| mTLS | `.pem`, `.p12`, `.jks` certificate upload |
+
+### Correlation — All extractor types
+
+JSON path, XPath, Regular expression, Boundary (left/right), Header, Cookie
+
+### Script Studio Correlation Strategies
+
+- **Two-HAR diff (VBAC)**: Compare two recordings — any value that differs = dynamic
+- **Single-HAR pattern**: UUID, JWT, entropy scoring
+- **Unresolved candidates**: TODO placeholders for Bearer tokens whose source wasn't in the HAR
+
+---
+
+## Configuration
+
+### Portal tab visibility
+
+Edit `PORTAL_CONFIG` in `src/web/views/index.ejs`:
+
+```javascript
+const PORTAL_CONFIG = {
+  tabs: {
+    home:      { enabled: true  },
+    converter: { enabled: true  },
+    recorder:  { enabled: true  },  // false → hides tab
+    studio:    { enabled: true  },  // false → hides tab
+    help:      { enabled: true  }
+  }
+};
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js 18 LTS |
+| Web framework | Express 4.18 |
+| Template | EJS |
+| File upload | multer (memoryStorage) |
+| ZIP streaming | archiver 6 (chunked, no Content-Length) |
+| XML parsing | fast-xml-parser 4.5 |
+| Excel output | ExcelJS 4.4 |
+| Client ZIP | JSZip 3.10.1 |
+| Deployment | IIS 10 + iisnode 0.2.26 |
+
+---
+
+## Documentation
+
+| Document | Audience | Link |
+|---|---|---|
+| **Documentation Index** | All | [Docs/INDEX.md](Docs/INDEX.md) |
+| Executive Summary | Business stakeholders | [Docs/business/EXECUTIVE-SUMMARY.md](Docs/business/EXECUTIVE-SUMMARY.md) |
+| Business Case | IT Management | [Docs/business/BUSINESS-CASE.md](Docs/business/BUSINESS-CASE.md) |
+| Architecture | Architects | [Docs/technical/ARCHITECTURE.md](Docs/technical/ARCHITECTURE.md) |
+| HLSD | Architecture board | [Docs/technical/HLSD.md](Docs/technical/HLSD.md) |
+| DPoP Guide | Security team | [Docs/technical/DPOP-GUIDE.md](Docs/technical/DPOP-GUIDE.md) |
+| PKCE Guide | Security team | [Docs/technical/PKCE-GUIDE.md](Docs/technical/PKCE-GUIDE.md) |
+| Developer Guide | Developers | [Docs/technical/DEVELOPER-GUIDE.md](Docs/technical/DEVELOPER-GUIDE.md) |
+| Getting Started | All users | [Docs/user/GETTING-STARTED.md](Docs/user/GETTING-STARTED.md) |
+| IIS Deployment | Admins | [Docs/deployment/DEPLOYMENT-IIS.md](Docs/deployment/DEPLOYMENT-IIS.md) |
+| Troubleshooting | All users | [Docs/user/TROUBLESHOOTING.md](Docs/user/TROUBLESHOOTING.md) |
+
+---
+
+## Tests
+
+```bash
+npm test                                    # All tests
+npm test -- --testPathPattern=correlation  # Single suite
+npm test -- --coverage                     # With coverage
+```
+
+---
+
+## Version History
+
+| Version | Key Changes |
+|---|---|
+| **v2.9.2** | PKCE (RFC 7636) support — Converter + Script Studio |
+| **v2.9.0** | DPoP (RFC 9449) full support; HTML entity decoding for PEM keys |
+| **v2.8.0** | Value-Based Auto-Correlation (VBAC) engine in Script Studio |
+| **v2.7.0** | Memory-only processing; all log statements removed from generated scripts |
+| **v2.6.0** | Per-request transaction naming with global sequential counter |
+| **v2.5.0** | Multi-certificate upload; Bruno YAML folder collection support |
+| **v2.4.0** | Proxy auto-detection; URL encoding fix for `{{variable}}` URLs |
+| **v2.3.0** | JMeter converter; Workload Model Excel generation |
