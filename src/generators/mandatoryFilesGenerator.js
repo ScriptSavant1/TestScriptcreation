@@ -634,29 +634,27 @@ ${extarEntries}    <FileEntry Name="Action.c" Filter="1" />
     // Back-compat: normalise legacy single-string form
     const _mtlsCertFiles = Array.isArray(mtlsCertFiles) ? mtlsCertFiles : (mtlsCertFiles ? [{ certFile: mtlsCertFiles, keyFile: mtlsCertFiles, format: 'PEM' }] : []);
 
-    // Extract JWT-related parameter names from the claim map.
-    // These go into rts.yml userArguments instead of CSV/parameters.yml.
+    // All global params (JMX UDVs, Postman/Bruno collection-level vars) go into
+    // rts.yml userArguments so they are accessible via load.params / load.config.user.args.
+    // This includes JWT claim params AND any other collection-level variables.
+    // PEM keys are handled by _formatUserArguments() as YAML block scalar (|).
     const jwtParamNames = new Set();
     let jwtUserArgs = null;
 
-    if (hasJwt && jwtClaimMap && parameters) {
+    if (parameters && parameters.size > 0) {
       jwtUserArgs = {};
-      // Collect all parameter names referenced by the claim map
-      for (const [claim, paramName] of Object.entries(jwtClaimMap)) {
-        if (claim === "output") continue; // output var is dynamic, not a parameter
-        if (parameters.has(paramName)) {
-          const cfg = parameters.get(paramName);
-          jwtUserArgs[paramName] = this.decodeHtmlEntities(
-            String(cfg.paramValue || ""),
-          );
-          jwtParamNames.add(paramName);
+      for (const [name, cfg] of parameters.entries()) {
+        // Only collection-level / global vars (no external CSV file pointer)
+        if (!cfg.fileName || cfg.fileName === 'collection_data.dat') {
+          jwtUserArgs[name] = this.decodeHtmlEntities(String(cfg.paramValue || ""));
+          jwtParamNames.add(name);
         }
       }
       if (Object.keys(jwtUserArgs).length === 0) jwtUserArgs = null;
     }
 
-    // Filter parameters: JWT params go to rts.yml userArguments only (accessed
-    // via load.config.user.args at runtime). Exclude them from CSV/parameters.yml.
+    // Filter parameters: global params go to rts.yml userArguments only.
+    // Exclude them from CSV/parameters.yml to avoid duplication.
     let csvParameters = parameters;
     let ymlParameters = parameters;
     if (jwtParamNames.size > 0 && parameters) {
