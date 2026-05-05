@@ -437,8 +437,14 @@ class WebHttpScriptGenerator {
 
     // RULE 2.5 — Private key / cryptographic secret → always dynamic (never in ParameterFile.prm)
     // PEM keys are multi-line, contain special chars that break CSV, must not be in plain-text files.
+    // Exclude JKS keystore references — names containing keystore/keypassword/keyalias/keyid are
+    // ordinary string values (file paths, passwords, aliases), not PEM keys, even when their names
+    // contain substrings like "signing" or "key" that would otherwise match privateKeyPattern.
+    const keystoreExclusionPattern = /keystore|key.?password|key.?alias|key.?id/i;
     for (const [name] of this.variableMap.entries()) {
-      if (privateKeyPattern.test(name)) this.dynamicVarNames.add(name);
+      if (privateKeyPattern.test(name) && !keystoreExclusionPattern.test(name)) {
+        this.dynamicVarNames.add(name);
+      }
     }
 
     // RULE 3 — _ prefix → always dynamic
@@ -2542,12 +2548,17 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     const varPattern = /\{([a-zA-Z][a-zA-Z0-9_]*)\}/g;
     const credentialPattern =
       /^(username|password|user|email|account|credential|login|pwd|passwd|user_?name|user_?id|user_?email)$/i;
+    // Host LR param names (ServerHost, ServerHost1, ...) are set via lr_save_string() in vuser_init —
+    // they must NOT appear in [CommandArguments] / ParameterFile.prm.
+    const hostParamNames = this.hostVarMap ? new Set(this.hostVarMap.values()) : new Set();
     let match;
     let added = 0;
 
     while ((match = varPattern.exec(cCode)) !== null) {
       const varName = match[1];
 
+      // Skip host LR params (e.g. ServerHost, ServerHost1) — set by lr_save_string(), not command args
+      if (hostParamNames.has(varName)) continue;
       // Skip already-classified variables and dynamic/per-request vars
       if (this.parameters.has(varName)) continue;
       if (this.dynamicVarNames.has(varName)) continue;
