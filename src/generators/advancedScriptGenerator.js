@@ -598,8 +598,14 @@ class AdvancedScriptGenerator {
 
     // RULE 2.5 — Private key / cryptographic secret → always Tier 1 (never parameterize)
     // PEM keys are multi-line, contain special chars that break CSV, must not be in plain-text files.
+    // Exclude JKS keystore references — names containing keystore/keypassword/keyalias/keyid are
+    // ordinary string values (file paths, passwords, aliases), not PEM keys, even when their names
+    // contain substrings like "signing" or "key" that would otherwise match privateKeyPattern.
+    const keystoreExclusionPattern = /keystore|key.?password|key.?alias|key.?id/i;
     for (const [name] of this.variableMap.entries()) {
-      if (privateKeyPattern.test(name)) this.dynamicVarNames.add(name);
+      if (privateKeyPattern.test(name) && !keystoreExclusionPattern.test(name)) {
+        this.dynamicVarNames.add(name);
+      }
     }
 
     // RULE 3 — _ prefix: always Tier 1 regardless of value
