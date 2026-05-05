@@ -67,7 +67,12 @@ class WebHttpMandatoryFilesGenerator {
 
     const safeScriptName = this.sanitizeName(this.scriptName);
 
-    const needsCrypto = hasJwt || hasDpop;
+    // Split parameters first — globalParams needed by generateDefaultCfg ([CommandArguments])
+    //   globalParams → collection-level vars (JMX UDVs, Postman collection vars) — read once
+    //   csvParams    → CSVDataSet-linked vars (external test-data files) — read per iteration
+    const globalParams = this.filterGlobalParams(parameters);
+    const csvParams    = this.filterCsvParams(parameters);
+
     this.writeFile(
       outputDir,
       `${safeScriptName}.usr`,
@@ -83,28 +88,25 @@ class WebHttpMandatoryFilesGenerator {
     this.writeFile(
       outputDir,
       "default.cfg",
-      this.generateDefaultCfg(proxy, hasNtlm, hasJwt, hasDpop),
+      this.generateDefaultCfg(proxy, hasNtlm, hasJwt, hasDpop, globalParams),
     );
     if (proxy && proxy.enabled)
       console.log(
         `  ✓ Proxy configured in default.cfg: ${proxy.host}:${proxy.port}`,
       );
     this.writeFile(outputDir, "default.usp", this.generateDefaultUsp());
-    // Split parameters into two groups:
-    //   globalParams → collection-level vars (JMX UDVs, Postman collection vars) — read once
-    //   csvParams    → CSVDataSet-linked vars (external test-data files) — read per iteration
-    const globalParams = this.filterGlobalParams(parameters);
-    const csvParams    = this.filterCsvParams(parameters);
 
+    // GlobalVars.prm: params are now in [CommandArguments] in default.cfg.
+    // Keep file for VuGen compatibility but as empty (VuGen won't load it since GlobalParameterFile= is cleared).
     this.writeFile(
       outputDir,
       "GlobalVars.prm",
-      this.generateGlobalVarsPrm(globalParams),
+      this.generateGlobalVarsPrm(new Map()),
     );
     this.writeFile(
       outputDir,
       "collection_data.dat",
-      this.generateCollectionDataDat(globalParams),
+      this.generateCollectionDataDat(new Map()),
     );
     this.writeFile(
       outputDir,
@@ -191,7 +193,7 @@ class WebHttpMandatoryFilesGenerator {
 Type=Multi
 DefaultCfg=default.cfg
 ParameterFile=ParameterFile.prm
-GlobalParameterFile=GlobalVars.prm
+GlobalParameterFile=
 NewFunctionHeader=1
 RunType=cci
 ActionLogicExt=action_logic
@@ -260,8 +262,9 @@ ${txOrder}${txSection}${manualExtraSection}`;
 
   // ─── default.cfg (INI) ───────────────────────────────────────────────────────
 
-  generateDefaultCfg(proxy = null, hasNtlm = false, enableJs = false) {
+  generateDefaultCfg(proxy = null, hasNtlm = false, hasJwt = false, hasDpop = false, globalParams = null) {
     // Complete canonical VuGen Web HTTP/HTML runtime config.
+    // [CommandArguments] section holds all global params read at startup via lr_get_attrib_string().
     // Proxy settings are injected into [WEB] when a proxy is detected in the collection.
     const proxyLines =
       proxy && proxy.enabled
@@ -294,6 +297,25 @@ ProxyBypass=
 ProxyNoLocal=0
 ProxyUserName=
 ProxyPasswordIsEncrypted=false`;
+
+    // Build [CommandArguments] from scalar global params.
+    // PEM keys are stored on one line with newlines escaped as \n — same escaping
+    // used in collection_data.dat — so lr_get_attrib_string() can read them intact.
+    let commandArgsSection = '';
+    if (globalParams && globalParams.size > 0) {
+      const lines = [];
+      for (const [name, cfg] of globalParams.entries()) {
+        const rawVal = cfg.paramValue !== undefined && cfg.paramValue !== null
+          ? String(cfg.paramValue) : '';
+        const val = this.decodeHtmlEntities(rawVal);
+        // Escape real newlines so the value fits on one INI line
+        const singleLine = val.replace(/\r\n/g, '\\n').replace(/\r/g, '\\n').replace(/\n/g, '\\n');
+        lines.push(`${name}=${singleLine}`);
+      }
+      if (lines.length > 0) {
+        commandArgsSection = `\n[CommandArguments]\n${lines.join('\n')}\n`;
+      }
+    }
 
     return `[General]
 XlBridgeTimeout=120
@@ -416,7 +438,7 @@ PrintBufLineLen=99
 PrintBufEscape0=0
 LogEnableResponseLimit=0
 LogMaxResponseSize=100
-EnableJsForTransport=${enableJs ? 1 : 0}
+EnableJsForTransport=${(hasJwt || hasDpop) ? 1 : 0}
 JsForTransportRuntimeSize=51200
 JsForTransportStackSize=32
 LogFileWrite=0
@@ -444,8 +466,7 @@ IncludeFiltersInList=
 [Java]
 UseExternalJVM=0
 ExternalJREPath=
-
-`;
+${commandArgsSection}`;
   }
 
   // ─── default.usp (INI) ───────────────────────────────────────────────────────

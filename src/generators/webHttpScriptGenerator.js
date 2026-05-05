@@ -1086,59 +1086,79 @@ static void gen_hex64(const char *param_name) {
   }
 
   generateVuserInitC() {
-    const scriptName =
-      this.collection.info?.name || this.collection.name || "VuGenScript";
-
-    // JWT vars detected — build active validation block for each JWT variable.
-    // JWT note: web_js_run() in Action() handles JWT generation via lre-utils.dat.
-    // No pre-generation or validation needed in vuser_init.c.
-    const jwtNote = "";
-
-    // NTLM / Kerberos authentication block
+    // NTLM / Kerberos authentication block (unchanged)
     const ntlmBlock = this.hasNtlm
-      ? `web_set_user("{username}", "{password}", "${this.ntlmHost}");`
+      ? `  web_set_user("{username}", "{password}", "${this.ntlmHost}");\n`
       : "";
 
-    // mTLS client certificate block (when certs uploaded but JWT is NOT active)
+    // mTLS client certificate block (unchanged — only when JWT is NOT active)
     const certBlock = this.mtlsCertFiles.length > 0 && !this.hasJwt
       ? this.mtlsCertFiles.map(c => `
-web_set_certificate_ex(
-  "CertFilePath=${c.certFile}",
-  "CertFormat=${c.format}",
-  "KeyFilePath=${c.keyFile}",
-  "KeyFormat=${c.format}",
-  LAST);`).join('\n')
+  web_set_certificate_ex(
+    "CertFilePath=${c.certFile}",
+    "CertFormat=${c.format}",
+    "KeyFilePath=${c.keyFile}",
+    "KeyFormat=${c.format}",
+    LAST);`).join('\n') + '\n'
       : '';
 
-    // DPoP optimization: Load lre-utils.dat once in vuser_init for performance
-    // This eliminates file I/O overhead from Action.c iterations (15 TPS → 200+ TPS)
+    // DPoP optimization: Load lre-utils.dat once in vuser_init (unchanged)
     const dpopInitBlock = this.hasDpop
-      ? // Load lre-utils.dat ONCE and initialize DPoP engine
-        `web_js_run(
-  "Code=initDpopKey(LR.getParam('${this.dpopKeyVar || "dpop_jwk"}')); 'DPoP engine initialized successfully';",
-  "ResultParam=dpop_init_result",
-  SOURCES,
-  "File=lre-utils.dat", ENDITEM,
-  LAST);
+      ? `  web_js_run(
+    "Code=initDpopKey(LR.getParam('${this.dpopKeyVar || "dpop_jwk"}')); 'DPoP engine initialized successfully';",
+    "ResultParam=dpop_init_result",
+    SOURCES,
+    "File=lre-utils.dat", ENDITEM,
+    LAST);
 
-lr_output_message("DPoP Initialization: %s", lr_eval_string("{dpop_init_result}"));
+  lr_output_message("DPoP Initialization: %s", lr_eval_string("{dpop_init_result}"));
 `
       : "";
 
     // — SetUp Thread Group content ————————————————
-    // HTTP requests from JMeter setUp TG go here. JSR223 samplers become TODOs.
     const setupRequests = this.options.setupRequests || [];
-    const setupScripts = this.options.setupScripts || [];
     let setupBlock = "";
     for (const req of setupRequests) {
       setupBlock += this.generateWebFunction(req, "    ");
     }
 
-    const hasSetup = setupRequests.length || setupScripts.length;
+    // ── Global params: read from [CommandArguments] in default.cfg ─────────────
+    // All collection-level vars (JMX UDVs, Postman/Bruno collection vars) are written
+    // to [CommandArguments] and read here once at script startup via lr_get_attrib_string().
+    // lr_save_string() promotes each value to an LR parameter, making {name} and
+    // LR.getParam('name') available throughout Action.c and web_js_run() calls.
+    const globalParamEntries = [];
+    if (this.parameters && this.parameters.size > 0) {
+      for (const [name, cfg] of this.parameters.entries()) {
+        if (!cfg.fileName || cfg.fileName === 'collection_data.dat') {
+          globalParamEntries.push(name);
+        }
+      }
+    }
 
-    return `vuser_init()
+    // File-scope variable declarations — MUST appear before vuser_init() in C file scope
+    let fileScopeDecls = '';
+    for (const name of globalParamEntries) {
+      const safe = name.replace(/[^a-zA-Z0-9_]/g, '_');
+      fileScopeDecls += `char *attrib_${safe};\n`;
+    }
+
+    // Body: read each attribute and promote to LR parameter
+    let attribBlock = '';
+    if (globalParamEntries.length > 0) {
+      attribBlock += '\n';
+      for (const name of globalParamEntries) {
+        const safe = name.replace(/[^a-zA-Z0-9_]/g, '_');
+        attribBlock += `  attrib_${safe} = lr_get_attrib_string("${name}");\n`;
+        attribBlock += `  if (attrib_${safe}) lr_save_string(attrib_${safe}, "${name}");\n`;
+      }
+    }
+
+    const fileScopeBlock = fileScopeDecls ? fileScopeDecls + '\n' : '';
+
+    return `${fileScopeBlock}vuser_init()
 {
-${jwtNote}${ntlmBlock}${certBlock}${dpopInitBlock}${setupBlock}
+${ntlmBlock}${certBlock}${dpopInitBlock}${attribBlock}${setupBlock}
   return 0;
 }
 `;
