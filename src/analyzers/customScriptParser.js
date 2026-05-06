@@ -692,6 +692,89 @@ class CustomScriptParser {
       map.output = m[1];
     }
 
+    // ── Java / Groovy JMX patterns (JSR223 / BeanShell) ─────────────────────────
+    // Step 1: Build Java local-var → LR-param-name map from vars.get() / context.getVariable()
+    const javaVarToParam = {};
+    const javaVarsGetRe = /\b(?:String|int|long|Object|def|var)\s+(\w+)\s*=\s*(?:vars|context)\.(?:get|getVariable)\s*\(\s*["']([^"']+)["']\s*\)/g;
+    let jvg;
+    while ((jvg = javaVarsGetRe.exec(script)) !== null) {
+      javaVarToParam[jvg[1]] = jvg[2]; // e.g. clientID → 'client_id'
+    }
+
+    if (Object.keys(javaVarToParam).length > 0) {
+      // Step 2: Build intermediate string-var map (string-concatenation assignments)
+      const stringVarMap = {}; // varName → resolved LR template string  e.g. url → 'host-{iam_env}.com'
+
+      function buildLRTemplate(expr) {
+        const pieces = expr.split(/\s*\+\s*/);
+        let result = '';
+        for (const piece of pieces) {
+          const p = piece.trim();
+          if (/^["'].*["']$/.test(p)) {
+            result += p.slice(1, -1);            // string literal — strip quotes
+          } else if (stringVarMap[p] !== undefined) {
+            result += stringVarMap[p];           // already-resolved intermediate var
+          } else if (javaVarToParam[p]) {
+            result += '{' + javaVarToParam[p] + '}'; // LR param placeholder
+          }
+          // else: unresolvable expression piece — omit
+        }
+        return result;
+      }
+
+      const strVarRe = /\b(?:String|var)\s+(\w+)\s*=\s*([^;{}]+?)\s*;/g;
+      let svm;
+      while ((svm = strVarRe.exec(script)) !== null) {
+        const varName = svm[1];
+        if (javaVarToParam[varName]) continue; // already a vars.get() param
+        const expr = svm[2].trim();
+        if (expr.includes('+') || /^["']/.test(expr)) {
+          const resolved = buildLRTemplate(expr);
+          if (resolved) stringVarMap[varName] = resolved;
+        }
+      }
+
+      // Step 3: Extract claims from attributes.put("claim", expr)
+      const attribRe = /attributes\.put\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+?)\s*\)/g;
+      let apr;
+      while ((apr = attribRe.exec(script)) !== null) {
+        const claim = apr[1].toLowerCase();
+        const expr = apr[2].trim();
+        if (!/^(iss|sub|aud|scope|jti)$/i.test(claim)) continue;
+        if (claim === 'aud') {
+          // Audience may be dynamically built — resolve to LR template
+          const template = buildLRTemplate(expr);
+          if (template && template.includes('{')) {
+            // Dynamic — store template; _jwt_aud param will be pre-built before createJWT()
+            map._audTemplate = template;
+            map.aud = '_jwt_aud';
+          } else if (javaVarToParam[expr]) {
+            map.aud = javaVarToParam[expr];
+          }
+        } else if (javaVarToParam[expr]) {
+          map[claim] = javaVarToParam[expr];
+        }
+      }
+
+      // Step 4: kid from .keyID(javaVar) or .withKeyId(javaVar)
+      const kidMatch = script.match(/\.(?:keyID|withKeyId)\s*\(\s*(\w+)\s*\)/);
+      if (kidMatch && javaVarToParam[kidMatch[1]]) {
+        map.kid = javaVarToParam[kidMatch[1]];
+      }
+
+      // Step 5: Output var from vars.put("varName", ...) — only token-like names
+      const varsPutRe = /vars\.put\s*\(\s*["']([^"']+)["']\s*,/g;
+      let vpo;
+      while ((vpo = varsPutRe.exec(script)) !== null) {
+        const vName = vpo[1];
+        if (/[Tt]oken|jwt|JWT|[Cc]red/.test(vName)) {
+          map.output = vName;
+          break;
+        }
+      }
+    }
+    // ── End Java / Groovy patterns ───────────────────────────────────────────────
+
     return Object.keys(map).length > 0 ? map : null;
   }
 

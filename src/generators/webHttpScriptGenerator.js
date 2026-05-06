@@ -1278,10 +1278,16 @@ ${teardownBlock}
       ? (() => {
           const cm = this.jwtClaimMap || {};
           const clientIdParam = cm.iss || cm.sub || "client_id";
-          const audParam = cm.aud || "token_url";
+          // Dynamic audience: pre-build with lr_eval_string before the web_js_run call.
+          // _audTemplate contains LR-notation placeholders: "https://host-{iam_env}.com/..."
+          const hasDynAud = !!cm._audTemplate;
+          const audParam = hasDynAud ? "_jwt_aud" : (cm.aud || "token_url");
+          const audPreStep = hasDynAud
+            ? `lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
+            : '';
           const scopeParam = cm.scope || "scope";
-          const kidParam = cm.kid || "signing_key_id";
-          const secretParam = cm.secret || "signing_private_key";
+          const kidParam   = cm.kid    || "signing_kid";
+          const secretParam = cm.secret || "private_key";
           const outputParam = cm.output || "jwt";
           const resultParam = outputParam.startsWith("_")
             ? outputParam
@@ -1294,7 +1300,7 @@ web_set_certificate_ex(
   "KeyFormat=PEM",
   LAST);
 
-web_js_run(
+${audPreStep}web_js_run(
   "Code=createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'));",
   "ResultParam=${resultParam}",
   SOURCES,
