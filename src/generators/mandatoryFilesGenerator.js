@@ -645,7 +645,8 @@ ${extarEntries}    <FileEntry Name="Action.c" Filter="1" />
       jwtUserArgs = {};
       for (const [name, cfg] of parameters.entries()) {
         // Only collection-level / global vars (no external CSV file pointer)
-        if (!cfg.fileName || cfg.fileName === 'collection_data.dat') {
+        // DevWeb uses collection_data.csv; VuGen uses collection_data.dat — accept both.
+        if (!cfg.fileName || cfg.fileName === 'collection_data.csv' || cfg.fileName === 'collection_data.dat') {
           jwtUserArgs[name] = this.decodeHtmlEntities(String(cfg.paramValue || ""));
           jwtParamNames.add(name);
         }

@@ -1388,10 +1388,21 @@ ${
     // JWT initialization — only when JWT signing detected.
     // cert + require declared at module level; only token fetch here.
     const jwtBlock = this.hasJwt
-      ? `
-    load.global.jwt_token = getJwtToken(load.params${this.jwtClaimMap ? ', ' + JSON.stringify(this.jwtClaimMap) : ''});
+      ? (() => {
+          const cm = this.jwtClaimMap || {};
+          const cmJson = this.jwtClaimMap ? JSON.stringify(this.jwtClaimMap) : 'null';
+          // Dynamic audience: resolve {paramName} placeholders from the merged params object
+          const audLine = cm._audTemplate
+            ? `    const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{(\\w+)\\}/g, (_, k) => _jwtParams[k] || '');\n    _jwtParams['_jwt_aud'] = _jwtAud;\n`
+            : '';
+          return `
+    // Merge parameters.yml and rts.yml userArguments — covers both Postman/Bruno (load.params)
+    // and JMX UDVs (load.config.user.args) without requiring one specific source.
+    const _jwtParams = Object.assign({}, load.params, (load.config && load.config.user && load.config.user.args) || {});
+${audLine}    load.global.jwt_token = getJwtToken(_jwtParams, ${cmJson});
     load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
-`
+`;
+        })()
       : "";
 
     // DPoP initialization - only when DPoP signing detected.
@@ -1791,12 +1802,20 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
         : '';
 
     const jwtRefreshBlock = this.hasJwt
-      ? `
+      ? (() => {
+          const cm = this.jwtClaimMap || {};
+          const cmJson = this.jwtClaimMap ? JSON.stringify(this.jwtClaimMap) : 'null';
+          const audLine = cm._audTemplate
+            ? `        const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{(\\w+)\\}/g, (_, k) => _jwtParams[k] || '');\n        _jwtParams['_jwt_aud'] = _jwtAud;\n`
+            : '';
+          return `
     if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
-        load.global.jwt_token = getJwtToken(load.params${this.jwtClaimMap ? ', ' + JSON.stringify(this.jwtClaimMap) : ''});
+        const _jwtParams = Object.assign({}, load.params, (load.config && load.config.user && load.config.user.args) || {});
+${audLine}        load.global.jwt_token = getJwtToken(_jwtParams, ${cmJson});
         load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);${globalHeaderUpdate}
     }
-`
+`;
+        })()
       : globalEntries.length > 0
         ? `\n    Object.assign(load.WebRequest.defaults.headers, {\n${
           globalEntries.map(([k, v]) => `        "${k}": ${v}`)
