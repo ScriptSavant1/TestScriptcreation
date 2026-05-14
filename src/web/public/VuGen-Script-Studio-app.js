@@ -829,6 +829,45 @@ function genCollectionDataCsv() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Groups HAR entries that fired concurrently (time-interval overlap) into Promise.all blocks.
+// autoFollowSet: Set<idx> of redirect/challenge entries excluded from the generated script.
+// excludeSet:    Set<idx> of entries that must remain sequential (DPoP proofs, extractor captures).
+// Returns Map<idx, {size, pos}> — only entries in groups of size >= 2 are present.
+function buildConcurrentGroups(entries, autoFollowSet, excludeSet) {
+  const groupMap = new Map();
+  let buf = [];
+  let maxEnd = 0;
+
+  function flush() {
+    if (buf.length >= 2) {
+      buf.forEach((idx, pos) => groupMap.set(idx, { size: buf.length, pos }));
+    }
+    buf = []; maxEnd = 0;
+  }
+
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.isMarker || e.filtered || autoFollowSet.has(i) || (excludeSet && excludeSet.has(i))) {
+      flush(); continue;
+    }
+    // Navigation requests always break groups — they trigger the concurrent burst after them
+    if ((e.hdrsMap && e.hdrsMap["sec-fetch-mode"]) === "navigate") { flush(); continue; }
+    const startMs = e.startMs || 0;
+    if (!startMs) { flush(); continue; } // no HAR timing (NetLog) → sequential
+    const endMs = startMs + Math.max(e.dur || 0, 1);
+    if (buf.length === 0 || startMs < maxEnd) {
+      buf.push(i);
+      if (endMs > maxEnd) maxEnd = endMs;
+    } else {
+      flush();
+      buf.push(i);
+      maxEnd = endMs;
+    }
+  }
+  flush();
+  return groupMap;
+}
+
 // DEVWEB CODE GENERATOR
 // ═══════════════════════════════════════════════════════════════════════════
 function genMainJS(entries, correlations) {
@@ -1115,6 +1154,17 @@ function genMainJS(entries, correlations) {
     o += "    TS01.start();\n\n";
   }
 
+  // Build concurrent group map from HAR timing overlap.
+  // Entries with extractors (response capture) and DPoP entries stay sequential.
+  const _mjExclude = new Set();
+  for (let _i = 0; _i < entries.length; _i++) {
+    const _e = entries[_i];
+    const _hasSrc = corrSourcesRemap.has(_i) && (corrSourcesRemap.get(_i) || []).some((c) => c.extractorType !== "generate");
+    if (_hasSrc) _mjExclude.add(_i);
+    if (S.hasDpop && (_e.reqHdrs || []).some((h) => /^dpop(-pf)?$/i.test(h.name))) _mjExclude.add(_i);
+  }
+  const mjGroupMap = buildConcurrentGroups(entries, mjAutoFollowSet, _mjExclude);
+
   let currentTxn = null; // {name, tsNum}
 
   for (let idx = 0; idx < entries.length; idx++) {
@@ -1146,6 +1196,15 @@ function genMainJS(entries, correlations) {
       continue;
     }
 
+    // Determine concurrent group membership — drives Promise.all grouping and indentation
+    const _ginfo = mjGroupMap.get(idx);
+    const _inGrp = !!(_ginfo && _ginfo.size >= 2);
+    const _grpFirst = !_ginfo || _ginfo.pos === 0;
+    const _grpLast  = !_ginfo || _ginfo.pos === _ginfo.size - 1;
+    const ind = _inGrp ? "        " : "    ";        // request-line indent (8 or 4 spaces)
+    const pi  = _inGrp ? "            " : "        ";  // property indent (12 or 8 spaces)
+    const si  = _inGrp ? "                " : "            "; // sub-item indent (16 or 12 spaces)
+
     // Count auto-follows triggered by this entry and add a note
     {
       let _j = idx + 1,
@@ -1155,7 +1214,7 @@ function genMainJS(entries, correlations) {
         _j++;
       }
       if (_fc > 0)
-        o += `    // Note: VuGen auto-follows ${_fc} redirect(s) after this request — extractors scan the final response\n`;
+        o += `${ind}// Note: VuGen auto-follows ${_fc} redirect(s) after this request — extractors scan the final response\n`;
     }
 
     const rn = (() => {
@@ -1481,9 +1540,22 @@ function genMainJS(entries, correlations) {
     const srcCorrsForReq = (corrSourcesRemap.get(idx) || []).filter(
       (c) => c.extractorType !== "generate",
     );
-    o += `    // ${rn}\n`;
 
-    // DPoP proof generation — fresh proof per request
+    // Open Promise.all block before the first entry in a concurrent group
+    if (_inGrp && _grpFirst) o += `    await Promise.all([\n`;
+
+    const bodyMime = ((e.body && e.body.mimeType) || "")
+      .split(";")[0]
+      .trim();
+    if (bodyMime === "multipart/form-data") {
+      o += `${ind}// TODO: Multipart body detected. For file uploads in DevWeb:\n`;
+      o += `${ind}// const formData = new load.FormData();\n`;
+      o += `${ind}// formData.append('fieldName', load.utils.readFile('filename.pdf'), 'filename.pdf');\n`;
+      o += `${ind}// Then use: body: formData  (remove the body property below and replace)\n`;
+    }
+    o += `${ind}// ${rn}\n`;
+
+    // DPoP proof generation — fresh proof per request (DPoP entries are always sequential)
     if (S.hasDpop) {
       const dpopHdrs = (e.reqHdrs || []).filter((h) =>
         /^dpop(-pf)?$/i.test(h.name),
@@ -1517,21 +1589,15 @@ function genMainJS(entries, correlations) {
       }
     }
 
-    const bodyMime = ((e.body && e.body.mimeType) || "")
-      .split(";")[0]
-      .trim();
-    if (bodyMime === "multipart/form-data") {
-      o += `    // TODO: Multipart body detected. For file uploads in DevWeb:\n`;
-      o += `    // const formData = new load.FormData();\n`;
-      o += `    // formData.append('fieldName', load.utils.readFile('filename.pdf'), 'filename.pdf');\n`;
-      o += `    // Then use: body: formData  (remove the body property below and replace)\n`;
-    }
-    if (srcCorrsForReq.length > 0) {
+    // Request opening — no `await` inside Promise.all; hasSrc entries are always sequential
+    if (_inGrp) {
+      o += `${ind}new load.WebRequest({\n`;
+    } else if (srcCorrsForReq.length > 0) {
       o += `    const ${varN} = await new load.WebRequest({\n`;
     } else {
       o += `    await new load.WebRequest({\n`;
     }
-    o += `        id: ${rid},\n`;
+    o += `${pi}id: ${rid},\n`;
     // Base URL
     if (urlBaseDyn) {
       let urlEsc = escTpl(urlBaseOut);
@@ -1544,13 +1610,13 @@ function genMainJS(entries, correlations) {
         "${load.params.$1}",
       );
       urlEsc = urlEsc.replace(/\x00SRVHOST_([^\x00]+)\x00/g, "${$1}");
-      o += `        url: \`${urlEsc}\`,\n`;
+      o += `${pi}url: \`${urlEsc}\`,\n`;
     } else {
-      o += `        url: ${subHdrValMj(e.url.split("?")[0], mjHostVarMap)},\n`;
+      o += `${pi}url: ${subHdrValMj(e.url.split("?")[0], mjHostVarMap)},\n`;
     }
     // queryString object
     if (urlQsOut) {
-      o += `        queryString: {\n`;
+      o += `${pi}queryString: {\n`;
       for (const pair of urlQsOut.split("&")) {
         const eqI = pair.indexOf("=");
         const rawK = eqI >= 0 ? pair.slice(0, eqI) : pair;
@@ -1578,7 +1644,7 @@ function genMainJS(entries, correlations) {
           const vxFinal = vxCh
             ? vxSub.replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}")
             : vx;
-          o += `            "${escJs(key)}": \`${vxFinal}\`,\n`;
+          o += `${si}"${escJs(key)}": \`${vxFinal}\`,\n`;
         } else {
           let val;
           try {
@@ -1586,12 +1652,12 @@ function genMainJS(entries, correlations) {
           } catch {
             val = rawV;
           }
-          o += `            "${escJs(key)}": ${subHdrValMj(val, mjHostVarMap)},\n`;
+          o += `${si}"${escJs(key)}": ${subHdrValMj(val, mjHostVarMap)},\n`;
         }
       }
-      o += `        },\n`;
+      o += `${pi}},\n`;
     }
-    o += `        method: "${e.method}",\n`;
+    o += `${pi}method: "${e.method}",\n`;
 
     // Inject DPoP headers with dynamic proof values
     if (S.hasDpop) {
@@ -1608,19 +1674,19 @@ function genMainJS(entries, correlations) {
       }
     }
     if (Object.keys(extraHdrs).length > 0) {
-      o += `        headers: {\n`;
+      o += `${pi}headers: {\n`;
       for (const [k, h] of Object.entries(extraHdrs)) {
-        if (h.dynamic) o += `            "${escJs(k)}": \`${h.expr}\`,\n`;
+        if (h.dynamic) o += `${si}"${escJs(k)}": \`${h.expr}\`,\n`;
         else if (h.todo) {
           // Preserve scheme prefix (Bearer / Token) if present in the original value
           const _schemeMatch = h.value && /^(Bearer|Token|Digest)\s/i.exec(h.value);
           const _prefix = _schemeMatch ? _schemeMatch[0] : "";
-          o += `            // TODO: corr — add extractor on the response that issues this token.\n`;
-          o += `            "${escJs(k)}": \`${_prefix}\${load.global.${h.todo}}\`,\n`;
+          o += `${si}// TODO: corr — add extractor on the response that issues this token.\n`;
+          o += `${si}"${escJs(k)}": \`${_prefix}\${load.global.${h.todo}}\`,\n`;
         } else
-          o += `            "${escJs(k)}": ${subHdrValMj(h.value, mjHostVarMap)},\n`;
+          o += `${si}"${escJs(k)}": ${subHdrValMj(h.value, mjHostVarMap)},\n`;
       }
-      o += `        },\n`;
+      o += `${pi}},\n`;
     }
     // NetLog source: body was not captured — emit TODO comment
     if (
@@ -1629,7 +1695,7 @@ function genMainJS(entries, correlations) {
       e.method !== "GET" &&
       e.method !== "HEAD"
     ) {
-      o += `        // TODO: POST body not available in NetLog — add body property with your recorded request body\n`;
+      o += `${pi}// TODO: POST body not available in NetLog — add body property with your recorded request body\n`;
     }
     if (bodyText !== null) {
       const isFormBody =
@@ -1637,7 +1703,7 @@ function genMainJS(entries, correlations) {
         bodyText.indexOf("=") >= 0;
       if (isFormBody) {
         const pairs = bodyText.split("&");
-        o += `        body: {\n`;
+        o += `${pi}body: {\n`;
         for (const pair of pairs) {
           const eq = pair.indexOf("=");
           const rawK = eq >= 0 ? pair.substring(0, eq) : pair;
@@ -1665,16 +1731,16 @@ function genMainJS(entries, correlations) {
             const vFinal = vCh
               ? vSub.replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}")
               : vExpr;
-            o += `            "${escJs(k)}": \`${vFinal}\`,\n`;
+            o += `${si}"${escJs(k)}": \`${vFinal}\`,\n`;
           } else {
             let v = rawV;
             try {
               v = decodeURIComponent(rawV.replace(/\+/g, " "));
             } catch (ex) {}
-            o += `            "${escJs(k)}": ${subHdrValMj(v, mjHostVarMap)},\n`;
+            o += `${si}"${escJs(k)}": ${subHdrValMj(v, mjHostVarMap)},\n`;
           }
         }
-        o += `        },\n`;
+        o += `${pi}},\n`;
       } else if (bodyHasDynamic) {
         let esc1 = escTpl(bodyText);
         esc1 = esc1.replace(
@@ -1693,7 +1759,7 @@ function genMainJS(entries, correlations) {
         const esc1Final = esc1Ch
           ? esc1Sub.replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}")
           : esc1;
-        o += `        body: \`${esc1Final}\`,\n`;
+        o += `${pi}body: \`${esc1Final}\`,\n`;
       } else if (
         bodyMime === "application/json" ||
         bodyMime === "text/json"
@@ -1704,14 +1770,14 @@ function genMainJS(entries, correlations) {
           mjHostVarMap,
         );
         if (bCh) {
-          o += `        body: \`${escTpl(bSub).replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}")}\`,\n`;
+          o += `${pi}body: \`${escTpl(bSub).replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}")}\`,\n`;
         } else {
           try {
             const parsed = JSON.parse(bodyText);
             const lines = JSON.stringify(parsed, null, 4).split("\n");
-            o += `        body: ${lines.map((l, i) => (i === 0 ? l : "        " + l)).join("\n")},\n`;
+            o += `${pi}body: ${lines.map((l, i) => (i === 0 ? l : pi + l)).join("\n")},\n`;
           } catch {
-            o += `        body: \`${escTpl(bodyText)}\`,\n`;
+            o += `${pi}body: \`${escTpl(bodyText)}\`,\n`;
           }
         }
       } else {
@@ -1720,25 +1786,31 @@ function genMainJS(entries, correlations) {
           mjHostVarMap,
         );
         if (bCh)
-          o += `        body: \`${escTpl(bSub).replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}")}\`,\n`;
-        else o += `        body: \`${escTpl(bodyText)}\`,\n`;
+          o += `${pi}body: \`${escTpl(bSub).replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}")}\`,\n`;
+        else o += `${pi}body: \`${escTpl(bodyText)}\`,\n`;
       }
     }
     if (srcCorrsForReq.length > 0) {
-      o += `        returnBody: true,\n`;
-      o += `        extractors: [\n`;
+      o += `${pi}returnBody: true,\n`;
+      o += `${pi}extractors: [\n`;
       for (const c of srcCorrsForReq) {
         const extCode = devwebExtractorCode(c);
         if (extCode) o += extCode + ",\n";
       }
-      o += `        ],\n`;
+      o += `${pi}],\n`;
     }
-    o += `    }).send();\n\n`;
-    // Store extracted values
-    if (srcCorrsForReq.length > 0) {
-      for (const c of srcCorrsForReq)
-        o += `    load.global.${c.name} = ${varN}.extractors.${c.name};\n`;
-      o += "\n";
+    // Request closing — concurrent: .send(), + optional Promise.all close; sequential: .send();\n\n
+    if (_inGrp) {
+      o += `${ind}}).send(),\n`;
+      if (_grpLast) o += `    ]);\n\n`;
+    } else {
+      o += `    }).send();\n\n`;
+      // Store extracted values (only for sequential entries with extractors)
+      if (srcCorrsForReq.length > 0) {
+        for (const c of srcCorrsForReq)
+          o += `    load.global.${c.name} = ${varN}.extractors.${c.name};\n`;
+        o += "\n";
+      }
     }
     rid++;
   }

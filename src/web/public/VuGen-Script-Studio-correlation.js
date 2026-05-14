@@ -29,6 +29,8 @@ function parseHar(har) {
       method: (e.request.method || "GET").toUpperCase(),
       status: e.response.status || 0,
       ct,
+      dur: Math.round(e.time || 0),
+      startMs: (() => { try { return new Date(e.startedDateTime).getTime() || 0; } catch { return 0; } })(),
       reqHdrs: e.request.headers || [],
       hdrsMap,
       body: e.request.postData || null,
@@ -215,6 +217,7 @@ function parseNetLog(netlog) {
   entries.sort((a, b) => a._startTime - b._startTime);
   entries.forEach((e, i) => {
     e.id = i + 1;
+    e.startMs = e._startTime || 0;
     delete e._startTime;
   });
   return entries;

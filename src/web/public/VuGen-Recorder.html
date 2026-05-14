@@ -1021,7 +1021,7 @@ function parseNetLog(netlog){
   // Sort by request start time so requests are in chronological order
   entries.sort((a,b)=>a._startTime-b._startTime);
   // Assign sequential IDs after sort
-  entries.forEach((e,i)=>{ e.id=i+1; delete e._startTime; });
+  entries.forEach((e,i)=>{ e.id=i+1; e.startMs=e._startTime||0; delete e._startTime; });
   return entries;
 }
 
@@ -1049,6 +1049,7 @@ function processHAR(har){
       ct,
       size: e.response.bodySize>0 ? e.response.bodySize : (e.response.content&&e.response.content.size>0?e.response.content.size:0),
       dur:  Math.round(e.time||0),
+      startMs: (()=>{ try{return new Date(e.startedDateTime).getTime()||0;}catch{return 0;} })(),
       reqHdrs: e.request.headers||[],
       hdrsMap: hdrs,
       respHdrsMap: respHdrs,
@@ -1676,6 +1677,46 @@ const SKIP_HDRS=new Set([
   'dpop','dpop-pf'
 ]);
 
+// Groups HAR entries that fired concurrently (time-interval overlap) into Promise.all blocks.
+// autoFollowSet: Set<idx> of redirect/challenge entries already excluded from generated script.
+// excludeSet:    Set<idx> of entries that must remain sequential regardless (DPoP, extractors).
+// Returns Map<idx, {size, pos}> — only entries in groups of size >= 2 are present.
+function buildConcurrentGroups(entries, autoFollowSet, excludeSet) {
+  const groupMap = new Map();
+  let buf = [];   // current group candidate: array of entry indices
+  let maxEnd = 0;
+
+  function flush() {
+    if (buf.length >= 2) {
+      buf.forEach((idx, pos) => groupMap.set(idx, {size: buf.length, pos}));
+    }
+    buf = []; maxEnd = 0;
+  }
+
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    // Markers, filtered, auto-follow, and explicitly excluded entries break groups
+    if (e.isMarker || e.filtered || autoFollowSet.has(i) || (excludeSet && excludeSet.has(i))) {
+      flush(); continue;
+    }
+    // Navigation requests (full-page GET) always break groups — they TRIGGER the concurrent burst
+    if ((e.hdrsMap && e.hdrsMap['sec-fetch-mode']) === 'navigate') { flush(); continue; }
+    const startMs = e.startMs || 0;
+    if (!startMs) { flush(); continue; } // no HAR timing data (NetLog) → sequential
+    const endMs = startMs + Math.max(e.dur || 0, 1);
+    if (buf.length === 0 || startMs < maxEnd) {
+      buf.push(i);
+      if (endMs > maxEnd) maxEnd = endMs;
+    } else {
+      flush();
+      buf.push(i);
+      maxEnd = endMs;
+    }
+  }
+  flush();
+  return groupMap;
+}
+
 function genMainJS(){
   let o='';
   let rid=1;
@@ -1708,6 +1749,11 @@ function genMainJS(){
 
   // Pre-compute auto-follow set so redirect entries can be excluded
   const mjAutoFollowSet=buildAutoFollowMap(S.entries);
+  // DPoP requests must stay sequential — proof computation lines appear before new load.WebRequest({)
+  const _mjDpopExclude=new Set();
+  if(S.hasDpop) S.entries.forEach((e,i)=>{ if((e.reqHdrs||[]).some(h=>/^dpop(-pf)?$/i.test(h.name))) _mjDpopExclude.add(i); });
+  // Build concurrent group map from HAR timing overlap (DevWeb only — Web HTTP is always sequential)
+  const mjGroupMap=buildConcurrentGroups(S.entries, mjAutoFollowSet, _mjDpopExclude);
   // Extract default headers from first scripted (non-redirect) request
   const firstE=S.entries.find((e,i)=>!e.isMarker&&!e.filtered&&!mjAutoFollowSet.has(i));
   const defHdrs=firstE?filtHdrs(firstE):{'accept-language':'en-US,en;q=0.9'};
@@ -1812,8 +1858,17 @@ function genMainJS(){
       o+=`    // HTTP ${e.status} → VuGen auto-follows redirect to ${escJs(e.url)} (omitted)\n`;
       continue;
     }
+    // Determine concurrent group membership — drives Promise.all grouping and indentation
+    const _ginfo = mjGroupMap.get(idx);
+    const _inGrp = !!(_ginfo && _ginfo.size >= 2);
+    const _grpFirst = !_ginfo || _ginfo.pos === 0;
+    const _grpLast  = !_ginfo || _ginfo.pos === _ginfo.size - 1;
+    const ind = _inGrp ? '        ' : '    ';     // request-line indent (8 or 4 spaces)
+    const pi  = _inGrp ? '            ' : '        '; // property indent (12 or 8 spaces)
+    const si  = _inGrp ? '                ' : '            '; // sub-item indent (16 or 12 spaces)
+
     // Count auto-follows triggered by this entry
-    {let _j=idx+1,_fc=0; while(_j<S.entries.length&&mjAutoFollowSet.has(_j)){_fc++;_j++;} if(_fc>0) o+=`    // Note: VuGen auto-follows ${_fc} redirect(s) after this request\n`;}
+    {let _j=idx+1,_fc=0; while(_j<S.entries.length&&mjAutoFollowSet.has(_j)){_fc++;_j++;} if(_fc>0) o+=`${ind}// Note: VuGen auto-follows ${_fc} redirect(s) after this request\n`;}
 
     const rn=rqName(e.url);
 
@@ -1832,16 +1887,19 @@ function genMainJS(){
       extraHdrs[k]=v;
     }
 
+    // Open Promise.all block before the first entry in a concurrent group
+    if(_inGrp && _grpFirst) o+=`    await Promise.all([\n`;
+
     // Multipart body detection
     const mjCt=(e.hdrsMap&&e.hdrsMap['content-type']||'').split(';')[0].trim();
     if(mjCt==='multipart/form-data'){
-      o+=`    // TODO: Multipart body detected. For file uploads in DevWeb:\n`;
-      o+=`    // const formData = new load.FormData();\n`;
-      o+=`    // formData.append('field', value); // or readFile() for binary\n`;
+      o+=`${ind}// TODO: Multipart body detected. For file uploads in DevWeb:\n`;
+      o+=`${ind}// const formData = new load.FormData();\n`;
+      o+=`${ind}// formData.append('field', value); // or readFile() for binary\n`;
     }
-    o+=`    // ${rn}\n`;
+    o+=`${ind}// ${rn}\n`;
 
-    // DPoP proof generation — fresh proof per request
+    // DPoP proof generation — fresh proof per request (DPoP entries are always sequential)
     if(S.hasDpop){
       const dpopHdrs=(e.reqHdrs||[]).filter(h=>/^dpop(-pf)?$/i.test(h.name));
       for(const dh of dpopHdrs){
@@ -1860,17 +1918,22 @@ function genMainJS(){
       }
     }
 
-    o+=`    await new load.WebRequest({\n`;
-    o+=`        id: ${rid},\n`;
+    // Request opening — no `await` inside Promise.all; concurrent case has extra indent
+    if(_inGrp){
+      o+=`${ind}new load.WebRequest({\n`;
+    } else {
+      o+=`    await new load.WebRequest({\n`;
+    }
+    o+=`${pi}id: ${rid},\n`;
     // URL substitution — replaces all known hostnames (SERVER_HOST, SERVER_HOST1, …)
-    o+=`        url: ${subHdrValMj(urlBase, mjHostVarMap)},\n`;
+    o+=`${pi}url: ${subHdrValMj(urlBase, mjHostVarMap)},\n`;
     // queryString object (only when URL had query params)
     if(qsEntries.length>0){
-      o+=`        queryString: {\n`;
-      for(const [k,v] of qsEntries) o+=`            "${escJs(k)}": ${subHdrValMj(v,mjHostVarMap)},\n`;
-      o+=`        },\n`;
+      o+=`${pi}queryString: {\n`;
+      for(const [k,v] of qsEntries) o+=`${si}"${escJs(k)}": ${subHdrValMj(v,mjHostVarMap)},\n`;
+      o+=`${pi}},\n`;
     }
-    o+=`        method: "${e.method}",\n`;
+    o+=`${pi}method: "${e.method}",\n`;
     // Inject DPoP headers with dynamic proof values
     if(S.hasDpop){
       const dpopHdrs=(e.reqHdrs||[]).filter(h=>/^dpop(-pf)?$/i.test(h.name));
@@ -1881,50 +1944,56 @@ function genMainJS(){
       }
     }
     if(Object.keys(extraHdrs).length>0){
-      o+=`        headers: {\n`;
+      o+=`${pi}headers: {\n`;
       for(const [k,v] of Object.entries(extraHdrs))
-        o+=`            "${escJs(k)}": ${subHdrValMj(v,mjHostVarMap)},\n`;
-      o+=`        },\n`;
+        o+=`${si}"${escJs(k)}": ${subHdrValMj(v,mjHostVarMap)},\n`;
+      o+=`${pi}},\n`;
     }
     if(e.body&&e.body.text){
       const bText=e.body.text;
       const bMime=(e.body.mimeType||'').split(';')[0].trim();
       if(bText.length>1500&&bMime==='application/x-www-form-urlencoded'&&/__VIEWSTATE|__EVENTVALIDATION|__RequestVerificationToken/.test(bText)){
-        o+=`        // TODO: Large .NET hidden field(s) in body. Use Script Studio with two HARs to auto-correlate.\n`;
+        o+=`${pi}// TODO: Large .NET hidden field(s) in body. Use Script Studio with two HARs to auto-correlate.\n`;
       }
       if(bMime==='application/x-www-form-urlencoded'&&bText.indexOf('=')>=0){
         // Form body: decode key=value pairs and apply hostname substitution on each value
         const pairs=bText.split('&');
-        o+=`        body: {\n`;
+        o+=`${pi}body: {\n`;
         for(const pair of pairs){
           const eq=pair.indexOf('=');
           const rawK=eq>=0?pair.substring(0,eq):pair;
           const rawV=eq>=0?pair.substring(eq+1):'';
           let k=rawK; try{k=decodeURIComponent(rawK.replace(/\+/g,' '));}catch(ex){}
           let v=rawV; try{v=decodeURIComponent(rawV.replace(/\+/g,' '));}catch(ex){}
-          o+=`            "${escJs(k)}": ${subHdrValMj(v,mjHostVarMap)},\n`;
+          o+=`${si}"${escJs(k)}": ${subHdrValMj(v,mjHostVarMap)},\n`;
         }
-        o+=`        },\n`;
+        o+=`${pi}},\n`;
       } else if(bMime==='application/json'||bMime==='text/json'){
         const {text:bSub,changed:bCh}=subRawMj(bText,mjHostVarMap);
         if(bCh){
-          o+=`        body: \`${escTpl(bSub).replace(/\x00HDRH_([^\x00]+)\x00/g,'${$1}')}\`,\n`;
+          o+=`${pi}body: \`${escTpl(bSub).replace(/\x00HDRH_([^\x00]+)\x00/g,'${$1}')}\`,\n`;
         } else {
           try{
             const parsed=JSON.parse(bText);
             const lines=JSON.stringify(parsed,null,4).split('\n');
-            o+=`        body: ${lines.map((l,i)=>i===0?l:'        '+l).join('\n')},\n`;
-          }catch{ o+=`        body: \`${escTpl(bText)}\`,\n`; }
+            o+=`${pi}body: ${lines.map((l,i)=>i===0?l:pi+l).join('\n')},\n`;
+          }catch{ o+=`${pi}body: \`${escTpl(bText)}\`,\n`; }
         }
       } else {
         const {text:bSub,changed:bCh}=subRawMj(bText,mjHostVarMap);
-        if(bCh) o+=`        body: \`${escTpl(bSub).replace(/\x00HDRH_([^\x00]+)\x00/g,'${$1}')}\`,\n`;
-        else    o+=`        body: \`${escTpl(bText)}\`,\n`;
+        if(bCh) o+=`${pi}body: \`${escTpl(bSub).replace(/\x00HDRH_([^\x00]+)\x00/g,'${$1}')}\`,\n`;
+        else    o+=`${pi}body: \`${escTpl(bText)}\`,\n`;
       }
     } else if(e._fromNetLog && e.method!=='GET' && e.method!=='HEAD'){
-      o+=`        // TODO: POST body not available in NetLog - add body property with your recorded request body\n`;
+      o+=`${pi}// TODO: POST body not available in NetLog - add body property with your recorded request body\n`;
     }
-    o+=`    }).send();\n\n`;
+    // Request closing — concurrent: .send(), with optional Promise.all closer; sequential: .send();\n\n
+    if(_inGrp){
+      o+=`${ind}}).send(),\n`;
+      if(_grpLast) o+=`    ]);\n\n`;
+    } else {
+      o+=`    }).send();\n\n`;
+    }
     rid++;
   }
 
