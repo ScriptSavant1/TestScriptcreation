@@ -525,7 +525,8 @@ function parseSampler(nodeChildren, attrs, defaults, reqHeaders, auth,
 
   const portStr = port && port !== '80' && port !== '443' ? `:${port}` : '';
   const base    = domain ? `${protocol}://${domain}${portStr}` : (defaults.baseUrl || '');
-  const url     = convertVars(base + rawPath);
+  const path    = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
+  const url     = convertVars(base + path);
 
   // ── Body ─────────────────────────────────────────────────────────────────
   let body = null;
