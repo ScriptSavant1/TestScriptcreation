@@ -424,6 +424,16 @@ function escBodyBinary(text) {
 // ═══════════════════════════════════════════════════════════════════════════
 // EXTRACTOR CODE GENERATORS
 // ═══════════════════════════════════════════════════════════════════════════
+// DevWeb (and VuGen) have a built-in cookie jar that automatically stores
+// Set-Cookie values and sends them in subsequent Cookie headers.  A correlation
+// whose ONLY usages are in Cookie request headers therefore needs zero code —
+// the runtime handles it.  Only suppress when EVERY usage is location "cookie";
+// if any usage is "url_path" (e.g. ;jsessionid=) the extractor is still needed.
+function isSuppressibleCookieCorr(c) {
+  if (c.extractorType !== "cookie") return false;
+  if (!c.usages || c.usages.length === 0) return false;
+  return c.usages.every((u) => u.location === "cookie");
+}
 function devwebExtractorCode(corr) {
   const { name, extractorType, extractorConfig: cfg } = corr;
   switch (extractorType) {
@@ -1016,9 +1026,10 @@ function genMainJS(entries, correlations) {
   }
   o += "\n";
 
-  // Global correlation variables (module-level)
+  // Global correlation variables (module-level) — cookie-only correlations suppressed
+  // because the runtime cookie jar handles them automatically (no code needed).
   const nonGenCorrs = correlations.filter(
-    (c) => c.extractorType !== "generate",
+    (c) => c.extractorType !== "generate" && !isSuppressibleCookieCorr(c),
   );
   if (nonGenCorrs.length > 0) {
     o += "// Correlated dynamic values — extracted at runtime\n";
@@ -1159,7 +1170,7 @@ function genMainJS(entries, correlations) {
   const _mjExclude = new Set();
   for (let _i = 0; _i < entries.length; _i++) {
     const _e = entries[_i];
-    const _hasSrc = corrSourcesRemap.has(_i) && (corrSourcesRemap.get(_i) || []).some((c) => c.extractorType !== "generate");
+    const _hasSrc = corrSourcesRemap.has(_i) && (corrSourcesRemap.get(_i) || []).some((c) => c.extractorType !== "generate" && !isSuppressibleCookieCorr(c));
     if (_hasSrc) _mjExclude.add(_i);
     if (S.hasDpop && (_e.reqHdrs || []).some((h) => /^dpop(-pf)?$/i.test(h.name))) _mjExclude.add(_i);
   }
@@ -1227,7 +1238,7 @@ function genMainJS(entries, correlations) {
     const hasSrc =
       corrSourcesRemap.has(idx) &&
       (corrSourcesRemap.get(idx) || []).some(
-        (c) => c.extractorType !== "generate",
+        (c) => c.extractorType !== "generate" && !isSuppressibleCookieCorr(c),
       );
     const reqUsages = corrUsages.get(idx) || [];
 
@@ -1538,7 +1549,7 @@ function genMainJS(entries, correlations) {
     const urlBaseDyn = urlBaseOut.includes("\x00");
 
     const srcCorrsForReq = (corrSourcesRemap.get(idx) || []).filter(
-      (c) => c.extractorType !== "generate",
+      (c) => c.extractorType !== "generate" && !isSuppressibleCookieCorr(c),
     );
 
     // Open Promise.all block before the first entry in a concurrent group
@@ -2282,10 +2293,14 @@ function genActionC(entries, correlations) {
       }
     }
 
-    // Inject web_reg_save_param BEFORE this request (includes extractors re-anchored from auto-follow entries)
-    if (corrSourcesRemap.has(idx)) {
+    // Inject web_reg_save_param BEFORE this request (includes extractors re-anchored from auto-follow entries).
+    // Cookie-only correlations are suppressed — VuGen cookie jar (ENABLE_COOKIES) handles them automatically.
+    const acSrcCorrs = (corrSourcesRemap.get(idx) || []).filter(
+      (c) => !isSuppressibleCookieCorr(c),
+    );
+    if (acSrcCorrs.length > 0) {
       o += `\t// --- Correlation extraction for request: ${n}\n`;
-      for (const corr of corrSourcesRemap.get(idx))
+      for (const corr of acSrcCorrs)
         o += webHttpCorrCode(corr, "\t");
       o += "\n";
     }
