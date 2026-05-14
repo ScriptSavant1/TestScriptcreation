@@ -427,10 +427,17 @@ function escBodyBinary(text) {
 // DevWeb (and VuGen) have a built-in cookie jar that automatically stores
 // Set-Cookie values and sends them in subsequent Cookie headers.  A correlation
 // whose ONLY usages are in Cookie request headers therefore needs zero code —
-// the runtime handles it.  Only suppress when EVERY usage is location "cookie";
-// if any usage is "url_path" (e.g. ;jsessionid=) the extractor is still needed.
+// the runtime handles it end-to-end.
+//
+// Suppression is based purely on usage locations, NOT extractorType.
+// In 2-HAR diff mode a cookie value may be sourced from a JSON body
+// (extractorType "boundary"/"jsonpath") yet still only appear in Cookie
+// request headers — extractorType is irrelevant; all that matters is that
+// no usage requires a script-level substitution.
+//
+// Exception: if any usage is "url_path" (;jsessionid=xxx) or "header" or
+// "body_*", the value IS referenced in the generated code — keep the corr.
 function isSuppressibleCookieCorr(c) {
-  if (c.extractorType !== "cookie") return false;
   if (!c.usages || c.usages.length === 0) return false;
   return c.usages.every((u) => u.location === "cookie");
 }
