@@ -918,49 +918,11 @@ function singleHarCorrelate(entries) {
       }
     }
 
-    // Check session cookies being sent
-    const cookieHdr = e.hdrsMap["cookie"] || "";
-    if (cookieHdr) {
-      cookieHdr.split(";").forEach((ck) => {
-        const eq = ck.indexOf("=");
-        if (eq < 1) return;
-        const cname = ck.substring(0, eq).trim();
-        const cval = ck.substring(eq + 1).trim();
-        if (!SESSION_COOKIE_NAMES.has(cname.toLowerCase())) return;
-        if (!cval || cval.length < 4) return;
-        const key = "ck_" + cname.toLowerCase();
-        if (seen.has(key)) return;
-        seen.add(key);
-        // Find Set-Cookie in previous responses
-        for (let i = 0; i < idx; i++) {
-          if (entries[i].filtered) continue;
-          const ckFound = entries[i].respCookies.find(
-            (c) => c.name.toLowerCase() === cname.toLowerCase(),
-          );
-          if (
-            ckFound ||
-            entries[i].respHdrsMap["set-cookie"]
-              ?.toLowerCase()
-              .includes(cname.toLowerCase() + "=")
-          ) {
-            const name = genParamName(cname, counter);
-            addUsage(
-              corrs,
-              name,
-              { type: "cookie", config: { cookieName: cname }, idx: i },
-              {
-                reqIdx: idx,
-                location: "cookie",
-                key: cname,
-                originalValue: cval,
-                prefix: "",
-              },
-            );
-            break;
-          }
-        }
-      });
-    }
+    // Cookie request headers are intentionally NOT correlated here.
+    // Both DevWeb and VuGen Web HTTP have a built-in cookie jar that stores
+    // Set-Cookie values and replays them automatically — no script code needed.
+    // Exception: session tokens embedded in URL paths (;jsessionid=xxx) require
+    // explicit URL construction and ARE correlated in the block below.
 
     // Check session tokens in URL path params (;jsessionid=xxx, etc.)
     try {
@@ -1287,31 +1249,13 @@ function twoHarCorrelate(entries1, entries2) {
         });
     }
 
-    // ── Cookie request header — parse individual name=value pairs ─────────────
-    // Detects dynamic cookie values that change between sessions.
-    // VuGen/DevWeb cookie jars handle Cookie: headers automatically — we only need
-    // to find which Set-Cookie response sets each dynamic cookie value.
-    {
-      const ck1 = e1.hdrsMap?.["cookie"] || "",
-        ck2 = e2.hdrsMap?.["cookie"] || "";
-      if (ck1 && ck2) {
-        const map1 = parseCookieHdr(ck1),
-          map2 = parseCookieHdr(ck2);
-        for (const [ckName, v1] of Object.entries(map1)) {
-          const v2 = map2[ckName];
-          if (!v2 || v1 === v2 || !isDynamic(v1)) continue;
-          changedVals.push({
-            reqIdx: idx1,
-            reqIdx2: idx2,
-            location: "cookie",
-            key: ckName,
-            value1: v1,
-            value2: v2,
-            hint: ckName,
-          });
-        }
-      }
-    }
+    // ── Cookie request header — intentionally skipped ────────────────────────
+    // DevWeb and VuGen Web HTTP both have a built-in cookie jar.  Cookies set
+    // by Set-Cookie responses are stored and replayed automatically — no script
+    // code is generated for them.  Scanning Cookie request headers here would
+    // produce 100+ useless correlations that bloat the output without effect.
+    // Exception: session IDs embedded in URL paths (;jsessionid=) are handled
+    // separately in the URL path block below and ARE correlated.
 
     // ── Request body (JSON, form-urlencoded, XML) ──────────────────────────────
     if (e1.body && e2.body) {
