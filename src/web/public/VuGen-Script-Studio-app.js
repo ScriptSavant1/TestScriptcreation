@@ -508,11 +508,18 @@ const _DATE_ISO_RE = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
 const _DATE_ISODT_RE = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T\d{2}:\d{2}:\d{2}/;
 const _DATE_EPOCH_MS_RE = /^\d{13}$/;
 const _DATE_EPOCH_SEC_RE = /^1\d{9}$/;
+// Non-padded datetime: "2026-5-15 23:59:59" / "2026-4-15 0:0:0" (HP ALM/PC graph filter format)
+const _DATE_NPAD_DT_RE = /^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{1,2}:\d{1,2}(?:\.\d+)?$/;
+// RFC 1123 / HTTP Date: "Fri, 15 May 2026 08:55:32 GMT"
+const _DATE_RFC1123_RE = /^[A-Za-z]{3},\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT$/;
+// Embedded non-padded datetime pattern source (no g flag — regex created with g inside functions)
+const _DATE_NPAD_EMBED_SRC = "\\d{4}-\\d{1,2}-\\d{1,2}[T ]\\d{1,2}:\\d{1,2}:\\d{1,2}(?:\\.\\d+)?";
 const _DATE_MAX_DAYS = 730; // ignore dates outside 2-year window from recording date
 
 // Returns {fn, arg} describing the runtime call to reproduce this value, or null.
 // value: string or number; recordingMs: epoch ms of the HAR recording start.
-function detectDateSubstitution(value, recordingMs) {
+// entryMs: optional, the HAR entry's own start time (used for RFC 1123 current-time detection).
+function detectDateSubstitution(value, recordingMs, entryMs) {
   if (!recordingMs || value === undefined || value === null) return null;
   const str = String(value).trim();
   if (!str) return null;
@@ -539,6 +546,17 @@ function detectDateSubstitution(value, recordingMs) {
     dDay.setUTCHours(0, 0, 0, 0);
     const offsetDays = Math.round((recDay.getTime() - dDay.getTime()) / 86400000);
     if (Math.abs(offsetDays) > _DATE_MAX_DAYS) return null;
+    // Month-boundary detection: first/last day of the recording month
+    const recDate = new Date(recordingMs);
+    if (d.getUTCFullYear() === recDate.getUTCFullYear() && d.getUTCMonth() === recDate.getUTCMonth()) {
+      if (d.getUTCDate() === 1 && d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
+        return { fn: "getStartOfCurrentMonthUTC", arg: null };
+      }
+      const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+      if (d.getUTCDate() === lastDay && d.getUTCHours() >= 22 && d.getUTCMinutes() >= 59) {
+        return { fn: "getEndOfCurrentMonthUTC", arg: null };
+      }
+    }
     const isEnd = d.getUTCHours() === 23 && d.getUTCMinutes() >= 59 && d.getUTCSeconds() >= 59;
     if (offsetDays === 0) return isEnd ? { fn: "getTodayEndUTC", arg: null } : { fn: "getTodayStartUTC", arg: null };
     if (offsetDays > 0) return { fn: "getDateDaysAgoUTC", arg: offsetDays };
@@ -567,7 +585,77 @@ function detectDateSubstitution(value, recordingMs) {
     return { fn: "getEpochSecsDaysAgo", arg: offsetDays };
   }
 
+  // Non-padded datetime: "2026-5-15 23:59:59" / "2026-4-15 0:0:0" (HP ALM/PC graph filter format)
+  if (_DATE_NPAD_DT_RE.test(str)) {
+    const spIdx = str.search(/[T ]/);
+    if (spIdx < 0) return null;
+    const dp = str.slice(0, spIdx).split("-").map(Number);
+    const tp = str.slice(spIdx + 1).split(":").map(Number);
+    if (dp.length < 3 || tp.length < 3) return null;
+    const [yr, mo, dy] = dp;
+    const [hr, mn, sc] = tp;
+    const d = new Date(Date.UTC(yr, mo - 1, dy));
+    if (isNaN(d.getTime())) return null;
+    const recDay = new Date(recordingMs);
+    recDay.setUTCHours(0, 0, 0, 0);
+    const offsetDays = Math.round((recDay.getTime() - d.getTime()) / 86400000);
+    if (Math.abs(offsetDays) > _DATE_MAX_DAYS) return null;
+    const isEnd = hr === 23 && mn >= 59 && sc >= 59;
+    const isStart = hr === 0 && mn === 0 && sc === 0;
+    if (isEnd && offsetDays >= 0) return { fn: "getEndDateForGraph", arg: null };
+    if (isStart && offsetDays >= 0) return { fn: "getStartDateForGraph", arg: offsetDays };
+    return null;
+  }
+
+  // RFC 1123 / HTTP Date: "Fri, 15 May 2026 08:55:32 GMT"
+  if (_DATE_RFC1123_RE.test(str)) {
+    let d;
+    try { d = new Date(str); } catch { return null; }
+    if (isNaN(d.getTime())) return null;
+    const recDay = new Date(recordingMs);
+    recDay.setUTCHours(0, 0, 0, 0);
+    const dDay = new Date(d.getTime());
+    dDay.setUTCHours(0, 0, 0, 0);
+    // offsetDays positive = future relative to recording
+    const offsetDays = Math.round((dDay.getTime() - recDay.getTime()) / 86400000);
+    if (Math.abs(offsetDays) > _DATE_MAX_DAYS) return null;
+    const hr = d.getUTCHours(), mn = d.getUTCMinutes(), sc = d.getUTCSeconds();
+    const isEnd = hr === 23 && mn >= 59 && sc >= 59;
+    const isStart = hr === 0 && mn === 0 && sc === 0;
+    if (isEnd && offsetDays > 0) return { fn: "getEndOfFutureDayUTC", arg: offsetDays };
+    if (isEnd) return { fn: "getEndOfTodayUTC", arg: null };
+    if (isStart) return { fn: "getStartOfTodayUTC", arg: null };
+    // "Current time" — only when entryMs is provided and value is within 5 min of the entry's recording time
+    if (entryMs && Math.abs(d.getTime() - entryMs) < 300000) return { fn: "getCurrentTimeUTC", arg: null };
+    return null;
+  }
+
   return null;
+}
+
+// Scan a complex string value for embedded non-padded datetime substrings and replace them
+// with ${fn()} template expressions. Returns modified content (safe inside a template literal)
+// or null if no date substrings were found.
+function substituteEmbeddedDates(str, recordingMs) {
+  if (!recordingMs || !str || str.length < 10) return null;
+  const re = new RegExp(_DATE_NPAD_EMBED_SRC, "g");
+  const replacements = [];
+  let m;
+  while ((m = re.exec(str)) !== null) {
+    const frag = m[0];
+    const ds = detectDateSubstitution(frag, recordingMs);
+    if (ds) {
+      const call = ds.arg !== null ? `${ds.fn}(${ds.arg})` : `${ds.fn}()`;
+      replacements.push({ frag, call });
+    }
+  }
+  if (replacements.length === 0) return null;
+  let out = escTpl(str);
+  for (const { frag, call } of replacements) {
+    const safe = frag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(safe, "g"), `\${${call}}`);
+  }
+  return out;
 }
 
 // Pre-scan all entries (read-only) and return the Set of date helper function names needed.
@@ -575,13 +663,21 @@ function detectDateSubstitution(value, recordingMs) {
 function prescanDateHelpers(entries, recordingMs) {
   const fns = new Set();
   if (!recordingMs) return fns;
-  function chk(v) {
-    const ds = detectDateSubstitution(v, recordingMs);
-    if (ds) fns.add(ds.fn);
+  function chk(v, entryMs) {
+    if (typeof v !== "string" || !v) return;
+    const ds = detectDateSubstitution(v, recordingMs, entryMs);
+    if (ds) { fns.add(ds.fn); return; }
+    // Also scan for non-padded datetime patterns embedded in complex string values
+    const re = new RegExp(_DATE_NPAD_EMBED_SRC, "g");
+    let m;
+    while ((m = re.exec(v)) !== null) {
+      const eDs = detectDateSubstitution(m[0], recordingMs);
+      if (eDs) fns.add(eDs.fn);
+    }
   }
   for (const e of entries) {
     if (e.filtered || e.isMarker) continue;
-    // Query params
+    // Query params — pass entry's own startMs for RFC 1123 current-time detection
     const qIdx = e.url ? e.url.indexOf("?") : -1;
     if (qIdx >= 0) {
       for (const pair of e.url.slice(qIdx + 1).split("&")) {
@@ -589,7 +685,7 @@ function prescanDateHelpers(entries, recordingMs) {
         if (eqI < 0) continue;
         let val;
         try { val = decodeURIComponent(pair.slice(eqI + 1).replace(/\+/g, " ")); } catch { val = pair.slice(eqI + 1); }
-        chk(val);
+        chk(val, e.startMs);
       }
     }
     // Request body
@@ -622,20 +718,67 @@ function prescanDateHelpers(entries, recordingMs) {
 function emitDateHelpers(usedFns) {
   if (!usedFns || usedFns.size === 0) return "";
   const defs = {
-    getTodayDate:        "function getTodayDate() { return new Date().toISOString().split('T')[0]; }",
-    getDateDaysAgo:      "function getDateDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; }",
-    getFutureDateDays:   "function getFutureDateDays(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }",
-    getTodayStartUTC:    "function getTodayStartUTC() { const d = new Date(); d.setUTCHours(0,0,0,0); return d.toISOString(); }",
-    getTodayEndUTC:      "function getTodayEndUTC() { const d = new Date(); d.setUTCHours(23,59,59,999); return d.toISOString(); }",
-    getDateDaysAgoUTC:   "function getDateDaysAgoUTC(n) { const d = new Date(); d.setDate(d.getDate() - n); d.setUTCHours(0,0,0,0); return d.toISOString(); }",
-    getEpochMsDaysAgo:   "function getEpochMsDaysAgo(n) { const d = new Date(); if (n) d.setDate(d.getDate() - n); d.setUTCHours(0,0,0,0); return d.getTime(); }",
-    getEpochSecsDaysAgo: "function getEpochSecsDaysAgo(n) { const d = new Date(); if (n) d.setDate(d.getDate() - n); d.setUTCHours(0,0,0,0); return Math.floor(d.getTime() / 1000); }",
+    // ISO date (YYYY-MM-DD)
+    getTodayDate:              "function getTodayDate() { return new Date().toISOString().split('T')[0]; }",
+    getDateDaysAgo:            "function getDateDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; }",
+    getFutureDateDays:         "function getFutureDateDays(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }",
+    // ISO UTC datetime
+    getTodayStartUTC:          "function getTodayStartUTC() { const d = new Date(); d.setUTCHours(0,0,0,0); return d.toISOString(); }",
+    getTodayEndUTC:            "function getTodayEndUTC() { const d = new Date(); d.setUTCHours(23,59,59,999); return d.toISOString(); }",
+    getDateDaysAgoUTC:         "function getDateDaysAgoUTC(n) { const d = new Date(); d.setDate(d.getDate() - n); d.setUTCHours(0,0,0,0); return d.toISOString(); }",
+    // ISO UTC month boundaries
+    getStartOfCurrentMonthUTC: "function getStartOfCurrentMonthUTC() { const d = new Date(); d.setUTCDate(1); d.setUTCHours(0,0,0,0); return d.toISOString(); }",
+    getEndOfCurrentMonthUTC:   "function getEndOfCurrentMonthUTC() { const d = new Date(); d.setUTCMonth(d.getUTCMonth()+1, 0); d.setUTCHours(23,59,59,999); return d.toISOString(); }",
+    // Epoch milliseconds
+    getEpochMsDaysAgo:         "function getEpochMsDaysAgo(n) { const d = new Date(); if (n) d.setDate(d.getDate() - n); d.setUTCHours(0,0,0,0); return d.getTime(); }",
+    getEpochSecsDaysAgo:       "function getEpochSecsDaysAgo(n) { const d = new Date(); if (n) d.setDate(d.getDate() - n); d.setUTCHours(0,0,0,0); return Math.floor(d.getTime() / 1000); }",
+    // Non-padded datetime (HP ALM/PC graph filter format: "2026-5-15 23:59:59")
+    getEndDateForGraph:        "function getEndDateForGraph() { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()} 23:59:59`; }",
+    getStartDateForGraph:      "function getStartDateForGraph(n) { const d = new Date(); if (n) d.setDate(d.getDate() - n); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()} 0:0:0`; }",
+    // RFC 1123 / HTTP date format (used in timeslot queries)
+    getCurrentTimeUTC:         "function getCurrentTimeUTC() { return new Date().toUTCString(); }",
+    getEndOfTodayUTC:          "function getEndOfTodayUTC() { const d = new Date(); d.setUTCHours(23,59,59,999); return d.toUTCString(); }",
+    getStartOfTodayUTC:        "function getStartOfTodayUTC() { const d = new Date(); d.setUTCHours(0,0,0,0); return d.toUTCString(); }",
+    getEndOfFutureDayUTC:      "function getEndOfFutureDayUTC(n) { const d = new Date(); d.setDate(d.getDate() + n); d.setUTCHours(23,59,59,999); return d.toUTCString(); }",
   };
   const ordered = Object.keys(defs).filter((fn) => usedFns.has(fn));
   if (ordered.length === 0) return "";
   let out = "// Date helpers — compute dates relative to today at runtime\n";
   for (const fn of ordered) out += defs[fn] + "\n";
   return out + "\n";
+}
+
+// ── Basic auth credential detection ───────────────────────────────────────────
+// When Authorization: Basic <base64(user:pass)> appears in the HAR, the generator
+// emits `const encodedCredentials = btoa(...)` at module level and substitutes the
+// raw base64 value everywhere it appears (auth header, request body, query params).
+// Returns {b64, userKey, passKey} or null.  userKey/passKey are the load.params CSV
+// keys to use; matched against S.params values if available, otherwise "username"/"password".
+function prescanBasicAuth(entries) {
+  if (!S.auth || ["ntlm", "kerberos", "negotiate"].includes(S.auth.type)) return null;
+  for (const e of entries) {
+    if (e.filtered || e.isMarker) continue;
+    for (const hdr of e.reqHdrs || []) {
+      if (hdr.name.toLowerCase() !== "authorization") continue;
+      const bm = /^Basic\s+([A-Za-z0-9+/=]{8,})\s*$/i.exec(hdr.value);
+      if (!bm) continue;
+      let decoded;
+      try { decoded = atob(bm[1]); } catch { continue; }
+      const ci = decoded.indexOf(":");
+      if (ci <= 0) continue;
+      const decodedUser = decoded.slice(0, ci);
+      const decodedPass = decoded.slice(ci + 1);
+      let userKey = "username", passKey = "password";
+      if (S.params) {
+        const uParam = S.params.find((p) => p.value === decodedUser);
+        const pParam = S.params.find((p) => p.value === decodedPass);
+        if (uParam) userKey = uParam.csvKey;
+        if (pParam) passKey = pParam.csvKey;
+      }
+      return { b64: bm[1], userKey, passKey };
+    }
+  }
+  return null;
 }
 
 // ── Auto-follow redirect detection ────────────────────────────────────────────
@@ -1096,6 +1239,9 @@ function genMainJS(entries, correlations) {
     entries.find((e) => !e.isMarker && !e.filtered && e.startMs > 0)?.startMs || 0;
   const _dateFns = prescanDateHelpers(entries, _dateRecMs);
 
+  // Basic auth credential pre-scan — detect Authorization: Basic <b64(user:pass)>
+  const _basicAuth = prescanBasicAuth(entries);
+
   // Detect auto-follow redirect entries and remap their extractors to the anchor entry.
   // In DevWeb, load.WebRequest follows redirects automatically; the extractor placed
   // on the triggering request sees the final redirect's response body/headers.
@@ -1145,6 +1291,9 @@ function genMainJS(entries, correlations) {
       }
     }
   }
+  // When Basic auth credentials are detected, manage the Authorization header explicitly
+  // via encodedCredentials — do not treat it as a dynamic/candidate correlation.
+  if (_basicAuth) dynHdrKeysMj.delete("authorization");
 
   // ── module-level declarations ─────────────────────────────────────────────
   const _shHostMj = S.serverHost ? S.serverHost.host : "";
@@ -1170,6 +1319,11 @@ function genMainJS(entries, correlations) {
       o += `let ${v} = '${h}';\n`;
     });
   o += "\nlet think_time = 1;\n\n";
+
+  // Basic auth credentials — btoa computed once per VUser from parameterised username:password
+  if (_basicAuth) {
+    o += `const encodedCredentials = btoa(\`\${load.params.${_basicAuth.userKey}}:\${load.params.${_basicAuth.passKey}}\`);\n\n`;
+  }
 
   // Default request options (module-level)
   o += "// Default request options\n";
@@ -1454,6 +1608,11 @@ function genMainJS(entries, correlations) {
     const allHdrs = filtHdrs(e);
     const extraHdrs = {}; // k → {value, dynamic, expr}
     for (const [k, v] of Object.entries(allHdrs)) {
+      // Basic auth: replace raw base64 with parameterised encodedCredentials expression
+      if (_basicAuth && k.toLowerCase() === "authorization" && v.includes(_basicAuth.b64)) {
+        extraHdrs[k] = { dynamic: true, expr: `Basic \${encodedCredentials}` };
+        continue;
+      }
       const hdrUsage = reqUsages.find(
         (u) =>
           u.location === "header" &&
@@ -1871,12 +2030,19 @@ function genMainJS(entries, correlations) {
           } catch {
             val = rawV;
           }
-          const _qds = _dateRecMs ? detectDateSubstitution(val, _dateRecMs) : null;
+          const _qds = _dateRecMs ? detectDateSubstitution(val, _dateRecMs, e.startMs) : null;
           if (_qds) {
             const _qcall = _qds.arg !== null ? `${_qds.fn}(${_qds.arg})` : `${_qds.fn}()`;
             o += `${si}"${escJs(key)}": \`\${${_qcall}}\`,\n`;
           } else {
-            o += `${si}"${escJs(key)}": ${subHdrValMj(val, mjHostVarMap)},\n`;
+            const _qEmbed = _dateRecMs ? substituteEmbeddedDates(val, _dateRecMs) : null;
+            if (_qEmbed) {
+              o += `${si}"${escJs(key)}": \`${_qEmbed}\`,\n`;
+            } else if (_basicAuth && val === _basicAuth.b64) {
+              o += `${si}"${escJs(key)}": \`\${encodedCredentials}\`,\n`;
+            } else {
+              o += `${si}"${escJs(key)}": ${subHdrValMj(val, mjHostVarMap)},\n`;
+            }
           }
         }
       }
@@ -1904,7 +2070,7 @@ function genMainJS(entries, correlations) {
         if (h.dynamic) o += `${si}"${escJs(k)}": \`${h.expr}\`,\n`;
         else if (h.todo) {
           // Preserve scheme prefix (Bearer / Token) if present in the original value
-          const _schemeMatch = h.value && /^(Bearer|Token|Digest)\s/i.exec(h.value);
+          const _schemeMatch = h.value && /^(Bearer|Token|Basic|Digest|API-Key)\s/i.exec(h.value);
           const _prefix = _schemeMatch ? _schemeMatch[0] : "";
           o += `${si}// TODO: corr — add extractor on the response that issues this token.\n`;
           o += `${si}"${escJs(k)}": \`${_prefix}\${load.global.${h.todo}}\`,\n`;
@@ -1967,7 +2133,14 @@ function genMainJS(entries, correlations) {
               const _fcall = _fds.arg !== null ? `${_fds.fn}(${_fds.arg})` : `${_fds.fn}()`;
               o += `${si}"${escJs(k)}": \`\${${_fcall}}\`,\n`;
             } else {
-              o += `${si}"${escJs(k)}": ${subHdrValMj(v, mjHostVarMap)},\n`;
+              const _fEmbed = _dateRecMs ? substituteEmbeddedDates(v, _dateRecMs) : null;
+              if (_fEmbed) {
+                o += `${si}"${escJs(k)}": \`${_fEmbed}\`,\n`;
+              } else if (_basicAuth && v === _basicAuth.b64) {
+                o += `${si}"${escJs(k)}": \`\${encodedCredentials}\`,\n`;
+              } else {
+                o += `${si}"${escJs(k)}": ${subHdrValMj(v, mjHostVarMap)},\n`;
+              }
             }
           }
         }
@@ -2005,40 +2178,72 @@ function genMainJS(entries, correlations) {
         } else {
           try {
             const parsed = JSON.parse(bodyText);
-            // Build date substitution map for JSON string and number values
+            // Build substitution map for JSON string/number values:
+            // includes both date patterns and encoded credentials.
             const _jsonDates = new Map();
+            // _jsonEmbedded: complex strings containing embedded non-padded datetime substrings
+            const _jsonEmbedded = new Map();
+            if (_basicAuth) {
+              // encodedCredentials variable replaces the raw base64 value
+              _jsonDates.set(_basicAuth.b64, "encodedCredentials");
+            }
             if (_dateRecMs) {
               (function _findJd(v) {
                 if (typeof v === "string") {
-                  const ds = detectDateSubstitution(v, _dateRecMs);
-                  if (ds && !_jsonDates.has(v)) {
-                    _jsonDates.set(v, ds.arg !== null ? `${ds.fn}(${ds.arg})` : `${ds.fn}()`);
+                  if (!_jsonDates.has(v) && !_jsonEmbedded.has(v)) {
+                    const ds = detectDateSubstitution(v, _dateRecMs);
+                    if (ds) {
+                      _jsonDates.set(v, ds.arg !== null ? `${ds.fn}(${ds.arg})` : `${ds.fn}()`);
+                    } else {
+                      const emb = substituteEmbeddedDates(v, _dateRecMs);
+                      if (emb) _jsonEmbedded.set(v, emb);
+                    }
                   }
                 } else if (typeof v === "number") {
-                  const ds = detectDateSubstitution(String(v), _dateRecMs);
-                  if (ds && !_jsonDates.has(String(v))) {
-                    _jsonDates.set(String(v), ds.arg !== null ? `${ds.fn}(${ds.arg})` : `${ds.fn}()`);
+                  const sk = String(v);
+                  if (!_jsonDates.has(sk)) {
+                    const ds = detectDateSubstitution(sk, _dateRecMs);
+                    if (ds) _jsonDates.set(sk, ds.arg !== null ? `${ds.fn}(${ds.arg})` : `${ds.fn}()`);
                   }
                 } else if (Array.isArray(v)) { v.forEach(_findJd); }
                 else if (v && typeof v === "object") { Object.values(v).forEach(_findJd); }
               })(parsed);
             }
-            if (_jsonDates.size > 0) {
-              // Serialize to pretty JSON, escape for template literal, then replace date values
-              let tplStr = escTpl(JSON.stringify(parsed, null, 4));
-              for (const [orig, call] of _jsonDates) {
-                if (/^\d+$/.test(orig)) {
-                  // Numeric value: appears after ": " or "[" in serialized JSON
-                  const safeN = orig.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                  tplStr = tplStr.replace(new RegExp("(:\\s+)" + safeN + "([,\\]\\n\\r}\\s])", "g"), `$1\${${call}}$2`);
-                  tplStr = tplStr.replace(new RegExp("(\\[)" + safeN + "([,\\]\\n\\r}\\s])", "g"), `$1\${${call}}$2`);
-                } else {
-                  // String value: appears as "value" in serialized JSON
-                  const safeS = orig.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                  tplStr = tplStr.replace(new RegExp('"' + safeS + '"', "g"), `"\${${call}}"`);
+            if (_jsonDates.size > 0 || _jsonEmbedded.size > 0) {
+              // Render as a JS object literal where each substituted field gets its own
+              // template literal value — avoids nested template literal syntax errors.
+              function _renderJsVal(v, depth) {
+                const ind = "    ".repeat(depth);
+                const indm1 = "    ".repeat(depth - 1);
+                if (v === null) return "null";
+                if (typeof v === "boolean") return String(v);
+                if (typeof v === "number") {
+                  const sk = String(v);
+                  // Epoch date → plain function call (no template literal needed)
+                  return _jsonDates.has(sk) ? _jsonDates.get(sk) : sk;
                 }
+                if (typeof v === "string") {
+                  // Standalone date / credential → `${fn()}` template literal
+                  if (_jsonDates.has(v)) return `\`\${${_jsonDates.get(v)}}\``;
+                  // Embedded dates → `$query={...'${fn()}'...}` template literal
+                  if (_jsonEmbedded.has(v)) return `\`${_jsonEmbedded.get(v)}\``;
+                  return JSON.stringify(v);
+                }
+                if (Array.isArray(v)) {
+                  if (!v.length) return "[]";
+                  return `[\n${v.map(i => `${ind}${_renderJsVal(i, depth + 1)}`).join(",\n")}\n${indm1}]`;
+                }
+                if (typeof v === "object") {
+                  const keys = Object.keys(v);
+                  if (!keys.length) return "{}";
+                  const pairs = keys.map(k => `${ind}${JSON.stringify(k)}: ${_renderJsVal(v[k], depth + 1)}`).join(",\n");
+                  return `{\n${pairs}\n${indm1}}`;
+                }
+                return JSON.stringify(v);
               }
-              o += `${pi}body: \`${tplStr}\`,\n`;
+              const _rendered = _renderJsVal(parsed, 1);
+              const _rLines = _rendered.split("\n");
+              o += `${pi}body: ${_rLines.map((l, i) => (i === 0 ? l : pi + l)).join("\n")},\n`;
             } else {
               const lines = JSON.stringify(parsed, null, 4).split("\n");
               o += `${pi}body: ${lines.map((l, i) => (i === 0 ? l : pi + l)).join("\n")},\n`;

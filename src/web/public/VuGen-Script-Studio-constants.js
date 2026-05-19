@@ -67,6 +67,10 @@ const SKIP_HDRS = new Set([
   "via", // proxy-inserted, irrelevant to load test
   // Encoding/compression — DevWeb SDK handles automatically
   "accept-encoding",
+  // Content-Encoding: gzip on requests means the body is compressed.
+  // HAR postData.text is always the DECODED (decompressed) content, so including
+  // Content-Encoding: gzip causes the server to try to decompress plain text → fails.
+  "content-encoding",
   // Cookie jar — managed automatically; correlation engine handles per-name diffing via parseCookieHdr()
   "cookie",
   "cookie2",
