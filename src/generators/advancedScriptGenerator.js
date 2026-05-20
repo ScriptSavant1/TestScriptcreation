@@ -57,7 +57,8 @@ class AdvancedScriptGenerator {
     // Variable classification
     this.variableMap = new Map(); // All variables: name → value
     this.dynamicVarNames = new Set(); // Variables set by scripts/correlation → load.global
-    this.paramVarNames = new Set(); // Variables to parameterize → load.params
+    this.paramVarNames = new Set(); // Variables to parameterize → load.params / load.config.user.args
+    this.envVarKeys = new Set(); // Keys that came from environment files (environments.json)
     this.scriptSetVarNames = new Set(); // Variables detected as set by scripts
     // CSV column names from JMX CSVDataSet configs — always Tier 3 (nextValue: iteration)
     this.csvVarNames = new Map(); // varName → { fileName, colIndex, delimiter, recycle }
@@ -369,6 +370,8 @@ class AdvancedScriptGenerator {
    * Build a map of all variables from collection and environment file
    */
   buildVariableMap() {
+    this.envVarKeys = new Set();
+
     // Extract collection variables
     if (this.collection.variable) {
       this.collection.variable.forEach((variable) => {
@@ -380,6 +383,7 @@ class AdvancedScriptGenerator {
     if (this.collection.environment) {
       Object.entries(this.collection.environment).forEach(([key, value]) => {
         this.variableMap.set(key, value);
+        this.envVarKeys.add(key);
       });
     }
 
@@ -392,6 +396,7 @@ class AdvancedScriptGenerator {
         if (existing === undefined || existing === null || existing === '') {
           this.variableMap.set(key, value);
         }
+        this.envVarKeys.add(key); // track as env var even if value was already present
       });
     }
 
@@ -614,12 +619,17 @@ class AdvancedScriptGenerator {
       if (name.startsWith("_")) this.dynamicVarNames.add(name);
     }
 
-    // RULE 4 (GENERIC) — Empty value in collection/environment = Tier 1 (dynamic).
+    // RULE 4 (GENERIC) — Empty value = Tier 1 (dynamic) OR userArguments depending on source.
     // Static config vars (baseUrl, clientId, apiKey) ALWAYS have real values.
     // Runtime vars (access_token, refresh_token, interaction_id) are intentionally
     // left EMPTY because they are filled at runtime from API responses.
     // Credentials (username/password) are excluded — they go to Tier 3.
     // CSV columns (Rule 0) are excluded — they already belong to paramVarNames.
+    //
+    // Exception: blank vars that came from an environment file (environments.json / collection.environment)
+    // are NOT runtime-set vars — they are config placeholders intentionally left blank.
+    // Those go to paramVarNames (→ userArguments in rts.yml with empty value) so the user
+    // can supply values via rts.yml without editing the script.
     for (const [name, value] of this.variableMap.entries()) {
       if (this.dynamicVarNames.has(name)) continue;
       if (this.paramVarNames.has(name)) continue; // already a param (Rule 0 CSV)
@@ -627,7 +637,11 @@ class AdvancedScriptGenerator {
       const isEmpty = value === "" || value === null || value === undefined;
       const isCredential = credentialPattern.test(name);
       if (isEmpty && !isCredential) {
-        this.dynamicVarNames.add(name);
+        if (this.envVarKeys.has(name)) {
+          this.paramVarNames.add(name); // blank env var → userArguments (empty value OK)
+        } else {
+          this.dynamicVarNames.add(name); // unresolved runtime placeholder → load.global
+        }
       }
     }
 
@@ -2771,14 +2785,19 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
         return `\${load.global.${safeName}}`;
       }
 
-      // Parameterized variable → load.params (from CSV)
+      // Parameterized variable — route by tier:
+      //   iteration (credentials / CSV) → load.params.name
+      //   once (config / env vars / userArguments) → load.config.user.args["name"]
       if (this.paramVarNames.has(trimmedName)) {
         const safeName = this.sanitizeVarName(trimmedName);
-        const isSimpleIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(safeName);
-        if (isSimpleIdentifier) {
-          return `\${load.params.${safeName}}`;
+        const cfg = this.parameters && this.parameters.get(trimmedName);
+        if (cfg && cfg.nextValue === 'iteration') {
+          // Per-iteration CSV parameter (credentials, test data)
+          const isSimple = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(safeName);
+          return isSimple ? `\${load.params.${safeName}}` : `\${load.params["${safeName}"]}`;
         }
-        return `\${load.params["${safeName}"]}`;
+        // Config / env var → rts.yml userArguments → load.config.user.args
+        return `\${load.config.user.args["${safeName}"]}`;
       }
 
       // Variable exists in map but wasn't classified (parameterization disabled)
@@ -2940,9 +2959,11 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     // Unwrap pure single-expression template literals: `${expr}` → expr
     // When a header value is ONLY an expression (e.g. load.utils.uuid() or load.global.token),
     // the backtick wrapper is redundant — the bare expression is cleaner and avoids
-    // unnecessary string coercion. Mixed strings like `Bearer ${token}` are unaffected
-    // because they don't start immediately with ${ after the opening backtick.
-    str = str.replace(/`\$\{([^`]+)\}`/g, "$1");
+    // unnecessary string coercion. Mixed strings like `Bearer ${token}` or
+    // `${base}/path/${id}` are unaffected.
+    // [^`}]* (not [^`]+) prevents crossing } boundaries so `${A}/path/${B}` is never misread
+    // as a pure expression by consuming from the first ${ to the last } before the backtick.
+    str = str.replace(/`\$\{([^`}]*)\}`/g, "$1");
 
     // Replace "{{MULTIPART}}" with actual multipart code
     str = str.replace('"{{MULTIPART}}"', "new load.MultipartBody([...])");

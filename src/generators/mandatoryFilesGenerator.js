@@ -634,9 +634,9 @@ ${extarEntries}    <FileEntry Name="Action.c" Filter="1" />
     // Back-compat: normalise legacy single-string form
     const _mtlsCertFiles = Array.isArray(mtlsCertFiles) ? mtlsCertFiles : (mtlsCertFiles ? [{ certFile: mtlsCertFiles, keyFile: mtlsCertFiles, format: 'PEM' }] : []);
 
-    // All global params (JMX UDVs, Postman/Bruno collection-level vars) go into
-    // rts.yml userArguments so they are accessible via load.params / load.config.user.args.
-    // This includes JWT claim params AND any other collection-level variables.
+    // Non-iteration collection-level params (JMX UDVs, env/config vars) go into
+    // rts.yml userArguments → accessible via load.config.user.args["key"].
+    // Iteration params (credentials, CSV test data) stay in collection_data.csv → load.params.
     // PEM keys are handled by _formatUserArguments() as YAML block scalar (|).
     const jwtParamNames = new Set();
     let jwtUserArgs = null;
@@ -644,9 +644,12 @@ ${extarEntries}    <FileEntry Name="Action.c" Filter="1" />
     if (parameters && parameters.size > 0) {
       jwtUserArgs = {};
       for (const [name, cfg] of parameters.entries()) {
-        // Only collection-level / global vars (no external CSV file pointer)
+        // Only collection-level / global vars (no external CSV file pointer) go to userArguments.
         // DevWeb uses collection_data.csv; VuGen uses collection_data.dat — accept both.
-        if (!cfg.fileName || cfg.fileName === 'collection_data.csv' || cfg.fileName === 'collection_data.dat') {
+        // Iteration params (credentials, test data) must stay in the CSV file so they
+        // advance per-iteration — userArguments would make them static single values.
+        const isCollectionVar = !cfg.fileName || cfg.fileName === 'collection_data.csv' || cfg.fileName === 'collection_data.dat';
+        if (isCollectionVar && cfg.nextValue !== 'iteration') {
           jwtUserArgs[name] = this.decodeHtmlEntities(String(cfg.paramValue || ""));
           jwtParamNames.add(name);
         }
