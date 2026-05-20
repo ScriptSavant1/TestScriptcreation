@@ -1799,6 +1799,17 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
     const paramsEntries = allAuthEntries.filter(([, v]) => v.includes("load.params."));
     const globalEntries = allAuthEntries.filter(([, v]) => !v.includes("load.params."));
 
+    // Separate globalEntries into "early" (safe to set at action start, e.g. tokens set in
+    // initialize) vs "deferred" (reference correlation-extracted variables that are null until
+    // a response is received, e.g. x-csrf-token extracted from the logon response).
+    // Deferred entries are emitted via load.WebRequest.defaults.headers[key] = val immediately
+    // after each correlation assignment in generateRequestCode(), not at action start.
+    const corrVarNames = new Set((this.correlations || []).map(c => this.sanitizeVarName(c.name)));
+    const isDeferredEntry = ([, v]) =>
+      [...v.matchAll(/load\.global\.(\w+)/g)].some(m => corrVarNames.has(m[1]));
+    const earlyGlobalEntries = globalEntries.filter(e => !isDeferredEntry(e));
+    this._deferredAuthHeaders = new Map(globalEntries.filter(isDeferredEntry));
+
     // Block to apply per-iteration CSV param headers — runs unconditionally every action() call
     const paramsHeaderBlock =
       paramsEntries.length > 0
@@ -1807,11 +1818,11 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
         }\n    });\n`
         : '';
 
-    // Block to apply dynamic auth headers — runs on token refresh
+    // Block to apply dynamic auth headers — runs on token refresh (JWT case only)
     const globalHeaderUpdate =
-      globalEntries.length > 0
+      earlyGlobalEntries.length > 0
         ? `\n        Object.assign(load.WebRequest.defaults.headers, {\n${
-          globalEntries.map(([k, v]) => `            "${k}": ${v}`)
+          earlyGlobalEntries.map(([k, v]) => `            "${k}": ${v}`)
             .join(',\n')}\n        });`
         : '';
 
@@ -1830,9 +1841,9 @@ ${audLine}        load.global.jwt_token = getJwtToken(_jwtParams, ${cmJson});
     }
 `;
         })()
-      : globalEntries.length > 0
+      : earlyGlobalEntries.length > 0
         ? `\n    Object.assign(load.WebRequest.defaults.headers, {\n${
-          globalEntries.map(([k, v]) => `        "${k}": ${v}`)
+          earlyGlobalEntries.map(([k, v]) => `        "${k}": ${v}`)
             .join(',\n')}\n    });\n`
         : '';
 
@@ -2134,6 +2145,16 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
         const safeCorrName = this.sanitizeVarName(corr.name);
         // Extractor registered as safeCorrName AND accessed with same name — must be identical
         code += `\n${this.indent(`load.global.${safeCorrName} = ${responseVar}.extractors["${safeCorrName}"];`, indentLevel)}`;
+        // Update any auth-global default headers that reference this just-extracted variable
+        // (e.g. x-csrf-token extracted from logon response → apply as default for all subsequent requests)
+        if (this._deferredAuthHeaders && this._deferredAuthHeaders.size > 0) {
+          const ref = `load.global.${safeCorrName}`;
+          for (const [hdrKey, hdrVal] of this._deferredAuthHeaders) {
+            if (hdrVal.includes(ref)) {
+              code += `\n${this.indent(`load.WebRequest.defaults.headers["${hdrKey}"] = load.global.${safeCorrName};`, indentLevel)}`;
+            }
+          }
+        }
       });
     }
 
