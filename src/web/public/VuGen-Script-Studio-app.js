@@ -612,19 +612,26 @@ function detectDateSubstitution(value, recordingMs, entryMs) {
     let d;
     try { d = new Date(str); } catch { return null; }
     if (isNaN(d.getTime())) return null;
-    const recDay = new Date(recordingMs);
+    // Use entry-level time for offset calculation when available (more accurate than recording start)
+    const refMs = entryMs || recordingMs;
+    const recDay = new Date(refMs);
     recDay.setUTCHours(0, 0, 0, 0);
     const dDay = new Date(d.getTime());
     dDay.setUTCHours(0, 0, 0, 0);
-    // offsetDays positive = future relative to recording
+    // offsetDays: positive = future relative to recording day
     const offsetDays = Math.round((dDay.getTime() - recDay.getTime()) / 86400000);
     if (Math.abs(offsetDays) > _DATE_MAX_DAYS) return null;
     const hr = d.getUTCHours(), mn = d.getUTCMinutes(), sc = d.getUTCSeconds();
-    const isEnd = hr === 23 && mn >= 59 && sc >= 59;
-    const isStart = hr === 0 && mn === 0 && sc === 0;
+    // Accept hr >= 22 for end-of-day to handle UTC+1 timezone (22:59:59 UTC = 23:59:59 local)
+    const isEnd = hr >= 22 && mn >= 59 && sc >= 59;
+    // Accept hr === 0 (UTC) or hr === 23 (UTC+1 midnight = start of local day)
+    const isUTCStart = hr === 0 && mn === 0 && sc === 0;
+    const isUTCPlusOneStart = hr === 23 && mn === 0 && sc === 0;
     if (isEnd && offsetDays > 0) return { fn: "getEndOfFutureDayUTC", arg: offsetDays };
     if (isEnd) return { fn: "getEndOfTodayUTC", arg: null };
-    if (isStart) return { fn: "getStartOfTodayUTC", arg: null };
+    if (isUTCStart && offsetDays === 0) return { fn: "getStartOfTodayUTC", arg: null };
+    // UTC+1 midnight: 23:00 UTC on the previous calendar day = start of today local
+    if (isUTCPlusOneStart && offsetDays === -1) return { fn: "getStartOfTodayUTC", arg: null };
     // "Current time" — only when entryMs is provided and value is within 5 min of the entry's recording time
     if (entryMs && Math.abs(d.getTime() - entryMs) < 300000) return { fn: "getCurrentTimeUTC", arg: null };
     return null;
