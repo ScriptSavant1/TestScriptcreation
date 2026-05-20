@@ -1495,12 +1495,9 @@ function genMainJS(entries, correlations) {
   }
   o += "});\n\n";
 
-  // ── PKCE helper — emitted once in the first action block (per-iteration) ──
-  // PKCE cannot go in initialize (needs fresh verifier/challenge each iteration).
-  // _pkceEmitted ensures it lands in exactly one action when markers split the script.
-  let _pkceEmitted = false;
-  function _emitPkce() {
-    if (_pkceEmitted || !S.hasPkce) return;
+  // ── action ────────────────────────────────────────────────────────────────
+  o += 'load.action("Action", async function() {\n';
+  if (S.hasPkce) {
     o += "    // PKCE — generate fresh code_verifier + code_challenge for this iteration\n";
     o += "    {\n";
     o += "        const _pkceChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';\n";
@@ -1510,14 +1507,8 @@ function genMainJS(entries, correlations) {
     o += "        load.global.pkce_challenge = btoa(String.fromCharCode(...new Uint8Array(_hBuf)))\n";
     o += "            .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\n";
     o += "    }\n\n";
-    _pkceEmitted = true;
   }
-
-
-  // action(s): single when no markers, one per transaction otherwise
   if (!hasMarkers) {
-    o += 'load.action("Action", async function() {\n';
-    _emitPkce();
     o += "    TS01.start();\n\n";
   }
   // Build concurrent group map from HAR timing overlap.
@@ -1542,25 +1533,11 @@ function genMainJS(entries, correlations) {
         const ti = txnNames.indexOf(e.txnName);
         const tsNum = String(ti + 1).padStart(2, "0");
         currentTxn = { name: e.txnName, tsNum };
-        if (hasMarkers) {
-          // Multi-action mode: open a dedicated action block for this transaction
-          const _txLabel = `${tsNum}_${e.txnName
-            .replace(/^[Tt]\d+[_\s-]+/, "")
-            .replace(/[^a-zA-Z0-9_]/g, "_")
-            .replace(/_+/g, "_")
-            .replace(/^_|_$/g, "")
-            .substring(0, 60)}`;
-          o += `load.action("${_txLabel}", async function() {\n`;
-          _emitPkce();
-        }
         o += `    TS${tsNum}.start();\n\n`;
       } else {
         if (currentTxn) {
           o += `    TS${currentTxn.tsNum}.stop();\n`;
           o += `    load.sleep(think_time);\n\n`;
-          if (hasMarkers) {
-            o += "});\n\n";
-          }
           currentTxn = null;
         }
       }
@@ -2290,12 +2267,12 @@ function genMainJS(entries, correlations) {
     rid++;
   }
 
-  // Single-action mode only: close TS01 and close the action block
+  // Close TS01 and the action block (only when no transaction markers defined)
   if (!hasMarkers) {
     o += "    TS01.stop();\n";
     o += "    load.sleep(think_time);\n\n";
-    o += "});\n\n";
   }
+  o += "});\n\n";
 
   // ── finalize ──────────────────────────────────────────────────────────────
   o += 'load.finalize("Finalize", async function() {\n';
