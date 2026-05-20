@@ -565,6 +565,20 @@ function detectDateSubstitution(value, recordingMs, entryMs) {
 
   if (_DATE_EPOCH_MS_RE.test(str)) {
     const ms = parseInt(str, 10);
+    // Check local-time midnight / end-of-day first (getStartDateMillis / getEndDateMillis)
+    const _dLocal = new Date(ms);
+    const _lhr = _dLocal.getHours(), _lmn = _dLocal.getMinutes(), _lsc = _dLocal.getSeconds();
+    const _isLocalStart = _lhr === 0 && _lmn === 0 && _lsc === 0;
+    const _isLocalEnd   = _lhr === 23 && _lmn === 59 && _lsc >= 59;
+    if (_isLocalStart || _isLocalEnd) {
+      const recDayL = new Date(recordingMs); recDayL.setHours(0, 0, 0, 0);
+      const dDayL   = new Date(ms);          dDayL.setHours(0, 0, 0, 0);
+      const localOff = Math.round((recDayL.getTime() - dDayL.getTime()) / 86400000);
+      if (localOff < 0 || localOff > _DATE_MAX_DAYS) return null;
+      if (_isLocalEnd) return { fn: "getEndDateMillis", arg: null };
+      return { fn: "getStartDateMillis", arg: localOff > 0 ? localOff : null };
+    }
+    // UTC-based epoch ms fallback
     const recDay = new Date(recordingMs);
     recDay.setUTCHours(0, 0, 0, 0);
     const dDay = new Date(ms);
@@ -630,8 +644,11 @@ function detectDateSubstitution(value, recordingMs, entryMs) {
     if (isEnd && offsetDays > 0) return { fn: "getEndOfFutureDayUTC", arg: offsetDays };
     if (isEnd) return { fn: "getEndOfTodayUTC", arg: null };
     if (isUTCStart && offsetDays === 0) return { fn: "getStartOfTodayUTC", arg: null };
-    // UTC+1 midnight: 23:00 UTC on the previous calendar day = start of today local
-    if (isUTCPlusOneStart && offsetDays === -1) return { fn: "getStartOfTodayUTC", arg: null };
+    // UTC+1 midnight: 23:00 UTC on day N = start of day N+1 in UTC+1 local time
+    if (isUTCPlusOneStart && offsetDays <= -1) {
+      const daysAgo = -(offsetDays + 1);
+      return { fn: "getStartDaysAgoUTC", arg: daysAgo > 0 ? daysAgo : null };
+    }
     // "Current time" — only when entryMs is provided and value is within 5 min of the entry's recording time
     if (entryMs && Math.abs(d.getTime() - entryMs) < 300000) return { fn: "getCurrentTimeUTC", arg: null };
     return null;
@@ -746,7 +763,11 @@ function emitDateHelpers(usedFns) {
     getCurrentTimeUTC:         "function getCurrentTimeUTC() { return new Date().toUTCString(); }",
     getEndOfTodayUTC:          "function getEndOfTodayUTC() { const d = new Date(); d.setUTCHours(23,59,59,999); return d.toUTCString(); }",
     getStartOfTodayUTC:        "function getStartOfTodayUTC() { const d = new Date(); d.setUTCHours(0,0,0,0); return d.toUTCString(); }",
+    getStartDaysAgoUTC:        "function getStartDaysAgoUTC(n) { const d = new Date(); if (n) d.setDate(d.getDate() - n); d.setUTCHours(0,0,0,0); return d.toUTCString(); }",
     getEndOfFutureDayUTC:      "function getEndOfFutureDayUTC(n) { const d = new Date(); d.setDate(d.getDate() + n); d.setUTCHours(23,59,59,999); return d.toUTCString(); }",
+    // Local-time epoch milliseconds (fromDate / toDate in booking/scheduler systems)
+    getStartDateMillis:        "function getStartDateMillis(n) { const d = new Date(); if (n) d.setDate(d.getDate() - n); d.setHours(0,0,0,0); return d.getTime(); }",
+    getEndDateMillis:          "function getEndDateMillis() { const d = new Date(); d.setHours(23,59,59,999); return d.getTime(); }",
   };
   const ordered = Object.keys(defs).filter((fn) => usedFns.has(fn));
   if (ordered.length === 0) return "";
@@ -1463,6 +1484,7 @@ function genMainJS(entries, correlations) {
     digest: "Digest",
   };
   o += 'load.initialize("Initialize", async function() {\n';
+  o += '    load.log("Initializing Vuser " + load.config.user.userId, load.LogLevel.debug);\n';
 
   if (S.hasDpop) {
     o +=
@@ -1493,10 +1515,12 @@ function genMainJS(entries, correlations) {
     o += `        host: ${hostArg}\n`;
     o += `    });\n\n`;
   }
+  o += '    load.log("Initialization complete", load.LogLevel.debug);\n';
   o += "});\n\n";
 
   // ── action ────────────────────────────────────────────────────────────────
   o += 'load.action("Action", async function() {\n';
+  o += '    load.log("Starting action - Iteration " + load.config.runtime.iteration, load.LogLevel.debug);\n';
   if (S.hasPkce) {
     o += "    // PKCE — generate fresh code_verifier + code_challenge for this iteration\n";
     o += "    {\n";
@@ -1785,6 +1809,8 @@ function genMainJS(entries, correlations) {
               pu.location !== "body_xml"
             )
               continue;
+            // Skip if this value should be replaced by a date helper function
+            if (_dateRecMs && detectDateSubstitution(String(param.value), _dateRecMs)) continue;
             const rawVal = param.value;
             const variants = [
               rawVal,
@@ -1845,6 +1871,15 @@ function genMainJS(entries, correlations) {
       for (const param of S.params) {
         for (const pu of param.usages) {
           if (pu.reqIdx !== idx || pu.location !== "query") continue;
+          // Skip if this value should be replaced by a date helper function
+          if (_dateRecMs) {
+            let _dpDec;
+            try { _dpDec = decodeURIComponent(String(param.value).replace(/\+/g, " ")); } catch { _dpDec = String(param.value); }
+            if (detectDateSubstitution(String(param.value), _dateRecMs, e.startMs) ||
+                (_dpDec !== String(param.value) && detectDateSubstitution(_dpDec, _dateRecMs, e.startMs))) {
+              continue;
+            }
+          }
           const rawVal = param.value;
           const variants = [
             encodeURIComponent(rawVal),
@@ -2272,11 +2307,14 @@ function genMainJS(entries, correlations) {
     o += "    TS01.stop();\n";
     o += "    load.sleep(think_time);\n\n";
   }
+  o += '    load.log("Action complete", load.LogLevel.debug);\n';
   o += "});\n\n";
 
   // ── finalize ──────────────────────────────────────────────────────────────
   o += 'load.finalize("Finalize", async function() {\n';
-  o += "    // Cleanup code here if needed\n\n";
+  o += '    load.log("Finalizing Vuser " + load.config.user.userId, load.LogLevel.debug);\n';
+  o += "    // Cleanup code here if needed\n";
+  o += '    load.log("Finalization complete", load.LogLevel.debug);\n';
   o += "});\n";
   return o;
 }
