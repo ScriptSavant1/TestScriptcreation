@@ -435,15 +435,24 @@ class WebHttpScriptGenerator {
     // RULE 2 — Script-set variables → dynamic
     this.scriptSetVarNames.forEach((name) => this.dynamicVarNames.add(name));
 
-    // RULE 2.5 — Private key / cryptographic secret → always dynamic (never in ParameterFile.prm)
+    // RULE 2.5 — Private key / cryptographic secret (never in ParameterFile.prm as multi-row data)
     // PEM keys are multi-line, contain special chars that break CSV, must not be in plain-text files.
     // Exclude JKS keystore references — names containing keystore/keypassword/keyalias/keyid are
     // ordinary string values (file paths, passwords, aliases), not PEM keys, even when their names
     // contain substrings like "signing" or "key" that would otherwise match privateKeyPattern.
     const keystoreExclusionPattern = /keystore|key.?password|key.?alias|key.?id/i;
-    for (const [name] of this.variableMap.entries()) {
+    for (const [name, value] of this.variableMap.entries()) {
       if (privateKeyPattern.test(name) && !keystoreExclusionPattern.test(name)) {
-        this.dynamicVarNames.add(name);
+        const isEmpty = value === "" || value === null || value === undefined;
+        if (isEmpty) {
+          // Empty private key → runtime placeholder → dynamic ({private_key} in C code)
+          this.dynamicVarNames.add(name);
+        } else {
+          // Non-empty private key → goes to ParameterFile.prm as Once param (not CSV iteration).
+          // webHttpMandatoryFilesGenerator escapes newlines so PEM fits in the INI format.
+          // VuGen JWT uses transport.pem for signing; this keeps the variable accessible if needed.
+          this.paramVarNames.add(name);
+        }
       }
     }
 
