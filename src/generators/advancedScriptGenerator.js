@@ -3064,17 +3064,22 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
    * Find auth config for request
    */
   findAuthConfig(request) {
-    // Check request-specific auth first (registered in authConfigs by extractAuthentication)
-    if (request.auth && request.auth.type && request.auth.type.toLowerCase() !== 'noauth') {
+    if (request.auth && request.auth.type) {
+      const authType = request.auth.type.toLowerCase();
+
+      // 'noauth' explicitly overrides collection-level auth — return null, apply nothing
+      if (authType === 'noauth') return null;
+
+      // Any other request-level auth — look up by request name (registered by extractAuthentication)
       const reqAuth = this.authConfigs.get(request.name);
       if (reqAuth) return reqAuth;
-      // Not yet registered — register now (edge case: extractAuthentication may have missed it)
+      // Edge case: extractAuthentication may have missed it — register now
       this.authHandler.processAuth(request.name, request.auth);
       return this.authConfigs.get(request.name) || null;
     }
 
-    // Fall back to collection-level auth, then first registered auth
-    return this.authConfigs.get('collection') || Array.from(this.authConfigs.values())[0] || null;
+    // No request-level auth — inherit collection-level auth only (never spill a per-request auth)
+    return this.authConfigs.get('collection') || null;
   }
 
   /**
