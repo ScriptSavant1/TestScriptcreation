@@ -750,7 +750,45 @@ class CorrelationDetector {
       });
     }
 
+    // 5. Check auth section for variables (Postman v2.1: request.auth.bearer[0].value = "{{access_token_1}}")
+    // The auth section is separate from request.headers — must be scanned independently.
+    if (request.auth) {
+      const authVars = this._findVariablesInAuth(request.auth);
+      authVars.forEach(varName => {
+        if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
+          consumed.push({
+            name: varName,
+            type: 'token',
+            location: 'auth',
+            path: 'auth'
+          });
+        }
+      });
+    }
+
     return consumed;
+  }
+
+  /**
+   * Recursively scan an auth object for {{varName}} / ${varName} template variable references.
+   * Handles Postman v2.1 format: { type: "bearer", bearer: [{ key: "token", value: "{{access_token_1}}" }] }
+   */
+  _findVariablesInAuth(auth) {
+    const vars = [];
+    if (!auth || typeof auth !== 'object') return vars;
+
+    const scan = (obj) => {
+      if (typeof obj === 'string') {
+        this.findVariablesInString(obj).forEach(v => vars.push(v));
+      } else if (Array.isArray(obj)) {
+        obj.forEach(item => scan(item));
+      } else if (obj && typeof obj === 'object') {
+        Object.values(obj).forEach(v => scan(v));
+      }
+    };
+
+    scan(auth);
+    return [...new Set(vars)];
   }
 
   /**

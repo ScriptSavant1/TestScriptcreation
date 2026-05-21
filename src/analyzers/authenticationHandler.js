@@ -223,13 +223,19 @@ load.log("Basic Auth configured", load.LogLevel.info);
    */
   generateBearerAuthCode(authConfig) {
     const { config } = authConfig;
-    
+    const tokenExpr = this.parameterize(config.token);
+
+    // If the token references a dynamic variable (load.global.*) or static param (load.params.*),
+    // skip the init-time assignment — the value isn't available at initialize() time.
+    // Dynamic tokens are extracted from responses during action() via correlation extractors.
+    if (tokenExpr.startsWith('load.global.') || tokenExpr.startsWith('load.params.') || tokenExpr.startsWith('load.config.')) {
+      return `\n// Bearer Token Authentication\n// Authorization header will use ${tokenExpr} — assigned at runtime via response extraction\n`;
+    }
+
     return `
 // Bearer Token Authentication
-load.global.bearerToken = ${this.parameterize(config.token)};
+load.global.bearerToken = ${tokenExpr};
 load.global.authorizationHeader = \`Bearer \${load.global.bearerToken}\`;
-
-load.log("Bearer Token configured", load.LogLevel.info);
 `;
   }
 
@@ -323,9 +329,20 @@ ${JSON.stringify(authConfig.config, null, 2)
   generateAuthHeaderInjection(authConfig) {
     switch (authConfig.type) {
       case this.authTypes.OAUTH2:
-      case this.authTypes.BEARER:
         return `"Authorization": \`\${load.global.oauth2TokenType || "Bearer"} \${load.global.oauth2AccessToken || load.global.bearerToken}\``;
-      
+
+      case this.authTypes.BEARER: {
+        const bearerCfg = authConfig && authConfig.config;
+        if (bearerCfg && bearerCfg.token) {
+          // Use the specific token variable directly so the deferred-header fix can pick it up
+          // when the token is a correlation-extracted runtime variable (e.g. load.global.access_token_1)
+          const tokenExpr = this.parameterize(bearerCfg.token);
+          return `"Authorization": \`Bearer \${${tokenExpr}}\``;
+        }
+        // Fallback: no specific token config — use the generic bearer/oauth chain
+        return `"Authorization": \`Bearer \${load.global.oauth2AccessToken || load.global.bearerToken}\``;
+      }
+
       case this.authTypes.BASIC:
         return `"Authorization": load.global.basicAuthHeader`;
       

@@ -601,15 +601,24 @@ class AdvancedScriptGenerator {
     // Any variable explicitly set by a script (pm.*.set, bru.setEnv, etc.) is runtime.
     this.scriptSetVarNames.forEach((name) => this.dynamicVarNames.add(name));
 
-    // RULE 2.5 — Private key / cryptographic secret → always Tier 1 (never parameterize)
+    // RULE 2.5 — Private key / cryptographic secret
     // PEM keys are multi-line, contain special chars that break CSV, must not be in plain-text files.
     // Exclude JKS keystore references — names containing keystore/keypassword/keyalias/keyid are
     // ordinary string values (file paths, passwords, aliases), not PEM keys, even when their names
     // contain substrings like "signing" or "key" that would otherwise match privateKeyPattern.
     const keystoreExclusionPattern = /keystore|key.?password|key.?alias|key.?id/i;
-    for (const [name] of this.variableMap.entries()) {
+    for (const [name, value] of this.variableMap.entries()) {
       if (privateKeyPattern.test(name) && !keystoreExclusionPattern.test(name)) {
-        this.dynamicVarNames.add(name);
+        const isEmpty = value === "" || value === null || value === undefined;
+        if (isEmpty) {
+          // Empty private key → runtime placeholder → dynamic (load.global.X = null at init)
+          this.dynamicVarNames.add(name);
+        } else {
+          // Non-empty private key (actual PEM value) → goes to rts.yml userArguments.
+          // mandatoryFilesGenerator routes nextValue:"once" params to userArguments (not CSV),
+          // and _formatUserArguments() handles multi-line PEM with YAML block scalar.
+          this.paramVarNames.add(name);
+        }
       }
     }
 
@@ -3055,13 +3064,17 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
    * Find auth config for request
    */
   findAuthConfig(request) {
-    // Check request-specific auth first
-    if (request.auth) {
-      return this.authHandler.processAuth(request.name, request.auth);
+    // Check request-specific auth first (registered in authConfigs by extractAuthentication)
+    if (request.auth && request.auth.type && request.auth.type.toLowerCase() !== 'noauth') {
+      const reqAuth = this.authConfigs.get(request.name);
+      if (reqAuth) return reqAuth;
+      // Not yet registered — register now (edge case: extractAuthentication may have missed it)
+      this.authHandler.processAuth(request.name, request.auth);
+      return this.authConfigs.get(request.name) || null;
     }
 
-    // Fall back to collection-level auth
-    return Array.from(this.authConfigs.values())[0] || null;
+    // Fall back to collection-level auth, then first registered auth
+    return this.authConfigs.get('collection') || Array.from(this.authConfigs.values())[0] || null;
   }
 
   /**
