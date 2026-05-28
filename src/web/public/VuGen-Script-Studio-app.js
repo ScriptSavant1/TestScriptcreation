@@ -83,6 +83,13 @@ function loadFile(file, slot) {
         S.har1 = parsed;
         S.isNetLog1 = netlog;
         markLoaded(1, file.name, netlog);
+        studioBuildDomains(parsed);
+        studioInitFilters();
+        studioRenderDomains();
+        const fes = document.getElementById("filter-empty-state");
+        if (fes) fes.style.display = "none";
+        const fs = document.getElementById("filter-section");
+        if (fs) fs.style.display = "";
       } else {
         S.har2 = parsed;
         S.isNetLog2 = netlog;
@@ -112,6 +119,15 @@ function clearSlot(slot) {
   if (slot === 1) {
     S.har1 = null;
     S.isNetLog1 = false;
+    S.filterResourceTypes = null;
+    S.filterDomains = {};
+    S.domainStats = {};
+    const fs = document.getElementById("filter-section");
+    if (fs) fs.style.display = "none";
+    const fes = document.getElementById("filter-empty-state");
+    if (fes) fes.style.display = "";
+    const dr = document.getElementById("domain-filter-row");
+    if (dr) dr.style.display = "none";
   } else {
     S.har2 = null;
     S.isNetLog2 = false;
@@ -144,6 +160,15 @@ function clearAll() {
   S.scripts = {};
   S.auth = null;
   S.serverHost = null;
+  S.filterResourceTypes = null;
+  S.filterDomains = {};
+  S.domainStats = {};
+  const fs = document.getElementById("filter-section");
+  if (fs) fs.style.display = "none";
+  const fes = document.getElementById("filter-empty-state");
+  if (fes) fes.style.display = "";
+  const dr = document.getElementById("domain-filter-row");
+  if (dr) dr.style.display = "none";
   [1, 2].forEach((slot) => {
     const dz = document.getElementById("dz" + slot);
     dz.classList.remove("loaded");
@@ -184,6 +209,129 @@ function updateUploadState() {
     btn.disabled = true;
     btn.textContent = "Load a HAR file to begin";
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HAR REQUEST FILTERS (Chrome DevTools-style resource type + domain)
+// ═══════════════════════════════════════════════════════════════════════════
+const STUDIO_RT_TYPES = [
+  { key: "fetch",      label: "Fetch/XHR", color: "#4f8ef7" },
+  { key: "document",   label: "Doc",       color: "#e8a838" },
+  { key: "stylesheet", label: "CSS",       color: "#9b59b6" },
+  { key: "script",     label: "JS",        color: "#f39c12" },
+  { key: "font",       label: "Font",      color: "#16a085" },
+  { key: "image",      label: "Img",       color: "#27ae60" },
+  { key: "media",      label: "Media",     color: "#e74c3c" },
+  { key: "manifest",   label: "Manifest",  color: "#8e44ad" },
+  { key: "websocket",  label: "WS",        color: "#2980b9" },
+  { key: "other",      label: "Other",     color: "#7f8c8d" },
+];
+
+function studioInitFilters() {
+  const list = document.getElementById("rt-filter-list");
+  if (!list) return;
+  list.innerHTML = STUDIO_RT_TYPES.map(t =>
+    `<div class="rt-filter-row rt-row-on" data-key="${t.key}" onclick="studioToggleRt('${t.key}')">
+      <span class="rt-filter-dot" style="background:${t.color}"></span>
+      <span class="rt-filter-label">${t.label}</span>
+      <span class="rt-filter-check">&#x2713;</span>
+    </div>`
+  ).join("");
+}
+
+function studioToggleRt(key) {
+  const list = document.getElementById("rt-filter-list");
+  if (!list) return;
+  if (key === "__all__") {
+    S.filterResourceTypes = null;
+    list.querySelectorAll(".rt-filter-row").forEach(r => r.classList.add("rt-row-on"));
+    return;
+  }
+  const row = list.querySelector(`[data-key="${key}"]`);
+  if (!row) return;
+  if (!S.filterResourceTypes) {
+    S.filterResourceTypes = new Set(STUDIO_RT_TYPES.map(t => t.key));
+    list.querySelectorAll(".rt-filter-row").forEach(r => r.classList.add("rt-row-on"));
+  }
+  if (S.filterResourceTypes.has(key)) {
+    S.filterResourceTypes.delete(key);
+    row.classList.remove("rt-row-on");
+  } else {
+    S.filterResourceTypes.add(key);
+    row.classList.add("rt-row-on");
+  }
+  if (S.filterResourceTypes.size === 0) {
+    S.filterResourceTypes.add(key);
+    row.classList.add("rt-row-on");
+  }
+  if (S.filterResourceTypes.size === STUDIO_RT_TYPES.length) {
+    S.filterResourceTypes = null;
+  }
+}
+
+function studioToggleRtNone() {
+  const list = document.getElementById("rt-filter-list");
+  if (!list) return;
+  const firstKey = STUDIO_RT_TYPES[0].key;
+  S.filterResourceTypes = new Set([firstKey]);
+  list.querySelectorAll(".rt-filter-row").forEach(r => {
+    r.classList.toggle("rt-row-on", r.dataset.key === firstKey);
+  });
+}
+
+function studioBuildDomains(har) {
+  const entries = (har && har.log && har.log.entries) || [];
+  S.filterDomains = {};
+  S.domainStats = {};
+  entries.forEach(e => {
+    try {
+      const host = new URL(e.request.url).hostname;
+      if (!host || host.endsWith(".invalid")) return; // skip transaction marker URLs
+      if (!S.domainStats[host]) S.domainStats[host] = { count: 0 };
+      S.domainStats[host].count++;
+      if (S.filterDomains[host] === undefined) S.filterDomains[host] = true;
+    } catch {}
+  });
+}
+
+function studioRenderDomains(search) {
+  const list = document.getElementById("domain-chip-bar");
+  const row = document.getElementById("domain-filter-row");
+  if (!list || !row) return;
+  const hosts = Object.keys(S.domainStats);
+  if (hosts.length === 0) { row.style.display = "none"; return; }
+  row.style.display = "";
+  const q = (search || "").trim().toLowerCase();
+  const filtered = hosts
+    .filter(h => !q || h.includes(q))
+    .sort((a, b) => S.domainStats[b].count - S.domainStats[a].count);
+  if (!filtered.length) {
+    list.innerHTML = `<div class="studio-dp-empty">No match</div>`;
+    return;
+  }
+  const total = hosts.length;
+  const active = Object.values(S.filterDomains).filter(Boolean).length;
+  const searchEl = document.getElementById("studio-dp-search");
+  if (searchEl) searchEl.placeholder = `Search domains… (${active}/${total})`;
+  list.innerHTML = filtered.map(h => {
+    const on = S.filterDomains[h] !== false;
+    const hEsc = h.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    return `<div class="studio-dp-row${on ? "" : " sdp-off"}" onclick="studioToggleDomain('${hEsc}')">
+      <input type="checkbox" ${on ? "checked" : ""} onclick="event.stopPropagation();studioToggleDomain('${hEsc}',this.checked)">
+      <span class="studio-dp-name">${h}</span>
+      <span class="studio-dp-cnt">${S.domainStats[h].count}req</span>
+    </div>`;
+  }).join("");
+}
+
+function studioToggleDomain(host, state) {
+  S.filterDomains[host] = state !== undefined ? state : (S.filterDomains[host] === false ? true : false);
+  studioRenderDomains(document.getElementById("studio-dp-search")?.value || "");
+}
+
+function studioToggleAllDomains(show) {
+  Object.keys(S.filterDomains).forEach(h => { S.filterDomains[h] = show; });
+  studioRenderDomains(document.getElementById("studio-dp-search")?.value || "");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
