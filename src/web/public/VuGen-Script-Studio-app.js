@@ -1058,7 +1058,7 @@ function webHttpCorrCode(corr, indent) {
       // VuGen's cookie jar handles Cookie request headers automatically.
       // For session tokens embedded in URL paths (;jsessionid=xxx), extract
       // the value from the Set-Cookie response header using boundary extraction.
-      return `${t}web_reg_save_param("ParamName=${name}",\n${t}\t"LB=${cfg.cookieName}=",\n${t}\t"RB=;",\n${t}\t"Search=Headers",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+      return `${t}web_reg_save_param("${name}",\n${t}\t"LB=${cfg.cookieName}=",\n${t}\t"RB=;",\n${t}\t"Search=Headers",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
     case "html": {
       // Map CSS selector + attr back to LB/RB boundary for web_reg_save_param (no HTML extractor in VuGen C API)
       const sel = cfg.selector || "";
@@ -1066,21 +1066,21 @@ function webHttpCorrCode(corr, indent) {
       // data-* attribute: selector=[data-csrf], attr=data-csrf → LB=data-csrf="  RB="
       const dataM = sel.match(/^\[data-([a-z][a-z0-9-]*)\]$/i);
       if (dataM) {
-        return `${t}web_reg_save_param("ParamName=${name}",\n${t}\t"LB=data-${dataM[1]}=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+        return `${t}web_reg_save_param("${name}",\n${t}\t"LB=data-${dataM[1]}=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
       }
       // meta[name='x'] with content attr → LB=name="x" content="  RB="
       const metaM = sel.match(/^meta\[name=['"]([^'"]+)['"]\]$/i);
       if (metaM) {
-        return `${t}web_reg_save_param("ParamName=${name}",\n${t}\t"LB=name=\\"${escJs(metaM[1])}\\" content=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+        return `${t}web_reg_save_param("${name}",\n${t}\t"LB=name=\\"${escJs(metaM[1])}\\" content=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
       }
       // input[name='x'] or generic name= selector → LB=name="x" <attr>="  RB="
       const nameM = sel.match(/\[name=['"]([^'"]+)['"]\]/);
       const fieldName = nameM ? nameM[1] : sel;
-      return `${t}web_reg_save_param("ParamName=${name}",\n${t}\t"LB=name=\\"${escJs(fieldName)}\\" ${attr}=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+      return `${t}web_reg_save_param("${name}",\n${t}\t"LB=name=\\"${escJs(fieldName)}\\" ${attr}=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
     }
     case "boundary_header":
       // web_reg_save_param (NOT _ex): Search=Headers to extract from response header
-      return `${t}web_reg_save_param("ParamName=${name}",\n${t}\t"LB=${escJs(cfg.lb)}",\n${t}\t"RB=\\r\\n",\n${t}\t"Search=Headers",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+      return `${t}web_reg_save_param("${name}",\n${t}\t"LB=${escJs(cfg.lb)}",\n${t}\t"RB=\\r\\n",\n${t}\t"Search=Headers",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
     case "generate": {
       // Client-side token generation — no response to extract from
       const pat = cfg.pattern || "alphanumeric";
@@ -1113,7 +1113,7 @@ function webHttpCorrCode(corr, indent) {
     case "boundary":
     default:
       // web_reg_save_param (NOT _ex): default searches Body — no Search= needed
-      return `${t}web_reg_save_param("ParamName=${name}",\n${t}\t"LB=${escJs(cfg.lb)}",\n${t}\t"RB=${escJs(cfg.rb || '"')}",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+      return `${t}web_reg_save_param("${name}",\n${t}\t"LB=${escJs(cfg.lb)}",\n${t}\t"RB=${escJs(cfg.rb || '"')}",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
   }
 }
 
@@ -2939,7 +2939,7 @@ function genActionC(entries, correlations) {
           const safeHint = sanitizeCandHint(cand.hint);
           o += `\t// TODO: Correlate "${safeHint}" — source response body was not captured in HAR.\n`;
           o += `\t// Re-record with DevTools "Disable cache" enabled to trace extraction source.\n`;
-          o += `\t// web_reg_save_param("ParamName=${safeHint}", "LB=TODO_LEFT_BOUNDARY", "RB=TODO_RIGHT_BOUNDARY", LAST);\n\n`;
+          o += `\t// web_reg_save_param("${safeHint}", "LB=TODO_LEFT_BOUNDARY", "RB=TODO_RIGHT_BOUNDARY", LAST);\n\n`;
         }
       }
     }

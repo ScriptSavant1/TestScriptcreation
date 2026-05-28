@@ -1846,7 +1846,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
           // Extract from response header — web_reg_save_param with Search=Headers
           // extractPath holds the header name (e.g. "x-csrf-token")
           const headerName = corr.extractPath || corrBase;
-          code += `${indent}web_reg_save_param("ParamName=${corr.name}",\n`;
+          code += `${indent}web_reg_save_param("${corr.name}",\n`;
           code += `${indent}    "LB=${this.escapeCString(headerName)}: ",\n`;
           code += `${indent}    "RB=\\r\\n",\n`;
           code += `${indent}    "Search=Headers",\n`;
@@ -1858,7 +1858,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
         case "cookie": {
           // Extract from response cookie
           const cookieName = corr.extractPath || corrBase;
-          code += `${indent}web_reg_save_param("ParamName=${corr.name}",\n`;
+          code += `${indent}web_reg_save_param("${corr.name}",\n`;
           code += `${indent}    "LB=${this.escapeCString(cookieName)}=",\n`;
           code += `${indent}    "RB=;",\n`;
           code += `${indent}    "Search=Headers",\n`;
@@ -1873,7 +1873,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
           const bScope = this._vugenSearchFilter(
             corr.scope || corr.extractorScope,
           );
-          code += `${indent}web_reg_save_param("ParamName=${corr.name}",\n`;
+          code += `${indent}web_reg_save_param("${corr.name}",\n`;
           if (corr.leftBoundary)
             code += `${indent}    "LB=${this.escapeCString(corr.leftBoundary)}",\n`;
           if (corr.rightBoundary)
