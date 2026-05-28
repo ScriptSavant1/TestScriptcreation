@@ -44,165 +44,137 @@
 
     <div class="page-body">
       <!-- ═══════════════════════════════════════════════════════
-     PHASE 1: UPLOAD
+     PHASE 1: UPLOAD — Two-column layout
 ═══════════════════════════════════════════════════════ -->
       <div id="ph-upload" class="phase active">
-        <div class="hero">
-          <div class="hero-title">VuGen Script Studio</div>
-          <p class="hero-sub">
-            Upload 1 HAR or NetLog for pattern-based correlation, or 2
-            recordings for deterministic diff-based correlation.
-          </p>
-        </div>
 
-        <div class="feature-pills">
-          <span class="feature-pill"
-            ><span class="pill-icon">&#x1F517;</span> 2-HAR Correlation</span
-          >
-          <span class="feature-pill"
-            ><span class="pill-icon">&#x1F512;</span> Auth Detection</span
-          >
-          <span class="feature-pill"
-            ><span class="pill-icon">&#x1F4C4;</span> DevWeb + WebHTTP</span
-          >
-        </div>
+        <!-- ── LEFT: Configuration Panel ── -->
+        <div class="upload-left">
 
-        <div class="har-row">
-          <!-- HAR 1 -->
-          <div
-            class="drop-zone"
-            id="dz1"
-            ondrop="onDrop(event, 1)"
-            ondragover="onDragOver(event, 1)"
-            ondragleave="onDragLeave(1)"
-          >
-            <input
-              type="file"
-              accept=".har,.json"
-              onchange="onFilePick(event, 1)"
-            />
-            <span class="dz-icon">&#x1F4C2;</span>
-            <div class="dz-title" id="dz1-title">
-              Recording 1 — HAR or NetLog
+          <div class="ul-brand">
+            <div class="ul-brand-logo">VS</div>
+            <div class="ul-brand-text">
+              <div class="ul-brand-name"><span style="color:#93c5fd">VuGen</span> Script Studio</div>
+              <div class="ul-brand-tag">HAR &#x2192; Correlation Script Generator</div>
             </div>
-            <div class="dz-sub" id="dz1-sub">
-              Required &nbsp;·&nbsp; Drop .har or chrome://net-export/ .json
-            </div>
-            <div class="dz-name" id="dz1-name" style="display: none"></div>
-            <button
-              id="dz1-clear"
-              onclick="
-                event.stopPropagation();
-                clearSlot(1);
-              "
-              title="Remove this file"
-              style="
-                display: none;
-                position: absolute;
-                top: 8px;
-                right: 8px;
-                background: var(--danger, #ef4444);
-                color: #fff;
-                border: none;
-                border-radius: 50%;
-                width: 22px;
-                height: 22px;
-                font-size: 13px;
-                cursor: pointer;
-                line-height: 1;
-              "
-            >
-              &#x2715;
-            </button>
           </div>
 
-          <!-- HAR 2 -->
-          <div
-            class="drop-zone"
-            id="dz2"
-            ondrop="onDrop(event, 2)"
-            ondragover="onDragOver(event, 2)"
-            ondragleave="onDragLeave(2)"
-          >
-            <input
-              type="file"
-              accept=".har,.json"
-              onchange="onFilePick(event, 2)"
-            />
-            <span class="dz-icon">&#x1F4C2;</span>
-            <div class="dz-title" id="dz2-title">
-              Recording 2 — HAR or NetLog
-            </div>
-            <div class="dz-sub" id="dz2-sub">
-              Optional &nbsp;·&nbsp; Second run for diff-based correlation
-            </div>
-            <div class="dz-name" id="dz2-name" style="display: none"></div>
-            <div class="dz-optional">Leave empty for pattern-based mode</div>
-            <button
-              id="dz2-clear"
-              onclick="
-                event.stopPropagation();
-                clearSlot(2);
-              "
-              title="Remove this file"
-              style="
-                display: none;
-                position: absolute;
-                top: 8px;
-                right: 8px;
-                background: var(--danger, #ef4444);
-                color: #fff;
-                border: none;
-                border-radius: 50%;
-                width: 22px;
-                height: 22px;
-                font-size: 13px;
-                cursor: pointer;
-                line-height: 1;
-              "
-            >
-              &#x2715;
-            </button>
-          </div>
-        </div>
+          <div class="ul-body">
 
-        <div class="options-row">
-          <span class="opt-label">Output Format</span>
-          <div class="fmt-btns">
-            <button class="fmt-btn" id="fmt-web" onclick="setFmt('webhttp')">
-              Web HTTP/HTML
-            </button>
-            <button
-              class="fmt-btn active"
-              id="fmt-dev"
-              onclick="setFmt('devweb')"
-            >
-              DevWeb
-            </button>
-            <button
-              class="fmt-btn"
-              id="fmt-both"
-              onclick="setFmt('both')"
-              style="display: none"
-            >
-              Both
-            </button>
-          </div>
-          <span class="sep"></span>
-          <span id="mode-badge" style="font-size: 12px; color: var(--text-2)"
-            >Mode: <b style="color: var(--warning)">Pattern</b> (1 HAR)</span
-          >
-        </div>
+            <div class="ul-features">
+              <div class="ul-feature"><span>&#x1F517;</span> 2-HAR diff-based correlation</div>
+              <div class="ul-feature"><span>&#x1F512;</span> Auth detection &amp; injection</div>
+              <div class="ul-feature"><span>&#x1F4C4;</span> DevWeb &amp; Web HTTP/HTML output</div>
+            </div>
 
-        <button
-          class="btn-analyze"
-          id="btn-analyze"
-          onclick="analyze()"
-          disabled
-        >
-          <span class="btn-analyze-icon">&#x26A1;</span>
-          <span>Load a HAR file to begin</span>
-        </button>
+            <div class="ul-section-label">HAR Recordings</div>
+
+            <!-- HAR 1 -->
+            <div class="drop-zone" id="dz1"
+              ondrop="onDrop(event,1)" ondragover="onDragOver(event,1)" ondragleave="onDragLeave(1)">
+              <input type="file" accept=".har,.json" onchange="onFilePick(event,1)" />
+              <span class="dz-icon">&#x1F4C2;</span>
+              <div class="dz-body">
+                <div class="dz-title" id="dz1-title">Recording 1</div>
+                <div class="dz-sub" id="dz1-sub">Required &nbsp;&middot;&nbsp; .har or chrome://net-export/ .json</div>
+                <div class="dz-name" id="dz1-name" style="display:none"></div>
+              </div>
+              <button id="dz1-clear" class="dz-clear-btn"
+                onclick="event.stopPropagation();clearSlot(1)" title="Remove file" style="display:none">&#x2715;</button>
+            </div>
+
+            <!-- HAR 2 -->
+            <div class="drop-zone dz-optional-zone" id="dz2"
+              ondrop="onDrop(event,2)" ondragover="onDragOver(event,2)" ondragleave="onDragLeave(2)">
+              <input type="file" accept=".har,.json" onchange="onFilePick(event,2)" />
+              <span class="dz-icon">&#x1F4C2;</span>
+              <div class="dz-body">
+                <div class="dz-title" id="dz2-title">Recording 2 <span class="dz-opt-badge">Optional</span></div>
+                <div class="dz-sub" id="dz2-sub">For diff-based correlation &nbsp;&middot;&nbsp; Leave empty for pattern mode</div>
+                <div class="dz-name" id="dz2-name" style="display:none"></div>
+              </div>
+              <button id="dz2-clear" class="dz-clear-btn"
+                onclick="event.stopPropagation();clearSlot(2)" title="Remove file" style="display:none">&#x2715;</button>
+            </div>
+
+            <div class="ul-section-label">Output Format</div>
+
+            <div class="fmt-btns">
+              <button class="fmt-btn" id="fmt-web" onclick="setFmt('webhttp')">Web HTTP/HTML</button>
+              <button class="fmt-btn active" id="fmt-dev" onclick="setFmt('devweb')">DevWeb</button>
+              <button class="fmt-btn" id="fmt-both" onclick="setFmt('both')" style="display:none">Both</button>
+            </div>
+
+            <div id="mode-badge" class="ul-mode-badge">
+              Mode: <b style="color:var(--warning)">Pattern</b> (1 HAR)
+            </div>
+
+            <div style="margin-top:auto;padding-top:8px">
+              <button class="btn-analyze" id="btn-analyze" onclick="analyze()" disabled>
+                <span class="btn-analyze-icon">&#x26A1;</span>
+                <span>Load a HAR file to begin</span>
+              </button>
+            </div>
+
+          </div><!-- /ul-body -->
+
+        </div><!-- /upload-left -->
+
+        <!-- ── RIGHT: Filter Panel ── -->
+        <div class="upload-right">
+
+          <!-- Empty state — shown before HAR is loaded -->
+          <div class="filter-empty-state" id="filter-empty-state">
+            <div class="fes-icon">&#x1F39B;&#xFE0F;</div>
+            <div class="fes-title">Request Filters</div>
+            <div class="fes-sub">Load a HAR recording on the left to configure filters. Filters are applied before analysis, removing noise so your generated script only contains real application traffic.</div>
+            <div class="fes-list">
+              <div class="fes-item"><span class="fes-dot" style="background:#4f8ef7"></span>Resource type &mdash; Fetch/XHR, Document, CSS, JS, Images&hellip;</div>
+              <div class="fes-item"><span class="fes-dot" style="background:#22c55e"></span>Domain &mdash; include or exclude specific hostnames</div>
+            </div>
+          </div>
+
+          <!-- Active filters — shown after HAR is loaded -->
+          <div id="filter-section" style="display:none">
+
+            <div class="filter-panel-hdr">
+              <div class="filter-panel-title">&#x1F39B;&#xFE0F; Request Filters</div>
+              <div class="filter-panel-hint">Applied before analysis &mdash; filters run before correlation engine</div>
+            </div>
+
+            <!-- Resource Type -->
+            <div class="filter-group">
+              <div class="filter-group-hdr">
+                <span class="filter-group-label">Resource Type</span>
+                <div class="filter-group-acts">
+                  <button onclick="studioToggleRt('__all__')">All</button>
+                  <button onclick="studioToggleRtNone()">None</button>
+                </div>
+              </div>
+              <div class="rt-filter-list" id="rt-filter-list"></div>
+            </div>
+
+            <!-- Domains -->
+            <div class="filter-group" id="domain-filter-row" style="display:none">
+              <div class="filter-group-hdr">
+                <span class="filter-group-label">Domains</span>
+                <div class="filter-group-acts">
+                  <button onclick="studioToggleAllDomains(true)">All</button>
+                  <button onclick="studioToggleAllDomains(false)">None</button>
+                </div>
+              </div>
+              <div class="filter-group-search">
+                <input class="studio-dp-search" id="studio-dp-search" type="text"
+                  placeholder="Search domains&#x2026;"
+                  oninput="studioRenderDomains(this.value)" />
+              </div>
+              <div class="studio-dp-list" id="domain-chip-bar"></div>
+            </div>
+
+          </div><!-- /filter-section -->
+
+        </div><!-- /upload-right -->
+
       </div>
 
       <!-- ═══════════════════════════════════════════════════════

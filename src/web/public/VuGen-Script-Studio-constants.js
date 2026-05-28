@@ -22,6 +22,9 @@ const S = {
   tab: "ac",
   auth: null, // detected auth {type, host, port, hostport, realm?, username?}
   serverHost: null, // detected primary server {host, proto, prefix, count}
+  filterResourceTypes: null, // null = all; Set<string> = whitelist of Chrome DevTools resource types
+  filterDomains: {}, // hostname → true (show) | false (hide)
+  domainStats: {},   // hostname → { count: number }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

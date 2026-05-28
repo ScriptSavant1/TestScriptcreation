@@ -38,6 +38,7 @@ function parseHar(har) {
       respBody,
       respHdrsMap,
       respCookies: e.response.cookies || [],
+      _resourceType: e._resourceType || "", // Chrome HAR extension: fetch|xhr|document|stylesheet|script|font|image|media|manifest|websocket|wasm|other
       filtered: false,
       isMarker: false,
       markerType: null,
@@ -223,6 +224,52 @@ function parseNetLog(netlog) {
   return entries;
 }
 
+// ─── Resource type classification ─────────────────────────────────────────
+// Maps a Studio/Recorder entry to a Chrome DevTools resource type string.
+// Priority: Chrome's own _resourceType field → MIME type → URL extension → method.
+function classifyHarEntry(entry) {
+  const rt = (entry._resourceType || "").toLowerCase();
+  if (rt === "fetch" || rt === "xhr") return "fetch";
+  if (rt === "document") return "document";
+  if (rt === "stylesheet") return "stylesheet";
+  if (rt === "script") return "script";
+  if (rt === "font") return "font";
+  if (rt === "image") return "image";
+  if (rt === "media") return "media";
+  if (rt === "manifest") return "manifest";
+  if (rt === "websocket") return "websocket";
+  if (rt === "wasm") return "wasm";
+  if (rt && rt !== "other") return rt;
+
+  // Fallback 1: MIME type
+  const mime = (entry.ct || "").toLowerCase();
+  if (mime === "text/css") return "stylesheet";
+  if (mime.includes("javascript") || mime === "application/x-javascript") return "script";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("font/") || mime.includes("woff") || mime === "application/x-font-ttf") return "font";
+  if (mime.startsWith("audio/") || mime.startsWith("video/")) return "media";
+  if (mime === "application/manifest+json" || mime === "application/webmanifest") return "manifest";
+  if (mime === "application/wasm") return "wasm";
+  if (mime === "text/html" || mime === "application/xhtml+xml") return "document";
+  if (mime.includes("json") || mime.includes("xml") || mime === "text/plain") return "fetch";
+
+  // Fallback 2: URL extension
+  const urlPath = (entry.url || "").split("?")[0].toLowerCase();
+  if (/\.(js|mjs|cjs)$/.test(urlPath)) return "script";
+  if (/\.css$/.test(urlPath)) return "stylesheet";
+  if (/\.(png|jpg|jpeg|gif|svg|webp|ico|bmp|avif)$/.test(urlPath)) return "image";
+  if (/\.(woff2?|ttf|eot|otf)$/.test(urlPath)) return "font";
+  if (/\.(mp4|webm|ogg|mp3|wav|flac|aac)$/.test(urlPath)) return "media";
+  if (/\.html?$/.test(urlPath)) return "document";
+  if (/\.wasm$/.test(urlPath)) return "wasm";
+
+  // Fallback 3: HTTP method
+  const method = (entry.method || "GET").toUpperCase();
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) return "fetch";
+
+  return "other";
+}
+
 function applyFilters(entries) {
   for (const e of entries) {
     if (e.isMarker) {
@@ -271,6 +318,17 @@ function applyFilters(entries) {
         continue;
       }
     } catch {}
+    // Domain filter — user unchecked this hostname in the filter panel
+    if (S.filterDomains && Object.keys(S.filterDomains).length > 0) {
+      try {
+        const _dhost = new URL(e.url).hostname;
+        if (S.filterDomains[_dhost] === false) { e.filtered = true; continue; }
+      } catch {}
+    }
+    // Resource type filter — user selected specific Chrome DevTools categories
+    if (S.filterResourceTypes && S.filterResourceTypes.size > 0) {
+      if (!S.filterResourceTypes.has(classifyHarEntry(e))) { e.filtered = true; continue; }
+    }
     e.filtered = false;
   }
 }

@@ -304,6 +304,13 @@ code{
 .chk-lbl input{cursor:pointer;accent-color:var(--primary)}
 #sel-bar{display:none;align-items:center;gap:8px;font-size:12px}
 #stats{margin-left:auto;font-size:11px;color:var(--text-3)}
+/* RT type chips */
+.rt-chip-bar{display:inline-flex;align-items:center;gap:3px;flex-wrap:nowrap}
+.rt-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--text-2);transition:all .15s;white-space:nowrap;user-select:none}
+.rt-chip:hover{border-color:var(--chip-color,var(--primary));color:var(--chip-color,var(--primary));background:color-mix(in srgb,var(--chip-color,var(--primary)) 8%,transparent)}
+.rt-chip.rt-active{background:var(--chip-color,var(--primary));border-color:var(--chip-color,var(--primary));color:#fff}
+.rt-chip.rt-all{--chip-color:var(--primary)}
+.rt-chip.rt-all.rt-active{background:var(--surface-2);border-color:var(--border-2);color:var(--text);font-weight:700}
 
 /* content split */
 .split{display:flex;flex:1;overflow:hidden}
@@ -570,6 +577,18 @@ details>.instr{border-top:0;border-radius:0 0 var(--radius-lg) var(--radius-lg);
     <label class="chk-lbl"><input type="checkbox" id="f-noise"  checked onchange="refresh()"> Analytics/Ads</label>
     <label class="chk-lbl"><input type="checkbox" id="f-opts"   checked onchange="refresh()"> OPTIONS</label>
     <div class="tbar-sep"></div>
+    <div class="rt-chip-bar" id="rec-rt-bar" style="display:inline-flex">
+      <span class="rt-chip rt-all rt-active" data-key="__all__" onclick="setRecorderRt('__all__')" title="All types">All</span>
+      <span class="rt-chip" data-key="fetch"      style="--chip-color:#4f8ef7" onclick="setRecorderRt('fetch')"      title="Fetch/XHR">Fetch/XHR</span>
+      <span class="rt-chip" data-key="document"   style="--chip-color:#e8a838" onclick="setRecorderRt('document')"   title="Document">Doc</span>
+      <span class="rt-chip" data-key="stylesheet" style="--chip-color:#9b59b6" onclick="setRecorderRt('stylesheet')" title="CSS">CSS</span>
+      <span class="rt-chip" data-key="script"     style="--chip-color:#f39c12" onclick="setRecorderRt('script')"     title="JavaScript">JS</span>
+      <span class="rt-chip" data-key="font"       style="--chip-color:#16a085" onclick="setRecorderRt('font')"       title="Font">Font</span>
+      <span class="rt-chip" data-key="image"      style="--chip-color:#27ae60" onclick="setRecorderRt('image')"      title="Image">Img</span>
+      <span class="rt-chip" data-key="media"      style="--chip-color:#e74c3c" onclick="setRecorderRt('media')"      title="Media">Media</span>
+      <span class="rt-chip" data-key="other"      style="--chip-color:#7f8c8d" onclick="setRecorderRt('other')"      title="Other">Other</span>
+    </div>
+    <div class="tbar-sep"></div>
     <button class="btn btn-muted btn-sm" id="btn-sel" onclick="toggleSelMode()">&#x2611; Select Mode</button>
     <div id="sel-bar">
       <span id="sel-cnt">0 selected</span>
@@ -813,7 +832,8 @@ const S = {
   domainStats: {},    // hostname -> {count, size}
   collapsed: {},      // txnName -> true (collapsed) | false (expanded)
   auth: null,         // detected auth {type, host, port, hostport, realm?, username?}
-  serverHost: null    // detected primary server {host, proto, prefix, count}
+  serverHost: null,   // detected primary server {host, proto, prefix, count}
+  resourceTypeFilter: null  // null = all; Set<string> = whitelist of Chrome DevTools resource types
 };
 
 const COLORS = [
@@ -1055,6 +1075,7 @@ function processHAR(har){
       respHdrsMap: respHdrs,
       body: e.request.postData||null,
       referer: hdrs['referer']||'',
+      _resourceType: e._resourceType||'',
       isMarker:false, markerType:null, txnName:null,
       txn:null, filtered:false
     };
@@ -1146,6 +1167,35 @@ const STATIC_CT=new Set([
 const STATIC_EXT=/\.(png|jpe?g|gif|ico|svg|webp|woff2?|ttf|eot|otf|css|js\.map|map)(\?|$)/i;
 const NOISY=/google-analytics|googletagmanager|doubleclick|googlesyndication|facebook\.net|hotjar|segment\.io|mixpanel|amplitude|clarity\.ms|adnxs|scorecardresearch|outbrain|taboola|adsrvr|pubmatic/i;
 
+function classifyHarEntry(e){
+  const rt=(e._resourceType||'').toLowerCase();
+  if(rt==='fetch'||rt==='xhr') return 'fetch';
+  if(rt==='document') return 'document';
+  if(rt==='stylesheet') return 'stylesheet';
+  if(rt==='script') return 'script';
+  if(rt==='font') return 'font';
+  if(rt==='image') return 'image';
+  if(rt==='media') return 'media';
+  if(rt==='manifest') return 'manifest';
+  if(rt==='websocket') return 'websocket';
+  if(rt&&rt!=='other'&&rt!=='') return rt;
+  const ct=(e.ct||'').toLowerCase();
+  if(/json|graphql|form-urlencoded|form-data|xml|text\/plain/.test(ct)||e.method==='POST'||e.method==='PUT'||e.method==='PATCH') return 'fetch';
+  if(ct.startsWith('text/html')||ct.startsWith('application/xhtml')) return 'document';
+  if(ct.startsWith('text/css')) return 'stylesheet';
+  if(/javascript/.test(ct)) return 'script';
+  if(ct.startsWith('font/')) return 'font';
+  if(ct.startsWith('image/')) return 'image';
+  if(ct.startsWith('audio/')||ct.startsWith('video/')) return 'media';
+  const path=(e.url||'').split('?')[0].toLowerCase();
+  if(/\.(css)$/.test(path)) return 'stylesheet';
+  if(/\.(js)$/.test(path)) return 'script';
+  if(/\.(woff2?|ttf|eot|otf)$/.test(path)) return 'font';
+  if(/\.(png|jpe?g|gif|ico|svg|webp)$/.test(path)) return 'image';
+  if(/\.(mp4|webm|mp3|ogg|wav)$/.test(path)) return 'media';
+  return 'other';
+}
+
 function applyFilters(){
   const fSt=document.getElementById('f-static')?.checked??true;
   const fNo=document.getElementById('f-noise')?.checked??true;
@@ -1174,12 +1224,44 @@ function applyFilters(){
     if(fNo){
       try{ if(NOISY.test(new URL(e.url).hostname)){e.filtered=true;continue;} }catch{}
     }
+    if(S.resourceTypeFilter&&S.resourceTypeFilter.size>0){
+      if(!S.resourceTypeFilter.has(classifyHarEntry(e))){e.filtered=true;continue;}
+    }
     e.filtered=false;
   }
 }
 
 function refresh(){
   applyFilters(); buildScripts(); renderTable(); renderStats(); showScript();
+}
+
+function setRecorderRt(key){
+  const bar=document.getElementById('rec-rt-bar');
+  if(!bar) return;
+  const allChip=bar.querySelector('[data-key="__all__"]');
+  if(key==='__all__'){
+    S.resourceTypeFilter=null;
+    bar.querySelectorAll('.rt-chip').forEach(c=>c.classList.remove('rt-active'));
+    if(allChip) allChip.classList.add('rt-active');
+    refresh(); return;
+  }
+  const chip=bar.querySelector(`[data-key="${key}"]`);
+  if(!chip) return;
+  if(!S.resourceTypeFilter){
+    const allKeys=['fetch','document','stylesheet','script','font','image','media','other'];
+    S.resourceTypeFilter=new Set(allKeys);
+    if(allChip) allChip.classList.remove('rt-active');
+    allKeys.forEach(k=>{ const c=bar.querySelector(`[data-key="${k}"]`); if(c) c.classList.add('rt-active'); });
+  }
+  if(S.resourceTypeFilter.has(key)){
+    S.resourceTypeFilter.delete(key);
+    chip.classList.remove('rt-active');
+  } else {
+    S.resourceTypeFilter.add(key);
+    chip.classList.add('rt-active');
+  }
+  if(S.resourceTypeFilter.size===0){ S.resourceTypeFilter=new Set([key]); chip.classList.add('rt-active'); }
+  refresh();
 }
 
 // ===========================================================================
