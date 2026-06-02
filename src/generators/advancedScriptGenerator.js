@@ -1755,8 +1755,14 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
 
     // Add script-set dynamic variables not already covered by correlations.
     // Skip JWT output vars — already set by getJwtToken() in initialize().
+    // Skip variables that come exclusively from JSR223/Groovy vars.put() calls —
+    // the converted custom-script block already emits load.global.X = ... for
+    // those, so a separate null-initialisation is duplicate clutter.
     const jwtOutputVars = new Set(this.jwtVarNames || []);
+    const corrNames = new Set((this.correlations || []).map(c => c.name));
     this.dynamicVarNames.forEach((name) => {
+      const scriptOnly = this.scriptSetVarNames.has(name) && !corrNames.has(name);
+      if (scriptOnly) return; // set by converted script code — no null init needed
       if (!seen.has(name) && !isLibraryName(name) && !jwtOutputVars.has(name)) {
         seen.add(name);
         const safe = this.sanitizeVarName(name);

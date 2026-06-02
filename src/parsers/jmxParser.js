@@ -537,7 +537,10 @@ function parseSampler(nodeChildren, attrs, defaults, reqHeaders, auth,
 
     if (postBodyRaw === 'true') {
       const rawVal = argItems[0] ? getProp(getChildren(argItems[0]), 'Argument.value') : '';
-      body = { mode: 'raw', raw: convertVars(rawVal), options: { raw: { language: 'json' } } };
+      // JMX sometimes stores literal backslash-r-backslash-n sequences (4 chars)
+      // instead of actual CRLF. Normalise so generated scripts send real newlines.
+      const normVal = rawVal.replace(/\\r\\n/g, '\r\n').replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+      body = { mode: 'raw', raw: convertVars(normVal), options: { raw: { language: 'json' } } };
     } else if (argItems.length > 0) {
       body = {
         mode: 'urlencoded',
@@ -603,6 +606,13 @@ const CONTROLLER_TAGS = new Set([
   'WhileController', 'RuntimeController', 'OnceOnlyController',
   'SwitchController', 'CriticalSectionController',
   'IncludeController',
+  // ModuleController references a named test fragment elsewhere in the plan.
+  // Full resolution (finding the target fragment by name) is not supported —
+  // we flatten its inline children as a best-effort conversion.
+  'ModuleController',
+  // TestFragmentController defines reusable fragments (always enabled="false" in JMX).
+  // Must be in this set so walkHashTree recurses into its children and collects requests.
+  'TestFragmentController',
 ]);
 
 // Extractor tags that belong inside a request's hashTree
@@ -629,6 +639,12 @@ function walkHashTree(nodeChildren, context, results) {
   let pendingThinkTime = context.thinkTimeSec || 0;
 
   for (const { tag, node, attrs, childHashTree } of children) {
+
+    // Skip any element the user explicitly disabled in JMeter.
+    // Exception: TestFragmentController is *always* stored with enabled="false" by
+    // design — it's a library fragment meant to be called via ModuleController.
+    // Skipping it would drop all requests inside, causing "No HTTP requests found".
+    if (attrs['@_enabled'] === 'false' && tag !== 'TestFragmentController') continue;
 
     // ── HTTP Request Defaults (ConfigTestElement) ─────────────────────────
     if (tag === 'ConfigTestElement') {
@@ -833,6 +849,9 @@ function walkHashTree(nodeChildren, context, results) {
       // With preserveOrder:true these are guaranteed correct.
       for (const rc of flattenHashTree(childHashTree)) {
 
+        // Skip disabled child elements (extractors, pre/post-processors, headers)
+        if (rc.attrs['@_enabled'] === 'false') continue;
+
         // Per-request HeaderManager — local headers override global headers
         if (rc.tag === 'HeaderManager') {
           const hdrs = parseHeaderManager(rc.node);
@@ -910,6 +929,7 @@ function walkHashTree(nodeChildren, context, results) {
 
     // ── Standalone script samplers ────────────────────────────────────────
     if (tag === 'JSR223Sampler' || tag === 'BeanShellSampler') {
+      // enabled="false" already caught by the top-of-loop guard above
       const sc = parseScriptNode(node, attrs);
       if (sc) {
         results.standaloneScripts.push({
@@ -1048,6 +1068,19 @@ class JmxParser {
 
     walkHashTree(mainHashTree, context, results);
 
+    // Collect diagnostic tag names for a better error message if 0 requests found
+    if (!results.requests.length) {
+      const seenTags = new Set();
+      const scanTags = (nodes) => {
+        for (const { tag, childHashTree } of flattenHashTree(nodes)) {
+          if (tag && tag !== 'hashTree') seenTags.add(tag);
+          if (childHashTree && childHashTree.length) scanTags(childHashTree);
+        }
+      };
+      scanTags(mainHashTree);
+      this._diagnosticTags = [...seenTags].sort();
+    }
+
     this.standaloneScripts = results.standaloneScripts;
 
     this.collection = buildCollection(
@@ -1075,6 +1108,7 @@ class JmxParser {
   getThreadGroups()      { return this.threadGroups; }
   getCsvDataSets()       { return this.csvDataSets; }
   getStandaloneScripts() { return this.standaloneScripts; }
+  getDiagnosticTags()    { return this._diagnosticTags || []; }
   /**
    * Returns variables defined INSIDE thread group tgIndex (not TestPlan-level globals).
    * Used by jmxConverter._convertMulti() to build per-TG environment variable maps.

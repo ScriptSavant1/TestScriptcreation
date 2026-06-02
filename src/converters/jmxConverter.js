@@ -49,7 +49,21 @@ class JmxConverter {
     const csvDataSets  = parser.getCsvDataSets();
 
     if (!requests.length) {
-      throw new Error('No HTTP requests found in this JMX file. Only HTTPSamplerProxy elements are converted.');
+      const tags = parser.getDiagnosticTags();
+      const tgTags   = tags.filter(t => /ThreadGroup/i.test(t));
+      const samplers = tags.filter(t => /Sampler/i.test(t) && t !== 'JSR223Sampler' && t !== 'BeanShellSampler');
+      let hint = '';
+      if (tgTags.length === 0) {
+        hint = ' No ThreadGroup elements were found — the file may be a JMeter test fragment, not a complete test plan.';
+      } else if (samplers.length > 0 && !samplers.includes('HTTPSamplerProxy')) {
+        hint = ` The file contains [${samplers.join(', ')}] samplers. Only HTTPSamplerProxy is supported.`;
+      } else if (tags.includes('TestFragmentController')) {
+        hint = ' The file uses TestFragmentController + ModuleController pattern. Update to the latest converter version which supports this.';
+      } else if (tgTags.length > 0) {
+        hint = ` Thread groups found: [${tgTags.join(', ')}]. All HTTP requests may be disabled (enabled="false").`;
+      }
+      if (tags.length) hint += ` Elements seen: ${tags.slice(0, 15).join(', ')}${tags.length > 15 ? '…' : ''}.`;
+      throw new Error(`No HTTP requests found in this JMX file.${hint}`);
     }
 
     // 2. Resolve CSVDataSet filenames that reference JMX variables
