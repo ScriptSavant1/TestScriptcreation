@@ -35,6 +35,7 @@
 const fs   = require('fs').promises;
 const path = require('path');
 const { XMLParser } = require('fast-xml-parser');
+const { buildBaseUrl } = require('../core/utils');
 
 // ─── JMeter built-in function conversion ─────────────────────────────────────
 // Map ${__func(...)} → {{_jmfn_name}} so the _ prefix forces Tier 1 Dynamic
@@ -213,14 +214,6 @@ function flattenHashTree(nodeChildren) {
   }
 
   return result;
-}
-
-// ─── Build base URL ───────────────────────────────────────────────────────────
-function buildBaseUrl(domain, port, protocol) {
-  if (!domain) return '';
-  const proto   = protocol || 'http';
-  const portStr = port && port !== '80' && port !== '443' ? `:${port}` : '';
-  return `${proto}://${domain}${portStr}`;
 }
 
 // ─── Parse HTTP Request Defaults (ConfigTestElement) ─────────────────────────
