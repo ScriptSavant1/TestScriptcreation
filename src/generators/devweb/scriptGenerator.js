@@ -357,12 +357,14 @@ class AdvancedScriptGenerator {
         const rawVal = m[2].trim();
         if (JAVA_ONLY.test(rawVal)) continue;
         // Quick expression conversion (mirrors _convertJavaExpr)
-        const converted = rawVal
-          .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'load.utils.uuid()')
-          .replace(/System\.currentTimeMillis\(\)/g, 'Date.now()')
-          .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, (_, n) => `load.global.${n}`)
-          .replace(/\s*\+\s*""\s*/g, '').replace(/\s*""\s*\+\s*/g, '');
-        if (JAVA_RESIDUAL.test(converted)) continue;
+        const converted = /["']/.test(rawVal) && /(?:vars|props)\.get\s*\(/.test(rawVal) && /\+/.test(rawVal)
+          ? this._convertConcatToTemplate(rawVal)
+          : rawVal
+              .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'load.utils.uuid()')
+              .replace(/System\.currentTimeMillis\(\)/g, 'Date.now()')
+              .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, (_, n) => `load.global.${n}`)
+              .replace(/\s*\+\s*""\s*/g, '').replace(/\s*""\s*\+\s*/g, '');
+        if (!converted.startsWith('`') && JAVA_RESIDUAL.test(converted)) continue;
         this.jsr223ModuleVars.add(m[1]);
       }
     }
@@ -1564,7 +1566,8 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
         const rawVal = putMatch[2].trim();
         if (JAVA_ONLY.test(rawVal)) { skipped++; continue; }
         const valExpr = this._convertJavaExpr(rawVal);
-        if (JAVA_RESIDUAL.test(valExpr)) { skipped++; continue;}
+        // isSafeJsValue already accepts backtick strings via /^["'`]/ — skip JAVA_RESIDUAL for them
+        if (!valExpr.startsWith('`') && JAVA_RESIDUAL.test(valExpr)) { skipped++; continue; }
         if (isSafeJsValue(valExpr, declaredLocalVars)) {
           converted.push(`${indent}load.global.${this.sanitizeVarName(putMatch[1])} = ${valExpr};`);
         } else {
@@ -1580,8 +1583,10 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
         const rawVal = typeAssignMatch[2].trim();
         if (JAVA_ONLY.test(rawVal)) { skipped++; continue;}
         const valExpr = this._convertJavaExpr(rawVal);
-        if (JAVA_RESIDUAL.test(valExpr) ||
-          /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)) {
+        if (!valExpr.startsWith('`') && (
+          JAVA_RESIDUAL.test(valExpr) ||
+          /new\s+[A-Z]|(?:prev|ctx|sampler|SampleResult)\s*\.|getResponse|groovy\.|apache\.|java\./.test(valExpr)
+        )) {
           skipped++; continue;
         }
         if (isSafeJsValue(valExpr, declaredLocalVars)) {
@@ -1611,6 +1616,11 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
    * Convert a Java/Groovy expression fragment to its DevWeb JavaScript equivalent.
    */
   _convertJavaExpr(expr) {
+    // Java string concatenation with vars.get()/props.get() → backtick template literal.
+    // Detect: expression has a quoted string literal + concatenation + a get() call.
+    if (/["']/.test(expr) && /(?:vars|props)\.get\s*\(/.test(expr) && /\+/.test(expr)) {
+      return this._convertConcatToTemplate(expr);
+    }
     return expr
         .replace(/UUID\.randomUUID\(\)\.toString\(\)/g, 'load.utils.uuid()')
         .replace(/java\.util\.UUID\.randomUUID\(\)\.toString\(\)/g,'load.utils.uuid()')
@@ -1622,11 +1632,84 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
         .replace(/Long\.toString\s*\(([^)]+)\)/g, 'String($1)')
         .replace(/\$\{([^}]+)\}/g, '${load.global.$1}')
         // vars.get("x") inline → load.global.x
-        .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g, 
+        .replace(/(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g,
           (_, n) => `load.global.${this.sanitizeVarName(n)}`)
         // Strip Java string-concatenation-with-empty-string idiom: value + ""  or  "" + value
         .replace(/\s*\+\s*""\s*/g, '')
         .replace(/\s*""\s*\+\s*/g, '');
+  }
+
+  /**
+   * Convert a Java/Groovy string-concatenation expression to a JS template literal.
+   * Handles: "text" + vars.get("x") + "more" → `text${load.global.x}more`
+   * The char-by-char parser correctly handles \" inside Java string literals.
+   */
+  _convertConcatToTemplate(expr) {
+    const parts = [];
+    let i = 0;
+    const len = expr.length;
+
+    while (i < len) {
+      // Skip whitespace
+      while (i < len && /\s/.test(expr[i])) i++;
+      if (i >= len) break;
+
+      if (expr[i] === '"') {
+        // Java string literal — read until closing unescaped "
+        i++; // skip opening "
+        let str = '';
+        while (i < len) {
+          if (expr[i] === '\\' && i + 1 < len) {
+            const next = expr[i + 1];
+            if      (next === '"')  { str += '"';  i += 2; }
+            else if (next === 'n')  { str += '\n'; i += 2; }
+            else if (next === 'r')  { str += '\r'; i += 2; }
+            else if (next === 't')  { str += '\t'; i += 2; }
+            else if (next === '\\') { str += '\\'; i += 2; }
+            else                    { str += expr[i]; i++; }
+          } else if (expr[i] === '"') {
+            i++; break; // closing "
+          } else {
+            str += expr[i++];
+          }
+        }
+        parts.push({ type: 'literal', value: str });
+      } else if (expr[i] === '+') {
+        i++; // skip + operator
+      } else {
+        // Expression segment — collect until next unparenthesised + or string literal
+        let depth = 0;
+        let seg = '';
+        while (i < len) {
+          const ch = expr[i];
+          if      (ch === '(')                        { depth++; seg += ch; i++; }
+          else if (ch === ')' && depth > 0)           { depth--; seg += ch; i++; }
+          else if ((ch === '+' || ch === '"') && depth === 0) break;
+          else                                        { seg += ch; i++; }
+        }
+        seg = seg.trim();
+        if (seg) {
+          const converted = seg.replace(
+            /(?:vars|props)\.get\s*\(\s*["']([^"']+)["']\s*\)/g,
+            (_, n) => `load.global.${this.sanitizeVarName(n)}`
+          );
+          parts.push({ type: 'expr', value: converted });
+        }
+      }
+    }
+
+    // Merge adjacent literals and build the template literal
+    let result = '`';
+    for (const part of parts) {
+      if (part.type === 'literal') {
+        // Escape backticks and bare $ signs in literal text
+        result += part.value.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$(?=\{)/g, '\\$');
+      } else {
+        result += `\${${part.value}}`;
+      }
+    }
+    result += '`';
+    return result;
   }
 
   generateGlobalVariablesInit() {
@@ -2890,12 +2973,19 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     // Convert to formatted JSON, then replace quoted template literals
     let str = JSON.stringify(options, null, 2);
 
-    // Convert any JSON string containing ${...} to a backtick template literal
-    // Handles pure expressions like "${load.params.var}" and mixed content like
-    // "https://${load.params.host}/api/${load.params.id}"
+    // Convert any JSON string containing ${...} or newline escapes to a backtick template literal.
+    // This covers:
+    //   • "${load.params.var}" and mixed "https://${host}/path"
+    //   • Multi-line request bodies with \r\n or \n sequences (from JMX raw bodies)
     str = str.replace(/"((?:[^"\\]|\\.)*)"/g, (match, content) => {
-      if (content.includes("${")) {
-        return "`" + content.replace(/\\"/g, '"') + "`";
+      if (content.includes("${") || content.includes("\\n") || content.includes("\\r")) {
+        const unescaped = content
+          .replace(/\\"/g, '"')
+          .replace(/\\r\\n/g, '\r\n')
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t');
+        return "`" + unescaped + "`";
       }
       return match;
     });
