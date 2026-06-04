@@ -340,6 +340,24 @@ function parseExtractors(taggedItems) {
       });
     }
 
+    // JSONPostProcessor — JMeter 3.0+ built-in JSON extractor (semicolon-separated multi-extraction)
+    else if (tag === 'JSONPostProcessor') {
+      const namesRaw  = getProp(node, 'JSONPostProcessor.referenceNames') || '';
+      const pathsRaw  = getProp(node, 'JSONPostProcessor.jsonPathExprs')  || '';
+      const matchRaw  = getProp(node, 'JSONPostProcessor.match_numbers')  || '';
+      const names   = namesRaw.split(';').map(s => s.trim()).filter(Boolean);
+      const paths   = pathsRaw.split(';').map(s => s.trim());
+      const matches = matchRaw.split(';').map(s => s.trim());
+      for (let idx = 0; idx < names.length; idx++) {
+        extractors.push({
+          type:        'jsonpath',
+          name:        names[idx],
+          jsonPath:    paths[idx] || `$.${names[idx]}`,
+          matchNumber: matches[idx] || '0',
+        });
+      }
+    }
+
     // XPath 1.0
     else if (tag === 'XPathExtractor') {
       const name = getProp(node, 'XPathExtractor.refname');
@@ -610,7 +628,9 @@ const CONTROLLER_TAGS = new Set([
 
 // Extractor tags that belong inside a request's hashTree
 const EXTRACTOR_TAGS = new Set([
-  'RegexExtractor', 'BoundaryExtractor', 'JSONPathExtractor',
+  'RegexExtractor', 'BoundaryExtractor',
+  'JSONPostProcessor',                   // JMeter 3.0+ built-in JSON extractor
+  'JSONPathExtractor',                   // older/atlantbh plugin variant
   'XPathExtractor', 'XPath2Extractor', 'HtmlExtractor', 'JMESPathExtractor',
   'com.atlantbh.jmeter.plugins.jsonutils.jsonpathextractor.JSONPathExtractor',
 ]);
