@@ -2075,7 +2075,11 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
         const parsed = JSON.parse(raw);
         return { body: this.jsonToCString(parsed) };
       } catch {
-        return { body: this.escapeCBodyString(this.replaceParameters(raw)) };
+        // JSON.parse failed — body likely has {{variables}} that are not valid JSON values,
+        // or is pretty-printed with formatting whitespace. Compact it first so the generated
+        // C string is a single line with no embedded \n sequences.
+        const compact = this._compactJsonBody(raw);
+        return { body: this.escapeCBodyString(this.replaceParameters(compact)) };
       }
     }
 
@@ -2113,6 +2117,32 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     const jsonStr = JSON.stringify(obj);
     const withParams = this.replaceParameters(jsonStr);
     return this.escapeCBodyString(withParams);
+  }
+
+  /**
+   * Compact a raw JSON body by stripping formatting whitespace (newlines, tabs,
+   * leading indentation) that sits OUTSIDE of JSON string literals.
+   *
+   * Used in the fallback path when JSON.parse fails (e.g. the body contains
+   * {{variable}} placeholders that aren't valid JSON values). Without this step,
+   * pretty-printed JMX bodies produce \n sequences embedded in the generated C
+   * string, which is syntactically valid but ugly and confusing.
+   *
+   * Inside string literals the content is kept verbatim — only inter-token
+   * whitespace is removed.
+   */
+  _compactJsonBody(str) {
+    const out = [];
+    let inStr = false, esc = false;
+    for (const c of str) {
+      if (esc) { out.push(c); esc = false; continue; }
+      if (c === '\\' && inStr) { out.push(c); esc = true; continue; }
+      if (c === '"') { inStr = !inStr; out.push(c); continue; }
+      // Outside strings, all whitespace is insignificant in JSON — strip it entirely.
+      if (!inStr && (c === ' ' || c === '\t' || c === '\r' || c === '\n')) continue;
+      out.push(c);
+    }
+    return out.join('');
   }
 
   /**
