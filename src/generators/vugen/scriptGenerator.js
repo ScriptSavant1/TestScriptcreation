@@ -2103,9 +2103,11 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
   }
 
   /**
-   * Convert a parsed JSON object to a C string literal with escaped double quotes.
+   * Convert a parsed JSON object to a C string literal suitable for Body=...
    * All {{variable}} references are converted to {variable} (LR param syntax).
    * Example: { "user": "{{username}}" } → {\"user\":\"{username}\"}
+   * Nested JSON string values, e.g. { "json": "{\"k\":\"v\"}" },
+   * are double-escaped so C sees the backslash: {\"json\":\"{\\\"k\\\":\\\"v\\\"}\"}
    */
   jsonToCString(obj) {
     const jsonStr = JSON.stringify(obj);
@@ -2115,12 +2117,38 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
 
   /**
    * Escape a string for use as a C "Body=..." parameter value.
-   * Replaces " with \" so the C compiler accepts it.
+   *
+   * Handles both JSON.stringify output (with JSON escape sequences) and raw bodies
+   * from JMX files that may contain actual newline/tab characters:
+   *   actual \r  → stripped         (CR removed; CRLF becomes LF then \n)
+   *   actual \n  → \\n              (real LF → C newline escape — keeps body valid, avoids broken string literal)
+   *   actual \t  → \\t              (real TAB → C tab escape)
+   *   \"  → \\\"                    (JSON-escaped quote → C escaped-backslash + escaped-quote)
+   *   \\  → \\\\                    (JSON-escaped backslash → C double-escaped backslash)
+   *   "   → \"                      (JSON string delimiter → C escaped-quote)
+   *   \n, \t, \uXXXX (2-char seqs)  → unchanged (already valid C escape sequences)
+   *
+   * Matching \\. atomically (backslash + any char) before plain " avoids the
+   * old double-escaping bug where the " inside an existing \" got re-escaped to \\"
+   * (which breaks C string parsing because \\ consumes both backslashes and then " closes the string).
+   *
+   * The newline/tab handling is critical for JMX bodies: pretty-printed JSON stored
+   * in JMX XML (or normalised from literal \\r\\n sequences) contains actual newline
+   * characters. Without escaping them, the generated C string literal spans multiple
+   * source lines, which is a C syntax error.
    */
   escapeCBodyString(str) {
+    const BS = '\\'; // single backslash character
     return str
-      .replace(/\r/g, "") // strip carriage returns (CRLF → LF, lone CR → gone)
-      .replace(/"/g, '\\"');
+      .replace(/\r/g, "")      // strip carriage returns (CRLF → LF, lone CR → gone)
+      .replace(/\n/g, '\\n')   // actual newline → \n escape (prevents broken C string literals)
+      .replace(/\t/g, '\\t')   // actual tab → \t escape
+      .replace(/\\.|"/g, (match) => {
+        if (match === BS + '"')  return BS + BS + BS + '"'; // \" → \\\"  (runtime: \")
+        if (match === BS + BS)   return BS + BS + BS + BS;  // \\ → \\\\  (runtime: \\)
+        if (match === '"')       return BS + '"';            // "  → \"    (runtime: ")
+        return match;                                        // \n,\t,etc. (2-char seqs) unchanged
+      });
   }
 
   /**
