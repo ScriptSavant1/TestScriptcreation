@@ -8,7 +8,7 @@ const { Command } = require('commander');
 const chalk = require('chalk');
 const ora = require('ora');
 const path = require('path');
-const BrunoDevWebConverter = require('./index');
+const BrunoDevWebConverter = require('./tools/collection-converter');
 const packageJson = require('../package.json');
 
 const program = new Command();
@@ -184,7 +184,7 @@ program
   .option('--no-authentication', 'Disable authentication handling')
   .option('--no-comments', 'Disable code comments in generated script')
   .action(async (options) => {
-    const JmxConverter = require('./converters/jmxConverter');
+    const JmxConverter = require('./tools/jmx-converter');
     const spinner = ora('Parsing JMX file...').start();
 
     try {

@@ -1051,38 +1051,44 @@ function webHttpCorrCode(corr, indent) {
   const t = indent || "\t";
   switch (extractorType) {
     case "jsonpath":
-      // web_reg_save_param_json: "ParamName=xxx" keyword format required by VuGen
-      return `${t}web_reg_save_param_json("ParamName=${name}",\n${t}\t"QueryString=${cfg.path}",\n${t}\tLAST);\n`;
+      return VugenCodegen.emitJson(name, cfg.path, t);
+
     case "cookie":
-      // web_reg_save_param_cookie does NOT exist in VuGen Web HTTP/HTML.
-      // VuGen's cookie jar handles Cookie request headers automatically.
-      // For session tokens embedded in URL paths (;jsessionid=xxx), extract
-      // the value from the Set-Cookie response header using boundary extraction.
-      return `${t}web_reg_save_param("${name}",\n${t}\t"LB=${cfg.cookieName}=",\n${t}\t"RB=;",\n${t}\t"Search=Headers",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+      // web_reg_save_param_cookie does NOT exist — extract from Set-Cookie header boundary.
+      return VugenCodegen.emitBoundary(name, {
+        lb: `${cfg.cookieName}=`, rb: ';', search: 'Headers', ord: 1,
+      }, t);
+
     case "html": {
-      // Map CSS selector + attr back to LB/RB boundary for web_reg_save_param (no HTML extractor in VuGen C API)
+      // Map CSS selector + attr back to LB/RB boundary (no HTML extractor in VuGen C API)
       const sel = cfg.selector || "";
       const attr = cfg.attr || "value";
-      // data-* attribute: selector=[data-csrf], attr=data-csrf → LB=data-csrf="  RB="
       const dataM = sel.match(/^\[data-([a-z][a-z0-9-]*)\]$/i);
       if (dataM) {
-        return `${t}web_reg_save_param("${name}",\n${t}\t"LB=data-${dataM[1]}=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+        return VugenCodegen.emitBoundary(name, {
+          lb: `data-${dataM[1]}="`, rb: '"', ord: 1,
+        }, t);
       }
-      // meta[name='x'] with content attr → LB=name="x" content="  RB="
       const metaM = sel.match(/^meta\[name=['"]([^'"]+)['"]\]$/i);
       if (metaM) {
-        return `${t}web_reg_save_param("${name}",\n${t}\t"LB=name=\\"${escJs(metaM[1])}\\" content=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+        return VugenCodegen.emitBoundary(name, {
+          lb: `name="${escJs(metaM[1])}" content="`, rb: '"', ord: 1,
+        }, t);
       }
-      // input[name='x'] or generic name= selector → LB=name="x" <attr>="  RB="
       const nameM = sel.match(/\[name=['"]([^'"]+)['"]\]/);
       const fieldName = nameM ? nameM[1] : sel;
-      return `${t}web_reg_save_param("${name}",\n${t}\t"LB=name=\\"${escJs(fieldName)}\\" ${attr}=\\"",\n${t}\t"RB=\\"",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+      return VugenCodegen.emitBoundary(name, {
+        lb: `name="${escJs(fieldName)}" ${attr}="`, rb: '"', ord: 1,
+      }, t);
     }
+
     case "boundary_header":
-      // web_reg_save_param (NOT _ex): Search=Headers to extract from response header
-      return `${t}web_reg_save_param("${name}",\n${t}\t"LB=${escJs(cfg.lb)}",\n${t}\t"RB=\\r\\n",\n${t}\t"Search=Headers",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+      return VugenCodegen.emitBoundary(name, {
+        lb: cfg.lb, rb: '\r\n', search: 'Headers', ord: 1,
+      }, t);
+
     case "generate": {
-      // Client-side token generation — no response to extract from
+      // Client-side token generation — lr_param_sprintf, not a web_reg_save_param call
       const pat = cfg.pattern || "alphanumeric";
       if (pat === "uuid")
         return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x-%04x-4%03x-%04x-%04x%08x",\n${t}\trand(), rand()&0xffff, rand()&0x0fff, (rand()&0x3fff)|0x8000, rand()&0xffff, rand());\n`;
@@ -1092,28 +1098,23 @@ function webHttpCorrCode(corr, indent) {
         return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x%08x%08x%08x",\n${t}\trand(),rand(),rand(),rand());\n`;
       if (pat === "hex16")
         return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x%08x",\n${t}\trand(),rand());\n`;
-      // alphanumeric / generic — build format string matching original value length exactly
       {
         const len = cfg.length || 19;
         const full8 = Math.floor(len / 8);
         const rem = len % 8;
         let fmt = "";
         const args = [];
-        for (let i = 0; i < full8; i++) {
-          fmt += "%08x";
-          args.push("rand()");
-        }
-        if (rem > 0) {
-          fmt += `%0${rem}x`;
-          args.push("rand()");
-        }
+        for (let i = 0; i < full8; i++) { fmt += "%08x"; args.push("rand()"); }
+        if (rem > 0) { fmt += `%0${rem}x`; args.push("rand()"); }
         return `${t}lr_param_sprintf("${name}",\n${t}\t"${fmt}",\n${t}\t${args.join(",")});\n`;
       }
     }
+
     case "boundary":
     default:
-      // web_reg_save_param (NOT _ex): default searches Body — no Search= needed
-      return `${t}web_reg_save_param("${name}",\n${t}\t"LB=${escJs(cfg.lb)}",\n${t}\t"RB=${escJs(cfg.rb || '"')}",\n${t}\t"Ord=1",\n${t}\tLAST);\n`;
+      return VugenCodegen.emitBoundary(name, {
+        lb: cfg.lb, rb: cfg.rb || '"', ord: 1,
+      }, t);
   }
 }
 

@@ -15,8 +15,8 @@ const os = require("os");
 const fs = require("fs").promises;
 const archiver = require("archiver");
 const { runWithMemoryFs } = require("../lib/memoryFsInterceptor");
-const BrunoDevWebConverter = require("../index");
-const JmxConverter = require("../converters/jmxConverter");
+const BrunoDevWebConverter = require("../tools/collection-converter");
+const JmxConverter = require("../tools/jmx-converter");
 const JmxDependencyResolver = require("../lib/jmxDependencyResolver");
 
 class WebServer {
