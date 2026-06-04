@@ -495,7 +495,7 @@ class AdvancedScriptGenerator {
    * Output variables are added to scriptSetVarNames so classifyVariables() marks them dynamic.
    */
   detectJwtUsage() {
-    const CustomScriptParser = require("../analyzers/customScriptParser");
+    const CustomScriptParser = require("../../analyzers/customScriptParser");
 
     const scanScriptText = (text, itemName) => {
       if (!text) return;
@@ -2973,18 +2973,23 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     // Convert to formatted JSON, then replace quoted template literals
     let str = JSON.stringify(options, null, 2);
 
-    // Convert any JSON string containing ${...} or newline escapes to a backtick template literal.
+    // Convert any JSON string containing ${...}, newline escapes, or embedded quotes to a backtick template literal.
     // This covers:
     //   • "${load.params.var}" and mixed "https://${host}/path"
     //   • Multi-line request bodies with \r\n or \n sequences (from JMX raw bodies)
+    //   • Nested JSON strings like "{\"condition\":\"or\", \"rules\":[]}" → `{"condition":"or", "rules":[]}`
     str = str.replace(/"((?:[^"\\]|\\.)*)"/g, (match, content) => {
-      if (content.includes("${") || content.includes("\\n") || content.includes("\\r")) {
+      // '\\"' is the two-char sequence backslash+quote that JSON.stringify inserts for embedded quotes
+      const hasEscapedQuotes = content.includes('\\"');
+      if (content.includes("${") || content.includes("\\n") || content.includes("\\r") || hasEscapedQuotes) {
         const unescaped = content
           .replace(/\\"/g, '"')
           .replace(/\\r\\n/g, '\r\n')
           .replace(/\\n/g, '\n')
           .replace(/\\r/g, '\r')
           .replace(/\\t/g, '\t');
+        // Skip extractor/code strings (handled by later regex) and values containing backticks
+        if (unescaped.startsWith('new load.') || unescaped.includes('`')) return match;
         return "`" + unescaped + "`";
       }
       return match;
