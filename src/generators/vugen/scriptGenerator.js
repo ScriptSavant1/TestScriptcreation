@@ -2000,6 +2000,15 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     if (bodyResult?.bodyFile) {
       // Large base64 body — VuGen reads file at runtime, substitutes {params} within it
       code += `${indent}    "BodyFilePath=${bodyResult.bodyFile}",\n`;
+    } else if (bodyResult?.bodyLines) {
+      // Multi-line C string literal concatenation — one field per line for readability
+      const fi = `${indent}        `;
+      code += `${indent}    "Body={"\n`;
+      bodyResult.bodyLines.forEach((line, i) => {
+        const comma = i < bodyResult.bodyLines.length - 1 ? ',' : '';
+        code += `${fi}"${line}${comma}"\n`;
+      });
+      code += `${indent}    "}",\n`;
     } else if (bodyResult?.body) {
       code += `${indent}    "Body=${bodyResult.body}",\n`;
     }
@@ -2070,17 +2079,22 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
         return { bodyFile: `data/${fileInfo.fileName}` };
       }
 
-      // Normal case: inline body
+      // Normal case: inline body — produce compact JSON then split into per-field lines.
+      // Both paths (valid JSON and fallback) share the same split+format logic.
+      let withParams;
       try {
         const parsed = JSON.parse(raw);
-        return { body: this.jsonToCString(parsed) };
+        withParams = this.replaceParameters(JSON.stringify(parsed));
       } catch {
-        // JSON.parse failed — body likely has {{variables}} that are not valid JSON values,
-        // or is pretty-printed with formatting whitespace. Compact it first so the generated
-        // C string is a single line with no embedded \n sequences.
-        const compact = this._compactJsonBody(raw);
-        return { body: this.escapeCBodyString(this.replaceParameters(compact)) };
+        // JSON.parse failed (unquoted {{variables}} or non-standard body).
+        // Compact first to strip pretty-printing whitespace.
+        withParams = this.replaceParameters(this._compactJsonBody(raw));
       }
+      const lines = this._splitBodyFields(withParams);
+      if (lines && lines.length > 1) {
+        return { bodyLines: lines.map(f => this.escapeCBodyString(f)) };
+      }
+      return { body: this.escapeCBodyString(withParams) };
     }
 
     if (mode === "urlencoded" && urlencoded) {
@@ -2143,6 +2157,39 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
       out.push(c);
     }
     return out.join('');
+  }
+
+  /**
+   * Split a compact JSON object body into individual field strings for multi-line
+   * C string literal output.
+   *
+   * Input:  {"username":"{userName}","json":"{\"cond\":\"or\"}","flag":true}
+   * Output: ['"username":"{userName}"', '"json":"{\"cond\":\"or\"}"', '"flag":true']
+   *
+   * Returns null when the body is not a JSON object (array, plain string, etc.) so
+   * the caller falls back to a single-line Body= parameter.
+   */
+  _splitBodyFields(str) {
+    if (!str || str[0] !== '{' || str[str.length - 1] !== '}') return null;
+    const inner = str.slice(1, -1);
+    const fields = [];
+    let depth = 0, inStr = false, esc = false, start = 0;
+    for (let i = 0; i < inner.length; i++) {
+      const c = inner[i];
+      if (esc)              { esc = false; continue; }
+      if (c === '\\' && inStr) { esc = true; continue; }
+      if (c === '"')        { inStr = !inStr; continue; }
+      if (!inStr) {
+        if      (c === '{' || c === '[') depth++;
+        else if (c === '}' || c === ']') depth--;
+        else if (c === ',' && depth === 0) {
+          fields.push(inner.slice(start, i));
+          start = i + 1;
+        }
+      }
+    }
+    if (start < inner.length) fields.push(inner.slice(start));
+    return fields.length > 0 ? fields : null;
   }
 
   /**
