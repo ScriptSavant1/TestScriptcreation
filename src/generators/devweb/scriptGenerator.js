@@ -376,16 +376,27 @@ class AdvancedScriptGenerator {
   buildVariableMap() {
     this.envVarKeys = new Set();
 
+    // JMX collections are identified by info.type === 'jmeter'.
+    // For JMX, User Defined Variables with empty values are intentional placeholders
+    // that must be kept. For Postman/Bruno, empty-value variables are noise (the
+    // collection defines them but they have no usable value) and should be skipped
+    // so they don't pollute the generated script with `load.global.name = null;`
+    // declarations or empty CSV/userArguments entries.
+    const isJmx = this.collection?.info?.type === 'jmeter';
+
     // Extract collection variables
     if (this.collection.variable) {
       this.collection.variable.forEach((variable) => {
-        this.variableMap.set(variable.key, variable.value);
+        const v = variable.value;
+        if (!isJmx && (v === undefined || v === null || v === '')) return;
+        this.variableMap.set(variable.key, v);
       });
     }
 
     // Extract environment variables from collection (if available)
     if (this.collection.environment) {
       Object.entries(this.collection.environment).forEach(([key, value]) => {
+        if (!isJmx && (value === undefined || value === null || value === '')) return;
         this.variableMap.set(key, value);
         this.envVarKeys.add(key);
       });
@@ -396,6 +407,10 @@ class AdvancedScriptGenerator {
     // injectRequestVariables() when it sees {{varName}} in request bodies.
     if (this.options.environmentVars) {
       Object.entries(this.options.environmentVars).forEach(([key, value]) => {
+        if (!isJmx && (value === undefined || value === null || value === '')) {
+          this.envVarKeys.add(key); // still track as env-var key even though value is empty
+          return;
+        }
         const existing = this.variableMap.get(key);
         if (existing === undefined || existing === null || existing === '') {
           this.variableMap.set(key, value);
