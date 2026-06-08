@@ -318,20 +318,29 @@ class WebHttpScriptGenerator {
   // ─── Variable Map ────────────────────────────────────────────────────────────
 
   buildVariableMap() {
+    // JMX collections are identified by info.type === 'jmeter'.
+    // For Postman/Bruno, skip collection variables with empty values — they are
+    // undefined placeholders that generate noise (empty PRM entries, unused
+    // ParameterFile parameters). JMX UDVs are kept even when empty (intentional).
+    const isJmx = this.collection?.info?.type === 'jmeter';
+
     if (this.collection.variable) {
-      this.collection.variable.forEach((v) =>
-        this.variableMap.set(v.key, v.value),
-      );
+      this.collection.variable.forEach((v) => {
+        if (!isJmx && (v.value === undefined || v.value === null || v.value === '')) return;
+        this.variableMap.set(v.key, v.value);
+      });
     }
     if (this.collection.environment) {
-      Object.entries(this.collection.environment).forEach(([k, v]) =>
-        this.variableMap.set(k, v),
-      );
+      Object.entries(this.collection.environment).forEach(([k, v]) => {
+        if (!isJmx && (v === undefined || v === null || v === '')) return;
+        this.variableMap.set(k, v);
+      });
     }
     // Supplement only — never overwrite a real collection/UDV value with an
     // empty placeholder that injectRequestVariables() inserts for {{varName}} refs.
     if (this.options.environmentVars) {
       Object.entries(this.options.environmentVars).forEach(([k, v]) => {
+        if (!isJmx && (v === undefined || v === null || v === '')) return;
         const existing = this.variableMap.get(k);
         if (existing === undefined || existing === null || existing === '') {
           this.variableMap.set(k, v);
