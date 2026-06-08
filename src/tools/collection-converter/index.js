@@ -400,7 +400,7 @@ class BrunoDevWebConverter {
     });
 
     // Run a quick correlation analysis across ALL requests
-    const CorrelationDetector = require("./analyzers/correlationDetector");
+    const CorrelationDetector = require("../../analyzers/correlationDetector");
     const detector = new CorrelationDetector();
     const allCorrelations = detector.analyzeRequests(requests);
 
