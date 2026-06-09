@@ -165,7 +165,12 @@ function _advAlreadyCorrelated(value, existingCorrelations) {
   for (const c of existingCorrelations) {
     if (!c.usages) continue;
     for (const u of c.usages) {
-      if (u.tokenValue === value || u.originalValue === value) return true;
+      const tv = u.tokenValue || u.originalValue || '';
+      if (tv === value) return true;
+      // Strip Bearer prefix from either side before comparing
+      const tvStripped = tv.replace(/^bearer\s+/i, '');
+      const valWithBearer = 'Bearer ' + value;
+      if (tvStripped === value || tv === valWithBearer) return true;
     }
   }
   return false;
@@ -503,19 +508,80 @@ function advisorToCorrelation(candidate) {
 // extractType    — "jsonpath" | "boundary" | "header"
 // extractValue   — the JSON path, boundary string, or header name
 // varName        — user-supplied variable name
+// actualValue    — (optional) the already-resolved field value from the field browser;
+//                  used to scan all subsequent requests for usages to substitute
 // ---------------------------------------------------------------------------
-function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName) {
-  const entry = S.entries1[sourceEntryIdx];
+function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, actualValue) {
+  const entry = (S.entries1 || [])[sourceEntryIdx];
   const id = 'adv-' + (S.advisorCandidates.length);
+
+  // Auto-scan all SUBSEQUENT requests for the extracted value so the codegen
+  // can substitute it everywhere (queryString, body, headers).
+  const autoUsages = [];
+  if (actualValue && actualValue.length >= 4) {
+    const entries = S.entries1 || [];
+    for (let i = sourceEntryIdx + 1; i < entries.length; i++) {
+      const e = entries[i];
+      if (e.filtered || e.isMarker) continue;
+
+      const bodyText = (e.body && e.body.text) || '';
+      const bodyParams = (e.body && e.body.params) || [];
+
+      // JSON body
+      if (bodyText) {
+        const obj = _advParseJson(bodyText);
+        if (obj) {
+          _advWalkLeaves(obj, '$', (val, jpath) => {
+            if (val === actualValue) {
+              autoUsages.push({ entryIdx: i, url: _advShortUrl(e), location: 'body_json', jsonPath: jpath });
+            }
+          }, 0);
+        }
+      }
+
+      // Form-encoded params
+      for (const p of bodyParams) {
+        if (String(p.value || '') === actualValue) {
+          autoUsages.push({ entryIdx: i, url: _advShortUrl(e), location: 'body_form', jsonPath: p.name });
+        }
+      }
+
+      // Query string — manual split to avoid URL() encoding {{variables}}
+      const urlStr = e.url || '';
+      const qIdx = urlStr.indexOf('?');
+      if (qIdx >= 0) {
+        const qs = urlStr.slice(qIdx + 1);
+        for (const part of qs.split('&')) {
+          const eqI = part.indexOf('=');
+          if (eqI < 0) continue;
+          const k = part.slice(0, eqI);
+          const v = _advQsDecode(part.slice(eqI + 1));
+          if (v === actualValue) {
+            autoUsages.push({ entryIdx: i, url: _advShortUrl(e), location: 'query', jsonPath: k });
+          }
+        }
+      }
+
+      // Request headers (check with and without Bearer prefix)
+      for (const h of (e.reqHdrs || [])) {
+        const val = String(h.value || '');
+        const stripped = val.replace(/^bearer\s+/i, '');
+        if (val === actualValue || stripped === actualValue) {
+          autoUsages.push({ entryIdx: i, url: _advShortUrl(e), location: 'header', jsonPath: h.name });
+        }
+      }
+    }
+  }
+
   const candidate = {
     id,
-    value: '(manual)',
-    preview: extractValue,
+    value: actualValue || '(manual)',
+    preview: actualValue ? (actualValue.length > 40 ? actualValue.slice(0, 40) + '…' : actualValue) : extractValue,
     valueType: 'token',
     confidence: 'high',
-    varName: varName || _advSuggestName(extractType === 'jsonpath' ? extractValue : null, extractType === 'header' ? extractValue : null, ''),
+    varName: varName || _advSuggestName(extractType === 'jsonpath' ? extractValue : null, extractType === 'header' ? extractValue : null, actualValue || ''),
     source: { entryIdx: sourceEntryIdx, url: entry ? _advShortUrl(entry) : '?', jsonPath: extractType === 'jsonpath' ? extractValue : null },
-    usages: [],
+    usages: autoUsages,
     status: 'accepted', // manual adds go straight to accepted
     _manual: true,
     _extractType: extractType,
@@ -523,4 +589,9 @@ function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName) {
   };
   S.advisorCandidates.push(candidate);
   return candidate;
+}
+
+// URL query-string value decoder (+ → space, %XX → char)
+function _advQsDecode(s) {
+  try { return decodeURIComponent((s || '').replace(/\+/g, ' ')); } catch { return s || ''; }
 }

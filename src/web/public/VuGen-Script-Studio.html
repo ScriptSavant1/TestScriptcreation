@@ -315,7 +315,8 @@
         </div>
         <div class="adv-modal-body">
           <!-- Step 1: Source request -->
-          <label class="adv-modal-label">Source request <span class="adv-modal-hint">(whose response contains the value)</span></label>
+          <label class="adv-modal-label">Source request <span class="adv-modal-hint">(whose <b>response</b> contains the value you want to extract)</span></label>
+          <input class="adv-fb-search" id="adv-src-filter" type="text" placeholder="Filter by URL or method..." oninput="filterAdvisorSrcDropdown(this.value)" autocomplete="off" style="margin-bottom:6px" />
           <select class="adv-modal-select" id="adv-src-select" onchange="onAdvisorSrcChange(this.value)">
             <option value="">— select a request —</option>
           </select>
