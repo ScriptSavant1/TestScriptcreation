@@ -744,24 +744,42 @@ function toggleAdvisorPanel() {
 // ---------------------------------------------------------------------------
 var _advFieldList = [];      // [{path, value, extType}]
 var _advSelectedField = null; // the field the user clicked
+var _advSrcEntries = [];     // [{idx, label}] — non-filtered requests for source dropdown
+
+function _advBuildSrcDropdown(filterText) {
+  var sel = document.getElementById('adv-src-select');
+  if (!sel) return;
+  var q = (filterText || '').toLowerCase();
+  var items = q
+    ? _advSrcEntries.filter(function(e) { return e.label.toLowerCase().indexOf(q) !== -1; })
+    : _advSrcEntries;
+  sel.innerHTML = '<option value="">— select a request —</option>'
+    + items.map(function(e) {
+        return '<option value="' + e.idx + '">' + _esc(e.label) + '</option>';
+      }).join('');
+}
+
+function filterAdvisorSrcDropdown(text) {
+  _advBuildSrcDropdown(text);
+}
 
 function openAdvisorModal() {
   _advFieldList = [];
   _advSelectedField = null;
 
-  // Populate source request dropdown (skip markers)
-  var sel = document.getElementById('adv-src-select');
-  if (sel) {
-    sel.innerHTML = '<option value="">— select a request —</option>'
-      + (S.entries1 || []).map(function(e, i) {
-          if (e.isMarker) return '';
-          var method = (e.method || 'GET').toUpperCase();
-          var url = (e.url || '').replace(/^https?:\/\/[^/]+/, '').split('?')[0] || '/';
-          return '<option value="' + i + '">' + method + ' ' + _esc(url) + '</option>';
-        }).join('');
-  }
+  // Build source dropdown entries (skip markers AND filtered-out requests)
+  _advSrcEntries = (S.entries1 || []).reduce(function(acc, e, i) {
+    if (e.isMarker || e.filtered) return acc;
+    var method = (e.method || 'GET').toUpperCase();
+    var url = (e.url || '').replace(/^https?:\/\/[^/]+/, '').split('?')[0] || '/';
+    acc.push({ idx: i, label: method + ' ' + url });
+    return acc;
+  }, []);
+  _advBuildSrcDropdown('');
 
   // Reset UI state
+  var srcFilter = document.getElementById('adv-src-filter');
+  if (srcFilter) srcFilter.value = '';
   var fbSection = document.getElementById('adv-fb-section');
   if (fbSection) fbSection.style.display = 'none';
   var infoEl = document.getElementById('adv-selected-info');
@@ -931,7 +949,7 @@ function submitAdvisorManual() {
   if (!_advSelectedField) { showToast('Please select a field from the browser first.', 'warning'); return; }
   if (!varName) { showToast('Please enter a variable name.', 'warning'); return; }
 
-  advisorAddManual(srcIdx, _advSelectedField.extType, _advSelectedField.path, varName);
+  advisorAddManual(srcIdx, _advSelectedField.extType, _advSelectedField.path, varName, _advSelectedField.value);
   _advSelectedField = null;
   closeAdvisorModal();
   renderAdvisorPanel();
