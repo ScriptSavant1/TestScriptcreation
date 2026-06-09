@@ -144,6 +144,24 @@
   }
 
   /**
+   * Emit a web_reg_save_param_json() call with SelectAll=Yes.
+   * All matching array values are saved as name_1, name_2, … and name_count holds the total.
+   *
+   * @param {string} name      VuGen parameter name
+   * @param {string} jsonPath  JSONPath expression targeting an array (e.g. '$.items[*].id')
+   * @param {string} indent    Base indentation string
+   * @returns {string}         C code fragment
+   */
+  function emitJsonAll(name, jsonPath, indent) {
+    var t  = indent || '  ';
+    var ti = t + '    ';
+    return t  + 'web_reg_save_param_json("ParamName=' + name + '",\n' +
+           ti + '"QueryString=' + jsonPath + '",\n' +
+           ti + '"SelectAll=Yes",\n' +
+           ti + 'LAST);\n';
+  }
+
+  /**
    * Emit a web_reg_save_param_regexp() call.
    *
    * FIRST ARG: "ParamName=xxx" format.
@@ -196,6 +214,7 @@
   // ── Exports ─────────────────────────────────────────────────────────────────
   exports.emitBoundary      = emitBoundary;
   exports.emitJson          = emitJson;
+  exports.emitJsonAll       = emitJsonAll;
   exports.emitRegexp        = emitRegexp;
   exports.emitXpath         = emitXpath;
   exports.vugenSearchFilter = vugenSearchFilter;

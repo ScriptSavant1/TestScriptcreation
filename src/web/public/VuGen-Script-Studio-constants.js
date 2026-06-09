@@ -15,6 +15,7 @@ const S = {
   correlations: [],
   candidates: [], // changed values whose source response wasn't found (e.g. truncated HAR)
   params: [], // detected parameterization candidates (user-entered values)
+  advisorCandidates: [], // correlation advisor: body-value fingerprint candidates
   harWarning: "", // HAR quality warning message
   scripts: {}, // {ac, vi, ve, gh, mj}
   format: "devweb",

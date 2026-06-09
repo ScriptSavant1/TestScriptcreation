@@ -252,6 +252,28 @@
           </div>
         </div>
 
+        <!-- ── CORRELATION ADVISOR PANEL ── -->
+        <div class="adv-panel" id="adv-panel" style="display:none">
+          <div class="adv-panel-hdr" onclick="toggleAdvisorPanel()">
+            <div class="adv-panel-hdr-left">
+              <span class="adv-panel-icon">&#x1F50D;</span>
+              <span class="adv-panel-title">Correlation Advisor</span>
+              <span class="adv-badge" id="adv-badge"></span>
+            </div>
+            <div class="adv-panel-hdr-right">
+              <button class="adv-btn-add" onclick="event.stopPropagation();openAdvisorModal()" title="Add a custom correlation manually">+ Add Manual</button>
+              <span class="adv-toggle-icon" id="adv-toggle-icon">&#x25BE;</span>
+            </div>
+          </div>
+          <div class="adv-body" id="adv-body">
+            <div class="adv-cards" id="adv-cards"></div>
+            <div class="adv-footer" id="adv-footer" style="display:none">
+              <span class="adv-footer-summary" id="adv-footer-summary"></span>
+              <button class="adv-btn-regen" id="adv-btn-regen" onclick="advisorApplyAndRegen()">&#x25B6; Apply &amp; Regenerate</button>
+            </div>
+          </div>
+        </div>
+
         <div class="corr-panel" id="corr-panel">
           <div class="corr-panel-hdr" onclick="toggleCorrPanel()">
             <span>&#x1F517; Correlation Details</span>
@@ -284,12 +306,57 @@
     </div>
     <!-- /.page-body -->
 
+    <!-- ── CORRELATION ADVISOR — Manual Add Modal ── -->
+    <div class="adv-modal-overlay" id="adv-modal-overlay" onclick="closeAdvisorModal()" style="display:none">
+      <div class="adv-modal adv-modal-wide" onclick="event.stopPropagation()">
+        <div class="adv-modal-hdr">
+          <span>Add Custom Correlation</span>
+          <button class="adv-modal-close" onclick="closeAdvisorModal()">&#x2715;</button>
+        </div>
+        <div class="adv-modal-body">
+          <!-- Step 1: Source request -->
+          <label class="adv-modal-label">Source request <span class="adv-modal-hint">(whose response contains the value)</span></label>
+          <select class="adv-modal-select" id="adv-src-select" onchange="onAdvisorSrcChange(this.value)">
+            <option value="">— select a request —</option>
+          </select>
+
+          <!-- Step 2: Field browser (shown after source is selected) -->
+          <div id="adv-fb-section" style="display:none">
+            <label class="adv-modal-label" style="margin-top:14px">Click a field to correlate</label>
+            <div class="adv-fb-search-row">
+              <input class="adv-fb-search" id="adv-fb-search" type="text" placeholder="Filter fields..." oninput="filterAdvisorFields(this.value)" autocomplete="off" />
+            </div>
+            <div class="adv-fb-list" id="adv-fb-list">
+              <!-- populated by onAdvisorSrcChange() -->
+            </div>
+          </div>
+
+          <!-- Step 3: Selected field confirmation (shown after a field is clicked) -->
+          <div class="adv-selected-info" id="adv-selected-info" style="display:none">
+            <span class="adv-fb-type adv-fb-json" id="adv-sel-type">JSON</span>
+            <span class="adv-sel-path" id="adv-sel-path"></span>
+            <span class="adv-sel-arrow">&#x2192;</span>
+            <span class="adv-sel-value" id="adv-sel-value"></span>
+          </div>
+
+          <!-- Step 4: Variable name -->
+          <label class="adv-modal-label" style="margin-top:14px">Variable name</label>
+          <input class="adv-modal-input" id="adv-varname-input" type="text" placeholder="accessToken" />
+        </div>
+        <div class="adv-modal-footer">
+          <button class="adv-modal-cancel" onclick="closeAdvisorModal()">Cancel</button>
+          <button class="adv-modal-submit" id="adv-modal-submit-btn" onclick="submitAdvisorManual()" disabled>Add Correlation</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast-container"></div>
 
     <script src="shared/vugen-codegen.js"></script>
     <script src="VuGen-Script-Studio-constants.js"></script>
     <script src="VuGen-Script-Studio-correlation.js"></script>
     <script src="studio-codegen.js"></script>
+    <script src="studio-advisor.js"></script>
     <script src="studio-ui.js"></script>
     <script src="studio-app.js"></script>
   </body>

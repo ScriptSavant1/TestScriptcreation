@@ -265,7 +265,9 @@ function devwebExtractorDecl(corr) {
   const { name, extractorType, extractorConfig: cfg } = corr;
   switch (extractorType) {
     case "jsonpath":
-      return `new load.JsonPathExtractor("${name}", "${cfg.path}")`;
+      return cfg.selectAll
+        ? `new load.JsonPathExtractor("${name}", "${cfg.path}", {all: true})`
+        : `new load.JsonPathExtractor("${name}", "${cfg.path}")`;
     case "cookie":
       return `new load.CookieExtractor("${name}", {cookieName: "${cfg.cookieName}"})`;
     case "html":
@@ -721,7 +723,9 @@ function webHttpCorrCode(corr, indent) {
   const t = indent || "\t";
   switch (extractorType) {
     case "jsonpath":
-      return VugenCodegen.emitJson(name, cfg.path, t);
+      return cfg.selectAll
+        ? VugenCodegen.emitJsonAll(name, cfg.path, t)
+        : VugenCodegen.emitJson(name, cfg.path, t);
 
     case "cookie":
       // web_reg_save_param_cookie does NOT exist — extract from Set-Cookie header boundary.
