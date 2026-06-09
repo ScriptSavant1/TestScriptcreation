@@ -3782,10 +3782,13 @@ function renderCorrelations() {
           ? srcEntry.url.split("?")[0].substring(0, 60)
           : "?";
         const usageCount = c.usages.length;
+        const advisorBadge = c._fromAdvisor
+          ? ' <span class="corr-advisor-badge">Advisor</span>'
+          : '';
         return `<div class="corr-item">
   <span class="corr-badge ${typeClass}">${typeLabel}</span>
   <div class="corr-detail">
-    <div class="corr-name">${esc(c.name)}</div>
+    <div class="corr-name">${esc(c.name)}${advisorBadge}</div>
     <div class="corr-src">Extracted from: …${esc(srcUrl.slice(-50))}</div>
     <div class="corr-usage">Used in ${usageCount} request${usageCount !== 1 ? "s" : ""}</div>
   </div>

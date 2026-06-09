@@ -162,6 +162,9 @@ function clearAll() {
   S.correlations = [];
   S.candidates = [];
   S.params = [];
+  S.advisorCandidates = [];
+  const advPanel = document.getElementById('adv-panel');
+  if (advPanel) advPanel.style.display = 'none';
   S.scripts = {};
   S.auth = null;
   S.serverHost = null;
@@ -394,10 +397,13 @@ function renderCorrelations() {
           ? srcEntry.url.split("?")[0].substring(0, 60)
           : "?";
         const usageCount = c.usages.length;
+        const advisorBadge = c._fromAdvisor
+          ? `<span class="corr-advisor-badge">Advisor</span>`
+          : '';
         return `<div class="corr-item">
   <span class="corr-badge ${typeClass}">${typeLabel}</span>
   <div class="corr-detail">
-    <div class="corr-name">${esc(c.name)}</div>
+    <div class="corr-name">${esc(c.name)}${advisorBadge}</div>
     <div class="corr-src">Extracted from: …${esc(srcUrl.slice(-50))}</div>
     <div class="corr-usage">Used in ${usageCount} request${usageCount !== 1 ? "s" : ""}</div>
   </div>
@@ -608,4 +614,401 @@ function copyCode() {
         "error",
       );
     });
+}
+
+// =============================================================================
+// CORRELATION ADVISOR UI
+// All functions prefixed adv* / advisor* to avoid name collisions.
+// Reads/writes S.advisorCandidates. Calls advisorToCorrelation() from
+// studio-advisor.js and regenerateFromAdvisor() from studio-app.js.
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Render the full advisor panel from S.advisorCandidates
+// ---------------------------------------------------------------------------
+function renderAdvisorPanel() {
+  var panel = document.getElementById('adv-panel');
+  if (!panel) return;
+
+  var candidates = S.advisorCandidates || [];
+  if (candidates.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+
+  // Re-render cards
+  var cardsEl = document.getElementById('adv-cards');
+  if (cardsEl) cardsEl.innerHTML = candidates.map(_advCardHtml).join('');
+
+  _advUpdateBadge();
+  _advUpdateFooter();
+}
+
+// ---------------------------------------------------------------------------
+// Build HTML for one candidate card
+// ---------------------------------------------------------------------------
+function _advCardHtml(c) {
+  var typeCls = 'adv-type-' + (c.valueType || 'unknown');
+  var typeLabel = (c.valueType || 'token').toUpperCase();
+  var confCls = 'adv-conf-' + c.confidence;
+  var confLabel = c.confidence === 'high' ? 'High confidence' : 'Pattern match';
+  var cardCls = 'adv-card adv-card-' + c.confidence;
+  if (c.status === 'accepted') cardCls += ' adv-card-accepted';
+  if (c.status === 'skipped') cardCls += ' adv-card-skipped';
+
+  var srcHtml = c.source
+    ? '<span class="adv-flow-src">&#x2190; From</span> <b>' + _esc(c.source.url) + '</b>'
+        + (c.source.jsonPath ? ' &rarr; <b>' + _esc(c.source.jsonPath) + '</b>' : '')
+    : '<span style="color:var(--text-3)">Source not found in HAR</span>';
+
+  var usageCount = (c.usages || []).length;
+  var firstUsage = c.usages && c.usages[0];
+  var useHtml = firstUsage
+    ? '<span class="adv-flow-use">&#x2192; Used in</span> <b>' + _esc(firstUsage.location) + '</b>'
+        + (firstUsage.url ? ' &mdash; ' + _esc(firstUsage.url) : '')
+        + (usageCount > 1 ? ' <span style="color:var(--text-3)">+' + (usageCount - 1) + ' more</span>' : '')
+    : '<span style="color:var(--text-3)">No request body usage found</span>';
+
+  var manualTag = c._manual    ? '<span class="adv-manual-tag">Manual</span>'
+                : c._selectAll ? '<span class="adv-manual-tag" style="background:rgba(16,185,129,0.15);color:#10b981">Array</span>'
+                : '';
+
+  var acceptActive = c.status === 'accepted' ? ' adv-btn-active' : '';
+  var skipActive = c.status === 'skipped' ? ' adv-btn-active' : '';
+
+  return '<div class="' + cardCls + '" id="advc-' + c.id + '">'
+    + '<div class="adv-card-left">'
+    +   '<div class="adv-card-meta">'
+    +     '<span class="adv-type-badge ' + typeCls + '">' + typeLabel + '</span>'
+    +     '<span class="adv-conf-dot ' + confCls + '"></span>'
+    +     '<span class="adv-conf-label">' + confLabel + '</span>'
+    +     manualTag
+    +   '</div>'
+    +   '<div class="adv-card-value">' + _esc(c.preview) + '</div>'
+    +   '<div class="adv-card-flow">' + srcHtml + '</div>'
+    +   '<div class="adv-card-flow">' + useHtml + '</div>'
+    +   '<div class="adv-card-name-row">'
+    +     '<span class="adv-card-name-label">Variable name</span>'
+    +     '<input class="adv-card-name-input" value="' + _esc(c.varName) + '" '
+    +       'oninput="advisorSetName(\'' + c.id + '\',this.value)" '
+    +       'placeholder="variableName" />'
+    +   '</div>'
+    + '</div>'
+    + '<div class="adv-card-right">'
+    +   '<div class="adv-card-actions">'
+    +     '<button class="adv-btn-accept' + acceptActive + '" onclick="advisorAccept(\'' + c.id + '\')" title="Add this correlation to the script">&#x2713; Accept</button>'
+    +     '<button class="adv-btn-skip' + skipActive + '" onclick="advisorSkip(\'' + c.id + '\')" title="Dismiss this suggestion">&#x2715; Skip</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+}
+
+// ---------------------------------------------------------------------------
+// User actions on individual cards
+// ---------------------------------------------------------------------------
+function advisorAccept(id) {
+  var c = _advFindById(id);
+  if (!c) return;
+  c.status = c.status === 'accepted' ? 'pending' : 'accepted'; // toggle
+  _advRefreshCard(c);
+  _advUpdateBadge();
+  _advUpdateFooter();
+}
+
+function advisorSkip(id) {
+  var c = _advFindById(id);
+  if (!c) return;
+  c.status = c.status === 'skipped' ? 'pending' : 'skipped'; // toggle
+  _advRefreshCard(c);
+  _advUpdateBadge();
+  _advUpdateFooter();
+}
+
+function advisorSetName(id, val) {
+  var c = _advFindById(id);
+  if (c) c.varName = val.trim() || c.varName;
+}
+
+// ---------------------------------------------------------------------------
+// Panel collapse toggle
+// ---------------------------------------------------------------------------
+function toggleAdvisorPanel() {
+  var panel = document.getElementById('adv-panel');
+  if (panel) panel.classList.toggle('adv-collapsed');
+}
+
+// ---------------------------------------------------------------------------
+// Manual add modal — field browser redesign
+// State for the field browser (module-level globals)
+// ---------------------------------------------------------------------------
+var _advFieldList = [];      // [{path, value, extType}]
+var _advSelectedField = null; // the field the user clicked
+
+function openAdvisorModal() {
+  _advFieldList = [];
+  _advSelectedField = null;
+
+  // Populate source request dropdown (skip markers)
+  var sel = document.getElementById('adv-src-select');
+  if (sel) {
+    sel.innerHTML = '<option value="">— select a request —</option>'
+      + (S.entries1 || []).map(function(e, i) {
+          if (e.isMarker) return '';
+          var method = (e.method || 'GET').toUpperCase();
+          var url = (e.url || '').replace(/^https?:\/\/[^/]+/, '').split('?')[0] || '/';
+          return '<option value="' + i + '">' + method + ' ' + _esc(url) + '</option>';
+        }).join('');
+  }
+
+  // Reset UI state
+  var fbSection = document.getElementById('adv-fb-section');
+  if (fbSection) fbSection.style.display = 'none';
+  var infoEl = document.getElementById('adv-selected-info');
+  if (infoEl) infoEl.style.display = 'none';
+  var submitBtn = document.getElementById('adv-modal-submit-btn');
+  if (submitBtn) submitBtn.disabled = true;
+  var nameInput = document.getElementById('adv-varname-input');
+  if (nameInput) nameInput.value = '';
+  var searchInput = document.getElementById('adv-fb-search');
+  if (searchInput) searchInput.value = '';
+
+  var overlay = document.getElementById('adv-modal-overlay');
+  if (overlay) overlay.style.display = 'flex';
+}
+
+function closeAdvisorModal() {
+  var overlay = document.getElementById('adv-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+// Called when source dropdown changes — parse selected response and populate field browser
+function onAdvisorSrcChange(idxStr) {
+  _advFieldList = [];
+  _advSelectedField = null;
+
+  var infoEl = document.getElementById('adv-selected-info');
+  if (infoEl) infoEl.style.display = 'none';
+  var submitBtn = document.getElementById('adv-modal-submit-btn');
+  if (submitBtn) submitBtn.disabled = true;
+  var nameInput = document.getElementById('adv-varname-input');
+  if (nameInput) nameInput.value = '';
+
+  var idx = parseInt(idxStr, 10);
+  if (isNaN(idx) || idx < 0) {
+    var fbSec = document.getElementById('adv-fb-section');
+    if (fbSec) fbSec.style.display = 'none';
+    return;
+  }
+  var entry = (S.entries1 || [])[idx];
+  if (!entry) {
+    var fbSec2 = document.getElementById('adv-fb-section');
+    if (fbSec2) fbSec2.style.display = 'none';
+    return;
+  }
+
+  // --- Parse JSON response body ---
+  var body = entry.respBody || '';
+  var bodyObj = _advParseJson(body); // defined in studio-advisor.js (shared global)
+  if (bodyObj) {
+    _advWalkLeaves(bodyObj, '$', function(val, path) {
+      if (!val || val.length < 4) return;
+      _advFieldList.push({ path: path, value: val, extType: 'jsonpath' });
+    }, 0);
+  }
+
+  // --- Parse response headers (skip infrastructure headers) ---
+  var SKIP_RESP_HDRS = new Set([
+    'content-type','content-length','content-encoding','transfer-encoding',
+    'connection','date','server','x-powered-by','x-frame-options',
+    'strict-transport-security','x-content-type-options','x-xss-protection',
+    'access-control-allow-origin','access-control-allow-methods',
+    'access-control-allow-headers','access-control-max-age',
+    'vary','cache-control','pragma','expires','etag','last-modified',
+    'p3p','x-ua-compatible','content-security-policy',
+  ]);
+  var hdrs = entry.respHdrsMap || {};
+  Object.keys(hdrs).sort().forEach(function(k) {
+    if (SKIP_RESP_HDRS.has(k)) return;
+    var val = hdrs[k] || '';
+    if (val.length < 4) return;
+    _advFieldList.push({ path: k, value: val, extType: 'header' });
+  });
+
+  // Reset search and render
+  var searchInput = document.getElementById('adv-fb-search');
+  if (searchInput) searchInput.value = '';
+  _advRenderFieldList(_advFieldList);
+
+  var fbSection = document.getElementById('adv-fb-section');
+  if (fbSection) fbSection.style.display = '';
+}
+
+// Filter field list by search query
+function filterAdvisorFields(query) {
+  var q = (query || '').toLowerCase();
+  var filtered = q
+    ? _advFieldList.filter(function(f) {
+        return f.path.toLowerCase().indexOf(q) !== -1 || f.value.toLowerCase().indexOf(q) !== -1;
+      })
+    : _advFieldList;
+  _advRenderFieldList(filtered, true);
+}
+
+// Render field browser list HTML
+function _advRenderFieldList(fields, preserveSelection) {
+  var listEl = document.getElementById('adv-fb-list');
+  if (!listEl) return;
+  if (!fields || !fields.length) {
+    listEl.innerHTML = '<div class="adv-fb-empty">No fields found in this response.</div>';
+    return;
+  }
+  listEl.innerHTML = fields.map(function(f) {
+    var origIdx = _advFieldList.indexOf(f);
+    var isSelected = preserveSelection && _advSelectedField && _advSelectedField === f;
+    var extTypeCls = f.extType === 'header' ? 'adv-fb-hdr' : f.extType === 'boundary' ? 'adv-fb-arr' : 'adv-fb-json';
+    var extTypeLabel = f.extType === 'header' ? 'HDR' : f.extType === 'boundary' ? 'BODY' : 'JSON';
+    var valPreview = f.value.length > 40 ? f.value.slice(0, 40) + '…' : f.value;
+    return '<div class="adv-fb-item' + (isSelected ? ' adv-fb-selected' : '') + '" onclick="selectAdvisorField(' + origIdx + ')">'
+      + '<span class="adv-fb-type ' + extTypeCls + '">' + extTypeLabel + '</span>'
+      + '<span class="adv-fb-path">' + _esc(f.path) + '</span>'
+      + '<span class="adv-fb-value">' + _esc(valPreview) + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+// Called when user clicks a field in the browser
+function selectAdvisorField(origIdx) {
+  var field = _advFieldList[origIdx];
+  if (!field) return;
+  _advSelectedField = field;
+
+  // Update selected-info display
+  var typeEl = document.getElementById('adv-sel-type');
+  var pathEl = document.getElementById('adv-sel-path');
+  var valEl  = document.getElementById('adv-sel-value');
+  if (typeEl) {
+    typeEl.textContent = field.extType === 'header' ? 'HDR' : 'JSON';
+    typeEl.className   = 'adv-fb-type ' + (field.extType === 'header' ? 'adv-fb-hdr' : 'adv-fb-json');
+  }
+  if (pathEl) pathEl.textContent = field.path;
+  if (valEl)  valEl.textContent  = field.value.length > 50 ? field.value.slice(0, 50) + '…' : field.value;
+
+  var infoEl = document.getElementById('adv-selected-info');
+  if (infoEl) infoEl.style.display = 'flex';
+
+  // Auto-suggest variable name (only if still empty)
+  var nameInput = document.getElementById('adv-varname-input');
+  if (nameInput && !nameInput.value.trim()) {
+    // _advSuggestName is a global from studio-advisor.js
+    nameInput.value = _advSuggestName(
+      field.extType === 'jsonpath' ? field.path : null,
+      field.extType === 'header'   ? field.path : null,
+      field.value
+    );
+  }
+
+  // Enable submit
+  var submitBtn = document.getElementById('adv-modal-submit-btn');
+  if (submitBtn) submitBtn.disabled = false;
+
+  // Re-render the field list to update the selected highlight
+  var searchEl = document.getElementById('adv-fb-search');
+  var q = searchEl ? searchEl.value.toLowerCase() : '';
+  _advRenderFieldList(
+    q ? _advFieldList.filter(function(f) {
+          return f.path.toLowerCase().indexOf(q) !== -1 || f.value.toLowerCase().indexOf(q) !== -1;
+        })
+      : _advFieldList,
+    true
+  );
+}
+
+function submitAdvisorManual() {
+  var srcIdx = parseInt((document.getElementById('adv-src-select') || {}).value, 10);
+  var varName = ((document.getElementById('adv-varname-input') || {}).value || '').trim();
+
+  if (!_advSelectedField) { showToast('Please select a field from the browser first.', 'warning'); return; }
+  if (!varName) { showToast('Please enter a variable name.', 'warning'); return; }
+
+  advisorAddManual(srcIdx, _advSelectedField.extType, _advSelectedField.path, varName);
+  _advSelectedField = null;
+  closeAdvisorModal();
+  renderAdvisorPanel();
+  showToast('Correlation added — click Apply & Regenerate to update the script.', 'success');
+}
+
+// Keep for backward compatibility (old radio buttons called this; no longer in the new modal)
+function advisorModalTypeChange(type) { /* no-op — field browser auto-detects type */ }
+
+// ---------------------------------------------------------------------------
+// Apply accepted candidates and regenerate (called from footer button)
+// Delegates heavy lifting to regenerateFromAdvisor() in studio-app.js
+// ---------------------------------------------------------------------------
+function advisorApplyAndRegen() {
+  var accepted = (S.advisorCandidates || []).filter(function(c) { return c.status === 'accepted'; });
+  if (!accepted.length) {
+    showToast('Accept at least one correlation first.', 'warning');
+    return;
+  }
+  // Convert and merge into S.correlations
+  var newCorr = accepted.map(advisorToCorrelation);
+  S.correlations = (S.correlations || []).concat(newCorr);
+
+  // Mark accepted as applied (dim them)
+  accepted.forEach(function(c) { c._applied = true; });
+
+  regenerateFromAdvisor();
+}
+
+// ---------------------------------------------------------------------------
+// INTERNAL HELPERS
+// ---------------------------------------------------------------------------
+function _advFindById(id) {
+  return (S.advisorCandidates || []).find(function(c) { return c.id === id; }) || null;
+}
+
+function _advRefreshCard(c) {
+  // Re-render just the one card element if it exists
+  var el = document.getElementById('advc-' + c.id);
+  if (!el) return;
+  var tmp = document.createElement('div');
+  tmp.innerHTML = _advCardHtml(c);
+  var newEl = tmp.firstChild;
+  el.replaceWith(newEl);
+}
+
+function _advUpdateBadge() {
+  var badge = document.getElementById('adv-badge');
+  if (!badge) return;
+  var pending = (S.advisorCandidates || []).filter(function(c) { return c.status === 'pending'; }).length;
+  var accepted = (S.advisorCandidates || []).filter(function(c) { return c.status === 'accepted'; }).length;
+  var total = (S.advisorCandidates || []).length;
+
+  if (total === 0) { badge.className = 'adv-badge adv-badge-zero'; badge.textContent = '0'; return; }
+  if (pending === 0) { badge.className = 'adv-badge adv-badge-all-done'; badge.textContent = accepted ? accepted + ' accepted' : 'all skipped'; return; }
+  badge.className = 'adv-badge';
+  badge.textContent = pending + ' pending';
+}
+
+function _advUpdateFooter() {
+  var footer = document.getElementById('adv-footer');
+  var summary = document.getElementById('adv-footer-summary');
+  var regen = document.getElementById('adv-btn-regen');
+  if (!footer || !summary || !regen) return;
+
+  var candidates = S.advisorCandidates || [];
+  var accepted = candidates.filter(function(c) { return c.status === 'accepted'; }).length;
+  var skipped  = candidates.filter(function(c) { return c.status === 'skipped'; }).length;
+  var pending  = candidates.filter(function(c) { return c.status === 'pending'; }).length;
+
+  if (accepted === 0 && skipped === 0) { footer.style.display = 'none'; return; }
+
+  footer.style.display = 'flex';
+  summary.innerHTML = '<b>' + accepted + '</b> accepted &nbsp;&middot;&nbsp; <b>' + skipped + '</b> skipped &nbsp;&middot;&nbsp; <b>' + pending + '</b> pending';
+  regen.disabled = (accepted === 0);
+}
+
+function _esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

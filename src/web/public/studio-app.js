@@ -151,6 +151,7 @@ async function analyze() {
 
     // Quality / source warnings
     S.candidates = [];
+    S.advisorCandidates = [];
     S.harWarning = "";
 
     // NetLog warning — response bodies unavailable, correlation will be pattern-only
@@ -562,6 +563,16 @@ async function analyze() {
         : ssoMsg;
     }
 
+    // Correlation Advisor — scan request bodies for values that came from prior responses.
+    // Runs AFTER all existing correlation engines so it skips already-handled values.
+    // Results go to S.advisorCandidates; rendered by renderAdvisorPanel() below.
+    try {
+      advisorScan(S.entries1, S.correlations); // must pass full S.entries1 so stored indices match codegen's expectations
+    } catch (advErr) {
+      console.warn('[Advisor] Non-fatal scan error:', advErr);
+      S.advisorCandidates = [];
+    }
+
     setMsg(
       "Generating scripts...",
       "Building VuGen code with correlations & parameters",
@@ -635,6 +646,7 @@ async function analyze() {
     }
 
     renderCorrelations();
+    renderAdvisorPanel();
     renderParams();
     renderTabs();
     renderDlBar();
@@ -657,4 +669,48 @@ async function analyze() {
 
 function tick() {
   return new Promise((r) => setTimeout(r, 20));
+}
+
+// =============================================================================
+// REGENERATE FROM ADVISOR
+// Called by advisorApplyAndRegen() in studio-ui.js after merging accepted
+// advisor candidates into S.correlations. Re-runs only the code generation
+// tail — no re-parsing, no re-correlating. Fast (< 1 second).
+// =============================================================================
+function regenerateFromAdvisor() {
+  try {
+    const isWeb = S.format === 'webhttp' || S.format === 'both';
+    const isDev = S.format === 'devweb'  || S.format === 'both';
+
+    if (isWeb) {
+      S.scripts.ac  = genActionC(S.entries1, S.correlations);
+      S.scripts.vi  = genVuserInit();
+      S.scripts.ve  = genVuserEnd();
+      S.scripts.gh  = genGlobalsH();
+      S.scripts.prm = genParamFilePrm();
+      S.scripts.dat = genCollectionDataCsv();
+    }
+    if (isDev) {
+      S.scripts.mj     = genMainJS(S.entries1, S.correlations);
+      S.scripts.corrjs = genCorrelationsJS(S.correlations);
+      S.scripts.pyml   = genParamsYml();
+      S.scripts.csv    = genCollectionDataCsv();
+    }
+
+    // Update correlation count stat
+    const corrEl = document.getElementById('st-corr');
+    if (corrEl) corrEl.textContent = S.correlations.length + (S.candidates.length > 0 ? '+' + S.candidates.length : '');
+
+    renderCorrelations();
+    renderAdvisorPanel(); // re-render to reflect applied state
+    renderTabs();
+    renderDlBar();
+    const codeEl = document.getElementById('code-body');
+    if (codeEl) codeEl.textContent = S.scripts[S.tab] || '// No content';
+
+    showToast('Script regenerated with ' + S.correlations.length + ' correlations.', 'success');
+  } catch (err) {
+    console.error('[Advisor regen]', err);
+    showToast('Regeneration error: ' + err.message, 'error', 6000);
+  }
 }
