@@ -1225,6 +1225,26 @@
         border: 1px solid rgba(56,189,248,0.3); border-radius: 10px;
         padding: 1px 7px; font-weight: 600; text-transform: uppercase;
       }
+      .adv-tag-array-reconstr {
+        background: rgba(139,92,246,0.12); color: #8b5cf6;
+        border-color: rgba(139,92,246,0.3);
+      }
+      /* Array reconstruct column table */
+      .adv-arr-detail { margin: 6px 0 4px; overflow-x: auto; }
+      .adv-arr-table {
+        font-size: 11px; border-collapse: collapse; width: 100%;
+        color: var(--text-2);
+      }
+      .adv-arr-table th {
+        background: var(--bg-2); padding: 2px 8px; text-align: left;
+        font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap;
+      }
+      .adv-arr-table td {
+        padding: 2px 8px; border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      .adv-arr-table code { font-size: 10px; color: var(--primary); }
+      .adv-arr-static td { color: var(--text-3); font-size: 10px; }
       /* empty state */
       .adv-empty {
         text-align: center; padding: 28px 16px; color: var(--text-2); font-size: 13px;

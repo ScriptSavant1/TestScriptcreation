@@ -399,6 +399,162 @@ function _advMergeArrayCandidates(candidates) {
 }
 
 // ---------------------------------------------------------------------------
+// F2: After SelectAll merging, detect when multiple _selectAll candidates all
+// feed into the SAME target array in a request body.
+// Groups them into a single _arrayReconstruct meta-candidate so the codegen
+// can emit a runtime loop instead of hardcoded array items.
+//
+// Detection: usage.jsonPath matching $.arrayKey[N].fieldName pattern indicates
+// this SelectAll column feeds into a target array position.
+// Groups by (targetReqIdx, targetArrayKey). Requires ≥1 column per group.
+// Absorbed _selectAll candidates are removed; ungroupable ones stay as-is.
+// ---------------------------------------------------------------------------
+function _advDetectArrayGroups(candidates) {
+  const ARRAY_USAGE_RE = /^\$\.([^[.]+)\[(\d+)\]\.(.+)$/;
+  const selectAllCandidates = candidates.filter(c => c._selectAll && !c._manual);
+  const otherCandidates    = candidates.filter(c => !c._selectAll || c._manual);
+
+  // Map: "reqIdx::arrayKey" → [candidate]
+  const groups    = new Map();
+  const ungroupable = [];
+
+  for (const c of selectAllCandidates) {
+    if (!c.usages || !c.usages.length) { ungroupable.push(c); continue; }
+
+    // Find the (reqIdx, arrayKey) pair that appears most in usages
+    const tally = new Map();
+    for (const u of c.usages) {
+      if (u.location !== 'body_json' || !u.jsonPath) continue;
+      const m = u.jsonPath.match(ARRAY_USAGE_RE);
+      if (!m) continue;
+      const key = u.entryIdx + '::' + m[1];
+      tally.set(key, (tally.get(key) || 0) + 1);
+    }
+    if (tally.size === 0) { ungroupable.push(c); continue; }
+
+    // Take the most frequent (reqIdx, arrayKey)
+    let best = null, bestCount = 0;
+    for (const [k, cnt] of tally) { if (cnt > bestCount) { best = k; bestCount = cnt; } }
+
+    if (!groups.has(best)) groups.set(best, []);
+    groups.get(best).push(c);
+  }
+
+  const result = [...otherCandidates, ...ungroupable];
+
+  for (const [groupKey, groupCandidates] of groups) {
+    const sep = groupKey.indexOf('::');
+    const reqIdx         = parseInt(groupKey.slice(0, sep));
+    const targetArrayKey = groupKey.slice(sep + 2);
+
+    // Build column list — each _selectAll candidate becomes one column
+    const columns = [];
+    for (const c of groupCandidates) {
+      if (!c.source || !c.source.jsonPath) continue;
+      // Derive target field from first matching usage
+      let targetKey = '';
+      for (const u of c.usages) {
+        if (!u.jsonPath) continue;
+        const m = u.jsonPath.match(ARRAY_USAGE_RE);
+        if (m && m[1] === targetArrayKey) { targetKey = m[3]; break; }
+      }
+      if (!targetKey) {
+        // Fallback: use the leaf segment of the source path
+        targetKey = c.source.jsonPath.replace(/^.*[.[]/g, '').replace(/[\]*]/g, '');
+      }
+      const rawName = _advSuggestName(c.source.jsonPath, null, '').replace(/Arr$/, '');
+      const varName = rawName ? rawName + 's' : (targetArrayKey + '_' + targetKey);
+      columns.push({ sourceJsonPath: c.source.jsonPath, varName, targetKey });
+    }
+
+    if (columns.length === 0) {
+      result.push(...groupCandidates);
+      continue;
+    }
+
+    // Infer static fields from HAR body of target entry
+    const targetEntry     = (S.entries1 || [])[reqIdx];
+    const knownTargetKeys = new Set(columns.map(col => col.targetKey));
+    const staticFields    = _advInferStaticFields(targetEntry, targetArrayKey, knownTargetKeys);
+
+    const first = groupCandidates[0];
+
+    // Determine item count hint from HAR
+    let itemCountHint = 0;
+    if (targetEntry) {
+      const bText = (targetEntry.body && targetEntry.body.text) || '';
+      if (bText) {
+        try {
+          const bObj = JSON.parse(bText);
+          const arr = bObj && bObj[targetArrayKey];
+          if (Array.isArray(arr)) itemCountHint = arr.length;
+        } catch {}
+      }
+    }
+
+    const labelCount = itemCountHint > 0 ? itemCountHint + ' items' : 'N items';
+    result.push({
+      id: first.id,
+      value: '(array — ' + columns.length + ' cols × ' + labelCount + ')',
+      preview: targetArrayKey + '[*]',
+      valueType: 'array',
+      confidence: 'high',
+      varName: targetArrayKey.charAt(0).toLowerCase() + targetArrayKey.slice(1),
+      source: first.source,
+      usages: [{
+        entryIdx: reqIdx,
+        url: targetEntry ? _advShortUrl(targetEntry) : '?',
+        location: 'body_array',
+        jsonPath: targetArrayKey,
+      }],
+      status: 'pending',
+      _arrayReconstruct: true,
+      _arrayConfig: {
+        targetArrayKey,
+        countVar: columns[0].varName,
+        columns,
+        staticFields,
+      },
+    });
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: infer static fields from the target array's first item in the HAR
+// request body. Keys NOT in knownKeys with a consistent value across all items
+// are returned as static field definitions.
+// ---------------------------------------------------------------------------
+function _advInferStaticFields(entry, targetArrayKey, knownKeys) {
+  if (!entry) return [];
+  const bText = (entry.body && entry.body.text) || '';
+  if (!bText) return [];
+  let parsed;
+  try { parsed = JSON.parse(bText); } catch { return []; }
+  if (!parsed) return [];
+
+  const arr = parsed[targetArrayKey];
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+
+  const firstItem = arr[0];
+  if (!firstItem || typeof firstItem !== 'object') return [];
+
+  const staticFields = [];
+  for (const [k, v] of Object.entries(firstItem)) {
+    if (knownKeys.has(k)) continue;
+    if (v === null || v === undefined) continue;
+    const vStr = String(v);
+    const consistent = arr.every(item => {
+      const iv = item[k];
+      return iv === v || iv === null || iv === undefined || String(iv) === vStr;
+    });
+    if (consistent) staticFields.push({ targetKey: k, value: vStr });
+  }
+  return staticFields;
+}
+
+// ---------------------------------------------------------------------------
 // PUBLIC: main entry point
 // Call after S.entries1 is populated and S.correlations is finalized.
 // Populates S.advisorCandidates.
@@ -437,6 +593,10 @@ function advisorScan(entries, existingCorrelations) {
   // F1: Merge array siblings into SelectAll candidates
   all = _advMergeArrayCandidates(all);
 
+  // F2: Detect groups of SelectAll candidates that feed the same target array
+  // and promote them to _arrayReconstruct meta-candidates
+  all = _advDetectArrayGroups(all);
+
   // Re-index IDs after filtering
   all.forEach((c, i) => { c.id = 'adv-' + i; });
 
@@ -462,6 +622,25 @@ function advisorToCorrelation(candidate) {
     originalValue: candidate.value,
     prefix: '',
   }));
+
+  // Array reconstruction: short-circuit — all config is already in _arrayConfig
+  if (candidate._arrayReconstruct) {
+    return {
+      name: candidate.varName,
+      sourceIdx: candidate.source ? candidate.source.entryIdx : 0,
+      extractorType: 'array_reconstruct',
+      extractorConfig: candidate._arrayConfig,
+      usages: [{
+        reqIdx: candidate.usages[0].entryIdx,
+        location: 'body_array',
+        key: candidate._arrayConfig.targetArrayKey,
+        tokenValue: 'array',
+        originalValue: 'array',
+        prefix: '',
+      }],
+      _fromAdvisor: true,
+    };
+  }
 
   // Determine extractor type and config
   let extractorType, extractorConfig;

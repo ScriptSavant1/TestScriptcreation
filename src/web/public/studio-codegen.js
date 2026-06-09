@@ -322,15 +322,31 @@ function genCorrelationsJS(correlations) {
   o += "// Response extractors shared across all action blocks in main.js.\n";
   o += "// 'load' is globally available in the DevWeb runtime — no import needed.\n\n";
 
+  const exports = [];
   for (const c of deduped) {
-    const decl = devwebExtractorDecl(c);
-    if (decl) o += `const ${c.name}Extractor = ${decl};\n`;
+    if (c.extractorType === 'array_reconstruct') {
+      // Emit one SelectAll extractor per column
+      const cfg = c.extractorConfig || {};
+      const srcBase = cfg.columns && cfg.columns.length > 0
+        ? cfg.columns[0].sourceJsonPath.replace(/\[.*\].*$/, '')
+        : '?';
+      o += `// Array reconstruct: ${cfg.targetArrayKey}  (source: ${srcBase})\n`;
+      for (const col of (cfg.columns || [])) {
+        o += `const ${col.varName}Extractor = new load.JsonPathExtractor("${col.varName}", "${col.sourceJsonPath}", {all: true});\n`;
+        exports.push(col.varName + 'Extractor');
+      }
+      o += '\n';
+    } else {
+      const decl = devwebExtractorDecl(c);
+      if (decl) {
+        o += `const ${c.name}Extractor = ${decl};\n`;
+        exports.push(c.name + 'Extractor');
+      }
+    }
   }
 
   o += "\nmodule.exports = {\n";
-  for (const c of deduped) {
-    if (devwebExtractorDecl(c)) o += `    ${c.name}Extractor,\n`;
-  }
+  for (const exp of exports) o += `    ${exp},\n`;
   o += "};\n";
   return o;
 }
@@ -807,6 +823,12 @@ function webHttpCorrCode(corr, indent) {
       }
     }
 
+    case "array_reconstruct": {
+      // Emit one web_reg_save_param_json with SelectAll=Yes per column
+      const cols = (cfg && cfg.columns) || [];
+      return cols.map(col => VugenCodegen.emitJsonAll(col.varName, col.sourceJsonPath, t)).join('');
+    }
+
     case "boundary":
     default:
       return VugenCodegen.emitBoundary(name, {
@@ -1256,7 +1278,17 @@ function genMainJS(entries, correlations) {
   // because the runtime cookie jar handles them automatically (no code needed).
   if (nonGenCorrs.length > 0) {
     o += "// Correlated dynamic values — extracted at runtime\n";
-    for (const c of nonGenCorrs) o += `load.global.${c.name} = null;\n`;
+    for (const c of nonGenCorrs) {
+      if (c.extractorType === 'array_reconstruct') {
+        // Emit null initializers for each column varName, not the array key itself
+        for (const col of (c.extractorConfig && c.extractorConfig.columns) || []) {
+          o += `load.global.${col.varName} = null;\n`;
+          o += `load.global.${col.varName}_count = 0;\n`;
+        }
+      } else {
+        o += `load.global.${c.name} = null;\n`;
+      }
+    }
     o += "\n";
   }
   if (S.candidates && S.candidates.length > 0) {
@@ -1579,11 +1611,46 @@ function genMainJS(entries, correlations) {
       }
     }
 
+    // Array reconstruction: detect body_array usages for this request
+    const _arrReconstrForReq = correlations.filter(
+      (c) => c.extractorType === 'array_reconstruct' &&
+             c.usages.some((u) => u.reqIdx === idx && u.location === 'body_array'),
+    );
+
     // Build body with correlation replacements
     let bodyText = null;
     let bodyHasDynamic = false;
+    // Sentinel map: sentinel string → JS variable reference for array reconstruct
+    const _arrSentinelMap = new Map();
     if (e.body && e.body.text) {
       bodyText = e.body.text;
+      // Replace array keys with sentinels BEFORE other substitutions
+      if (_arrReconstrForReq.length > 0) {
+        const bodyMimeTmp = ((e.body && e.body.mimeType) || '').split(';')[0].trim();
+        if (bodyMimeTmp === 'application/json' || bodyMimeTmp === 'text/json') {
+          try {
+            const _bObj = JSON.parse(bodyText);
+            let _modified = false;
+            for (const c of _arrReconstrForReq) {
+              for (const u of c.usages) {
+                if (u.reqIdx !== idx || u.location !== 'body_array') continue;
+                const arrKey = u.key || (c.extractorConfig && c.extractorConfig.targetArrayKey);
+                if (arrKey && Object.prototype.hasOwnProperty.call(_bObj, arrKey)) {
+                  const sentinel = '@@ARRAY_RECONSTR_' + arrKey + '@@';
+                  const varRef = `_${c.name}_arr`;
+                  _bObj[arrKey] = sentinel;
+                  _arrSentinelMap.set(sentinel, varRef);
+                  _modified = true;
+                }
+              }
+            }
+            if (_modified) {
+              bodyText = JSON.stringify(_bObj, null, 2);
+              bodyHasDynamic = true; // force template literal path
+            }
+          } catch {}
+        }
+      }
       // Resolved correlations — replace in body (JSON, form-urlencoded, XML)
       const bodyUsages = reqUsages.filter(
         (u) =>
@@ -1832,6 +1899,34 @@ function genMainJS(entries, correlations) {
       }
     }
 
+    // Emit array reconstruction builder IIFE before this request (if it uses a body_array)
+    if (_arrReconstrForReq.length > 0 && !_inGrp) {
+      for (const c of _arrReconstrForReq) {
+        const cfg = c.extractorConfig || {};
+        const arrKey = cfg.targetArrayKey || c.name;
+        const varRef = `_${c.name}_arr`;
+        const countVar = cfg.countVar || ((cfg.columns && cfg.columns[0] && cfg.columns[0].varName) || 'items');
+        const ind4 = '    ';
+        const ind6 = '      ';
+        o += `${ind4}// Build ${arrKey} array from correlated values\n`;
+        o += `${ind4}const ${varRef} = (() => {\n`;
+        o += `${ind6}const _n = parseInt(load.global.${countVar}_count) || 0;\n`;
+        o += `${ind6}const _arr = [];\n`;
+        o += `${ind6}for (let _i = 1; _i <= _n; _i++) {\n`;
+        o += `${ind6}  _arr.push({\n`;
+        for (const col of (cfg.columns || [])) {
+          o += `${ind6}    "${col.targetKey}": load.global["${col.varName}_" + _i] || "",\n`;
+        }
+        for (const sf of (cfg.staticFields || [])) {
+          o += `${ind6}    "${sf.targetKey}": ${JSON.stringify(sf.value)},\n`;
+        }
+        o += `${ind6}  });\n`;
+        o += `${ind6}}\n`;
+        o += `${ind6}return _arr;\n`;
+        o += `${ind4}})();\n\n`;
+      }
+    }
+
     // Request opening — no `await` inside Promise.all; hasSrc entries are always sequential
     if (_inGrp) {
       o += `${ind}new load.WebRequest({\n`;
@@ -2020,6 +2115,13 @@ function genMainJS(entries, correlations) {
           /\x00PARAM_([^]+?)\x00PARAMEND/g,
           "${load.params.$1}",
         );
+        // Replace array reconstruction sentinels: "@@ARRAY_RECONSTR_key@@" → ${JSON.stringify(_key_arr)}
+        for (const [sentinel, varRef] of _arrSentinelMap) {
+          esc1 = esc1.replace(
+            new RegExp('"' + sentinel.replace(/[@@]/g, '\\$&') + '"', 'g'),
+            '${JSON.stringify(' + varRef + ')}',
+          );
+        }
         // Apply hostname substitution to the already-resolved expression (hostname sub on static parts)
         const { text: esc1Sub, changed: esc1Ch } = subRawMj(
           esc1,
@@ -2129,8 +2231,15 @@ function genMainJS(entries, correlations) {
     }
     if (srcCorrsForReq.length > 0) {
       o += `${pi}returnBody: true,\n`;
-      // Reference pre-declared extractors from correlations.js for clean, compact code
-      o += `${pi}extractors: [${srcCorrsForReq.map((c) => `corr.${c.name}Extractor`).join(", ")}],\n`;
+      // Flatten extractors: array_reconstruct emits one extractor ref per column
+      const extractorRefs = srcCorrsForReq.flatMap((c) => {
+        if (c.extractorType === 'array_reconstruct') {
+          return ((c.extractorConfig && c.extractorConfig.columns) || [])
+            .map(col => `corr.${col.varName}Extractor`);
+        }
+        return [`corr.${c.name}Extractor`];
+      });
+      o += `${pi}extractors: [${extractorRefs.join(", ")}],\n`;
     }
     // Request closing — concurrent: .send(), + optional Promise.all close; sequential: .send();\n\n
     if (_inGrp) {
@@ -2140,8 +2249,15 @@ function genMainJS(entries, correlations) {
       o += `    }).send();\n\n`;
       // Store extracted values (only for sequential entries with extractors)
       if (srcCorrsForReq.length > 0) {
-        for (const c of srcCorrsForReq)
-          o += `    load.global.${c.name} = ${varN}.extractors.${c.name};\n`;
+        for (const c of srcCorrsForReq) {
+          if (c.extractorType === 'array_reconstruct') {
+            for (const col of (c.extractorConfig && c.extractorConfig.columns) || []) {
+              o += `    load.global.${col.varName} = ${varN}.extractors.${col.varName};\n`;
+            }
+          } else {
+            o += `    load.global.${c.name} = ${varN}.extractors.${c.name};\n`;
+          }
+        }
         o += "\n";
       }
     }
@@ -2814,6 +2930,62 @@ function genActionC(entries, correlations) {
           o += `\t// TODO: Large .NET hidden field(s) detected. Re-record with two HARs in Script Studio for auto-correlation.\n`;
         }
       }
+      // Array reconstruction for VuGen: inject web_js_run builder + sentinel in body
+      const _acArrReconstr = correlations.filter(
+        (c) => c.extractorType === 'array_reconstruct' &&
+               c.usages.some((u) => u.reqIdx === idx && u.location === 'body_array'),
+      );
+      const _acArrSentinelMap = new Map(); // sentinel → LR param name
+      if (_acArrReconstr.length > 0) {
+        // Replace array keys in raw body with sentinels
+        if (encType === 'application/json' || encType === 'text/json') {
+          try {
+            const _bObj = JSON.parse(rawBodyText);
+            let _modified = false;
+            for (const c of _acArrReconstr) {
+              for (const u of c.usages) {
+                if (u.reqIdx !== idx || u.location !== 'body_array') continue;
+                const arrKey = u.key || (c.extractorConfig && c.extractorConfig.targetArrayKey);
+                if (arrKey && Object.prototype.hasOwnProperty.call(_bObj, arrKey)) {
+                  const sentinel = '@@ARRAY_RECONSTR_' + arrKey + '@@';
+                  const paramName = arrKey + '_json';
+                  _bObj[arrKey] = sentinel;
+                  _acArrSentinelMap.set(sentinel, paramName);
+                  _modified = true;
+                }
+              }
+            }
+            if (_modified) rawBodyText = JSON.stringify(_bObj);
+          } catch {}
+        }
+        // Emit web_js_run builder for each array reconstruct correlation
+        for (const c of _acArrReconstr) {
+          const cfg = c.extractorConfig || {};
+          const arrKey = cfg.targetArrayKey || c.name;
+          const paramName = arrKey + '_json';
+          const countVar = cfg.countVar || ((cfg.columns && cfg.columns[0] && cfg.columns[0].varName) || 'items');
+          o += `\t/* Build ${arrKey} JSON array from correlated parameters */\n`;
+          o += `\tweb_js_run(\n`;
+          o += `\t\t"Code="\n`;
+          o += `\t\t"var _n=parseInt(lr.getParam('${countVar}_count'))||0;"\n`;
+          o += `\t\t"var _r=[];"\n`;
+          o += `\t\t"for(var _i=1;_i<=_n;_i++){"\n`;
+          o += `\t\t"var _t={};"\n`;
+          for (const col of (cfg.columns || [])) {
+            // Escape double-quotes inside JS string: \" → \\\" in C string
+            o += `\t\t"_t[\\"${col.targetKey}\\"]=lr.getParam(\\"${col.varName}_\\"+_i)||\\"\\";""\n`;
+          }
+          for (const sf of (cfg.staticFields || [])) {
+            o += `\t\t"_t[\\"${sf.targetKey}\\"]=\\"${sf.value.replace(/"/g, '\\"')}\\";"\n`;
+          }
+          o += `\t\t"_r.push(_t);"\n`;
+          o += `\t\t"}"\n`;
+          o += `\t\t"lr.setParam(\\"${paramName}\\",JSON.stringify(_r));",\n`;
+          o += `\t\t"ResultParam=_arr_build_result",\n`;
+          o += `\t\tLAST);\n\n`;
+        }
+      }
+
       const bodyUsages = reqUsages.filter(
         (u) =>
           u.location === "body_json" ||
@@ -3022,6 +3194,14 @@ function genActionC(entries, correlations) {
                   }
                 }
               }
+            }
+          }
+          // Array reconstruction: replace sentinels with {paramName} (no surrounding quotes)
+          if (_acArrSentinelMap.size > 0) {
+            for (const [sentinel, paramName] of _acArrSentinelMap) {
+              // Sentinel appears as a JSON string value: "@@ARRAY_RECONSTR_key@@"
+              // After escBodyBinary it's still the same ASCII chars — replace including quotes
+              body = body.split('"' + sentinel + '"').join('{' + paramName + '}');
             }
           }
         }

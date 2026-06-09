@@ -670,12 +670,43 @@ function _advCardHtml(c) {
         + (usageCount > 1 ? ' <span style="color:var(--text-3)">+' + (usageCount - 1) + ' more</span>' : '')
     : '<span style="color:var(--text-3)">No request body usage found</span>';
 
-  var manualTag = c._manual    ? '<span class="adv-manual-tag">Manual</span>'
-                : c._selectAll ? '<span class="adv-manual-tag" style="background:rgba(16,185,129,0.15);color:#10b981">Array</span>'
+  var manualTag = c._manual           ? '<span class="adv-manual-tag">Manual</span>'
+                : c._arrayReconstruct ? '<span class="adv-manual-tag adv-tag-array-reconstr">&#x2735; Array Reconstruct</span>'
+                : c._selectAll        ? '<span class="adv-manual-tag" style="background:rgba(16,185,129,0.15);color:#10b981">Array</span>'
                 : '';
 
   var acceptActive = c.status === 'accepted' ? ' adv-btn-active' : '';
   var skipActive = c.status === 'skipped' ? ' adv-btn-active' : '';
+
+  // Extra detail block for array reconstruct candidates
+  var extraDetail = '';
+  if (c._arrayReconstruct && c._arrayConfig) {
+    var cols = c._arrayConfig.columns || [];
+    var statics = c._arrayConfig.staticFields || [];
+    extraDetail = '<div class="adv-arr-detail">'
+      + '<table class="adv-arr-table">'
+      + '<thead><tr><th>Source path</th><th>Variable</th><th>Target key</th></tr></thead>'
+      + '<tbody>'
+      + cols.map(function(col) {
+          return '<tr>'
+            + '<td><code>' + _esc(col.sourceJsonPath) + '</code></td>'
+            + '<td><code>' + _esc(col.varName) + '</code></td>'
+            + '<td><code>' + _esc(col.targetKey) + '</code></td>'
+            + '</tr>';
+        }).join('')
+      + (statics.length > 0
+          ? statics.map(function(sf) {
+              return '<tr class="adv-arr-static">'
+                + '<td><em>static</em></td>'
+                + '<td><em>' + _esc(sf.value) + '</em></td>'
+                + '<td><code>' + _esc(sf.targetKey) + '</code></td>'
+                + '</tr>';
+            }).join('')
+          : '')
+      + '</tbody>'
+      + '</table>'
+      + '</div>';
+  }
 
   return '<div class="' + cardCls + '" id="advc-' + c.id + '">'
     + '<div class="adv-card-left">'
@@ -688,6 +719,7 @@ function _advCardHtml(c) {
     +   '<div class="adv-card-value">' + _esc(c.preview) + '</div>'
     +   '<div class="adv-card-flow">' + srcHtml + '</div>'
     +   '<div class="adv-card-flow">' + useHtml + '</div>'
+    +   extraDetail
     +   '<div class="adv-card-name-row">'
     +     '<span class="adv-card-name-label">Variable name</span>'
     +     '<input class="adv-card-name-input" value="' + _esc(c.varName) + '" '
