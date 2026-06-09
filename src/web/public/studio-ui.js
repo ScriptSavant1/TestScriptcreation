@@ -969,8 +969,14 @@ function advisorApplyAndRegen() {
     showToast('Accept at least one correlation first.', 'warning');
     return;
   }
-  // Convert and merge into S.correlations
-  var newCorr = accepted.map(advisorToCorrelation);
+  // Convert and merge into S.correlations, skipping exact duplicates (same name + config)
+  var newCorr = accepted.map(advisorToCorrelation).filter(function(nc) {
+    return !(S.correlations || []).some(function(ex) {
+      return ex.name === nc.name &&
+             ex.extractorType === nc.extractorType &&
+             JSON.stringify(ex.extractorConfig) === JSON.stringify(nc.extractorConfig);
+    });
+  });
   S.correlations = (S.correlations || []).concat(newCorr);
 
   // Mark accepted as applied (dim them)
