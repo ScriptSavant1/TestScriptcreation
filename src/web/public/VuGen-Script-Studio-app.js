@@ -485,6 +485,22 @@ function fmtSize(b) {
   if (b < 1048576) return (b / 1024).toFixed(1) + "KB";
   return (b / 1048576).toFixed(1) + "MB";
 }
+// Returns the JSON-string-escaped form of a value (e.g. {"a":"b"} → {\"a\":\"b\"})
+// without the outer quotes. Returns null when not needed (no " or \ in value).
+function _jsonStrEscVariant(val) {
+  if (!val || typeof val !== 'string') return null;
+  if (!val.includes('"') && !val.includes('\\')) return null;
+  return JSON.stringify(val).slice(1, -1);
+}
+
+// Returns the C-string-escaped form of the JSON-escaped variant.
+// Used to find JSON-in-JSON values in VuGen bodies (which are already C-string-escaped).
+function _cEscJsonVariant(rawVal) {
+  const jv = _jsonStrEscVariant(rawVal);
+  if (!jv) return null;
+  return jv.split('\\').join('\\\\').split('"').join('\\"');
+}
+
 // Returns true if body text requires BodyBinary= (non-printable chars outside \t \n \r range)
 function needsBinary(text) {
   for (let i = 0; i < text.length; i++) {
@@ -1374,11 +1390,17 @@ function genCollectionDataCsv() {
   if (!S.params || S.params.length === 0) return "";
   const header = S.params.map((p) => p.csvKey).join(",");
   const row = S.params
-    .map((p) =>
-      p.value.includes(",") || p.value.includes('"')
-        ? `"${p.value.replace(/"/g, '""')}"`
-        : p.value,
-    )
+    .map((p) => {
+      const _allJson = p.usages && p.usages.every(
+        u => u.location === 'body_json' || u.location === 'body_xml'
+      );
+      const effectiveValue = (_allJson && p.value && p.value.includes('"'))
+        ? JSON.stringify(p.value).slice(1, -1)
+        : p.value;
+      return effectiveValue.includes(",") || effectiveValue.includes('"')
+        ? `"${effectiveValue.replace(/"/g, '""')}"`
+        : effectiveValue;
+    })
     .join(",");
   return header + "\n" + row + "\n";
 }
@@ -1989,6 +2011,7 @@ function genMainJS(entries, correlations) {
           decodeURIComponent(rawVal || ""),
           String(rawVal).replace(/ /g, "+"),
         ];
+        let _bodyReplaced = false;
         for (const sv of variants) {
           if (sv && bodyText.includes(sv)) {
             bodyText = bodyText.replace(
@@ -1996,7 +2019,15 @@ function genMainJS(entries, correlations) {
               `\x00DYNSTART_${u.name}\x00DYNEND`,
             );
             bodyHasDynamic = true;
+            _bodyReplaced = true;
             break;
+          }
+        }
+        if (!_bodyReplaced) {
+          const _jv = _jsonStrEscVariant(rawVal);
+          if (_jv && bodyText.includes(_jv)) {
+            bodyText = bodyText.replace(_jv, `\x00DYNJSON_${u.name}\x00DYNEND`);
+            bodyHasDynamic = true;
           }
         }
       }
@@ -2020,6 +2051,7 @@ function genMainJS(entries, correlations) {
               decodeURIComponent(rawVal || ""),
               String(rawVal).replace(/ /g, "+"),
             ];
+            let _candReplaced = false;
             for (const sv of variants) {
               if (sv && bodyText.includes(sv)) {
                 bodyText = bodyText.replace(
@@ -2027,7 +2059,15 @@ function genMainJS(entries, correlations) {
                   `\x00DYNSTART_${cand.hint}\x00DYNEND`,
                 );
                 bodyHasDynamic = true;
+                _candReplaced = true;
                 break;
+              }
+            }
+            if (!_candReplaced) {
+              const _jv = _jsonStrEscVariant(rawVal);
+              if (_jv && bodyText.includes(_jv)) {
+                bodyText = bodyText.replace(_jv, `\x00DYNJSON_${cand.hint}\x00DYNEND`);
+                bodyHasDynamic = true;
               }
             }
           }
@@ -2053,6 +2093,7 @@ function genMainJS(entries, correlations) {
               decodeURIComponent(rawVal || ""),
               String(rawVal).replace(/ /g, "+"),
             ];
+            let _paramReplaced = false;
             for (const sv of variants) {
               if (sv && bodyText.includes(sv)) {
                 bodyText = bodyText.replace(
@@ -2060,7 +2101,15 @@ function genMainJS(entries, correlations) {
                   `\x00PARAM_${param.csvKey}\x00PARAMEND`,
                 );
                 bodyHasDynamic = true;
+                _paramReplaced = true;
                 break;
+              }
+            }
+            if (!_paramReplaced) {
+              const _jv = _jsonStrEscVariant(rawVal);
+              if (_jv && bodyText.includes(_jv)) {
+                bodyText = bodyText.replace(_jv, `\x00PARAMJSON_${param.csvKey}\x00PARAMEND`);
+                bodyHasDynamic = true;
               }
             }
           }
@@ -2433,9 +2482,18 @@ function genMainJS(entries, correlations) {
           /\x00DYNSTART_([^]+?)\x00DYNEND/g,
           "${load.global.$1}",
         );
+        // JSON-in-JSON: re-escape the value at runtime so it is safe inside a JSON string value
+        esc1 = esc1.replace(
+          /\x00DYNJSON_([^]+?)\x00DYNEND/g,
+          (_, nm) => '${JSON.stringify(load.global.' + nm + "||'').slice(1,-1)}",
+        );
         esc1 = esc1.replace(
           /\x00PARAM_([^]+?)\x00PARAMEND/g,
           "${load.params.$1}",
+        );
+        esc1 = esc1.replace(
+          /\x00PARAMJSON_([^]+?)\x00PARAMEND/g,
+          (_, k) => '${JSON.stringify(load.params.' + k + "||'').slice(1,-1)}",
         );
         // Replace array reconstruction sentinels: "@@ARRAY_RECONSTR_key@@" → ${JSON.stringify(_key_arr)}
         for (const [sentinel, varRef] of _arrSentinelMap) {
@@ -3449,11 +3507,17 @@ function genActionC(entries, correlations) {
               decodeURIComponent(rawVal || ""),
               String(rawVal).replace(/ /g, "+"),
             ];
+            let _replaced = false;
             for (const sv of variants) {
               if (sv && body.includes(sv)) {
                 body = body.replace(sv, `{${u.name}}`);
+                _replaced = true;
                 break;
               }
+            }
+            if (!_replaced) {
+              const _cjv = _cEscJsonVariant(rawVal);
+              if (_cjv && body.includes(_cjv)) body = body.replace(_cjv, `{${u.name}}`);
             }
           }
           if (S.candidates && S.candidates.length > 0) {
@@ -3476,11 +3540,17 @@ function genActionC(entries, correlations) {
                   String(rawVal).replace(/ /g, "+"),
                 ];
                 const safeHint = sanitizeCandHint(cand.hint);
+                let _cReplaced = false;
                 for (const sv of variants) {
                   if (sv && body.includes(sv)) {
                     body = body.replace(sv, `{${safeHint}}`);
+                    _cReplaced = true;
                     break;
                   }
+                }
+                if (!_cReplaced) {
+                  const _cjv = _cEscJsonVariant(rawVal);
+                  if (_cjv && body.includes(_cjv)) body = body.replace(_cjv, `{${safeHint}}`);
                 }
               }
             }
@@ -3495,7 +3565,13 @@ function genActionC(entries, correlations) {
                   pu.location !== "body_xml"
                 )
                   continue;
-                const rawVal = param.value
+                const _paramAllJson = param.usages.every(
+                  u => u.location === 'body_json' || u.location === 'body_xml'
+                );
+                const rawValBase = (_paramAllJson && param.value.includes('"'))
+                  ? (JSON.stringify(param.value).slice(1, -1))
+                  : param.value;
+                const rawVal = rawValBase
                   .replace(/\\/g, "\\\\")
                   .replace(/"/g, '\\"')
                   .replace(/\r?\n/g, "\\n");
