@@ -382,23 +382,26 @@
           <button class="adv-modal-close" onclick="closePasteCorrelate()">&#x2715;</button>
         </div>
         <div class="adv-modal-body">
-          <div class="pc-step-label">&#x2460; Paste the server response body</div>
+          <div class="pc-step-label">
+            &#x2460; Paste the server response body
+            <span class="adv-modal-hint">(optional — if you skip this, a pattern is auto-generated from the value shape)</span>
+          </div>
           <textarea class="pc-textarea" id="pc-response-body"
-            placeholder='{"access_token":"eyJa...","expires_in":3600}'
-            rows="6"></textarea>
+            placeholder='{"access_token":"eyJa...","expires_in":3600}&#10;&#10;Leave empty to auto-generate from the value shape below.'
+            rows="5"></textarea>
 
-          <div class="pc-step-label" style="margin-top:10px">&#x2461; Value to extract (copy-paste the exact value)</div>
+          <div class="pc-step-label" style="margin-top:10px">&#x2461; Value to extract <span class="adv-modal-hint">(paste the exact value from the request)</span></div>
           <input class="adv-modal-input" id="pc-target-value" type="text"
-            placeholder="eyJa..." autocomplete="off" />
+            placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off" />
 
-          <button class="pc-detect-btn" onclick="runPasteDetect()">&#x1F50D; Detect Path</button>
+          <button class="pc-detect-btn" onclick="runPasteDetect()">&#x1F50D; Detect &amp; Generate</button>
 
           <div id="pc-result-section" style="display:none"></div>
 
           <div id="pc-src-row" style="margin-top:10px">
-            <div class="pc-step-label">&#x2462; Which request <em>uses</em> this value? (for usage substitution)</div>
+            <div class="pc-step-label">&#x2462; Which request <em>uses</em> this value? <span class="adv-modal-hint">(optional — used to auto-locate all usage substitutions)</span></div>
             <select class="adv-modal-select" id="pc-src-select">
-              <option value="">— select a request —</option>
+              <option value="">— select a request (optional) —</option>
             </select>
           </div>
         </div>

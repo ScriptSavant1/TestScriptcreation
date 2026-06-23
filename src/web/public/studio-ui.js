@@ -1253,41 +1253,84 @@ function closePasteCorrelate() {
   if (overlay) overlay.style.display = 'none';
 }
 
+// Build a shape-based fallback extractor when the value isn't found in the response.
+// Analyses the value's pattern (JWT, UUID, hex, opaque token) to generate a
+// regex or boundary that will capture it at script runtime.
+function _pcBuildFallbackExtractor(value) {
+  var v = String(value).trim();
+  var varName = (typeof _advSuggestName !== 'undefined') ? _advSuggestName(null, null, v) : 'dynamicValue';
+
+  if (/^eyJ[A-Za-z0-9+\/=_-]{10,}\.[A-Za-z0-9+\/=_-]+\.[A-Za-z0-9+\/=_-]+$/.test(v)) {
+    return { extType: 'regexp', pattern: 'eyJ[A-Za-z0-9+/=_-]+\\.[A-Za-z0-9+/=_-]+\\.[A-Za-z0-9+/=_-]+', group: 0, varName: varName, value: v, _autoPattern: true, _patternLabel: 'JWT shape' };
+  }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) {
+    return { extType: 'regexp', pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', group: 0, varName: varName, value: v, _autoPattern: true, _patternLabel: 'UUID shape' };
+  }
+  if (/^[0-9a-f]{16,64}$/i.test(v)) {
+    return { extType: 'regexp', pattern: '[0-9a-fA-F]{' + v.length + '}', group: 0, varName: varName, value: v, _autoPattern: true, _patternLabel: 'Hex token (' + v.length + ' chars)' };
+  }
+  if (/^[A-Za-z0-9+\/=_.\-]{24,}$/.test(v)) {
+    // Opaque base64-ish token — boundary: left=first 8 chars, right=last 4 chars
+    return { extType: 'boundary', lb: v.slice(0, 8), rb: v.slice(-4), path: null, varName: varName, value: v, _autoPattern: true, _patternLabel: 'Opaque token (boundary on first/last chars)' };
+  }
+  // Generic: escape and use as a literal regex
+  var escaped = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return { extType: 'regexp', pattern: escaped, group: 0, varName: varName, value: v, _autoPattern: true, _patternLabel: 'Literal value pattern' };
+}
+
 function runPasteDetect() {
-  var respText = (document.getElementById('pc-response-body') || {}).value || '';
+  var respText = ((document.getElementById('pc-response-body') || {}).value || '').trim();
   var targetVal = ((document.getElementById('pc-target-value') || {}).value || '').trim();
   var resultEl = document.getElementById('pc-result-section');
   var submitBtn = document.getElementById('pc-submit-btn');
   _riPasteResult = null;
   if (submitBtn) submitBtn.disabled = true;
 
-  if (!respText.trim() || !targetVal) {
-    showToast('Paste a response body and enter the value to extract.', 'warning');
+  if (!targetVal) {
+    showToast('Enter the value to extract (Step 2).', 'warning');
     return;
   }
 
-  var res = advPasteDetect(respText, targetVal); // from studio-advisor.js
+  // Try to detect path in pasted response first
+  var res = respText ? advPasteDetect(respText, targetVal) : null; // from studio-advisor.js
+
+  var autoFallback = false;
   if (!res) {
-    if (resultEl) {
-      resultEl.style.display = '';
-      resultEl.innerHTML = '<div class="pc-result-error">&#x274C; Value not found in the pasted response.<br>'
-        + '<small>Check for typos or whitespace differences.</small></div>';
-    }
-    return;
+    // Value not found in response (or no response pasted) — auto-generate from value shape
+    res = _pcBuildFallbackExtractor(targetVal);
+    autoFallback = true;
   }
 
   _riPasteResult = res;
 
-  var extDesc = res.extType === 'jsonpath'
-    ? '<b>JSONPath</b>: <code>' + _esc(res.path) + '</code>'
-    : '<b>Boundary</b>: LB=<code>' + _esc(res.lb) + '</code> &nbsp; RB=<code>' + _esc(res.rb) + '</code>';
+  // Build extractor description for display
+  var extDesc;
+  if (res.extType === 'jsonpath') {
+    extDesc = '<b>JSONPath</b>: <code>' + _esc(res.path) + '</code>';
+  } else if (res.extType === 'regexp') {
+    extDesc = '<b>RegExp</b>: <code>' + _esc(res.pattern) + '</code>';
+    if (res._patternLabel) extDesc += ' <span class="pc-pattern-label">(' + _esc(res._patternLabel) + ')</span>';
+  } else {
+    extDesc = '<b>Boundary</b>: LB=<code>' + _esc(res.lb || '') + '</code> &nbsp; RB=<code>' + _esc(res.rb || '') + '</code>';
+    if (res._patternLabel) extDesc += ' <span class="pc-pattern-label">(' + _esc(res._patternLabel) + ')</span>';
+  }
+
+  var statusLine = autoFallback
+    ? '&#x26A1; <b>Auto-generated</b> from value pattern — path not found in pasted response'
+    : '&#x2705; <b>Detected</b>' + (res._partial ? ' (partial match)' : '');
+
+  var statusCls = autoFallback ? 'pc-result-auto' : 'pc-result-ok';
+  var hintLine = autoFallback
+    ? '<div class="pc-result-hint">The extractor pattern is based on the value&#x27;s shape and will capture any similar value at script runtime. You can refine the pattern after adding.</div>'
+    : '';
 
   if (resultEl) {
     resultEl.style.display = '';
-    resultEl.innerHTML = '<div class="pc-result-ok">'
-      + '<div class="pc-result-row">&#x2705; <b>Found' + (res._partial ? ' (partial match)' : '') + '</b></div>'
+    resultEl.innerHTML = '<div class="' + statusCls + '">'
+      + '<div class="pc-result-row">' + statusLine + '</div>'
       + '<div class="pc-result-row">' + extDesc + '</div>'
-      + '<div class="pc-result-row"><label class="adv-modal-label">Variable name</label>'
+      + hintLine
+      + '<div class="pc-result-row"><label class="adv-modal-label" style="margin-bottom:3px">Variable name</label>'
       + '<input class="adv-modal-input pc-varname" id="pc-varname-input" value="' + _esc(res.varName) + '" placeholder="variableName" /></div>'
       + '</div>';
   }
@@ -1305,21 +1348,29 @@ function submitPasteCorrelate() {
   if (isNaN(srcIdx)) srcIdx = 0;
 
   var res = _riPasteResult;
-  var extType = res.extType === 'jsonpath' ? 'jsonpath' : 'boundary';
-  var extValue = res.extType === 'jsonpath' ? res.path : (res.lb || '');
 
   // Use the nearest earlier entry as "source" so codegen has a valid sourceIdx
-  // (the pasted response comes from outside the HAR)
-  var sourceEntryIdx = Math.max(0, srcIdx - 1);
+  var sourceEntryIdx = isNaN(srcIdx) ? 0 : Math.max(0, srcIdx - 1);
 
-  // Create correlation directly with the detected extractor
+  // Build extractorType + extractorConfig for all three possible result types
+  var extractorType, extractorConfig;
+  if (res.extType === 'jsonpath') {
+    extractorType = 'jsonpath';
+    extractorConfig = { path: res.path };
+  } else if (res.extType === 'regexp') {
+    extractorType = 'regexp';
+    extractorConfig = { pattern: res.pattern, group: res.group != null ? res.group : 0 };
+  } else {
+    extractorType = 'boundary';
+    extractorConfig = { lb: res.lb || '', rb: res.rb || '' };
+  }
+
+  // Create correlation with the detected extractor
   var newCorr = {
     name: varName,
     sourceIdx: sourceEntryIdx,
-    extractorType: extType,
-    extractorConfig: res.extType === 'jsonpath'
-      ? { path: res.path }
-      : { lb: res.lb || '', rb: res.rb || '' },
+    extractorType: extractorType,
+    extractorConfig: extractorConfig,
     usages: [],
     _fromAdvisor: true,
     _pasteDetect: true,
