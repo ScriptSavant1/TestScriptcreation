@@ -641,6 +641,9 @@ function renderAdvisorPanel() {
   var cardsEl = document.getElementById('adv-cards');
   if (cardsEl) cardsEl.innerHTML = candidates.map(_advCardHtml).join('');
 
+  // Re-populate inspector dropdown (entries may have changed)
+  _advBuildInspectorDropdown();
+
   _advUpdateBadge();
   _advUpdateFooter();
 }
@@ -1067,4 +1070,291 @@ function _advUpdateFooter() {
 
 function _esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// =============================================================================
+// REQUEST INSPECTOR — Feature A + C
+// =============================================================================
+
+var _riFields = [];
+var _riEntryIdx = -1;
+
+function _advBuildInspectorDropdown() {
+  var sel = document.getElementById('adv-insp-req-sel');
+  if (!sel) return;
+  var options = '<option value="">— select a request to inspect —</option>';
+  (S.entries1 || []).forEach(function(e, i) {
+    if (e.isMarker || e.filtered) return;
+    var method = (e.method || 'GET').toUpperCase();
+    var path = (e.url || '').replace(/^https?:\/\/[^/]+/, '').split('?')[0] || '/';
+    options += '<option value="' + i + '">' + method + ' ' + path + '</option>';
+  });
+  sel.innerHTML = options;
+}
+
+function onInspectorReqChange(idxStr) {
+  _riFields = [];
+  _riEntryIdx = -1;
+  var traceEl = document.getElementById('ri-trace-panel');
+  if (traceEl) traceEl.style.display = 'none';
+
+  var idx = parseInt(idxStr, 10);
+  if (isNaN(idx) || idx < 0) {
+    var listEl = document.getElementById('ri-field-list');
+    if (listEl) listEl.innerHTML = '';
+    return;
+  }
+  _riEntryIdx = idx;
+  _riFields = advGetRequestFields(idx); // from studio-advisor.js
+  _riRenderFields(_riFields);
+}
+
+function _riRenderFields(fields) {
+  var listEl = document.getElementById('ri-field-list');
+  if (!listEl) return;
+  if (!fields || fields.length === 0) {
+    listEl.innerHTML = '<div class="ri-empty">No dynamic or suspicious values found in this request.</div>';
+    return;
+  }
+
+  var green = fields.filter(function(f) { return f.status === 'green'; });
+  var yellow = fields.filter(function(f) { return f.status === 'yellow'; });
+
+  var html = '';
+
+  if (green.length) {
+    html += '<div class="ri-group-label">&#x2705; Traced to prior response</div>';
+    green.forEach(function(f, i) {
+      var origIdx = fields.indexOf(f);
+      var valPreview = f.value.length > 44 ? f.value.slice(0, 40) + '&hellip;' : _esc(f.value);
+      var locBadge = f.location === 'header' ? 'HDR' : f.location === 'query' ? 'QS' : 'BODY';
+      var srcLabel = f.traceSource ? _esc(f.traceSource.url || '?') : '';
+      html += '<div class="ri-field ri-field-green" onclick="riTraceField(' + origIdx + ')">'
+        + '<span class="ri-field-dot ri-dot-green"></span>'
+        + '<span class="ri-field-loc">' + locBadge + '</span>'
+        + '<span class="ri-field-key">' + _esc(f.key) + '</span>'
+        + '<span class="ri-field-val">' + valPreview + '</span>'
+        + '<span class="ri-field-src">&#x2190; ' + srcLabel + '</span>'
+        + '<button class="ri-field-btn" onclick="event.stopPropagation();riAddCorrFromTrace(' + origIdx + ')" title="Add correlation">+ Add</button>'
+        + '</div>';
+    });
+  }
+
+  if (yellow.length) {
+    html += '<div class="ri-group-label">&#x26A0;&#xFE0F; Dynamic pattern, source unknown</div>';
+    yellow.forEach(function(f) {
+      var origIdx = fields.indexOf(f);
+      var valPreview = f.value.length > 44 ? f.value.slice(0, 40) + '&hellip;' : _esc(f.value);
+      var locBadge = f.location === 'header' ? 'HDR' : f.location === 'query' ? 'QS' : 'BODY';
+      html += '<div class="ri-field ri-field-yellow" onclick="riTraceField(' + origIdx + ')">'
+        + '<span class="ri-field-dot ri-dot-yellow"></span>'
+        + '<span class="ri-field-loc">' + locBadge + '</span>'
+        + '<span class="ri-field-key">' + _esc(f.key) + '</span>'
+        + '<span class="ri-field-val">' + valPreview + '</span>'
+        + '<span class="ri-field-src" style="color:var(--text-3)">source not found in HAR</span>'
+        + '<button class="ri-field-btn ri-paste-btn" onclick="event.stopPropagation();riOpenPasteForField(' + origIdx + ')" title="Paste the source response to detect path">Paste</button>'
+        + '</div>';
+    });
+  }
+
+  listEl.innerHTML = html;
+}
+
+function riTraceField(fieldIdx) {
+  var field = _riFields[fieldIdx];
+  if (!field) return;
+  var traceEl = document.getElementById('ri-trace-panel');
+  if (!traceEl) return;
+
+  if (field.status === 'green' && field.traceSource) {
+    var src = field.traceSource;
+    var pathText = src.jsonPath ? ' &rarr; <code>' + _esc(src.jsonPath) + '</code>' : '';
+    traceEl.innerHTML = '<div class="ri-trace-result">'
+      + '<span class="ri-trace-label">&#x1F50E; Source found:</span>'
+      + ' <b>' + _esc(src.url || '?') + '</b>' + pathText
+      + '<button class="ri-field-btn" style="margin-left:auto" onclick="riAddCorrFromTrace(' + fieldIdx + ')">+ Add Correlation</button>'
+      + '</div>';
+    traceEl.style.display = '';
+  } else {
+    traceEl.innerHTML = '<div class="ri-trace-result ri-trace-unknown">'
+      + '<span class="ri-trace-label">&#x26A0;&#xFE0F; Source not found in HAR.</span>'
+      + ' Paste the server response to detect the path.'
+      + '<button class="ri-field-btn ri-paste-btn" style="margin-left:auto" onclick="riOpenPasteForField(' + fieldIdx + ')">&#x1F4CB; Paste & Detect</button>'
+      + '</div>';
+    traceEl.style.display = '';
+  }
+}
+
+function riAddCorrFromTrace(fieldIdx) {
+  var field = _riFields[fieldIdx];
+  if (!field || !field.traceSource) { showToast('No source found for this value.', 'warning'); return; }
+  var src = field.traceSource;
+  var varName = (typeof _advSuggestName !== 'undefined')
+    ? _advSuggestName(src.jsonPath || null, field.location === 'header' ? field.key : null, field.value)
+    : (field.key.split('.').pop().replace(/\W/g, '') || 'dynamicValue');
+
+  var extType = src.jsonPath ? 'jsonpath' : (field.location === 'header' ? 'header' : 'boundary');
+  var extValue = src.jsonPath || src.url || '';
+  advisorAddManual(src.entryIdx, extType, extValue, varName, field.value);
+  renderAdvisorPanel();
+  _advUpdateBadge();
+  showToast('Correlation added — click Apply & Regenerate.', 'success');
+}
+
+function riOpenPasteForField(fieldIdx) {
+  var field = _riFields[fieldIdx];
+  openPasteCorrelate(field ? field.value : '');
+}
+
+function toggleInspector() {
+  var body = document.getElementById('adv-insp-body');
+  var icon = document.getElementById('adv-insp-toggle');
+  if (!body) return;
+  var collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  if (icon) icon.textContent = collapsed ? '▾' : '▸';
+}
+
+// =============================================================================
+// PASTE & CORRELATE — Feature B
+// =============================================================================
+
+var _riPasteResult = null;
+
+function openPasteCorrelate(prefillValue) {
+  var overlay = document.getElementById('pc-modal-overlay');
+  if (!overlay) return;
+  var valEl = document.getElementById('pc-target-value');
+  if (valEl) valEl.value = prefillValue || '';
+  var resultEl = document.getElementById('pc-result-section');
+  if (resultEl) resultEl.style.display = 'none';
+  var submitBtn = document.getElementById('pc-submit-btn');
+  if (submitBtn) submitBtn.disabled = true;
+  _riPasteResult = null;
+
+  // Populate source request dropdown
+  var srcSel = document.getElementById('pc-src-select');
+  if (srcSel) {
+    var opts = '<option value="">— select the request that receives this value —</option>';
+    (S.entries1 || []).forEach(function(e, i) {
+      if (e.isMarker || e.filtered) return;
+      var method = (e.method || 'GET').toUpperCase();
+      var path = (e.url || '').replace(/^https?:\/\/[^/]+/, '').split('?')[0] || '/';
+      opts += '<option value="' + i + '">' + method + ' ' + path + '</option>';
+    });
+    srcSel.innerHTML = opts;
+  }
+
+  overlay.style.display = 'flex';
+}
+
+function closePasteCorrelate() {
+  var overlay = document.getElementById('pc-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function runPasteDetect() {
+  var respText = (document.getElementById('pc-response-body') || {}).value || '';
+  var targetVal = ((document.getElementById('pc-target-value') || {}).value || '').trim();
+  var resultEl = document.getElementById('pc-result-section');
+  var submitBtn = document.getElementById('pc-submit-btn');
+  _riPasteResult = null;
+  if (submitBtn) submitBtn.disabled = true;
+
+  if (!respText.trim() || !targetVal) {
+    showToast('Paste a response body and enter the value to extract.', 'warning');
+    return;
+  }
+
+  var res = advPasteDetect(respText, targetVal); // from studio-advisor.js
+  if (!res) {
+    if (resultEl) {
+      resultEl.style.display = '';
+      resultEl.innerHTML = '<div class="pc-result-error">&#x274C; Value not found in the pasted response.<br>'
+        + '<small>Check for typos or whitespace differences.</small></div>';
+    }
+    return;
+  }
+
+  _riPasteResult = res;
+
+  var extDesc = res.extType === 'jsonpath'
+    ? '<b>JSONPath</b>: <code>' + _esc(res.path) + '</code>'
+    : '<b>Boundary</b>: LB=<code>' + _esc(res.lb) + '</code> &nbsp; RB=<code>' + _esc(res.rb) + '</code>';
+
+  if (resultEl) {
+    resultEl.style.display = '';
+    resultEl.innerHTML = '<div class="pc-result-ok">'
+      + '<div class="pc-result-row">&#x2705; <b>Found' + (res._partial ? ' (partial match)' : '') + '</b></div>'
+      + '<div class="pc-result-row">' + extDesc + '</div>'
+      + '<div class="pc-result-row"><label class="adv-modal-label">Variable name</label>'
+      + '<input class="adv-modal-input pc-varname" id="pc-varname-input" value="' + _esc(res.varName) + '" placeholder="variableName" /></div>'
+      + '</div>';
+  }
+
+  if (submitBtn) submitBtn.disabled = false;
+}
+
+function submitPasteCorrelate() {
+  if (!_riPasteResult) { showToast('Run Detect first.', 'warning'); return; }
+
+  var varName = ((document.getElementById('pc-varname-input') || {}).value || '').trim()
+    || _riPasteResult.varName;
+  var srcIdxStr = (document.getElementById('pc-src-select') || {}).value || '';
+  var srcIdx = parseInt(srcIdxStr, 10);
+  if (isNaN(srcIdx)) srcIdx = 0;
+
+  var res = _riPasteResult;
+  var extType = res.extType === 'jsonpath' ? 'jsonpath' : 'boundary';
+  var extValue = res.extType === 'jsonpath' ? res.path : (res.lb || '');
+
+  // Use the nearest earlier entry as "source" so codegen has a valid sourceIdx
+  // (the pasted response comes from outside the HAR)
+  var sourceEntryIdx = Math.max(0, srcIdx - 1);
+
+  // Create correlation directly with the detected extractor
+  var newCorr = {
+    name: varName,
+    sourceIdx: sourceEntryIdx,
+    extractorType: extType,
+    extractorConfig: res.extType === 'jsonpath'
+      ? { path: res.path }
+      : { lb: res.lb || '', rb: res.rb || '' },
+    usages: [],
+    _fromAdvisor: true,
+    _pasteDetect: true,
+  };
+
+  // Auto-scan ALL requests for usages of this value
+  var entries = S.entries1 || [];
+  var value = res.value;
+  entries.forEach(function(e, i) {
+    if (e.isMarker || e.filtered) return;
+    var bodyText = (e.body && e.body.text) || '';
+    if (bodyText) {
+      var obj;
+      try { obj = JSON.parse(bodyText); } catch (err) { obj = null; }
+      if (obj && typeof _advWalkLeaves !== 'undefined') {
+        _advWalkLeaves(obj, '$', function(val, jpath) {
+          if (val === value) {
+            newCorr.usages.push({ reqIdx: i, location: 'body_json', key: jpath.split('.').pop(), tokenValue: value, originalValue: value, prefix: '' });
+          }
+        }, 0);
+      } else if (bodyText.includes(value)) {
+        newCorr.usages.push({ reqIdx: i, location: 'body_json', key: 'value', tokenValue: value, originalValue: value, prefix: '' });
+      }
+    }
+    for (var h of (e.reqHdrs || [])) {
+      var hval = String(h.value || '');
+      if (hval === value || hval === 'Bearer ' + value) {
+        newCorr.usages.push({ reqIdx: i, location: 'header', key: h.name, tokenValue: value, originalValue: value, prefix: /^bearer\s+/i.test(hval) ? 'Bearer ' : '' });
+      }
+    }
+  });
+
+  S.correlations = (S.correlations || []).concat([newCorr]);
+  closePasteCorrelate();
+  renderAdvisorPanel();
+  showToast('Correlation added. Click Apply & Regenerate to update the script.', 'success');
+  if (typeof regenerateFromAdvisor !== 'undefined') regenerateFromAdvisor();
 }
