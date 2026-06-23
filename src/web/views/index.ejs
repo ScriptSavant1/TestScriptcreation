@@ -2046,6 +2046,51 @@ code {
       <li>Review the correlation and parameterization results shown.</li>
       <li>Click <strong>Download ZIP</strong> and open the script in VuGen.</li>
     </ol>
+
+    <h3 class="help-h3">Correlation Advisor</h3>
+    <p class="help-p">After analysis, the <strong>Correlation Advisor</strong> panel appears at the top of the results. It lists every dynamic value it found — each as a card showing confidence level, where the value came from, and where it is used. Review each card and click <strong>Accept</strong> to add it as a correlation, then click <strong>▶ Apply &amp; Regenerate</strong> to rebuild the script.</p>
+    <p class="help-p">You can add your own correlations manually (click <strong>+ Add Manual</strong>) or use <strong>Paste &amp; Detect</strong> when you know the value but it is not visible in the HAR (e.g. a value extracted by an upstream service not captured in the recording).</p>
+
+    <h3 class="help-h3">Request Inspector — Traffic Light Highlighting</h3>
+    <p class="help-p">Expand the <strong>Request Inspector</strong> inside the Advisor panel and select any request from the dropdown. Every field in that request is colour-coded:</p>
+    <ul class="help-steps-list">
+      <li><span style="color:#4ade80;font-weight:700">● Green</span> — value traced to a prior server response. Click <strong>Trace</strong> to see which request produced it, or <strong>+ Correlate</strong> to add the correlation in one click.</li>
+      <li><span style="color:#fbbf24;font-weight:700">● Yellow</span> — looks dynamic (JWT, UUID, or token pattern) but its source was not found in the HAR. Use <strong>Paste &amp; Detect</strong> to create the extractor manually.</li>
+    </ul>
+    <p class="help-p">The inspector scans request headers, JSON body, form parameters, query string, <strong>and URL path segments</strong> — so a session ID embedded in a REST URL like <code>/api/users/286522</code> is detected and shown just like any other field.</p>
+
+    <h3 class="help-h3">Paste &amp; Detect</h3>
+    <p class="help-p">Click <strong>Paste &amp; Detect</strong> in the Advisor header. Paste the server response body (JSON, HTML, XML, or plain text) and the exact value you want to extract, then click <strong>Detect &amp; Generate</strong>. The tool automatically:</p>
+    <ul class="help-steps-list">
+      <li>Identifies the response content type and chooses the best extractor (JSONPath for JSON, Boundary for HTML/XML, RegExp for JWT / UUID / hex tokens)</li>
+      <li>When the value appears at multiple JSON paths — shows a radio list so you pick the right one</li>
+      <li>When the value appears multiple times in an HTML/XML response — shows an occurrence dropdown so you choose position 1, 2, 3…</li>
+      <li>When no response is pasted — auto-generates a shape-based RegExp pattern from the value itself (works for JWT, UUID, hex tokens, and opaque base64 strings)</li>
+    </ul>
+
+    <h3 class="help-h3">URL Path Parameters</h3>
+    <p class="help-p">Dynamic values embedded in URL paths (e.g. the session ID <code>286522</code> in <code>/scfm/alert_tuned/LIVE/286522</code>) are automatically detected and replaced in the generated script — <code>${load.global.sessionId}</code> in DevWeb or <code>{sessionId}</code> in VuGen C. No extra steps are needed; the Advisor finds them the same way it finds body and header values.</p>
+
+    <h3 class="help-h3">Extractor types — how they are chosen</h3>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin:12px 0">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Extractor</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">When used</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">DevWeb function</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">VuGen C function</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JSONPath</td><td style="padding:8px 12px">JSON response bodies</td><td style="padding:8px 12px"><code>JsonPathExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param_json</code></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Boundary</td><td style="padding:8px 12px">HTML, XML, plain text</td><td style="padding:8px 12px"><code>BoundaryExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param</code></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">RegExp</td><td style="padding:8px 12px">JWT, UUID, hex, token shapes</td><td style="padding:8px 12px"><code>RegExpExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param_regexp</code></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Header</td><td style="padding:8px 12px">Response header value</td><td style="padding:8px 12px"><code>BoundaryExtractor</code> (Headers scope)</td><td style="padding:8px 12px"><code>web_reg_save_param</code> (Search=Headers)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="help-h3">Request Filters</h3>
+    <p class="help-p">Filters run <em>before</em> analysis. By default only <strong>Fetch/XHR</strong> and <strong>Document</strong> requests are included — CSS, JS, fonts, images, and media are excluded as they are never relevant to load test scripting. Use the <strong>All</strong> button in the filter panel to include them if needed.</p>
   </section>
 
    <!-- — SECTION: Capabilities ————————————————————————————— -->

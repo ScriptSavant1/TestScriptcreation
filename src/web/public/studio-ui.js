@@ -23,15 +23,6 @@ function setMsg(step, msg) {
 function goBack() {
   showPhase("ph-upload");
 }
-function toggleHelpPanel() {
-  var panel = document.getElementById('help-panel');
-  var overlay = document.getElementById('help-overlay');
-  if (!panel) return;
-  var open = panel.style.display !== 'none';
-  panel.style.display = open ? 'none' : '';
-  overlay.style.display = open ? 'none' : '';
-}
-
 function toggleCorrPanel() {
   const list = document.getElementById("corr-list");
   const icon = document.getElementById("corr-toggle-icon");
