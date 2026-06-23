@@ -296,3 +296,67 @@ In practice it runs in under 100ms even for large HARs.
 
 **Q: The advisor found a correlation I don't want. What do I do?**
 Dismiss it in the advisor panel. Dismissed candidates are not applied to the script.
+
+---
+
+## New Features (2026-06-23)
+
+### Request Inspector — Traffic Light Value Highlighting
+
+The **Request Inspector** is a panel inside the Correlation Advisor. Select any request from the dropdown to see all its dynamic fields color-coded:
+
+| Color | Meaning | Action |
+|-------|---------|--------|
+| 🟢 Green | Value traced to a prior response | Click **Trace** to see which response, or **+ Correlate** to add immediately |
+| 🟡 Yellow | Looks dynamic (JWT / UUID / token) but source not found in HAR | Use **Paste & Detect** to create a correlation manually |
+| (none) | Static / infrastructure value | Hidden by default |
+
+The inspector scans:
+- Request headers
+- JSON body fields (all nested paths)
+- Form-encoded body params
+- Query string parameters
+- **URL path segments** — e.g. `/scfm/alert_tuned/LIVE/286522` shows `286522` as a yellow/green field
+
+### URL Path Parameter Correlation
+
+Values embedded in URL paths (REST-style IDs like `/api/users/286522`) are now fully supported:
+
+- **Auto-detection** (Phase 2 scanner): scans each path segment against the `responseValueMap` — if `286522` appeared in an earlier response, it is flagged as a correlation candidate.
+- **Manual add** (`advisorAddManual`): after specifying a source extractor, the auto-usage scanner also checks URL path segments in all subsequent requests.
+- **Request Inspector**: path segments that look like IDs (numeric 4+ digits, hex strings, or token patterns) appear as yellow/green fields.
+- **Code generation**: the codegen already emits `${load.global.sessionId}` (DevWeb) or `{sessionId}` (VuGen C) inside URL strings when a `url_path` usage is present — no codegen change was needed.
+
+### Paste & Detect — Multi-Scenario Intelligence
+
+Use **Paste & Detect** (button in Advisor header) when:
+- The server response is not in the HAR (external OAuth server, etc.)
+- You want to manually specify an extractor for a known value
+
+**How it works:**
+
+1. Paste the server response body (optional)
+2. Enter the exact value to extract
+3. Click **Detect & Generate** — the tool auto-selects the best extractor type:
+
+| Response content | Extractor chosen | Why |
+|-----------------|-----------------|-----|
+| JSON with the value | JSONPath | Most precise for JSON APIs |
+| HTML attribute (`name="VALUE"`) | Boundary (`LB='name="'`, `RB='"'`) | Context-aware HTML parsing |
+| HTML tag content (`<td>VALUE</td>`) | Boundary (`LB='<td>'`, `RB='</td>'`) | Tag-based boundary |
+| Query string in response text | Boundary (`LB='param='`, `RB='&'`) | Query param boundary |
+| JWT token shape | RegExp (`eyJ[A-Za-z0-9+/=_-]+\.…`) | JWTs have a known structure |
+| UUID shape | RegExp (`[0-9a-f]{8}-…`) | UUID pattern |
+| Hex 16–64 chars | RegExp (`[0-9a-fA-F]{N}`) | Fixed-length hex token |
+| No response / value not found | Shape-based auto-pattern | Auto-generates from value shape |
+
+**Multiple paths / occurrences:**
+- JSON with value at multiple paths → radio button list to pick the correct path
+- Value found N times in HTML/XML → occurrence dropdown ("Occurrence 2 of 3 — HTML attribute [...]")
+- Array path detected → hint about SelectAll option
+
+### Request Filters — Smart Defaults
+
+The resource type filter now defaults to **Fetch/XHR + Document only**. Static resources (CSS, JS, fonts, images, media) are excluded by default as they are never relevant to load test scripts. Click **All** to include them.
+
+This reduces noise in the request list and makes the correlation advisor scan faster and more accurate.

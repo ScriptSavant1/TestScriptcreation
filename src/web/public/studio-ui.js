@@ -23,6 +23,15 @@ function setMsg(step, msg) {
 function goBack() {
   showPhase("ph-upload");
 }
+function toggleHelpPanel() {
+  var panel = document.getElementById('help-panel');
+  var overlay = document.getElementById('help-overlay');
+  if (!panel) return;
+  var open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : '';
+  overlay.style.display = open ? 'none' : '';
+}
+
 function toggleCorrPanel() {
   const list = document.getElementById("corr-list");
   const icon = document.getElementById("corr-toggle-icon");
@@ -234,17 +243,23 @@ const STUDIO_RT_TYPES = [
   { key: "websocket",  label: "WS",        color: "#2980b9" },
   { key: "other",      label: "Other",     color: "#7f8c8d" },
 ];
+// Default: only Fetch/XHR and Document enabled — static resources (CSS/JS/images/fonts) are
+// excluded by default as they are not relevant to performance test scripting.
+const STUDIO_RT_DEFAULT = new Set(["fetch", "document"]);
 
 function studioInitFilters() {
   const list = document.getElementById("rt-filter-list");
   if (!list) return;
-  list.innerHTML = STUDIO_RT_TYPES.map(t =>
-    `<div class="rt-filter-row rt-row-on" data-key="${t.key}" onclick="studioToggleRt('${t.key}')">
+  list.innerHTML = STUDIO_RT_TYPES.map(t => {
+    const on = STUDIO_RT_DEFAULT.has(t.key);
+    return `<div class="rt-filter-row ${on ? 'rt-row-on' : ''}" data-key="${t.key}" onclick="studioToggleRt('${t.key}')">
       <span class="rt-filter-dot" style="background:${t.color}"></span>
       <span class="rt-filter-label">${t.label}</span>
       <span class="rt-filter-check">&#x2713;</span>
-    </div>`
-  ).join("");
+    </div>`;
+  }).join("");
+  // Initialise S.filterResourceTypes to the default subset (not null="show all")
+  S.filterResourceTypes = new Set(STUDIO_RT_DEFAULT);
 }
 
 function studioToggleRt(key) {
