@@ -277,6 +277,18 @@ function _advCrossReference(entries, responseValueMap) {
       if (src.entryIdx >= i) continue;
       _advAddUsage(found, lookupVal, src, { entryIdx: i, url: _advShortUrl(e), location: 'header', jsonPath: h.name }, 'high');
     }
+
+    // --- F5: Scan URL path segments (REST path params: /api/resources/286522) ---
+    // Only checks path segments (not query string — that's handled by Phase 2 query scan)
+    const urlPath = (e.url || '').split('?')[0];
+    for (const seg of urlPath.split('/')) {
+      if (!seg || seg.length < ADV_MIN_LEN) continue;
+      if (ADV_SKIP_VALUES.has(seg.toLowerCase())) continue;
+      if (!responseValueMap.has(seg)) continue;
+      const src = responseValueMap.get(seg);
+      if (src.entryIdx >= i) continue; // value must come from a PRIOR response
+      _advAddUsage(found, seg, src, { entryIdx: i, url: _advShortUrl(e), location: 'url_path', jsonPath: null }, 'high');
+    }
   }
   return Array.from(found.values());
 }
@@ -750,6 +762,15 @@ function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, ac
           autoUsages.push({ entryIdx: i, url: _advShortUrl(e), location: 'header', jsonPath: h.name });
         }
       }
+
+      // URL path segments (REST path params: /api/resources/286522)
+      const urlPath = (urlStr.split('?')[0]);
+      for (const seg of urlPath.split('/')) {
+        if (seg === actualValue) {
+          autoUsages.push({ entryIdx: i, url: _advShortUrl(e), location: 'url_path', jsonPath: null });
+          break; // only push once per request even if the value appears in multiple segments
+        }
+      }
     }
   }
 
@@ -841,6 +862,17 @@ function advGetRequestFields(entryIdx) {
       if (cl.status === 'static') continue;
       fields.push({ key: k, value: v, location: 'query', ...cl });
     }
+  }
+
+  // URL path segments (REST path params: /api/resources/286522)
+  const urlPathOnly = urlStr.split('?')[0];
+  for (const seg of urlPathOnly.split('/')) {
+    if (!seg || seg.length < 4) continue;
+    // Only show segments that look dynamic (numeric IDs, UUIDs, tokens)
+    if (!/^\d{4,}$|^[0-9a-f]{8,}$/i.test(seg) && !_advMatchesPattern(seg)) continue;
+    const cl = classify(seg, null);
+    if (cl.status === 'static') continue;
+    fields.push({ key: 'path:' + seg, value: seg, location: 'url_path', ...cl });
   }
 
   return fields;
