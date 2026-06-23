@@ -565,6 +565,7 @@ function advisorScan(entries, existingCorrelations) {
 
   // Phase 1
   const responseValueMap = _advExtractResponseValues(entries);
+  S._advValueMap = responseValueMap; // stored for Request Inspector use
 
   // Phase 2
   const highConf = _advCrossReference(entries, responseValueMap);
@@ -768,6 +769,118 @@ function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, ac
   };
   S.advisorCandidates.push(candidate);
   return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// REQUEST INSPECTOR: get all request fields, classified by traffic-light status
+// Returns [{key, value, location, status, traceSource}]
+// status: 'green' (traced to prior response) | 'yellow' (dynamic pattern) | 'static'
+// ---------------------------------------------------------------------------
+function advGetRequestFields(entryIdx) {
+  const entries = S.entries1 || [];
+  const e = entries[entryIdx];
+  if (!e) return [];
+
+  // Ensure response map is available (may not exist if advisor scan hasn't run yet)
+  const map = S._advValueMap || _advExtractResponseValues(entries);
+  if (!S._advValueMap) S._advValueMap = map;
+
+  const fields = [];
+
+  function classify(val, stripped) {
+    const lookup = stripped || val;
+    const src = map.get(val) || (stripped ? map.get(stripped) : null);
+    if (src && src.entryIdx < entryIdx) return { status: 'green', traceSource: src };
+    if (_advMatchesPattern(lookup)) return { status: 'yellow', traceSource: null };
+    return { status: 'static', traceSource: null };
+  }
+
+  // Request headers
+  for (const h of (e.reqHdrs || [])) {
+    const hname = (h.name || '').toLowerCase();
+    if (ADV_SKIP_REQ_HDRS.has(hname)) continue;
+    const hval = String(h.value || '');
+    if (!hval || hval.length < 4) continue;
+    const stripped = /^bearer\s+/i.test(hval) ? hval.replace(/^bearer\s+/i, '') : null;
+    const cl = classify(hval, stripped);
+    if (cl.status === 'static' && !ADV_AUTH_HDRS.has(hname)) continue; // skip boring static headers
+    fields.push({ key: h.name, value: hval, location: 'header', ...cl });
+  }
+
+  // JSON body
+  const bodyText = (e.body && e.body.text) || '';
+  if (bodyText) {
+    const bodyObj = _advParseJson(bodyText);
+    if (bodyObj) {
+      _advWalkLeaves(bodyObj, '$', (val, path) => {
+        if (!val || val.length < 4) return;
+        const cl = classify(val, null);
+        if (cl.status === 'static' && !_advMatchesPattern(val)) return;
+        fields.push({ key: path, value: val, location: 'body_json', ...cl });
+      }, 0);
+    }
+    for (const bp of ((e.body && e.body.params) || [])) {
+      const bval = String(bp.value || '');
+      if (!bval || bval.length < 4) continue;
+      const cl = classify(bval, null);
+      fields.push({ key: bp.name, value: bval, location: 'body_form', ...cl });
+    }
+  }
+
+  // Query string
+  const urlStr = e.url || '';
+  const qIdx = urlStr.indexOf('?');
+  if (qIdx >= 0) {
+    for (const part of urlStr.slice(qIdx + 1).split('&')) {
+      const eqI = part.indexOf('=');
+      if (eqI < 0) continue;
+      const k = part.slice(0, eqI);
+      const v = _advQsDecode(part.slice(eqI + 1));
+      if (!v || v.length < 4) continue;
+      const cl = classify(v, null);
+      if (cl.status === 'static') continue;
+      fields.push({ key: k, value: v, location: 'query', ...cl });
+    }
+  }
+
+  return fields;
+}
+
+// ---------------------------------------------------------------------------
+// PASTE & CORRELATE: detect the JSON path (or boundary) of a value in pasted text
+// Returns {extType, path, lb, rb, varName, value} or null
+// ---------------------------------------------------------------------------
+function advPasteDetect(responseText, targetValue) {
+  if (!responseText || !targetValue || targetValue.length < 2) return null;
+  const tv = targetValue.trim();
+
+  const bodyObj = _advParseJson(responseText);
+  if (bodyObj) {
+    let found = null;
+    _advWalkLeaves(bodyObj, '$', (val, path) => {
+      if (found) return;
+      if (val === tv) found = { extType: 'jsonpath', path, varName: _advSuggestName(path, null, tv), value: tv };
+    }, 0);
+    if (!found) {
+      // Partial / case-insensitive fallback
+      _advWalkLeaves(bodyObj, '$', (val, path) => {
+        if (found) return;
+        if (typeof val === 'string' && val.toLowerCase().includes(tv.toLowerCase()))
+          found = { extType: 'jsonpath', path, varName: _advSuggestName(path, null, tv), value: tv, _partial: true };
+      }, 0);
+    }
+    if (found) return found;
+  }
+
+  // Plain text / HTML — boundary extractor
+  let idx = responseText.indexOf(tv);
+  if (idx === -1) {
+    idx = responseText.toLowerCase().indexOf(tv.toLowerCase());
+    if (idx === -1) return null;
+  }
+  const lb = responseText.substring(Math.max(0, idx - 20), idx).replace(/\n/g, '\\n').slice(-15);
+  const rb = responseText.substring(idx + tv.length, idx + tv.length + 20).replace(/\n/g, '\\n').slice(0, 15);
+  return { extType: 'boundary', path: null, lb, rb, varName: _advSuggestName(null, null, tv), value: tv };
 }
 
 // URL query-string value decoder (+ → space, %XX → char)

@@ -1393,3 +1393,193 @@
         background: rgba(59,130,246,0.15); color: var(--primary);
         vertical-align: middle; letter-spacing: 0.02em;
       }
+
+      /* ═══════════════════════════════════════════════════════════
+         PASTE & DETECT BUTTON (advisor header)
+      ═══════════════════════════════════════════════════════════ */
+      .adv-btn-paste {
+        font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+        background: transparent; border: 1px solid rgba(99,102,241,0.4); color: #a5b4fc;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        white-space: nowrap;
+      }
+      .adv-btn-paste:hover { border-color: #6366f1; color: #e0e7ff; background: rgba(99,102,241,0.12); }
+
+      /* ═══════════════════════════════════════════════════════════
+         REQUEST INSPECTOR SECTION
+      ═══════════════════════════════════════════════════════════ */
+      .adv-inspector {
+        margin: 0 0 10px 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface2);
+        overflow: hidden;
+      }
+      .adv-inspector-hdr {
+        display: flex; align-items: center; gap: 8px;
+        padding: 9px 14px; cursor: pointer; user-select: none;
+        background: linear-gradient(90deg, rgba(99,102,241,0.07), transparent);
+        transition: background 0.15s;
+      }
+      .adv-inspector-hdr:hover { background: linear-gradient(90deg, rgba(99,102,241,0.13), transparent); }
+      .adv-inspector-title { font-weight: 600; font-size: 13px; color: var(--text); white-space: nowrap; }
+      .adv-inspector-hint { font-size: 11px; color: var(--text-3); flex: 1; }
+      .adv-insp-toggle { font-size: 11px; color: var(--text-2); transition: transform 0.15s; }
+      .adv-inspector-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+      .adv-insp-req-sel { width: 100%; }
+
+      /* ═══════════════════════════════════════════════════════════
+         TRAFFIC LIGHT LEGEND
+      ═══════════════════════════════════════════════════════════ */
+      .ri-legend {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 11px; color: var(--text-2);
+      }
+      .ri-dot {
+        display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+      }
+      .ri-dot-green { background: var(--success); box-shadow: 0 0 5px var(--success); }
+      .ri-dot-yellow { background: var(--warning); box-shadow: 0 0 5px var(--warning); }
+
+      /* ═══════════════════════════════════════════════════════════
+         REQUEST INSPECTOR FIELD LIST
+      ═══════════════════════════════════════════════════════════ */
+      .ri-field-list { display: flex; flex-direction: column; gap: 3px; }
+      .ri-field {
+        display: grid;
+        grid-template-columns: 14px 32px minmax(80px,1fr) minmax(60px,2fr) minmax(100px,1fr) auto;
+        align-items: center; gap: 6px;
+        padding: 6px 10px; border-radius: 6px; cursor: pointer;
+        font-size: 12px; border: 1px solid transparent;
+        transition: background 0.12s, border-color 0.12s;
+      }
+      .ri-field:hover { background: rgba(255,255,255,0.04); }
+      .ri-field-green {
+        border-left: 3px solid var(--success);
+        background: rgba(34,197,94,0.05);
+      }
+      .ri-field-green:hover { background: rgba(34,197,94,0.09); }
+      .ri-field-yellow {
+        border-left: 3px solid var(--warning);
+        background: rgba(245,158,11,0.05);
+      }
+      .ri-field-yellow:hover { background: rgba(245,158,11,0.09); }
+      .ri-field-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+      .ri-field-loc {
+        font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+        padding: 1px 5px; border-radius: 4px; text-align: center;
+        background: var(--surface); color: var(--text-3); border: 1px solid var(--border);
+      }
+      .ri-field-key { font-family: var(--mono); font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ri-field-val { font-family: var(--mono); font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ri-field-src { font-size: 11px; color: var(--success); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ri-field-btn {
+        font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 5px; cursor: pointer;
+        background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: var(--success);
+        white-space: nowrap; transition: background 0.12s;
+      }
+      .ri-field-btn:hover { background: rgba(34,197,94,0.25); }
+      .ri-paste-btn { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.3); color: var(--warning); }
+      .ri-paste-btn:hover { background: rgba(245,158,11,0.25); }
+      .ri-group-label {
+        font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--text-3); padding: 8px 2px 3px; margin-top: 4px;
+      }
+      .ri-group-label:first-child { margin-top: 0; padding-top: 0; }
+      .ri-empty { font-size: 12px; color: var(--text-3); padding: 12px 4px; text-align: center; }
+      .ri-trace-panel { border-radius: 7px; overflow: hidden; margin-top: 2px; }
+      .ri-trace-result {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        padding: 10px 14px; font-size: 12px;
+        background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); border-radius: 7px;
+      }
+      .ri-trace-unknown { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.2); }
+      .ri-trace-label { font-weight: 600; color: var(--text); white-space: nowrap; }
+      .ri-trace-result code { font-family: var(--mono); font-size: 11px; color: var(--primary); }
+
+      /* ═══════════════════════════════════════════════════════════
+         PASTE & CORRELATE MODAL
+      ═══════════════════════════════════════════════════════════ */
+      .pc-modal { width: 620px; max-width: 95vw; }
+      .pc-step-label {
+        font-size: 11px; font-weight: 700; color: var(--text-2); text-transform: uppercase;
+        letter-spacing: 0.06em; margin-bottom: 4px;
+      }
+      .pc-textarea {
+        width: 100%; min-height: 110px; padding: 10px 12px; border-radius: 7px;
+        background: var(--code-bg); border: 1px solid var(--border); color: var(--text);
+        font-family: var(--mono); font-size: 12px; resize: vertical;
+        transition: border-color 0.15s;
+      }
+      .pc-textarea:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+      .pc-detect-btn {
+        align-self: flex-start; padding: 7px 18px; border-radius: 7px; cursor: pointer;
+        font-size: 13px; font-weight: 600;
+        background: linear-gradient(135deg, #6366f1, #4f46e5); border: none; color: #fff;
+        margin-top: 8px; transition: opacity 0.15s, transform 0.1s;
+      }
+      .pc-detect-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+      .pc-detect-btn:active { transform: none; }
+      .pc-result-ok {
+        display: flex; flex-direction: column; gap: 6px;
+        background: rgba(34,197,94,0.07); border: 1px solid rgba(34,197,94,0.22); border-radius: 8px;
+        padding: 12px 14px; margin-top: 6px;
+      }
+      .pc-result-error {
+        background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.22); border-radius: 8px;
+        padding: 12px 14px; margin-top: 6px; font-size: 13px; color: var(--danger);
+      }
+      .pc-result-row { font-size: 13px; color: var(--text); }
+      .pc-result-row code { font-family: var(--mono); font-size: 12px; color: var(--primary); }
+      .pc-varname { margin-top: 4px; width: 100%; max-width: 280px; }
+
+      /* ═══════════════════════════════════════════════════════════
+         MODERN UI REFINEMENTS (v2.9.4)
+      ═══════════════════════════════════════════════════════════ */
+
+      /* Smoother focus rings throughout */
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+      }
+
+      /* Stats bar hover effect */
+      .stat {
+        transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .stat:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow);
+      }
+
+      /* Better scrollbar */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+      /* Advisor panel smooth open/close */
+      .adv-body {
+        animation: fadeInUp 0.18s ease;
+      }
+      @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Code area subtle glow on focus */
+      #code-body { scroll-behavior: smooth; }
+
+      /* Improved card hover */
+      .adv-card {
+        transition: border-left-color 0.15s, box-shadow 0.15s, transform 0.12s;
+      }
+      .adv-card:hover { transform: translateX(2px); }
+
+      /* Drop-zone pulse animation on drag-over */
+      .drop-zone.dz-active {
+        animation: dzPulse 1s ease infinite;
+      }
+      @keyframes dzPulse {
+        0%,100% { border-color: var(--primary); box-shadow: 0 0 0 0 rgba(59,130,246,0.3); }
+        50%      { border-color: #60a5fa;       box-shadow: 0 0 0 8px rgba(59,130,246,0); }
+      }

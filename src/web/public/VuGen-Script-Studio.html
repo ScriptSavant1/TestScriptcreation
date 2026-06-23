@@ -261,11 +261,34 @@
               <span class="adv-badge" id="adv-badge"></span>
             </div>
             <div class="adv-panel-hdr-right">
+              <button class="adv-btn-paste" onclick="event.stopPropagation();openPasteCorrelate()" title="Paste a response body and extract a value from it">&#x1F4CB; Paste &amp; Detect</button>
               <button class="adv-btn-add" onclick="event.stopPropagation();openAdvisorModal()" title="Add a custom correlation manually">+ Add Manual</button>
               <span class="adv-toggle-icon" id="adv-toggle-icon">&#x25BE;</span>
             </div>
           </div>
           <div class="adv-body" id="adv-body">
+
+            <!-- ── REQUEST INSPECTOR (Feature A + C) ── -->
+            <div class="adv-inspector" id="adv-inspector">
+              <div class="adv-inspector-hdr" onclick="toggleInspector()">
+                <span class="adv-inspector-title">&#x1F50D; Request Inspector</span>
+                <span class="adv-inspector-hint">Select any request to see which values need correlation</span>
+                <span class="adv-insp-toggle" id="adv-insp-toggle">&#x25B8;</span>
+              </div>
+              <div class="adv-inspector-body" id="adv-insp-body" style="display:none">
+                <select class="adv-modal-select adv-insp-req-sel" id="adv-insp-req-sel"
+                        onchange="onInspectorReqChange(this.value)">
+                  <option value="">— select a request to inspect —</option>
+                </select>
+                <div class="ri-legend">
+                  <span class="ri-dot ri-dot-green"></span><span>Traced to prior response</span>
+                  <span class="ri-dot ri-dot-yellow" style="margin-left:14px"></span><span>Dynamic pattern, source unknown</span>
+                </div>
+                <div class="ri-field-list" id="ri-field-list"></div>
+                <div class="ri-trace-panel" id="ri-trace-panel" style="display:none"></div>
+              </div>
+            </div>
+
             <div class="adv-cards" id="adv-cards"></div>
             <div class="adv-footer" id="adv-footer" style="display:none">
               <span class="adv-footer-summary" id="adv-footer-summary"></span>
@@ -347,6 +370,41 @@
         <div class="adv-modal-footer">
           <button class="adv-modal-cancel" onclick="closeAdvisorModal()">Cancel</button>
           <button class="adv-modal-submit" id="adv-modal-submit-btn" onclick="submitAdvisorManual()" disabled>Add Correlation</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PASTE & CORRELATE MODAL (Feature B) ── -->
+    <div class="adv-modal-overlay" id="pc-modal-overlay" onclick="closePasteCorrelate()" style="display:none">
+      <div class="adv-modal adv-modal-wide pc-modal" onclick="event.stopPropagation()">
+        <div class="adv-modal-hdr">
+          <span>&#x1F4CB; Paste &amp; Detect Correlation</span>
+          <button class="adv-modal-close" onclick="closePasteCorrelate()">&#x2715;</button>
+        </div>
+        <div class="adv-modal-body">
+          <div class="pc-step-label">&#x2460; Paste the server response body</div>
+          <textarea class="pc-textarea" id="pc-response-body"
+            placeholder='{"access_token":"eyJa...","expires_in":3600}'
+            rows="6"></textarea>
+
+          <div class="pc-step-label" style="margin-top:10px">&#x2461; Value to extract (copy-paste the exact value)</div>
+          <input class="adv-modal-input" id="pc-target-value" type="text"
+            placeholder="eyJa..." autocomplete="off" />
+
+          <button class="pc-detect-btn" onclick="runPasteDetect()">&#x1F50D; Detect Path</button>
+
+          <div id="pc-result-section" style="display:none"></div>
+
+          <div id="pc-src-row" style="margin-top:10px">
+            <div class="pc-step-label">&#x2462; Which request <em>uses</em> this value? (for usage substitution)</div>
+            <select class="adv-modal-select" id="pc-src-select">
+              <option value="">— select a request —</option>
+            </select>
+          </div>
+        </div>
+        <div class="adv-modal-footer">
+          <button class="adv-modal-cancel" onclick="closePasteCorrelate()">Cancel</button>
+          <button class="adv-modal-submit" id="pc-submit-btn" onclick="submitPasteCorrelate()" disabled>Add Correlation</button>
         </div>
       </div>
     </div>
