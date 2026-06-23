@@ -847,40 +847,175 @@ function advGetRequestFields(entryIdx) {
 }
 
 // ---------------------------------------------------------------------------
-// PASTE & CORRELATE: detect the JSON path (or boundary) of a value in pasted text
-// Returns {extType, path, lb, rb, varName, value} or null
+// PASTE & CORRELATE: detect the best extractor for a value in pasted response text.
+//
+// Handles: JSON (single + multi-path), HTML attributes, HTML tag content,
+// query-string parameters, JSON-in-plain-text, JWT/UUID/hex shapes.
+//
+// Returns {
+//   extType, path, allPaths,                  ← JSON case
+//   lb, rb, pattern, group,                   ← boundary / regexp case
+//   allOccurrences, ordinal,                  ← when value found N > 1 times
+//   contextType, contextLabel,                ← 'html_attribute' | 'html_tag' | …
+//   varName, value, contentType, occurrences, confidence
+// }
+// or null (value genuinely not present)
 // ---------------------------------------------------------------------------
-function advPasteDetect(responseText, targetValue) {
-  if (!responseText || !targetValue || targetValue.length < 2) return null;
-  const tv = targetValue.trim();
 
-  const bodyObj = _advParseJson(responseText);
-  if (bodyObj) {
-    let found = null;
-    _advWalkLeaves(bodyObj, '$', (val, path) => {
-      if (found) return;
-      if (val === tv) found = { extType: 'jsonpath', path, varName: _advSuggestName(path, null, tv), value: tv };
-    }, 0);
-    if (!found) {
-      // Partial / case-insensitive fallback
-      _advWalkLeaves(bodyObj, '$', (val, path) => {
-        if (found) return;
-        if (typeof val === 'string' && val.toLowerCase().includes(tv.toLowerCase()))
-          found = { extType: 'jsonpath', path, varName: _advSuggestName(path, null, tv), value: tv, _partial: true };
-      }, 0);
+function _advDetectContentType(text) {
+  const t = (text || '').trim();
+  if (!t) return 'empty';
+  // Try JSON parse
+  if (t[0] === '{' || t[0] === '[') {
+    try { JSON.parse(t); return 'json'; } catch { /* fall through */ }
+  }
+  if (/^<\?xml/i.test(t) || (/^<[a-zA-Z]/.test(t) && /<\/[a-zA-Z]/.test(t) && !/<html/i.test(t))) return 'xml';
+  if (/<html|<body|<!DOCTYPE/i.test(t) || /<(div|input|form|table|td|span|p|a)[^>]*>/i.test(t)) return 'html';
+  return 'text';
+}
+
+// Analyse the characters BEFORE and AFTER the found value to determine the
+// best extractor. Returns an occurrence descriptor object.
+function _advBoundaryContext(before, after, value, contentType) {
+  // 1. HTML attribute:  name="VALUE"  or  name='VALUE'
+  const attrM = before.match(/([\w:_-]+=["'])$/);
+  if (attrM) {
+    const q = attrM[1].slice(-1); // the opening quote
+    const rb = q; // matching close quote
+    // Try to include full attribute name for specificity: take last attr=quote combo
+    const lb = attrM[1];
+    return { extType: 'boundary', lb, rb, contextType: 'html_attribute', contextLabel: 'HTML attribute value' };
+  }
+
+  // 2. HTML tag content: <tag...>VALUE</tag>
+  const tagEndM = before.match(/<([a-zA-Z][a-zA-Z0-9]*)(?:\s[^>]*)?>$/);
+  if (tagEndM && contentType !== 'text') {
+    const closeTag = '</' + tagEndM[1] + '>';
+    if (after.trimStart().startsWith('</' + tagEndM[1])) {
+      return { extType: 'boundary', lb: '<' + tagEndM[1] + '>', rb: closeTag, contextType: 'html_tag', contextLabel: 'HTML <' + tagEndM[1] + '> content' };
     }
-    if (found) return found;
   }
 
-  // Plain text / HTML — boundary extractor
-  let idx = responseText.indexOf(tv);
-  if (idx === -1) {
-    idx = responseText.toLowerCase().indexOf(tv.toLowerCase());
-    if (idx === -1) return null;
+  // 3. JSON key-value in plain text: "key":"VALUE"
+  const jsonKvM = before.match(/"([^"\\]{1,60})":"$/);
+  if (jsonKvM) {
+    const closeQ = after.startsWith('"') ? '"' : (after.match(/^[^,}\]\n"]*/) || [''])[0].length > 0 ? '' : '"';
+    return { extType: 'boundary', lb: '"' + jsonKvM[1] + '":"', rb: '"', contextType: 'json_kv', contextLabel: 'JSON field "' + jsonKvM[1] + '"' };
   }
-  const lb = responseText.substring(Math.max(0, idx - 20), idx).replace(/\n/g, '\\n').slice(-15);
-  const rb = responseText.substring(idx + tv.length, idx + tv.length + 20).replace(/\n/g, '\\n').slice(0, 15);
-  return { extType: 'boundary', path: null, lb, rb, varName: _advSuggestName(null, null, tv), value: tv };
+
+  // 4. Query-string parameter: ?param=VALUE or &param=VALUE
+  const qsM = before.match(/[?&]([^&=\s]{1,40})=$/);
+  if (qsM) {
+    const rbChar = (after.match(/^([&\s"'\n])/) || [, '&'])[1];
+    return { extType: 'boundary', lb: qsM[1] + '=', rb: rbChar, contextType: 'query_string', contextLabel: 'Query param "' + qsM[1] + '"' };
+  }
+
+  // 5. Generic HTML tag text content: look for > before value and < after
+  if ((before.match(/>$/) || before.match(/>\s*$/)) && contentType !== 'text') {
+    const tagBefore = before.match(/<([a-zA-Z][a-zA-Z0-9]*)(?:\s[^>]*)?>(?:\s*)$/);
+    if (tagBefore) {
+      return { extType: 'boundary', lb: '>' , rb: '<', contextType: 'html_content', contextLabel: 'HTML element content' };
+    }
+  }
+
+  // 6. JWT/UUID/hex pattern → regexp is better than boundary
+  if (/^eyJ[A-Za-z0-9+\/=_-]{10,}\.[A-Za-z0-9+\/=_-]+\.[A-Za-z0-9+\/=_-]+$/.test(value)) {
+    return { extType: 'regexp', pattern: 'eyJ[A-Za-z0-9+/=_-]+\\.[A-Za-z0-9+/=_-]+\\.[A-Za-z0-9+/=_-]+', group: 0, contextType: 'jwt', contextLabel: 'JWT token (regexp)' };
+  }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    return { extType: 'regexp', pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', group: 0, contextType: 'uuid', contextLabel: 'UUID (regexp)' };
+  }
+  if (/^[0-9a-f]{16,64}$/i.test(value)) {
+    return { extType: 'regexp', pattern: '[0-9a-fA-F]{' + value.length + '}', group: 0, contextType: 'hex', contextLabel: 'Hex token (regexp)' };
+  }
+
+  // 7. Fallback: surrounding chars as boundary
+  const lb = before.replace(/\n/g, '\\n').slice(-18);
+  const rb = after.replace(/\n/g, '\\n').slice(0, 18).split('\n')[0];
+  return { extType: 'boundary', lb, rb, contextType: 'generic', contextLabel: 'Surrounding text (generic boundary)' };
+}
+
+function advPasteDetect(responseText, targetValue) {
+  if (!responseText || !targetValue || targetValue.length < 1) return null;
+  const tv = targetValue.trim();
+  const contentType = _advDetectContentType(responseText);
+  const varName = _advSuggestName(null, null, tv);
+
+  // ── JSON response ──────────────────────────────────────────────────────────
+  if (contentType === 'json') {
+    let bodyObj;
+    try { bodyObj = JSON.parse(responseText.trim()); } catch { bodyObj = null; }
+    if (bodyObj) {
+      const allPaths = [];
+      _advWalkLeaves(bodyObj, '$', (val, path) => {
+        if (val === tv) allPaths.push({ path, exact: true, value: val });
+        else if (typeof val === 'string' && val.includes(tv)) allPaths.push({ path, exact: false, value: val, _partial: true });
+      }, 0);
+
+      if (allPaths.length === 0) return null;
+
+      // Best path: prefer exact match, then shortest path (less nested = more reliable)
+      const exactPaths = allPaths.filter(p => p.exact);
+      const best = (exactPaths.length ? exactPaths : allPaths)
+        .sort((a, b) => (a.path.split('.').length + (a.path.match(/\[/g) || []).length)
+                       - (b.path.split('.').length + (b.path.match(/\[/g) || []).length))[0];
+
+      // Detect if array path: $.items[0] → suggest SelectAll hint
+      const hasArrayIndex = /\[\d+\]/.test(best.path);
+
+      return {
+        extType: 'jsonpath',
+        path: best.path,
+        allPaths,
+        varName: _advSuggestName(best.path, null, tv),
+        value: tv,
+        contentType: 'json',
+        occurrences: allPaths.filter(p => p.exact).length || allPaths.length,
+        confidence: exactPaths.length ? 'high' : 'medium',
+        hasArrayIndex,
+      };
+    }
+  }
+
+  // ── Non-JSON: find all occurrences with context ────────────────────────────
+  const lower = responseText.toLowerCase();
+  const tvLower = tv.toLowerCase();
+  if (!lower.includes(tvLower)) return null;
+
+  const allOccurrences = [];
+  let pos = 0;
+  while (allOccurrences.length < 20) { // cap at 20 occurrences
+    const fi = lower.indexOf(tvLower, pos);
+    if (fi === -1) break;
+    const actualVal = responseText.substring(fi, fi + tv.length);
+    const before = responseText.substring(Math.max(0, fi - 100), fi);
+    const after  = responseText.substring(fi + tv.length, fi + tv.length + 100);
+    const ctx    = _advBoundaryContext(before, after, actualVal, contentType);
+    allOccurrences.push({ ...ctx, position: fi, snippet: (before.slice(-20) + '【' + actualVal + '】' + after.slice(0, 20)).replace(/\n/g, ' ') });
+    pos = fi + tv.length;
+  }
+
+  if (allOccurrences.length === 0) return null;
+
+  // Pick first high-confidence occurrence as default
+  const best = allOccurrences.find(o => o.contextType !== 'generic') || allOccurrences[0];
+
+  return {
+    extType: best.extType,
+    lb: best.lb,
+    rb: best.rb,
+    pattern: best.pattern,
+    group: best.group,
+    contextType: best.contextType,
+    contextLabel: best.contextLabel,
+    allOccurrences,
+    ordinal: allOccurrences.indexOf(best) + 1,
+    varName,
+    value: tv,
+    contentType,
+    occurrences: allOccurrences.length,
+    confidence: best.contextType !== 'generic' ? 'high' : 'medium',
+  };
 }
 
 // URL query-string value decoder (+ → space, %XX → char)

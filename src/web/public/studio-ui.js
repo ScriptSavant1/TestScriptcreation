@@ -1220,6 +1220,8 @@ function toggleInspector() {
 // =============================================================================
 
 var _riPasteResult = null;
+var _riPastePathIdx = 0;   // selected JSONPath index when multiple paths found
+var _riPasteOccIdx  = 0;   // selected occurrence index when value found N times
 
 function openPasteCorrelate(prefillValue) {
   var overlay = document.getElementById('pc-modal-overlay');
@@ -1278,12 +1280,46 @@ function _pcBuildFallbackExtractor(value) {
   return { extType: 'regexp', pattern: escaped, group: 0, varName: varName, value: v, _autoPattern: true, _patternLabel: 'Literal value pattern' };
 }
 
+// Called when user selects a different JSONPath from the list
+function pcSelectPath(idx) {
+  _riPastePathIdx = parseInt(idx, 10) || 0;
+  var res = _riPasteResult;
+  if (!res || !res.allPaths) return;
+  var chosen = res.allPaths[_riPastePathIdx];
+  if (!chosen) return;
+  var descEl = document.getElementById('pc-ext-desc');
+  if (descEl) descEl.innerHTML = '<b>JSONPath</b>: <code>' + _esc(chosen.path) + '</code>'
+    + (chosen._partial ? ' <span class="pc-pattern-label">(partial match)</span>' : '');
+}
+
+// Called when user selects a different occurrence from the dropdown
+function pcSelectOccurrence(idx) {
+  _riPasteOccIdx = parseInt(idx, 10) || 0;
+  var res = _riPasteResult;
+  if (!res || !res.allOccurrences) return;
+  var occ = res.allOccurrences[_riPasteOccIdx];
+  if (!occ) return;
+  var descEl = document.getElementById('pc-ext-desc');
+  if (descEl) descEl.innerHTML = _pcExtDesc(occ);
+}
+
+function _pcExtDesc(r) {
+  if (!r) return '';
+  if (r.extType === 'jsonpath') return '<b>JSONPath</b>: <code>' + _esc(r.path || '') + '</code>';
+  if (r.extType === 'regexp')   return '<b>RegExp</b>: <code>' + _esc(r.pattern || '') + '</code>'
+    + (r.contextLabel ? ' <span class="pc-pattern-label">(' + _esc(r.contextLabel) + ')</span>' : '');
+  return '<b>Boundary</b>: LB=<code>' + _esc(r.lb || '') + '</code>&nbsp; RB=<code>' + _esc(r.rb || '') + '</code>'
+    + (r.contextLabel ? ' <span class="pc-pattern-label">(' + _esc(r.contextLabel) + ')</span>' : '');
+}
+
 function runPasteDetect() {
   var respText = ((document.getElementById('pc-response-body') || {}).value || '').trim();
   var targetVal = ((document.getElementById('pc-target-value') || {}).value || '').trim();
   var resultEl = document.getElementById('pc-result-section');
   var submitBtn = document.getElementById('pc-submit-btn');
   _riPasteResult = null;
+  _riPastePathIdx = 0;
+  _riPasteOccIdx  = 0;
   if (submitBtn) submitBtn.disabled = true;
 
   if (!targetVal) {
@@ -1291,48 +1327,77 @@ function runPasteDetect() {
     return;
   }
 
-  // Try to detect path in pasted response first
-  var res = respText ? advPasteDetect(respText, targetVal) : null; // from studio-advisor.js
+  // Try to detect in pasted response
+  var res = respText ? advPasteDetect(respText, targetVal) : null;
 
   var autoFallback = false;
   if (!res) {
-    // Value not found in response (or no response pasted) — auto-generate from value shape
     res = _pcBuildFallbackExtractor(targetVal);
     autoFallback = true;
   }
-
   _riPasteResult = res;
 
-  // Build extractor description for display
-  var extDesc;
-  if (res.extType === 'jsonpath') {
-    extDesc = '<b>JSONPath</b>: <code>' + _esc(res.path) + '</code>';
-  } else if (res.extType === 'regexp') {
-    extDesc = '<b>RegExp</b>: <code>' + _esc(res.pattern) + '</code>';
-    if (res._patternLabel) extDesc += ' <span class="pc-pattern-label">(' + _esc(res._patternLabel) + ')</span>';
+  // ── Build result HTML ─────────────────────────────────────────────────────
+  var html = '';
+  var statusCls = autoFallback ? 'pc-result-auto' : 'pc-result-ok';
+
+  // Status header
+  if (autoFallback) {
+    html += '<div class="pc-result-row">&#x26A1; <b>Auto-generated</b> pattern &mdash; value not found in pasted response</div>'
+      + '<div class="pc-result-hint">Pattern is based on the value\'s shape (JWT / UUID / hex / token). Captures similar values at script runtime. Refine if needed after adding.</div>';
   } else {
-    extDesc = '<b>Boundary</b>: LB=<code>' + _esc(res.lb || '') + '</code> &nbsp; RB=<code>' + _esc(res.rb || '') + '</code>';
-    if (res._patternLabel) extDesc += ' <span class="pc-pattern-label">(' + _esc(res._patternLabel) + ')</span>';
+    var ctLabel = { json:'JSON', html:'HTML', xml:'XML', text:'Plain text' }[res.contentType] || '';
+    var confIcon = res.confidence === 'high' ? '&#x2705;' : '&#x26A0;&#xFE0F;';
+    html += '<div class="pc-result-row">' + confIcon + ' <b>Detected</b>'
+      + (ctLabel ? ' &middot; ' + ctLabel + ' response' : '')
+      + (res.occurrences > 1 ? ' &middot; value found <b>' + res.occurrences + ' times</b>' : '')
+      + '</div>';
   }
 
-  var statusLine = autoFallback
-    ? '&#x26A1; <b>Auto-generated</b> from value pattern — path not found in pasted response'
-    : '&#x2705; <b>Detected</b>' + (res._partial ? ' (partial match)' : '');
+  // Extractor description + path/occurrence selectors
+  html += '<div class="pc-result-row" id="pc-ext-desc">' + _pcExtDesc(res) + '</div>';
 
-  var statusCls = autoFallback ? 'pc-result-auto' : 'pc-result-ok';
-  var hintLine = autoFallback
-    ? '<div class="pc-result-hint">The extractor pattern is based on the value&#x27;s shape and will capture any similar value at script runtime. You can refine the pattern after adding.</div>'
-    : '';
+  // Multiple JSONPaths → radio list
+  if (!autoFallback && res.extType === 'jsonpath' && res.allPaths && res.allPaths.length > 1) {
+    html += '<div class="pc-multipath-label">Found at ' + res.allPaths.length + ' paths &mdash; select the correct one:</div>'
+      + '<div class="pc-paths">';
+    res.allPaths.forEach(function(p, i) {
+      var isDefault = (i === 0);
+      var badge = p._partial ? '<span class="pc-pattern-label">partial</span>' : (p.exact ? '' : '');
+      html += '<label class="pc-path-opt">'
+        + '<input type="radio" name="pc-path-radio" value="' + i + '"' + (isDefault ? ' checked' : '') + ' onchange="pcSelectPath(' + i + ')">'
+        + ' <code>' + _esc(p.path) + '</code>' + badge + '</label>';
+    });
+    html += '</div>';
+    // Hint for array paths
+    var arrayPaths = res.allPaths.filter(function(p) { return /\[\d+\]/.test(p.path); });
+    if (arrayPaths.length) {
+      html += '<div class="pc-result-hint">&#x1F4A1; Array path detected. To extract ALL elements, this will use SelectAll in the generated script.</div>';
+    }
+  }
+
+  // Multiple occurrences for non-JSON → occurrence selector
+  if (!autoFallback && res.allOccurrences && res.allOccurrences.length > 1) {
+    html += '<div class="pc-occ-row">'
+      + '<label class="pc-occ-label">Occurrence:</label>'
+      + '<select class="adv-modal-select pc-occ-sel" onchange="pcSelectOccurrence(this.value)">';
+    res.allOccurrences.forEach(function(occ, i) {
+      var ordinal = i + 1;
+      var snip = occ.snippet ? ' — ' + occ.snippet.slice(0, 35) + (occ.snippet.length > 35 ? '…' : '') : '';
+      var ctx = occ.contextLabel ? ' [' + occ.contextLabel + ']' : '';
+      html += '<option value="' + i + '"' + (i === 0 ? ' selected' : '') + '>'
+        + ordinal + ' of ' + res.allOccurrences.length + ctx + _esc(snip) + '</option>';
+    });
+    html += '</select></div>';
+  }
+
+  // Variable name input
+  html += '<div class="pc-result-row"><label class="adv-modal-label" style="margin-bottom:3px">Variable name</label>'
+    + '<input class="adv-modal-input pc-varname" id="pc-varname-input" value="' + _esc(res.varName) + '" placeholder="variableName" /></div>';
 
   if (resultEl) {
     resultEl.style.display = '';
-    resultEl.innerHTML = '<div class="' + statusCls + '">'
-      + '<div class="pc-result-row">' + statusLine + '</div>'
-      + '<div class="pc-result-row">' + extDesc + '</div>'
-      + hintLine
-      + '<div class="pc-result-row"><label class="adv-modal-label" style="margin-bottom:3px">Variable name</label>'
-      + '<input class="adv-modal-input pc-varname" id="pc-varname-input" value="' + _esc(res.varName) + '" placeholder="variableName" /></div>'
-      + '</div>';
+    resultEl.innerHTML = '<div class="' + statusCls + '">' + html + '</div>';
   }
 
   if (submitBtn) submitBtn.disabled = false;
@@ -1349,20 +1414,32 @@ function submitPasteCorrelate() {
 
   var res = _riPasteResult;
 
+  // Resolve selected path / occurrence to get final extractor config
+  var effective = res; // default
+  if (res.extType === 'jsonpath' && res.allPaths && res.allPaths[_riPastePathIdx]) {
+    effective = { extType: 'jsonpath', path: res.allPaths[_riPastePathIdx].path };
+  } else if (res.allOccurrences && res.allOccurrences[_riPasteOccIdx]) {
+    effective = res.allOccurrences[_riPasteOccIdx];
+  }
+
   // Use the nearest earlier entry as "source" so codegen has a valid sourceIdx
   var sourceEntryIdx = isNaN(srcIdx) ? 0 : Math.max(0, srcIdx - 1);
 
-  // Build extractorType + extractorConfig for all three possible result types
+  // Build extractorType + extractorConfig for all result types
   var extractorType, extractorConfig;
-  if (res.extType === 'jsonpath') {
+  if (effective.extType === 'jsonpath') {
     extractorType = 'jsonpath';
-    extractorConfig = { path: res.path };
-  } else if (res.extType === 'regexp') {
+    extractorConfig = { path: effective.path };
+  } else if (effective.extType === 'regexp') {
     extractorType = 'regexp';
-    extractorConfig = { pattern: res.pattern, group: res.group != null ? res.group : 0 };
+    extractorConfig = { pattern: effective.pattern || '', group: effective.group != null ? effective.group : 0 };
   } else {
     extractorType = 'boundary';
-    extractorConfig = { lb: res.lb || '', rb: res.rb || '' };
+    extractorConfig = { lb: effective.lb || '', rb: effective.rb || '' };
+    // Add ordinal if multiple occurrences
+    if (res.allOccurrences && res.allOccurrences.length > 1) {
+      extractorConfig.ordinal = _riPasteOccIdx + 1;
+    }
   }
 
   // Create correlation with the detected extractor
