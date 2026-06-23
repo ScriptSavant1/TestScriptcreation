@@ -1532,6 +1532,18 @@
       .pc-result-row { font-size: 13px; color: var(--text); }
       .pc-result-row code { font-family: var(--mono); font-size: 12px; color: var(--primary); }
       .pc-varname { margin-top: 4px; width: 100%; max-width: 280px; }
+      .pc-result-auto {
+        display: flex; flex-direction: column; gap: 6px;
+        background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.25); border-radius: 8px;
+        padding: 12px 14px; margin-top: 6px;
+      }
+      .pc-result-hint {
+        font-size: 11px; color: var(--text-3); line-height: 1.5;
+        padding: 4px 0;
+      }
+      .pc-pattern-label {
+        font-size: 11px; color: var(--text-3);
+      }
 
       /* ═══════════════════════════════════════════════════════════
          MODERN UI REFINEMENTS (v2.9.4)
