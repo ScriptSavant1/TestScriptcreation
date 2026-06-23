@@ -1544,6 +1544,21 @@
       .pc-pattern-label {
         font-size: 11px; color: var(--text-3);
       }
+      /* Multiple-path selector */
+      .pc-multipath-label { font-size: 11px; color: var(--text-2); margin: 6px 0 4px; font-weight: 600; }
+      .pc-paths { display: flex; flex-direction: column; gap: 4px; margin: 0 0 6px 2px; }
+      .pc-path-opt {
+        display: flex; align-items: center; gap: 6px; font-size: 12px;
+        cursor: pointer; padding: 5px 8px; border-radius: 5px;
+        border: 1px solid transparent; transition: background 0.1s;
+      }
+      .pc-path-opt:hover { background: rgba(59,130,246,0.06); border-color: var(--border); }
+      .pc-path-opt input[type="radio"] { accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+      .pc-path-opt code { font-size: 12px; color: var(--primary); }
+      /* Occurrence selector */
+      .pc-occ-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+      .pc-occ-label { font-size: 11px; color: var(--text-2); white-space: nowrap; font-weight: 600; }
+      .pc-occ-sel { flex: 1; font-size: 12px; }
 
       /* ═══════════════════════════════════════════════════════════
          MODERN UI REFINEMENTS (v2.9.4)
