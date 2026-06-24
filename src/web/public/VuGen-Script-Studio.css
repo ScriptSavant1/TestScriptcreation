@@ -1111,6 +1111,13 @@
         transition: background 0.15s;
       }
       .adv-panel-hdr:hover { background: linear-gradient(90deg, rgba(59,130,246,0.13), transparent); }
+      .adv-info-line {
+        padding: 5px 16px 6px;
+        font-size: 11px; color: var(--text-3); line-height: 1.55;
+        border-bottom: 1px solid var(--border);
+        background: rgba(59,130,246,0.03);
+      }
+      .adv-info-line strong { color: var(--text-2); font-weight: 600; }
       .adv-panel-hdr-left { display: flex; align-items: center; gap: 8px; }
       .adv-panel-hdr-right { display: flex; align-items: center; gap: 8px; }
       .adv-panel-icon { font-size: 16px; }
