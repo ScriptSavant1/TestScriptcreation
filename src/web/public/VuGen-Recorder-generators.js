@@ -660,15 +660,39 @@ function genMainJS(){
 // ===========================================================================
 // OTHER GENERATED FILES
 // ===========================================================================
+var _REC_LRE_SETUP_COMMENT =
+    "/*\n"
+  + " * " + "═".repeat(62) + "\n"
+  + " *  SETUP REQUIRED — 3 steps before running this script in VuGen\n"
+  + " * " + "═".repeat(62) + "\n"
+  + " *\n"
+  + " *  lre-utils.dat contains the DPoP crypto library. It is\n"
+  + " *  shipped as .dat to bypass antivirus scanners on IIS servers.\n"
+  + " *  VuGen requires the .js extension to execute it. Do this once:\n"
+  + " *\n"
+  + " *  Step 1 — Rename the file (Windows Explorer or command prompt):\n"
+  + " *            lre-utils.dat  →  lre-utils.js\n"
+  + " *\n"
+  + " *  Step 2 — In this file (vuser_init.c) and in Action.c:\n"
+  + ' *            Find:    "File=lre-utils.dat"\n'
+  + ' *            Replace: "File=lre-utils.js"\n'
+  + " *\n"
+  + " *  Step 3 — In VuGen: Script > Script Properties > Extra Files\n"
+  + " *            Remove lre-utils.dat  then Add Files → select lre-utils.js\n"
+  + " *\n"
+  + " * " + "═".repeat(62) + "\n"
+  + " */\n\n";
+
 function genVuserInit(){
     if(S.hasDpop){
-      return `vuser_init()\n{\n\n`
+      return _REC_LRE_SETUP_COMMENT
+        +`vuser_init()\n{\n\n`
         +`\t// Load lre-utils.dat ONCE and initialize DPoP engine\n`
         +`\tweb_js_run(\n`
         +`\t\t"Code=initDpopKey(LR.getParam('dpop_jwk')); 'DPoP engine initialized successfully':",\n`
         +`\t\t"ResultParam=dpop_init_result",\n`
         +`\t\tSOURCES,\n`
-        +`\t\t"File=lre-utils.dat", ENDITEM,\n`
+        +`\t\t"File=lre-utils.dat", ENDITEM,    /* <- Step 2: update to "File=lre-utils.js" after renaming */\n`
         +`\t\tLAST);\n\n`
         +`\tlr_output_message("DPoP Initialization: %s", lr_eval_string("{dpop_init_result}"));\n\n`
         +`\treturn 0;\n}\n`;
