@@ -1065,7 +1065,7 @@ static void gen_hex64(const char *param_name) {
     "Code=initDpopKey(LR.getParam('${this.dpopKeyVar || "dpop_jwk"}')); 'DPoP engine initialized successfully';",
     "ResultParam=dpop_init_result",
     SOURCES,
-    "File=lre-utils.dat", ENDITEM,
+    "File=lre-utils.dat", ENDITEM,    /* <- Step 2: update to "File=lre-utils.js" after renaming */
     LAST);
 
   lr_output_message("DPoP Initialization: %s", lr_eval_string("{dpop_init_result}"));
@@ -1113,7 +1113,32 @@ static void gen_hex64(const char *param_name) {
 
     const fileScopeBlock = fileScopeDecls ? fileScopeDecls + '\n' : '';
 
-    return `${fileScopeBlock}vuser_init()
+    // Setup comment block — only emitted when lre-utils.dat is included (JWT or DPoP)
+    const lreSetupComment = (this.hasJwt || this.hasDpop)
+      ? `/*\n` +
+        ` * ${'═'.repeat(62)}\n` +
+        ` *  SETUP REQUIRED — 3 steps before running this script in VuGen\n` +
+        ` * ${'═'.repeat(62)}\n` +
+        ` *\n` +
+        ` *  lre-utils.dat contains the JWT/DPoP crypto library. It is\n` +
+        ` *  shipped as .dat to bypass antivirus scanners on IIS servers.\n` +
+        ` *  VuGen requires the .js extension to execute it. Do this once:\n` +
+        ` *\n` +
+        ` *  Step 1 — Rename the file (Windows Explorer or command prompt):\n` +
+        ` *            lre-utils.dat  →  lre-utils.js\n` +
+        ` *\n` +
+        ` *  Step 2 — In this file (vuser_init.c) and in Action.c:\n` +
+        ` *            Find:    "File=lre-utils.dat"\n` +
+        ` *            Replace: "File=lre-utils.js"\n` +
+        ` *\n` +
+        ` *  Step 3 — In VuGen: Script > Script Properties > Extra Files\n` +
+        ` *            Remove lre-utils.dat  then Add Files → select lre-utils.js\n` +
+        ` *\n` +
+        ` * ${'═'.repeat(62)}\n` +
+        ` */\n\n`
+      : '';
+
+    return `${lreSetupComment}${fileScopeBlock}vuser_init()
 {
 ${ntlmBlock}${certBlock}${dpopInitBlock}${attribBlock}${setupBlock}
   return 0;
@@ -1255,7 +1280,7 @@ ${audPreStep}web_js_run(
   "Code=createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'));",
   "ResultParam=${resultParam}",
   SOURCES,
-  "File=lre-utils.dat", ENDITEM,
+  "File=lre-utils.dat", ENDITEM,    /* <- Step 2: update to "File=lre-utils.js" after renaming */
   LAST);
 `;
         })()
