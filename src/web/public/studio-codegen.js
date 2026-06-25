@@ -2954,7 +2954,7 @@ function genActionC(entries, correlations) {
             }
           }
         }
-        o += `\tweb_add_header("${hdrTitleCase(k)}", "${escJs(subHdrValC(h.value, acHostVarMap))}");\n`;
+        o += `\tweb_add_header("${hdrTitleCase(k)}", "${escJs(subHdrValC(hdrDynamic ? hdrVal : h.value, acHostVarMap))}");\n`;
       }
     }
 
@@ -3037,24 +3037,38 @@ function genActionC(entries, correlations) {
           o += `\t/* Build ${arrKey} JSON array from correlated parameters */\n`;
           o += `\tweb_js_run(\n`;
           o += `\t\t"Code="\n`;
-          o += `\t\t"var _n=parseInt(lr.getParam('${countVar}_count'))||0;"\n`;
-          o += `\t\t"var _r=[];"\n`;
-          o += `\t\t"for(var _i=1;_i<=_n;_i++){"\n`;
-          o += `\t\t"var _t={};"\n`;
+          o += `\t\t"var _n=parseInt(LR.getParam('${countVar}_count'))||0;"\n`;
+          o += `\t\t"var _r=[];var _i;var _obj;"\n`;
+          o += `\t\t"for(_i=1;_i<=_n;_i++){"\n`;
+          o += `\t\t"_obj=new Object();"\n`;
           for (const col of (cfg.columns || [])) {
+            // Use dot notation when key is a valid JS identifier, bracket notation otherwise
+            const keyIsIdent = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(col.targetKey);
             if (col._placeholder) {
-              o += `\t\t"_t[\\"${col.targetKey}\\"]=\\"\\";/* TODO: add ${col.varName} correlation */"\n`;
+              if (keyIsIdent) {
+                o += `\t\t"_obj.${col.targetKey}='';/* TODO: add ${col.varName} correlation */"\n`;
+              } else {
+                o += `\t\t"_obj[\\"${col.targetKey}\\"]=\\"\\";/* TODO: add ${col.varName} correlation */"\n`;
+              }
             } else {
-              // Escape double-quotes inside JS string: \" → \\\" in C string
-              o += `\t\t"_t[\\"${col.targetKey}\\"]=lr.getParam(\\"${col.varName}_\\"+_i)||\\"\\";""\n`;
+              if (keyIsIdent) {
+                o += `\t\t"_obj.${col.targetKey}=LR.getParam(\\"${col.varName}_\\"+_i);"\n`;
+              } else {
+                o += `\t\t"_obj[\\"${col.targetKey}\\"]=LR.getParam(\\"${col.varName}_\\"+_i);"\n`;
+              }
             }
           }
           for (const sf of (cfg.staticFields || [])) {
-            o += `\t\t"_t[\\"${sf.targetKey}\\"]=\\"${sf.value.replace(/"/g, '\\"')}\\";"\n`;
+            const keyIsIdent = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(sf.targetKey);
+            if (keyIsIdent) {
+              o += `\t\t"_obj.${sf.targetKey}=\\"${sf.value.replace(/"/g, '\\"')}\\";"\n`;
+            } else {
+              o += `\t\t"_obj[\\"${sf.targetKey}\\"]=\\"${sf.value.replace(/"/g, '\\"')}\\";"\n`;
+            }
           }
-          o += `\t\t"_r.push(_t);"\n`;
+          o += `\t\t"_r.push(_obj);"\n`;
           o += `\t\t"}"\n`;
-          o += `\t\t"lr.setParam(\\"${paramName}\\",JSON.stringify(_r));",\n`;
+          o += `\t\t"LR.setParam(\\"${paramName}\\",JSON.stringify(_r));",\n`;
           o += `\t\t"ResultParam=_arr_build_result",\n`;
           o += `\t\tLAST);\n\n`;
         }
@@ -3188,6 +3202,9 @@ function genActionC(entries, correlations) {
         // Body= causes VuGen attribute parser errors with JSON braces, colons, and other special chars.
         const isBinary = true;
         let body = "";
+        // Track correlations whose extracted value is a JSON string and must be re-escaped
+        // before being embedded inside another JSON body string value (DYNJSON case).
+        const _dynJsonEscNeeded = new Set();
         if (rawBodyText) {
           // Escape body for C string embedding (binary-safe or plain)
           body = isBinary
@@ -3214,10 +3231,12 @@ function genActionC(entries, correlations) {
               }
             }
             // 5th variant: C-escape of JSON-escaped form (JSON-in-JSON scenario)
+            // Use {name_esc} — a web_js_run will JSON-escape the raw value before this request.
             if (!_replaced) {
               const _cjv = _cEscJsonVariant(rawVal);
               if (_cjv && body.includes(_cjv)) {
-                body = body.replace(_cjv, `{${u.name}}`);
+                body = body.replace(_cjv, `{${u.name}_esc}`);
+                _dynJsonEscNeeded.add(u.name);
               }
             }
           }
@@ -3304,6 +3323,16 @@ function genActionC(entries, correlations) {
               body = body.split('"' + sentinel + '"').join('{' + paramName + '}');
             }
           }
+        }
+        // DYNJSON: JSON-escape each correlation value that is embedded inside a JSON string value.
+        // web_reg_save_param_json extracts the parsed value (real " chars); we must re-escape it
+        // at runtime before inserting it into a JSON body, otherwise the surrounding JSON breaks.
+        for (const _djCorrName of _dynJsonEscNeeded) {
+          o += `\t/* JSON-escape ${_djCorrName} before embedding in JSON body string value */\n`;
+          o += `\tweb_js_run(\n`;
+          o += `\t\t"Code=LR.setParam('${_djCorrName}_esc', JSON.stringify(LR.getParam('${_djCorrName}')).slice(1,-1));",\n`;
+          o += `\t\t"ResultParam=_esc_result",\n`;
+          o += `\t\tLAST);\n\n`;
         }
         o += `\tweb_custom_request("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Method=${e.method}",\n`;
         o += `\t\t"Resource=0",\n\t\t"RecContentType=${ct}",\n`;
