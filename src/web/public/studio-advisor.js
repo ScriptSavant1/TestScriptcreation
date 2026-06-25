@@ -872,6 +872,30 @@ function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, ac
 // (e.g. "$.alerts[*].pairingID" → base = "$.alerts[*]") and appends the
 // placeholder's targetKey to derive its source path automatically.
 // ---------------------------------------------------------------------------
+
+// Navigate a parsed JSON object to the array identified by a [*]-terminated
+// JSONPath (e.g. "$.liveCountDetails[0].liveGridData[*]") and return the first
+// item of that array, used to resolve correct field-name casing.
+function _advSampleItemAtPath(obj, starPath) {
+  if (!obj || !starPath) return null;
+  // Strip leading "$." and trailing "[*]"
+  const inner = starPath.replace(/^\$\.?/, '').replace(/\[\*\]$/, '');
+  let cur = obj;
+  if (!inner) return Array.isArray(cur) ? cur[0] || null : null;
+  for (const seg of inner.split('.')) {
+    if (!cur || typeof cur !== 'object') return null;
+    const m = seg.match(/^([^\[]+)\[(\d+)\]$/);
+    if (m) {
+      cur = cur[m[1]];
+      if (!Array.isArray(cur)) return null;
+      cur = cur[parseInt(m[2])];
+    } else {
+      cur = cur[seg];
+    }
+  }
+  return Array.isArray(cur) ? cur[0] || null : (cur || null);
+}
+
 function advisorFillArrayPaths(candidateId, primaryKey) {
   const candidate = (S.advisorCandidates || []).find(c => c.id === candidateId);
   if (!candidate || !candidate._arrayReconstruct) return;
@@ -882,13 +906,27 @@ function advisorFillArrayPaths(candidateId, primaryKey) {
   const realCol = columns.find(c => !c._placeholder && c.sourceJsonPath);
   if (!realCol) return;
 
-  // Strip last field segment: "$.alerts[*].pairingID" → "$.alerts[*]"
+  // Strip last field segment: "$.alerts[*].pairingId" → "$.alerts[*]"
   const basePath = realCol.sourceJsonPath.replace(/\.[^.[]+$/, '');
 
-  // Promote every placeholder column to a real column with an inferred path
+  // Get a sample item from the source response to resolve correct field-name casing.
+  // The response key may differ in case from the request key (e.g. "systemId" vs "systemID").
+  let sampleItem = null;
+  const srcEntry = (S.entries1 || [])[(candidate.source && candidate.source.entryIdx != null ? candidate.source.entryIdx : -1)];
+  if (srcEntry && srcEntry.respBody) {
+    try { sampleItem = _advSampleItemAtPath(JSON.parse(srcEntry.respBody), basePath); } catch {}
+  }
+
+  // Promote every placeholder column to a real column with a case-correct inferred path
   for (const col of columns) {
     if (!col._placeholder) continue;
-    col.sourceJsonPath = basePath + '.' + col.targetKey;
+    let fieldName = col.targetKey;
+    if (sampleItem && typeof sampleItem === 'object') {
+      const lower = col.targetKey.toLowerCase();
+      const actual = Object.keys(sampleItem).find(k => k.toLowerCase() === lower);
+      if (actual) fieldName = actual;
+    }
+    col.sourceJsonPath = basePath + '.' + fieldName;
     delete col._placeholder;
   }
 

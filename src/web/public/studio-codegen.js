@@ -1312,7 +1312,6 @@ function genMainJS(entries, correlations) {
         // Emit null initializers for each column varName, not the array key itself
         for (const col of (c.extractorConfig && c.extractorConfig.columns) || []) {
           o += `load.global.${col.varName} = null;\n`;
-          o += `load.global.${col.varName}_count = 0;\n`;
         }
       } else {
         o += `load.global.${c.name} = null;\n`;
@@ -1968,23 +1967,23 @@ function genMainJS(entries, correlations) {
         const ind6 = '      ';
         o += `${ind4}// Build ${arrKey} array from correlated values\n`;
         o += `${ind4}const ${varRef} = (() => {\n`;
-        o += `${ind6}const _n = parseInt(load.global.${countVar}_count) || 0;\n`;
-        o += `${ind6}const _arr = [];\n`;
-        o += `${ind6}for (let _i = 1; _i <= _n; _i++) {\n`;
-        o += `${ind6}  _arr.push({\n`;
+        o += `${ind6}const _src = load.global.${countVar} || [];\n`;
+        o += `${ind6}return _src.map(function(_v, _i) {\n`;
+        o += `${ind6}  return {\n`;
         for (const col of (cfg.columns || [])) {
           if (col._placeholder) {
             o += `${ind6}    "${col.targetKey}": "", /* TODO: add ${col.varName} correlation */\n`;
+          } else if (col.varName === countVar) {
+            o += `${ind6}    "${col.targetKey}": _v || "",\n`;
           } else {
-            o += `${ind6}    "${col.targetKey}": load.global["${col.varName}_" + _i] || "",\n`;
+            o += `${ind6}    "${col.targetKey}": (load.global.${col.varName} || [])[_i] || "",\n`;
           }
         }
         for (const sf of (cfg.staticFields || [])) {
           o += `${ind6}    "${sf.targetKey}": ${JSON.stringify(sf.value)},\n`;
         }
-        o += `${ind6}  });\n`;
-        o += `${ind6}}\n`;
-        o += `${ind6}return _arr;\n`;
+        o += `${ind6}  };\n`;
+        o += `${ind6}});\n`;
         o += `${ind4}})();\n\n`;
       }
     }

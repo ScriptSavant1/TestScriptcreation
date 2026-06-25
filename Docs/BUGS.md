@@ -23,6 +23,8 @@
 | BUG-006 | Medium | v2.9.2 | `web_reg_save_param_xpath` emitting `XPath=` instead of `QueryString=`, and wrongly emitting `Ord=` attribute |
 | BUG-007 | Low | v2.9.0 | Private/crypto key patterns (PEM keys) classified as Tier 2 instead of Tier 1 — broke VuGen Parameters panel |
 | BUG-008 | High | v2.9.4 | `JsonPathExtractor` third arg was `{all: true}` (object) — SDK requires `true` (boolean). All SelectAll and array_reconstruct extractors generated invalid DevWeb code. Fixed in studio-codegen.js (2 sites) + VuGen-Script-Studio-app.js (2 sites). |
+| BUG-009 | High | v2.9.4 | Array reconstruct IIFE used `load.global.varName_count` / `["varName_" + _i]` (VuGen pattern) — DevWeb runtime stores SelectAll results as a plain JS array at `load.global.varName`, never using `_count`/`_N` suffixes. Fixed: generated code now uses `.map()` over `load.global.anchorVar`. |
+| BUG-010 | Medium | v2.9.4 | `advisorFillArrayPaths` inferred placeholder source paths using the request-body field name (e.g. `systemID`) but the response JSON key may differ in case (e.g. `systemId`), causing JSONPath extraction to fail. Fixed: now resolves correct casing from a sample item of the source response body. |
 
 ---
 
