@@ -351,6 +351,7 @@ function genCorrelationsJS(correlations) {
         : '?';
       o += `// Array reconstruct: ${cfg.targetArrayKey}  (source: ${srcBase})\n`;
       for (const col of (cfg.columns || [])) {
+        if (col._placeholder) continue; // no extractor until user adds the correlation
         o += `const ${col.varName}Extractor = new load.JsonPathExtractor("${col.varName}", "${col.sourceJsonPath}", true);\n`;
         exports.push(col.varName + 'Extractor');
       }
@@ -1972,7 +1973,11 @@ function genMainJS(entries, correlations) {
         o += `${ind6}for (let _i = 1; _i <= _n; _i++) {\n`;
         o += `${ind6}  _arr.push({\n`;
         for (const col of (cfg.columns || [])) {
-          o += `${ind6}    "${col.targetKey}": load.global["${col.varName}_" + _i] || "",\n`;
+          if (col._placeholder) {
+            o += `${ind6}    "${col.targetKey}": "", /* TODO: add ${col.varName} correlation */\n`;
+          } else {
+            o += `${ind6}    "${col.targetKey}": load.global["${col.varName}_" + _i] || "",\n`;
+          }
         }
         for (const sf of (cfg.staticFields || [])) {
           o += `${ind6}    "${sf.targetKey}": ${JSON.stringify(sf.value)},\n`;
@@ -3038,8 +3043,12 @@ function genActionC(entries, correlations) {
           o += `\t\t"for(var _i=1;_i<=_n;_i++){"\n`;
           o += `\t\t"var _t={};"\n`;
           for (const col of (cfg.columns || [])) {
-            // Escape double-quotes inside JS string: \" → \\\" in C string
-            o += `\t\t"_t[\\"${col.targetKey}\\"]=lr.getParam(\\"${col.varName}_\\"+_i)||\\"\\";""\n`;
+            if (col._placeholder) {
+              o += `\t\t"_t[\\"${col.targetKey}\\"]=\\"\\";/* TODO: add ${col.varName} correlation */"\n`;
+            } else {
+              // Escape double-quotes inside JS string: \" → \\\" in C string
+              o += `\t\t"_t[\\"${col.targetKey}\\"]=lr.getParam(\\"${col.varName}_\\"+_i)||\\"\\";""\n`;
+            }
           }
           for (const sf of (cfg.staticFields || [])) {
             o += `\t\t"_t[\\"${sf.targetKey}\\"]=\\"${sf.value.replace(/"/g, '\\"')}\\";"\n`;

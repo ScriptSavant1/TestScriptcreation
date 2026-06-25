@@ -411,6 +411,57 @@ function _advMergeArrayCandidates(candidates) {
 }
 
 // ---------------------------------------------------------------------------
+// F2 helper: find fields in the target array that are dynamic (values vary
+// across items) but were NOT detected as correlated columns or static fields.
+// These become placeholder columns so the codegen always emits every field.
+// ---------------------------------------------------------------------------
+function _advFindUnresolvedFields(entry, targetArrayKey, knownKeys) {
+  if (!entry) return [];
+  const bText = (entry.body && entry.body.text) || '';
+  if (!bText) return [];
+  let arr;
+  try { const bObj = JSON.parse(bText); arr = bObj && bObj[targetArrayKey]; } catch {}
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  const firstItem = arr[0];
+  if (!firstItem || typeof firstItem !== 'object') return [];
+  const result = [];
+  for (const k of Object.keys(firstItem)) {
+    if (knownKeys.has(k)) continue;
+    const values = arr.map(item => (item && item[k] != null) ? String(item[k]) : '');
+    const nonEmpty = values.filter(v => v !== '');
+    if (nonEmpty.length === 0) continue;                                           // all empty → skip
+    if (new Set(nonEmpty).size === 1 && nonEmpty.length === arr.length) continue;  // constant → already static
+    result.push(k);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// F2 helper: choose countVar anchor — the non-placeholder column whose
+// targetKey has the most non-empty values across all items in the HAR array.
+// Avoids picking a sparsely-populated field (e.g. pairingID) over one that
+// is always present (e.g. systemID).
+// ---------------------------------------------------------------------------
+function _advBestAnchorVarName(columns, entry, targetArrayKey) {
+  const candidates = columns.filter(c => !c._placeholder);
+  if (!candidates.length) return (columns[0] && columns[0].varName) || 'items';
+  const bText = (entry && entry.body && entry.body.text) || '';
+  if (!bText) return candidates[0].varName;
+  let arr;
+  try { const bObj = JSON.parse(bText); arr = bObj && bObj[targetArrayKey]; } catch {}
+  if (!Array.isArray(arr) || !arr.length) return candidates[0].varName;
+  let bestVar = candidates[0].varName, bestCount = -1;
+  for (const col of candidates) {
+    const count = arr.filter(item => {
+      const v = item && item[col.targetKey];
+      return v != null && String(v) !== '';
+    }).length;
+    if (count > bestCount) { bestVar = col.varName; bestCount = count; }
+  }
+  return bestVar;
+}
+
+// ---------------------------------------------------------------------------
 // F2: After SelectAll merging, detect when multiple _selectAll candidates all
 // feed into the SAME target array in a request body.
 // Groups them into a single _arrayReconstruct meta-candidate so the codegen
@@ -489,6 +540,20 @@ function _advDetectArrayGroups(candidates) {
     const knownTargetKeys = new Set(columns.map(col => col.targetKey));
     const staticFields    = _advInferStaticFields(targetEntry, targetArrayKey, knownTargetKeys);
 
+    // Placeholder columns: dynamic fields present in array items but not auto-detected
+    // as correlated. Codegen emits a TODO comment so users know to add the correlation.
+    const staticFieldKeys = new Set(staticFields.map(f => f.targetKey));
+    const allKnownKeys    = new Set([...knownTargetKeys, ...staticFieldKeys]);
+    const unresolved = _advFindUnresolvedFields(targetEntry, targetArrayKey, allKnownKeys);
+    for (const k of unresolved) {
+      const vn = _advSuggestName('$.' + targetArrayKey + '[*].' + k, null, '').replace(/Arr$/, '') + 's';
+      columns.push({ sourceJsonPath: null, varName: vn, targetKey: k, _placeholder: true });
+    }
+
+    // Anchor: non-placeholder column with the most non-empty values in the HAR body
+    // so the loop count reflects the fullest field (e.g. systemID over pairingID).
+    const anchorVarName = _advBestAnchorVarName(columns, targetEntry, targetArrayKey);
+
     const first = groupCandidates[0];
 
     // Determine item count hint from HAR
@@ -504,10 +569,15 @@ function _advDetectArrayGroups(candidates) {
       }
     }
 
+    const detectedCols    = columns.filter(c => !c._placeholder).length;
+    const placeholderCols = columns.length - detectedCols;
+    const colsLabel = placeholderCols > 0
+      ? detectedCols + ' cols + ' + placeholderCols + ' TODO'
+      : detectedCols + ' cols';
     const labelCount = itemCountHint > 0 ? itemCountHint + ' items' : 'N items';
     result.push({
       id: first.id,
-      value: '(array — ' + columns.length + ' cols × ' + labelCount + ')',
+      value: '(array — ' + colsLabel + ' × ' + labelCount + ')',
       preview: targetArrayKey + '[*]',
       valueType: 'array',
       confidence: 'high',
@@ -523,7 +593,7 @@ function _advDetectArrayGroups(candidates) {
       _arrayReconstruct: true,
       _arrayConfig: {
         targetArrayKey,
-        countVar: columns[0].varName,
+        countVar: anchorVarName,
         columns,
         staticFields,
       },
