@@ -7,6 +7,10 @@
 
 ---
 
+## Fixed (this session)
+
+---
+
 ## Fixed Bugs (History)
 
 | ID | Severity | Fixed In | Description |
@@ -18,6 +22,7 @@
 | BUG-005 | High | v2.9.3 / `58644b9` | JSON-in-JSON body substitution silent failure — JSON-escaped value form not matched during body text substitution for DevWeb and VuGen |
 | BUG-006 | Medium | v2.9.2 | `web_reg_save_param_xpath` emitting `XPath=` instead of `QueryString=`, and wrongly emitting `Ord=` attribute |
 | BUG-007 | Low | v2.9.0 | Private/crypto key patterns (PEM keys) classified as Tier 2 instead of Tier 1 — broke VuGen Parameters panel |
+| BUG-008 | High | v2.9.4 | `JsonPathExtractor` third arg was `{all: true}` (object) — SDK requires `true` (boolean). All SelectAll and array_reconstruct extractors generated invalid DevWeb code. Fixed in studio-codegen.js (2 sites) + VuGen-Script-Studio-app.js (2 sites). |
 
 ---
 
