@@ -718,11 +718,12 @@ function _advCardHtml(c) {
       "<tbody>" +
       cols
         .map(function (col) {
+          var sourceCel = col._placeholder
+            ? '<span style="color:var(--text-3);font-style:italic">needs correlation</span>'
+            : '<code>' + _esc(col.sourceJsonPath) + '</code>';
           return (
-            "<tr>" +
-            "<td><code>" +
-            _esc(col.sourceJsonPath) +
-            "</code></td>" +
+            "<tr" + (col._placeholder ? ' style="opacity:0.65"' : '') + ">" +
+            "<td>" + sourceCel + "</td>" +
             "<td><code>" +
             _esc(col.varName) +
             "</code></td>" +
