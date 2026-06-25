@@ -100,9 +100,9 @@ const events = req.tests || req.event || [];
 | Type | DevWeb | VuGen C |
 |------|--------|---------|
 | `jsonpath` | `new load.JsonPathExtractor(name, path)` | `web_reg_save_param_json(...)` |
-| `jsonpath+selectAll` | `{all: true}` option | `SelectAll=Yes` |
-| `boundary` | `new load.TextCheckPoint(lb, rb)` | `web_reg_save_param(LB=..., RB=...)` |
-| `boundary_header` | `new load.TextCheckPoint(lb, rb)` | `web_reg_save_param(LB=..., RB=..., Search=Headers)` |
+| `jsonpath+selectAll` | third arg `true` (boolean) | `SelectAll=Yes` |
+| `boundary` | `new load.BoundaryExtractor(name, {leftBoundary, rightBoundary, scope: load.ExtractorScope.Body})` | `web_reg_save_param(LB=..., RB=...)` |
+| `boundary_header` | `new load.BoundaryExtractor(name, {leftBoundary, rightBoundary, scope: load.ExtractorScope.Headers})` | `web_reg_save_param(LB=..., RB=..., Search=Headers)` |
 | `regexp` | `new load.RegExpExtractor(name, pattern)` | `web_reg_save_param_regexp(...)` |
 | `array_reconstruct` | IIFE loop + SelectAll extractors | `web_js_run` builder + SelectAll |
 | `cookie` | suppressed (not emitted) | suppressed |

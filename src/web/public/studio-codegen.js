@@ -285,7 +285,7 @@ function devwebExtractorDecl(corr) {
   switch (extractorType) {
     case "jsonpath":
       return cfg.selectAll
-        ? `new load.JsonPathExtractor("${name}", "${cfg.path}", {all: true})`
+        ? `new load.JsonPathExtractor("${name}", "${cfg.path}", true)`
         : `new load.JsonPathExtractor("${name}", "${cfg.path}")`;
     case "cookie":
       return `new load.CookieExtractor("${name}", {cookieName: "${cfg.cookieName}"})`;
@@ -351,7 +351,7 @@ function genCorrelationsJS(correlations) {
         : '?';
       o += `// Array reconstruct: ${cfg.targetArrayKey}  (source: ${srcBase})\n`;
       for (const col of (cfg.columns || [])) {
-        o += `const ${col.varName}Extractor = new load.JsonPathExtractor("${col.varName}", "${col.sourceJsonPath}", {all: true});\n`;
+        o += `const ${col.varName}Extractor = new load.JsonPathExtractor("${col.varName}", "${col.sourceJsonPath}", true);\n`;
         exports.push(col.varName + 'Extractor');
       }
       o += '\n';
