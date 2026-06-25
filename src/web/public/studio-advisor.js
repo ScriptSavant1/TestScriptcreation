@@ -596,6 +596,7 @@ function _advDetectArrayGroups(candidates) {
         countVar: anchorVarName,
         columns,
         staticFields,
+        _itemCountHint: itemCountHint,
       },
     });
   }
@@ -860,6 +861,57 @@ function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, ac
   };
   S.advisorCandidates.push(candidate);
   return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC: fill inferred source paths for ALL placeholder columns and set anchor.
+// candidateId — the candidate's .id (e.g. "adv-0")
+// primaryKey  — targetKey of the field to use as loop anchor (e.g. "systemID")
+//
+// How inference works: takes the base path from any already-detected column
+// (e.g. "$.alerts[*].pairingID" → base = "$.alerts[*]") and appends the
+// placeholder's targetKey to derive its source path automatically.
+// ---------------------------------------------------------------------------
+function advisorFillArrayPaths(candidateId, primaryKey) {
+  const candidate = (S.advisorCandidates || []).find(c => c.id === candidateId);
+  if (!candidate || !candidate._arrayReconstruct) return;
+  const cfg = candidate._arrayConfig || {};
+  const columns = cfg.columns || [];
+
+  // Need at least one real (non-placeholder) column to infer the base path
+  const realCol = columns.find(c => !c._placeholder && c.sourceJsonPath);
+  if (!realCol) return;
+
+  // Strip last field segment: "$.alerts[*].pairingID" → "$.alerts[*]"
+  const basePath = realCol.sourceJsonPath.replace(/\.[^.[]+$/, '');
+
+  // Promote every placeholder column to a real column with an inferred path
+  for (const col of columns) {
+    if (!col._placeholder) continue;
+    col.sourceJsonPath = basePath + '.' + col.targetKey;
+    delete col._placeholder;
+  }
+
+  // Set the loop anchor to the chosen primary key
+  const primaryCol = columns.find(c => c.targetKey === primaryKey);
+  if (primaryCol) cfg.countVar = primaryCol.varName;
+
+  // Refresh the candidate display label (removes "+ N TODO" suffix)
+  const hint = cfg._itemCountHint || 0;
+  const labelCount = hint > 0 ? hint + ' items' : 'N items';
+  candidate.value = '(array — ' + columns.length + ' cols × ' + labelCount + ')';
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC: change only the loop anchor of an already-complete array reconstruct.
+// (Used when all paths are filled but user wants a different primary key.)
+// ---------------------------------------------------------------------------
+function advisorSetArrayAnchor(candidateId, primaryKey) {
+  const candidate = (S.advisorCandidates || []).find(c => c.id === candidateId);
+  if (!candidate || !candidate._arrayReconstruct) return;
+  const cfg = candidate._arrayConfig || {};
+  const col = (cfg.columns || []).find(c => c.targetKey === primaryKey && !c._placeholder);
+  if (col) cfg.countVar = col.varName;
 }
 
 // ---------------------------------------------------------------------------

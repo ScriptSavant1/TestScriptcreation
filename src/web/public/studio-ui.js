@@ -711,49 +711,79 @@ function _advCardHtml(c) {
   if (c._arrayReconstruct && c._arrayConfig) {
     var cols = c._arrayConfig.columns || [];
     var statics = c._arrayConfig.staticFields || [];
+    var arrCfg = c._arrayConfig;
+    var hasPlaceholders = cols.some(function(col) { return col._placeholder; });
+    var hasRealCols    = cols.some(function(col) { return !col._placeholder && col.sourceJsonPath; });
+
+    // Find current anchor's targetKey by matching varName → countVar
+    var currentPrimaryKey = '';
+    for (var _pi = 0; _pi < cols.length; _pi++) {
+      if (cols[_pi].varName === arrCfg.countVar) { currentPrimaryKey = cols[_pi].targetKey; break; }
+    }
+
+    // Build primary-key dropdown (all non-static columns, including placeholders)
+    var pkSelectId = 'pk-' + c.id;
+    var pkOptions = cols.map(function(col) {
+      var sel = col.targetKey === currentPrimaryKey ? ' selected' : '';
+      var warn = col._placeholder ? ' (needs correlation)' : '';
+      return '<option value="' + _esc(col.targetKey) + '"' + sel + '>' + _esc(col.targetKey) + warn + '</option>';
+    }).join('');
+
+    var pkRow = '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 6px;flex-wrap:wrap;">' +
+      '<span style="font-size:11px;color:var(--text-2);white-space:nowrap;">Primary key (loop anchor):</span>' +
+      '<select id="' + pkSelectId + '" style="font-size:11px;padding:2px 6px;border:1px solid var(--border-1);border-radius:4px;background:var(--bg-2);color:var(--text-1);">' +
+      pkOptions + '</select>';
+
+    if (hasPlaceholders && hasRealCols) {
+      // Show "Fill & apply" — infers missing source paths and sets anchor in one click
+      pkRow +=
+        '<button onclick="advisorFillArrayPaths(\'' + c.id + '\',document.getElementById(\'' + pkSelectId + '\').value);renderAdvisorPanel();" ' +
+        'style="font-size:11px;padding:2px 10px;border-radius:4px;border:none;background:var(--accent-1,#6366f1);color:#fff;cursor:pointer;white-space:nowrap;">' +
+        'Fill &amp; apply</button>' +
+        '<span style="font-size:10px;color:var(--text-3);">auto-infers missing source paths</span>';
+    } else if (!hasPlaceholders) {
+      // All paths already filled — only anchor change is possible
+      pkRow +=
+        '<button onclick="advisorSetArrayAnchor(\'' + c.id + '\',document.getElementById(\'' + pkSelectId + '\').value);renderAdvisorPanel();" ' +
+        'style="font-size:11px;padding:2px 10px;border-radius:4px;border:1px solid var(--border-1);background:var(--bg-3,#1a1a2e);color:var(--text-1);cursor:pointer;">' +
+        'Set anchor</button>';
+    }
+    pkRow += '</div>';
+
     extraDetail =
+      pkRow +
       '<div class="adv-arr-detail">' +
       '<table class="adv-arr-table">' +
       "<thead><tr><th>Source path</th><th>Variable</th><th>Target key</th></tr></thead>" +
       "<tbody>" +
-      cols
-        .map(function (col) {
+      cols.map(function (col) {
+          var isAnchor = col.varName === arrCfg.countVar;
           var sourceCel = col._placeholder
             ? '<span style="color:var(--text-3);font-style:italic">needs correlation</span>'
             : '<code>' + _esc(col.sourceJsonPath) + '</code>';
+          var anchorBadge = isAnchor
+            ? ' <span style="font-size:9px;background:var(--accent-1,#6366f1);color:#fff;border-radius:3px;padding:0 4px;vertical-align:middle;margin-left:3px;">anchor</span>'
+            : '';
           return (
             "<tr" + (col._placeholder ? ' style="opacity:0.65"' : '') + ">" +
             "<td>" + sourceCel + "</td>" +
-            "<td><code>" +
-            _esc(col.varName) +
-            "</code></td>" +
-            "<td><code>" +
-            _esc(col.targetKey) +
-            "</code></td>" +
+            "<td><code>" + _esc(col.varName) + "</code>" + anchorBadge + "</td>" +
+            "<td><code>" + _esc(col.targetKey) + "</code></td>" +
             "</tr>"
           );
-        })
-        .join("") +
+        }).join("") +
       (statics.length > 0
-        ? statics
-            .map(function (sf) {
-              return (
-                '<tr class="adv-arr-static">' +
-                "<td><em>static</em></td>" +
-                "<td><em>" +
-                _esc(sf.value) +
-                "</em></td>" +
-                "<td><code>" +
-                _esc(sf.targetKey) +
-                "</code></td>" +
-                "</tr>"
-              );
-            })
-            .join("")
+        ? statics.map(function (sf) {
+            return (
+              '<tr class="adv-arr-static">' +
+              "<td><em>static</em></td>" +
+              "<td><em>" + _esc(sf.value) + "</em></td>" +
+              "<td><code>" + _esc(sf.targetKey) + "</code></td>" +
+              "</tr>"
+            );
+          }).join("")
         : "") +
-      "</tbody>" +
-      "</table>" +
-      "</div>";
+      "</tbody></table></div>";
   }
 
   return (
