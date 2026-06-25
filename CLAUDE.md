@@ -100,11 +100,11 @@ const events = req.tests || req.event || [];
 | Type | DevWeb | VuGen C |
 |------|--------|---------|
 | `jsonpath` | `new load.JsonPathExtractor(name, path)` | `web_reg_save_param_json(...)` |
-| `jsonpath+selectAll` | third arg `true` (boolean) | `SelectAll=Yes` |
+| `jsonpath+selectAll` | third arg `true` (boolean); runtime stores result as **JS array** at `load.global.name` (NOT `name_1`/`name_count`) | `SelectAll=Yes`; VuGen stores `{name}_1..N` + `{name}_count` |
 | `boundary` | `new load.BoundaryExtractor(name, {leftBoundary, rightBoundary, scope: load.ExtractorScope.Body})` | `web_reg_save_param(LB=..., RB=...)` |
 | `boundary_header` | `new load.BoundaryExtractor(name, {leftBoundary, rightBoundary, scope: load.ExtractorScope.Headers})` | `web_reg_save_param(LB=..., RB=..., Search=Headers)` |
 | `regexp` | `new load.RegExpExtractor(name, pattern)` | `web_reg_save_param_regexp(...)` |
-| `array_reconstruct` | IIFE loop + SelectAll extractors | `web_js_run` builder + SelectAll |
+| `array_reconstruct` | IIFE `.map()` over `load.global.anchorVar` (JS array) | `web_js_run` builder + `_count`/`_N` indexing |
 | `cookie` | suppressed (not emitted) | suppressed |
 
 ---
