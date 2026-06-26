@@ -392,7 +392,7 @@ function renderCorrelations() {
     html += S.correlations
       .map((c) => {
         const typeClass =
-          c.extractorType === "jsonpath"
+          c.extractorType === "jsonpath" || c.extractorType === "random_select"
             ? "jsonpath"
             : c.extractorType === "cookie"
               ? "cookie"
@@ -402,13 +402,15 @@ function renderCorrelations() {
         const typeLabel =
           c.extractorType === "jsonpath"
             ? "JSON"
-            : c.extractorType === "cookie"
-              ? "Cookie"
-              : c.extractorType === "html"
-                ? "HTML"
-                : c.extractorType === "boundary_header"
-                  ? "Header"
-                  : "Boundary";
+            : c.extractorType === "random_select"
+              ? "RandSel"
+              : c.extractorType === "cookie"
+                ? "Cookie"
+                : c.extractorType === "html"
+                  ? "HTML"
+                  : c.extractorType === "boundary_header"
+                    ? "Header"
+                    : "Boundary";
         const srcEntry = S.entries1[c.sourceIdx];
         const srcUrl = srcEntry
           ? srcEntry.url.split("?")[0].substring(0, 60)
@@ -417,10 +419,15 @@ function renderCorrelations() {
         const advisorBadge = c._fromAdvisor
           ? `<span class="corr-advisor-badge">Advisor</span>`
           : "";
+        const _siIsSelectAll = (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) || c.extractorType === "random_select";
+        const _siIdx = S.correlations.indexOf(c);
+        const randBtn = _siIsSelectAll
+          ? `<button class="corr-rnd-btn${c.extractorType === "random_select" ? " active" : ""}" onclick="toggleCorrRandSelect(${_siIdx})" title="${c.extractorType === "random_select" ? "Switch back to SelectAll" : "Switch to Random Select (pick one per iteration)"}">&#x1F3B2; Rnd</button>`
+          : "";
         return `<div class="corr-item">
   <span class="corr-badge ${typeClass}">${typeLabel}</span>
   <div class="corr-detail">
-    <div class="corr-name">${esc(c.name)}${advisorBadge}</div>
+    <div class="corr-name">${esc(c.name)}${advisorBadge}${randBtn}</div>
     <div class="corr-src">Extracted from: …${esc(srcUrl.slice(-50))}</div>
     <div class="corr-usage">Used in ${usageCount} request${usageCount !== 1 ? "s" : ""}</div>
   </div>
