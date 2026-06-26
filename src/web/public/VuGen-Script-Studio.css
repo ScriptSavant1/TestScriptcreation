@@ -1401,6 +1401,16 @@
         vertical-align: middle; letter-spacing: 0.02em;
       }
 
+      /* ── RANDOM SELECT TOGGLE BUTTON ── */
+      .corr-rnd-btn {
+        display: inline-block; margin-left: 8px;
+        font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-1);
+        background: transparent; color: var(--text-3); cursor: pointer; vertical-align: middle;
+        transition: background 0.15s, color 0.15s;
+      }
+      .corr-rnd-btn:hover { background: var(--bg-3); color: var(--text-1); }
+      .corr-rnd-btn.active { background: rgba(99,102,241,0.15); color: var(--primary); border-color: var(--primary); font-weight: 700; }
+
       /* ═══════════════════════════════════════════════════════════
          PASTE & DETECT BUTTON (advisor header)
       ═══════════════════════════════════════════════════════════ */

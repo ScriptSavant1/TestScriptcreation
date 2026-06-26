@@ -620,6 +620,9 @@ function devwebExtractorDecl(corr) {
       return `new load.HtmlExtractor("${name}", "${cfg.selector}", "${cfg.attr || "value"}")`;
     case "boundary_header":
       return `new load.BoundaryExtractor("${name}", {leftBoundary: "${escJs(cfg.lb)}", rightBoundary: "${escJs(cfg.rb)}", scope: load.ExtractorScope.Headers})`;
+    case "random_select":
+      return `new load.JsonPathExtractor("${name}", "${escJs(cfg.path)}", true)`;
+
     case "generate":
       return null;
     case "boundary":
@@ -1171,6 +1174,9 @@ function webHttpCorrCode(corr, indent) {
       const cols = (cfg && cfg.columns) || [];
       return cols.map(col => VugenCodegen.emitJsonAll(col.varName, col.sourceJsonPath, t)).join('');
     }
+
+    case "random_select":
+      return VugenCodegen.emitJsonAll(name, cfg.path, t);
 
     case "boundary":
     default:
@@ -4027,6 +4033,24 @@ function switchTab(el, tab) {
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDER RESULTS
 // ═══════════════════════════════════════════════════════════════════════════
+// Toggle a jsonpath+selectAll correlation to/from random_select mode.
+// random_select extracts the same way (SelectAll=Yes) but usage substitution picks one random
+// value per iteration instead of exposing the full array via {corrName_1..N} / load.global.name[].
+function toggleCorrRandSelect(idx) {
+  const c = S.correlations[idx];
+  if (!c) return;
+  if (c.extractorType === "random_select") {
+    // Revert to standard jsonpath+selectAll
+    c.extractorType = "jsonpath";
+    if (c.extractorConfig) c.extractorConfig.selectAll = true;
+  } else if (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) {
+    c.extractorType = "random_select";
+  } else {
+    return; // only toggle for selectAll correlations
+  }
+  regenerateFromAdvisor();
+}
+
 function renderCorrelations() {
   const list = document.getElementById("corr-list");
   let html = "";
@@ -4043,7 +4067,7 @@ function renderCorrelations() {
     html += S.correlations
       .map((c) => {
         const typeClass =
-          c.extractorType === "jsonpath"
+          c.extractorType === "jsonpath" || c.extractorType === "random_select"
             ? "jsonpath"
             : c.extractorType === "cookie"
               ? "cookie"
@@ -4053,13 +4077,15 @@ function renderCorrelations() {
         const typeLabel =
           c.extractorType === "jsonpath"
             ? "JSON"
-            : c.extractorType === "cookie"
-              ? "Cookie"
-              : c.extractorType === "html"
-                ? "HTML"
-                : c.extractorType === "boundary_header"
-                  ? "Header"
-                  : "Boundary";
+            : c.extractorType === "random_select"
+              ? "RandSel"
+              : c.extractorType === "cookie"
+                ? "Cookie"
+                : c.extractorType === "html"
+                  ? "HTML"
+                  : c.extractorType === "boundary_header"
+                    ? "Header"
+                    : "Boundary";
         const srcEntry = S.entries1[c.sourceIdx];
         const srcUrl = srcEntry
           ? srcEntry.url.split("?")[0].substring(0, 60)
@@ -4068,10 +4094,17 @@ function renderCorrelations() {
         const advisorBadge = c._fromAdvisor
           ? ' <span class="corr-advisor-badge">Advisor</span>'
           : '';
+        // "Random Select" toggle — shown for jsonpath+selectAll and random_select correlations.
+        // Lets the user switch an extracted array from "use all" to "pick one randomly per iteration".
+        const _isSelectAll = (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) || c.extractorType === "random_select";
+        const _ci = S.correlations.indexOf(c);
+        const randBtn = _isSelectAll
+          ? `<button class="corr-rnd-btn${c.extractorType === "random_select" ? " active" : ""}" onclick="toggleCorrRandSelect(${_ci})" title="${c.extractorType === "random_select" ? "Switch back to SelectAll (use all extracted values)" : "Switch to Random Select (pick one value randomly each iteration)"}">&#x1F3B2; Rnd</button>`
+          : '';
         return `<div class="corr-item">
   <span class="corr-badge ${typeClass}">${typeLabel}</span>
   <div class="corr-detail">
-    <div class="corr-name">${esc(c.name)}${advisorBadge}</div>
+    <div class="corr-name">${esc(c.name)}${advisorBadge}${randBtn}</div>
     <div class="corr-src">Extracted from: …${esc(srcUrl.slice(-50))}</div>
     <div class="corr-usage">Used in ${usageCount} request${usageCount !== 1 ? "s" : ""}</div>
   </div>
