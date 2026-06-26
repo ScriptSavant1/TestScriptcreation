@@ -2805,33 +2805,12 @@ function genActionC(entries, correlations) {
       }
     }
 
-    // Inject web_reg_save_param BEFORE this request (includes extractors re-anchored from auto-follow entries).
-    // Cookie-only correlations are suppressed — VuGen cookie jar (ENABLE_COOKIES) handles them automatically.
+    // Prepare extractors for THIS request's response.
+    // Emitted inside each branch AFTER all web_js_run calls per VuGen ordering rule:
+    //   web_js_run → web_reg_save_param* → web_add_header → request
     const acSrcCorrs = (corrSourcesRemap.get(idx) || []).filter(
       (c) => !isSuppressibleCookieCorr(c),
     );
-    if (acSrcCorrs.length > 0) {
-      o += `\t// --- Correlation extraction for request: ${n}\n`;
-      for (const corr of acSrcCorrs)
-        o += webHttpCorrCode(corr, "\t");
-      o += "\n";
-    }
-    // Inject TODO comment if this request uses an unresolved candidate value
-    if (S.candidates && S.candidates.length > 0) {
-      const eBase = e.url.split("?")[0];
-      for (const cand of S.candidates) {
-        const used = cand.usages.some((cu) => {
-          const cuBase = cu.reqUrl ? cu.reqUrl.split("?")[0] : "";
-          return cuBase === eBase;
-        });
-        if (used) {
-          const safeHint = sanitizeCandHint(cand.hint);
-          o += `\t// TODO: Correlate "${safeHint}" — source response body was not captured in HAR.\n`;
-          o += `\t// Re-record with DevTools "Disable cache" enabled to trace extraction source.\n`;
-          o += `\t// web_reg_save_param("${safeHint}", "LB=TODO_LEFT_BOUNDARY", "RB=TODO_RIGHT_BOUNDARY", LAST);\n\n`;
-        }
-      }
-    }
 
     // Build URL with correlation and param substitutions
     let urlOut = e.url;
@@ -2960,7 +2939,25 @@ function genActionC(entries, correlations) {
     }
 
     if (e.method === "GET" || e.method === "HEAD") {
-      o += hdrOut; // no web_js_run before GET — flush headers immediately
+      // No web_js_run for GET — emit extractors, then headers, then web_url
+      if (acSrcCorrs.length > 0) {
+        o += `\t// --- Correlation extraction for request: ${n}\n`;
+        for (const corr of acSrcCorrs) o += webHttpCorrCode(corr, "\t");
+        o += "\n";
+      }
+      if (S.candidates && S.candidates.length > 0) {
+        const eBase = e.url.split("?")[0];
+        for (const cand of S.candidates) {
+          const used = cand.usages.some((cu) => (cu.reqUrl ? cu.reqUrl.split("?")[0] : "") === eBase);
+          if (used) {
+            const safeHint = sanitizeCandHint(cand.hint);
+            o += `\t// TODO: Correlate "${safeHint}" — source response body was not captured in HAR.\n`;
+            o += `\t// Re-record with DevTools "Disable cache" enabled to trace extraction source.\n`;
+            o += `\t// web_reg_save_param("${safeHint}", "LB=TODO_LEFT_BOUNDARY", "RB=TODO_RIGHT_BOUNDARY", LAST);\n\n`;
+          }
+        }
+      }
+      o += hdrOut; // flush headers immediately before web_url
       o += `\tweb_url("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Resource=0",\n`;
       o += `\t\t"RecContentType=${ct}",\n\t\t"Referer=${ref}",\n`;
       o += `\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n\t\tLAST);\n\n`;
@@ -3073,6 +3070,45 @@ function genActionC(entries, correlations) {
           o += `\t\t"LR.setParam(\\"${paramName}\\",JSON.stringify(_r));",\n`;
           o += `\t\t"ResultParam=_arr_build_result",\n`;
           o += `\t\tLAST);\n\n`;
+        }
+      }
+
+      // DYNJSON pre-scan: detect JSON-in-JSON correlation values and emit web_js_run BEFORE extractors.
+      // The body substitution loop below still replaces _cjv→{name_esc}; the web_js_run won't
+      // re-emit because _dynJsonEscEmitted is already set here.
+      if (rawBodyText) {
+        const _prescanBodyEsc = escBodyBinary(rawBodyText);
+        for (const u of reqUsages) {
+          if (u.location !== "body_json" && u.location !== "body_form" && u.location !== "body_xml") continue;
+          const rawVal = u.tokenValue || u.originalValue;
+          if (!rawVal) continue;
+          const _cjv = _cEscJsonVariant(rawVal);
+          if (_cjv && _prescanBodyEsc.includes(_cjv) && !_dynJsonEscEmitted.has(u.name)) {
+            _dynJsonEscEmitted.add(u.name);
+            o += `\t/* JSON-escape ${u.name} before embedding in JSON body string value */\n`;
+            o += `\tweb_js_run(\n`;
+            o += `\t\t"Code=LR.setParam('${u.name}_esc', JSON.stringify(LR.getParam('${u.name}')).slice(1,-1));",\n`;
+            o += `\t\t"ResultParam=_esc_result",\n`;
+            o += `\t\tLAST);\n\n`;
+          }
+        }
+      }
+      // Emit extractors AFTER web_js_run calls — VuGen rule: web_js_run → web_reg_save_param → headers → request
+      if (acSrcCorrs.length > 0) {
+        o += `\t// --- Correlation extraction for request: ${n}\n`;
+        for (const corr of acSrcCorrs) o += webHttpCorrCode(corr, "\t");
+        o += "\n";
+      }
+      if (S.candidates && S.candidates.length > 0) {
+        const eBase = e.url.split("?")[0];
+        for (const cand of S.candidates) {
+          const used = cand.usages.some((cu) => (cu.reqUrl ? cu.reqUrl.split("?")[0] : "") === eBase);
+          if (used) {
+            const safeHint = sanitizeCandHint(cand.hint);
+            o += `\t// TODO: Correlate "${safeHint}" — source response body was not captured in HAR.\n`;
+            o += `\t// Re-record with DevTools "Disable cache" enabled to trace extraction source.\n`;
+            o += `\t// web_reg_save_param("${safeHint}", "LB=TODO_LEFT_BOUNDARY", "RB=TODO_RIGHT_BOUNDARY", LAST);\n\n`;
+          }
         }
       }
 
