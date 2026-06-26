@@ -3315,12 +3315,12 @@ function genActionC(entries, correlations) {
               }
             }
           }
-          // Array reconstruction: replace sentinels with {paramName} (no surrounding quotes)
+          // Array reconstruction: replace sentinels with {paramName} (no surrounding quotes).
+          // escBodyBinary has already run, converting " → \" in the body string, so the
+          // sentinel's surrounding JSON string quotes appear as \" not " — match accordingly.
           if (_acArrSentinelMap.size > 0) {
             for (const [sentinel, paramName] of _acArrSentinelMap) {
-              // Sentinel appears as a JSON string value: "@@ARRAY_RECONSTR_key@@"
-              // After escBodyBinary it's still the same ASCII chars — replace including quotes
-              body = body.split('"' + sentinel + '"').join('{' + paramName + '}');
+              body = body.split('\\"' + sentinel + '\\"').join('{' + paramName + '}');
             }
           }
         }
@@ -3726,7 +3726,11 @@ function detectAuth(entries) {
 
 function genDefaultCfg(auth) {
   const overrides = {};
-  if (S.hasDpop) overrides["EnableJsForTransport"] = "1";
+  // Enable VuGen JavaScript engine whenever web_js_run will be emitted:
+  // DPoP proof generation, PKCE, array reconstruction, and JSON-in-JSON body escaping.
+  const _needsJs = S.hasDpop || S.hasPkce ||
+    (S.correlations && S.correlations.some(c => c.extractorType === 'array_reconstruct'));
+  if (_needsJs) overrides["EnableJsForTransport"] = "1";
   if (auth && ["kerberos", "negotiate", "ntlm"].includes(auth.type)) {
     if (auth.type === "kerberos" || auth.type === "negotiate") {
       overrides["IntegratedAuthentication"] = "1";
