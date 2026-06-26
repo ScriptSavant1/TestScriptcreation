@@ -2715,6 +2715,11 @@ function genActionC(entries, correlations) {
   if (!hasMarkers)
     o += '\tlr_start_transaction("SC01_01_Transaction");\n\n';
 
+  // Track DYNJSON correlations whose web_js_run escape call has already been emitted.
+  // Each corr value is extracted once and doesn't change, so we only need one escape call
+  // per correlation per Action() — placed before the first request that uses it.
+  const _dynJsonEscEmitted = new Set();
+
   for (let idx = 0; idx < entries.length; idx++) {
     const e = entries[idx];
 
@@ -2869,24 +2874,25 @@ function genActionC(entries, correlations) {
     urlOut = subHdrValC(urlOut, acHostVarMap);
     if (ref) ref = subHdrValC(ref, acHostVarMap);
 
-    // Build header injections for this request
+    // Build header injections for this request.
+    // Buffered into hdrOut — flushed to o AFTER any pre-request web_js_run calls so that
+    // web_add_header always immediately precedes the actual HTTP request in the output.
+    let hdrOut = "";
     const hdrUsages = reqUsages.filter((u) => u.location === "header");
     for (const u of hdrUsages) {
       if (u.extractorType === "generate") {
-        // Call per-request helper — generates a fresh token and adds the header for THIS request only
-        o += `\tgen_${u.name}();\n`;
+        hdrOut += `\tgen_${u.name}();\n`;
         continue;
       }
       const replVal = u.prefix ? `${u.prefix}{${u.name}}` : `{${u.name}}`;
-      o += `\tweb_add_header("${hdrTitleCase(u.key)}", "${replVal}");\n`;
+      hdrOut += `\tweb_add_header("${hdrTitleCase(u.key)}", "${replVal}");\n`;
     }
-    // Per-request headers: emit only when value DIFFERS from global default (acts as override)
     // DPoP headers — batch-assigned or per-request param names
     if (S.hasDpop) {
       if (_dpopParamForEntry.has(idx)) {
         const dpopParams = _dpopParamForEntry.get(idx);
         for (const [dk, paramName] of Object.entries(dpopParams)) {
-          o += ` \tweb_add_header("${hdrTitleCase(dk)}", "{${paramName}}");\n`;
+          hdrOut += `\tweb_add_header("${hdrTitleCase(dk)}", "{${paramName}}");\n`;
         }
       } else if (_dpopDeferredSet.has(idx)) {
         const dpopHdrs = (e.reqHdrs || []).filter((h) =>
@@ -2895,7 +2901,7 @@ function genActionC(entries, correlations) {
         for (const dh of dpopHdrs) {
           const dk = dh.name.toLowerCase();
           const rp = dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof";
-          o += ` \tweb_add_header("${hdrTitleCase(dk)}", "{${rp}}");\n`;
+          hdrOut += `\tweb_add_header("${hdrTitleCase(dk)}", "{${rp}}");\n`;
         }
       }
     }
@@ -2905,8 +2911,8 @@ function genActionC(entries, correlations) {
     for (const h of e.reqHdrs || []) {
       const k = h.name.toLowerCase();
       if (SKIP_HDR_AC.has(k) || k.startsWith(":")) continue;
-      if (autoHdrs[k] === h.value) continue; // global already covers this exact value — skip
-      if (k === "accept" && h.value === "*/*") continue; // VuGen default — never needed
+      if (autoHdrs[k] === h.value) continue;
+      if (k === "accept" && h.value === "*/*") continue;
       if (
         k === "authorization" &&
         S.auth &&
@@ -2914,8 +2920,7 @@ function genActionC(entries, correlations) {
         /^(negotiate|ntlm)\s/i.test(h.value)
       )
         continue;
-      if (corrHdrKeys.has(k)) continue; // already emitted as correlation
-      // Check if this header's value is an unresolved candidate — never emit static dynamic values
+      if (corrHdrKeys.has(k)) continue;
       let candHint = null;
       if (S.candidates) {
         for (const cand of S.candidates) {
@@ -2932,16 +2937,12 @@ function genActionC(entries, correlations) {
         }
       }
       if (candHint) {
-        // Dynamic header — source response not captured in HAR; tester must add the extractor.
-        // Preserve scheme prefix (Bearer / Token) if present in original header value.
         const _cSchemeMatch = h.value && /^(Bearer|Token|Digest)\s/i.exec(h.value);
         const _cPrefix = _cSchemeMatch ? _cSchemeMatch[0] : "";
-        o += `\t// TODO: corr — add web_reg_save_param BEFORE the request that returns "${hdrTitleCase(k)}".\n`;
-        o += `\t// Example: web_reg_save_param("${candHint}", "LB=\\"access_token\\":\\"", "RB=\\"", "Search=Body", "Ord=1", LAST);\n`;
-        o += `\tweb_add_header("${hdrTitleCase(k)}", "${_cPrefix}{${candHint}}");\n`;
+        hdrOut += `\t// TODO: corr — add web_reg_save_param BEFORE the request that returns "${hdrTitleCase(k)}".\n`;
+        hdrOut += `\t// Example: web_reg_save_param("${candHint}", "LB=\\"access_token\\":\\"", "RB=\\"", "Search=Body", "Ord=1", LAST);\n`;
+        hdrOut += `\tweb_add_header("${hdrTitleCase(k)}", "${_cPrefix}{${candHint}}");\n`;
       } else {
-        // Substitute any correlated token values embedded in this header
-        // (e.g. Authorization: Bearer <token> where <token> was extracted by web_reg_save_param)
         let hdrVal = h.value;
         let hdrDynamic = false;
         for (const corr of correlations) {
@@ -2954,11 +2955,12 @@ function genActionC(entries, correlations) {
             }
           }
         }
-        o += `\tweb_add_header("${hdrTitleCase(k)}", "${escJs(subHdrValC(hdrDynamic ? hdrVal : h.value, acHostVarMap))}");\n`;
+        hdrOut += `\tweb_add_header("${hdrTitleCase(k)}", "${escJs(subHdrValC(hdrDynamic ? hdrVal : h.value, acHostVarMap))}");\n`;
       }
     }
 
     if (e.method === "GET" || e.method === "HEAD") {
+      o += hdrOut; // no web_js_run before GET — flush headers immediately
       o += `\tweb_url("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Resource=0",\n`;
       o += `\t\t"RecContentType=${ct}",\n\t\t"Referer=${ref}",\n`;
       o += `\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n\t\tLAST);\n\n`;
@@ -3185,6 +3187,7 @@ function genActionC(entries, correlations) {
           sv = subHdrValC(sv, acHostVarMap);
           return { k: escJs(k), v: escJs(sv) };
         });
+        o += hdrOut; // form POST — no web_js_run before this branch, flush headers now
         o += `\tweb_submit_data("${n}",\n`;
         o += `\t\t"Action=${urlOut}",\n`;
         o += `\t\t"Method=POST",\n`;
@@ -3327,13 +3330,17 @@ function genActionC(entries, correlations) {
         // DYNJSON: JSON-escape each correlation value that is embedded inside a JSON string value.
         // web_reg_save_param_json extracts the parsed value (real " chars); we must re-escape it
         // at runtime before inserting it into a JSON body, otherwise the surrounding JSON breaks.
+        // Each correlation only needs one escape call per Action() — tracked in _dynJsonEscEmitted.
         for (const _djCorrName of _dynJsonEscNeeded) {
+          if (_dynJsonEscEmitted.has(_djCorrName)) continue;
+          _dynJsonEscEmitted.add(_djCorrName);
           o += `\t/* JSON-escape ${_djCorrName} before embedding in JSON body string value */\n`;
           o += `\tweb_js_run(\n`;
           o += `\t\t"Code=LR.setParam('${_djCorrName}_esc', JSON.stringify(LR.getParam('${_djCorrName}')).slice(1,-1));",\n`;
           o += `\t\t"ResultParam=_esc_result",\n`;
           o += `\t\tLAST);\n\n`;
         }
+        o += hdrOut; // flush headers AFTER all web_js_run calls, immediately before the HTTP request
         o += `\tweb_custom_request("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Method=${e.method}",\n`;
         o += `\t\t"Resource=0",\n\t\t"RecContentType=${ct}",\n`;
         o += `\t\t"Referer=${ref}",\n\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n`;
