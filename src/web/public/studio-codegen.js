@@ -3033,15 +3033,21 @@ function genActionC(entries, correlations) {
           const arrKey = cfg.targetArrayKey || c.name;
           const paramName = arrKey + '_json';
           const countVar = cfg.countVar || ((cfg.columns && cfg.columns[0] && cfg.columns[0].varName) || 'items');
+          // Assign a temp var (_cv0, _cv1, ...) to each real (non-placeholder) correlated column.
+          // LR.getParam returns the empty string or the literal string "null" when SelectAll
+          // finds no value at a JSON path for a given item — null-guard converts both to "".
+          const _realCols = (cfg.columns || []).filter(col => !col._placeholder);
+          const _tvNames = _realCols.map((_, ci) => `_cv${ci}`);
+          const _tvDecl = _tvNames.length > 0 ? ';var ' + _tvNames.join(';var ') : '';
           o += `\t/* Build ${arrKey} JSON array from correlated parameters */\n`;
           o += `\tweb_js_run(\n`;
           o += `\t\t"Code="\n`;
           o += `\t\t"var _n=parseInt(LR.getParam('${countVar}_count'))||0;"\n`;
-          o += `\t\t"var _r=[];var _i;var _obj;"\n`;
+          o += `\t\t"var _r=[];var _i;var _obj${_tvDecl};"\n`;
           o += `\t\t"for(_i=1;_i<=_n;_i++){"\n`;
           o += `\t\t"_obj=new Object();"\n`;
+          let _tvIdx = 0;
           for (const col of (cfg.columns || [])) {
-            // Use dot notation when key is a valid JS identifier, bracket notation otherwise
             const keyIsIdent = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(col.targetKey);
             if (col._placeholder) {
               if (keyIsIdent) {
@@ -3050,10 +3056,14 @@ function genActionC(entries, correlations) {
                 o += `\t\t"_obj[\\"${col.targetKey}\\"]=\\"\\";/* TODO: add ${col.varName} correlation */"\n`;
               }
             } else {
+              const tv = _tvNames[_tvIdx++];
+              // Fetch, null-guard (empty string or literal "null" → ""), then assign
+              o += `\t\t"${tv}=LR.getParam('${col.varName}_'+_i);"\n`;
+              o += `\t\t"if(!${tv}||${tv}=='null'){${tv}=''}"\n`;
               if (keyIsIdent) {
-                o += `\t\t"_obj.${col.targetKey}=LR.getParam(\\"${col.varName}_\\"+_i);"\n`;
+                o += `\t\t"_obj.${col.targetKey}=${tv};"\n`;
               } else {
-                o += `\t\t"_obj[\\"${col.targetKey}\\"]=LR.getParam(\\"${col.varName}_\\"+_i);"\n`;
+                o += `\t\t"_obj[\\"${col.targetKey}\\"]=${tv};"\n`;
               }
             }
           }
@@ -3067,7 +3077,7 @@ function genActionC(entries, correlations) {
           }
           o += `\t\t"_r.push(_obj);"\n`;
           o += `\t\t"}"\n`;
-          o += `\t\t"LR.setParam(\\"${paramName}\\",JSON.stringify(_r));",\n`;
+          o += `\t\t"LR.setParam('${paramName}',JSON.stringify(_r));",\n`;
           o += `\t\t"ResultParam=_arr_build_result",\n`;
           o += `\t\tLAST);\n\n`;
         }

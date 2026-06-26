@@ -18,6 +18,7 @@
 | BUG-015 | High | v2.9.5 / `d49d559` | `EnableJsForTransport=1` not written to `default.cfg` for scripts using array reconstruction — VuGen showed "JavaScript should be enabled" error at runtime. Fixed: `genDefaultCfg()` now sets the flag for `array_reconstruct` correlations and `S.hasPkce`. |
 | BUG-016 | High | v2.9.5 / `9525705` | VuGen statement ordering wrong — `web_add_header` emitted before `web_js_run` instead of after. VuGen rule: `web_js_run → web_reg_save_param* → web_add_header → request`. Fixed: buffer all `web_add_header` calls into `hdrOut`, flush only after all `web_js_run` calls; move `web_reg_save_param` emission inside each branch, after `web_js_run`. |
 | BUG-017 | Medium | v2.9.5 / `a9e05d1` | DYNJSON `web_js_run` escape call repeated before every request that used the correlated value in its body — one escape call per Action() is sufficient. Fixed: `_dynJsonEscEmitted` Set tracks which correlations have been escaped; subsequent usages skip re-emission. |
+| BUG-018 | High | v2.9.6 / pending | VuGen array reconstruction `web_js_run` assigned `LR.getParam(...)` directly to `_obj.field` — when `web_reg_save_param_json` SelectAll finds no value at a path, it stores the literal string `"null"` or `""`. Direct assignment then put `"null"` into the JSON body, causing 400 errors. Fixed: each correlated column now fetches into a temp var (`_cv0`, `_cv1`, …), applies null-guard `if(!v||v=='null'){v=''}`, then assigns — generic for all columns regardless of whether they are nullable in the HAR. |
 
 ---
 
