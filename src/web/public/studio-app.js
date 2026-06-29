@@ -567,7 +567,9 @@ async function analyze() {
     // Runs AFTER all existing correlation engines so it skips already-handled values.
     // Results go to S.advisorCandidates; rendered by renderAdvisorPanel() below.
     try {
-      advisorScan(S.entries1, S.correlations); // must pass full S.entries1 so stored indices match codegen's expectations
+      // Pass only active (non-suppressed) correlations so _advAlreadyCorrelated doesn't
+      // block candidates whose auto-generated correlation was suppressed by array_reconstruct.
+      advisorScan(S.entries1, (S.correlations || []).filter(c => !c._suppressed));
     } catch (advErr) {
       console.warn('[Advisor] Non-fatal scan error:', advErr);
       S.advisorCandidates = [];
@@ -582,8 +584,9 @@ async function analyze() {
     const isWeb = S.format === "webhttp" || S.format === "both";
     const isDev = S.format === "devweb" || S.format === "both";
     S.scripts = {};
+    const _activeCorrs = (S.correlations || []).filter(c => !c._suppressed);
     if (isWeb) {
-      S.scripts.ac = genActionC(S.entries1, S.correlations);
+      S.scripts.ac = genActionC(S.entries1, _activeCorrs);
       S.scripts.vi = genVuserInit();
       S.scripts.ve = genVuserEnd();
       S.scripts.gh = genGlobalsH();
@@ -592,8 +595,8 @@ async function analyze() {
       S.tab = "ac";
     }
     if (isDev) {
-      S.scripts.mj = genMainJS(S.entries1, S.correlations);
-      S.scripts.corrjs = genCorrelationsJS(S.correlations);
+      S.scripts.mj = genMainJS(S.entries1, _activeCorrs);
+      S.scripts.corrjs = genCorrelationsJS(_activeCorrs);
       S.scripts.pyml = genParamsYml();
       S.scripts.csv = genCollectionDataCsv();
       if (!isWeb) S.tab = "mj";
@@ -681,9 +684,11 @@ function regenerateFromAdvisor() {
   try {
     const isWeb = S.format === 'webhttp' || S.format === 'both';
     const isDev = S.format === 'devweb'  || S.format === 'both';
+    // Exclude suppressed correlations (auto-generated ones overridden by array_reconstruct)
+    const _activeCorrs = (S.correlations || []).filter(c => !c._suppressed);
 
     if (isWeb) {
-      S.scripts.ac  = genActionC(S.entries1, S.correlations);
+      S.scripts.ac  = genActionC(S.entries1, _activeCorrs);
       S.scripts.vi  = genVuserInit();
       S.scripts.ve  = genVuserEnd();
       S.scripts.gh  = genGlobalsH();
@@ -691,8 +696,8 @@ function regenerateFromAdvisor() {
       S.scripts.dat = genCollectionDataCsv();
     }
     if (isDev) {
-      S.scripts.mj     = genMainJS(S.entries1, S.correlations);
-      S.scripts.corrjs = genCorrelationsJS(S.correlations);
+      S.scripts.mj     = genMainJS(S.entries1, _activeCorrs);
+      S.scripts.corrjs = genCorrelationsJS(_activeCorrs);
       S.scripts.pyml   = genParamsYml();
       S.scripts.csv    = genCollectionDataCsv();
     }
