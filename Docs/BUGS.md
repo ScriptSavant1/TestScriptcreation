@@ -11,6 +11,16 @@
 
 | ID | Severity | Fixed In | Description |
 |----|----------|----------|-------------|
+| BUG-019 | High | v2.9.8 | `array_reconstruct` correlation only added ONE `body_array` usage (the first detected request). If the same `targetArrayKey` appeared in a second request (e.g. `nextAlerts` nested inside `ptfMessage.hitList[0].nextAlerts` in t12.inf), the sentinel `@@ARRAY_RECONSTR_nextAlerts@@` was never placed and the web_js_run builder was never emitted for that request. Fix: (a) `_advDetectArrayGroups` deep-scans ALL entries for `targetArrayKey` at any nesting level via new `_advDeepContainsKey` helper and adds extra `body_array` usages; (b) `advisorToCorrelation` maps ALL body_array usages (not just `candidate.usages[0]`). |
+| BUG-020 | High | v2.9.8 | Array reconstruction sentinel placement used `hasOwnProperty(_bObj, arrKey)` — only matched top-level keys. Nested arrays (e.g. `$.ptfMessage.hitList[0].nextAlerts`) were never replaced with the sentinel. Fix: new `_deepReplaceArrayKey(obj, key, sentinel)` helper in studio-codegen.js; sentinel placement tries top-level first then falls back to deep search. Applied in both DevWeb and VuGen codegen paths. |
+| BUG-021 | Medium | v2.9.8 | Standalone occurrences of the anchor column value (e.g. `"systemID":"STF..."` at top of request body, OUTSIDE the `nextAlerts` array) were never correlated — the `array_reconstruct` candidate discarded non-array usages. Fix: `_advDetectArrayGroups` now creates a companion `_selectAll` candidate for standalone occurrences of the anchor value, surfaced in the advisor panel so the user can accept it and toggle to `random_select`. |
+
+---
+
+## Fixed (this session)
+
+| ID | Severity | Fixed In | Description |
+|----|----------|----------|-------------|
 | BUG-011 | High | v2.9.5 / `346ddb9` | VuGen `web_js_run` syntax error "unexpected IDENTIFIER, wrong token = _t" — object literal `{}` and variable `_t` not supported in VuGen's ES3 JS engine. Fixed: use `new Object()`, rename to `_obj`, use dot notation for valid identifiers, hoist all `var` declarations. |
 | BUG-012 | High | v2.9.5 / `346ddb9` | VuGen `web_js_run` "JS loading error" — code used lowercase `lr.getParam()`/`lr.setParam()`. VuGen's JS engine only exposes uppercase `LR`. Fixed: all 4 occurrences in array reconstruction generator corrected to `LR.getParam`/`LR.setParam`. |
 | BUG-013 | High | v2.9.5 / `346ddb9` | VuGen `web_add_header` for Authorization emitted raw `h.value` (e.g. `Bearer <literal_token>`) instead of substituted `hdrVal` (e.g. `Bearer {AccessToken}`) — correlation only applied to first request. Fixed: emit `hdrDynamic ? hdrVal : h.value`. |

@@ -183,6 +183,28 @@ function needsBinary(text) {
   }
   return false;
 }
+// Replace the FIRST occurrence of `key` (at any nesting depth) that holds an Array
+// with `sentinel`, mutating `obj` in-place. Returns true if replaced.
+// Depth-limited to guard against deeply nested / circular structures.
+function _deepReplaceArrayKey(obj, key, sentinel, _depth) {
+  _depth = _depth || 0;
+  if (_depth > 12 || !obj || typeof obj !== 'object') return false;
+  if (Array.isArray(obj)) {
+    for (let _i = 0; _i < obj.length; _i++) {
+      if (_deepReplaceArrayKey(obj[_i], key, sentinel, _depth + 1)) return true;
+    }
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(obj, key) && Array.isArray(obj[key])) {
+    obj[key] = sentinel;
+    return true;
+  }
+  for (const k of Object.keys(obj)) {
+    if (_deepReplaceArrayKey(obj[k], key, sentinel, _depth + 1)) return true;
+  }
+  return false;
+}
+
 // Escape body for BodyBinary= — encodes as C string safe for VuGen's attribute parser.
 // Non-ASCII chars are emitted as UTF-8 bytes using \xHH sequences.
 function escBodyBinary(text) {
@@ -1673,10 +1695,14 @@ function genMainJS(entries, correlations) {
               for (const u of c.usages) {
                 if (u.reqIdx !== idx || u.location !== 'body_array') continue;
                 const arrKey = u.key || (c.extractorConfig && c.extractorConfig.targetArrayKey);
-                if (arrKey && Object.prototype.hasOwnProperty.call(_bObj, arrKey)) {
-                  const sentinel = '@@ARRAY_RECONSTR_' + arrKey + '@@';
-                  const varRef = `_${c.name}_arr`;
-                  _bObj[arrKey] = sentinel;
+                if (!arrKey) continue;
+                const sentinel = '@@ARRAY_RECONSTR_' + arrKey + '@@';
+                const varRef = `_${c.name}_arr`;
+                // Try top-level first, then deep-search for nested array keys
+                const _replaced = Object.prototype.hasOwnProperty.call(_bObj, arrKey) && Array.isArray(_bObj[arrKey])
+                  ? (_bObj[arrKey] = sentinel, true)
+                  : _deepReplaceArrayKey(_bObj, arrKey, sentinel);
+                if (_replaced) {
                   _arrSentinelMap.set(sentinel, varRef);
                   _modified = true;
                 }
@@ -3069,10 +3095,14 @@ function genActionC(entries, correlations) {
               for (const u of c.usages) {
                 if (u.reqIdx !== idx || u.location !== 'body_array') continue;
                 const arrKey = u.key || (c.extractorConfig && c.extractorConfig.targetArrayKey);
-                if (arrKey && Object.prototype.hasOwnProperty.call(_bObj, arrKey)) {
-                  const sentinel = '@@ARRAY_RECONSTR_' + arrKey + '@@';
-                  const paramName = arrKey + '_json';
-                  _bObj[arrKey] = sentinel;
+                if (!arrKey) continue;
+                const sentinel = '@@ARRAY_RECONSTR_' + arrKey + '@@';
+                const paramName = arrKey + '_json';
+                // Try top-level first, then deep-search for nested array keys
+                const _replaced2 = Object.prototype.hasOwnProperty.call(_bObj, arrKey) && Array.isArray(_bObj[arrKey])
+                  ? (_bObj[arrKey] = sentinel, true)
+                  : _deepReplaceArrayKey(_bObj, arrKey, sentinel);
+                if (_replaced2) {
                   _acArrSentinelMap.set(sentinel, paramName);
                   _modified = true;
                 }
