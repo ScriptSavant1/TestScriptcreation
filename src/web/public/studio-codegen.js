@@ -1756,6 +1756,21 @@ function genMainJS(entries, correlations) {
           }
         }
       }
+      // Standalone anchor replacements from array_reconstruct correlations.
+      // Uses DYNRND sentinel (same as random_select) — extraction already covered by the
+      // array_reconstruct column, so no duplicate load.JsonPathExtractor is emitted.
+      for (const c of correlations) {
+        if (c.extractorType !== 'array_reconstruct') continue;
+        const _anchorVarDW = c.extractorConfig && c.extractorConfig.countVar;
+        if (!_anchorVarDW) continue;
+        for (const u of c.usages) {
+          if (u.reqIdx !== idx || u.location !== 'body_json_standalone') continue;
+          const _rawSt = u.tokenValue || u.originalValue;
+          if (!_rawSt || !bodyText || !bodyText.includes(_rawSt)) continue;
+          bodyText = bodyText.replace(_rawSt, `\x00DYNRND_${_anchorVarDW}\x00DYNEND`);
+          bodyHasDynamic = true;
+        }
+      }
       // Unresolved candidate values — replace with TODO placeholder
       if (S.candidates && S.candidates.length > 0) {
         const eBase = e.url.split("?")[0];
@@ -3006,18 +3021,34 @@ function genActionC(entries, correlations) {
 
     if (e.method === "GET" || e.method === "HEAD") {
       // Emit random_select pickers for any correlation used in this GET that hasn't been picked yet.
+      // Also emit pickers for array_reconstruct correlations with body_json_standalone usages.
       // Picker must run once per Action() before first use; for GET the value is in URL/headers.
       for (const c of correlations) {
-        if (c.extractorType !== "random_select") continue;
-        if (_randSelEmitted.has(c.name)) continue;
-        const usedHere = reqUsages.some(u => u.name === c.name);
-        if (!usedHere) continue;
-        _randSelEmitted.add(c.name);
-        o += `\tweb_js_run(\n`;
-        o += `\t\t"Code=var _n=parseInt(LR.getParam('${c.name}_count'))||0;"\n`;
-        o += `\t\t"LR.setParam('${c.name}_selected',_n>0?LR.getParam('${c.name}_'+(Math.floor(Math.random()*_n)+1)):'');",\n`;
-        o += `\t\t"ResultParam=_rand_sel_result",\n`;
-        o += `\t\tLAST);\n\n`;
+        if (c.extractorType === "random_select") {
+          if (_randSelEmitted.has(c.name)) continue;
+          const usedHere = reqUsages.some(u => u.name === c.name);
+          if (!usedHere) continue;
+          _randSelEmitted.add(c.name);
+          o += `\tweb_js_run(\n`;
+          o += `\t\t"Code=var _n=parseInt(LR.getParam('${c.name}_count'))||0;"\n`;
+          o += `\t\t"LR.setParam('${c.name}_selected',_n>0?LR.getParam('${c.name}_'+(Math.floor(Math.random()*_n)+1)):'');",\n`;
+          o += `\t\t"ResultParam=_rand_sel_result",\n`;
+          o += `\t\tLAST);\n\n`;
+        } else if (c.extractorType === "array_reconstruct") {
+          const _anchorVarG = c.extractorConfig && c.extractorConfig.countVar;
+          if (!_anchorVarG) continue;
+          const _hasStandaloneG = c.usages.some(u => u.reqIdx === idx && u.location === 'body_json_standalone');
+          if (!_hasStandaloneG) continue;
+          const _pickerKeyG = '_arr_standalone_' + _anchorVarG;
+          if (_randSelEmitted.has(_pickerKeyG)) continue;
+          _randSelEmitted.add(_pickerKeyG);
+          o += `\t/* Pick one random ${_anchorVarG} for standalone field replacement */\n`;
+          o += `\tweb_js_run(\n`;
+          o += `\t\t"Code=var _n=parseInt(LR.getParam('${_anchorVarG}_count'))||0;"\n`;
+          o += `\t\t"LR.setParam('${_anchorVarG}_selected',_n>0?LR.getParam('${_anchorVarG}_'+(Math.floor(Math.random()*_n)+1)):'');",\n`;
+          o += `\t\t"ResultParam=_rand_sel_result",\n`;
+          o += `\t\tLAST);\n\n`;
+        }
       }
       // web_reg_save_param* → web_add_header → web_url
       if (acSrcCorrs.length > 0) {
@@ -3168,18 +3199,35 @@ function genActionC(entries, correlations) {
       }
 
       // random_select pickers — emit for any correlation used in this non-GET request.
+      // Also emit pickers for array_reconstruct correlations that have body_json_standalone
+      // usages here — those standalone anchor values get replaced with {anchorVar_selected}.
       // Placed after array_reconstruct web_js_run, before extractors (VuGen ordering rule).
       for (const c of correlations) {
-        if (c.extractorType !== "random_select") continue;
-        if (_randSelEmitted.has(c.name)) continue;
-        const usedHere = reqUsages.some(u => u.name === c.name);
-        if (!usedHere) continue;
-        _randSelEmitted.add(c.name);
-        o += `\tweb_js_run(\n`;
-        o += `\t\t"Code=var _n=parseInt(LR.getParam('${c.name}_count'))||0;"\n`;
-        o += `\t\t"LR.setParam('${c.name}_selected',_n>0?LR.getParam('${c.name}_'+(Math.floor(Math.random()*_n)+1)):'');",\n`;
-        o += `\t\t"ResultParam=_rand_sel_result",\n`;
-        o += `\t\tLAST);\n\n`;
+        if (c.extractorType === "random_select") {
+          if (_randSelEmitted.has(c.name)) continue;
+          const usedHere = reqUsages.some(u => u.name === c.name);
+          if (!usedHere) continue;
+          _randSelEmitted.add(c.name);
+          o += `\tweb_js_run(\n`;
+          o += `\t\t"Code=var _n=parseInt(LR.getParam('${c.name}_count'))||0;"\n`;
+          o += `\t\t"LR.setParam('${c.name}_selected',_n>0?LR.getParam('${c.name}_'+(Math.floor(Math.random()*_n)+1)):'');",\n`;
+          o += `\t\t"ResultParam=_rand_sel_result",\n`;
+          o += `\t\tLAST);\n\n`;
+        } else if (c.extractorType === "array_reconstruct") {
+          const _anchorVar = c.extractorConfig && c.extractorConfig.countVar;
+          if (!_anchorVar) continue;
+          const _hasStandalone = c.usages.some(u => u.reqIdx === idx && u.location === 'body_json_standalone');
+          if (!_hasStandalone) continue;
+          const _pickerKey = '_arr_standalone_' + _anchorVar;
+          if (_randSelEmitted.has(_pickerKey)) continue;
+          _randSelEmitted.add(_pickerKey);
+          o += `\t/* Pick one random ${_anchorVar} for standalone field replacement */\n`;
+          o += `\tweb_js_run(\n`;
+          o += `\t\t"Code=var _n=parseInt(LR.getParam('${_anchorVar}_count'))||0;"\n`;
+          o += `\t\t"LR.setParam('${_anchorVar}_selected',_n>0?LR.getParam('${_anchorVar}_'+(Math.floor(Math.random()*_n)+1)):'');",\n`;
+          o += `\t\t"ResultParam=_rand_sel_result",\n`;
+          o += `\t\tLAST);\n\n`;
+        }
       }
 
       // DYNJSON pre-scan: detect JSON-in-JSON correlation values and emit web_js_run BEFORE extractors.
@@ -3471,6 +3519,25 @@ function genActionC(entries, correlations) {
           if (_acArrSentinelMap.size > 0) {
             for (const [sentinel, paramName] of _acArrSentinelMap) {
               body = body.split('\\"' + sentinel + '\\"').join('{' + paramName + '}');
+            }
+          }
+          // Standalone anchor replacements: anchor values that appear outside the target array
+          // (e.g. "systemID":"STF..." at body top) → replace with {anchorVar_selected}.
+          // The anchor is already extracted by the array_reconstruct SelectAll — no new extractor.
+          for (const c of correlations) {
+            if (c.extractorType !== 'array_reconstruct') continue;
+            const _anchorVarSt = c.extractorConfig && c.extractorConfig.countVar;
+            if (!_anchorVarSt) continue;
+            const _stUsages = c.usages.filter(u => u.reqIdx === idx && u.location === 'body_json_standalone');
+            for (const _stu of _stUsages) {
+              const _rawTok = _stu.tokenValue || _stu.originalValue;
+              if (!_rawTok) continue;
+              // The tokenValue is a plain string; after escBodyBinary it appears as
+              // its C-escaped version inside \"...\". Build the escaped form to search:
+              const _escapedTok = escBodyBinary(_rawTok);
+              if (_escapedTok && body.includes(_escapedTok)) {
+                body = body.split(_escapedTok).join(`{${_anchorVarSt}_selected}`);
+              }
             }
           }
         }
