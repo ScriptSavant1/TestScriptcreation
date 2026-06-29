@@ -11,6 +11,14 @@
 
 | ID | Severity | Fixed In | Description |
 |----|----------|----------|-------------|
+| BUG-023 | High | v2.10.0 | Two-HAR mode created N separate correlations for each changed array item in request bodies. Root cause: `twoHarCorrelate` → `jsonDiffFlat` returns one diff entry per `$.array[i].field` path; all entries share the same hint (e.g. `NextAlerts_systemID`) but have unique values, so `valMap` value-dedup did not collapse them. Result: 16 `NextAlerts_systemID_*` correlations for a 16-item array. Fix: added `(reqIdx, hint)` group-dedup before `valMap` for `body_json` array-index paths — keeps only the first representative per group, reducing N correlations to 1. |
+
+---
+
+## Fixed (this session)
+
+| ID | Severity | Fixed In | Description |
+|----|----------|----------|-------------|
 | BUG-019 | High | v2.9.9 | `array_reconstruct` deep scan (v2.9.8) was blind — it added ANY request containing `targetArrayKey` as an extra usage, even when that request's array came from a DIFFERENT source response. Fix: value-verification added to deep scan — requires ≥1 item in the candidate entry's array to match an anchor value from the source response. If no overlap, the request is skipped (belongs to a separate correlation). |
 | BUG-020 | High | v2.9.9 | `_advMergeArrayCandidates` deduplicated usages by `entryIdx` only, discarding all but the first usage per request. When a value appeared at both `$.systemID` (standalone) AND `$.nextAlerts[0].systemID` (array) in the same request, only one survived. This prevented array-pattern detection for that entry. Fix: dedup changed to `(entryIdx, jsonPath, location)` so multiple usages per entry at different paths are preserved. |
 | BUG-021 | Medium | v2.9.9 | ARRAY_USAGE_RE `/^\$\.([^[.]+)\[(\d+)\]\.(.+)$/` anchored to `^$\.` — only matched top-level array patterns. `$.ptfMessage.hitList[0].nextAlerts[0].systemID` did NOT match, so nested arrays were never detected as primary candidates. Fix: changed to `/.*\.([^[.\]]+)\[(\d+)\]\.([^[.\]]+)/` (greedy `.*` ensures last array segment matches). Now detects `nextAlerts` in nested paths. |

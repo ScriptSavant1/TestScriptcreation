@@ -1398,9 +1398,30 @@ function twoHarCorrelate(entries1, entries2) {
     }
   }
 
+  // ── Array-path deduplication ───────────────────────────────────────────────
+  // When a JSON body contains an array (e.g. nextAlerts[0..N].systemID), every
+  // changed array item produces a separate diff entry with the SAME hint.
+  // Keeping all N entries creates N nearly-identical correlations.
+  // Group by (reqIdx, hint) for body_json array-index paths and keep only the
+  // first representative, preventing "NextAlerts_systemID" × 16 floods.
+  const _arrayHintSeen = new Set();
+  const changedValsFinal = [];
+  for (const cv of changedVals) {
+    if (cv.location === 'body_json' && /\[\d+\]/.test(cv.key)) {
+      const _nk = cv.reqIdx + '\x01' + cv.hint;
+      if (!_arrayHintSeen.has(_nk)) {
+        _arrayHintSeen.add(_nk);
+        changedValsFinal.push(cv); // keep first representative
+      }
+      // else: same field at a different array index → suppress duplicate
+    } else {
+      changedValsFinal.push(cv);
+    }
+  }
+
   // Deduplicate by value1 (same value in multiple places → one correlation)
   const valMap = new Map();
-  for (const cv of changedVals) {
+  for (const cv of changedValsFinal) {
     const k = cv.value1;
     if (!valMap.has(k))
       valMap.set(k, {
