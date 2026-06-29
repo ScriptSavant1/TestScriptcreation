@@ -61,6 +61,58 @@ function _advParseJson(str) {
 }
 
 // ---------------------------------------------------------------------------
+// UTILITY: return the first string value found at `path` in `obj`.
+// Handles JSONPath segments: .key, [N], [*] — returns null when not found.
+// ---------------------------------------------------------------------------
+function _advGetValueAtPath(obj, path) {
+  const segs = [];
+  let rem = (path || '').replace(/^\$/, '');
+  while (rem.length > 0) {
+    const dm = rem.match(/^\.([^[.]+)(.*)/);
+    if (dm) { segs.push({ t: 'k', k: dm[1] }); rem = dm[2]; continue; }
+    const am = rem.match(/^\[(\d+)\](.*)/);
+    if (am) { segs.push({ t: 'i', i: parseInt(am[1]) }); rem = am[2]; continue; }
+    const wm = rem.match(/^\[\*\](.*)/);
+    if (wm) { segs.push({ t: 'a' }); rem = wm[1]; continue; }
+    break;
+  }
+  function _w(cur, si) {
+    if (si >= segs.length) return (cur !== null && cur !== undefined && typeof cur !== 'object') ? String(cur) : null;
+    const s = segs[si];
+    if (!cur || typeof cur !== 'object') return null;
+    if (s.t === 'k') return _w(cur[s.k], si + 1);
+    if (s.t === 'i') return Array.isArray(cur) && s.i < cur.length ? _w(cur[s.i], si + 1) : null;
+    if (s.t === 'a') {
+      if (!Array.isArray(cur)) return null;
+      for (const item of cur) { const r = _w(item, si + 1); if (r !== null) return r; }
+      return null;
+    }
+    return null;
+  }
+  return _w(obj, 0);
+}
+
+// ---------------------------------------------------------------------------
+// UTILITY: return true if key exists as an OWN array-valued property at ANY
+// nesting level within obj (depth-limited to avoid runaway on huge bodies).
+// ---------------------------------------------------------------------------
+function _advDeepContainsKey(obj, key, _depth) {
+  _depth = _depth || 0;
+  if (_depth > 12 || !obj || typeof obj !== 'object') return false;
+  if (Array.isArray(obj)) {
+    for (let _i = 0; _i < Math.min(obj.length, 30); _i++) {
+      if (_advDeepContainsKey(obj[_i], key, _depth + 1)) return true;
+    }
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(obj, key) && Array.isArray(obj[key])) return true;
+  for (const k of Object.keys(obj)) {
+    if (_advDeepContainsKey(obj[k], key, _depth + 1)) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // UTILITY: walk all leaf string values in a JSON object/array.
 // Calls cb(value, jsonPath) for each leaf string.
 // Stops recursion at depth > 10 to guard against circular / deeply-nested docs.
@@ -575,6 +627,39 @@ function _advDetectArrayGroups(candidates) {
       ? detectedCols + ' cols + ' + placeholderCols + ' TODO'
       : detectedCols + ' cols';
     const labelCount = itemCountHint > 0 ? itemCountHint + ' items' : 'N items';
+    // Primary usage at the first detected request
+    const _primaryUsage = {
+      entryIdx: reqIdx,
+      url: targetEntry ? _advShortUrl(targetEntry) : '?',
+      location: 'body_array',
+      jsonPath: targetArrayKey,
+    };
+
+    // Additional usages: scan ALL entries for the same targetArrayKey at any nesting depth.
+    // This handles cases where the same array pattern appears in multiple requests
+    // (e.g., nextAlerts at top-level in t6.inf AND nested inside hitList[0] in t12.inf).
+    const _extraUsages = [];
+    const _seenExtras = new Set([reqIdx]);
+    const _allEntries2 = (typeof S !== 'undefined' && S.entries1) || [];
+    for (let _ei2 = 0; _ei2 < _allEntries2.length; _ei2++) {
+      if (_seenExtras.has(_ei2)) continue;
+      const _e2 = _allEntries2[_ei2];
+      if (!_e2 || _e2.filtered || _e2.isMarker) continue;
+      const _bt2 = (_e2.body && _e2.body.text) || '';
+      if (!_bt2) continue;
+      let _bObj2;
+      try { _bObj2 = JSON.parse(_bt2); } catch { continue; }
+      if (_advDeepContainsKey(_bObj2, targetArrayKey)) {
+        _seenExtras.add(_ei2);
+        _extraUsages.push({
+          entryIdx: _ei2,
+          url: _advShortUrl(_e2),
+          location: 'body_array',
+          jsonPath: targetArrayKey,
+        });
+      }
+    }
+
     result.push({
       id: first.id,
       value: '(array — ' + colsLabel + ' × ' + labelCount + ')',
@@ -583,12 +668,7 @@ function _advDetectArrayGroups(candidates) {
       confidence: 'high',
       varName: targetArrayKey.charAt(0).toLowerCase() + targetArrayKey.slice(1),
       source: first.source,
-      usages: [{
-        entryIdx: reqIdx,
-        url: targetEntry ? _advShortUrl(targetEntry) : '?',
-        location: 'body_array',
-        jsonPath: targetArrayKey,
-      }],
+      usages: [_primaryUsage, ..._extraUsages],
       status: 'pending',
       _arrayReconstruct: true,
       _arrayConfig: {
@@ -599,6 +679,72 @@ function _advDetectArrayGroups(candidates) {
         _itemCountHint: itemCountHint,
       },
     });
+
+    // Companion candidate: standalone occurrences of the anchor column's values
+    // outside the target array. Surfaced as a separate SelectAll card so the user
+    // can accept it and toggle it to random_select.
+    // Example: nextAlerts array_reconstruct built from systemIds → but the request
+    // body ALSO has a standalone "systemID" field (the selected alert) that needs
+    // independent parameterization.
+    const _anchorCol = columns.find(col => col.varName === anchorVarName && !col._placeholder);
+    if (_anchorCol && _anchorCol.sourceJsonPath) {
+      const _srcE = (_allEntries2 && _allEntries2[first.source.entryIdx]);
+      const _srcResBody = (_srcE && ((_srcE.response && _srcE.response.body && _srcE.response.body.text) || _srcE.resBody)) || '';
+      let _sampleVal = null;
+      if (_srcResBody) {
+        try { _sampleVal = _advGetValueAtPath(JSON.parse(_srcResBody), _anchorCol.sourceJsonPath); } catch {}
+      }
+      if (_sampleVal && _sampleVal.length >= ADV_MIN_LEN) {
+        const _companionUsages = [];
+        const _seenComp = new Set();
+        for (let _ci2 = 0; _ci2 < _allEntries2.length; _ci2++) {
+          const _ce2 = _allEntries2[_ci2];
+          if (!_ce2 || _ce2.filtered || _ce2.isMarker) continue;
+          const _cbt2 = (_ce2.body && _ce2.body.text) || '';
+          if (!_cbt2 || !_cbt2.includes(_sampleVal)) continue;
+          let _cbObj2;
+          try { _cbObj2 = JSON.parse(_cbt2); } catch { continue; }
+          let _foundPath = null;
+          _advWalkLeaves(_cbObj2, '$', function(v, p) {
+            if (_foundPath || v !== _sampleVal) return;
+            // Skip if the path is inside the target array: $.arrayKey[N].field or nested
+            if (p.includes(targetArrayKey + '[')) return;
+            _foundPath = p;
+          }, 0);
+          if (_foundPath && !_seenComp.has(_ci2)) {
+            _seenComp.add(_ci2);
+            _companionUsages.push({
+              entryIdx: _ci2,
+              url: _advShortUrl(_ce2),
+              location: 'body_json',
+              jsonPath: _foundPath,
+              originalValue: _sampleVal,
+              tokenValue: _sampleVal,
+            });
+          }
+        }
+        if (_companionUsages.length > 0) {
+          const _compVarName = _anchorCol.varName.replace(/s$/, '') + '_pick';
+          result.push({
+            id: first.id + '-standalone',
+            value: _sampleVal,
+            preview: _anchorCol.sourceJsonPath + ' (standalone)',
+            valueType: 'string',
+            confidence: 'medium',
+            varName: _compVarName,
+            source: {
+              entryIdx: first.source.entryIdx,
+              jsonPath: _anchorCol.sourceJsonPath,
+              url: first.source.url || '',
+            },
+            _selectAll: true,
+            usages: _companionUsages,
+            status: 'pending',
+            _companionOf: targetArrayKey,
+          });
+        }
+      }
+    }
   }
 
   return result;
@@ -707,21 +853,37 @@ function advisorToCorrelation(candidate) {
     prefix: '',
   }));
 
-  // Array reconstruction: short-circuit — all config is already in _arrayConfig
+  // Array reconstruction: short-circuit — all config is already in _arrayConfig.
+  // Map ALL detected body_array usages so array sentinel is placed in every request
+  // that contains the target array key (e.g. top-level in t6.inf AND nested in t12.inf).
   if (candidate._arrayReconstruct) {
-    return {
-      name: candidate.varName,
-      sourceIdx: candidate.source ? candidate.source.entryIdx : 0,
-      extractorType: 'array_reconstruct',
-      extractorConfig: candidate._arrayConfig,
-      usages: [{
+    const _arrUsages = candidate.usages
+      .filter(u => u.location === 'body_array')
+      .map(u => ({
+        reqIdx: u.entryIdx,
+        location: 'body_array',
+        key: candidate._arrayConfig.targetArrayKey,
+        tokenValue: 'array',
+        originalValue: 'array',
+        prefix: '',
+      }));
+    // Always have at least the primary usage
+    if (_arrUsages.length === 0) {
+      _arrUsages.push({
         reqIdx: candidate.usages[0].entryIdx,
         location: 'body_array',
         key: candidate._arrayConfig.targetArrayKey,
         tokenValue: 'array',
         originalValue: 'array',
         prefix: '',
-      }],
+      });
+    }
+    return {
+      name: candidate.varName,
+      sourceIdx: candidate.source ? candidate.source.entryIdx : 0,
+      extractorType: 'array_reconstruct',
+      extractorConfig: candidate._arrayConfig,
+      usages: _arrUsages,
       _fromAdvisor: true,
     };
   }
