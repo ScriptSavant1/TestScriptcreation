@@ -863,6 +863,24 @@ function advisorScan(entries, existingCorrelations) {
   // F1: Merge array siblings into SelectAll candidates
   all = _advMergeArrayCandidates(all);
 
+  // Pre-F2: Remove SelectAll candidates already covered by an existing array_reconstruct
+  // correlation (prevents re-running the Advisor from showing already-accepted candidates).
+  const _existingArrReconstr = (existingCorrelations || []).filter(
+    c => c.extractorType === 'array_reconstruct'
+  );
+  if (_existingArrReconstr.length > 0) {
+    const _coveredPaths = new Set();
+    for (const _ar of _existingArrReconstr) {
+      for (const _col of ((_ar.extractorConfig && _ar.extractorConfig.columns) || [])) {
+        if (_col.sourceJsonPath) _coveredPaths.add(_col.sourceJsonPath);
+      }
+    }
+    all = all.filter(c => {
+      if (!c._selectAll || !c.source || !c.source.jsonPath) return true;
+      return !_coveredPaths.has(c.source.jsonPath);
+    });
+  }
+
   // F2: Detect groups of SelectAll candidates that feed the same target array
   // and promote them to _arrayReconstruct meta-candidates
   all = _advDetectArrayGroups(all);

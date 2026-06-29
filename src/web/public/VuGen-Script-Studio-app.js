@@ -4846,8 +4846,12 @@ async function analyze() {
     const isWeb = S.format === "webhttp" || S.format === "both";
     const isDev = S.format === "devweb" || S.format === "both";
     S.scripts = {};
+    // Exclude correlations suppressed by an accepted array_reconstruct — they are
+    // redundant (the array_reconstruct already handles those body fields) and would
+    // produce conflicting extractors if included.
+    const _activeCorrs = (S.correlations || []).filter(c => !c._suppressed);
     if (isWeb) {
-      S.scripts.ac = genActionC(S.entries1, S.correlations);
+      S.scripts.ac = genActionC(S.entries1, _activeCorrs);
       S.scripts.vi = genVuserInit();
       S.scripts.ve = genVuserEnd();
       S.scripts.gh = genGlobalsH();
@@ -4856,8 +4860,8 @@ async function analyze() {
       S.tab = "ac";
     }
     if (isDev) {
-      S.scripts.mj = genMainJS(S.entries1, S.correlations);
-      S.scripts.corrjs = genCorrelationsJS(S.correlations);
+      S.scripts.mj = genMainJS(S.entries1, _activeCorrs);
+      S.scripts.corrjs = genCorrelationsJS(_activeCorrs);
       S.scripts.pyml = genParamsYml();
       S.scripts.csv = genCollectionDataCsv();
       if (!isWeb) S.tab = "mj";
