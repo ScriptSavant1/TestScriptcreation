@@ -113,6 +113,27 @@ function _advDeepContainsKey(obj, key, _depth) {
 }
 
 // ---------------------------------------------------------------------------
+// UTILITY: return the first Array found at `key` at any nesting level, or null.
+// ---------------------------------------------------------------------------
+function _advDeepFindArray(obj, key, _depth) {
+  _depth = _depth || 0;
+  if (_depth > 12 || !obj || typeof obj !== 'object') return null;
+  if (Array.isArray(obj)) {
+    for (let _i = 0; _i < Math.min(obj.length, 20); _i++) {
+      const _r = _advDeepFindArray(obj[_i], key, _depth + 1);
+      if (_r) return _r;
+    }
+    return null;
+  }
+  if (Object.prototype.hasOwnProperty.call(obj, key) && Array.isArray(obj[key])) return obj[key];
+  for (const _k of Object.keys(obj)) {
+    const _r = _advDeepFindArray(obj[_k], key, _depth + 1);
+    if (_r) return _r;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // UTILITY: walk all leaf string values in a JSON object/array.
 // Calls cb(value, jsonPath) for each leaf string.
 // Stops recursion at depth > 10 to guard against circular / deeply-nested docs.
@@ -436,12 +457,15 @@ function _advMergeArrayCandidates(candidates) {
       result.push(group[0]);
       continue;
     }
-    // Merge all sibling candidates into one SelectAll candidate
+    // Merge all sibling candidates into one SelectAll candidate.
+    // Dedup by (entryIdx, jsonPath, location) so both standalone usages ($.systemID)
+    // and array usages ($.nextAlerts[0].systemID) from the same entry are preserved.
     const first = group[0];
-    const seenEntries = new Set();
+    const seenUsageKeys = new Set();
     const allUsages = group.flatMap(c => c.usages).filter(u => {
-      if (seenEntries.has(u.entryIdx)) return false;
-      seenEntries.add(u.entryIdx);
+      const _uk = u.entryIdx + '\x01' + (u.jsonPath || '') + '\x01' + (u.location || '');
+      if (seenUsageKeys.has(_uk)) return false;
+      seenUsageKeys.add(_uk);
       return true;
     });
     result.push({
@@ -525,18 +549,19 @@ function _advBestAnchorVarName(columns, entry, targetArrayKey) {
 // Absorbed _selectAll candidates are removed; ungroupable ones stay as-is.
 // ---------------------------------------------------------------------------
 function _advDetectArrayGroups(candidates) {
-  const ARRAY_USAGE_RE = /^\$\.([^[.]+)\[(\d+)\]\.(.+)$/;
+  // Greedy .*\. ensures we match the LAST array segment in any path depth.
+  // $.nextAlerts[0].field → OK (top-level)
+  // $.parent.hitList[0].nextAlerts[0].field → m[1]='nextAlerts' (nested)
+  const ARRAY_USAGE_RE = /.*\.([^[.\]]+)\[(\d+)\]\.([^[.\]]+)/;
+
   const selectAllCandidates = candidates.filter(c => c._selectAll && !c._manual);
   const otherCandidates    = candidates.filter(c => !c._selectAll || c._manual);
 
-  // Map: "reqIdx::arrayKey" → [candidate]
-  const groups    = new Map();
+  const groups    = new Map(); // "reqIdx::arrayKey" → [candidate]
   const ungroupable = [];
 
   for (const c of selectAllCandidates) {
     if (!c.usages || !c.usages.length) { ungroupable.push(c); continue; }
-
-    // Find the (reqIdx, arrayKey) pair that appears most in usages
     const tally = new Map();
     for (const u of c.usages) {
       if (u.location !== 'body_json' || !u.jsonPath) continue;
@@ -546,27 +571,24 @@ function _advDetectArrayGroups(candidates) {
       tally.set(key, (tally.get(key) || 0) + 1);
     }
     if (tally.size === 0) { ungroupable.push(c); continue; }
-
-    // Take the most frequent (reqIdx, arrayKey)
     let best = null, bestCount = 0;
     for (const [k, cnt] of tally) { if (cnt > bestCount) { best = k; bestCount = cnt; } }
-
     if (!groups.has(best)) groups.set(best, []);
     groups.get(best).push(c);
   }
 
   const result = [...otherCandidates, ...ungroupable];
+  const _allEntries = (typeof S !== 'undefined' && S.entries1) || [];
 
   for (const [groupKey, groupCandidates] of groups) {
     const sep = groupKey.indexOf('::');
     const reqIdx         = parseInt(groupKey.slice(0, sep));
     const targetArrayKey = groupKey.slice(sep + 2);
 
-    // Build column list — each _selectAll candidate becomes one column
+    // Build column list from grouped SelectAll candidates
     const columns = [];
     for (const c of groupCandidates) {
       if (!c.source || !c.source.jsonPath) continue;
-      // Derive target field from first matching usage
       let targetKey = '';
       for (const u of c.usages) {
         if (!u.jsonPath) continue;
@@ -574,50 +596,162 @@ function _advDetectArrayGroups(candidates) {
         if (m && m[1] === targetArrayKey) { targetKey = m[3]; break; }
       }
       if (!targetKey) {
-        // Fallback: use the leaf segment of the source path
         targetKey = c.source.jsonPath.replace(/^.*[.[]/g, '').replace(/[\]*]/g, '');
       }
       const rawName = _advSuggestName(c.source.jsonPath, null, '').replace(/Arr$/, '');
       const varName = rawName ? rawName + 's' : (targetArrayKey + '_' + targetKey);
       columns.push({ sourceJsonPath: c.source.jsonPath, varName, targetKey });
     }
+    if (columns.length === 0) { result.push(...groupCandidates); continue; }
 
-    if (columns.length === 0) {
-      result.push(...groupCandidates);
-      continue;
-    }
-
-    // Infer static fields from HAR body of target entry
-    const targetEntry     = (S.entries1 || [])[reqIdx];
+    const targetEntry     = (_allEntries)[reqIdx];
     const knownTargetKeys = new Set(columns.map(col => col.targetKey));
     const staticFields    = _advInferStaticFields(targetEntry, targetArrayKey, knownTargetKeys);
-
-    // Placeholder columns: dynamic fields present in array items but not auto-detected
-    // as correlated. Codegen emits a TODO comment so users know to add the correlation.
     const staticFieldKeys = new Set(staticFields.map(f => f.targetKey));
     const allKnownKeys    = new Set([...knownTargetKeys, ...staticFieldKeys]);
-    const unresolved = _advFindUnresolvedFields(targetEntry, targetArrayKey, allKnownKeys);
+    const unresolved      = _advFindUnresolvedFields(targetEntry, targetArrayKey, allKnownKeys);
     for (const k of unresolved) {
       const vn = _advSuggestName('$.' + targetArrayKey + '[*].' + k, null, '').replace(/Arr$/, '') + 's';
       columns.push({ sourceJsonPath: null, varName: vn, targetKey: k, _placeholder: true });
     }
 
-    // Anchor: non-placeholder column with the most non-empty values in the HAR body
-    // so the loop count reflects the fullest field (e.g. systemID over pairingID).
     const anchorVarName = _advBestAnchorVarName(columns, targetEntry, targetArrayKey);
-
     const first = groupCandidates[0];
 
-    // Determine item count hint from HAR
+    // Item count: use deep-find since the array may be nested in the primary entry
     let itemCountHint = 0;
     if (targetEntry) {
-      const bText = (targetEntry.body && targetEntry.body.text) || '';
-      if (bText) {
+      try {
+        const _bObj0 = JSON.parse((targetEntry.body && targetEntry.body.text) || '');
+        const _arr0 = _advDeepFindArray(_bObj0, targetArrayKey);
+        if (_arr0) itemCountHint = _arr0.length;
+      } catch {}
+    }
+
+    // -----------------------------------------------------------------------
+    // Build anchor value set from the source response — used for:
+    //   (a) Value verification when deep-scanning extra entries
+    //   (b) Detecting standalone anchor-value occurrences outside the array
+    // -----------------------------------------------------------------------
+    const _anchorValues = new Set();
+    const _anchorCol = columns.find(col => col.varName === anchorVarName && !col._placeholder);
+    if (_anchorCol && _anchorCol.sourceJsonPath) {
+      const _srcE = _allEntries[first.source.entryIdx];
+      const _srcResBody = (_srcE && (
+        (_srcE.response && _srcE.response.body && _srcE.response.body.text) || _srcE.resBody
+      )) || '';
+      if (_srcResBody) {
         try {
-          const bObj = JSON.parse(bText);
-          const arr = bObj && bObj[targetArrayKey];
-          if (Array.isArray(arr)) itemCountHint = arr.length;
+          const _srcObj = JSON.parse(_srcResBody);
+          // Match values whose path fits the anchor's source path pattern (all [N] → [\d+])
+          const _pathRe = new RegExp('^' +
+            _anchorCol.sourceJsonPath
+              .replace(/\./g, '\\.')
+              .replace(/\[\*\]/g, '\\[\\d+\\]')
+            + '$');
+          _advWalkLeaves(_srcObj, '$', function(v, p) {
+            if (_anchorValues.size >= 40 || !v || v.length < ADV_MIN_LEN) return;
+            if (_pathRe.test(p)) _anchorValues.add(v);
+          }, 0);
         } catch {}
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Deep scan: find OTHER requests containing targetArrayKey as an array.
+    // Value-verify against _anchorValues to confirm same-source lineage —
+    // prevents incorrectly linking req7 (sourced from Response6) to a
+    // correlation sourced from Response2.
+    // Adds body_array usages for confirmed same-source occurrences.
+    // -----------------------------------------------------------------------
+    const _extraBodyArrayUsages = [];
+    const _seenExtras = new Set([reqIdx]);
+
+    for (let _ei = 0; _ei < _allEntries.length; _ei++) {
+      if (_seenExtras.has(_ei)) continue;
+      const _e2 = _allEntries[_ei];
+      if (!_e2 || _e2.filtered || _e2.isMarker) continue;
+      const _bt2 = (_e2.body && _e2.body.text) || '';
+      if (!_bt2) continue;
+      let _bObj2;
+      try { _bObj2 = JSON.parse(_bt2); } catch { continue; }
+      if (!_advDeepContainsKey(_bObj2, targetArrayKey)) continue;
+
+      // Value verification: require ≥1 item in the array that matches an anchor value.
+      // If _anchorValues is empty (source parse failed) we skip verification and include.
+      if (_anchorValues.size > 0 && _anchorCol) {
+        const _arr2 = _advDeepFindArray(_bObj2, targetArrayKey);
+        let _overlap = false;
+        if (_arr2) {
+          for (let _ai = 0; _ai < Math.min(_arr2.length, 30); _ai++) {
+            const _v2 = _arr2[_ai] && _arr2[_ai][_anchorCol.targetKey];
+            if (_v2 && _anchorValues.has(String(_v2))) { _overlap = true; break; }
+          }
+        }
+        if (!_overlap) continue; // different source — belongs to a different correlation
+      }
+
+      _seenExtras.add(_ei);
+      _extraBodyArrayUsages.push({
+        entryIdx: _ei,
+        url: _advShortUrl(_e2),
+        location: 'body_array',
+        jsonPath: targetArrayKey,
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // Standalone detection: anchor column values appearing OUTSIDE the target
+    // array in request bodies. Added as body_json_standalone usages so the
+    // codegen replaces them with a random-pick placeholder WITHOUT creating
+    // a duplicate extractor.
+    //
+    // Example: "systemID":"STF..." at top of body (outside nextAlerts array).
+    // The extraction is already covered by the array_reconstruct column;
+    // only a runtime picker is needed to select one value per iteration.
+    // -----------------------------------------------------------------------
+    const _standaloneUsages = [];
+    if (_anchorValues.size > 0) {
+      const _standaloneSeenEntries = new Set();
+      for (let _si = 0; _si < _allEntries.length; _si++) {
+        const _se = _allEntries[_si];
+        if (!_se || _se.filtered || _se.isMarker) continue;
+        const _sbt = (_se.body && _se.body.text) || '';
+        if (!_sbt) continue;
+        // Quick string check before JSON parse
+        let _matchedAnchorVal = null;
+        for (const _av of _anchorValues) {
+          if (_sbt.includes(_av)) { _matchedAnchorVal = _av; break; }
+        }
+        if (!_matchedAnchorVal) continue;
+        let _sObj;
+        try { _sObj = JSON.parse(_sbt); } catch { continue; }
+
+        // Walk the body for every anchor value — collect first standalone hit per entry
+        for (const _av of _anchorValues) {
+          if (!_sbt.includes(_av) || _standaloneSeenEntries.has(_si + '\x01' + _av)) continue;
+          let _stPath = null;
+          _advWalkLeaves(_sObj, '$', function(v, p) {
+            if (_stPath || v !== _av) return;
+            // Skip paths inside the target array (at any depth)
+            if (p.includes(targetArrayKey + '[')) return;
+            _stPath = p;
+          }, 0);
+          if (_stPath) {
+            _standaloneSeenEntries.add(_si + '\x01' + _av);
+            if (!_standaloneSeenEntries.has(_si + '\x01__entry')) {
+              _standaloneSeenEntries.add(_si + '\x01__entry');
+              _standaloneUsages.push({
+                entryIdx: _si,
+                url: _advShortUrl(_se),
+                location: 'body_json_standalone',
+                jsonPath: _stPath,
+                tokenValue: _av,
+                originalValue: _av,
+              });
+            }
+          }
+        }
       }
     }
 
@@ -627,38 +761,6 @@ function _advDetectArrayGroups(candidates) {
       ? detectedCols + ' cols + ' + placeholderCols + ' TODO'
       : detectedCols + ' cols';
     const labelCount = itemCountHint > 0 ? itemCountHint + ' items' : 'N items';
-    // Primary usage at the first detected request
-    const _primaryUsage = {
-      entryIdx: reqIdx,
-      url: targetEntry ? _advShortUrl(targetEntry) : '?',
-      location: 'body_array',
-      jsonPath: targetArrayKey,
-    };
-
-    // Additional usages: scan ALL entries for the same targetArrayKey at any nesting depth.
-    // This handles cases where the same array pattern appears in multiple requests
-    // (e.g., nextAlerts at top-level in t6.inf AND nested inside hitList[0] in t12.inf).
-    const _extraUsages = [];
-    const _seenExtras = new Set([reqIdx]);
-    const _allEntries2 = (typeof S !== 'undefined' && S.entries1) || [];
-    for (let _ei2 = 0; _ei2 < _allEntries2.length; _ei2++) {
-      if (_seenExtras.has(_ei2)) continue;
-      const _e2 = _allEntries2[_ei2];
-      if (!_e2 || _e2.filtered || _e2.isMarker) continue;
-      const _bt2 = (_e2.body && _e2.body.text) || '';
-      if (!_bt2) continue;
-      let _bObj2;
-      try { _bObj2 = JSON.parse(_bt2); } catch { continue; }
-      if (_advDeepContainsKey(_bObj2, targetArrayKey)) {
-        _seenExtras.add(_ei2);
-        _extraUsages.push({
-          entryIdx: _ei2,
-          url: _advShortUrl(_e2),
-          location: 'body_array',
-          jsonPath: targetArrayKey,
-        });
-      }
-    }
 
     result.push({
       id: first.id,
@@ -668,7 +770,11 @@ function _advDetectArrayGroups(candidates) {
       confidence: 'high',
       varName: targetArrayKey.charAt(0).toLowerCase() + targetArrayKey.slice(1),
       source: first.source,
-      usages: [_primaryUsage, ..._extraUsages],
+      usages: [
+        { entryIdx: reqIdx, url: targetEntry ? _advShortUrl(targetEntry) : '?', location: 'body_array', jsonPath: targetArrayKey },
+        ..._extraBodyArrayUsages,
+        ..._standaloneUsages,
+      ],
       status: 'pending',
       _arrayReconstruct: true,
       _arrayConfig: {
@@ -679,72 +785,6 @@ function _advDetectArrayGroups(candidates) {
         _itemCountHint: itemCountHint,
       },
     });
-
-    // Companion candidate: standalone occurrences of the anchor column's values
-    // outside the target array. Surfaced as a separate SelectAll card so the user
-    // can accept it and toggle it to random_select.
-    // Example: nextAlerts array_reconstruct built from systemIds → but the request
-    // body ALSO has a standalone "systemID" field (the selected alert) that needs
-    // independent parameterization.
-    const _anchorCol = columns.find(col => col.varName === anchorVarName && !col._placeholder);
-    if (_anchorCol && _anchorCol.sourceJsonPath) {
-      const _srcE = (_allEntries2 && _allEntries2[first.source.entryIdx]);
-      const _srcResBody = (_srcE && ((_srcE.response && _srcE.response.body && _srcE.response.body.text) || _srcE.resBody)) || '';
-      let _sampleVal = null;
-      if (_srcResBody) {
-        try { _sampleVal = _advGetValueAtPath(JSON.parse(_srcResBody), _anchorCol.sourceJsonPath); } catch {}
-      }
-      if (_sampleVal && _sampleVal.length >= ADV_MIN_LEN) {
-        const _companionUsages = [];
-        const _seenComp = new Set();
-        for (let _ci2 = 0; _ci2 < _allEntries2.length; _ci2++) {
-          const _ce2 = _allEntries2[_ci2];
-          if (!_ce2 || _ce2.filtered || _ce2.isMarker) continue;
-          const _cbt2 = (_ce2.body && _ce2.body.text) || '';
-          if (!_cbt2 || !_cbt2.includes(_sampleVal)) continue;
-          let _cbObj2;
-          try { _cbObj2 = JSON.parse(_cbt2); } catch { continue; }
-          let _foundPath = null;
-          _advWalkLeaves(_cbObj2, '$', function(v, p) {
-            if (_foundPath || v !== _sampleVal) return;
-            // Skip if the path is inside the target array: $.arrayKey[N].field or nested
-            if (p.includes(targetArrayKey + '[')) return;
-            _foundPath = p;
-          }, 0);
-          if (_foundPath && !_seenComp.has(_ci2)) {
-            _seenComp.add(_ci2);
-            _companionUsages.push({
-              entryIdx: _ci2,
-              url: _advShortUrl(_ce2),
-              location: 'body_json',
-              jsonPath: _foundPath,
-              originalValue: _sampleVal,
-              tokenValue: _sampleVal,
-            });
-          }
-        }
-        if (_companionUsages.length > 0) {
-          const _compVarName = _anchorCol.varName.replace(/s$/, '') + '_pick';
-          result.push({
-            id: first.id + '-standalone',
-            value: _sampleVal,
-            preview: _anchorCol.sourceJsonPath + ' (standalone)',
-            valueType: 'string',
-            confidence: 'medium',
-            varName: _compVarName,
-            source: {
-              entryIdx: first.source.entryIdx,
-              jsonPath: _anchorCol.sourceJsonPath,
-              url: first.source.url || '',
-            },
-            _selectAll: true,
-            usages: _companionUsages,
-            status: 'pending',
-            _companionOf: targetArrayKey,
-          });
-        }
-      }
-    }
   }
 
   return result;
@@ -854,8 +894,8 @@ function advisorToCorrelation(candidate) {
   }));
 
   // Array reconstruction: short-circuit — all config is already in _arrayConfig.
-  // Map ALL detected body_array usages so array sentinel is placed in every request
-  // that contains the target array key (e.g. top-level in t6.inf AND nested in t12.inf).
+  // Maps body_array usages (sentinel placement) AND body_json_standalone usages
+  // (random-pick replacement for standalone anchor values outside the array).
   if (candidate._arrayReconstruct) {
     const _arrUsages = candidate.usages
       .filter(u => u.location === 'body_array')
@@ -867,7 +907,6 @@ function advisorToCorrelation(candidate) {
         originalValue: 'array',
         prefix: '',
       }));
-    // Always have at least the primary usage
     if (_arrUsages.length === 0) {
       _arrUsages.push({
         reqIdx: candidate.usages[0].entryIdx,
@@ -878,12 +917,24 @@ function advisorToCorrelation(candidate) {
         prefix: '',
       });
     }
+    // Standalone usages: preserve tokenValue so codegen can locate+replace the
+    // recorded value with a runtime random-pick placeholder.
+    const _standaloneUsages = candidate.usages
+      .filter(u => u.location === 'body_json_standalone')
+      .map(u => ({
+        reqIdx: u.entryIdx,
+        location: 'body_json_standalone',
+        key: u.jsonPath ? u.jsonPath.split('.').pop().replace(/[\[\]]/g, '') : 'value',
+        tokenValue: u.tokenValue || u.originalValue || '',
+        originalValue: u.originalValue || u.tokenValue || '',
+        prefix: '',
+      }));
     return {
       name: candidate.varName,
       sourceIdx: candidate.source ? candidate.source.entryIdx : 0,
       extractorType: 'array_reconstruct',
       extractorConfig: candidate._arrayConfig,
-      usages: _arrUsages,
+      usages: [..._arrUsages, ..._standaloneUsages],
       _fromAdvisor: true,
     };
   }
