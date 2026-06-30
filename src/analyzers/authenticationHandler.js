@@ -394,11 +394,14 @@ ${JSON.stringify(authConfig.config, null, 2)
 
     if (typeof value === 'string' && /\{\{.*?\}\}|\$\{.*?\}/.test(value)) {
       const varName = value.replace(/\{\{|\}\}|\$\{|\}/g, '').trim();
+      // Sanitize: hyphens and other non-JS-identifier chars must become underscores
+      // so the generated load.global.X is valid JavaScript (e.g. access-token → access_token).
+      const safe = varName.replace(/[^a-zA-Z0-9_$]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || '_var';
       // Prefer load.global for any variable the generator classified as dynamic
       if (this.dynamicVarNames.has(varName)) {
-        return `load.global.${varName}`;
+        return `load.global.${safe}`;
       }
-      return `load.params.${varName}`;
+      return `load.params.${safe}`;
     }
 
     return `"${value}"`;
