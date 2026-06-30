@@ -1,4 +1,4 @@
-/* lre-utils.js  —  DPoP (ES256) + JWT (PS256) for VuGen Web HTTP/HTML
+/* lre-utils.js  -  DPoP (ES256) + JWT (PS256) for VuGen Web HTTP/HTML
  * BigInteger and EC math embedded from jsrsasign (Tom Wu / Kenji Urushima).
  * No external dependencies required. Load via SOURCES File=lre-utils.js
  * Every web_js_run Code= must call initDpopKey() before generateDpopProof().
@@ -189,7 +189,7 @@ function _getP256(){
   return _p256;
 }
 
-/* helper: unsigned byte array → positive BigInteger (prepend 0x00 if MSB set) */
+/* helper: unsigned byte array -> positive BigInteger (prepend 0x00 if MSB set) */
 function _ubiFromBytes(bytes){
   var arr=bytes.slice();
   if(arr.length===0||arr[0]>=0x80) arr.unshift(0);
@@ -398,7 +398,7 @@ function _generateDpopKeyPair(){
 }
 
 /* =========================================================
-   initDpopKey  —  call at start of every web_js_run Code=
+   initDpopKey  -  call at start of every web_js_run Code=
    jwkParam: base64url-encoded JWK string (optional)
    If omitted or empty, a fresh ephemeral key is generated.
    ========================================================= */
@@ -421,13 +421,13 @@ function initDpopKey(jwkParam){
 }
 
 /* =========================================================
-   generateDpopProof  —  RFC 9449
+   generateDpopProof  -  RFC 9449
    htu: target URI  (string)
    htm: HTTP method (string, e.g. "POST")
    accessToken: current bearer access_token (string, optional)
    ========================================================= */
 function generateDpopProof(htu,htm,accessToken){
-  if(!_dpopPriv) throw new Error('DPoP key not initialised — call initDpopKey() first');
+  if(!_dpopPriv) throw new Error('DPoP key not initialised - call initDpopKey() first');
   var header={typ:'dpop+jwt',alg:'ES256',jwk:_dpopPubJwk};
   var payload={jti:_uuidv4(),iat:Math.floor(Date.now()/1000),htu:String(htu),htm:String(htm).toUpperCase()};
   if(accessToken && accessToken.length>0){
@@ -439,7 +439,7 @@ function generateDpopProof(htu,htm,accessToken){
 }
 
 /* =========================================================
-   generateDpopProofs  —  batch, takes JSON string
+   generateDpopProofs  -  batch, takes JSON string
    specsJson: '[{"htu":"...","htm":"...","accessToken":"...","paramName":"..."},...]'
    Stores each proof in LR.setParam(paramName, proof)
    ========================================================= */
@@ -456,7 +456,7 @@ function generateDpopProofs(specsJson){
 }
 
 /* =========================================================
-   createJWT  —  PS256 (RSA-PSS / SHA-256)
+   createJWT  -  PS256 (RSA-PSS / SHA-256)
    signingKid:  key ID string
    secret:      PEM-encoded RSA private key (PKCS#8 or PKCS#1)
                 May contain HTML entities (e.g. &#10; for newlines)
