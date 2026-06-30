@@ -456,6 +456,39 @@ function generateDpopProofs(specsJson){
 }
 
 /* =========================================================
+   generatePkce  -  RFC 7636 PKCE code_verifier + code_challenge
+   Generates a 43-char base64url code_verifier using Math.random (sufficient
+   for load-test isolation; not for production secret material).
+   Computes code_challenge = BASE64URL(SHA-256(ASCII(code_verifier))) using
+   the built-in _sha256() above - no external crypto dependency.
+   Stores both values via LR.setParam so VuGen body/URL substitution works.
+   Call once at the start of each Action() iteration before any request.
+   ========================================================= */
+function generatePkce(){
+  var chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  var vBytes=[];
+  for(var i=0;i<32;i++) vBytes.push(Math.floor(Math.random()*256));
+  var verifier=vBytes.map(function(b){return chars[b%chars.length];}).join('');
+  /* SHA-256 of ASCII bytes of verifier string */
+  var vAscii=[];
+  for(var i=0;i<verifier.length;i++) vAscii.push(verifier.charCodeAt(i)&0xff);
+  var hash=_sha256(vAscii);
+  /* Base64url-encode the 32-byte hash (no padding) */
+  var B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  var b64='';
+  for(var i=0;i<hash.length;i+=3){
+    var b0=hash[i],b1=i+1<hash.length?hash[i+1]:0,b2=i+2<hash.length?hash[i+2]:0;
+    b64+=B64[(b0>>2)&63]+B64[((b0<<4)|(b1>>4))&63];
+    b64+=i+1<hash.length?B64[((b1<<2)|(b2>>6))&63]:'=';
+    b64+=i+2<hash.length?B64[b2&63]:'=';
+  }
+  var challenge=b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  LR.setParam('pkce_verifier',verifier);
+  LR.setParam('pkce_challenge',challenge);
+  return verifier;
+}
+
+/* =========================================================
    createJWT  -  PS256 (RSA-PSS / SHA-256)
    signingKid:  key ID string
    secret:      PEM-encoded RSA private key (PKCS#8 or PKCS#1)
