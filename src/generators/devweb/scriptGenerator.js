@@ -464,6 +464,7 @@ class AdvancedScriptGenerator {
               ? event.script.exec.join("\n")
               : event.script.exec;
             let match;
+            setPattern.lastIndex = 0; // reset /gm regex before each new string — Node 18+ strict lastIndex
             while ((match = setPattern.exec(scriptText)) !== null) {
               // group 1=pm.*/context, 2=postman.set* legacy, 3=bru.set*, 4=env/vars legacy
               const varName = match[1] || match[2] || match[3] || match[4];
@@ -496,6 +497,7 @@ class AdvancedScriptGenerator {
             : "";
         if (!text) return;
         let m;
+        setPattern.lastIndex = 0; // reset /gm regex before each new string — Node 18+ strict lastIndex
         while ((m = setPattern.exec(text)) !== null) {
           const varName = m[1] || m[2] || m[3] || m[4];
           if (varName) this.scriptSetVarNames.add(varName);
@@ -975,6 +977,9 @@ ${finalizeSection}
       // Inject JMX-explicit extractors (RegexExtractor, BoundaryExtractor, etc.)
       // stored on req.extractors[] by jmxParser — not detectable from script content.
       this.injectJmxExtractors();
+      // Inject script-detected variables that analyzeRequests() missed due to
+      // producer-after-consumer ordering (token endpoint placed after consumers in collection).
+      this.injectScriptExtractors();
       console.log(`✓ Found ${this.correlations.length} correlation(s)`);
     }
 
@@ -2732,6 +2737,49 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
             corr = { ...base, extractorType: "regex", pattern: "(.+?)" };
         }
         this.correlations.push(corr);
+      }
+    }
+  }
+
+  /**
+   * Inject correlations for variables set by post-response test scripts.
+   *
+   * analyzeRequests() has a producer-before-consumer ordering constraint — it only
+   * creates a correlation when the producer request index is lower than the consumer
+   * request index. In many real-world Postman collections the token endpoint is placed
+   * AFTER the requests that use the token (e.g. producer at index 6, consumers at 0-5),
+   * so analyzeRequests() finds 0 correlations even when the script is parsed correctly.
+   *
+   * This method bypasses that constraint by directly injecting a correlation for every
+   * variable set by a post-response script that doesn't already have one. It runs after
+   * both analyzeRequests() and injectJmxExtractors() so it never creates duplicates.
+   */
+  injectScriptExtractors() {
+    const seenNames = new Set(this.correlations.map((c) => c.name));
+    for (let i = 0; i < this.requests.length; i++) {
+      const request = this.requests[i];
+      const testScript = this.correlationDetector.extractTestScript(request);
+      if (!testScript) continue;
+      const setVars = this.correlationDetector.extractSetVariables(testScript);
+      for (const varInfo of setVars) {
+        const name = varInfo.name;
+        if (!name || seenNames.has(name)) continue;
+        // Skip library-loading or crypto identifiers — not real correlation targets
+        if (/jsrsasign|kjur|cryptojs|jsonwebtoken|jose|forge|jsbn/i.test(name)) continue;
+        seenNames.add(name);
+        this.correlations.push({
+          name,
+          producerRequest:  request.name,
+          consumerRequests: [],
+          extractorType:    varInfo.extractorType || 'json',
+          extractPath:      varInfo.extractPath   || `$.${name}`,
+          leftBound:        varInfo.leftBound,
+          rightBound:       varInfo.rightBound,
+          pattern:          varInfo.pattern,
+          xpathQuery:       varInfo.xpathQuery,
+          _fromScript:      true,
+        });
+        this.scriptSetVarNames.add(name);
       }
     }
   }
