@@ -1324,19 +1324,16 @@ ${teardownBlock}
           const secretParam = cm.secret || 'private_key';
           const outputParam = cm.output || 'jwt';
           const resultParam = outputParam.startsWith('_') ? outputParam : '_' + outputParam;
-          const expiryCheck = `Date.now() >= parseInt(LR.getParam('_jwt_expires_at') || '0')`;
-          const createCall  =
-            `createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
-            `LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'))`;
+          // refreshJWT() in lre-utils.dat owns all state: checks expiry,
+          // calls createJWT() when needed, updates _jwt_expires_at via LR.setParam,
+          // and returns the (possibly refreshed) token — one call instead of two.
+          const refreshCall =
+            `refreshJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
+            `LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'), '${resultParam}')`;
           return `
 ${audPreStep}  web_js_run(
-    "Code=${expiryCheck} ? ${createCall} : LR.getParam('${resultParam}');",
+    "Code=${refreshCall};",
     "ResultParam=${resultParam}",
-    LAST);
-
-  web_js_run(
-    "Code=${expiryCheck} ? String(Date.now() + 9 * 60 * 1000) : LR.getParam('_jwt_expires_at');",
-    "ResultParam=_jwt_expires_at",
     LAST);
 
 `;
