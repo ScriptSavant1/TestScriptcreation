@@ -1114,10 +1114,10 @@ static void gen_hex64(const char *param_name) {
     const fileScopeBlock = fileScopeDecls ? fileScopeDecls + '\n' : '';
 
     // JWT init block — mirrors DevWeb's load.initialize() pattern:
-    //   vuser_init() generates the token once and stores expiry timestamp.
+    //   vuser_init() generates the token once and records the expiry timestamp.
     //   Action() only refreshes when the token has expired (see jwtSetup in generateActionC).
-    // lre-utils.dat is loaded here via SOURCES; Action()'s refresh call reuses this
-    // persistent JS context and therefore needs no SOURCES block.
+    // Two separate web_js_run calls so each Code= is a single expression —
+    // multi-statement Code= strings confuse VuGen's ES3 JS engine.
     const jwtInitBlock = this.hasJwt
       ? (() => {
           const cm = this.jwtClaimMap || {};
@@ -1132,13 +1132,6 @@ static void gen_hex64(const char *param_name) {
           const secretParam = cm.secret || 'private_key';
           const outputParam = cm.output || 'jwt';
           const resultParam = outputParam.startsWith('_') ? outputParam : '_' + outputParam;
-          // Single-line JS: generate token, store it and the expiry timestamp as LR params.
-          // Last expression (_t) becomes the ResultParam value for diagnostic logging.
-          const initCode =
-            `var _t=createJWT(LR.getParam('${clientIdParam}'),LR.getParam('${audParam}'),` +
-            `LR.getParam('${scopeParam}'),LR.getParam('${kidParam}'),LR.getParam('${secretParam}')); ` +
-            `LR.setParam('${resultParam}',_t); ` +
-            `LR.setParam('_jwt_expires_at',String(Date.now()+9*60*1000)); _t;`;
           return `
   web_set_certificate_ex(
     "CertFilePath=transport.pem",
@@ -1148,13 +1141,18 @@ static void gen_hex64(const char *param_name) {
     LAST);
 
 ${audPreStep}  web_js_run(
-    "Code=${initCode}",
+    "Code=createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'));",
     "ResultParam=${resultParam}",
     SOURCES,
     "File=lre-utils.dat", ENDITEM,    /* <- Step 2: update to "File=lre-utils.js" after renaming */
     LAST);
 
-  lr_output_message("JWT initialized (expires in 9 min). Token: %.20s...", lr_eval_string("{${resultParam}}"));
+  web_js_run(
+    "Code=String(Date.now() + 9 * 60 * 1000);",
+    "ResultParam=_jwt_expires_at",
+    LAST);
+
+  lr_output_message("JWT initialized (expires in 9 min).");
 `;
         })()
       : '';
@@ -1304,12 +1302,17 @@ ${teardownBlock}
     // No SOURCES block: lre-utils.dat was loaded in vuser_init.c and the JS
     // context persists for the entire vuser lifetime (same mechanism as DPoP).
     // web_set_certificate_ex also lives in vuser_init.c — not repeated here.
+    //
+    // Two separate web_js_run calls, each with a single ternary expression:
+    //   Call 1 — token: if expired call createJWT (same call as in vuser_init),
+    //                   else return the existing token (ResultParam re-sets it unchanged).
+    //   Call 2 — expiry: if expired set a new 9-min timestamp, else keep existing.
+    // Using ternary (not if-statement) avoids multi-statement Code= strings which
+    // cause "RSA Parse: expected outer sequence" in VuGen's ES3 JS engine.
     const jwtSetup = this.hasJwt
       ? (() => {
           const cm = this.jwtClaimMap || {};
           const clientIdParam = cm.iss || cm.sub || 'client_id';
-          // Dynamic audience: always pre-build _jwt_aud before the expiry check
-          // because the template may reference other LR params that vary per run.
           const hasDynAud   = !!cm._audTemplate;
           const audParam    = hasDynAud ? '_jwt_aud' : (cm.aud || 'token_url');
           const audPreStep  = hasDynAud
@@ -1320,17 +1323,19 @@ ${teardownBlock}
           const secretParam = cm.secret || 'private_key';
           const outputParam = cm.output || 'jwt';
           const resultParam = outputParam.startsWith('_') ? outputParam : '_' + outputParam;
-          // Single-line JS: only regenerate when expiry timestamp has passed.
-          const refreshCode =
-            `if(Date.now()>=parseInt(LR.getParam('_jwt_expires_at')||'0')){` +
-            `var _t=createJWT(LR.getParam('${clientIdParam}'),LR.getParam('${audParam}'),` +
-            `LR.getParam('${scopeParam}'),LR.getParam('${kidParam}'),LR.getParam('${secretParam}')); ` +
-            `LR.setParam('${resultParam}',_t); ` +
-            `LR.setParam('_jwt_expires_at',String(Date.now()+9*60*1000));}`;
+          const expiryCheck = `Date.now() >= parseInt(LR.getParam('_jwt_expires_at') || '0')`;
+          const createCall  =
+            `createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
+            `LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'))`;
           return `
 ${audPreStep}  web_js_run(
-    "Code=${refreshCode}",
-    "ResultParam=_jwt_refresh_status",
+    "Code=${expiryCheck} ? ${createCall} : LR.getParam('${resultParam}');",
+    "ResultParam=${resultParam}",
+    LAST);
+
+  web_js_run(
+    "Code=${expiryCheck} ? String(Date.now() + 9 * 60 * 1000) : LR.getParam('_jwt_expires_at');",
+    "ResultParam=_jwt_expires_at",
     LAST);
 
 `;
