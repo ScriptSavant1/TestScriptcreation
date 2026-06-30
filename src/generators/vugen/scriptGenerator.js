@@ -1116,25 +1116,25 @@ static void gen_hex64(const char *param_name) {
     // Setup comment block — only emitted when lre-utils.dat is included (JWT or DPoP)
     const lreSetupComment = (this.hasJwt || this.hasDpop)
       ? `/*\n` +
-        ` * ${'═'.repeat(62)}\n` +
-        ` *  SETUP REQUIRED — 3 steps before running this script in VuGen\n` +
-        ` * ${'═'.repeat(62)}\n` +
+        ` * ${'='.repeat(62)}\n` +
+        ` *  SETUP REQUIRED - 3 steps before running this script in VuGen\n` +
+        ` * ${'='.repeat(62)}\n` +
         ` *\n` +
         ` *  lre-utils.dat contains the JWT/DPoP crypto library. It is\n` +
         ` *  shipped as .dat to bypass antivirus scanners on IIS servers.\n` +
         ` *  VuGen requires the .js extension to execute it. Do this once:\n` +
         ` *\n` +
-        ` *  Step 1 — Rename the file (Windows Explorer or command prompt):\n` +
-        ` *            lre-utils.dat  →  lre-utils.js\n` +
+        ` *  Step 1 - Rename the file (Windows Explorer or command prompt):\n` +
+        ` *            lre-utils.dat  ->  lre-utils.js\n` +
         ` *\n` +
-        ` *  Step 2 — In this file (vuser_init.c) and in Action.c:\n` +
+        ` *  Step 2 - In this file (vuser_init.c) and in Action.c:\n` +
         ` *            Find:    "File=lre-utils.dat"\n` +
         ` *            Replace: "File=lre-utils.js"\n` +
         ` *\n` +
-        ` *  Step 3 — In VuGen: Script > Script Properties > Extra Files\n` +
-        ` *            Remove lre-utils.dat  then Add Files → select lre-utils.js\n` +
+        ` *  Step 3 - In VuGen: Script > Script Properties > Extra Files\n` +
+        ` *            Remove lre-utils.dat  then Add Files -> select lre-utils.js\n` +
         ` *\n` +
-        ` * ${'═'.repeat(62)}\n` +
+        ` * ${'='.repeat(62)}\n` +
         ` */\n\n`
       : '';
 
@@ -1417,7 +1417,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     });
     const codeStr = `generateDpopProofs('[${specParts.join(",")}]');`;
 
-    let code = `${indent}// Batch DPoP proof generation — ${specs.length} proofs (optimized: no file loading)\n`;
+    let code = `${indent}// Batch DPoP proof generation - ${specs.length} proofs (optimized: no file loading)\n`;
     code += `${indent}web_js_run(\n`;
     code += `${indent}    "Code=${this.escapeCString(codeStr)}",\n`;
     code += `${indent}    "ResultParam=_dpop_batch_status",\n`;
