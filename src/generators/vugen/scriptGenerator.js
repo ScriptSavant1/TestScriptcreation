@@ -79,6 +79,11 @@ class WebHttpScriptGenerator {
     this.jwtClaimMap = null;
     this.jwtVarNames = []; // variable names the pre-request script stores the token into
 
+    // Per-request JWT — requests with their OWN JWT pre-request script that produces a
+    // DIFFERENT output variable than the primary JWT (e.g. a JWT used as a raw request body).
+    // Map: requestName → { claimMap, outputvar }
+    this.perRequestJwt = new Map();
+
     //DPoP detection — set in detectDpopUsage() after script scanning
     this.hasDpop = false;
     this.dpopVarNames = []; // variable names the pre-request script stores the proof into
@@ -657,6 +662,24 @@ class WebHttpScriptGenerator {
     };
   }
 
+  /**
+   * Extract a request's pre-request script text, in any supported format.
+   * Mirrors devweb/scriptGenerator.js's extractScriptFromRequest('prerequest') —
+   * VuGen has no equivalent helper, so JWT-per-request detection needs this directly.
+   */
+  _extractPreScript(request) {
+    if (request.preRequestScript) return request.preRequestScript;
+    const events = request.tests || request.event || [];
+    const ev = events.find(
+      (e) => e.listen === "prerequest" || e.listen === "pre-request",
+    );
+    if (!ev || !ev.script) return null;
+    const exec = ev.script.exec;
+    if (Array.isArray(exec)) return exec.join("\n");
+    if (typeof exec === "string") return exec;
+    return null;
+  }
+
   async analyze() {
     // Filter out jsrsasign library-loading requests (kjur.github.io/jsrsasign).
     // These are script-runner HTTP fetches used by Postman/Bruno pre-request scripts to
@@ -777,6 +800,38 @@ class WebHttpScriptGenerator {
           this.perRequestVars.get(varName).requestNames.push(req.name);
         });
       });
+
+      // --- Per-request JWT detection ---------------------------------------------
+      // Some collections have MULTIPLE pre-request JWT-signing scripts producing DIFFERENT
+      // output variables with different claims (e.g. a primary `jwt_token` used for the
+      // Authorization header, plus a secondary JWT used as a raw request body for a
+      // registration endpoint). Identify the true primary output var (skipping library
+      // loading flags like "jsrsasign-js"), then scan each request's OWN pre-request
+      // script independently for additional JWT signers targeting a different output var.
+      {
+        const _LIBRARY_RE = /jsrsasign|kjur|cryptojs|jsonwebtoken|jose|forge|jsbn/i;
+        const _primaryOut =
+          this.jwtVarNames.find((v) => v && !_LIBRARY_RE.test(v)) || null;
+
+        for (const req of this.requests) {
+          const preScript = this._extractPreScript(req);
+          if (!preScript) continue;
+          const jwtInfo = CustomScriptParser.detectJwtUsage(preScript);
+          if (!jwtInfo.isJwt || jwtInfo.outputVars.length === 0) continue;
+          const outputvar = jwtInfo.outputVars.find(
+            (v) => v && !_LIBRARY_RE.test(v),
+          );
+          if (!outputvar || outputvar === _primaryOut) continue; // primary JWT — already handled above
+          if (this.perRequestJwt.has(req.name)) continue;
+          const claimMap = CustomScriptParser.extractJwtClaimMap(preScript);
+          if (!claimMap) continue;
+          this.perRequestJwt.set(req.name, { claimMap, outputvar });
+          this.scriptSetVarNames.add(outputvar);
+          console.log(
+            `    ✓ Per-request JWT detected for "${req.name}" → ${outputvar}`,
+          );
+        }
+      }
     }
 
     // Detect NTLM/Kerberos auth BEFORE classifyVariables() so that credential values
@@ -1607,6 +1662,10 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
       }
     }
 
+    // 1.6. Per-request JWT — requests with their OWN JWT pre-request script, distinct
+    // from the primary JWT (e.g. a JWT used as the raw request body).
+    code += this.generatePerRequestJwtCode(request, indent);
+
     // 2. Correlation registrations (must come BEFORE the producing request)
     code += this.generateCorrelationRegistrations(request, indent);
 
@@ -1626,6 +1685,40 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     }
 
     return code;
+  }
+
+  /**
+   * Generate C code for a request's OWN per-request JWT — distinct from the primary JWT
+   * (e.g. a JWT used as the raw request body for a registration endpoint). Always generated
+   * fresh via createJWT() (NOT refreshJWT()) since it's signed for one-time use and must not
+   * be cached/reused across iterations the way the primary JWT is.
+   */
+  generatePerRequestJwtCode(request, indent) {
+    if (!this.perRequestJwt || !this.perRequestJwt.has(request.name)) return "";
+
+    const { claimMap: cm, outputvar } = this.perRequestJwt.get(request.name);
+    const safeOv = outputvar.replace(/[^a-zA-Z0-9_]/g, "_");
+    const clientIdParam = cm.iss || cm.sub || "client_id";
+    const hasDynAud = !!cm._audTemplate;
+    const audParam = hasDynAud ? `_jwt_aud_${safeOv}` : cm.aud || "token_url";
+    const audPreStep = hasDynAud
+      ? `${indent}lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "${audParam}");\n\n`
+      : "";
+    const scopeParam = cm.scope || "scope";
+    const kidParam = cm.kid || "signing_kid";
+    const secretParam = cm.secret || "private_key";
+    const resultParam = outputvar.startsWith("_") ? outputvar : "_" + outputvar;
+
+    const createCall =
+      `createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
+      `LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'))`;
+
+    return `${audPreStep}${indent}web_js_run(
+${indent}    "Code=${createCall};",
+${indent}    "ResultParam=${resultParam}",
+${indent}    LAST);
+
+`;
   }
 
   /**
@@ -2743,6 +2836,17 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
       // Per-request dynamic vars (UUID/nonce) use _ prefix — gen_uuid() stores as "_varName"
       if (this.perRequestVars && this.perRequestVars.has(trimmed))
         return `{_${trimmed}}`;
+      // JWT output vars (primary + per-request) use _ prefix — web_js_run's ResultParam=
+      // always stores under "_name" (see generateActionC() / generatePerRequestJwtCode()).
+      // BUG-035: without this, {jwt_token} resolved to an undefined LR param at runtime
+      // since the value was only ever stored under "_jwt_token".
+      if (this.jwtVarNames && this.jwtVarNames.includes(trimmed))
+        return `{_${trimmed}}`;
+      if (this.perRequestJwt) {
+        for (const { outputvar } of this.perRequestJwt.values()) {
+          if (outputvar === trimmed) return `{_${trimmed}}`;
+        }
+      }
       // Correlation targets use the plain name — web_reg_save_param_* uses ParamName=name (no _ prefix)
       return `{${trimmed}}`;
     });

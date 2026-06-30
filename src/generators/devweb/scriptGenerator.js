@@ -70,6 +70,11 @@ class AdvancedScriptGenerator {
     this.jwtVarNames = []; // token variable names set by JWT pre-request scripts
     this.jwtClaimMap = null; // { kid:'signing_kid', iss:'client_id', ... } extracted from pre-request script
 
+    // Per-request JWT — requests with their OWN JWT pre-request script that produces a
+    // DIFFERENT output variable than the primary JWT (e.g. a JWT used as a raw request body).
+    // Map: requestName → { claimMap, outputvar }
+    this.perRequestJwt = new Map();
+
     // DPoP detection -- populated by detectDpopUsage() during analyze()
     this.hasDpop = false;
     this.dpopVarNames = []; // dpop_proof variable names set by DPoP pre-request scripts
@@ -590,6 +595,31 @@ class AdvancedScriptGenerator {
         const text = typeof sc === 'string' ? sc : sc?.code || '';
         scanScriptText(text, req.name);
       }
+    }
+
+    // --- Per-request JWT detection -------------------------------------------------
+    // Some collections have MULTIPLE pre-request JWT-signing scripts producing DIFFERENT
+    // output variables with different claims (e.g. a primary `jwt_token` used for the
+    // Authorization header, plus a secondary JWT used as a raw request body for a
+    // registration endpoint). Identify the true primary output var (skipping library
+    // loading flags like "jsrsasign-js"), then scan each request's OWN pre-request
+    // script independently for additional JWT signers targeting a different output var.
+    const _LIBRARY_RE = /jsrsasign|kjur|cryptojs|jsonwebtoken|jose|forge|jsbn/i;
+    const _primaryOut = this.jwtVarNames.find((v) => v && !_LIBRARY_RE.test(v)) || null;
+
+    for (const req of this.requests) {
+      const preScript = this.extractScriptFromRequest(req, "prerequest");
+      if (!preScript) continue;
+      const jwtInfo = CustomScriptParser.detectJwtUsage(preScript);
+      if (!jwtInfo.isJwt || jwtInfo.outputVars.length === 0) continue;
+      const outputvar = jwtInfo.outputVars.find((v) => v && !_LIBRARY_RE.test(v));
+      if (!outputvar || outputvar === _primaryOut) continue; // primary JWT — already handled above
+      if (this.perRequestJwt.has(req.name)) continue;
+      const claimMap = CustomScriptParser.extractJwtClaimMap(preScript);
+      if (!claimMap) continue;
+      this.perRequestJwt.set(req.name, { claimMap, outputvar });
+      this.scriptSetVarNames.add(outputvar);
+      console.log(`  ✓ Per-request JWT detected for "${req.name}" → ${outputvar}`);
     }
   }
 
@@ -1771,6 +1801,9 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
     // the converted custom-script block already emits load.global.X = ... for
     // those, so a separate null-initialisation is duplicate clutter.
     const jwtOutputVars = new Set(this.jwtVarNames || []);
+    if (this.perRequestJwt) {
+      for (const { outputvar } of this.perRequestJwt.values()) jwtOutputVars.add(outputvar);
+    }
     const corrNames = new Set((this.correlations || []).map(c => c.name));
     this.dynamicVarNames.forEach((name) => {
       const scriptOnly = this.scriptSetVarNames.has(name) && !corrNames.has(name);
@@ -2152,6 +2185,23 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
           this.dpopPfUsed = true; // mark dpop-pf as used to avoid regenerating it for subsequent requests
         }
       }
+    }
+
+    // Generate per-request JWT for requests with their own JWT pre-request script —
+    // distinct from the primary JWT (e.g. a JWT used as the raw request body).
+    // Always generated fresh (no expiry caching) since it's signed for this single use.
+    if (this.perRequestJwt && this.perRequestJwt.has(request.name)) {
+      const { claimMap: cm, outputvar } = this.perRequestJwt.get(request.name);
+      const cmJson = JSON.stringify(cm);
+      const safeOv = this.sanitizeVarName(outputvar);
+      const paramsVar = `_jwtParams_${safeOv}`;
+      code += `\n${this.indent(`const ${paramsVar} = Object.assign({}, load.params, (load.config && load.config.user && load.config.user.args) || {});`, indentLevel)}`;
+      if (cm._audTemplate) {
+        const audExpr = JSON.stringify(cm._audTemplate);
+        code += `\n${this.indent(`const _jwtAud_${safeOv} = ${audExpr}.replace(/\\{(\\w+)\\}/g, (_, k) => ${paramsVar}[k] || '');`, indentLevel)}`;
+        code += `\n${this.indent(`${paramsVar}['_jwt_aud'] = _jwtAud_${safeOv};`, indentLevel)}`;
+      }
+      code += `\n${this.indent(`load.global.${safeOv} = getJwtToken(${paramsVar}, ${cmJson});`, indentLevel)}`;
     }
 
     // Generate WebRequest options (increments requestIdCounter)
