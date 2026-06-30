@@ -2694,12 +2694,10 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
       const trimmed = varName.trim();
       // Skip Postman built-in dynamic variables ($guid, $timestamp, etc.)
       if (trimmed.startsWith("$")) return match;
-      // Per-request dynamic vars use _ prefix in VuGen (generated inline before the request)
+      // Per-request dynamic vars (UUID/nonce) use _ prefix — gen_uuid() stores as "_varName"
       if (this.perRequestVars && this.perRequestVars.has(trimmed))
         return `{_${trimmed}}`;
-      // Dynamic/correlated vars also use _ prefix by convention
-      if (this.dynamicVarNames && this.dynamicVarNames.has(trimmed))
-        return `{_${trimmed}}`;
+      // Correlation targets use the plain name — web_reg_save_param_* uses ParamName=name (no _ prefix)
       return `{${trimmed}}`;
     });
   }
