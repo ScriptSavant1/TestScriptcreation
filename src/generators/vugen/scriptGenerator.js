@@ -1126,7 +1126,7 @@ static void gen_hex64(const char *param_name) {
     "Code=initDpopKey(LR.getParam('${this.dpopKeyVar || "dpop_jwk"}')); 'DPoP engine initialized successfully';",
     "ResultParam=dpop_init_result",
     SOURCES,
-    "File=lre-utils.dat", ENDITEM,    /* <- Step 2: update to "File=lre-utils.js" after renaming */
+    "File=lre-utils.js", ENDITEM,
     LAST);
 
   lr_output_message("DPoP Initialization: %s", lr_eval_string("{dpop_init_result}"));
@@ -1205,7 +1205,7 @@ ${audPreStep}  web_js_run(
     "Code=createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'));",
     "ResultParam=${resultParam}",
     SOURCES,
-    "File=lre-utils.dat", ENDITEM,    /* <- Step 2: update to "File=lre-utils.js" after renaming */
+    "File=lre-utils.js", ENDITEM,
     LAST);
 
   web_js_run(
@@ -1219,12 +1219,13 @@ ${audPreStep}  web_js_run(
       : '';
 
     // Setup comment block — only emitted when lre-utils.dat is included (JWT or DPoP).
-    // After the JWT init refactor, "File=lre-utils.dat" only appears in vuser_init.c
-    // (no longer in Action.c), so Step 2 references only this file.
+    // The generated SOURCES line already references "File=lre-utils.js" directly, so the
+    // user only needs to rename the file and re-point VuGen's Extra Files at it — no manual
+    // code edit required.
     const lreSetupComment = (this.hasJwt || this.hasDpop)
       ? `/*\n` +
         ` * ${'='.repeat(62)}\n` +
-        ` *  SETUP REQUIRED - 3 steps before running this script in VuGen\n` +
+        ` *  SETUP REQUIRED - 2 steps before running this script in VuGen\n` +
         ` * ${'='.repeat(62)}\n` +
         ` *\n` +
         ` *  lre-utils.dat contains the JWT/DPoP crypto library. It is\n` +
@@ -1234,11 +1235,7 @@ ${audPreStep}  web_js_run(
         ` *  Step 1 - Rename the file (Windows Explorer or command prompt):\n` +
         ` *            lre-utils.dat  ->  lre-utils.js\n` +
         ` *\n` +
-        ` *  Step 2 - In this file (vuser_init.c):\n` +
-        ` *            Find:    "File=lre-utils.dat"\n` +
-        ` *            Replace: "File=lre-utils.js"\n` +
-        ` *\n` +
-        ` *  Step 3 - In VuGen: Script > Script Properties > Extra Files\n` +
+        ` *  Step 2 - In VuGen: Script > Script Properties > Extra Files\n` +
         ` *            Remove lre-utils.dat  then Add Files -> select lre-utils.js\n` +
         ` *\n` +
         ` * ${'='.repeat(62)}\n` +
