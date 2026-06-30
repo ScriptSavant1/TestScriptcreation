@@ -970,6 +970,7 @@ ${finalizeSection}
     if (this.options.useCorrelation) {
       this.correlations = this.correlationDetector.analyzeRequests(
         this.requests,
+        this.collection,
       );
       // Inject JMX-explicit extractors (RegexExtractor, BoundaryExtractor, etc.)
       // stored on req.extractors[] by jmxParser — not detectable from script content.

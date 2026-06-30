@@ -41,9 +41,10 @@ class CorrelationDetector {
   /**
    * Analyze requests to detect potential correlations
    */
-  analyzeRequests(requests) {
+  analyzeRequests(requests, collection = null) {
     const correlations = [];
     const valueRegistry = new Map(); // Track values across requests
+    const collectionAuth = collection?.auth || null;
 
     // First pass: collect all produced values from each request
     for (let i = 0; i < requests.length; i++) {
@@ -68,7 +69,7 @@ class CorrelationDetector {
       const request = requests[i];
 
       // Check if this request consumes values
-      const consumes = this.detectConsumedValues(request, i, valueRegistry);
+      const consumes = this.detectConsumedValues(request, i, valueRegistry, collectionAuth);
 
       // Create correlation rules
       consumes.forEach(consume => {
@@ -632,7 +633,7 @@ class CorrelationDetector {
   /**
    * Detect values that this request consumes (needs from previous requests)
    */
-  detectConsumedValues(request, index, valueRegistry) {
+  detectConsumedValues(request, index, valueRegistry, collectionAuth = null) {
     const consumed = [];
 
     // 1. Check pre-request scripts for variable usage
@@ -761,6 +762,25 @@ class CorrelationDetector {
             type: 'token',
             location: 'auth',
             path: 'auth'
+          });
+        }
+      });
+    }
+
+    // 6. Collection-level auth — inherited by requests that have no per-request auth override.
+    // When the Postman collection sets Bearer {{access_token}} at collection level, individual
+    // requests don't have request.auth set, so step 5 above never fires. We must scan the
+    // collection auth here for any request that inherits it (no own auth, or own auth is noauth).
+    const hasOwnAuth = request.auth && request.auth.type && request.auth.type !== 'noauth';
+    if (!hasOwnAuth && collectionAuth) {
+      const collAuthVars = this._findVariablesInAuth(collectionAuth);
+      collAuthVars.forEach(varName => {
+        if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
+          consumed.push({
+            name: varName,
+            type: 'token',
+            location: 'auth',
+            path: 'collectionAuth'
           });
         }
       });

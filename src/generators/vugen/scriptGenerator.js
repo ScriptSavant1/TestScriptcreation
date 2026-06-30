@@ -676,6 +676,7 @@ class WebHttpScriptGenerator {
     if (this.options.useCorrelation) {
       this.correlations = this.correlationDetector.analyzeRequests(
         this.requests,
+        this.collection,
       );
       // Inject JMX-explicit extractors (RegexExtractor, BoundaryExtractor, etc.)
       this.injectJmxExtractors();
