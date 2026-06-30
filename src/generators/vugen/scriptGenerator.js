@@ -567,7 +567,7 @@ class WebHttpScriptGenerator {
       // lre-utils.dat may already be copied by DPoP block below — only copy if not present
       const lreCryptoDest = path.join(outputDir, "lre-utils.dat");
       if (!fs.existsSync(lreCryptoDest)) {
-        const lreCryptoSrc = path.join(PROJECT_ROOT, "lre-utils-helper.js");
+        const lreCryptoSrc = path.join(PROJECT_ROOT, "lre-utils.dat");
         if (fs.existsSync(lreCryptoSrc)) {
           fs.copyFileSync(lreCryptoSrc, lreCryptoDest);
           console.log("✓ Copied lre-utils.dat (JWT signing for VuGen)");
@@ -603,7 +603,7 @@ class WebHttpScriptGenerator {
       const PROJECT_ROOT = path.join(__dirname, "..", "..", "..");
       const lreCryptoDest = path.join(outputDir, "lre-utils.dat");
       if (!fs.existsSync(lreCryptoDest)) {
-        const lreCryptoSrc = path.join(PROJECT_ROOT, "lre-utils-helper.js");
+        const lreCryptoSrc = path.join(PROJECT_ROOT, "lre-utils.dat");
         if (fs.existsSync(lreCryptoSrc)) {
           fs.copyFileSync(lreCryptoSrc, lreCryptoDest);
           console.log(
