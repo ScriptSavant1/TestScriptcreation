@@ -1113,7 +1113,55 @@ static void gen_hex64(const char *param_name) {
 
     const fileScopeBlock = fileScopeDecls ? fileScopeDecls + '\n' : '';
 
-    // Setup comment block — only emitted when lre-utils.dat is included (JWT or DPoP)
+    // JWT init block — mirrors DevWeb's load.initialize() pattern:
+    //   vuser_init() generates the token once and stores expiry timestamp.
+    //   Action() only refreshes when the token has expired (see jwtSetup in generateActionC).
+    // lre-utils.dat is loaded here via SOURCES; Action()'s refresh call reuses this
+    // persistent JS context and therefore needs no SOURCES block.
+    const jwtInitBlock = this.hasJwt
+      ? (() => {
+          const cm = this.jwtClaimMap || {};
+          const clientIdParam = cm.iss || cm.sub || 'client_id';
+          const hasDynAud    = !!cm._audTemplate;
+          const audParam     = hasDynAud ? '_jwt_aud' : (cm.aud || 'token_url');
+          const audPreStep   = hasDynAud
+            ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
+            : '';
+          const scopeParam  = cm.scope  || 'scope';
+          const kidParam    = cm.kid    || 'signing_kid';
+          const secretParam = cm.secret || 'private_key';
+          const outputParam = cm.output || 'jwt';
+          const resultParam = outputParam.startsWith('_') ? outputParam : '_' + outputParam;
+          // Single-line JS: generate token, store it and the expiry timestamp as LR params.
+          // Last expression (_t) becomes the ResultParam value for diagnostic logging.
+          const initCode =
+            `var _t=createJWT(LR.getParam('${clientIdParam}'),LR.getParam('${audParam}'),` +
+            `LR.getParam('${scopeParam}'),LR.getParam('${kidParam}'),LR.getParam('${secretParam}')); ` +
+            `LR.setParam('${resultParam}',_t); ` +
+            `LR.setParam('_jwt_expires_at',String(Date.now()+9*60*1000)); _t;`;
+          return `
+  web_set_certificate_ex(
+    "CertFilePath=transport.pem",
+    "CertFormat=PEM",
+    "KeyFilePath=transport.pem",
+    "KeyFormat=PEM",
+    LAST);
+
+${audPreStep}  web_js_run(
+    "Code=${initCode}",
+    "ResultParam=${resultParam}",
+    SOURCES,
+    "File=lre-utils.dat", ENDITEM,    /* <- Step 2: update to "File=lre-utils.js" after renaming */
+    LAST);
+
+  lr_output_message("JWT initialized (expires in 9 min). Token: %.20s...", lr_eval_string("{${resultParam}}"));
+`;
+        })()
+      : '';
+
+    // Setup comment block — only emitted when lre-utils.dat is included (JWT or DPoP).
+    // After the JWT init refactor, "File=lre-utils.dat" only appears in vuser_init.c
+    // (no longer in Action.c), so Step 2 references only this file.
     const lreSetupComment = (this.hasJwt || this.hasDpop)
       ? `/*\n` +
         ` * ${'='.repeat(62)}\n` +
@@ -1127,7 +1175,7 @@ static void gen_hex64(const char *param_name) {
         ` *  Step 1 - Rename the file (Windows Explorer or command prompt):\n` +
         ` *            lre-utils.dat  ->  lre-utils.js\n` +
         ` *\n` +
-        ` *  Step 2 - In this file (vuser_init.c) and in Action.c:\n` +
+        ` *  Step 2 - In this file (vuser_init.c):\n` +
         ` *            Find:    "File=lre-utils.dat"\n` +
         ` *            Replace: "File=lre-utils.js"\n` +
         ` *\n` +
@@ -1140,7 +1188,7 @@ static void gen_hex64(const char *param_name) {
 
     return `${lreSetupComment}${fileScopeBlock}vuser_init()
 {
-${ntlmBlock}${certBlock}${dpopInitBlock}${attribBlock}${setupBlock}
+${ntlmBlock}${certBlock}${dpopInitBlock}${attribBlock}${jwtInitBlock}${setupBlock}
   return 0;
 }
 `;
@@ -1250,41 +1298,44 @@ ${teardownBlock}
     // JWT setup block — certificate + token generation via lre-utils.dat
     // web_js_run() executes JavaScript using VuGen's built-in JS engine.
     // createJWT() is a function inside lre-utils.dat.
+    // JWT refresh block — mirrors DevWeb's load.action() expiry-check pattern.
+    // vuser_init() already generated the token and set _jwt_expires_at.
+    // Here we only regenerate when the token has expired (every ~9 minutes).
+    // No SOURCES block: lre-utils.dat was loaded in vuser_init.c and the JS
+    // context persists for the entire vuser lifetime (same mechanism as DPoP).
+    // web_set_certificate_ex also lives in vuser_init.c — not repeated here.
     const jwtSetup = this.hasJwt
       ? (() => {
           const cm = this.jwtClaimMap || {};
-          const clientIdParam = cm.iss || cm.sub || "client_id";
-          // Dynamic audience: pre-build with lr_eval_string before the web_js_run call.
-          // _audTemplate contains LR-notation placeholders: "https://host-{iam_env}.com/..."
-          const hasDynAud = !!cm._audTemplate;
-          const audParam = hasDynAud ? "_jwt_aud" : (cm.aud || "token_url");
-          const audPreStep = hasDynAud
-            ? `lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
+          const clientIdParam = cm.iss || cm.sub || 'client_id';
+          // Dynamic audience: always pre-build _jwt_aud before the expiry check
+          // because the template may reference other LR params that vary per run.
+          const hasDynAud   = !!cm._audTemplate;
+          const audParam    = hasDynAud ? '_jwt_aud' : (cm.aud || 'token_url');
+          const audPreStep  = hasDynAud
+            ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
             : '';
-          const scopeParam = cm.scope || "scope";
-          const kidParam   = cm.kid    || "signing_kid";
-          const secretParam = cm.secret || "private_key";
-          const outputParam = cm.output || "jwt";
-          const resultParam = outputParam.startsWith("_")
-            ? outputParam
-            : "_" + outputParam;
+          const scopeParam  = cm.scope  || 'scope';
+          const kidParam    = cm.kid    || 'signing_kid';
+          const secretParam = cm.secret || 'private_key';
+          const outputParam = cm.output || 'jwt';
+          const resultParam = outputParam.startsWith('_') ? outputParam : '_' + outputParam;
+          // Single-line JS: only regenerate when expiry timestamp has passed.
+          const refreshCode =
+            `if(Date.now()>=parseInt(LR.getParam('_jwt_expires_at')||'0')){` +
+            `var _t=createJWT(LR.getParam('${clientIdParam}'),LR.getParam('${audParam}'),` +
+            `LR.getParam('${scopeParam}'),LR.getParam('${kidParam}'),LR.getParam('${secretParam}')); ` +
+            `LR.setParam('${resultParam}',_t); ` +
+            `LR.setParam('_jwt_expires_at',String(Date.now()+9*60*1000));}`;
           return `
-web_set_certificate_ex(
-  "CertFilePath=transport.pem",
-  "CertFormat=PEM",
-  "KeyFilePath=transport.pem",
-  "KeyFormat=PEM",
-  LAST);
+${audPreStep}  web_js_run(
+    "Code=${refreshCode}",
+    "ResultParam=_jwt_refresh_status",
+    LAST);
 
-${audPreStep}web_js_run(
-  "Code=createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'));",
-  "ResultParam=${resultParam}",
-  SOURCES,
-  "File=lre-utils.dat", ENDITEM,    /* <- Step 2: update to "File=lre-utils.js" after renaming */
-  LAST);
 `;
         })()
-      : "";
+      : '';
 
     // DPoP: init is done inline per-request (combined with proof generation)
     const dpopSetup = "";
