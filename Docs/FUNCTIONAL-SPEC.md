@@ -335,7 +335,7 @@ GenerateNewVal=Once
 | Bearer (static) | Hard-coded token string | — | Header with param value |
 | API Key (header) | `auth.apikey` + `in: header` | — | Header injection |
 | API Key (query) | `auth.apikey` + `in: query` | — | Query parameter injection |
-| JWT | Script fingerprint | JWT generation code | `Authorization: Bearer <generated>` |
+| JWT | Script fingerprint | JWT generation code (all 12 RFC 7518 algs: HS256/384/512, RS256/384/512, PS256/384/512, ES256/384/512) | `Authorization: Bearer <generated>` |
 | AWS Sig v4 | `auth.awsv4` | — | AWS signing headers |
 | Digest | `auth.digest` | — | Digest challenge-response |
 | NTLM | `auth.ntlm` | `load.setUserCredentials()` or `web_set_user()` | — |

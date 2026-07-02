@@ -100,7 +100,11 @@ function resolveSignKey(normKey) {
 
   // Primary path: explicit type (works on all Node 12+ including 18+ / OpenSSL 3.x)
   try {
-    return crypto.createPrivateKey({ key: normKey, format: "pem", type: keyType });
+    return crypto.createPrivateKey({
+      key: normKey,
+      format: "pem",
+      type: keyType,
+    });
   } catch (_) {}
 
   // Fallback path: no explicit type (some Node 12-14 / OpenSSL 1.x edge cases)
@@ -114,7 +118,7 @@ function resolveSignKey(normKey) {
         "Key preview (first 120 chars): [" +
         preview +
         "] | Original error: " +
-        e.message
+        e.message,
     );
   }
 }
@@ -152,7 +156,7 @@ function generateJWT(header, payload, privateKey) {
         padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
         saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
       },
-      "base64"
+      "base64",
     )
     .replace(/=/g, "")
     .replace(/\+/g, "-")
@@ -209,7 +213,12 @@ function getJwtToken(params, claimMap) {
 
   // Key normalisation (HTML entities, escaped newlines, YAML corruption) is
   // handled inside generateJWT() via normalisePem() — no pre-processing needed here.
-  const prvkey = resolve("secret", "secret", "private_key", "signing_private_key");
+  const prvkey = resolve(
+    "secret",
+    "secret",
+    "private_key",
+    "signing_private_key",
+  );
 
   load.global.jwt_Token = generateJWT(header, payload, prvkey);
   load.global.jwt_expires_at = Date.now() + 9 * 60 * 1000; // Refresh at 9 min
@@ -217,4 +226,46 @@ function getJwtToken(params, claimMap) {
   return load.global.jwt_Token;
 }
 
-module.exports = { generateJWT, getJwtToken };
+/**
+ * Generate a JWT from an arbitrary claim map — for per-request JWTs with non-standard claims
+ * (e.g. software_statement, token_endpoint_auth_method) that cannot use the fixed-signature
+ * getJwtToken(). Always generates fresh (no caching) since these are one-time-use tokens.
+ *
+ * claimObj: plain object where each value is either a literal or a param name to resolve.
+ *   Standard claims (iss, sub, aud, scope, kid, secret, expOffset) are resolved from params.
+ *   extraClaims: { claimName: paramName } — each resolved from params.
+ * params: load.params merged with load.config.user.args
+ */
+function getJwtTokenFromMap(claimObj, params) {
+  const cm = claimObj || {};
+  const args = (load.config && load.config.user && load.config.user.args) || {};
+  const resolve = (paramName) => {
+    if (!paramName) return "";
+    return args[paramName] || params[paramName] || "";
+  };
+
+  const kid = resolve(cm.kid || "signing_kid");
+  const alg = cm.alg || "PS256";
+  const expOffset = cm.expOffset ? parseInt(cm.expOffset, 10) : 600;
+
+  const header = { kid, typ: "JWT", alg };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { iat: now, exp: now + expOffset, jti: load.utils.uuid() };
+
+  // Standard optional claims
+  if (cm.iss) payload.iss = resolve(cm.iss);
+  if (cm.sub) payload.sub = resolve(cm.sub);
+  if (cm.aud) payload.aud = resolve(cm.aud);
+  if (cm.scope) payload.scope = resolve(cm.scope);
+
+  // Non-standard extra claims
+  const extra = cm.extraClaims || {};
+  for (const claimName of Object.keys(extra)) {
+    payload[claimName] = resolve(extra[claimName]);
+  }
+
+  const prvkey = resolve(cm.secret || "private_key");
+  return generateJWT(header, payload, prvkey);
+}
+
+module.exports = { generateJWT, getJwtToken, getJwtTokenFromMap };
