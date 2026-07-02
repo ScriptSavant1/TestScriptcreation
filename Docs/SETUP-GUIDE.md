@@ -1,0 +1,225 @@
+# Local Setup Guide
+## Bruno / Postman → LoadRunner Converter
+
+This guide walks you through setting up the converter tool on your Windows machine from scratch.
+
+---
+
+## What This Tool Does
+
+Converts API collection files into ready-to-run LoadRunner scripts:
+
+| Input | Output |
+|-------|--------|
+| Postman collection (`.json`) | DevWeb JavaScript script |
+| Bruno collection (`.json`, `.yml`, `.bru`) | VuGen Web HTTP/HTML C script |
+| JMX file (`.jmx`) | Both protocols |
+
+Access it through a browser-based GUI or the command line.
+
+---
+
+## Step 1 — Install Git
+
+If you do not already have Git installed:
+
+1. Download from **https://git-scm.com/download/win**
+2. Run the installer — accept all defaults
+3. Verify: open **Command Prompt** and run:
+   ```
+   git --version
+   ```
+   Expected output: `git version 2.x.x`
+
+---
+
+## Step 2 — Install Node.js
+
+The tool requires **Node.js version 14 or newer** (v20 LTS recommended).
+
+1. Download the **LTS** installer from **https://nodejs.org**
+2. Run the installer — accept all defaults (includes npm automatically)
+3. Verify: open a **new** Command Prompt and run:
+   ```
+   node --version
+   npm --version
+   ```
+   Expected output: `v20.x.x` and `10.x.x` (or similar — any v14+ is fine)
+
+---
+
+## Step 3 — Clone the Repository
+
+Open **Command Prompt** or **PowerShell** and run:
+
+```
+git clone https://github.com/ScriptSavant1/TestScriptcreation.git
+```
+
+Then enter the project folder:
+
+```
+cd TestScriptcreation
+```
+
+> **Note:** If your organisation uses SSH keys for GitHub, use the SSH URL instead:
+> `git clone git@github.com:ScriptSavant1/TestScriptcreation.git`
+
+---
+
+## Step 4 — Install Dependencies
+
+Inside the project folder, run:
+
+```
+npm install --production
+```
+
+This downloads all required packages into a `node_modules/` folder.
+It takes about 30–60 seconds on first run.
+
+> `--production` skips test/lint tools — sufficient for day-to-day use.
+> If you plan to run tests or lint, use `npm install` (without the flag) instead.
+
+---
+
+## Step 5 — Start the Web GUI
+
+```
+npm run web
+```
+
+You should see:
+
+```
+  Converter UI  →  http://localhost:3000/converter
+```
+
+Open that URL in your browser. The tool is ready to use.
+
+**To stop the server:** press `Ctrl + C` in the terminal.
+
+---
+
+## Using the Web GUI
+
+### Converter (main tool)
+**URL:** `http://localhost:3000/converter`
+
+1. Choose output protocol: **DevWeb** (JavaScript) or **Web HTTP/HTML** (VuGen C)
+2. Upload your Postman/Bruno collection `.json`, `.yml`, or JMX `.jmx` file
+3. Optionally upload a Postman environment `.json` file
+4. Click **Convert**
+5. A ZIP file downloads automatically — open it in VuGen or your LRE workspace
+
+### VuGen Script Studio (HAR-based)
+**URL:** `http://localhost:3000/converter/studio`
+
+Upload a HAR recording (exported from browser DevTools) to:
+- Auto-detect dynamic values (tokens, session IDs, UUIDs)
+- Add correlations manually via the field browser
+- Parameterize test data
+- Generate either DevWeb or VuGen C code
+
+---
+
+## Using the Command Line (CLI)
+
+If you prefer the command line over the browser:
+
+**Basic conversion:**
+```
+node src/cli.js convert -i MyCollection.json -o ./output
+```
+
+**Convert to VuGen Web HTTP/HTML instead of DevWeb:**
+```
+node src/cli.js convert -i MyCollection.json --protocol web-http -o ./output
+```
+
+**With a Postman environment file:**
+```
+node src/cli.js convert -i MyCollection.json -e MyEnvironment.json -o ./output
+```
+
+**All options:**
+```
+node src/cli.js convert --help
+```
+
+---
+
+## Pulling Latest Changes
+
+When a teammate pushes an update, get it with:
+
+```
+git pull
+npm install --production
+```
+
+Then restart the server (`npm run web`).
+
+---
+
+## Troubleshooting
+
+**Port 3000 already in use**
+Another app is using port 3000. Either stop that app, or start the converter on a different port:
+```
+PORT=3001 npm run web
+```
+Then open `http://localhost:3001/converter`.
+
+**`node` or `npm` not found after installing Node.js**
+Close and reopen your terminal — the PATH update only applies to new windows.
+
+**`npm install` fails with permission errors**
+Run Command Prompt as Administrator, or check your corporate proxy settings:
+```
+npm config set proxy http://your-proxy:8080
+npm config set https-proxy http://your-proxy:8080
+npm install --production
+```
+
+**Blank page or 404 in the browser**
+Make sure the server is still running (check the terminal). If it crashed, restart with `npm run web` and check the error message.
+
+**ZIP downloads but VuGen cannot open the script**
+- DevWeb scripts: open the `.usr` file in LRE/VuGen
+- VuGen Web HTTP/HTML scripts: if the script uses JWT or DPoP, follow the 2-step setup comment at the top of `vuser_init.c` (rename `lre-utils.dat` → `lre-utils.js` and re-add it in VuGen Extra Files)
+
+---
+
+## Folder Structure (reference)
+
+```
+TestScriptcreation/
+├── src/
+│   ├── cli.js                  CLI entry point
+│   ├── web/server.js           Web GUI server
+│   ├── generators/
+│   │   ├── devweb/             DevWeb (JavaScript) script generator
+│   │   └── vugen/              VuGen Web HTTP/HTML (C) script generator
+│   └── tools/                  Converter orchestration
+├── jwt-helper.js               JWT signing for DevWeb scripts
+├── lre-utils.dat               JWT/DPoP crypto library for VuGen scripts
+├── Docs/                       Documentation
+└── package.json
+```
+
+---
+
+## Quick Reference
+
+| Task | Command |
+|------|---------|
+| Start web GUI | `npm run web` |
+| CLI convert (DevWeb) | `node src/cli.js convert -i file.json -o ./out` |
+| CLI convert (VuGen C) | `node src/cli.js convert -i file.json --protocol web-http -o ./out` |
+| Get latest code | `git pull && npm install --production` |
+| Run tests | `npm test` |
+
+---
+
+*Repo: https://github.com/ScriptSavant1/TestScriptcreation*
