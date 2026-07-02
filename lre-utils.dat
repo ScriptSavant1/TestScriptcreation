@@ -1451,7 +1451,7 @@ var lowprimes = [
   613, 617, 619, 631, 641, 643, 647, 653, 659, 661, 673, 677, 683, 691, 701,
   709, 719, 727, 733, 739, 743, 751, 757, 761, 769, 773, 787, 797, 809, 811,
   821, 823, 827, 829, 839, 853, 857, 859, 863, 877, 881, 883, 887, 907, 911,
-  919, 929, 937, 941, 947, 953, 967, 971, 977, 983, 991, 997,
+  919, 929, 937, 941, 947, 953, 967, 971, 977, 983, 991, 997
 ];
 var lplim = (1 << 26) / lowprimes[lowprimes.length - 1];
 function bnIsProbablePrime(e) {
@@ -1585,13 +1585,13 @@ function feFpAdd(a) {
 function feFpSubtract(a) {
   return new ECFieldElementFp(
     this.q,
-    this.x.subtract(a.toBigInteger()).mod(this.q),
+    this.x.subtract(a.toBigInteger()).mod(this.q)
   );
 }
 function feFpMultiply(a) {
   return new ECFieldElementFp(
     this.q,
-    this.x.multiply(a.toBigInteger()).mod(this.q),
+    this.x.multiply(a.toBigInteger()).mod(this.q)
   );
 }
 function feFpSquare() {
@@ -1600,7 +1600,7 @@ function feFpSquare() {
 function feFpDivide(a) {
   return new ECFieldElementFp(
     this.q,
-    this.x.multiply(a.toBigInteger().modInverse(this.q)).mod(this.q),
+    this.x.multiply(a.toBigInteger().modInverse(this.q)).mod(this.q)
   );
 }
 ECFieldElementFp.prototype.equals = feFpEquals;
@@ -1630,7 +1630,7 @@ function pointFpGetX() {
     this.zinv = this.z.modInverse(this.curve.q);
   }
   return this.curve.fromBigInteger(
-    this.x.toBigInteger().multiply(this.zinv).mod(this.curve.q),
+    this.x.toBigInteger().multiply(this.zinv).mod(this.curve.q)
   );
 }
 function pointFpGetY() {
@@ -1638,7 +1638,7 @@ function pointFpGetY() {
     this.zinv = this.z.modInverse(this.curve.q);
   }
   return this.curve.fromBigInteger(
-    this.y.toBigInteger().multiply(this.zinv).mod(this.curve.q),
+    this.y.toBigInteger().multiply(this.zinv).mod(this.curve.q)
   );
 }
 function pointFpEquals(a) {
@@ -1730,7 +1730,7 @@ function pointFpAdd(l) {
     this.curve,
     this.curve.fromBigInteger(a),
     this.curve.fromBigInteger(h),
-    f,
+    f
   );
 }
 function pointFpTwice() {
@@ -1770,7 +1770,7 @@ function pointFpTwice() {
     this.curve,
     this.curve.fromBigInteger(b),
     this.curve.fromBigInteger(f),
-    d,
+    d
   );
 }
 function pointFpMultiply(d) {
@@ -1895,7 +1895,7 @@ function curveFpDecodePointHex(m) {
       return new ECPointFp(
         this,
         this.fromBigInteger(new BigInteger(k, 16)),
-        this.fromBigInteger(new BigInteger(f, 16)),
+        this.fromBigInteger(new BigInteger(f, 16))
       );
     default:
       return null;
@@ -2081,12 +2081,12 @@ var _sha256K = [
   0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
   0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
   0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 ];
 function _sha256(data) {
   var H = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
-    0x1f83d9ab, 0x5be0cd19,
+    0x1f83d9ab, 0x5be0cd19
   ];
   var msg = [];
   for (var i = 0; i < data.length; i++) msg.push(data[i] & 0xff);
@@ -2104,7 +2104,7 @@ function _sha256(data) {
     (bLow >>> 24) & 0xff,
     (bLow >>> 16) & 0xff,
     (bLow >>> 8) & 0xff,
-    bLow & 0xff,
+    bLow & 0xff
   );
   function rotr(x, n) {
     return ((x >>> n) | (x << (32 - n))) >>> 0;
@@ -2161,7 +2161,7 @@ function _sha256(data) {
       (H[i] >>> 24) & 0xff,
       (H[i] >>> 16) & 0xff,
       (H[i] >>> 8) & 0xff,
-      H[i] & 0xff,
+      H[i] & 0xff
     );
   }
   return out;
@@ -2348,33 +2348,33 @@ function _getP256() {
   if (_p256) return _p256;
   var p = new BigInteger(
     "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
-    16,
+    16
   );
   var a = new BigInteger(
     "ffffffff00000001000000000000000000000000fffffffffffffffffffffffc",
-    16,
+    16
   );
   var b = new BigInteger(
     "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
-    16,
+    16
   );
   var n = new BigInteger(
     "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551",
-    16,
+    16
   );
   var Gx = new BigInteger(
     "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
-    16,
+    16
   );
   var Gy = new BigInteger(
     "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
-    16,
+    16
   );
   var curve = new ECCurveFp(p, a, b);
   var G = new ECPointFp(
     curve,
     curve.fromBigInteger(Gx),
-    curve.fromBigInteger(Gy),
+    curve.fromBigInteger(Gy)
   );
   _p256 = { curve: curve, G: G, n: n, hLen: 32 };
   return _p256;
@@ -2500,7 +2500,7 @@ function _parseRsaKey(der) {
         "RSA parse: expected INTEGER tag at pos " +
           pos +
           " got 0x" +
-          der[pos].toString(16),
+          der[pos].toString(16)
       );
     pos++;
     var r = _tlvLen(der, pos);
