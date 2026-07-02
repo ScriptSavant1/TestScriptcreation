@@ -6,6 +6,7 @@
 
 /* BigInteger core */
 var dbits;
+
 function BigInteger(e, d, f) {
   if (e != null) {
     if ("number" == typeof e) {
@@ -19,6 +20,7 @@ function BigInteger(e, d, f) {
     }
   }
 }
+
 function nbi() {
   return new BigInteger(null);
 }
@@ -2768,4 +2770,33 @@ function createJWT(clientId, aud, scope, signingKid, secret) {
   var sigInput = _b64uJson(header) + "." + _b64uJson(payload);
   var sig = _rsaPssSign(_strToBytes(sigInput), key.n, key.d);
   return sigInput + "." + _b64uEncode(sig);
+}
+
+/* ============================================================
+    refreshJWT  -  call once at the top of every Action()
+    Reads the cached JWT; returns it unchanged if still valid.
+    When the token has expired (or was never set) it calls
+    createJWT(), stores the new expiry via LR.setParam(), and
+    returns the fresh token.
+
+    tokenParam: name of the LR parameter where the token lives
+                (must match ResultParam= in the vuser_init call
+                and in this web_js_run call -- e.g. '_jwt_token')
+
+    Usage in Action.c (one call replaces the previous two):
+
+      web_js_run(
+        "Code=refreshJWT(LR.getParam('client_id'),LR.getParam('token_url'),"
+            "LR.getParam('scope'),LR.getParam('signing_kid'),"
+            "LR.getParam('private_key'),'_jwt_token');",
+        "ResultParam=_jwt_token",
+        LAST);
+============================================================ */
+function refreshJWT(clientId, aud, scope, signingKid, secret, tokenParam) {
+  var param = tokenParam || "_jwt_token";
+  var expiresAt = parseInt(LR.getParam("_jwt_expires_at") || "0");
+  if (Date.now() < expiresAt) return LR.getParam(param);
+  var token = createJWT(clientId, aud, scope, signingKid, secret);
+  LR.setParam("_jwt_expires_at", String(Date.now() + 9 * 60 * 1000));
+  return token;
 }
