@@ -2772,6 +2772,38 @@ function createJWT(clientId, aud, scope, signingKid, secret) {
   return sigInput + "." + _b64uEncode(sig);
 }
 
+/* =========================================================
+   createJWTFromMap  -  PS256 (RSA-PSS / SHA-256) with arbitrary claims
+   claimsJson:  JSON string produced by JSON.stringify({...}) in the
+                Code= expression. All values must already be resolved
+                (use LR.getParam() calls before JSON.stringify).
+                May include _expOffset (seconds until exp; default 300).
+   signingKid:  key ID string
+   secret:      PEM-encoded RSA private key (PKCS#8 or PKCS#1)
+   ========================================================= */
+function createJWTFromMap(claimsJson, signingKid, secret) {
+  var claims = JSON.parse(claimsJson);
+  var expOffset = claims._expOffset !== undefined ? parseInt(String(claims._expOffset), 10) : 300;
+  /* PEM -> DER */
+  var pem = _decodeHtmlEntities(String(secret));
+  pem = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  var der = _b64uDecode(pem);
+  var key = _parseRsaKey(der);
+  /* build JWT header + payload */
+  var now = Math.floor(Date.now() / 1000);
+  var header = { alg: "PS256", typ: "JWT", kid: String(signingKid) };
+  var payload = { iat: now, exp: now + expOffset, jti: _uuidv4() };
+  /* copy all provided claims (skip private _expOffset marker) */
+  for (var k in claims) {
+    if (Object.prototype.hasOwnProperty.call(claims, k) && k !== "_expOffset") {
+      payload[k] = claims[k];
+    }
+  }
+  var sigInput = _b64uJson(header) + "." + _b64uJson(payload);
+  var sig = _rsaPssSign(_strToBytes(sigInput), key.n, key.d);
+  return sigInput + "." + _b64uEncode(sig);
+}
+
 /* ============================================================
     refreshJWT  -  call once at the top of every Action()
     Reads the cached JWT; returns it unchanged if still valid.
