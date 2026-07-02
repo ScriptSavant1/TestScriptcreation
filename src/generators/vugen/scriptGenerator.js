@@ -14,8 +14,8 @@ const ParameterizationEngine = require("../../analyzers/parameterizationEngine")
 const AuthenticationHandler = require("../../analyzers/authenticationHandler");
 const CustomScriptParser = require("../../analyzers/customScriptParser");
 const WebHttpMandatoryFilesGenerator = require("./filesGenerator");
-const _u     = require("../../core/utils");
-const _vc    = require("../../core/variableClassifier");
+const _u = require("../../core/utils");
+const _vc = require("../../core/variableClassifier");
 const _vugen = require("../../core/vugenCodegen");
 
 class WebHttpScriptGenerator {
@@ -290,33 +290,49 @@ class WebHttpScriptGenerator {
     const paths = this.options.csvFilePaths || {};
     const allFiles = Object.keys(paths);
 
-    const pemFiles = allFiles.filter(f => f.toLowerCase().endsWith('.pem') || f.toLowerCase().endsWith('.crt') || f.toLowerCase().endsWith('.cer'));
-    const keyFiles = allFiles.filter(f => f.toLowerCase().endsWith('.key'));
-    const p12Files = allFiles.filter(f => f.toLowerCase().endsWith('.p12') || f.toLowerCase().endsWith('.pfx'));
+    const pemFiles = allFiles.filter(
+      (f) =>
+        f.toLowerCase().endsWith(".pem") ||
+        f.toLowerCase().endsWith(".crt") ||
+        f.toLowerCase().endsWith(".cer"),
+    );
+    const keyFiles = allFiles.filter((f) => f.toLowerCase().endsWith(".key"));
+    const p12Files = allFiles.filter(
+      (f) =>
+        f.toLowerCase().endsWith(".p12") || f.toLowerCase().endsWith(".pfx"),
+    );
 
     const usedKeys = new Set();
 
     for (const pem of pemFiles) {
-      const base = pem.replace(/\.[^.]+$/, '').toLowerCase();
-      const matchedKey = keyFiles.find(k => k.replace(/\.[^.]+$/, '').toLowerCase() === base);
+      const base = pem.replace(/\.[^.]+$/, "").toLowerCase();
+      const matchedKey = keyFiles.find(
+        (k) => k.replace(/\.[^.]+$/, "").toLowerCase() === base,
+      );
       if (matchedKey) {
         usedKeys.add(matchedKey);
-        this.mtlsCertFiles.push({ certFile: pem, keyFile: matchedKey, format: 'PEM' });
+        this.mtlsCertFiles.push({
+          certFile: pem,
+          keyFile: matchedKey,
+          format: "PEM",
+        });
         console.log(`  ✓ Client cert pair detected: ${pem} + ${matchedKey}`);
       } else {
-        this.mtlsCertFiles.push({ certFile: pem, keyFile: pem, format: 'PEM' });
+        this.mtlsCertFiles.push({ certFile: pem, keyFile: pem, format: "PEM" });
         console.log(`  ✓ Client certificate detected: ${pem}`);
       }
     }
 
     for (const p12 of p12Files) {
-      this.mtlsCertFiles.push({ certFile: p12, keyFile: p12, format: 'PFX' });
+      this.mtlsCertFiles.push({ certFile: p12, keyFile: p12, format: "PFX" });
       console.log(`  ✓ Client certificate detected: ${p12}`);
     }
 
-    const skipped = keyFiles.filter(k => !usedKeys.has(k));
+    const skipped = keyFiles.filter((k) => !usedKeys.has(k));
     if (skipped.length) {
-      console.warn(`  ⚠  Skipped standalone key file(s) with no matching .pem: ${skipped.join(', ')}`);
+      console.warn(
+        `  ⚠  Skipped standalone key file(s) with no matching .pem: ${skipped.join(", ")}`,
+      );
     }
   }
 
@@ -327,17 +343,21 @@ class WebHttpScriptGenerator {
     // For Postman/Bruno, skip collection variables with empty values — they are
     // undefined placeholders that generate noise (empty PRM entries, unused
     // ParameterFile parameters). JMX UDVs are kept even when empty (intentional).
-    const isJmx = this.collection?.info?.type === 'jmeter';
+    const isJmx = this.collection?.info?.type === "jmeter";
 
     if (this.collection.variable) {
       this.collection.variable.forEach((v) => {
-        if (!isJmx && (v.value === undefined || v.value === null || v.value === '')) return;
+        if (
+          !isJmx &&
+          (v.value === undefined || v.value === null || v.value === "")
+        )
+          return;
         this.variableMap.set(v.key, v.value);
       });
     }
     if (this.collection.environment) {
       Object.entries(this.collection.environment).forEach(([k, v]) => {
-        if (!isJmx && (v === undefined || v === null || v === '')) return;
+        if (!isJmx && (v === undefined || v === null || v === "")) return;
         this.variableMap.set(k, v);
       });
     }
@@ -345,9 +365,9 @@ class WebHttpScriptGenerator {
     // empty placeholder that injectRequestVariables() inserts for {{varName}} refs.
     if (this.options.environmentVars) {
       Object.entries(this.options.environmentVars).forEach(([k, v]) => {
-        if (!isJmx && (v === undefined || v === null || v === '')) return;
+        if (!isJmx && (v === undefined || v === null || v === "")) return;
         const existing = this.variableMap.get(k);
-        if (existing === undefined || existing === null || existing === '') {
+        if (existing === undefined || existing === null || existing === "") {
           this.variableMap.set(k, v);
         }
       });
@@ -434,46 +454,48 @@ class WebHttpScriptGenerator {
   classifyVariables() {
     // ── Step 1: Shared classification (Rules 0-5) ──────────────────────────
     // VuGen has no envVarKeys concept — all blank non-credential vars go dynamic (Rule 4).
-    const { dynamicVarNames, paramVarNames, usernameParam } = _vc.classifyVariables({
-      variableMap:       this.variableMap,
-      correlations:      this.correlations,
-      scriptSetVarNames: this.scriptSetVarNames,
-      csvVarNames:       this.csvVarNames,
-      // envVarKeys intentionally omitted → defaults to empty Set → VuGen behaviour
-    });
+    const { dynamicVarNames, paramVarNames, usernameParam } =
+      _vc.classifyVariables({
+        variableMap: this.variableMap,
+        correlations: this.correlations,
+        scriptSetVarNames: this.scriptSetVarNames,
+        csvVarNames: this.csvVarNames,
+        // envVarKeys intentionally omitted → defaults to empty Set → VuGen behaviour
+      });
     this.dynamicVarNames = dynamicVarNames;
-    this.paramVarNames   = paramVarNames;
+    this.paramVarNames = paramVarNames;
 
     // ── Step 2: Build VuGen-specific parameters map ────────────────────────
     // Uses collection_data.dat (VuGen format). JMX CSV params include colIndex + delimiter.
     for (const name of this.paramVarNames) {
-      const value        = this.variableMap.get(name);
-      const csvInfo      = this.csvVarNames.get(name);
+      const value = this.variableMap.get(name);
+      const csvInfo = this.csvVarNames.get(name);
       const isCredential = _vc.CREDENTIAL_PATTERN.test(name);
 
       if (csvInfo) {
         this.parameters.set(name, {
           name,
-          type:      "csv",
-          fileName:  csvInfo.fileName,
+          type: "csv",
+          fileName: csvInfo.fileName,
           columnName: name,
-          colIndex:  csvInfo.colIndex,
+          colIndex: csvInfo.colIndex,
           delimiter: csvInfo.delimiter,
           nextValue: "iteration",
-          nextRow:   "sequential",
-          onEnd:     csvInfo.recycle ? "loop" : "last",
+          nextRow: "sequential",
+          onEnd: csvInfo.recycle ? "loop" : "last",
           paramValue: "",
         });
       } else {
         this.parameters.set(name, {
           name,
-          type:      "csv",
-          fileName:  "collection_data.dat",
+          type: "csv",
+          fileName: "collection_data.dat",
           columnName: name,
           nextValue: isCredential ? "iteration" : "once",
-          nextRow:   "sequential",
-          onEnd:     "loop",
-          paramValue: value !== undefined && value !== null ? String(value) : "",
+          nextRow: "sequential",
+          onEnd: "loop",
+          paramValue:
+            value !== undefined && value !== null ? String(value) : "",
         });
       }
     }
@@ -481,7 +503,8 @@ class WebHttpScriptGenerator {
     // Link all columns from the same CSV file (col 2..N → same as col 1)
     const csvFileFirstCol = new Map();
     for (const [col, info] of this.csvVarNames) {
-      if (!csvFileFirstCol.has(info.fileName)) csvFileFirstCol.set(info.fileName, col);
+      if (!csvFileFirstCol.has(info.fileName))
+        csvFileFirstCol.set(info.fileName, col);
     }
     for (const [name, config] of this.parameters.entries()) {
       const csvInfo = this.csvVarNames.get(name);
@@ -493,7 +516,10 @@ class WebHttpScriptGenerator {
     // Link password-like params to username for non-CSV params
     if (usernameParam) {
       for (const [name, config] of this.parameters.entries()) {
-        if (/^(password|pwd|passwd)$/i.test(name) && !this.csvVarNames.has(name)) {
+        if (
+          /^(password|pwd|passwd)$/i.test(name) &&
+          !this.csvVarNames.has(name)
+        ) {
           config.nextRow = `same as ${usernameParam}`;
         }
       }
@@ -637,7 +663,9 @@ class WebHttpScriptGenerator {
             fs.copyFileSync(srcPath, path.join(outputDir, fname));
             console.log(`✓ Copied mTLS certificate: ${fname}`);
           } else {
-            console.warn(`  ⚠  mTLS cert ${fname} not found in uploaded files.`);
+            console.warn(
+              `  ⚠  mTLS cert ${fname} not found in uploaded files.`,
+            );
           }
         }
       }
@@ -809,7 +837,8 @@ class WebHttpScriptGenerator {
       // loading flags like "jsrsasign-js"), then scan each request's OWN pre-request
       // script independently for additional JWT signers targeting a different output var.
       {
-        const _LIBRARY_RE = /jsrsasign|kjur|cryptojs|jsonwebtoken|jose|forge|jsbn/i;
+        const _LIBRARY_RE =
+          /jsrsasign|kjur|cryptojs|jsonwebtoken|jose|forge|jsbn/i;
         const _primaryOut =
           this.jwtVarNames.find((v) => v && !_LIBRARY_RE.test(v)) || null;
 
@@ -1110,15 +1139,20 @@ static void gen_hex64(const char *param_name) {
       : "";
 
     // mTLS client certificate block (unchanged — only when JWT is NOT active)
-    const certBlock = this.mtlsCertFiles.length > 0 && !this.hasJwt
-      ? this.mtlsCertFiles.map(c => `
+    const certBlock =
+      this.mtlsCertFiles.length > 0 && !this.hasJwt
+        ? this.mtlsCertFiles
+            .map(
+              (c) => `
   web_set_certificate_ex(
     "CertFilePath=${c.certFile}",
     "CertFormat=${c.format}",
     "KeyFilePath=${c.keyFile}",
     "KeyFormat=${c.format}",
-    LAST);`).join('\n') + '\n'
-      : '';
+    LAST);`,
+            )
+            .join("\n") + "\n"
+        : "";
 
     // DPoP optimization: Load lre-utils.dat once in vuser_init (unchanged)
     const dpopInitBlock = this.hasDpop
@@ -1148,31 +1182,31 @@ static void gen_hex64(const char *param_name) {
     const globalParamEntries = [];
     if (this.parameters && this.parameters.size > 0) {
       for (const [name, cfg] of this.parameters.entries()) {
-        if (!cfg.fileName || cfg.fileName === 'collection_data.dat') {
+        if (!cfg.fileName || cfg.fileName === "collection_data.dat") {
           globalParamEntries.push(name);
         }
       }
     }
 
     // File-scope variable declarations — MUST appear before vuser_init() in C file scope
-    let fileScopeDecls = '';
+    let fileScopeDecls = "";
     for (const name of globalParamEntries) {
-      const safe = name.replace(/[^a-zA-Z0-9_]/g, '_');
+      const safe = name.replace(/[^a-zA-Z0-9_]/g, "_");
       fileScopeDecls += `char *attrib_${safe};\n`;
     }
 
     // Body: read each attribute and promote to LR parameter
-    let attribBlock = '';
+    let attribBlock = "";
     if (globalParamEntries.length > 0) {
-      attribBlock += '\n';
+      attribBlock += "\n";
       for (const name of globalParamEntries) {
-        const safe = name.replace(/[^a-zA-Z0-9_]/g, '_');
+        const safe = name.replace(/[^a-zA-Z0-9_]/g, "_");
         attribBlock += `  attrib_${safe} = lr_get_attrib_string("${name}");\n`;
         attribBlock += `  if (attrib_${safe}) lr_save_string(attrib_${safe}, "${name}");\n`;
       }
     }
 
-    const fileScopeBlock = fileScopeDecls ? fileScopeDecls + '\n' : '';
+    const fileScopeBlock = fileScopeDecls ? fileScopeDecls + "\n" : "";
 
     // JWT init block — mirrors DevWeb's load.initialize() pattern:
     //   vuser_init() generates the token once and records the expiry timestamp.
@@ -1182,17 +1216,19 @@ static void gen_hex64(const char *param_name) {
     const jwtInitBlock = this.hasJwt
       ? (() => {
           const cm = this.jwtClaimMap || {};
-          const clientIdParam = cm.iss || cm.sub || 'client_id';
-          const hasDynAud    = !!cm._audTemplate;
-          const audParam     = hasDynAud ? '_jwt_aud' : (cm.aud || 'token_url');
-          const audPreStep   = hasDynAud
+          const clientIdParam = cm.iss || cm.sub || "client_id";
+          const hasDynAud = !!cm._audTemplate;
+          const audParam = hasDynAud ? "_jwt_aud" : cm.aud || "token_url";
+          const audPreStep = hasDynAud
             ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
-            : '';
-          const scopeParam  = cm.scope  || 'scope';
-          const kidParam    = cm.kid    || 'signing_kid';
-          const secretParam = cm.secret || 'private_key';
-          const outputParam = cm.output || 'jwt';
-          const resultParam = outputParam.startsWith('_') ? outputParam : '_' + outputParam;
+            : "";
+          const scopeParam = cm.scope || "scope";
+          const kidParam = cm.kid || "signing_kid";
+          const secretParam = cm.secret || "private_key";
+          const outputParam = cm.output || "jwt";
+          const resultParam = outputParam.startsWith("_")
+            ? outputParam
+            : "_" + outputParam;
           return `
   web_set_certificate_ex(
     "CertFilePath=transport.pem",
@@ -1216,31 +1252,32 @@ ${audPreStep}  web_js_run(
   lr_output_message("JWT initialized (expires in 9 min).");
 `;
         })()
-      : '';
+      : "";
 
     // Setup comment block — only emitted when lre-utils.dat is included (JWT or DPoP).
     // The generated SOURCES line already references "File=lre-utils.js" directly, so the
     // user only needs to rename the file and re-point VuGen's Extra Files at it — no manual
     // code edit required.
-    const lreSetupComment = (this.hasJwt || this.hasDpop)
-      ? `/*\n` +
-        ` * ${'='.repeat(62)}\n` +
-        ` *  SETUP REQUIRED - 2 steps before running this script in VuGen\n` +
-        ` * ${'='.repeat(62)}\n` +
-        ` *\n` +
-        ` *  lre-utils.dat contains the JWT/DPoP crypto library. It is\n` +
-        ` *  shipped as .dat to bypass antivirus scanners on IIS servers.\n` +
-        ` *  VuGen requires the .js extension to execute it. Do this once:\n` +
-        ` *\n` +
-        ` *  Step 1 - Rename the file (Windows Explorer or command prompt):\n` +
-        ` *            lre-utils.dat  ->  lre-utils.js\n` +
-        ` *\n` +
-        ` *  Step 2 - In VuGen: Script > Script Properties > Extra Files\n` +
-        ` *            Remove lre-utils.dat  then Add Files -> select lre-utils.js\n` +
-        ` *\n` +
-        ` * ${'='.repeat(62)}\n` +
-        ` */\n\n`
-      : '';
+    const lreSetupComment =
+      this.hasJwt || this.hasDpop
+        ? `/*\n` +
+          ` * ${"=".repeat(62)}\n` +
+          ` *  SETUP REQUIRED - 2 steps before running this script in VuGen\n` +
+          ` * ${"=".repeat(62)}\n` +
+          ` *\n` +
+          ` *  lre-utils.dat contains the JWT/DPoP crypto library. It is\n` +
+          ` *  shipped as .dat to bypass antivirus scanners on IIS servers.\n` +
+          ` *  VuGen requires the .js extension to execute it. Do this once:\n` +
+          ` *\n` +
+          ` *  Step 1 - Rename the file (Windows Explorer or command prompt):\n` +
+          ` *            lre-utils.dat  ->  lre-utils.js\n` +
+          ` *\n` +
+          ` *  Step 2 - In VuGen: Script > Script Properties > Extra Files\n` +
+          ` *            Remove lre-utils.dat  then Add Files -> select lre-utils.js\n` +
+          ` *\n` +
+          ` * ${"=".repeat(62)}\n` +
+          ` */\n\n`
+        : "";
 
     return `${lreSetupComment}${fileScopeBlock}vuser_init()
 {
@@ -1370,17 +1407,19 @@ ${teardownBlock}
     const jwtSetup = this.hasJwt
       ? (() => {
           const cm = this.jwtClaimMap || {};
-          const clientIdParam = cm.iss || cm.sub || 'client_id';
-          const hasDynAud   = !!cm._audTemplate;
-          const audParam    = hasDynAud ? '_jwt_aud' : (cm.aud || 'token_url');
-          const audPreStep  = hasDynAud
+          const clientIdParam = cm.iss || cm.sub || "client_id";
+          const hasDynAud = !!cm._audTemplate;
+          const audParam = hasDynAud ? "_jwt_aud" : cm.aud || "token_url";
+          const audPreStep = hasDynAud
             ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
-            : '';
-          const scopeParam  = cm.scope  || 'scope';
-          const kidParam    = cm.kid    || 'signing_kid';
-          const secretParam = cm.secret || 'private_key';
-          const outputParam = cm.output || 'jwt';
-          const resultParam = outputParam.startsWith('_') ? outputParam : '_' + outputParam;
+            : "";
+          const scopeParam = cm.scope || "scope";
+          const kidParam = cm.kid || "signing_kid";
+          const secretParam = cm.secret || "private_key";
+          const outputParam = cm.output || "jwt";
+          const resultParam = outputParam.startsWith("_")
+            ? outputParam
+            : "_" + outputParam;
           // refreshJWT() in lre-utils.dat owns all state: checks expiry,
           // calls createJWT() when needed, updates _jwt_expires_at via LR.setParam,
           // and returns the (possibly refreshed) token — one call instead of two.
@@ -1395,7 +1434,7 @@ ${audPreStep}  web_js_run(
 
 `;
         })()
-      : '';
+      : "";
 
     // DPoP: init is done inline per-request (combined with proof generation)
     const dpopSetup = "";
@@ -1427,11 +1466,15 @@ ${audPreStep}  web_js_run(
     // C89: all local variable declarations must appear at the TOP of Action()
     // before any statements. Collect them here and emit as a block.
     const localDecls = [];
-    const needsTs = this.perRequestVars && Array.from(this.perRequestVars.values())
-      .some(v => v.generationType === 'timestamp');
-    if (needsTs) localDecls.push('  char _ts[32];');
+    const needsTs =
+      this.perRequestVars &&
+      Array.from(this.perRequestVars.values()).some(
+        (v) => v.generationType === "timestamp",
+      );
+    if (needsTs) localDecls.push("  char _ts[32];");
 
-    const declBlock = localDecls.length > 0 ? localDecls.join('\n') + '\n\n' : '';
+    const declBlock =
+      localDecls.length > 0 ? localDecls.join("\n") + "\n\n" : "";
 
     let code = `Action()
 {
@@ -1695,16 +1738,57 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
 
     const { claimMap: cm, outputvar } = this.perRequestJwt.get(request.name);
     const safeOv = outputvar.replace(/[^a-zA-Z0-9_]/g, "_");
+    const resultParam = outputvar.startsWith("_") ? outputvar : "_" + outputvar;
+
+    if (cm.extraClaims && Object.keys(cm.extraClaims).length > 0) {
+      // Non-standard claim set — build claims JSON with LR.getParam() calls resolved at runtime.
+      // We pass a JSON string where each value is already substituted via lr_eval_string.
+      // Strategy: build the JSON string in C using lr_eval_string for each param value.
+      const kidParam = cm.kid || "signing_kid";
+      const secretParam = cm.secret || "private_key";
+      const expOffset = cm.expOffset || 600;
+
+      // Build the claims object as a JSON template string with {param} placeholders,
+      // then resolve via lr_eval_string before passing to createJWTFromMap.
+      const claimsObj = {};
+      if (cm.aud) claimsObj.aud = `{${cm.aud}}`;
+      if (cm.iss) claimsObj.iss = `{${cm.iss}}`;
+      if (cm.sub) claimsObj.sub = `{${cm.sub}}`;
+      if (cm.scope) claimsObj.scope = `{${cm.scope}}`;
+      const extra = cm.extraClaims || {};
+      for (const [claimName, paramName] of Object.entries(extra)) {
+        claimsObj[claimName] = `{${paramName}}`;
+      }
+      // exp and iat will be injected by createJWTFromMap; pass expOffset as a claim
+      claimsObj._expOffset = expOffset;
+
+      // The claims JSON template goes inside Code="..." — a C string literal.
+      // lr_eval_string() needs its own "..." argument, but those quotes would
+      // terminate the outer Code="..." string. Solution: escape them as \" so
+      // C sees one continuous string: Code="createJWTFromMap(lr_eval_string(\"...}\"), ...}"
+      // Step 1: JSON.stringify produces {"aud":"{nwb_org_id}",...}
+      // Step 2: escape every " → \" so it survives inside the C string literal
+      const claimsTemplate = JSON.stringify(claimsObj).replace(/\//g, '\\"');
+      // lr_eval_string argument delimiters also need escaping: (" → (\"
+      const createCall = `createJWTFromMap(lr_eval_string(\\"${claimsTemplate}\\"), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'))`;
+
+      return `${indent}web_js_run(
+${indent}    "Code=${createCall};",
+${indent}    "ResultParam=${resultParam}",
+${indent}    LAST);
+`;
+    }
+
+    // Standard claim set — use createJWT with fixed 5-param signature
     const clientIdParam = cm.iss || cm.sub || "client_id";
     const hasDynAud = !!cm._audTemplate;
     const audParam = hasDynAud ? `_jwt_aud_${safeOv}` : cm.aud || "token_url";
     const audPreStep = hasDynAud
-      ? `${indent}lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "${audParam}");\n\n`
+      ? `${indent}lr_save_string(lr_eval_string("${cm._audTemplate.replace(/\//g, '\\"')}"), "${audParam}");\n\n`
       : "";
     const scopeParam = cm.scope || "scope";
     const kidParam = cm.kid || "signing_kid";
     const secretParam = cm.secret || "private_key";
-    const resultParam = outputvar.startsWith("_") ? outputvar : "_" + outputvar;
 
     const createCall =
       `createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
@@ -1714,8 +1798,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
 ${indent}    "Code=${createCall};",
 ${indent}    "ResultParam=${resultParam}",
 ${indent}    LAST);
-
-`;
+ `;
   }
 
   /**
@@ -1940,19 +2023,20 @@ ${indent}    LAST);
         const name = varInfo.name;
         if (!name || seenNames.has(name)) continue;
         // Skip library-loading or crypto identifiers — not real correlation targets
-        if (/jsrsasign|kjur|cryptojs|jsonwebtoken|jose|forge|jsbn/i.test(name)) continue;
+        if (/jsrsasign|kjur|cryptojs|jsonwebtoken|jose|forge|jsbn/i.test(name))
+          continue;
         seenNames.add(name);
         this.correlations.push({
           name,
-          producerRequest:  request.name,
+          producerRequest: request.name,
           consumerRequests: [],
-          extractorType:    varInfo.extractorType || 'json',
-          extractPath:      varInfo.extractPath   || `$.${name}`,
-          leftBound:        varInfo.leftBound,
-          rightBound:       varInfo.rightBound,
-          pattern:          varInfo.pattern,
-          xpathQuery:       varInfo.xpathQuery,
-          _fromScript:      true,
+          extractorType: varInfo.extractorType || "json",
+          extractPath: varInfo.extractPath || `$.${name}`,
+          leftBound: varInfo.leftBound,
+          rightBound: varInfo.rightBound,
+          pattern: varInfo.pattern,
+          xpathQuery: varInfo.xpathQuery,
+          _fromScript: true,
         });
         this.scriptSetVarNames.add(name);
       }
@@ -2000,48 +2084,68 @@ ${indent}    LAST);
 
         case "header": {
           const headerName = corr.extractPath || corrBase;
-          code += _vugen.emitBoundary(corr.name, {
-            lb:     `${headerName}: `,
-            rb:     '\r\n',
-            search: 'Headers',
-            ord:    1,
-          }, indent);
+          code += _vugen.emitBoundary(
+            corr.name,
+            {
+              lb: `${headerName}: `,
+              rb: "\r\n",
+              search: "Headers",
+              ord: 1,
+            },
+            indent,
+          );
           break;
         }
 
         case "cookie": {
           const cookieName = corr.extractPath || corrBase;
-          code += _vugen.emitBoundary(corr.name, {
-            lb:     `${cookieName}=`,
-            rb:     ';',
-            search: 'Headers',
-            ord:    1,
-          }, indent);
+          code += _vugen.emitBoundary(
+            corr.name,
+            {
+              lb: `${cookieName}=`,
+              rb: ";",
+              search: "Headers",
+              ord: 1,
+            },
+            indent,
+          );
           break;
         }
 
         case "boundary":
         case "csrf": {
-          const bScope = _vugen.vugenSearchFilter(corr.scope || corr.extractorScope);
-          code += _vugen.emitBoundary(corr.name, {
-            lb:     corr.leftBoundary  || undefined,
-            rb:     corr.rightBoundary || undefined,
-            search: bScope || undefined,
-            ord:    1,
-          }, indent);
+          const bScope = _vugen.vugenSearchFilter(
+            corr.scope || corr.extractorScope,
+          );
+          code += _vugen.emitBoundary(
+            corr.name,
+            {
+              lb: corr.leftBoundary || undefined,
+              rb: corr.rightBoundary || undefined,
+              search: bScope || undefined,
+              ord: 1,
+            },
+            indent,
+          );
           break;
         }
 
         case "regex":
         case "regexp": {
-          const vScope  = _vugen.vugenRegexpScope(corr.scope || corr.extractorScope);
-          const matchNo = Math.max(1, parseInt(corr.matchNumber || '1', 10));
-          code += _vugen.emitRegexp(corr.name, {
-            pattern: corr.pattern || `${corrBase}=([^&"'\\s]+)`,
-            group:   1,
-            scope:   vScope || undefined,
-            ordinal: matchNo,
-          }, indent);
+          const vScope = _vugen.vugenRegexpScope(
+            corr.scope || corr.extractorScope,
+          );
+          const matchNo = Math.max(1, parseInt(corr.matchNumber || "1", 10));
+          code += _vugen.emitRegexp(
+            corr.name,
+            {
+              pattern: corr.pattern || `${corrBase}=([^&"'\\s]+)`,
+              group: 1,
+              scope: vScope || undefined,
+              ordinal: matchNo,
+            },
+            indent,
+          );
           break;
         }
 
@@ -2231,7 +2335,7 @@ ${indent}    LAST);
       const fi = `${indent}        `;
       code += `${indent}    "Body={"\n`;
       bodyResult.bodyLines.forEach((line, i) => {
-        const comma = i < bodyResult.bodyLines.length - 1 ? ',' : '';
+        const comma = i < bodyResult.bodyLines.length - 1 ? "," : "";
         code += `${fi}"${line}${comma}"\n`;
       });
       code += `${indent}    "}",\n`;
@@ -2318,7 +2422,7 @@ ${indent}    LAST);
       }
       const lines = this._splitBodyFields(withParams);
       if (lines && lines.length > 1) {
-        return { bodyLines: lines.map(f => this.escapeCBodyString(f)) };
+        return { bodyLines: lines.map((f) => this.escapeCBodyString(f)) };
       }
       return { body: this.escapeCBodyString(withParams) };
     }
@@ -2373,16 +2477,30 @@ ${indent}    LAST);
    */
   _compactJsonBody(str) {
     const out = [];
-    let inStr = false, esc = false;
+    let inStr = false,
+      esc = false;
     for (const c of str) {
-      if (esc) { out.push(c); esc = false; continue; }
-      if (c === '\\' && inStr) { out.push(c); esc = true; continue; }
-      if (c === '"') { inStr = !inStr; out.push(c); continue; }
+      if (esc) {
+        out.push(c);
+        esc = false;
+        continue;
+      }
+      if (c === "\\" && inStr) {
+        out.push(c);
+        esc = true;
+        continue;
+      }
+      if (c === '"') {
+        inStr = !inStr;
+        out.push(c);
+        continue;
+      }
       // Outside strings, all whitespace is insignificant in JSON — strip it entirely.
-      if (!inStr && (c === ' ' || c === '\t' || c === '\r' || c === '\n')) continue;
+      if (!inStr && (c === " " || c === "\t" || c === "\r" || c === "\n"))
+        continue;
       out.push(c);
     }
-    return out.join('');
+    return out.join("");
   }
 
   /**
@@ -2396,19 +2514,31 @@ ${indent}    LAST);
    * the caller falls back to a single-line Body= parameter.
    */
   _splitBodyFields(str) {
-    if (!str || str[0] !== '{' || str[str.length - 1] !== '}') return null;
+    if (!str || str[0] !== "{" || str[str.length - 1] !== "}") return null;
     const inner = str.slice(1, -1);
     const fields = [];
-    let depth = 0, inStr = false, esc = false, start = 0;
+    let depth = 0,
+      inStr = false,
+      esc = false,
+      start = 0;
     for (let i = 0; i < inner.length; i++) {
       const c = inner[i];
-      if (esc)              { esc = false; continue; }
-      if (c === '\\' && inStr) { esc = true; continue; }
-      if (c === '"')        { inStr = !inStr; continue; }
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (c === "\\" && inStr) {
+        esc = true;
+        continue;
+      }
+      if (c === '"') {
+        inStr = !inStr;
+        continue;
+      }
       if (!inStr) {
-        if      (c === '{' || c === '[') depth++;
-        else if (c === '}' || c === ']') depth--;
-        else if (c === ',' && depth === 0) {
+        if (c === "{" || c === "[") depth++;
+        else if (c === "}" || c === "]") depth--;
+        else if (c === "," && depth === 0) {
           fields.push(inner.slice(start, i));
           start = i + 1;
         }
@@ -2441,16 +2571,16 @@ ${indent}    LAST);
    * source lines, which is a C syntax error.
    */
   escapeCBodyString(str) {
-    const BS = '\\'; // single backslash character
+    const BS = "\\"; // single backslash character
     return str
-      .replace(/\r/g, "")      // strip carriage returns (CRLF → LF, lone CR → gone)
-      .replace(/\n/g, '\\n')   // actual newline → \n escape (prevents broken C string literals)
-      .replace(/\t/g, '\\t')   // actual tab → \t escape
+      .replace(/\r/g, "") // strip carriage returns (CRLF → LF, lone CR → gone)
+      .replace(/\n/g, "\\n") // actual newline → \n escape (prevents broken C string literals)
+      .replace(/\t/g, "\\t") // actual tab → \t escape
       .replace(/\\.|"/g, (match) => {
-        if (match === BS + '"')  return BS + BS + BS + '"'; // \" → \\\"  (runtime: \")
-        if (match === BS + BS)   return BS + BS + BS + BS;  // \\ → \\\\  (runtime: \\)
-        if (match === '"')       return BS + '"';            // "  → \"    (runtime: ")
-        return match;                                        // \n,\t,etc. (2-char seqs) unchanged
+        if (match === BS + '"') return BS + BS + BS + '"'; // \" → \\\"  (runtime: \")
+        if (match === BS + BS) return BS + BS + BS + BS; // \\ → \\\\  (runtime: \\)
+        if (match === '"') return BS + '"'; // "  → \"    (runtime: ")
+        return match; // \n,\t,etc. (2-char seqs) unchanged
       });
   }
 
@@ -2733,8 +2863,12 @@ ${indent}    LAST);
    * VuGen web_reg_save_param Search= values (boundary extractor):
    *   Body (default when omitted), Headers, Noresource, ALL
    */
-  _vugenSearchFilter(scope) { return _vugen.vugenSearchFilter(scope); }
-  _vugenRegexpScope(scope)   { return _vugen.vugenRegexpScope(scope); }
+  _vugenSearchFilter(scope) {
+    return _vugen.vugenSearchFilter(scope);
+  }
+  _vugenRegexpScope(scope) {
+    return _vugen.vugenRegexpScope(scope);
+  }
 
   getContentType(request) {
     if (!request.headers) return null;
@@ -2773,7 +2907,9 @@ ${indent}    LAST);
     const credentialPattern = _vc.CREDENTIAL_PATTERN;
     // Host LR param names (ServerHost, ServerHost1, ...) are set via lr_save_string() in vuser_init —
     // they must NOT appear in [CommandArguments] / ParameterFile.prm.
-    const hostParamNames = this.hostVarMap ? new Set(this.hostVarMap.values()) : new Set();
+    const hostParamNames = this.hostVarMap
+      ? new Set(this.hostVarMap.values())
+      : new Set();
     let match;
     let added = 0;
 
