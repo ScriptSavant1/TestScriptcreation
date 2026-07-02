@@ -1741,42 +1741,34 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     const resultParam = outputvar.startsWith("_") ? outputvar : "_" + outputvar;
 
     if (cm.extraClaims && Object.keys(cm.extraClaims).length > 0) {
-      // Non-standard claim set — build claims JSON with LR.getParam() calls resolved at runtime.
-      // We pass a JSON string where each value is already substituted via lr_eval_string.
-      // Strategy: build the JSON string in C using lr_eval_string for each param value.
-      const kidParam = cm.kid || "signing_kid";
+      // Non-standard claim set — build claims object in JS using LR.getParam() calls.
+      // createJWTFromMap() receives a JSON string with values already resolved.
+      const kidParam    = cm.kid    || "signing_kid";
       const secretParam = cm.secret || "private_key";
-      const expOffset = cm.expOffset || 600;
+      const expOffset   = cm.expOffset || 600;
 
-      // Build the claims object as a JSON template string with {param} placeholders,
-      // then resolve via lr_eval_string before passing to createJWTFromMap.
-      const claimsObj = {};
-      if (cm.aud) claimsObj.aud = `{${cm.aud}}`;
-      if (cm.iss) claimsObj.iss = `{${cm.iss}}`;
-      if (cm.sub) claimsObj.sub = `{${cm.sub}}`;
-      if (cm.scope) claimsObj.scope = `{${cm.scope}}`;
-      const extra = cm.extraClaims || {};
-      for (const [claimName, paramName] of Object.entries(extra)) {
-        claimsObj[claimName] = `{${paramName}}`;
+      // Build JS object literal: {claim:LR.getParam('param'),...,_expOffset:N}
+      const claimParts = [];
+      if (cm.aud)   claimParts.push(`aud:LR.getParam('${cm.aud}')`);
+      if (cm.iss)   claimParts.push(`iss:LR.getParam('${cm.iss}')`);
+      if (cm.sub)   claimParts.push(`sub:LR.getParam('${cm.sub}')`);
+      if (cm.scope) claimParts.push(`scope:LR.getParam('${cm.scope}')`);
+      for (const [claimName, paramName] of Object.entries(cm.extraClaims || {})) {
+        claimParts.push(`${claimName}:LR.getParam('${paramName}')`);
       }
-      // exp and iat will be injected by createJWTFromMap; pass expOffset as a claim
-      claimsObj._expOffset = expOffset;
+      claimParts.push(`_expOffset:${expOffset}`);
+      const objLiteral = `{${claimParts.join(",")}}`;
 
-      // The claims JSON template goes inside Code="..." — a C string literal.
-      // lr_eval_string() needs its own "..." argument, but those quotes would
-      // terminate the outer Code="..." string. Solution: escape them as \" so
-      // C sees one continuous string: Code="createJWTFromMap(lr_eval_string(\"...}\"), ...}"
-      // Step 1: JSON.stringify produces {"aud":"{nwb_org_id}",...}
-      // Step 2: escape every " → \" so it survives inside the C string literal
-      const claimsTemplate = JSON.stringify(claimsObj).replace(/\//g, '\\"');
-      // lr_eval_string argument delimiters also need escaping: (" → (\"
-      const createCall = `createJWTFromMap(lr_eval_string(\\"${claimsTemplate}\\"), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'))`;
+      // Code= is pure JS — no C escaping of JSON quotes needed
+      const createCall =
+        `createJWTFromMap(JSON.stringify(${objLiteral}),LR.getParam('${kidParam}'),LR.getParam('${secretParam}'))`;
 
-      return `${indent}web_js_run(
-${indent}    "Code=${createCall};",
-${indent}    "ResultParam=${resultParam}",
-${indent}    LAST);
-`;
+      return (
+        `${indent}web_js_run(\n` +
+        `${indent}    "Code=${createCall};",\n` +
+        `${indent}    "ResultParam=${resultParam}",\n` +
+        `${indent}    LAST);\n\n`
+      );
     }
 
     // Standard claim set — use createJWT with fixed 5-param signature
@@ -1784,23 +1776,23 @@ ${indent}    LAST);
     const hasDynAud = !!cm._audTemplate;
     const audParam = hasDynAud ? `_jwt_aud_${safeOv}` : cm.aud || "token_url";
     const audPreStep = hasDynAud
-      ? `${indent}lr_save_string(lr_eval_string("${cm._audTemplate.replace(/\//g, '\\"')}"), "${audParam}");\n\n`
+      ? `${indent}lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "${audParam}");\n\n`
       : "";
-    const scopeParam = cm.scope || "scope";
-    const kidParam = cm.kid || "signing_kid";
+    const scopeParam  = cm.scope  || "scope";
+    const kidParam    = cm.kid    || "signing_kid";
     const secretParam = cm.secret || "private_key";
 
     const createCall =
       `createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
       `LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'))`;
 
-    return `${audPreStep}${indent}web_js_run(
-${indent}    "Code=${createCall};",
-${indent}    "ResultParam=${resultParam}",
-${indent}    LAST);
- `;
+    return (
+      `${audPreStep}${indent}web_js_run(\n` +
+      `${indent}    "Code=${createCall};",\n` +
+      `${indent}    "ResultParam=${resultParam}",\n` +
+      `${indent}    LAST);\n\n`
+    );
   }
-
   /**
    * Generate C code to create per-request dynamic values (UUID, nonce, timestamp).
    * Emits a C block that saves a unique value into an LR parameter BEFORE the request headers.
