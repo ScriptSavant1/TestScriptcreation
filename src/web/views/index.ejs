@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LRE Toolkit — Performance Engineering</title>
+<title>PerfX Studio — Performance Script Generation</title>
 <script>/* prevent FOUC */(function(){const t=localStorage.getItem('lr-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -972,11 +972,10 @@ footer {
 
 /* ── Tool cards — FULLY CLICKABLE ───────────────────────────────────────── */
 .tool-cards {
-  display: grid; grid-template-columns: repeat(3,1fr);
+  display: grid; grid-template-columns: repeat(2,1fr);
   gap: 20px; width: 100%; margin-bottom: 52px;
 }
-@media (max-width: 740px)  { .tool-cards { grid-template-columns: 1fr; } }
-@media (max-width: 1000px) and (min-width: 741px) { .tool-cards { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 600px) { .tool-cards { grid-template-columns: 1fr; } }
 
 .tool-card {
   background: var(--surface); border: 1px solid var(--glass-border);
@@ -995,15 +994,21 @@ footer {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
   border-radius: var(--r-xl) var(--r-xl) 0 0;
 }
-.tool-card.tc-blue::before  { background: linear-gradient(90deg, var(--primary), var(--accent)); }
-.tool-card.tc-green::before { background: linear-gradient(90deg, #34d17a, #22b5c0); }
-.tool-card.tc-purple::before{ background: linear-gradient(90deg, var(--accent), #e040fb); }
+.tool-card.tc-blue::before   { background: linear-gradient(90deg, var(--primary), var(--accent)); }
+.tool-card.tc-orange::before { background: linear-gradient(90deg, var(--vugen), #d45f10); }
+.tool-card.tc-green::before  { background: linear-gradient(90deg, #34d17a, #22b5c0); }
+.tool-card.tc-purple::before { background: linear-gradient(90deg, var(--accent), #e040fb); }
 
 /* glow on hover — colour-matched per card */
-.tool-card.tc-blue:hover  {
+.tool-card.tc-blue:hover {
   transform: translateY(-8px) scale(1.012);
   border-color: rgba(79,142,247,0.55);
   box-shadow: 0 20px 60px rgba(79,142,247,0.18), 0 8px 24px rgba(0,0,0,0.45);
+}
+.tool-card.tc-orange:hover {
+  transform: translateY(-8px) scale(1.012);
+  border-color: rgba(240,136,62,0.55);
+  box-shadow: 0 20px 60px rgba(240,136,62,0.18), 0 8px 24px rgba(0,0,0,0.45);
 }
 .tool-card.tc-green:hover {
   transform: translateY(-8px) scale(1.012);
@@ -1027,8 +1032,9 @@ footer {
   to   { opacity:1; transform: translateY(0); }
 }
 .tool-card:nth-child(1) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.25s both; }
-.tool-card:nth-child(2) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.35s both; }
-.tool-card:nth-child(3) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.45s both; }
+.tool-card:nth-child(2) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.33s both; }
+.tool-card:nth-child(3) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.41s both; }
+.tool-card:nth-child(4) { animation: cardIn 0.45s cubic-bezier(0.4,0,0.2,1) 0.49s both; }
 
 /* icon */
 .tc-icon {
@@ -1038,9 +1044,10 @@ footer {
   transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
 }
 .tool-card:hover .tc-icon { transform: scale(1.12); }
-.tc-icon-blue  { background: linear-gradient(135deg, rgba(79,142,247,0.22), rgba(124,92,252,0.16)); border: 1px solid rgba(79,142,247,0.28); }
-.tc-icon-green { background: linear-gradient(135deg, rgba(52,209,122,0.18), rgba(34,181,192,0.12)); border: 1px solid rgba(52,209,122,0.24); }
-.tc-icon-purple{ background: linear-gradient(135deg, rgba(124,92,252,0.20), rgba(224,64,251,0.12)); border: 1px solid rgba(124,92,252,0.24); }
+.tc-icon-blue   { background: linear-gradient(135deg, rgba(79,142,247,0.22), rgba(124,92,252,0.16)); border: 1px solid rgba(79,142,247,0.28); }
+.tc-icon-orange { background: linear-gradient(135deg, rgba(240,136,62,0.22), rgba(200,80,10,0.16)); border: 1px solid rgba(240,136,62,0.28); }
+.tc-icon-green  { background: linear-gradient(135deg, rgba(52,209,122,0.18), rgba(34,181,192,0.12)); border: 1px solid rgba(52,209,122,0.24); }
+.tc-icon-purple { background: linear-gradient(135deg, rgba(124,92,252,0.20), rgba(224,64,251,0.12)); border: 1px solid rgba(124,92,252,0.24); }
 
 /* badge tag */
 .tc-tag {
@@ -1049,6 +1056,7 @@ footer {
   font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
 }
 .tc-tag-blue   { background: var(--primary-dim); color: var(--primary); border: 1px solid rgba(79,142,247,0.22); }
+.tc-tag-orange { background: rgba(240,136,62,0.12); color: #ffb07a; border: 1px solid rgba(240,136,62,0.22); }
 .tc-tag-green  { background: rgba(52,209,122,0.09); color: var(--success); border: 1px solid rgba(52,209,122,0.18); }
 .tc-tag-purple { background: rgba(124,92,252,0.11); color: #b39dfa; border: 1px solid rgba(124,92,252,0.20); }
 
@@ -1073,6 +1081,7 @@ footer {
   flex-shrink: 0; margin-top: 2px;
 }
 .tool-card.tc-blue   .tc-features li::before { color: var(--primary); }
+.tool-card.tc-orange .tc-features li::before { color: var(--vugen); }
 .tool-card.tc-green  .tc-features li::before { color: var(--success); }
 .tool-card.tc-purple .tc-features li::before { color: #b39dfa; }
 
@@ -1087,6 +1096,7 @@ footer {
   transition: color 0.18s ease;
 }
 .tool-card.tc-blue   .tc-cta-text { color: var(--primary); }
+.tool-card.tc-orange .tc-cta-text { color: var(--vugen); }
 .tool-card.tc-green  .tc-cta-text { color: var(--success); }
 .tool-card.tc-purple .tc-cta-text { color: #b39dfa; }
 
@@ -1097,6 +1107,7 @@ footer {
   transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), background 0.18s ease;
 }
 .tool-card.tc-blue   .tc-cta-arrow { background: var(--primary-dim); color: var(--primary); }
+.tool-card.tc-orange .tc-cta-arrow { background: rgba(240,136,62,0.10); color: var(--vugen); }
 .tool-card.tc-green  .tc-cta-arrow { background: rgba(52,209,122,0.10); color: var(--success); }
 .tool-card.tc-purple .tc-cta-arrow { background: rgba(124,92,252,0.10); color: #b39dfa; }
 .tool-card:hover .tc-cta-arrow { transform: translateX(5px); }
@@ -1131,9 +1142,9 @@ footer {
 
 /* ── Decision guide ──────────────────────────────────────────────────── */
 .decision-grid {
-  display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; width: 100%;
+  display: grid; grid-template-columns: repeat(2,1fr); gap: 18px; width: 100%;
 }
-@media (max-width: 740px) { .decision-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .decision-grid { grid-template-columns: 1fr; } }
 .decision-card {
   background: var(--surface); border: 1px solid var(--glass-border);
   border-radius: var(--r-lg); padding: 24px 20px 22px;
@@ -1332,8 +1343,8 @@ code {
     <div class="nav-brand" onclick="switchPortalTab('home')" title="Go to Home">
       <div class="nav-logo">⚡</div>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <span class="nav-title">LRE Toolkit</span>
-        <span class="nav-subtitle">Performance Engineering</span>
+        <span class="nav-title">PerfX Studio</span>
+        <span class="nav-subtitle">Script Generation Platform</span>
       </div>
     </div>
     <!-- Portal navigation tabs — centered via absolute CSS -->
@@ -1388,52 +1399,74 @@ code {
 
   <!-- Hero -->
   <header class="home-hero">
-    <div class="home-hero-badge">⚡ LoadRunner Performance Engineering Toolkit</div>
-    <h1>LRE Script Generation Toolkit</h1>
-    <p class="home-hero-sub">Three tools that generate production-ready LoadRunner VuGen scripts without writing code manually. Pick the tool that matches your starting point below.</p>
+    <div class="home-hero-badge">⚡ PerfX Studio — LoadRunner Script Generation Platform</div>
+    <h1>PerfX Studio</h1>
+    <p class="home-hero-sub">Four tools that generate production-ready LoadRunner VuGen scripts from any starting point — API collections, JMeter scripts, or browser recordings. Automatic correlation, authentication, and parameterization included.</p>
     <div class="hero-badges">
-      <span class="chip">📂 Postman · Bruno · JMeter</span>
+      <span class="chip">📂 Postman · Bruno</span>
+      <span class="chip">♨ JMeter .jmx</span>
+      <span class="chip">🎙 HAR Recording</span>
       <span class="chip">🟦 DevWeb JS</span>
       <span class="chip">🟧 VuGen C</span>
       <span class="chip">🔒 In-memory only</span>
     </div>
   </header>
 
-  <!-- Tool Cards -->
+  <!-- Tool Cards (2×2 grid) -->
   <div class="tool-cards">
 
-    <!-- Converter card -->
+    <!-- Card 1: Postman / Bruno Converter -->
     <div class="tool-card tc-blue" id="tc-converter" role="button" tabindex="0"
-         onclick="switchPortalTab('converter')"
-         onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('converter')">
+         onclick="openConverterTab('bruno')"
+         onkeydown="if(event.key==='Enter'||event.key===' ')openConverterTab('bruno')">
       <div class="tc-icon tc-icon-blue">📂</div>
-      <span class="tc-tag tc-tag-blue">Collections &amp; JMX → VuGen</span>
-      <div class="tc-title">Converter</div>
-      <div class="tc-desc">Convert your existing Postman/Bruno API collections or JMeter scripts into VuGen scripts. No scripting knowledge needed — upload your file, choose your output format, and download.</div>
+      <span class="tc-tag tc-tag-blue">Postman · Bruno → VuGen</span>
+      <div class="tc-title">Postman / Bruno Converter</div>
+      <div class="tc-desc">Convert Postman or Bruno API collections into VuGen scripts. Upload your collection and an optional environment file — get a fully scripted, ready-to-run VuGen project in seconds.</div>
       <ul class="tc-features">
-        <li>Postman v2.1 JSON · Bruno JSON, YAML, .bru · JMeter .jmx</li>
+        <li>Postman v2.1 JSON, Bruno JSON / YAML / .bru</li>
         <li>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
-        <li>Authentication: OAuth2, Basic, Bearer, API Key, JWT, AWS Sig v4</li>
-        <li>Multi-script mode — one script per folder or thread group</li>
+        <li>Auth: OAuth2, JWT, DPoP, PKCE, NTLM, AWS Sig v4</li>
+        <li>Multi-script mode — one script per collection folder</li>
       </ul>
       <div class="tc-cta">
-        <span class="tc-cta-text">Open Converter</span>
+        <span class="tc-cta-text">Open Postman / Bruno Converter</span>
         <span class="tc-cta-arrow">→</span>
       </div>
     </div>
 
-    <!-- Recorder card -->
+    <!-- Card 2: JMeter Converter -->
+    <div class="tool-card tc-orange" id="tc-jmeter" role="button" tabindex="0"
+         onclick="openConverterTab('jmx')"
+         onkeydown="if(event.key==='Enter'||event.key===' ')openConverterTab('jmx')">
+      <div class="tc-icon tc-icon-orange">♨</div>
+      <span class="tc-tag tc-tag-orange">JMeter .jmx → VuGen</span>
+      <div class="tc-title">JMeter Converter</div>
+      <div class="tc-desc">Convert Apache JMeter test plans (.jmx) into VuGen scripts. Upload your .jmx, optional CSV data files and certificates — get a complete VuGen script with thread group structure preserved.</div>
+      <ul class="tc-features">
+        <li>JMeter .jmx — all thread group types supported</li>
+        <li>CSV data files and certificate files included in output</li>
+        <li>Generates Workload Model Excel (.xlsx) automatically</li>
+        <li>Multi-script mode — one script per thread group</li>
+      </ul>
+      <div class="tc-cta">
+        <span class="tc-cta-text">Open JMeter Converter</span>
+        <span class="tc-cta-arrow">→</span>
+      </div>
+    </div>
+
+    <!-- Card 3: Recorder -->
     <div class="tool-card tc-green" id="tc-recorder" role="button" tabindex="0"
          onclick="switchPortalTab('recorder')"
          onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('recorder')">
       <div class="tc-icon tc-icon-green">🎙</div>
-      <span class="tc-tag tc-tag-green">HAR File → VuGen Script</span>
+      <span class="tc-tag tc-tag-green">Browser Recording → VuGen</span>
       <div class="tc-title">Recorder</div>
-      <div class="tc-desc">VuGen recording is unavailable on VCSE machines. This tool bypasses that entirely. Install the bookmarklet, record your browser journey, export a HAR from DevTools, and get a ready-to-open VuGen script — no VuGen needed for recording.</div>
+      <div class="tc-desc">VuGen recording does not work on many VCSE and corporate machines. Use your browser's built-in network capture instead. Export a HAR from DevTools — Recorder converts it into a ready-to-open VuGen script. No VuGen installation needed for recording.</div>
       <ul class="tc-features">
-        <li>No VuGen installation required to record</li>
-        <li>Works with Chrome and Firefox DevTools exports</li>
+        <li>Works with Chrome, Firefox, Edge DevTools (F12)</li>
         <li>Filter domains and mark transaction boundaries visually</li>
+        <li>Export HAR from any modern browser — no proxy setup</li>
         <li>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
       </ul>
       <div class="tc-cta">
@@ -1442,19 +1475,19 @@ code {
       </div>
     </div>
 
-    <!-- Script Studio card -->
+    <!-- Card 4: Script Studio -->
     <div class="tool-card tc-purple" id="tc-studio" role="button" tabindex="0"
          onclick="switchPortalTab('studio')"
          onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('studio')">
       <div class="tc-icon tc-icon-purple">🧪</div>
-      <span class="tc-tag tc-tag-purple">HAR Correlation Engine</span>
+      <span class="tc-tag tc-tag-purple">HAR → Correlated Script</span>
       <div class="tc-title">Script Studio</div>
-      <div class="tc-desc">Upload one or two HAR files to generate a correlated script. With two HAR files (same journey recorded twice), it compares both recordings and identifies every dynamic value — producing far more complete correlation than a single recording can.</div>
+      <div class="tc-desc">Upload one or two HAR files to get a correlated VuGen script. Two HARs (same journey recorded twice with different data) enables diff-based analysis — automatically finding every dynamic value for the most complete correlation possible.</div>
       <ul class="tc-features">
-        <li>1 HAR — pattern-based correlation (faster, fewer correlations)</li>
-        <li>2 HARs — diff analysis (deeper, more complete correlation)</li>
-        <li>Auto-extracts JSON paths, XPath, boundaries, cookies, headers</li>
-        <li>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
+        <li>1 HAR — pattern-based correlation (quick start)</li>
+        <li>2 HARs — diff analysis (deepest, most reliable correlation)</li>
+        <li>Correlation Advisor — review and accept found correlations</li>
+        <li>Paste &amp; Detect — manually add any extractor in one click</li>
       </ul>
       <div class="tc-cta">
         <span class="tc-cta-text">Open Script Studio</span>
@@ -1470,29 +1503,38 @@ code {
     <div class="decision-grid">
 
       <div class="decision-card">
-        <div class="decision-q">I have a Postman collection, Bruno collection, or JMeter (.jmx) script</div>
+        <div class="decision-q">I have a Postman or Bruno API collection (.json, .yml, .bru)</div>
         <div class="decision-arrow">↓</div>
         <div class="decision-a tc-blue-a">
-          <span class="decision-tool">⚡ Converter</span>
-          <span class="decision-hint">Upload your file, choose output format, download ZIP, open in VuGen.</span>
+          <span class="decision-tool">📂 Postman / Bruno Converter</span>
+          <span class="decision-hint">Upload your collection (+ optional environment file), choose DevWeb or VuGen C output, download ZIP, open in VuGen.</span>
         </div>
       </div>
 
       <div class="decision-card">
-        <div class="decision-q">I need to record a new user journey but VuGen recording doesn't work on my machine</div>
+        <div class="decision-q">I have an existing JMeter test plan (.jmx)</div>
+        <div class="decision-arrow">↓</div>
+        <div class="decision-a" style="background:rgba(240,136,62,0.08);border:1px solid rgba(240,136,62,0.20);border-radius:var(--r-md);display:flex;flex-direction:column;gap:7px;padding:14px 16px">
+          <span class="decision-tool" style="color:var(--vugen)">♨ JMeter Converter</span>
+          <span class="decision-hint">Upload your .jmx (+ optional CSV and certificate files). Get a VuGen script with all thread groups, extractors, and a Workload Model Excel.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-q">I need to record a new user journey — VuGen recording doesn't work on my machine</div>
         <div class="decision-arrow">↓</div>
         <div class="decision-a tc-green-a">
           <span class="decision-tool">🎙 Recorder → then 🧪 Script Studio</span>
-          <span class="decision-hint">Use Recorder to create a HAR file from your browser. Then use Script Studio to turn it into a correlated script.</span>
+          <span class="decision-hint">Record with browser DevTools (F12 → Export HAR). Use Recorder to import it, then Script Studio to add correlation and download a VuGen script.</span>
         </div>
       </div>
 
       <div class="decision-card">
-        <div class="decision-q">I already have a HAR file and want to generate a script with correlations</div>
+        <div class="decision-q">I already have a HAR file and want a script with automatic correlation</div>
         <div class="decision-arrow">↓</div>
         <div class="decision-a tc-purple-a">
           <span class="decision-tool">🧪 Script Studio</span>
-          <span class="decision-hint">Upload 1 HAR for basic correlation. Record the journey twice and upload 2 HARs for deeper, more complete correlation.</span>
+          <span class="decision-hint">Upload 1 HAR for pattern-based correlation. Record the same journey twice and upload 2 HARs for diff-based analysis — the most complete correlation.</span>
         </div>
       </div>
 
@@ -1502,7 +1544,7 @@ code {
   <!-- Footer for home panel -->
   <footer>
     <div class="footer-links">
-      <span>LRE Toolkit · Performance Engineering</span>
+      <span>PerfX Studio · Performance Script Generation</span>
       <span class="footer-sep">·</span>
       <span>Files processed in-memory — nothing stored on server</span>
     </div>
@@ -1517,9 +1559,9 @@ code {
 <!-- ── Converter Hero ───────────────────────────────────────────────────── -->
 <header class="hero" style="text-align:center;padding:36px 0 24px">
   <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:99px;margin-bottom:14px;background:var(--primary-dim);border:1px solid rgba(79,142,247,0.28);color:var(--primary);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">
-    ⚡ Collection Converter
+    ⚡ PerfX Studio — Converter
   </div>
-  <p class="hero-sub" style="font-size:15px;margin-bottom:16px">Convert Postman, Bruno &amp; JMeter collections into production-ready LoadRunner Enterprise scripts in seconds.</p>
+  <p class="hero-sub" style="font-size:15px;margin-bottom:16px">Convert Postman/Bruno collections or JMeter scripts (.jmx) into production-ready LoadRunner VuGen scripts in seconds. Switch tabs below to select your input type.</p>
   <div class="hero-badges">
     <span class="chip">📂 Postman / Bruno</span>
     <span class="chip">♨ JMeter .jmx</span>
@@ -1867,7 +1909,7 @@ code {
 <!-- ── Footer ──────────────────────────────────────────────────────────── -->
 <footer>
   <div class="footer-links">
-    <span>LRE Toolkit · Performance Engineering</span>
+    <span>PerfX Studio · Performance Script Generation</span>
     <span class="footer-sep">·</span>
     <span>Files processed in-memory — nothing stored on server</span>
   </div>
@@ -1909,15 +1951,15 @@ code {
   <div class="help-page-title">
     <div class="home-hero-badge" style="margin-bottom:16px">📖 Documentation</div>
     <h1 class="help-h1">Help &amp; User Guide</h1>
-    <p class="help-intro">Everything you need to use this toolkit — from first-time setup to advanced correlation. Designed for both technical and non-technical users.</p>
+    <p class="help-intro">Everything you need to use PerfX Studio — from first-time setup to advanced correlation. Designed for both technical and non-technical users.</p>
   </div>
 
   <!-- — SECTION: What Is This Toolkit? ————————————————————— -->
     <section class="help-section">
-      <h2 class="help-h2">What is the LRE Toolkit?</h2>
-      <p class="help-p">The LRE Toolkit streamlines the creation of LoadRunner Enterprise performance test scripts by removing much of the manual effort traditionally required in VuGen. Instead of spending days recording, scripting, and refactoring, provide your existing API collections, browser recordings, or JMeter test plans – and receive a fully structured, VuGen-ready project within minutes.</p>
-      <p class="help-p">In a standard performance testing lifecycle, script development is the most time-consuming phase – identifying dynamic values for correlation, parameterising test data, and implementing authentication mechanisms such as OAuth2, JWT, Kerberos, or DPoP. The LRE Toolkit addresses these challenges directly: it analyses your inputs, applies best-practice correlation and parameterisation, and generates production-quality VuGen script code covering roughly <strong>80% of the scripting effort</strong>.</p>
-      <p class="help-p">Open the generated project in VuGen to validate, make application-specific adjustments, and add custom logic before uploading to LoadRunner Enterprise for execution.</p>
+      <h2 class="help-h2">What is PerfX Studio?</h2>
+      <p class="help-p">PerfX Studio is a LoadRunner script generation platform that removes the manual effort traditionally required in VuGen. Instead of spending days recording, scripting, and refactoring, provide your existing API collections, browser recordings, or JMeter test plans — and receive a fully structured, VuGen-ready project within minutes.</p>
+      <p class="help-p">In a standard performance testing lifecycle, script development is the most time-consuming phase — identifying dynamic values for correlation, parameterising test data, and implementing authentication mechanisms such as OAuth2, JWT, Kerberos, or DPoP. PerfX Studio addresses these challenges directly: it analyses your inputs, applies best-practice correlation and parameterisation, and generates production-quality VuGen script code covering roughly <strong>80% of the scripting effort</strong>.</p>
+      <p class="help-p">PerfX Studio provides four tools covering every starting point: Postman/Bruno Converter, JMeter Converter, Recorder (HAR-based), and Script Studio (HAR correlation engine). Open the generated project in VuGen to validate and finalise before uploading to LoadRunner Enterprise.</p>
       <div class="help-callout help-callout-blue">
         <strong>🔒 No files are stored on the server.</strong> Everything you upload is processed in-memory and immediately discarded. The only thing that leaves the server is your downloaded ZIP file.
       </div>
@@ -1927,7 +1969,7 @@ code {
   <!-- ── SECTION: Output formats ─────────────────────────────────────────── -->
   <section class="help-section">
     <h2 class="help-h2">Output formats — which should I choose?</h2>
-    <p class="help-p">All three tools can generate scripts in either of two formats:</p>
+    <p class="help-p">All four tools can generate scripts in either of two formats:</p>
     <div class="help-formats">
       <div class="help-format-card help-format-blue">
         <div class="help-format-title">🟦 DevWeb · JavaScript</div>
@@ -2197,16 +2239,16 @@ code {
   <!-- ── SECTION: FAQ ─────────────────────────────────────────────────────── -->
   <!-- — SECTION: What's New + FAQ ————————————————————————— -->
     <section class="help-section">
-      <h2 class="help-h2">What's new in v2.9.2</h2>
+      <h2 class="help-h2">What's new in v2.10</h2>
+      <ul class="help-list">
+        <li><strong>Per-request JWT for VuGen (BUG-036/038/039)</strong> – collections with multiple distinct JWT-signing scripts now generate <code>createJWTFromMap()</code> calls per request in VuGen C, and <code>getJwtTokenFromMap()</code> in DevWeb. Each request gets its own claim set.</li>
+        <li><strong><code>createJWTFromMap</code> in lre-utils.dat</strong> – new function added to the VuGen crypto runtime library. Accepts a JSON string of already-resolved claims, kid, and PEM secret; performs PS256 RSA-PSS signing. No LRE parameter syntax needed.</li>
+        <li><strong>ES3 compliance (BUG-040)</strong> – removed 21 trailing commas from <code>lre-utils.js</code> / <code>lre-utils.dat</code> that caused <code>SyntaxError</code> in VuGen's ES3 JavaScript engine at line 1589.</li>
+      </ul>
+      <h2 class="help-h2" style="margin-top:20px">v2.9 highlights</h2>
       <ul class="help-list">
         <li><strong>PKCE support (RFC 7636)</strong> – automatic detection of <code>code_challenge</code> / <code>code_verifier</code> patterns. Generates per-iteration PKCE pair creation code (not correlated — client-generated). Works in both Converter and Script Studio, for DevWeb and VuGen.</li>
-        <li><strong>lre-utils.dat shared by DPoP + PKCE</strong> – the same crypto utility file now provides <code>generatePkce()</code> alongside the existing DPoP and JWT functions. No new dependencies.</li>
-      </ul>
-      <h2 class="help-h2" style="margin-top:20px">v2.9.0 highlights</h2>
-      <ul class="help-list">
-        <li><strong>DPoP support (RFC 9449)</strong> – automatic detection and handling of <code>dpop</code> and <code>dpop-pf</code> headers across all tools. Generates EC P-256 key pair + per-request proof JWT code automatically.</li>
-        <li><strong>VuGen DPoP performance</strong> – <code>lre-utils.dat</code> crypto library loaded once in <code>vuser_init.c</code>, reused across all iterations. Eliminates file I/O overhead per request.</li>
-        <li><strong>Recorder &amp; Script Studio</strong> – both browser-based tools now generate the same optimised DPoP pattern as the server-side converter.</li>
+        <li><strong>DPoP support (RFC 9449)</strong> – automatic detection and handling of <code>dpop</code> and <code>dpop-pf</code> headers. Generates EC P-256 key pair + per-request proof JWT code automatically.</li>
         <li><strong>HTML entity decoding</strong> – PEM keys with <code>&amp;amp;</code>, <code>&amp;#10;</code> from Postman/JMX exports are correctly decoded before crypto operations and parameter files.</li>
       </ul>
     </section>
@@ -2441,6 +2483,12 @@ function _clearIframeTool(toolName) {
   });
   switchPortalTab('home');
 })();
+
+/* ── Open specific converter sub-tab from home cards ────────────────────── */
+function openConverterTab(subTab) {
+  switchPortalTab('converter');
+  switchTab(subTab || 'bruno');
+}
 
 /* ── Converter tab switching ────────────────────────────────────────────── */
 function switchTab(tab) {
