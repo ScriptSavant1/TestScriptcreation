@@ -1,21 +1,21 @@
-# Local Setup Guide
-## Bruno / Postman → LoadRunner Converter
+# PerfX Studio — Local Setup Guide
 
-This guide walks you through setting up the converter tool on your Windows machine from scratch.
+This guide walks you through setting up PerfX Studio on your Windows machine from scratch.
 
 ---
 
-## What This Tool Does
+## What PerfX Studio Does
 
-Converts API collection files into ready-to-run LoadRunner scripts:
+A four-tool platform that generates production-ready LoadRunner VuGen scripts from any starting point:
 
-| Input | Output |
-|-------|--------|
-| Postman collection (`.json`) | DevWeb JavaScript script |
-| Bruno collection (`.json`, `.yml`, `.bru`) | VuGen Web HTTP/HTML C script |
-| JMX file (`.jmx`) | Both protocols |
+| Tool | Input | Output |
+|------|-------|--------|
+| Postman/Bruno Converter | Postman v2.1 JSON, Bruno JSON/YAML/.bru | DevWeb JS or VuGen C script |
+| JMeter Converter | Apache JMeter `.jmx` file | DevWeb JS or VuGen C script + Workload Excel |
+| Recorder | Browser HAR recording (DevTools export) | DevWeb JS or VuGen C script |
+| Script Studio | HAR file(s) with correlation engine | DevWeb JS or VuGen C script |
 
-Access it through a browser-based GUI or the command line.
+Access all four tools through a browser at `http://localhost:3000/converter`.
 
 ---
 
@@ -103,23 +103,42 @@ Open that URL in your browser. The tool is ready to use.
 
 ## Using the Web GUI
 
-### Converter (main tool)
 **URL:** `http://localhost:3000/converter`
 
+The home page shows all four tools as clickable cards. Click any card to open that tool.
+
+### Postman / Bruno Converter
+Click **Postman / Bruno Converter** on the home page (or **Converter** in top nav → **Postman / Bruno** tab).
+
 1. Choose output protocol: **DevWeb** (JavaScript) or **Web HTTP/HTML** (VuGen C)
-2. Upload your Postman/Bruno collection `.json`, `.yml`, or JMX `.jmx` file
-3. Optionally upload a Postman environment `.json` file
-4. Click **Convert**
-5. A ZIP file downloads automatically — open it in VuGen or your LRE workspace
+2. Upload your collection file (`.json`, `.yml`, `.bru`) and optionally an environment file
+3. Configure options (think time, script mode, correlation toggles)
+4. Click **Convert** — a ZIP downloads automatically
+5. Open the `.usr` file in VuGen, or upload to LoadRunner Enterprise
 
-### VuGen Script Studio (HAR-based)
-**URL:** `http://localhost:3000/converter/studio`
+### JMeter Converter
+Click **JMeter Converter** on the home page (or **Converter** in navigation → **JMeter (.jmx)** tab).
 
-Upload a HAR recording (exported from browser DevTools) to:
-- Auto-detect dynamic values (tokens, session IDs, UUIDs)
-- Add correlations manually via the field browser
-- Parameterize test data
-- Generate either DevWeb or VuGen C code
+1. Upload your `.jmx` file; optionally upload CSV data files and certificate files
+2. Choose output protocol and script mode (single or per-thread-group)
+3. Click **Convert** — ZIP includes scripts + Workload Model Excel
+
+### Recorder
+Click **Recorder** in the home page or top navigation.
+
+1. Follow Bookmarklet Setup instructions to install the browser helper (one-time)
+2. Open your application in a browser, press F12 → Network tab
+3. Perform your complete user journey
+4. Export HAR from DevTools (download icon in the Network tab)
+5. Upload the `.har`, filter domains, set transactions, click **Generate Script**
+
+### Script Studio (HAR Correlation Engine)
+Click **Script Studio** in the home page or top navigation.
+
+1. Upload 1 HAR (pattern-based) or 2 HARs (diff-based for deepest correlation)
+2. Click **Analyze** — Correlation Advisor lists all found dynamic values
+3. Review, accept correlations, click **Apply & Regenerate**
+4. Download the ZIP and open in VuGen
 
 ---
 
