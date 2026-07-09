@@ -1,8 +1,8 @@
 # PerfX Studio — Usage Analytics & Reporting
 # Implementation Plan
 
-**Status:** Draft — awaiting confirmation before implementation  
-**Date:** 2026-07-09  
+**Status:** ✅ IMPLEMENTED — commit `analytics-phase1-3`  
+**Date:** 2026-07-09 (plan) · 2026-07-10 (implemented)  
 **Audience:** Internal — performance engineering team lead + infra
 
 ---
@@ -395,33 +395,35 @@ With this data you can present:
 
 ## 9. Implementation Phases
 
-### Phase 1 — Data Collection (backend + client fingerprint)
-- Install `better-sqlite3` package
-- Create `data/` directory + `analytics.db` schema on server start
-- Add `analytics-device.js` to `index.ejs` (device ID + fingerprint)
-- Instrument `/converter/convert` and `/converter/convert-jmx` in server.js
-- Async reverse DNS hostname lookup (non-blocking)
-- All data flowing into DB
+### Phase 1 — Data Collection ✅ DONE
+- `better-sqlite3`, `ua-parser-js`, `docx`, `chart.js` installed
+- `src/analytics/db.js` — SQLite wrapper, schema, indexes, WAL mode, prune
+- `src/analytics/collector.js` — `startEvent()`, `enrichWithFile()`, `finishEvent()`; async DNS
+- `src/web/public/analytics-device.js` — device UUID (localStorage), fingerprint, fetch interceptor
+- Both convert handlers instrumented (non-breaking, try/finally)
+- `index.ejs` loads `analytics-device.js` via `<script defer>`
 
-### Phase 2 — Admin API
-- `ADMIN_TOKEN` middleware
-- `/admin/api/stats` — summary JSON
-- `/admin/api/events` — paginated + filtered
-- `/admin/download/csv` and `/admin/download/json`
+### Phase 2 — Admin API + Exporters ✅ DONE
+- `ADMIN_TOKEN` middleware (404 to non-admins — no hint admin panel exists)
+- `/admin/api/stats`, `/admin/api/events` (paginated + filtered)
+- `src/analytics/exporters/csv.js` — UTF-8 BOM CSV
+- `src/analytics/exporters/xlsx.js` — 6-sheet Excel (exceljs, already installed)
+- `src/analytics/exporters/docx.js` — Word report with auto-insights, styled tables
+- PDF via `window.print()` with `@media print` CSS (zero server dependency)
 
-### Phase 3 — Admin Dashboard UI
-- `admin.ejs` — self-contained HTML with inline CSS/JS
-- Summary cards with time-range toggle
-- Bar charts (Canvas API, no external library)
-- Heatmap (HTML table with CSS colour scale)
-- Filterable event log table with pagination
-- Download buttons wired to Phase 2 endpoints
+### Phase 3 — Admin Dashboard UI ✅ DONE
+- `src/web/views/admin.ejs` — self-contained dashboard
+- Chart.js served locally from node_modules at `/admin/vendor/chart.js` (no CDN)
+- Doughnut (tool usage), bar (protocol), line (daily trend), heatmap (peak hours)
+- Auto-generated insights panel (rule-based natural language from stats data)
+- Filterable, paginated event log (AJAX, no page reload)
+- Download buttons: CSV, Excel, Word, Print/PDF
 
-### Phase 4 — Polish & Documentation
-- Data retention auto-cleanup on server start
-- `SECURITY.md` + `OPERATIONS.md` updates
-- `.gitignore` update
-- `memory/state.md` and `memory/architecture.md` updates
+### Phase 4 — Polish & Documentation ✅ DONE
+- Data retention auto-prune on server start (`ANALYTICS_RETENTION_DAYS`)
+- `.gitignore` updated (`data/` excluded)
+- `pm2.config.js` updated (ADMIN_TOKEN, ANALYTICS_RETENTION_DAYS env vars)
+- `memory/state.md` and `memory/architecture.md` updated
 
 ---
 
