@@ -1,84 +1,206 @@
 /**
- * Web UI Server — Bruno / Postman → LoadRunner Converter
+ * Web UI Server — PerfX Studio
  *
- * Privacy model:
- *  • Uploaded files use multer memoryStorage — they NEVER touch disk on the server.
- *  • All converter output is captured in RAM (AsyncLocalStorage interceptor).
- *  • The ZIP is streamed directly to the browser — no file is ever written to disk.
+ * Privacy model (corrected):
+ *  • Uploaded files use multer memoryStorage — they initially stay in RAM.
+ *  • Collection / environment / cert files are temporarily written to os.tmpdir()
+ *    so filesystem-based parsers can access them by path. Cleanup is guaranteed
+ *    via try/finally even on error. Cleanup failures are logged (never silenced).
+ *  • All converter OUTPUT is captured in RAM (AsyncLocalStorage interceptor).
+ *  • The ZIP is streamed directly to the browser — no generated script files
+ *    are ever written to disk.
  *  • Nothing is persisted on the server between requests.
+ *  • Download tokens are single-use and expire after 5 minutes.
+ *
+ * Security posture (internal banking deployment):
+ *  • Authentication: intentionally omitted — internal tool, network-access-controlled.
+ *    Only reachable from the internal corporate network. Accepted risk.
+ *  • File size limit: 2 GB per file (generous for large HAR/JMX files).
+ *  • Rate limiting: 60 requests per 5 minutes per IP on conversion endpoints.
+ *  • Security headers: helmet applied (CSP disabled due to inline scripts in UI).
+ *  • Download tokens: crypto.randomBytes(32) — 256-bit CSPRNG entropy.
+ *  • Path traversal prevention: all uploaded filenames sanitized before path.join().
+ *  • File type validation: allowlist per upload field.
+ *  • Error responses: generic codes only — full errors logged server-side.
  */
 
-const express = require("express");
-const multer = require("multer");
-const path = require("path");
-const os = require("os");
-const fs = require("fs").promises;
-const archiver = require("archiver");
-const { runWithMemoryFs } = require("../lib/memoryFsInterceptor");
-const BrunoDevWebConverter = require("../tools/collection-converter");
-const JmxConverter = require("../tools/jmx-converter");
-const JmxDependencyResolver = require("../lib/jmxDependencyResolver");
+"use strict";
+
+const express    = require("express");
+const multer     = require("multer");
+const path       = require("path");
+const os         = require("os");
+const fs         = require("fs").promises;
+const crypto     = require("crypto");
+const archiver   = require("archiver");
+const helmet     = require("helmet");
+const rateLimit  = require("express-rate-limit");
+
+const { runWithMemoryFs }       = require("../lib/memoryFsInterceptor");
+const BrunoDevWebConverter      = require("../tools/collection-converter");
+const JmxConverter              = require("../tools/jmx-converter");
+const JmxDependencyResolver     = require("../lib/jmxDependencyResolver");
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+/** 2 GB per file — generous for large JMX / collection files; guards against
+ *  accidental uploads of wrong file types (e.g. a multi-GB video or database dump). */
+const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
+
+/** Abort conversion after 2 minutes to prevent runaway CPU on pathological input. */
+const CONVERSION_TIMEOUT_MS = 120_000;
+
+const VALID_LOG_LEVELS = new Set(["debug", "info", "warn", "error"]);
+
+/** Allowed file extensions per upload field (allowlist). */
+const ALLOWED_EXTENSIONS = {
+  collection:  new Set([".json", ".yml", ".yaml", ".bru", ".zip"]),
+  environment: new Set([".json"]),
+  certFiles:   new Set([".pem", ".p12", ".pfx", ".crt", ".cer"]),
+  jmxFile:     new Set([".jmx"]),
+  csvFiles:    new Set([".csv", ".tsv", ".txt"]),
+};
+
+// ── Helper functions ─────────────────────────────────────────────────────────
+
+/**
+ * Strips directory components and replaces any character that is not a word
+ * character, dot, or hyphen. Prevents path traversal via crafted filenames.
+ */
+function sanitizeFilename(name) {
+  return path.basename(String(name || "upload")).replace(/[^\w.\-]/g, "_") || "upload";
+}
+
+/**
+ * Race a promise against a timeout. Rejects with a CONVERSION_TIMEOUT error
+ * if the promise does not resolve within `ms` milliseconds.
+ */
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(Object.assign(new Error("CONVERSION_TIMEOUT"), { isTimeout: true })), ms)
+    ),
+  ]);
+}
+
+/**
+ * Multer fileFilter that validates uploaded file extensions against an allowlist.
+ * Unknown field names are passed through (defensive — multer already limits field names).
+ */
+function makeFileFilter(allowedExtensions) {
+  return (req, file, cb) => {
+    const allowed = allowedExtensions[file.fieldname];
+    if (!allowed) return cb(null, true);
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.has(ext)) return cb(null, true);
+    const err = Object.assign(
+      new Error(`File type '${ext}' is not accepted for '${file.fieldname}'.`),
+      { status: 415 }
+    );
+    cb(err, false);
+  };
+}
+
+/**
+ * Delete a temp file and log on failure (never silently swallow errors).
+ */
+async function safeUnlink(p) {
+  if (!p) return;
+  await fs.unlink(p).catch((e) => {
+    if (e.code !== "ENOENT") console.warn(`[CLEANUP-FAIL] ${p} — ${e.message}`);
+  });
+}
+
+async function safeRmdir(p) {
+  if (!p) return;
+  await fs.rmdir(p).catch((e) => {
+    if (e.code !== "ENOENT") console.warn(`[CLEANUP-FAIL] ${p} — ${e.message}`);
+  });
+}
+
+// ── WebServer class ───────────────────────────────────────────────────────────
 
 class WebServer {
   constructor(port = 3000) {
     this.port = port;
-    this.app = express();
-
-    // memoryStorage: uploaded files stay in RAM, never written to disk
-    this.upload = multer({ storage: multer.memoryStorage() });
-
-    // token → { files: Map, expires } — single-use, 5-minute TTL
+    this.app  = express();
+    /** token → { files: Map, outputDir, expires } — single-use, 5-minute TTL */
     this.pendingDownloads = new Map();
-
     this.setupMiddleware();
     this.setupRoutes();
   }
 
   setupMiddleware() {
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: true }));
+    // Security headers — CSP disabled because index.ejs uses inline <script> blocks.
+    // All other helmet protections are active (X-Frame-Options, X-Content-Type-Options,
+    // Referrer-Policy, X-DNS-Prefetch-Control, Strict-Transport-Security, etc.).
+    this.app.use(
+      helmet({ contentSecurityPolicy: false })
+    );
+    this.app.disable("x-powered-by");
 
-    // Block direct .html file access — only clean routes are allowed
+    this.app.use(express.json());
+    this.app.use(express.urlencoded({ extended: false }));
+
+    // Block direct .html file access — only clean routes are exposed.
     this.app.use((req, res, next) => {
       if (req.method === "GET" && req.path.toLowerCase().endsWith(".html")) {
-        return res
-          .status(404)
-          .sendFile(path.join(__dirname, "public", "404.html"));
+        return res.status(404).sendFile(path.join(__dirname, "public", "404.html"));
       }
       next();
     });
 
     this.app.use(express.static(path.join(__dirname, "public")));
-    //Serve static files under /converter/ too - needed because Recorder
-    // and Studio HTML pages are served at /converter/recorder etc. and
-    // resolve asset paths relative to /converter/.
+    // Serve static files under /converter/ too — Recorder and Studio iframes
+    // resolve asset paths relative to /converter/ under IIS virtual directory.
     this.app.use("/converter", express.static(path.join(__dirname, "public")));
     this.app.set("view engine", "ejs");
     this.app.set("views", path.join(__dirname, "views"));
   }
 
   setupRoutes() {
-    // ── Converter home─────────────────────────────────────────────────────────────
-    // Under IIS virtual dir, requests arrive as /converter/...
-    // Routes use the /converter prefix so they match directly.
+    // ── Rate limiter (conversion endpoints only) ──────────────────────────────
+    // 60 requests per 5-minute window per IP — generous for an internal team.
+    // Adjust max/windowMs if needed for your team size.
+    const convertLimiter = rateLimit({
+      windowMs: 5 * 60 * 1000,
+      max: 60,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: "rate_limit_exceeded" },
+    });
+
+    // ── Multer instances (one per route — each has its own fileFilter) ────────
+    const uploadCollection = multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE, files: 12 },
+      fileFilter: makeFileFilter(ALLOWED_EXTENSIONS),
+    });
+
+    const uploadJmx = multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE, files: 42 },
+      fileFilter: makeFileFilter(ALLOWED_EXTENSIONS),
+    });
+
+    // ── Home ──────────────────────────────────────────────────────────────────
     const renderHome = (req, res) => {
       res.render("index", {
-        title: "Bruno / Postman → LoadRunner Converter",
-        version: require("../../package.json").version,
+        title: "PerfX Studio — Performance Script Generation",
       });
     };
     this.app.get("/", renderHome);
     this.app.get("/converter", renderHome);
     this.app.get("/converter/", (req, res) => res.redirect("/converter"));
 
-    // ── Tool routes ─────────────────────────────────────────────────────────────
+    // ── Tool routes ───────────────────────────────────────────────────────────
     this.app.get("/converter/recorder", (req, res) => {
       res.sendFile(path.join(__dirname, "public", "VuGen-Recorder.html"));
     });
     this.app.get("/converter/studio", (req, res) => {
       res.sendFile(path.join(__dirname, "public", "VuGen-Script-Studio.html"));
     });
-    // Standalone fallbacks (no /converter prefix)
     this.app.get("/tools/recorder", (req, res) => {
       res.sendFile(path.join(__dirname, "public", "VuGen-Recorder.html"));
     });
@@ -86,15 +208,8 @@ class WebServer {
       res.sendFile(path.join(__dirname, "public", "VuGen-Script-Studio.html"));
     });
 
-    // — DPoP / crypto helper files (served for ZIP download by Recorder/Studio) —
+    // ── Crypto helper file routes ─────────────────────────────────────────────
     const PROJECT_ROOT = path.join(__dirname, "..", "..");
-    // Routes at both / and /converter/ — needed because Recorder/Studio iframes
-    // resolve paths relative to /converter/ under IIS virtual directory.
-    // fallback: when the primary filename doesn't exist at root, serve the
-    // fallback file instead.  This handles two real-world cases:
-    //   lre-utils-helper.js → lre-utils.js  (AV blocks .js; HTML tools fetch
-    //     as lre-utils-helper.js then save into the zip as lre-utils.dat)
-    //   jsrsasign-vugen.js  → jsrsasign.js   (VuGen alias; same library)
     const cryptoFileRoutes = [
       { name: "dpop-helper.js" },
       { name: "lre-utils-helper.js", fallback: "lre-utils.js" },
@@ -111,16 +226,17 @@ class WebServer {
           const fb = path.join(PROJECT_ROOT, fallback);
           if (require("fs").existsSync(fb)) return res.sendFile(fb);
         }
-        res.status(404).json({ error: `${name} not found` });
+        res.status(404).json({ error: "not_found" });
       };
       this.app.get(`/${name}`, handler);
       this.app.get(`/converter/${name}`, handler);
     }
 
-    // ── Convert ───────────────────────────────────────────────────────────────
+    // ── Convert (Postman / Bruno collections) ─────────────────────────────────
     this.app.post(
       "/converter/convert",
-      this.upload.fields([
+      convertLimiter,
+      uploadCollection.fields([
         { name: "collection", maxCount: 1 },
         { name: "environment", maxCount: 1 },
         { name: "certFiles", maxCount: 10 },
@@ -131,149 +247,122 @@ class WebServer {
         const certFiles = req.files?.certFiles || [];
 
         if (!collectionFile) {
-          return res
-            .status(400)
-            .json({ error: "Collection file is required." });
+          return res.status(400).json({ error: "collection_file_required" });
         }
 
-        // Write uploaded buffers to temp files so brunoParser (which uses fs.stat
-        // and fs.readFile against a path) can read them normally.
-        // These temp files are deleted immediately after parsing completes.
-        const tmpCollection = path.join(
-          os.tmpdir(),
-          `lr-col-${Date.now()}-${collectionFile.originalname}`,
-        );
-        const tmpEnvironment = environmentFile
-          ? path.join(
-              os.tmpdir(),
-              `lr-env-${Date.now()}-${environmentFile.originalname}`,
-            )
+        // Sanitize filenames before building temp paths (F-04: path traversal prevention)
+        const safeColName  = sanitizeFilename(collectionFile.originalname);
+        const safeEnvName  = environmentFile ? sanitizeFilename(environmentFile.originalname) : null;
+
+        const tmpCollection  = path.join(os.tmpdir(), `lr-col-${Date.now()}-${safeColName}`);
+        const tmpEnvironment = safeEnvName
+          ? path.join(os.tmpdir(), `lr-env-${Date.now()}-${safeEnvName}`)
           : null;
-
-        // Write cert files to a temp support dir so generators can read them by path
-        const tmpCertDir = path.join(os.tmpdir(), `lr-cert-${Date.now()}`);
-        const csvFilePaths = {}; // originalname → tmpPath
-        if (certFiles.length) {
-          await fs.mkdir(tmpCertDir, { recursive: true });
-          for (const f of certFiles) {
-            const tmpPath = path.join(tmpCertDir, f.originalname);
-            await fs.writeFile(tmpPath, f.buffer);
-            csvFilePaths[f.originalname] = tmpPath;
-          }
-        }
+        const tmpCertDir   = certFiles.length ? path.join(os.tmpdir(), `lr-cert-${Date.now()}`) : null;
+        const csvFilePaths = {};
 
         try {
           await fs.writeFile(tmpCollection, collectionFile.buffer);
-          if (tmpEnvironment)
-            await fs.writeFile(tmpEnvironment, environmentFile.buffer);
+          if (tmpEnvironment) await fs.writeFile(tmpEnvironment, environmentFile.buffer);
+
+          if (tmpCertDir) {
+            await fs.mkdir(tmpCertDir, { recursive: true });
+            for (const f of certFiles) {
+              const safeName = sanitizeFilename(f.originalname);
+              const tmpPath  = path.join(tmpCertDir, safeName);
+              await fs.writeFile(tmpPath, f.buffer);
+              csvFilePaths[f.originalname] = tmpPath;
+            }
+          }
 
           const outputDir = path.join(os.tmpdir(), `lr-out-${Date.now()}`);
+          const logLevel  = VALID_LOG_LEVELS.has(req.body.logLevel) ? req.body.logLevel : "info";
 
           const options = {
-            inputFile: tmpCollection,
+            inputFile:            tmpCollection,
             outputDir,
-            environmentFile: tmpEnvironment || null,
-            protocol: req.body.protocol || "devweb",
-            mode: req.body.mode || "single",
-            useTransactions: req.body.useTransactions !== "false",
-            useCorrelation: req.body.useCorrelation !== "false",
-            useParameterization: req.body.useParameterization !== "false",
-            useAuthentication: req.body.useAuthentication !== "false",
-            thinkTime: parseFloat(req.body.thinkTime) || 1,
-            addComments: req.body.addComments !== "false",
-            logLevel: req.body.logLevel || "info",
-            csvFilePaths, // cert file name → tmp path for generator use
+            environmentFile:      tmpEnvironment || null,
+            protocol:             req.body.protocol || "devweb",
+            mode:                 req.body.mode || "single",
+            useTransactions:      req.body.useTransactions !== "false",
+            useCorrelation:       req.body.useCorrelation !== "false",
+            useParameterization:  req.body.useParameterization !== "false",
+            useAuthentication:    req.body.useAuthentication !== "false",
+            thinkTime:            parseFloat(req.body.thinkTime) || 1,
+            addComments:          req.body.addComments !== "false",
+            logLevel,
+            csvFilePaths,
           };
 
-          // Run conversion — all fs WRITES go to the in-memory Map, not disk
           const converter = new BrunoDevWebConverter(options);
-          const { result: results, files } = await runWithMemoryFs(() =>
-            converter.convert(),
+          const { result: results, files } = await withTimeout(
+            runWithMemoryFs(() => converter.convert()),
+            CONVERSION_TIMEOUT_MS
           );
 
-          // Add uploaded cert files directly into the in-memory ZIP map
+          // Add cert files directly into the in-memory ZIP map
           for (const f of certFiles) {
-            const dest = path.join(outputDir, f.originalname).replace(/\\/g, "/");
+            const dest = path.join(outputDir, sanitizeFilename(f.originalname)).replace(/\\/g, "/");
             files.set(dest, f.buffer);
           }
 
-          // Input temp files no longer needed
-          await fs.unlink(tmpCollection).catch(() => {});
-          if (tmpEnvironment) await fs.unlink(tmpEnvironment).catch(() => {});
-          // Clean up cert temp dir
-          for (const p of Object.values(csvFilePaths)) await fs.unlink(p).catch(() => {});
-          await fs.rmdir(tmpCertDir).catch(() => {});
-
-          // Register single-use download token (5-minute TTL)
-          const token = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-          this.pendingDownloads.set(token, {
-            files,
-            outputDir,
-            expires: Date.now() + 5 * 60 * 1000,
-          });
-
-          setTimeout(
-            () => {
-              this.pendingDownloads.delete(token);
-            },
-            5 * 60 * 1000,
-          );
+          // Issue a cryptographically strong single-use download token (F-05)
+          const token = crypto.randomBytes(32).toString("hex");
+          this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
+          setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
           res.json({
-            success: true,
+            success:     true,
             downloadUrl: `/converter/download/${token}`,
-            analysis: results.analysis,
-            protocol: options.protocol,
-            mode: options.mode,
+            analysis:    results.analysis,
+            protocol:    options.protocol,
+            mode:        options.mode,
           });
-        } catch (err) {
-          await fs.unlink(tmpCollection).catch(() => {});
-          if (tmpEnvironment) await fs.unlink(tmpEnvironment).catch(() => {});
-          for (const p of Object.values(csvFilePaths)) await fs.unlink(p).catch(() => {});
-          await fs.rmdir(tmpCertDir).catch(() => {});
 
-          console.error("Conversion error:", err);
-          res.status(500).json({ error: err.message });
+        } catch (err) {
+          // Log full error server-side; send generic code to client (F-07)
+          console.error("[convert-error]", err.message, err.isTimeout ? "(timeout)" : "");
+          const status = err.isTimeout ? 408 : 500;
+          const code   = err.isTimeout ? "conversion_timeout" : "conversion_failed";
+          res.status(status).json({ error: code });
+
+        } finally {
+          // Guaranteed cleanup — runs on both success and error paths (F-12 / F-21)
+          await safeUnlink(tmpCollection);
+          await safeUnlink(tmpEnvironment);
+          for (const p of Object.values(csvFilePaths)) await safeUnlink(p);
+          if (tmpCertDir) await safeRmdir(tmpCertDir);
         }
-      },
+      }
     );
 
     // ── Download ──────────────────────────────────────────────────────────────
     // Streams a ZIP built entirely from the in-memory file Map.
     // No ZIP file — and no generated script files — are ever written to disk.
-    // No Content-Length header → chunked transfer, bypasses proxy size limits.
     this.app.get("/converter/download/:token", (req, res) => {
       const entry = this.pendingDownloads.get(req.params.token);
 
       if (!entry || Date.now() > entry.expires) {
-        return res
-          .status(404)
-          .json({ error: "Download link expired or already used." });
+        return res.status(404).json({ error: "download_expired" });
       }
 
       this.pendingDownloads.delete(req.params.token); // single-use
       const { files, outputDir } = entry;
 
-      // Content-Type: octet-stream - generic binary download
-      // application/zip was tried but triggers stricter scanning on corporate newtorks.
+      // application/octet-stream — generic binary avoids stricter scanning on
+      // some corporate networks that inspect application/zip differently.
       res.setHeader("Content-Type", "application/octet-stream");
-      res.setHeader(
-        "Content-Disposition",
-        'attachment; filename="loadrunner_script.zip"',
-      );
-      // No Content-Length — chunked transfer encoding bypasses size-based restrictions
+      res.setHeader("Content-Disposition", 'attachment; filename="loadrunner_script.zip"');
+      // No Content-Length — chunked transfer encoding bypasses proxy size limits.
 
       const archive = archiver("zip", { zlib: { level: 9 } });
       archive.on("error", (err) => {
-        console.error("Archive error:", err);
-        if (!res.headersSent)
-          res.status(500).json({ error: "Archive failed." });
+        console.error("[archive-error]", err.message);
+        if (!res.headersSent) res.status(500).json({ error: "archive_failed" });
       });
 
       archive.pipe(res);
 
-      // Add every in-memory file to the archive, stripping the outputDir prefix
-      // so the zip contains relative paths (e.g. main.js, rts.yml, …)
       const prefix = outputDir.replace(/\\/g, "/");
       for (const [filePath, content] of files) {
         const relative = filePath.startsWith(prefix)
@@ -286,46 +375,40 @@ class WebServer {
       archive.finalize();
     });
 
-    // ── Convert JMX ──────────────────────────────────────────────────────────
+    // ── Convert JMX ───────────────────────────────────────────────────────────
     this.app.post(
       "/converter/convert-jmx",
-      this.upload.fields([
-        { name: "jmxFile", maxCount: 1 },
-        { name: "csvFiles", maxCount: 30 },
+      convertLimiter,
+      uploadJmx.fields([
+        { name: "jmxFile",   maxCount: 1  },
+        { name: "csvFiles",  maxCount: 30 },
         { name: "certFiles", maxCount: 10 },
       ]),
       async (req, res) => {
-        const jmxFile = req.files?.jmxFile?.[0];
-        const csvFiles = req.files?.csvFiles || [];
+        const jmxFile   = req.files?.jmxFile?.[0];
+        const csvFiles  = req.files?.csvFiles  || [];
         const certFiles = req.files?.certFiles || [];
 
         if (!jmxFile) {
-          return res.status(400).json({ error: "JMX file is required." });
+          return res.status(400).json({ error: "jmx_file_required" });
         }
 
-        const tmpFiles = []; // all temp paths to clean up
-        const tmpJmx = path.join(
-          os.tmpdir(),
-          `lr-jmx-${Date.now()}-${jmxFile.originalname}`,
-        );
-        tmpFiles.push(tmpJmx);
+        const safeJmxName  = sanitizeFilename(jmxFile.originalname);
+        const tmpJmx       = path.join(os.tmpdir(), `lr-jmx-${Date.now()}-${safeJmxName}`);
+        const tmpSupportDir = path.join(os.tmpdir(), `lr-jmx-support-${Date.now()}`);
+        const csvFilePaths  = {};
+        const tmpFiles      = [tmpJmx];
+
+        const uploadedSupportFiles = [...csvFiles, ...certFiles];
 
         try {
           await fs.writeFile(tmpJmx, jmxFile.buffer);
 
-          // Write uploaded CSV / cert files to a temp directory so the converter
-          // can reference them by path if needed (dependency resolver uses in-memory).
-          const tmpSupportDir = path.join(
-            os.tmpdir(),
-            `lr-jmx-support-${Date.now()}`,
-          );
-          const uploadedSupportFiles = [...csvFiles, ...certFiles];
-          const csvFilePaths = {}; // originalname → tmpPath
-
           if (uploadedSupportFiles.length) {
             await fs.mkdir(tmpSupportDir, { recursive: true });
             for (const f of uploadedSupportFiles) {
-              const tmpPath = path.join(tmpSupportDir, f.originalname);
+              const safeName = sanitizeFilename(f.originalname);
+              const tmpPath  = path.join(tmpSupportDir, safeName);
               await fs.writeFile(tmpPath, f.buffer);
               tmpFiles.push(tmpPath);
               csvFilePaths[f.originalname] = tmpPath;
@@ -334,117 +417,103 @@ class WebServer {
           }
 
           const outputDir = path.join(os.tmpdir(), `lr-jmx-out-${Date.now()}`);
+          const logLevel  = VALID_LOG_LEVELS.has(req.body.logLevel) ? req.body.logLevel : "info";
 
           const options = {
-            inputFile: tmpJmx,
+            inputFile:            tmpJmx,
             outputDir,
-            protocol: req.body.protocol || "devweb",
-            mode: req.body.mode || "single",
-            useTransactions: req.body.useTransactions !== "false",
-            useCorrelation: req.body.useCorrelation !== "false",
-            useParameterization: req.body.useParameterization !== "false",
-            useAuthentication: req.body.useAuthentication !== "false",
-            thinkTime: parseFloat(req.body.thinkTime) || 1,
-            addComments: req.body.addComments !== "false",
-            logLevel: req.body.logLevel || "info",
-            generateWlmExcel: req.body.generateWlmExcel !== "false",
-            csvFilePaths, // map of filename → tmpPath for converter use
+            protocol:             req.body.protocol || "devweb",
+            mode:                 req.body.mode || "single",
+            useTransactions:      req.body.useTransactions !== "false",
+            useCorrelation:       req.body.useCorrelation !== "false",
+            useParameterization:  req.body.useParameterization !== "false",
+            useAuthentication:    req.body.useAuthentication !== "false",
+            thinkTime:            parseFloat(req.body.thinkTime) || 1,
+            addComments:          req.body.addComments !== "false",
+            logLevel,
+            generateWlmExcel:     req.body.generateWlmExcel !== "false",
+            csvFilePaths,
           };
 
           const converter = new JmxConverter(options);
-          const { result: results, files } = await runWithMemoryFs(() =>
-            converter.convert(),
+          const { result: results, files } = await withTimeout(
+            runWithMemoryFs(() => converter.convert()),
+            CONVERSION_TIMEOUT_MS
           );
 
-          // Dependency report — runs after parse (results.csvDataSets populated)
-          const resolver = new JmxDependencyResolver(
-            results.csvDataSets || [],
-            uploadedSupportFiles,
-          );
+          const resolver   = new JmxDependencyResolver(results.csvDataSets || [], uploadedSupportFiles);
           const dependency = resolver.resolve();
 
-          // Copy uploaded CSV / cert files into the in-memory file map so they
-          // are included in the output ZIP alongside the generated scripts.
           for (const f of uploadedSupportFiles) {
-            const dest = path
-              .join(outputDir, f.originalname)
-              .replace(/\\/g, "/");
+            const dest = path.join(outputDir, sanitizeFilename(f.originalname)).replace(/\\/g, "/");
             files.set(dest, f.buffer);
           }
 
-          // Clean up temp files (the JMX itself — support dir handled separately)
-          await Promise.all(tmpFiles.map((p) => fs.unlink(p).catch(() => {})));
-          await fs.rmdir(tmpSupportDir).catch(() => {});
-
-          const token = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-          this.pendingDownloads.set(token, {
-            files,
-            outputDir,
-            expires: Date.now() + 5 * 60 * 1000,
-          });
+          const token = crypto.randomBytes(32).toString("hex");
+          this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
           res.json({
-            success: true,
+            success:     true,
             downloadUrl: `/converter/download/${token}`,
-            analysis: results.analysis,
+            analysis:    results.analysis,
             threadGroups: results.threadGroups,
-            scripts: results.scripts || null, // non-null only in multi mode
+            scripts:     results.scripts || null,
             multiScript: results.multiScript || false,
-            metadata: results.metadata,
+            metadata:    results.metadata,
             dependency,
-            protocol: options.protocol,
-            mode: options.mode,
+            protocol:    options.protocol,
+            mode:        options.mode,
           });
+
         } catch (err) {
-          await Promise.all(tmpFiles.map((p) => fs.unlink(p).catch(() => {})));
-          console.error("JMX conversion error:", err);
-          res.status(500).json({ error: err.message });
+          console.error("[convert-jmx-error]", err.message, err.isTimeout ? "(timeout)" : "");
+          const status = err.isTimeout ? 408 : 500;
+          const code   = err.isTimeout ? "conversion_timeout" : "conversion_failed";
+          res.status(status).json({ error: code });
+
+        } finally {
+          // Guaranteed cleanup (F-12 / F-21)
+          for (const p of tmpFiles) {
+            if (p === tmpSupportDir) await safeRmdir(p);
+            else await safeUnlink(p);
+          }
         }
-      },
+      }
     );
 
-    // ── Health ────────────────────────────────────────────────────────────────
-    this.app.get("/health", (req, res) => {
-      res.json({
-        status: "ok",
-        version: require("../../package.json").version,
-      });
-    });
-    this.app.get("/converter/health", (req, res) => {
-      res.json({
-        status: "ok",
-        version: require("../../package.json").version,
-      });
-    });
+    // ── Health ─────────────────────────────────────────────────────────────────
+    // Version removed (F-15) — version info should not be disclosed to any caller.
+    const healthHandler = (req, res) => res.json({ status: "ok" });
+    this.app.get("/health", healthHandler);
+    this.app.get("/converter/health", healthHandler);
 
-    // ── Catch-all 404 ─────────────────────────────────────────────────────────
+    // ── Catch-all 404 ──────────────────────────────────────────────────────────
     this.app.use((req, res) => {
       res.status(404).sendFile(path.join(__dirname, "public", "404.html"));
     });
 
-    // ── JSON error handler ────────────────────────────────────────────────────
-    // MUST be last and have 4 params (err, req, res, next) for Express to treat
-    // it as an error handler.  Without this, Express returns an HTML error page
-    // whenever multer, body-parser or any middleware calls next(err), which
-    // causes the browser to receive <!DOCTYPE html> when it expects JSON and
-    // shows "unexpected token '<'...is not valid JSON".
+    // ── Global error handler ───────────────────────────────────────────────────
+    // Must have 4 params for Express to recognise it as an error handler.
+    // Catches errors from multer (file size, file type), body-parser, and middleware.
     // eslint-disable-next-line no-unused-vars
     this.app.use((err, req, res, next) => {
-      console.error("Unhandled middleware error:", err);
+      console.error("[middleware-error]", err.message);
       const status = err.status || err.statusCode || 500;
-      res
-        .status(status)
-        .json({ error: err.message || "Internal server error" });
+      // Map known error types to user-facing codes; never expose err.message (F-07)
+      let code = "server_error";
+      if (err.code === "LIMIT_FILE_SIZE")  code = "file_too_large";
+      if (err.code === "LIMIT_FILE_COUNT") code = "too_many_files";
+      if (status === 415)                  code = "unsupported_file_type";
+      if (status === 429)                  code = "rate_limit_exceeded";
+      res.status(status).json({ error: code });
     });
   }
 
   async start(port = this.port) {
     return new Promise((resolve) => {
       this.server = this.app.listen(port, () => {
-        console.log(
-          `\n🌐  Converter UI  →  http://localhost:${port}/converter\n`,
-        );
+        console.log(`\n🌐  PerfX Studio  →  http://localhost:${port}/converter\n`);
         resolve(this.server);
       });
     });
