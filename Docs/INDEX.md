@@ -1,6 +1,6 @@
-# LRE Toolkit — Documentation Index
+# PerfX Studio — Documentation Index
 
-**Version:** 2.9.2 | **Last Updated:** 2026-05-03
+**Version:** 2.10.13 | **Last Updated:** 2026-07-09
 
 This is the master index for all LRE Toolkit documentation. Documentation is organized into four audiences: **Business**, **Technical (Developers)**, **User**, and **Deployment & Operations**.
 
@@ -76,6 +76,9 @@ For system administrators and DevOps.
 
 | Document | Purpose | Audience |
 |---|---|---|
+| [Operations & Capacity Guide](OPERATIONS.md) | Concurrent users, memory, monitoring, tuning, failure scenarios | Team leads, Infra, Support |
+| [Security Guide](SECURITY.md) | Security controls, accepted risks, infrastructure recommendations | Security teams, App leads |
+| [Setup Guide](SETUP-GUIDE.md) | Local developer setup + PM2 production deployment | Developers, Administrators |
 | [IIS Deployment Guide](deployment/DEPLOYMENT-IIS.md) | Step-by-step IIS + iisnode, permissions, SSL | System Administrators |
 | [Docker Deployment Guide](deployment/DEPLOYMENT-DOCKER.md) | Container-based deployment alternative | DevOps / Cloud Team |
 | [Configuration Reference](deployment/CONFIGURATION.md) | All environment variables, feature flags, tunables | Administrators |
