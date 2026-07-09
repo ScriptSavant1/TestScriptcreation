@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PerfX Studio — Performance Script Generation</title>
 <script>/* prevent FOUC */(function(){const t=localStorage.getItem('lr-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Fonts: system stack only — no external CDN requests (F-13 privacy fix) -->
 <style>
 /* ── Dark tokens (default) ──────────────────────────────────────────────── */
 :root {
@@ -42,8 +40,8 @@
   --danger-dim:   rgba(240,100,100,0.10);
   --warn:         #f0c040;
   /* typography */
-  --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono: 'Cascadia Code', 'Consolas', 'JetBrains Mono', 'Courier New', monospace;
+  --sans: -apple-system, 'Segoe UI', system-ui, sans-serif;
   /* shape */
   --r-xs: 5px; --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px; --r-2xl: 32px;
   /* elevation */
@@ -2864,9 +2862,15 @@ function renderBrunoCertChips() {
     const ext  = f.name.split('.').pop().toLowerCase();
     const chip = document.createElement('div');
     chip.className = 'cert-chip';
-    chip.innerHTML =
-      `<span class="chip-ext">.${ext}</span>` +
-      `<span class="chip-name" title="${f.name}">${f.name}</span>`;
+    const extSpan = document.createElement('span');
+    extSpan.className = 'chip-ext';
+    extSpan.textContent = '.' + ext;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'chip-name';
+    nameSpan.title = f.name;
+    nameSpan.textContent = f.name;
+    chip.appendChild(extSpan);
+    chip.appendChild(nameSpan);
     const rm = document.createElement('button');
     rm.className = 'chip-rm'; rm.title = 'Remove'; rm.textContent = '×';
     rm.onclick = e => { e.stopPropagation(); removeBrunoCert(i); };
@@ -3027,6 +3031,8 @@ function showJmxResult(data, err) {
     `JMeter → ${pl} · ${mode} · ${reqs} requests · ${tgCount} thread group(s)`;
 
   // ── Per-thread-group script list (multi mode only) ──────────────────
+  // escHtml: sanitize server-supplied strings before innerHTML insertion (XSS prevention)
+  const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const tgListEl = document.getElementById('res-tg-list');
   if (data.multiScript && data.scripts && data.scripts.length) {
     const typeIcon = { Standard:'🧵', SetUp:'▶', TearDown:'⏹', Stepping:'📈', Ultimate:'🚀', Concurrency:'⚡', Arrivals:'🌊' };
@@ -3036,9 +3042,9 @@ function showJmxResult(data, err) {
       const icon = typeIcon[s.threadGroupType] || '🧵';
       html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:var(--glass);border:1px solid var(--glass-border);font-size:0.82rem">
         <span>${icon}</span>
-        <span style="font-weight:500;color:var(--text)">${s.threadGroupName}</span>
-        <span style="color:var(--text-3);margin-left:auto">${s.requestCount} requests</span>
-        <span style="color:var(--text-3);font-family:'JetBrains Mono',monospace;font-size:0.72rem">${s.safeDirName}/</span>
+        <span style="font-weight:500;color:var(--text)">${escHtml(s.threadGroupName)}</span>
+        <span style="color:var(--text-3);margin-left:auto">${Number(s.requestCount)} requests</span>
+        <span style="color:var(--text-3);font-family:var(--mono);font-size:0.72rem">${escHtml(s.safeDirName)}/</span>
       </div>`;
     }
     html += '</div>';
@@ -3057,7 +3063,7 @@ function showJmxResult(data, err) {
       html += '<div style="margin-bottom:6px">';
       for (const m of dep.missing) {
         html += `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 10px;border-radius:6px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.2);font-size:0.8rem;margin-bottom:4px">
-          <span>⚠</span><span style="color:var(--text)">${m.message}</span></div>`;
+          <span>⚠</span><span style="color:var(--text)">${escHtml(m.message)}</span></div>`;
       }
       html += '</div>';
     }
