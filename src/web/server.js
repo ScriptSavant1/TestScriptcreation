@@ -51,6 +51,24 @@ const BrunoDevWebConverter      = require("../tools/collection-converter");
 const JmxConverter              = require("../tools/jmx-converter");
 const JmxDependencyResolver     = require("../lib/jmxDependencyResolver");
 
+// Analytics — lazy-loaded so a missing DB never crashes the server
+let analytics, adminReports, csvExporter, xlsxExporter, docxExporter;
+try {
+  analytics     = require("../analytics/collector");
+  adminReports  = require("../analytics/reports");
+  csvExporter   = require("../analytics/exporters/csv");
+  xlsxExporter  = require("../analytics/exporters/xlsx");
+  docxExporter  = require("../analytics/exporters/docx");
+
+  // Prune old records on startup (0 = keep forever)
+  const { pruneOldRecords } = require("../analytics/db");
+  const retentionDays = parseInt(process.env.ANALYTICS_RETENTION_DAYS, 10) || 0;
+  const pruned = pruneOldRecords(retentionDays);
+  if (pruned > 0) console.log(`[analytics] Pruned ${pruned} records older than ${retentionDays} days`);
+} catch (e) {
+  console.warn("[analytics] Module load failed — analytics disabled:", e.message);
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /** 2 GB per file — generous for large JMX / collection files; guards against
@@ -281,6 +299,11 @@ class WebServer {
         }
         this.activeConversions++;
 
+        // Analytics — capture request data before async work begins
+        const _evt = analytics ? analytics.startEvent(req, "converter") : null;
+        if (_evt && analytics) analytics.enrichWithFile(_evt, collectionFile, req.body.protocol, req.body.mode);
+        let _evtResult = "failed", _evtErrCode = null, _evtReqCount = null;
+
         // Sanitize filenames before building temp paths (F-04: path traversal prevention)
         const safeColName  = sanitizeFilename(collectionFile.originalname);
         const safeEnvName  = environmentFile ? sanitizeFilename(environmentFile.originalname) : null;
@@ -342,6 +365,9 @@ class WebServer {
           this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
+          _evtResult   = "success";
+          _evtReqCount = results.analysis?.requestCount || null;
+
           res.json({
             success:     true,
             downloadUrl: `/converter/download/${token}`,
@@ -355,11 +381,14 @@ class WebServer {
           console.error("[convert-error]", err.message, err.isTimeout ? "(timeout)" : "");
           const status = err.isTimeout ? 408 : 500;
           const code   = err.isTimeout ? "conversion_timeout" : "conversion_failed";
+          _evtResult  = err.isTimeout ? "timeout" : "failed";
+          _evtErrCode = code;
           res.status(status).json({ error: code });
 
         } finally {
           // Guaranteed cleanup — runs on both success and error paths (F-12 / F-21)
           this.activeConversions = Math.max(0, this.activeConversions - 1);
+          if (_evt && analytics) analytics.finishEvent(_evt, { result: _evtResult, errorCode: _evtErrCode, requestCount: _evtReqCount });
           await safeUnlink(tmpCollection);
           await safeUnlink(tmpEnvironment);
           for (const p of Object.values(csvFilePaths)) await safeUnlink(p);
@@ -434,6 +463,11 @@ class WebServer {
         }
         this.activeConversions++;
 
+        // Analytics
+        const _evtJ = analytics ? analytics.startEvent(req, "jmx") : null;
+        if (_evtJ && analytics) analytics.enrichWithFile(_evtJ, jmxFile, req.body.protocol, req.body.mode);
+        let _evtJResult = "failed", _evtJErrCode = null, _evtJReqCount = null;
+
         const safeJmxName  = sanitizeFilename(jmxFile.originalname);
         const tmpJmx       = path.join(os.tmpdir(), `lr-jmx-${Date.now()}-${safeJmxName}`);
         const tmpSupportDir = path.join(os.tmpdir(), `lr-jmx-support-${Date.now()}`);
@@ -494,6 +528,9 @@ class WebServer {
           this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
+          _evtJResult   = "success";
+          _evtJReqCount = results.analysis?.requestCount || null;
+
           res.json({
             success:     true,
             downloadUrl: `/converter/download/${token}`,
@@ -511,11 +548,14 @@ class WebServer {
           console.error("[convert-jmx-error]", err.message, err.isTimeout ? "(timeout)" : "");
           const status = err.isTimeout ? 408 : 500;
           const code   = err.isTimeout ? "conversion_timeout" : "conversion_failed";
+          _evtJResult  = err.isTimeout ? "timeout" : "failed";
+          _evtJErrCode = code;
           res.status(status).json({ error: code });
 
         } finally {
           // Guaranteed cleanup (F-12 / F-21)
           this.activeConversions = Math.max(0, this.activeConversions - 1);
+          if (_evtJ && analytics) analytics.finishEvent(_evtJ, { result: _evtJResult, errorCode: _evtJErrCode, requestCount: _evtJReqCount });
           for (const p of tmpFiles) {
             if (p === tmpSupportDir) await safeRmdir(p);
             else await safeUnlink(p);
@@ -549,6 +589,86 @@ class WebServer {
     const healthHandler = (req, res) => res.json({ status: "ok" });
     this.app.get("/health", healthHandler);
     this.app.get("/converter/health", healthHandler);
+
+    // ── Admin analytics dashboard ─────────────────────────────────────────────
+    // All /admin/* routes require a valid ADMIN_TOKEN query param or Bearer header.
+    // Returns 404 (not 401) to avoid disclosing that an admin panel exists.
+    const ADMIN_TOKEN = process.env.ADMIN_TOKEN || null;
+
+    const adminAuth = (req, res, next) => {
+      if (!ADMIN_TOKEN) return res.status(404).sendFile(path.join(__dirname, "public", "404.html"));
+      if (!analytics)   return res.status(503).json({ error: "analytics_unavailable" });
+      const token = req.query.token
+        || (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      if (token !== ADMIN_TOKEN) return res.status(404).sendFile(path.join(__dirname, "public", "404.html"));
+      next();
+    };
+
+    // Serve Chart.js from local node_modules — no CDN dependency
+    this.app.get("/admin/vendor/chart.js", (req, res) => {
+      try {
+        const p = require.resolve("chart.js/dist/chart.umd.min.js");
+        res.setHeader("Content-Type", "application/javascript");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        res.sendFile(p);
+      } catch (_) {
+        res.status(404).json({ error: "not_found" });
+      }
+    });
+
+    // Dashboard HTML
+    this.app.get("/admin", adminAuth, (req, res) => {
+      const preset = req.query.period || "30d";
+      const range  = adminReports.dateRangePreset(preset);
+      const from   = req.query.from || range.from;
+      const to     = req.query.to   || range.to;
+      const stats  = adminReports.getStats({ from, to });
+      res.render("admin", {
+        stats, preset, from, to,
+        adminToken: ADMIN_TOKEN,
+      });
+    });
+
+    // JSON stats API (for AJAX refresh)
+    this.app.get("/admin/api/stats", adminAuth, (req, res) => {
+      const from  = req.query.from  || null;
+      const to    = req.query.to    || null;
+      const stats = adminReports.getStats({ from, to });
+      res.json(stats);
+    });
+
+    // JSON events API (paginated)
+    this.app.get("/admin/api/events", adminAuth, (req, res) => {
+      const { from, to, tool, result, search } = req.query;
+      const limit  = Math.min(parseInt(req.query.limit,  10) || 100, 1000);
+      const offset = parseInt(req.query.offset, 10) || 0;
+      const data = require("../analytics/db").queryEvents({ from, to, tool, result, search, limit, offset });
+      res.json(data);
+    });
+
+    // CSV download
+    this.app.get("/admin/download/csv", adminAuth, (req, res) => {
+      const { from, to, tool, result } = req.query;
+      const rows = require("../analytics/db").queryAllForExport({ from, to, tool, result });
+      csvExporter.streamCsv(res, rows, `perfx-analytics-${isoDate()}.csv`);
+    });
+
+    // XLSX download
+    this.app.get("/admin/download/xlsx", adminAuth, async (req, res) => {
+      const { from, to, tool, result } = req.query;
+      const preset = req.query.period || "custom";
+      const rows   = require("../analytics/db").queryAllForExport({ from, to, tool, result });
+      const stats  = adminReports.getStats({ from, to });
+      await xlsxExporter.streamXlsx(res, stats, rows, periodLabel(preset, from, to));
+    });
+
+    // DOCX download
+    this.app.get("/admin/download/docx", adminAuth, async (req, res) => {
+      const { from, to } = req.query;
+      const preset = req.query.period || "custom";
+      const stats  = adminReports.getStats({ from, to });
+      await docxExporter.streamDocx(res, stats, periodLabel(preset, from, to));
+    });
 
     // ── Catch-all 404 ──────────────────────────────────────────────────────────
     this.app.use((req, res) => {
@@ -586,6 +706,19 @@ class WebServer {
       return new Promise((resolve) => this.server.close(resolve));
     }
   }
+}
+
+// ── Module-level helpers for admin routes ─────────────────────────────────────
+
+function isoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function periodLabel(preset, from, to) {
+  const MAP = { "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", "mtd": "Month to date", "all": "All time" };
+  if (MAP[preset]) return MAP[preset];
+  if (from && to)  return `${from} to ${to}`;
+  return "All time";
 }
 
 module.exports = new WebServer();

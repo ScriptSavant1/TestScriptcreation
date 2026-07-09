@@ -2,6 +2,8 @@ Salesforce_Platform_APIs.postman_collection.json
 BUGFIX-parameters.yml.md
 HOTFIX_v2.0.3.md
 INSTALL_COMPARISON.md
+# Analytics database — operational data, never committed to git
+data/
 node_modules/@babel/helpers/LICENSE
 .claude/settings.local.json
 postman_collection.json

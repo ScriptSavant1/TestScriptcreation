@@ -37,6 +37,14 @@ module.exports = {
         // Maximum simultaneous conversions. Set to number of physical CPU cores.
         // Users beyond this limit receive HTTP 503 and should retry.
         MAX_CONCURRENT_CONVERSIONS:  8,
+        // Analytics admin dashboard — REQUIRED to enable /admin routes.
+        // Choose a strong secret. Share only with authorised admins.
+        // Access via: http://your-server:3000/admin?token=<value>
+        ADMIN_TOKEN:                 "change-me-before-deploying",
+        // Automatically delete analytics records older than N days (0 = keep forever).
+        ANALYTICS_RETENTION_DAYS:    730,
+        // Optional: override analytics DB path (default: ./data/analytics.db)
+        // ANALYTICS_DB_PATH: "/data/perfx/analytics.db",
       },
 
       // Structured log files (rotate daily, keep 14 days)
