@@ -1240,6 +1240,7 @@ footer {
   font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
 }
 .help-badge-blue   { background: var(--primary-dim); color: var(--primary); border: 1px solid rgba(79,142,247,0.25); }
+.help-badge-orange { background: rgba(240,136,62,0.10); color: var(--vugen); border: 1px solid rgba(240,136,62,0.22); }
 .help-badge-green  { background: rgba(52,209,122,0.10); color: var(--success); border: 1px solid rgba(52,209,122,0.22); }
 .help-badge-purple { background: rgba(124,92,252,0.12); color: #b39dfa; border: 1px solid rgba(124,92,252,0.22); }
 .help-h2 {
@@ -1954,16 +1955,78 @@ code {
     <p class="help-intro">Everything you need to use PerfX Studio — from first-time setup to advanced correlation. Designed for both technical and non-technical users.</p>
   </div>
 
-  <!-- — SECTION: What Is This Toolkit? ————————————————————— -->
-    <section class="help-section">
-      <h2 class="help-h2">What is PerfX Studio?</h2>
-      <p class="help-p">PerfX Studio is a LoadRunner script generation platform that removes the manual effort traditionally required in VuGen. Instead of spending days recording, scripting, and refactoring, provide your existing API collections, browser recordings, or JMeter test plans — and receive a fully structured, VuGen-ready project within minutes.</p>
-      <p class="help-p">In a standard performance testing lifecycle, script development is the most time-consuming phase — identifying dynamic values for correlation, parameterising test data, and implementing authentication mechanisms such as OAuth2, JWT, Kerberos, or DPoP. PerfX Studio addresses these challenges directly: it analyses your inputs, applies best-practice correlation and parameterisation, and generates production-quality VuGen script code covering roughly <strong>80% of the scripting effort</strong>.</p>
-      <p class="help-p">PerfX Studio provides four tools covering every starting point: Postman/Bruno Converter, JMeter Converter, Recorder (HAR-based), and Script Studio (HAR correlation engine). Open the generated project in VuGen to validate and finalise before uploading to LoadRunner Enterprise.</p>
-      <div class="help-callout help-callout-blue">
-        <strong>🔒 No files are stored on the server.</strong> Everything you upload is processed in-memory and immediately discarded. The only thing that leaves the server is your downloaded ZIP file.
+  <!-- ── SECTION: Quick Start ──────────────────────────────────────────── -->
+  <section class="help-section">
+    <h2 class="help-h2">Quick Start — pick your path</h2>
+    <p class="help-p">Every path below produces a ready-to-run VuGen script ZIP in under 2 minutes. Choose the one that matches your starting point.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0">
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2)">
+        <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;color:var(--primary)">📂 Path A — Postman / Bruno</div>
+        <ol style="margin:0;padding-left:16px;font-size:0.82rem;color:var(--text-2);line-height:1.95">
+          <li>Click <strong>Converter</strong> in the nav</li>
+          <li>Select the <strong>Postman / Bruno</strong> tab</li>
+          <li>Upload your .json / .yml / .bru file</li>
+          <li>Choose output format → <strong>Convert</strong></li>
+          <li>Download ZIP → open in VuGen</li>
+        </ol>
       </div>
-    </section>
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(240,136,62,0.07);border:1px solid rgba(240,136,62,0.2)">
+        <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;color:var(--vugen)">♨ Path B — JMeter (.jmx)</div>
+        <ol style="margin:0;padding-left:16px;font-size:0.82rem;color:var(--text-2);line-height:1.95">
+          <li>Click <strong>Converter</strong> in the nav</li>
+          <li>Select the <strong>JMeter (.jmx)</strong> tab</li>
+          <li>Upload your .jmx file + any CSV files</li>
+          <li>Choose output format → <strong>Convert</strong></li>
+          <li>Download ZIP → open in VuGen</li>
+        </ol>
+      </div>
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(52,209,122,0.07);border:1px solid rgba(52,209,122,0.2)">
+        <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;color:var(--success)">🎙 Path C — Record in browser</div>
+        <ol style="margin:0;padding-left:16px;font-size:0.82rem;color:var(--text-2);line-height:1.95">
+          <li>Click <strong>Recorder</strong> in the nav</li>
+          <li>Install the bookmarklet (one-time)</li>
+          <li>Press F12 → Network → record your journey</li>
+          <li>Export HAR → upload to Recorder</li>
+          <li>Generate Script → Download ZIP</li>
+        </ol>
+      </div>
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(124,92,252,0.07);border:1px solid rgba(124,92,252,0.2)">
+        <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;color:#b39dfa">🧪 Path D — Deep correlation</div>
+        <ol style="margin:0;padding-left:16px;font-size:0.82rem;color:var(--text-2);line-height:1.95">
+          <li>Click <strong>Script Studio</strong> in the nav</li>
+          <li>Record the same journey twice → two HARs</li>
+          <li>Upload both → <strong>Analyze</strong></li>
+          <li>Review Advisor → Accept → Regenerate</li>
+          <li>Download ZIP → open in VuGen</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- — SECTION: What Is This Toolkit? ————————————————————— -->
+  <section class="help-section">
+    <h2 class="help-h2">What is PerfX Studio?</h2>
+    <p class="help-p">PerfX Studio is a four-tool platform that converts any performance testing input — Postman/Bruno collections, JMeter test plans, or browser recordings — into production-ready VuGen scripts in minutes. It handles the work that normally takes days: correlation, parameterisation, authentication, and transaction boundaries.</p>
+    <div style="overflow-x:auto;margin:14px 0">
+      <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Tool</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What you give it</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What you get</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Best for</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--primary)">📂 Postman / Bruno Converter</td><td style="padding:8px 12px">.json / .yml / .bru collection</td><td style="padding:8px 12px">VuGen script ZIP</td><td style="padding:8px 12px">Teams already using Postman or Bruno</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--vugen)">♨ JMeter Converter</td><td style="padding:8px 12px">.jmx file + optional CSVs</td><td style="padding:8px 12px">VuGen script ZIP + Workload Excel</td><td style="padding:8px 12px">Migrating from JMeter to LoadRunner</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--success)">🎙 Recorder</td><td style="padding:8px 12px">Browser HAR file (F12 export)</td><td style="padding:8px 12px">VuGen script ZIP</td><td style="padding:8px 12px">VCSE / Azure machines where VuGen can't record</td></tr>
+          <tr><td style="padding:8px 12px;font-weight:600;color:#b39dfa">🧪 Script Studio</td><td style="padding:8px 12px">1 or 2 HAR files</td><td style="padding:8px 12px">Fully correlated VuGen script ZIP</td><td style="padding:8px 12px">Any app with tokens, session IDs, or CSRF values</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="help-callout help-callout-blue">
+      <strong>🔒 Privacy first.</strong> Everything you upload is processed in-memory and never written to disk. Nothing is stored between requests. Download links expire after 5 minutes and are single-use.
+    </div>
+  </section>
 
 
   <!-- ── SECTION: Output formats ─────────────────────────────────────────── -->
@@ -1985,45 +2048,75 @@ code {
     <p class="help-p">Not sure? Ask your LRE administrator which protocol your project uses. When in doubt, choose <strong>DevWeb</strong> — it is the current default for new projects.</p>
   </section>
 
-  <!-- ── SECTION: Converter ──────────────────────────────────────────────── -->
+  <!-- ── SECTION: Postman / Bruno Converter ────────────────────────────── -->
   <section class="help-section">
-    <div class="help-tool-badge help-badge-blue">⚡ Converter</div>
-    <h2 class="help-h2">Converter — Collections &amp; JMX to VuGen</h2>
-    <p class="help-p">Use this tool when you already have an API collection (Postman or Bruno) or an existing JMeter script (.jmx) and want to convert it into a VuGen script.</p>
+    <div class="help-tool-badge help-badge-blue">📂 Postman / Bruno Converter</div>
+    <h2 class="help-h2">Postman / Bruno Converter</h2>
+    <p class="help-p">Convert your API collection directly into a VuGen script — no scripting knowledge required. The converter reads all requests, headers, bodies, auth, and pre/post scripts, and generates a complete VuGen project.</p>
 
-    <h3 class="help-h3">Postman / Bruno Collections</h3>
-    <p class="help-p"><strong>Supported file formats:</strong></p>
+    <h3 class="help-h3">Supported input formats</h3>
     <ul class="help-list">
-      <li><strong>Postman v2.1</strong> — export from Postman as a Collection v2.1 JSON file</li>
-      <li><strong>Bruno JSON</strong> — the <code>.json</code> export from Bruno</li>
-      <li><strong>Bruno YAML</strong> — <code>.yml</code> or <code>.yaml</code> files</li>
-      <li><strong>Bruno folder</strong> — a directory containing <code>.bru</code> files (export as zip then upload)</li>
-      <li><strong>Single .bru file</strong> — a single Bruno request file</li>
+      <li><strong>Postman v2.1</strong> — export from Postman: <em>Collection → ⋯ → Export → Collection v2.1</em></li>
+      <li><strong>Bruno JSON</strong> — the <code>.json</code> export from Bruno desktop</li>
+      <li><strong>Bruno YAML</strong> — <code>.yml</code> or <code>.yaml</code> collection files</li>
+      <li><strong>Bruno folder</strong> — a zipped directory of <code>.bru</code> files</li>
+      <li><strong>Single .bru file</strong> — a single Bruno request</li>
     </ul>
-    <p class="help-p">You can also upload an <strong>Environment file</strong> alongside your collection. This fills in variable values (like base URLs, API keys, usernames) in the generated script.</p>
+    <p class="help-p">Optionally upload an <strong>Environment file</strong> alongside your collection. It fills in variable values — base URLs, API keys, usernames — directly in the generated script so you do not need to edit them by hand.</p>
 
-    <h3 class="help-h3">JMeter Scripts (.jmx)</h3>
-    <p class="help-p">Upload a JMeter <code>.jmx</code> file exported from Apache JMeter. You can also upload:</p>
+    <h3 class="help-h3">Step-by-step</h3>
+    <ol class="help-steps-list">
+      <li>Click <strong>Converter</strong> in the top navigation, then select the <strong>Postman / Bruno</strong> tab.</li>
+      <li>Choose your output format: <strong>DevWeb</strong> (JavaScript) or <strong>Web HTTP/HTML</strong> (C).</li>
+      <li>Drag and drop your collection file into the upload area, or click to browse.</li>
+      <li>Optionally upload an environment file in the second upload area.</li>
+      <li>Adjust options as needed: think time, transactions, correlation toggles.</li>
+      <li>Click <strong>Convert</strong> and wait a few seconds.</li>
+      <li>Click <strong>Download ZIP</strong> when it appears.</li>
+      <li>Extract the ZIP and open the <code>.usr</code> file in VuGen, or upload it to LoadRunner Enterprise.</li>
+    </ol>
+
+    <div class="help-callout help-callout-blue">
+      <strong>Multi-script mode:</strong> Enable this when your collection has multiple folders. Instead of one large script, you get one separate script per folder — ideal for modular test design.
+    </div>
+  </section>
+
+  <!-- ── SECTION: JMeter Converter ─────────────────────────────────────── -->
+  <section class="help-section">
+    <div class="help-tool-badge help-badge-orange">♨ JMeter Converter</div>
+    <h2 class="help-h2">JMeter Converter</h2>
+    <p class="help-p">Migrating from Apache JMeter to LoadRunner? Upload your <code>.jmx</code> test plan and receive an equivalent VuGen script, plus a <strong>Workload Model Excel</strong> file that translates your JMeter thread groups into a LoadRunner workload definition.</p>
+
+    <h3 class="help-h3">What to upload</h3>
     <ul class="help-list">
-      <li><strong>CSV files</strong> — if your JMeter script uses CSVDataSet elements to read test data</li>
-      <li><strong>Certificate files</strong> — if your script uses client certificates for authentication</li>
+      <li><strong>.jmx file</strong> — your JMeter test plan (exported from JMeter: <em>File → Save Test Plan As</em>)</li>
+      <li><strong>CSV files</strong> — any data files referenced by CSVDataSet elements in the plan (optional but recommended)</li>
+      <li><strong>Certificate files</strong> — client certificates (.pem / .p12) used for mTLS authentication (optional)</li>
     </ul>
 
     <h3 class="help-h3">Step-by-step</h3>
     <ol class="help-steps-list">
-      <li>Click <strong>Converter</strong> in the top navigation.</li>
-      <li>Select the tab matching your input: <strong>Postman / Bruno</strong> or <strong>JMeter (.jmx)</strong>.</li>
+      <li>Click <strong>Converter</strong> in the top navigation, then select the <strong>JMeter (.jmx)</strong> tab.</li>
       <li>Choose your output format: <strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>.</li>
-      <li>Drag and drop your file into the upload area, or click to browse.</li>
-      <li>Adjust options (transactions, correlation, parameterization, think time) as needed.</li>
+      <li>Upload your <code>.jmx</code> file. Optionally add CSV and certificate files.</li>
+      <li>Select script mode: <strong>Single script</strong> or <strong>Per thread group</strong>.</li>
       <li>Click <strong>Convert</strong>.</li>
-      <li>When conversion completes, click <strong>Download ZIP</strong>.</li>
-      <li>Extract the ZIP and open the <code>.usr</code> file in VuGen, or upload it directly to LoadRunner Enterprise.</li>
+      <li>Download the ZIP — it includes VuGen scripts and a Workload Model Excel file.</li>
     </ol>
 
     <div class="help-callout help-callout-amber">
-      <strong>Multi-script mode:</strong> If your collection has multiple folders (Postman) or thread groups (JMeter), enable <em>Multi-script mode</em> to generate one separate script per folder/group instead of one combined script.
+      <strong>Per-thread-group mode:</strong> Each JMeter Thread Group becomes its own VuGen script. Recommended when thread groups represent different user roles or business flows.
     </div>
+
+    <h3 class="help-h3">What gets converted</h3>
+    <ul class="help-list">
+      <li>HTTP Sampler requests → VuGen web requests with headers and bodies</li>
+      <li>CSVDataSet → VuGen parameterisation with matching data files</li>
+      <li>Extractors (JSON, RegEx, XPath, Boundary) → equivalent VuGen correlation code</li>
+      <li>setUp / tearDown Thread Groups → <code>vuser_init.c</code> / <code>vuser_end.c</code></li>
+      <li>JSR223 Groovy scripts → converted where possible, flagged where manual review needed</li>
+      <li>Thread Group settings → Workload Model Excel (ramp, users, duration)</li>
+    </ul>
   </section>
 
   <!-- ── SECTION: Recorder ───────────────────────────────────────────────── -->
@@ -2184,21 +2277,44 @@ code {
         </table>
       </div>
     </section>
-    <!-- — SECTION: Technology & Privacy ————————————————————— -->
-    <section class="help-section">
-      <h2 class="help-h2">Technology & privacy</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0">
-        <div style="padding:14px 16px;border-radius:var(--r-md,8px);background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15)">
-          <div style="font-weight:700;font-size:0.85rem;margin-bottom:6px;color:var(--primary)">⚙ Built with</div>
-          <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0"><strong>Node.js</strong> server with <strong>Express</strong> web framework. Browser interface works in Chrome, Firefox, Edge, and Safari. Recorder and Script Studio run entirely client-side – no server calls for script generation.</p>
-        </div>
-        <div style="padding:14px 16px;border-radius:var(--r-md,8px);background:rgba(22,163,74,0.06);border:1px solid rgba(22,163,74,0.15)">
-          <div style="font-weight:700;font-size:0.85rem;margin-bottom:6px;color:var(--success,#16a34a)">🔒 Privacy model</div>
-          <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0">All file processing happens <strong>in memory</strong>. Nothing is written to disk. Nothing is stored between requests. Download links expire after 5 minutes and are single-use. No external services are called.</p>
-        </div>
+  <!-- — SECTION: Technology & Privacy ————————————————————— -->
+  <section class="help-section">
+    <h2 class="help-h2">Technology &amp; privacy</h2>
+
+    <div class="help-callout help-callout-green" style="margin-bottom:16px">
+      <strong>🔒 Designed for regulated environments.</strong> PerfX Studio processes all uploaded files in-memory and never writes data to disk. No data persists between requests. This design was chosen specifically to suit enterprise and banking environments where data handling policies are strict.
+    </div>
+
+    <h3 class="help-h3">Data handling — what happens to your files</h3>
+    <div style="overflow-x:auto;margin:10px 0">
+      <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Question</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Answer</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">Is my file saved to disk?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Files are received directly into memory (RAM). No temporary files are created on disk at any point.</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Is my data stored between requests?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Each conversion runs in its own isolated in-memory context. When your request ends, all data is released. The next user starts completely fresh.</td></tr>
+          <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">Can anyone else see my upload?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Data lives only in your request's memory scope. Other users cannot access it, and server logs do not contain file contents.</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Are external services called?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> All processing is local. No data leaves the server other than the ZIP file returned to you.</td></tr>
+          <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">How long does the download link last?</td><td style="padding:8px 12px">Download tokens expire after <strong>5 minutes</strong> and are single-use. Once clicked, the token is invalidated. If it expires, run the conversion again — it takes only a few seconds.</td></tr>
+          <tr><td style="padding:8px 12px;font-weight:600">Do HAR files contain sensitive data?</td><td style="padding:8px 12px">Yes — HAR files exported from your browser contain all request headers, cookies, and response bodies from your recorded session. This may include session tokens, API keys, or personal data. Treat your HAR files as sensitive, use them only on trusted machines, and delete them after conversion.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="help-h3">Technical stack</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0">
+      <div style="padding:14px 16px;border-radius:8px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15)">
+        <div style="font-weight:700;font-size:0.84rem;margin-bottom:6px;color:var(--primary)">⚙ Server</div>
+        <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0"><strong>Node.js</strong> + <strong>Express</strong>. File uploads handled by <strong>Multer</strong> with in-memory storage — no disk writes. File size limits enforced at the upload boundary. Served on your internal network only.</p>
       </div>
-      <p class="help-p">For DPoP, PKCE, and JWT support, the toolkit includes <code>lre-utils.dat</code> – a self-contained cryptographic utility file designed for VuGen's JavaScript engine. It handles EC P-256 key generation, ECDSA signing, RSA-PSS signing, SHA-256 hashing, and PKCE code generation with zero external dependencies. DevWeb uses the built-in Node.js <code>crypto</code> module instead.</p>
-    </section>
+      <div style="padding:14px 16px;border-radius:8px;background:rgba(124,92,252,0.06);border:1px solid rgba(124,92,252,0.15)">
+        <div style="font-weight:700;font-size:0.84rem;margin-bottom:6px;color:#b39dfa">🔐 Crypto library</div>
+        <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0"><code>lre-utils.dat</code> — zero-dependency crypto runtime for VuGen scripts. Handles EC P-256 key gen, ECDSA signing, RSA-PSS (PS256), SHA-256, PKCE pair generation. DevWeb uses Node.js built-in <code>crypto</code>.</p>
+      </div>
+    </div>
+  </section>
   <!-- ── SECTION: Glossary ────────────────────────────────────────────────── -->
   <section class="help-section">
     <h2 class="help-h2">Glossary</h2>
@@ -2253,57 +2369,90 @@ code {
       </ul>
     </section>
 
+  <!-- ── SECTION: FAQ ──────────────────────────────────────────────────── -->
   <section class="help-section">
     <h2 class="help-h2">Frequently Asked Questions</h2>
 
     <div class="help-faq">
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">Which tool should I use?</div>
+        <div class="help-faq-a">It depends on what you already have. If you have a <strong>Postman or Bruno collection</strong>, use the Postman / Bruno Converter. If you have a <strong>JMeter .jmx file</strong>, use the JMeter Converter. If you need to record a new journey and VuGen cannot record on your machine, use the <strong>Recorder</strong>. If you have a HAR file and want deep correlation (tokens, session IDs), use <strong>Script Studio</strong>. The home page also has a decision guide — click <strong>Home</strong> in the navigation.</div>
+      </div>
+
       <div class="help-faq-item">
         <div class="help-faq-q">Which output format should I choose — DevWeb or Web HTTP/HTML?</div>
-        <div class="help-faq-a">Ask your LRE administrator or project lead. If you are starting a new project on LRE 2021 or later, DevWeb (JavaScript) is recommended. For existing projects or older LRE versions, use Web HTTP/HTML (C).</div>
+        <div class="help-faq-a">Ask your LRE administrator or project lead. If your project runs on LRE 2021 or later and there is no existing script convention, choose <strong>DevWeb (JavaScript)</strong> — it is the current default for new projects. If your team has existing VuGen C scripts or uses an older LRE version, choose <strong>Web HTTP/HTML (C)</strong>. You can always convert again with the other format — it takes seconds.</div>
       </div>
-      <div class="help-faq-item">
-        <div class="help-faq-q">My download failed or the ZIP is empty. What happened?</div>
-        <div class="help-faq-a">The download link is single-use and expires after 5 minutes. If you waited too long or clicked the link more than once, go back and run the conversion again — it only takes a few seconds.</div>
-      </div>
-      <div class="help-faq-item">
-        <div class="help-faq-q">My script runs but fails with "invalid token" or "session expired" errors.</div>
-        <div class="help-faq-a">This means the script has a hard-coded value that needs to be correlated. Use Script Studio with 2 HAR files (record the same journey twice) for the most complete correlation. The diff-based analysis will find the values causing the failure.</div>
-      </div>
-      <div class="help-faq-item">
-        <div class="help-faq-q">Can I upload files from a shared drive or network path?</div>
-        <div class="help-faq-a">Yes — the upload areas accept any file you can access from your machine. Just browse to the file location as normal.</div>
-      </div>
+
       <div class="help-faq-item">
         <div class="help-faq-q">Are my files stored on the server?</div>
-        <div class="help-faq-a">No. Files are processed entirely in memory and are never written to disk. Nothing persists on the server between requests. Your data is not accessible to anyone else.</div>
+        <div class="help-faq-a">No. Everything is processed in RAM and immediately discarded when your request completes. Nothing is written to disk, nothing persists between requests, and no other user can see your data. Download links expire after 5 minutes and are single-use. See the <em>Technology &amp; Privacy</em> section for a full breakdown.</div>
       </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">My HAR file contains real session tokens and credentials — is that a security risk?</div>
+        <div class="help-faq-a">The tool itself does not retain your data (see above). However, the HAR file you export from your browser is a sensitive document — it contains all request headers, cookies, session tokens, and API keys from your recorded session. Best practices: <strong>(1)</strong> record against a test environment, not production; <strong>(2)</strong> use test credentials, not personal or admin accounts; <strong>(3)</strong> delete the HAR file from your machine once the conversion is complete; <strong>(4)</strong> never email or share HAR files from production sessions.</div>
+      </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">My script runs but fails with "invalid token" or "session expired" errors.</div>
+        <div class="help-faq-a">The script has a hard-coded value from your recording session that the server no longer accepts — this is a missing correlation. The fix: open <strong>Script Studio</strong>, record the same journey <strong>twice</strong> using different credentials or test data, upload both HAR files, and click Analyze. The diff between the two recordings pinpoints every value that changed between runs — exactly the values that need to be correlated. Accept the suggestions, click Apply &amp; Regenerate, then download the updated script.</div>
+      </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">How do I get the best correlation result from Script Studio?</div>
+        <div class="help-faq-a">Use two HAR files, not one. Record the <em>exact same journey</em> twice with <em>different</em> test data (two different usernames, for example). Script Studio compares the two and identifies every value that changed — these are guaranteed to be dynamic values that need correlation. A single HAR uses pattern matching only and may miss some correlations. After analysis, review each card in the Correlation Advisor — click <strong>Trace</strong> to see where a value came from, and <strong>Accept</strong> to add it. Then click <strong>▶ Apply &amp; Regenerate</strong>.</div>
+      </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">What is the difference between the Recorder and Script Studio?</div>
+        <div class="help-faq-a"><strong>Recorder</strong> captures network traffic and converts it into a basic VuGen script. It is the capture and conversion tool — use it first. <strong>Script Studio</strong> takes one or two HAR files and produces a <em>correlated</em> script — it identifies dynamic values and generates the extraction and reuse code automatically. The recommended workflow is: record with the Recorder (or browser DevTools), then feed the HAR into Script Studio for correlation. Both tools export the same script formats (DevWeb or VuGen C).</div>
+      </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">My download failed or the ZIP is empty. What happened?</div>
+        <div class="help-faq-a">The download link is single-use and expires after 5 minutes. If you waited too long or clicked the link more than once, it will no longer work. Simply run the conversion again — it takes only a few seconds. If the ZIP downloads but appears empty, check that you uploaded the correct file and that the conversion did not show an error message.</div>
+      </div>
+
       <div class="help-faq-item">
         <div class="help-faq-q">The conversion completed but the script doesn't look right. What should I check?</div>
-        <div class="help-faq-a">Check that you uploaded the correct file format (e.g. Postman v2.1, not v2.0). For Bruno collections, make sure you exported from Bruno correctly. For JMeter, ensure the .jmx file is from a supported JMeter version and includes all referenced CSV files.</div>
+        <div class="help-faq-a">First confirm the file format: Postman must be <strong>v2.1</strong> (not v2.0). For Bruno YAML, make sure you exported the full collection (not a single .bru file if your collection spans multiple requests). For JMeter, verify the .jmx was saved from JMeter 3.x or later and that all referenced CSV files were uploaded. If the script is missing auth headers, check that your collection includes an environment file with the relevant variable values.</div>
       </div>
+
       <div class="help-faq-item">
-        <div class="help-faq-q">My application uses DPoP – will the generated script handle it?</div>
-        <div class="help-faq-a">Yes. If your application sends <code>dpop</code> or <code>dpop-pf</code> headers, the toolkit detects them automatically and generates the cryptographic proof code. For VuGen scripts, it loads the crypto library once in <code>vuser_init.c</code> for best performance. No manual setup is needed – just convert or record as normal.</div>
+        <div class="help-faq-q">Can I upload files from a shared drive or network path?</div>
+        <div class="help-faq-a">Yes — the upload areas accept any file accessible from your machine. Browse to the file on your shared drive or network location just as you would on your local drive.</div>
       </div>
-      <div class="help-faq-item">
-        <div class="help-faq-q">My application uses PKCE in its OAuth2 flow – is that handled?</div>
-        <div class="help-faq-a">Yes. The toolkit detects <code>code_challenge</code> in authorization URLs and <code>code_verifier</code> in token exchange bodies. Because these values are client-generated (not server-issued), the script generates a fresh PKCE pair at the start of each iteration using <code>crypto.subtle</code> (DevWeb) or <code>generatePkce()</code> in <code>lre-utils.dat</code> (VuGen). No manual coding is needed.</div>
-      </div>
-      <div class="help-faq-item">
-        <div class="help-faq-q">My application uses Kerberos / NTLM / Windows SSO – is that supported?</div>
-        <div class="help-faq-a">Yes. The toolkit detects Negotiate, Kerberos, and NTLM authentication from response headers and generates the appropriate <code>web_set_user()</code> call in VuGen or <code>setUserCredentials()</code> in DevWeb. It also configures the runtime settings (<code>IntegratedAuthentication=1</code>) automatically.</div>
-      </div>
-      <div class="help-faq-item">
-        <div class="help-faq-q">My application uses JWT tokens in pre-request scripts – will those be converted?</div>
-        <div class="help-faq-a">Yes. The toolkit scans pre-request scripts for JWT signing patterns (jsrsasign, jsonwebtoken, jose, Java JJWT, nimbus-jose-jwt, BouncyCastle, JCA, and others). It extracts the claim mappings and generates equivalent JWT code using <code>lre-utils.dat</code> for VuGen or <code>jwt-helper.js</code> for DevWeb.</div>
-      </div>
+
       <div class="help-faq-item">
         <div class="help-faq-q">Why can't I record in VuGen on my VCSE / Azure machine?</div>
-        <div class="help-faq-a">Corporate security policies and incomplete VuGen installations on VCSE and some Azure machines prevent the built-in proxy-based recording from functioning. Use the Recorder tool instead – it captures traffic through your browser's Developer Tools (F12) as a HAR file, which is then converted into a VuGen script. Open the generated script in VuGen to validate and enhance before uploading to LRE.</div>
+        <div class="help-faq-a">Corporate security policies and incomplete VuGen installations on VCSE and some Azure virtual machines prevent VuGen's built-in proxy recording from working. The <strong>Recorder</strong> tool is the solution — it captures traffic through your browser's built-in Developer Tools (F12 → Network tab), so no proxy or certificate is needed. Export the HAR from DevTools, upload it to the Recorder, and download the VuGen script. Open the script in VuGen to validate and enhance before uploading to LRE.</div>
       </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">My application uses JWT tokens in pre-request scripts — will those be converted?</div>
+        <div class="help-faq-a">Yes. PerfX Studio scans pre-request and test scripts for JWT signing code — including jsrsasign, jsonwebtoken, jose (JavaScript) and JJWT, nimbus-jose-jwt, BouncyCastle, JCA (Java/Groovy). It extracts the claim mappings and generates equivalent signing code: <code>lre-utils.dat</code> + <code>createJWTFromMap()</code> for VuGen, or <code>jwt-helper.js</code> + <code>getJwtTokenFromMap()</code> for DevWeb. Each request with a distinct claim set gets its own JWT call.</div>
+      </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">My application uses DPoP — will the generated script handle it?</div>
+        <div class="help-faq-a">Yes. If your application sends <code>dpop</code> or <code>dpop-pf</code> headers, the toolkit detects them automatically and generates the full cryptographic proof code (RFC 9449). For VuGen, it initialises the EC P-256 key pair once in <code>vuser_init.c</code> and generates a unique signed proof for every request that needs it. No manual configuration is needed.</div>
+      </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">My application uses PKCE in its OAuth2 flow — is that handled?</div>
+        <div class="help-faq-a">Yes. The toolkit detects <code>code_challenge</code> in authorization URLs and <code>code_verifier</code> in token exchange bodies. Because these values are freshly generated by the client on each login, the script generates a new PKCE pair at the start of each iteration using <code>crypto.subtle</code> (DevWeb) or <code>generatePkce()</code> in <code>lre-utils.dat</code> (VuGen). They are never correlated from a server response — the toolkit handles this distinction automatically.</div>
+      </div>
+
+      <div class="help-faq-item">
+        <div class="help-faq-q">My application uses Kerberos / NTLM / Windows SSO — is that supported?</div>
+        <div class="help-faq-a">Yes. The toolkit detects Negotiate, Kerberos, and NTLM challenges from response headers and generates the appropriate authentication code: <code>web_set_user()</code> in VuGen C, or <code>setUserCredentials()</code> in DevWeb. It also sets the runtime configuration (<code>IntegratedAuthentication=1</code>) automatically so no manual VuGen setup is needed.</div>
+      </div>
+
     </div>
-  </div>
-</section>
+  </section>
+
 </div><!-- /.help-wrap -->
 </div><!-- /#portal-help -->
 
