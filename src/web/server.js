@@ -17,11 +17,21 @@
  *    Only reachable from the internal corporate network. Accepted risk.
  *  • File size limit: 2 GB per file (generous for large HAR/JMX files).
  *  • Rate limiting: 60 requests per 5 minutes per IP on conversion endpoints.
+ *  • Concurrency limit: MAX_CONCURRENT_CONVERSIONS env var (default 8) guards CPU/RAM
+ *    under burst load. Requests over the limit receive HTTP 503 immediately.
  *  • Security headers: helmet applied (CSP disabled due to inline scripts in UI).
  *  • Download tokens: crypto.randomBytes(32) — 256-bit CSPRNG entropy.
  *  • Path traversal prevention: all uploaded filenames sanitized before path.join().
  *  • File type validation: allowlist per upload field.
  *  • Error responses: generic codes only — full errors logged server-side.
+ *
+ * Capacity (single process, typical 4-8 core server):
+ *  • 60-70 ACTIVE users throughout the day: handles comfortably.
+ *  • Peak simultaneous conversions: ~8 running + queued at 503 (set by MAX_CONCURRENT_CONVERSIONS).
+ *  • Clustering across cores: NOT safe without a shared download token store — each process
+ *    has its own pendingDownloads Map, so a download request could reach a different process
+ *    than the one that created the token. Use PM2 single-instance mode (see pm2.config.js).
+ *  • Monitor via GET /converter/status — shows activeConversions, memory, pendingDownloads.
  */
 
 "use strict";
@@ -49,6 +59,14 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
 
 /** Abort conversion after 2 minutes to prevent runaway CPU on pathological input. */
 const CONVERSION_TIMEOUT_MS = 120_000;
+
+/**
+ * Maximum simultaneous conversions. Requests beyond this return HTTP 503 immediately
+ * rather than piling up and competing for CPU/RAM.
+ * Tune via MAX_CONCURRENT_CONVERSIONS environment variable.
+ * Rule of thumb: set to number of physical CPU cores on the server.
+ */
+const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_CONVERSIONS, 10) || 8;
 
 const VALID_LOG_LEVELS = new Set(["debug", "info", "warn", "error"]);
 
@@ -127,6 +145,8 @@ class WebServer {
     this.app  = express();
     /** token → { files: Map, outputDir, expires } — single-use, 5-minute TTL */
     this.pendingDownloads = new Map();
+    /** Live count of conversions currently executing (0 … MAX_CONCURRENT). */
+    this.activeConversions = 0;
     this.setupMiddleware();
     this.setupRoutes();
   }
@@ -250,6 +270,17 @@ class WebServer {
           return res.status(400).json({ error: "collection_file_required" });
         }
 
+        // Concurrency guard — prevent CPU/RAM exhaustion under burst load.
+        // Returns 503 immediately; client should retry after a short delay.
+        if (this.activeConversions >= MAX_CONCURRENT) {
+          return res.status(503).json({
+            error: "server_busy",
+            activeConversions: this.activeConversions,
+            maxConcurrent: MAX_CONCURRENT,
+          });
+        }
+        this.activeConversions++;
+
         // Sanitize filenames before building temp paths (F-04: path traversal prevention)
         const safeColName  = sanitizeFilename(collectionFile.originalname);
         const safeEnvName  = environmentFile ? sanitizeFilename(environmentFile.originalname) : null;
@@ -328,6 +359,7 @@ class WebServer {
 
         } finally {
           // Guaranteed cleanup — runs on both success and error paths (F-12 / F-21)
+          this.activeConversions = Math.max(0, this.activeConversions - 1);
           await safeUnlink(tmpCollection);
           await safeUnlink(tmpEnvironment);
           for (const p of Object.values(csvFilePaths)) await safeUnlink(p);
@@ -392,6 +424,15 @@ class WebServer {
         if (!jmxFile) {
           return res.status(400).json({ error: "jmx_file_required" });
         }
+
+        if (this.activeConversions >= MAX_CONCURRENT) {
+          return res.status(503).json({
+            error: "server_busy",
+            activeConversions: this.activeConversions,
+            maxConcurrent: MAX_CONCURRENT,
+          });
+        }
+        this.activeConversions++;
 
         const safeJmxName  = sanitizeFilename(jmxFile.originalname);
         const tmpJmx       = path.join(os.tmpdir(), `lr-jmx-${Date.now()}-${safeJmxName}`);
@@ -474,6 +515,7 @@ class WebServer {
 
         } finally {
           // Guaranteed cleanup (F-12 / F-21)
+          this.activeConversions = Math.max(0, this.activeConversions - 1);
           for (const p of tmpFiles) {
             if (p === tmpSupportDir) await safeRmdir(p);
             else await safeUnlink(p);
@@ -481,6 +523,26 @@ class WebServer {
         }
       }
     );
+
+    // ── Status (ops / monitoring) ──────────────────────────────────────────────
+    // Shows live conversion load and memory usage. Internal use only.
+    const statusHandler = (req, res) => {
+      const mem = process.memoryUsage();
+      res.json({
+        status:            this.activeConversions < MAX_CONCURRENT ? "ok" : "busy",
+        activeConversions: this.activeConversions,
+        maxConcurrent:     MAX_CONCURRENT,
+        pendingDownloads:  this.pendingDownloads.size,
+        memory: {
+          heapUsedMB:  Math.round(mem.heapUsed  / 1024 / 1024),
+          heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+          rssMB:       Math.round(mem.rss        / 1024 / 1024),
+        },
+        uptime: Math.round(process.uptime()) + "s",
+      });
+    };
+    this.app.get("/converter/status", statusHandler);
+    this.app.get("/status", statusHandler);
 
     // ── Health ─────────────────────────────────────────────────────────────────
     // Version removed (F-15) — version info should not be disclosed to any caller.
