@@ -294,17 +294,18 @@ td.mono { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
       </div>
     </div>
     <div class="topbar-actions no-print">
-      <a href="/admin/download/csv?period=<%=preset%>&from=<%=from||''%>&to=<%=to||''%>&token=<%=adminToken%>" class="btn btn-ghost">⬇ CSV</a>
-      <a href="/admin/download/xlsx?period=<%=preset%>&from=<%=from||''%>&to=<%=to||''%>&token=<%=adminToken%>" class="btn btn-green">⬇ Excel</a>
-      <a href="/admin/download/docx?period=<%=preset%>&from=<%=from||''%>&to=<%=to||''%>&token=<%=adminToken%>" class="btn btn-purple">⬇ Word</a>
+      <a href="<%=adminBase%>/download/csv?period=<%=preset%>&from=<%=from||''%>&to=<%=to||''%>" class="btn btn-ghost">⬇ CSV</a>
+      <a href="<%=adminBase%>/download/xlsx?period=<%=preset%>&from=<%=from||''%>&to=<%=to||''%>" class="btn btn-green">⬇ Excel</a>
+      <a href="<%=adminBase%>/download/docx?period=<%=preset%>&from=<%=from||''%>&to=<%=to||''%>" class="btn btn-purple">⬇ Word</a>
       <button class="btn btn-amber no-print" onclick="window.print()">🖨 Print / PDF</button>
+      <a href="<%=adminBase%>/logout" class="btn btn-ghost" title="Sign out">⎋ Logout</a>
     </div>
   </div>
 
   <!-- Period selector -->
   <div class="period-bar no-print">
     <% [['7d','Last 7 days'],['30d','Last 30 days'],['90d','Last 90 days'],['mtd','This month'],['all','All time']].forEach(function(p){ %>
-    <a href="/admin?period=<%=p[0]%>&token=<%=adminToken%>" class="period-btn <%=preset===p[0]?'active':''%>"><%=p[1]%></a>
+    <a href="<%=adminBase%>?period=<%=p[0]%>" class="period-btn <%=preset===p[0]?'active':''%>"><%=p[1]%></a>
     <% }) %>
     <% if(from && to){ %><span class="period-range"><%=from%> → <%=to%></span><% } %>
   </div>
@@ -586,9 +587,9 @@ td.mono { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
 
 </div><!-- /page -->
 
-<script src="/admin/vendor/chart.js"></script>
+<script src="<%=adminBase%>/vendor/chart.js"></script>
 <script>
-var ADMIN_TOKEN = "<%=adminToken%>";
+var ADMIN_BASE = "<%=adminBase%>";
 var evtOffset = 0, evtTotal = 0, PAGE_SIZE = 50, _debTimer = null;
 
 // ── Chart data from server ────────────────────────────────────────────────────
@@ -756,18 +757,18 @@ function clearFilters() {
 }
 
 function buildUrl() {
-  var base = '/admin/api/events?token=' + encodeURIComponent(ADMIN_TOKEN);
+  var parts = ['limit=' + PAGE_SIZE, 'offset=' + evtOffset];
   var tool   = document.getElementById('fTool').value;
   var result = document.getElementById('fResult').value;
   var search = document.getElementById('fSearch').value;
   var from   = document.getElementById('fFrom').value;
   var to     = document.getElementById('fTo').value;
-  if (tool)   base += '&tool='   + encodeURIComponent(tool);
-  if (result) base += '&result=' + encodeURIComponent(result);
-  if (search) base += '&search=' + encodeURIComponent(search);
-  if (from)   base += '&from='   + encodeURIComponent(from);
-  if (to)     base += '&to='     + encodeURIComponent(to);
-  return base + '&limit=' + PAGE_SIZE + '&offset=' + evtOffset;
+  if (tool)   parts.push('tool='   + encodeURIComponent(tool));
+  if (result) parts.push('result=' + encodeURIComponent(result));
+  if (search) parts.push('search=' + encodeURIComponent(search));
+  if (from)   parts.push('from='   + encodeURIComponent(from));
+  if (to)     parts.push('to='     + encodeURIComponent(to));
+  return ADMIN_BASE + '/api/events?' + parts.join('&');
 }
 
 function loadEvents()   { evtOffset = 0; fetchEvents(); }

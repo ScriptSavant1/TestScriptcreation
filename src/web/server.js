@@ -625,84 +625,127 @@ class WebServer {
     });
 
     // ── Admin analytics dashboard ─────────────────────────────────────────────
-    // All /admin/* routes require a valid ADMIN_TOKEN query param or Bearer header.
-    // Returns 404 (not 401) to avoid disclosing that an admin panel exists.
-    const ADMIN_TOKEN = process.env.ADMIN_TOKEN || null;
+    // Auth: token entered once via login form → httpOnly session cookie.
+    // Token never appears in the URL bar, browser history, or server access logs.
+    // Registered at both /admin/* and /converter/admin/* so it works whether IIS
+    // mounts the app at the site root (/admin) or as a sub-app (/converter/admin).
+    const ADMIN_TOKEN  = process.env.ADMIN_TOKEN || null;
+    const ADMIN_COOKIE = "perfx_admin";
+    const COOKIE_OPTS  = { httpOnly: true, sameSite: "Strict", maxAge: 8 * 60 * 60 * 1000 };
 
     const adminAuth = (req, res, next) => {
       if (!ADMIN_TOKEN) return res.status(404).sendFile(path.join(__dirname, "public", "404.html"));
       if (!analytics)   return res.status(503).json({ error: "analytics_unavailable" });
-      const token = req.query.token
-        || (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      if (token !== ADMIN_TOKEN) return res.status(404).sendFile(path.join(__dirname, "public", "404.html"));
-      next();
+
+      // 1. Valid session cookie — clean URL, no token visible
+      const cookies = parseCookies(req);
+      if (cookies[ADMIN_COOKIE] === makeSessionToken(ADMIN_TOKEN)) return next();
+
+      // 2. Token supplied in query string (legacy / first-time link)
+      //    Set cookie then redirect to clean URL so token disappears from bar + history
+      const queryToken  = req.query.token || "";
+      const bearerToken = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      if (queryToken === ADMIN_TOKEN || bearerToken === ADMIN_TOKEN) {
+        res.cookie(ADMIN_COOKIE, makeSessionToken(ADMIN_TOKEN), COOKIE_OPTS);
+        if (queryToken) {
+          const qs = Object.entries(req.query)
+            .filter(([k]) => k !== "token")
+            .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+            .join("&");
+          return res.redirect(302, req.path + (qs ? `?${qs}` : ""));
+        }
+        return next();
+      }
+
+      // 3. No valid auth → show login form
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(adminLoginHtml(false));
     };
 
-    // Serve Chart.js from local node_modules — no CDN dependency.
-    // chart.js v4 uses an exports map that blocks require.resolve() on subpaths,
-    // so we construct the absolute path directly instead.
-    this.app.get("/admin/vendor/chart.js", (req, res) => {
-      const p = path.join(process.cwd(), "node_modules", "chart.js", "dist", "chart.umd.min.js");
-      res.setHeader("Content-Type", "application/javascript");
-      res.setHeader("Cache-Control", "public, max-age=86400");
-      res.sendFile(p, (err) => {
-        if (err) res.status(404).json({ error: "not_found" });
+    // POST login handler (shared between /admin/login and /converter/admin/login)
+    const loginHandler = [
+      express.urlencoded({ extended: false }),
+      (req, res) => {
+        if (!ADMIN_TOKEN) return res.status(404).end();
+        if ((req.body.token || "") === ADMIN_TOKEN) {
+          res.cookie(ADMIN_COOKIE, makeSessionToken(ADMIN_TOKEN), COOKIE_OPTS);
+          const base = req.originalUrl.includes("/converter/admin") ? "/converter/admin" : "/admin";
+          return res.redirect(302, base);
+        }
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(adminLoginHtml(true));
+      },
+    ];
+
+    const logoutHandler = (req, res) => {
+      res.clearCookie(ADMIN_COOKIE);
+      const base = req.originalUrl.includes("/converter/admin") ? "/converter/admin" : "/admin";
+      res.redirect(302, base);
+    };
+
+    // Register all admin routes under both prefixes for IIS compatibility
+    for (const pfx of ["/admin", "/converter/admin"]) {
+      // Chart.js vendor — no auth (just a static file)
+      this.app.get(`${pfx}/vendor/chart.js`, (req, res) => {
+        const p = path.join(process.cwd(), "node_modules", "chart.js", "dist", "chart.umd.min.js");
+        res.setHeader("Content-Type", "application/javascript");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        res.sendFile(p, (err) => { if (err) res.status(404).json({ error: "not_found" }); });
       });
-    });
 
-    // Dashboard HTML
-    this.app.get("/admin", adminAuth, (req, res) => {
-      const preset = req.query.period || "30d";
-      const range  = adminReports.dateRangePreset(preset);
-      const from   = req.query.from || range.from;
-      const to     = req.query.to   || range.to;
-      const stats  = adminReports.getStats({ from, to });
-      res.render("admin", {
-        stats, preset, from, to,
-        adminToken: ADMIN_TOKEN,
+      this.app.post(`${pfx}/login`,  loginHandler);
+      this.app.get(`${pfx}/logout`,  logoutHandler);
+
+      // Dashboard HTML
+      this.app.get(pfx, adminAuth, (req, res) => {
+        const preset = req.query.period || "30d";
+        const range  = adminReports.dateRangePreset(preset);
+        const from   = req.query.from || range.from;
+        const to     = req.query.to   || range.to;
+        const stats  = adminReports.getStats({ from, to });
+        const adminBase = pfx; // pass prefix so EJS builds correct URLs
+        res.render("admin", { stats, preset, from, to, adminBase });
       });
-    });
 
-    // JSON stats API (for AJAX refresh)
-    this.app.get("/admin/api/stats", adminAuth, (req, res) => {
-      const from  = req.query.from  || null;
-      const to    = req.query.to    || null;
-      const stats = adminReports.getStats({ from, to });
-      res.json(stats);
-    });
+      // JSON stats API
+      this.app.get(`${pfx}/api/stats`, adminAuth, (req, res) => {
+        const from  = req.query.from || null;
+        const to    = req.query.to   || null;
+        res.json(adminReports.getStats({ from, to }));
+      });
 
-    // JSON events API (paginated)
-    this.app.get("/admin/api/events", adminAuth, (req, res) => {
-      const { from, to, tool, result, search } = req.query;
-      const limit  = Math.min(parseInt(req.query.limit,  10) || 100, 1000);
-      const offset = parseInt(req.query.offset, 10) || 0;
-      const data = require("../analytics/db").queryEvents({ from, to, tool, result, search, limit, offset });
-      res.json(data);
-    });
+      // JSON events API (paginated)
+      this.app.get(`${pfx}/api/events`, adminAuth, (req, res) => {
+        const { from, to, tool, result, search } = req.query;
+        const limit  = Math.min(parseInt(req.query.limit,  10) || 100, 1000);
+        const offset = parseInt(req.query.offset, 10) || 0;
+        res.json(require("../analytics/db").queryEvents({ from, to, tool, result, search, limit, offset }));
+      });
 
-    // CSV download
-    this.app.get("/admin/download/csv", adminAuth, (req, res) => {
-      const { from, to, tool, result } = req.query;
-      const rows = require("../analytics/db").queryAllForExport({ from, to, tool, result });
-      csvExporter.streamCsv(res, rows, `perfx-analytics-${isoDate()}.csv`);
-    });
+      // CSV download
+      this.app.get(`${pfx}/download/csv`, adminAuth, (req, res) => {
+        const { from, to, tool, result } = req.query;
+        const rows = require("../analytics/db").queryAllForExport({ from, to, tool, result });
+        csvExporter.streamCsv(res, rows, `perfx-analytics-${isoDate()}.csv`);
+      });
 
-    // XLSX download
-    this.app.get("/admin/download/xlsx", adminAuth, async (req, res) => {
-      const { from, to, tool, result } = req.query;
-      const preset = req.query.period || "custom";
-      const rows   = require("../analytics/db").queryAllForExport({ from, to, tool, result });
-      const stats  = adminReports.getStats({ from, to });
-      await xlsxExporter.streamXlsx(res, stats, rows, periodLabel(preset, from, to));
-    });
+      // XLSX download
+      this.app.get(`${pfx}/download/xlsx`, adminAuth, async (req, res) => {
+        const { from, to, tool, result } = req.query;
+        const preset = req.query.period || "custom";
+        const rows   = require("../analytics/db").queryAllForExport({ from, to, tool, result });
+        const stats  = adminReports.getStats({ from, to });
+        await xlsxExporter.streamXlsx(res, stats, rows, periodLabel(preset, from, to));
+      });
 
-    // DOCX download
-    this.app.get("/admin/download/docx", adminAuth, async (req, res) => {
-      const { from, to } = req.query;
-      const preset = req.query.period || "custom";
-      const stats  = adminReports.getStats({ from, to });
-      await docxExporter.streamDocx(res, stats, periodLabel(preset, from, to));
-    });
+      // DOCX download
+      this.app.get(`${pfx}/download/docx`, adminAuth, async (req, res) => {
+        const { from, to } = req.query;
+        const preset = req.query.period || "custom";
+        const stats  = adminReports.getStats({ from, to });
+        await docxExporter.streamDocx(res, stats, periodLabel(preset, from, to));
+      });
+    }
 
     // ── Catch-all 404 ──────────────────────────────────────────────────────────
     this.app.use((req, res) => {
@@ -743,6 +786,58 @@ class WebServer {
 }
 
 // ── Module-level helpers for admin routes ─────────────────────────────────────
+
+/** Parse Cookie header without cookie-parser. Returns plain key→value object. */
+function parseCookies(req) {
+  const result = {};
+  for (const part of (req.headers.cookie || "").split(";")) {
+    const idx = part.indexOf("=");
+    if (idx < 1) continue;
+    result[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+  }
+  return result;
+}
+
+/** Derive session cookie value from raw token — never stores the token directly. */
+function makeSessionToken(rawToken) {
+  return crypto.createHmac("sha256", rawToken).update("perfx-admin-v1").digest("hex");
+}
+
+/** Inline login page — no separate view file. showError = true adds a "wrong token" message. */
+function adminLoginHtml(showError) {
+  const err = showError
+    ? `<p style="color:#EF4444;font-size:12px;margin-top:10px">Incorrect token — try again.</p>`
+    : "";
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PerfX Studio — Admin</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:dark}
+body{background:#0A0D14;color:#E2E8F0;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.box{background:#141721;border:1px solid #252A40;border-radius:16px;padding:44px 40px;width:340px;text-align:center;box-shadow:0 8px 48px rgba(0,0,0,.6)}
+.logo{width:58px;height:58px;background:linear-gradient(135deg,#1D4ED8,#7C3AED);border-radius:14px;margin:0 auto 22px;display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 0 24px rgba(59,130,246,.35)}
+h1{font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em;margin-bottom:4px}
+.sub{font-size:13px;color:#8B95B0;margin-bottom:28px}
+input{width:100%;background:#0A0D14;border:1px solid #252A40;border-radius:8px;padding:12px 14px;font-size:14px;color:#E2E8F0;outline:none;margin-bottom:12px;transition:border-color .15s}
+input:focus{border-color:#3B82F6}
+button{width:100%;background:#3B82F6;color:#fff;border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s}
+button:hover{opacity:.88}
+</style>
+</head><body>
+<div class="box">
+  <div class="logo">📊</div>
+  <h1>PerfX Studio</h1>
+  <p class="sub">Analytics Admin</p>
+  <form method="POST" action="login">
+    <input type="password" name="token" placeholder="Enter admin token" autocomplete="current-password" autofocus>
+    <button type="submit">Sign in &rarr;</button>
+    ${err}
+  </form>
+</div>
+</body></html>`;
+}
 
 function isoDate() {
   return new Date().toISOString().slice(0, 10);
