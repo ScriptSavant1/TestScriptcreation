@@ -84,6 +84,7 @@ function loadFile(file, slot) {
       if (slot === 1) {
         S.har1 = parsed;
         S.isNetLog1 = netlog;
+        S.har1Name = file.name;
         markLoaded(1, file.name, netlog);
         studioBuildDomains(parsed);
         studioInitFilters();
@@ -95,6 +96,7 @@ function loadFile(file, slot) {
       } else {
         S.har2 = parsed;
         S.isNetLog2 = netlog;
+        S.har2Name = file.name;
         markLoaded(2, file.name, netlog);
       }
       updateUploadState();
