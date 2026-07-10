@@ -123,8 +123,29 @@ async function dlZip(fmt) {
     a.click();
   }
 
+  const _pingStart = Date.now();
   if (isWeb) await makeWebHttpZip();
   if (isDev) await makeDevWebZip();
+
+  // Silently record Studio usage — server has no other way to observe this.
+  try {
+    const _entries = (S.entries1 || []).filter(function(e){ return !e.filtered && !e.isMarker; });
+    const _corrs   = (S.correlations || []).filter(function(c){ return !c._suppressed; });
+    const _found   = ((S.advisorCandidates || S.candidates || []).length + _corrs.length) || null;
+    fetch("/analytics/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tool: "studio", protocol: fmt,
+        filename: S.har1Name || null,
+        requestCount: _entries.length || null,
+        correlationsFound: _found,
+        correlationsAccepted: _corrs.length || null,
+        result: "success",
+        duration: Date.now() - _pingStart,
+      }),
+    }).catch(function(){});
+  } catch (_) {}
 }
 
 
