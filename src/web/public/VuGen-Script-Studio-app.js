@@ -82,6 +82,7 @@ function loadFile(file, slot) {
       if (slot === 1) {
         S.har1 = parsed;
         S.isNetLog1 = netlog;
+        S.har1Name = file.name;
         markLoaded(1, file.name, netlog);
         studioBuildDomains(parsed);
         studioInitFilters();
@@ -93,6 +94,7 @@ function loadFile(file, slot) {
       } else {
         S.har2 = parsed;
         S.isNetLog2 = netlog;
+        S.har2Name = file.name;
         markLoaded(2, file.name, netlog);
       }
       updateUploadState();
@@ -4013,8 +4015,31 @@ async function dlZip(fmt) {
     a.click();
   }
 
+  const _pingStart = Date.now();
   if (isWeb) await makeWebHttpZip();
   if (isDev) await makeDevWebZip();
+
+  // Silently ping analytics endpoint so Studio usage is recorded server-side.
+  // analytics-device.js will add the X-Perfx-Fp fingerprint header automatically.
+  try {
+    const _activeEntries = (S.entries1 || []).filter(function(e){ return !e.filtered && !e.isMarker; });
+    const _activeCorrs   = (S.correlations || []).filter(function(c){ return !c._suppressed; });
+    const _candidateCount = (S.advisorCandidates || S.candidates || []).length;
+    fetch("/analytics/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tool:                 "studio",
+        protocol:             fmt,
+        filename:             S.har1Name || null,
+        requestCount:         _activeEntries.length || null,
+        correlationsFound:    (_candidateCount + _activeCorrs.length) || null,
+        correlationsAccepted: _activeCorrs.length || null,
+        result:               "success",
+        duration:             Date.now() - _pingStart,
+      }),
+    }).catch(function(){});
+  } catch (_) {}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

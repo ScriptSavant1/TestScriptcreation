@@ -47,7 +47,7 @@
   var _origFetch = window.fetch;
   window.fetch = function (url, options) {
     var urlStr = typeof url === "string" ? url : (url && url.url) || "";
-    if (urlStr.indexOf("/converter/convert") !== -1 || urlStr.indexOf("/tools/") !== -1) {
+    if (urlStr.indexOf("/converter/convert") !== -1 || urlStr.indexOf("/tools/") !== -1 || urlStr.indexOf("/analytics/track") !== -1) {
       options        = options        || {};
       options.headers = options.headers || {};
       // Don't overwrite if already set
