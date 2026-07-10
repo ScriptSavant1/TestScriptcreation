@@ -638,16 +638,16 @@ class WebServer {
       next();
     };
 
-    // Serve Chart.js from local node_modules — no CDN dependency
+    // Serve Chart.js from local node_modules — no CDN dependency.
+    // chart.js v4 uses an exports map that blocks require.resolve() on subpaths,
+    // so we construct the absolute path directly instead.
     this.app.get("/admin/vendor/chart.js", (req, res) => {
-      try {
-        const p = require.resolve("chart.js/dist/chart.umd.min.js");
-        res.setHeader("Content-Type", "application/javascript");
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        res.sendFile(p);
-      } catch (_) {
-        res.status(404).json({ error: "not_found" });
-      }
+      const p = path.join(process.cwd(), "node_modules", "chart.js", "dist", "chart.umd.min.js");
+      res.setHeader("Content-Type", "application/javascript");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.sendFile(p, (err) => {
+        if (err) res.status(404).json({ error: "not_found" });
+      });
     });
 
     // Dashboard HTML
