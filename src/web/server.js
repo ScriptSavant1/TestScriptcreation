@@ -594,6 +594,36 @@ class WebServer {
     this.app.get("/health", healthHandler);
     this.app.get("/converter/health", healthHandler);
 
+    // ── Studio analytics ping ─────────────────────────────────────────────────
+    // No auth required — Studio generates scripts entirely client-side, so this
+    // is the only way to record Studio usage. Input is untrusted; we sanitise.
+    this.app.post("/analytics/track", express.json({ limit: "2kb" }), (req, res) => {
+      res.status(204).end(); // respond immediately, work happens below
+      if (!analytics) return;
+      try {
+        const b = req.body || {};
+        const event = analytics.startEvent(req, "studio");
+        const proto = String(b.protocol || "").slice(0, 32) || null;
+        const fname = b.filename ? String(b.filename).slice(0, 255) : null;
+        event.protocol    = proto;
+        event.script_mode = "studio";
+        event.filename    = fname;
+        event.file_ext    = fname ? require("path").extname(fname).toLowerCase() || null : null;
+        event.file_size_kb = null; // HAR is loaded in-browser; size not available
+        // Client-reported duration: override the internal timer
+        const dur = parseInt(b.duration, 10);
+        if (dur > 0) event._startMs = Date.now() - dur;
+        analytics.finishEvent(event, {
+          result:               "success",
+          requestCount:         parseInt(b.requestCount, 10) || null,
+          correlationsFound:    parseInt(b.correlationsFound, 10) || null,
+          correlationsAccepted: parseInt(b.correlationsAccepted, 10) || null,
+        });
+      } catch (err) {
+        console.warn("[analytics] studio track failed:", err.message);
+      }
+    });
+
     // ── Admin analytics dashboard ─────────────────────────────────────────────
     // All /admin/* routes require a valid ADMIN_TOKEN query param or Bearer header.
     // Returns 404 (not 401) to avoid disclosing that an admin panel exists.
