@@ -366,7 +366,9 @@ class WebServer {
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
           _evtResult   = "success";
-          _evtReqCount = results.analysis?.requestCount || null;
+          _evtReqCount = results.analysis?.totalRequests
+            || results.analysis?.requests?.total
+            || null;
 
           res.json({
             success:     true,
@@ -529,7 +531,9 @@ class WebServer {
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
           _evtJResult   = "success";
-          _evtJReqCount = results.analysis?.requestCount || null;
+          _evtJReqCount = results.threadGroups
+            ? results.threadGroups.reduce((s, tg) => s + (tg.requestCount || 0), 0) || null
+            : results.analysis?.totalRequests || null;
 
           res.json({
             success:     true,
