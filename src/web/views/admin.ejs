@@ -600,7 +600,10 @@ var SUCCESS   = <%- stats.successCount %>;
 var FAIL      = <%- stats.failCount %>;
 var TIMEOUT   = <%- stats.timeoutCount %>;
 
-// ── Chart defaults ────────────────────────────────────────────────────────────
+// ── Chart defaults (guard in case Chart.js fails to load) ────────────────────
+if (typeof Chart === 'undefined') {
+  console.warn('Chart.js not loaded — charts will not render');
+} else {
 Chart.defaults.color = '#8B95B0';
 Chart.defaults.font.family = "-apple-system,'Segoe UI',system-ui,sans-serif";
 Chart.defaults.font.size = 12;
@@ -728,6 +731,8 @@ if (trendData.length) {
     }
   });
 }
+
+} // end Chart.js guard
 
 // ── Event log ─────────────────────────────────────────────────────────────────
 var TOOL_LABELS = { converter: 'Converter', jmx: 'JMeter', recorder: 'Recorder', studio: 'Studio' };
