@@ -36,6 +36,10 @@
 
 "use strict";
 
+// Load .env file if present (local dev / server deployment without system env vars).
+// Does nothing if .env doesn't exist — system env vars still take precedence.
+require("dotenv").config();
+
 const express    = require("express");
 const multer     = require("multer");
 const path       = require("path");
