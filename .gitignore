@@ -33,3 +33,8 @@ demo.jpeg
 PerfX-Studio-Demo.pptx
 Docs/FUNCTIONAL-SPEC.md
 Docs/FUNCTIONAL-SPEC.md
+node_modules/
+# Local environment config — never commit tokens or secrets
+.env
+.env.local
+logs/
