@@ -159,6 +159,22 @@ async function safeRmdir(p) {
   });
 }
 
+/**
+ * Map a caught error to a specific analytics error code.
+ * Keeps error_code meaningful without leaking internal paths to the client.
+ */
+function classifyError(err) {
+  if (err.isTimeout) return "conversion_timeout";
+  const msg  = (err.message || "").toLowerCase();
+  const name = err.constructor?.name || "";
+  if (name === "SyntaxError" || msg.includes("json") && msg.includes("parse")) return "parse_error";
+  if (msg.includes("unsupported") || msg.includes("not supported"))             return "unsupported_format";
+  if (msg.includes("no requests") || msg.includes("empty"))                     return "empty_input";
+  if (msg.includes("enoent") || msg.includes("no such file"))                   return "file_not_found";
+  if (msg.includes("out of memory") || err.code === "ENOMEM")                   return "out_of_memory";
+  return "conversion_failed";
+}
+
 // ── WebServer class ───────────────────────────────────────────────────────────
 
 class WebServer {
@@ -385,10 +401,10 @@ class WebServer {
         } catch (err) {
           // Log full error server-side; send generic code to client (F-07)
           console.error("[convert-error]", err.message, err.isTimeout ? "(timeout)" : "");
-          const status = err.isTimeout ? 408 : 500;
-          const code   = err.isTimeout ? "conversion_timeout" : "conversion_failed";
+          const status    = err.isTimeout ? 408 : 500;
+          const code      = err.isTimeout ? "conversion_timeout" : "conversion_failed";
           _evtResult  = err.isTimeout ? "timeout" : "failed";
-          _evtErrCode = code;
+          _evtErrCode = classifyError(err);
           res.status(status).json({ error: code });
 
         } finally {
@@ -554,10 +570,10 @@ class WebServer {
 
         } catch (err) {
           console.error("[convert-jmx-error]", err.message, err.isTimeout ? "(timeout)" : "");
-          const status = err.isTimeout ? 408 : 500;
-          const code   = err.isTimeout ? "conversion_timeout" : "conversion_failed";
+          const status     = err.isTimeout ? 408 : 500;
+          const code       = err.isTimeout ? "conversion_timeout" : "conversion_failed";
           _evtJResult  = err.isTimeout ? "timeout" : "failed";
-          _evtJErrCode = code;
+          _evtJErrCode = classifyError(err);
           res.status(status).json({ error: code });
 
         } finally {

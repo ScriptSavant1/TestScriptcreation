@@ -540,10 +540,10 @@ td.mono { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
     <div class="filters no-print">
       <select id="fTool" onchange="loadEvents()">
         <option value="">All tools</option>
-        <option value="converter">Converter</option>
-        <option value="jmx">JMeter</option>
+        <option value="converter">Postman / Bruno Converter</option>
+        <option value="jmx">JMX Converter</option>
         <option value="recorder">Recorder</option>
-        <option value="studio">Studio</option>
+        <option value="studio">Script Studio</option>
       </select>
       <select id="fResult" onchange="loadEvents()">
         <option value="">All results</option>
@@ -736,7 +736,7 @@ if (trendData.length) {
 } // end Chart.js guard
 
 // ── Event log ─────────────────────────────────────────────────────────────────
-var TOOL_LABELS = { converter: 'Converter', jmx: 'JMeter', recorder: 'Recorder', studio: 'Studio' };
+var TOOL_LABELS = { converter: 'Postman/Bruno', jmx: 'JMX', recorder: 'Recorder', studio: 'Studio' };
 var TOOL_BADGE  = { converter: 'badge-blue', jmx: 'badge-amber', recorder: 'badge-purple', studio: 'badge-green' };
 var RESULT_BADGE = { success: 'badge-green', failed: 'badge-red', timeout: 'badge-amber' };
 
@@ -807,7 +807,7 @@ function fetchEvents() {
         var fname  = r.filename ? '<span title="' + escHtml(r.filename) + '" style="font-family:var(--mono);font-size:11px">' + escHtml(r.filename.length > 28 ? '…' + r.filename.slice(-26) : r.filename) + '</span>' : '—';
         var corr   = fmtCorr(r.correlations_found, r.correlations_accepted);
         var rbadge = RESULT_BADGE[r.result] || 'badge-gray';
-        var err    = r.error_code ? '<br><span style="font-size:10px;color:var(--text-faint)">' + escHtml(r.error_code) + '</span>' : '';
+        var err    = r.error_code ? '<br><span title="Error code" style="font-size:10px;color:#EF4444;opacity:.8;font-family:var(--mono)">' + escHtml(r.error_code) + '</span>' : '';
         html += '<tr>'
           + '<td class="mono" style="font-size:11px;white-space:nowrap;color:var(--text-dim)">' + ts + '</td>'
           + '<td><span style="font-weight:600;font-size:12px">' + host + '</span></td>'
