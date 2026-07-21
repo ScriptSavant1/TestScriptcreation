@@ -2,7 +2,7 @@
 
 > Convert Postman/Bruno collections, JMeter scripts, and browser recordings into production-ready LoadRunner Enterprise VuGen scripts — automatically.
 
-**Version:** 2.9.2 | **Internal tool — bank's performance engineering platform**
+**Version:** 2.10.13 | **Internal tool — bank's performance engineering platform**
 
 ---
 
@@ -270,6 +270,7 @@ npm test -- --coverage                     # With coverage
 
 | Version | Key Changes |
 |---|---|
+| **v2.10.13** | Dead file cleanup; DPoP copy bug fix; Node 20 docs alignment; devErrors disabled |
 | **v2.9.2** | PKCE (RFC 7636) support — Converter + Script Studio |
 | **v2.9.0** | DPoP (RFC 9449) full support; HTML entity decoding for PEM keys |
 | **v2.8.0** | Value-Based Auto-Correlation (VBAC) engine in Script Studio |
