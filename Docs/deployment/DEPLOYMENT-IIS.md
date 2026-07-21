@@ -9,16 +9,24 @@
 
 ## Before You Start -- Prerequisites Checklist
 
-Confirm all items below before starting. Every component must be installed on the **server**, not your local PC.
+The IIS server is a **zero-trust machine with no internet access**. All installers must be downloaded on your local machine (or any internet-connected machine) and transferred to the server via file share or shared drive before starting.
+
+**What must be installed on the IIS server:**
 
 | # | Component | Where to get it |
 |---|-----------|----------------|
 | [ ] | Windows Server 2019 or 2022 with IIS enabled | Windows Features |
-| [ ] | Node.js **18 LTS** (not 20 or 22) | nodejs.org -- choose "18.x.x LTS" |
-| [ ] | IIS URL Rewrite Module 2.1 | Microsoft IIS downloads page -- `rewrite_amd64_en-US.msi` |
-| [ ] | iisnode v0.2.26 | GitHub: Azure/iisnode Releases -- `iisnode-full-v0.2.26-x64.msi` |
-| [ ] | PerfX Studio deployment package (ZIP) | Provided by your team |
+| [ ] | Node.js **18 LTS** installer (`.msi`) | Download on local machine from nodejs.org, then copy to server |
+| [ ] | IIS URL Rewrite Module 2.1 (`rewrite_amd64_en-US.msi`) | Download on local machine from Microsoft IIS downloads page, then copy to server |
+| [ ] | iisnode v0.2.26 (`iisnode-full-v0.2.26-x64.msi`) | Download on local machine from GitHub: Azure/iisnode Releases, then copy to server |
 | [ ] | Administrator access on the server | Required for all steps |
+
+**What must be installed on your local developer machine (VCSE):**
+
+| # | Component | Why needed |
+|---|-----------|-----------|
+| [ ] | Node.js **18 LTS** (same version as the server) | To run `npm install` in Step 5 -- must match server version exactly |
+| [ ] | PerfX Studio source code | To build `node_modules` and prepare deployment files |
 
 ---
 
@@ -28,7 +36,10 @@ The application is deployed to: `D:\MSINetData\WWW\converter\`
 
 This folder sits inside your IIS website root (`D:\MSINetData\WWW\`) as the `converter` application.
 
-### Copy these files and folders
+### Copy these files and folders to the server
+
+All items below go into `D:\MSINetData\WWW\converter\` on the IIS server.
+`node_modules\` is built on your local machine first (Step 5), then copied here.
 
 ```
 D:\MSINetData\WWW\converter\
@@ -44,6 +55,9 @@ D:\MSINetData\WWW\converter\
 |   +-- web\
 |       +-- public\
 |       +-- views\
+|
++-- node_modules\               <- built locally (Step 5), then copied here
+|                                  tens of thousands of files -- copy last
 |
 +-- app.js                      <- IIS entry point (iisnode starts here)
 +-- web.config                  <- IIS routing rules
@@ -62,13 +76,6 @@ D:\MSINetData\WWW\converter\
 +-- transport.pem               <- transport certificate
 ```
 
-### Also copy node_modules (built on your local machine first)
-
-The IIS server has no internet access, so `npm install` cannot run on it.
-Build `node_modules` on your **local developer machine** and copy the entire folder to the server.
-
-See **Step 5** for the exact procedure.
-
 ### Do NOT copy these
 
 | Path | Why not |
@@ -84,10 +91,12 @@ See **Step 5** for the exact procedure.
 
 ## Step 1 of 11 -- Install Node.js 18 LTS
 
-1. On the server, open a browser and go to **nodejs.org**
-2. Download the installer labelled **"18.x.x LTS"** (green button). Do not choose version 20 or 22.
-3. Run the installer as **Administrator**. Accept all defaults.
-4. Verify in **Command Prompt (as Administrator)**:
+> **The server has no internet access.** Download the installer on your local machine and copy it to the server first.
+
+1. On your **local machine**, go to **nodejs.org** and download the Windows installer labelled **"18.x.x LTS"** (file: `node-v18.x.x-x64.msi`). Do not choose version 20 or 22.
+2. Copy the `.msi` file to the IIS server via file share or shared drive
+3. On the server, run the `.msi` installer as **Administrator**. Accept all defaults.
+4. Verify in **Command Prompt (as Administrator)** on the server:
 
 ```cmd
 C:\> node --version
@@ -105,9 +114,11 @@ Should print:  9.x.x or 10.x.x
 
 Without this module, every page on the site returns a 404 error.
 
-1. Search the web for **"IIS URL Rewrite 2.1 download"** and go to the Microsoft IIS downloads page
-2. Download the **x64 English** installer (`rewrite_amd64_en-US.msi`)
-3. Run the installer as **Administrator** -- accept the license and click **Install**
+> **The server has no internet access.** Download the installer on your local machine and copy it to the server first.
+
+1. On your **local machine**, search the web for **"IIS URL Rewrite 2.1 download"** and download the **x64 English** installer (`rewrite_amd64_en-US.msi`) from the Microsoft IIS downloads page
+2. Copy the `.msi` file to the IIS server via file share or shared drive
+3. On the server, run the installer as **Administrator** -- accept the license and click **Install**
 4. After installation, restart IIS:
 
 ```cmd
@@ -120,9 +131,11 @@ C:\> iisreset
 
 iisnode bridges IIS and Node.js, letting IIS host Node.js applications.
 
-1. Go to **github.com/Azure/iisnode** -> click **Releases**
-2. Download **iisnode-full-v0.2.26-x64.msi**
-3. Run the installer as **Administrator**, accept all prompts
+> **The server has no internet access.** Download the installer on your local machine and copy it to the server first.
+
+1. On your **local machine**, go to **github.com/Azure/iisnode** -> click **Releases** -> download **iisnode-full-v0.2.26-x64.msi**
+2. Copy the `.msi` file to the IIS server via file share or shared drive
+3. On the server, run the installer as **Administrator**, accept all prompts
 
 **How to confirm it worked:**
 Open IIS Manager -> click the server name in the left panel -> double-click **Handler Mappings** -> look for an entry named **iisnode** in the list.
@@ -140,7 +153,7 @@ Open IIS Manager -> click the server name in the left panel -> double-click **Ha
 C:\> mkdir D:\MSINetData\WWW\converter
 ```
 
-3. Copy all files from the "Files to Deploy" list into `D:\MSINetData\WWW\converter\`
+3. Copy all application source files from the "Files and Folders to Deploy" list into `D:\MSINetData\WWW\converter\` -- everything **except** `node_modules\` (that comes in Step 5)
 4. Open File Explorer and verify: `app.js`, `web.config`, and the `src` folder must be visible **directly inside** `D:\MSINetData\WWW\converter\` -- not inside a subfolder
 
 > **WARNING:** If everything is one level too deep (e.g., `converter\converter\app.js`), move all files up one level. `app.js` and `web.config` must be at the root of `D:\MSINetData\WWW\converter\`.
@@ -401,10 +414,10 @@ Only `ADMIN_TOKEN` is required.
 | 404 Not Found | URL Rewrite not installed or web.config missing | Confirm `web.config` exists in `D:\MSINetData\WWW\converter\`. Confirm URL Rewrite installed (Step 2). Run `iisreset`. |
 | 403 Forbidden | NetworkService lacks read permission | Re-run the `icacls` commands from Step 9. |
 | Admin page is a 404 | ADMIN_TOKEN not set | Go back to Step 7. Confirm the name is exactly `ADMIN_TOKEN` (all caps). Recycle the app pool. |
-| Blank page, no error | node_modules missing | Run `npm install --production` in `D:\MSINetData\WWW\converter\`. |
+| Blank page, no error | node_modules missing or incomplete | On your **local machine** run `npm install --production`, then copy the `node_modules\` folder to `D:\MSINetData\WWW\converter\` on the server (Step 5). |
 | 413 Request Entity Too Large | IIS blocking large file uploads | Confirm `maxAllowedContentLength="104857600"` in `web.config`. |
 | App pool keeps crashing | Rapid-fail protection triggered | Open Windows Event Viewer -> Windows Logs -> Application. Look for WAS or iisnode errors. |
-| Cannot find module 'better-sqlite3' | Wrong Node.js version during install | Confirm Node.js 18 (`node --version`). Delete `node_modules\` and rerun `npm install --production`. |
+| Cannot find module 'better-sqlite3' | Node.js version mismatch between local machine and server | Run `node --version` on both machines -- both must print `v18.x.x`. Fix whichever is wrong, then re-run `npm install --production` on your local machine and re-copy `node_modules\` to the server. |
 
 ### Where to find log files
 
