@@ -62,11 +62,17 @@ D:\MSINetData\WWW\converter\
 +-- transport.pem               <- transport certificate
 ```
 
+### Also copy node_modules (built on your local machine first)
+
+The IIS server has no internet access, so `npm install` cannot run on it.
+Build `node_modules` on your **local developer machine** and copy the entire folder to the server.
+
+See **Step 5** for the exact procedure.
+
 ### Do NOT copy these
 
 | Path | Why not |
 |------|---------|
-| `node_modules\` | Run `npm install` on the server instead -- never copy this folder |
 | `.env` | Create fresh on the server (contains password) |
 | `.git\` | Source control history -- not needed at runtime |
 | `data\` | Auto-created by the app on first run |
@@ -141,21 +147,43 @@ C:\> mkdir D:\MSINetData\WWW\converter
 
 ---
 
-## Step 5 of 11 -- Install Node.js Dependencies
+## Step 5 of 11 -- Build and Copy Node.js Dependencies
 
-This command downloads all libraries the application needs. It reads `package.json` and creates the `node_modules` folder automatically.
+The IIS server is a zero-trust machine with no internet access, so `npm install` must run on your **local developer machine** (VCSE machine). You then copy the resulting `node_modules` folder to the server.
+
+> **Why:** `npm install` downloads packages from the internet (npmjs.com or an Artifactory registry). Without internet access on the server, it would fail.
+
+### 5a -- Run npm install on your local machine
+
+Open **Command Prompt or PowerShell** on your local developer machine:
 
 ```cmd
-C:\> cd D:\MSINetData\WWW\converter
+cd C:\path\to\your\bruno-devweb-converter
 
-D:\MSINetData\WWW\converter> npm install --production
+npm install --production
 ```
 
 Wait 1-3 minutes. At the end you will see: `added NNN packages in Xs`
 
-> **WARNING:** Do not close the window while it runs. Many lines scroll past -- this is normal.
+> **Note:** Run this with the **same Node.js 18 version** that is installed on the IIS server. If versions differ, some native modules (e.g., `better-sqlite3`) may fail to load on the server.
 
-> **Success:** A `node_modules` folder now appears in `D:\MSINetData\WWW\converter\`. It contains hundreds of subfolders -- this is correct.
+### 5b -- Copy node_modules to the IIS server
+
+Copy the entire `node_modules` folder from your local machine to the server:
+
+```
+Source (your local machine):
+  C:\path\to\bruno-devweb-converter\node_modules\
+
+Destination (IIS server):
+  D:\MSINetData\WWW\converter\node_modules\
+```
+
+Use any file transfer method available on your network -- Windows file share (UNC path), SFTP, or a shared drive.
+
+> **WARNING:** `node_modules` contains tens of thousands of small files. Copying over a network can take several minutes. Do not interrupt the transfer.
+
+> **Success:** After copying, `D:\MSINetData\WWW\converter\node_modules\` exists on the server and contains many subfolders (express, multer, better-sqlite3, etc.).
 
 ---
 
@@ -337,14 +365,12 @@ Click the **Logout** button in the top-right corner of the dashboard.
 
 When a new version is released, the ADMIN_TOKEN set in IIS persists -- you do not need to set it again.
 
-1. Copy all files from the "Files to Deploy" list into `D:\MSINetData\WWW\converter\`, replacing existing files
-2. Do **not** delete `node_modules\` unless instructed -- run npm install to update it
+1. Copy all updated files from the "Files to Deploy" list into `D:\MSINetData\WWW\converter\`, replacing existing files
+2. On your **local developer machine**, run `npm install --production` to update `node_modules`, then copy it to the server (same procedure as Step 5)
+3. Skip step 2 if `package.json` has not changed -- no new dependencies means no need to re-copy `node_modules`
 
 ```cmd
-cd D:\MSINetData\WWW\converter
-npm install --production
-
-REM Recycle the pool to load new code -- no IIS restart needed
+REM On the IIS server -- recycle the pool to load new code (no IIS restart needed)
 %windir%\system32\inetsrv\appcmd recycle apppool /apppool.name:"perfx-studio-pool"
 ```
 
