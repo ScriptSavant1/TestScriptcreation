@@ -151,7 +151,7 @@ class BrunoParser {
         this.flushSection(request, currentSection, currentContent);
         currentSection = 'meta';
         currentContent = [];
-      } else if (line.match(/^(get|post|put|patch|delete|head|options)/i)) {
+      } else if (line.match(/^(get|post|put|patch|delete|head|options)\s+/i)) {
         this.flushSection(request, currentSection, currentContent);
         const parts = line.split(/\s+/);
         request.method = parts[0].toUpperCase();
