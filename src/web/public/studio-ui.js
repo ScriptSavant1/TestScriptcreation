@@ -378,6 +378,20 @@ function switchTab(el, tab) {
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDER RESULTS
 // ═══════════════════════════════════════════════════════════════════════════
+function toggleCorrRandSelect(idx) {
+  const c = S.correlations[idx];
+  if (!c) return;
+  if (c.extractorType === "random_select") {
+    c.extractorType = "jsonpath";
+    if (c.extractorConfig) c.extractorConfig.selectAll = true;
+  } else if (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) {
+    c.extractorType = "random_select";
+  } else {
+    return;
+  }
+  regenerateFromAdvisor();
+}
+
 function renderCorrelations() {
   const list = document.getElementById("corr-list");
   let html = "";
