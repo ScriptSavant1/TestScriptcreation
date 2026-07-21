@@ -1011,7 +1011,7 @@ ${finalizeSection}
         const path = require("path");
         const PROJECT_ROOT = path.join(__dirname, "..", "..", "..");
         const dpopHelperSrc = path.join(PROJECT_ROOT, "dpop-helper.js");
-        if (!fs.existsSync(dpopHelperSrc)) {
+        if (fs.existsSync(dpopHelperSrc)) {
           fs.copyFileSync(
             dpopHelperSrc,
             path.join(outputDir, "dpop-helper.js"),

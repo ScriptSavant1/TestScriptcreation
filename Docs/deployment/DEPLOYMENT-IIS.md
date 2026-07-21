@@ -1,7 +1,7 @@
 # PerfX Studio -- IIS Deployment Guide
 
-**Version:** 2.8.0 | **Date:** July 2026
-**Platform:** Windows Server 2019 or 2022 | IIS 10 | Node.js 18 LTS | iisnode 0.2.26
+**Version:** 2.10.13 | **Date:** July 2026
+**Platform:** Windows Server 2019 or 2022 | IIS 10 | Node.js 20 LTS | iisnode 0.2.26
 
 > **Visual guide available:** A formatted version with IIS dialog mockups is published alongside this file.
 
@@ -16,7 +16,7 @@ The IIS server is a **zero-trust machine with no internet access**. All installe
 | # | Component | Where to get it |
 |---|-----------|----------------|
 | [ ] | Windows Server 2019 or 2022 with IIS enabled | Windows Features |
-| [ ] | Node.js **18 LTS** installer (`.msi`) | Download on local machine from nodejs.org, then copy to server |
+| [ ] | Node.js **20 LTS** installer (`.msi`) | Download on local machine from nodejs.org, then copy to server |
 | [ ] | IIS URL Rewrite Module 2.1 (`rewrite_amd64_en-US.msi`) | Download on local machine from Microsoft IIS downloads page, then copy to server |
 | [ ] | iisnode v0.2.26 (`iisnode-full-v0.2.26-x64.msi`) | Download on local machine from GitHub: Azure/iisnode Releases, then copy to server |
 | [ ] | Administrator access on the server | Required for all steps |
@@ -25,7 +25,7 @@ The IIS server is a **zero-trust machine with no internet access**. All installe
 
 | # | Component | Why needed |
 |---|-----------|-----------|
-| [ ] | Node.js **18 LTS** (same version as the server) | To run `npm install` in Step 5 -- must match server version exactly |
+| [ ] | Node.js **20 LTS** (same version as the server) | To run `npm install` in Step 5 -- must match server version exactly |
 | [ ] | PerfX Studio source code | To build `node_modules` and prepare deployment files |
 
 ---
@@ -89,18 +89,18 @@ D:\MSINetData\WWW\converter\
 
 ---
 
-## Step 1 of 11 -- Install Node.js 18 LTS
+## Step 1 of 11 -- Install Node.js 20 LTS
 
 > **The server has no internet access.** Download the installer on your local machine and copy it to the server first.
 
-1. On your **local machine**, go to **nodejs.org** and download the Windows installer labelled **"18.x.x LTS"** (file: `node-v18.x.x-x64.msi`). Do not choose version 20 or 22.
+1. On your **local machine**, go to **nodejs.org** and download the Windows installer labelled **"20.x.x LTS"** (file: `node-v20.x.x-x64.msi`).
 2. Copy the `.msi` file to the IIS server via file share or shared drive
 3. On the server, run the `.msi` installer as **Administrator**. Accept all defaults.
 4. Verify in **Command Prompt (as Administrator)** on the server:
 
 ```cmd
 C:\> node --version
-Should print:  v18.x.x
+Should print:  v20.x.x
 
 C:\> npm --version
 Should print:  9.x.x or 10.x.x
@@ -178,7 +178,7 @@ npm install --production
 
 Wait 1-3 minutes. At the end you will see: `added NNN packages in Xs`
 
-> **Note:** Run this with the **same Node.js 18 version** that is installed on the IIS server. If versions differ, some native modules (e.g., `better-sqlite3`) may fail to load on the server.
+> **Note:** Run this with the **same Node.js 20 version** that is installed on the IIS server. If versions differ, some native modules (e.g., `better-sqlite3`) may fail to load on the server.
 
 ### 5b -- Copy node_modules to the IIS server
 
@@ -418,7 +418,7 @@ Only `ADMIN_TOKEN` is required.
 | Blank page, no error | node_modules missing or incomplete | On your **local machine** run `npm install --production`, then copy the `node_modules\` folder to `D:\MSINetData\WWW\converter\` on the server (Step 5). |
 | 413 Request Entity Too Large | IIS blocking large file uploads | Confirm `maxAllowedContentLength="104857600"` in `web.config`. |
 | App pool keeps crashing | Rapid-fail protection triggered | Open Windows Event Viewer -> Windows Logs -> Application. Look for WAS or iisnode errors. |
-| Cannot find module 'better-sqlite3' | Node.js version mismatch between local machine and server | Run `node --version` on both machines -- both must print `v18.x.x`. Fix whichever is wrong, then re-run `npm install --production` on your local machine and re-copy `node_modules\` to the server. |
+| Cannot find module 'better-sqlite3' | Node.js version mismatch between local machine and server | Run `node --version` on both machines -- both must print `v20.x.x`. Fix whichever is wrong, then re-run `npm install --production` on your local machine and re-copy `node_modules\` to the server. |
 
 ### Where to find log files
 

@@ -56,7 +56,12 @@ bruno-devweb-converter/
     └── public/
         ├── VuGen-Recorder.html     ← HAR Recorder (standalone client-side)
         ├── VuGen-Script-Studio.html        ← Script Studio shell (iframes lore)
-        ├── VuGen-Script-Studio-app.js      ← Studio core app (code generation)
+        ├── studio-app.js                   ← Studio orchestrator (auth detection, ZIP assembly)
+        ├── studio-codegen.js               ← Studio code generation (DevWeb + VuGen C)
+        ├── studio-advisor.js               ← Correlation Advisor detection engine
+        ├── studio-ui.js                    ← Advisor UI, modals, card rendering
+        ├── VuGen-Script-Studio-constants.js ← Shared constants
+        ├── VuGen-Script-Studio-app.js      ← DEAD FILE — not loaded, do not edit
         ├── VuGen-Script-Studio-correlation.js ← Studio correlation engine
         └── jszip.min.js            ← JSZip 3.10.1 (shared by Recorder + Studio)
 ```
@@ -135,16 +140,25 @@ Uses Node.js `AsyncLocalStorage` to intercept `fs` write operations. When code r
 
 After processing, the caller reads the Map and feeds its entries to `archiver` for ZIP streaming.
 
+### src/web/public/studio-app.js
+
+Studio orchestrator. Contains `analyze()`, `tick()`, and `dlZip()`. Handles:
+- HAR parsing and filtering
+- Authentication detection (mirrors server-side logic)
+- ZIP assembly via JSZip
+- Delegates code generation to `studio-codegen.js`
+
+### src/web/public/studio-codegen.js
+
+~4000-line code generation module. Contains:
+- All DevWeb + VuGen C generation logic
+- Sentinel resolution pipeline (`\x00DYNSTART\x00`, `\x00PARAM\x00`, `@@ARRAY_RECONSTR@@`, etc.)
+- Extractor generation for all extractor types (jsonpath, boundary, regexp, html, etc.)
+- Parameter file generation
+
 ### src/web/public/VuGen-Script-Studio-app.js
 
-~5000-line client-side JavaScript file. Contains:
-- HAR parsing and filtering
-- All code generation logic (DevWeb + VuGen)
-- Authentication detection (mirrors server-side logic)
-- DPoP, PKCE, JWT generation code
-- Transaction naming
-- Parameter file generation
-- ZIP assembly via JSZip
+**DEAD FILE — not loaded by any HTML page. Do not edit.** (Historical artifact from before Phase 4B split.)
 
 ### src/web/public/VuGen-Script-Studio-correlation.js
 
@@ -193,7 +207,7 @@ archiver.pipe(res) → ZIP → browser
 1. `authenticationHandler.js` — add detection method + code generation
 2. `advancedScriptGenerator.js` — consume the new auth config in `generateAuth()`
 3. `webHttpScriptGenerator.js` — same for VuGen
-4. `VuGen-Script-Studio-app.js` — mirror the detection + code gen for Studio
+4. `studio-app.js` — mirror the detection for Studio
 
 ### New extractor type (correlation)
 
@@ -201,7 +215,7 @@ archiver.pipe(res) → ZIP → browser
 2. `advancedScriptGenerator.js` — add `case 'newtype':` in `generateExtractor()`
 3. `webHttpScriptGenerator.js` — same for VuGen
 4. `VuGen-Script-Studio-correlation.js` — add to Studio's correlation engine
-5. `VuGen-Script-Studio-app.js` — add code generation for new extractor
+5. `studio-codegen.js` — add code generation for new extractor type
 
 ### New input format (parser)
 

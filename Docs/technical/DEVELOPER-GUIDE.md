@@ -108,7 +108,7 @@ if (this.authConfig.type === 'myauth') {
 
 ### Step 3 — Mirror in Studio
 
-In [VuGen-Script-Studio-app.js](../../src/web/public/VuGen-Script-Studio-app.js), find the auth detection block and add:
+In [studio-app.js](../../src/web/public/studio-app.js), find the auth detection block and add:
 
 ```javascript
 // After the DPoP detection block
@@ -177,7 +177,7 @@ case 'mytype':
 
 In `VuGen-Script-Studio-correlation.js`, add your extraction logic to `valueBasedCorrelate()` and `singleHarCorrelate()`.
 
-In `VuGen-Script-Studio-app.js`, add the `case 'mytype':` to both the DevWeb and VuGen extractor generation blocks.
+In `studio-codegen.js`, add the `case 'mytype':` to both the DevWeb and VuGen extractor generation blocks.
 
 ---
 
@@ -202,7 +202,7 @@ In [src/generators/webHttpMandatoryFilesGenerator.js](../../src/generators/webHt
 
 ### Studio (client-side)
 
-In `VuGen-Script-Studio-app.js`, find the JSZip assembly block and add:
+In `studio-app.js`, find the JSZip assembly block (`dlZip()`) and add:
 
 ```javascript
 zip.file('my-new-file.yml', `# My new config\nproperty: ${S.scriptName}\n`);
@@ -309,7 +309,7 @@ No build step required. The application runs directly from source.
 
 | Mistake | Symptom | Fix |
 |---|---|---|
-| Forgetting to mirror server change in Studio | Converter works, Studio doesn't | Check VuGen-Script-Studio-app.js |
+| Forgetting to mirror server change in Studio | Converter works, Studio doesn't | Check `studio-app.js` (auth/ZIP) and `studio-codegen.js` (extractor generation) |
 | Using `new URL()` on `{{var}}` URL | `TypeError: Invalid URL` | Use `url.split('?')` manually |
 | `req.event[]` instead of `req.tests[]` | Bruno YAML collections miss scripts | Use `req.tests \|\| req.event \|\| []` |
 | Hardcoded snapshot numbers | Duplicate snapshots in VuGen | Use `this.snapshotCounter++` |

@@ -155,7 +155,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px soli
     <span class="chip">July 2026</span>
     <span class="chip">Windows Server 2019 / 2022</span>
     <span class="chip">IIS 10 + iisnode</span>
-    <span class="chip">Node.js 18 LTS</span>
+    <span class="chip">Node.js 20 LTS</span>
   </div>
 </div>
 
@@ -171,7 +171,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px soli
   <h3>Must be installed on the IIS server</h3>
   <ul class="chk">
     <li><div class="chk-box"></div><div class="chk-b"><b>Windows Server 2019 or 2022</b><span>With IIS enabled as a Windows Feature</span></div></li>
-    <li><div class="chk-box"></div><div class="chk-b"><b>Node.js 18 LTS</b><span>Download <code>node-v18.x.x-x64.msi</code> on your local machine from nodejs.org, copy to server, run installer there.</span></div></li>
+    <li><div class="chk-box"></div><div class="chk-b"><b>Node.js 20 LTS</b><span>Download <code>node-v20.x.x-x64.msi</code> on your local machine from nodejs.org, copy to server, run installer there.</span></div></li>
     <li><div class="chk-box"></div><div class="chk-b"><b>IIS URL Rewrite Module 2.1</b><span>Download <code>rewrite_amd64_en-US.msi</code> on your local machine from Microsoft IIS downloads, copy to server, run installer there. Without this, all pages return 404.</span></div></li>
     <li><div class="chk-box"></div><div class="chk-b"><b>iisnode v0.2.26</b><span>Download <code>iisnode-full-v0.2.26-x64.msi</code> on your local machine from GitHub (Azure/iisnode Releases), copy to server, run installer there.</span></div></li>
     <li><div class="chk-box"></div><div class="chk-b"><b>Administrator access on the server</b><span>Required to run commands and open IIS Manager.</span></div></li>
@@ -179,7 +179,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px soli
 
   <h3>Must be installed on your local developer machine (VCSE)</h3>
   <ul class="chk">
-    <li><div class="chk-box"></div><div class="chk-b"><b>Node.js 18 LTS &mdash; same version as the server</b><span>Required to run <code>npm install</code> in Step 5. Version must match the server exactly or native modules will fail.</span></div></li>
+    <li><div class="chk-box"></div><div class="chk-b"><b>Node.js 20 LTS &mdash; same version as the server</b><span>Required to run <code>npm install</code> in Step 5. Version must match the server exactly or native modules will fail.</span></div></li>
     <li><div class="chk-box"></div><div class="chk-b"><b>PerfX Studio source code</b><span>To build <code>node_modules</code> and prepare deployment files.</span></div></li>
   </ul>
 </section>
@@ -242,22 +242,22 @@ D:\MSINetData\WWW\converter\
 
 <!-- STEP 1 -->
 <section class="sec" id="nodejs">
-  <div class="sec-hdr"><span class="step-tag">STEP 1 OF 11</span><h2>Install Node.js 18 LTS</h2></div>
+  <div class="sec-hdr"><span class="step-tag">STEP 1 OF 11</span><h2>Install Node.js 20 LTS</h2></div>
   <p>Node.js is the engine that runs the application. The server has no internet access, so download the installer on your local machine and copy it to the server first.</p>
   <div class="callout warn">
     <div class="callout-icon">!</div>
     <div class="callout-body"><strong>Download on local machine, install on server</strong>
-    <p>The IIS server cannot access nodejs.org. Download <code>node-v18.x.x-x64.msi</code> on your local machine, copy it to the server via file share, then run it there.</p></div>
+    <p>The IIS server cannot access nodejs.org. Download <code>node-v20.x.x-x64.msi</code> on your local machine, copy it to the server via file share, then run it there.</p></div>
   </div>
   <ol class="steps">
-    <li>On your <b>local machine</b>, go to <b>nodejs.org</b> and download <b>"18.x.x LTS"</b> (file: <code>node-v18.x.x-x64.msi</code>). Do not choose version 20 or 22.</li>
+    <li>On your <b>local machine</b>, go to <b>nodejs.org</b> and download <b>"20.x.x LTS"</b> (file: <code>node-v20.x.x-x64.msi</code>). Do not choose version 22 or later.</li>
     <li>Copy the <code>.msi</code> file to the IIS server via file share or shared drive</li>
     <li>On the server, run the installer as <b>Administrator</b>. Accept all defaults. Click Next through every screen.</li>
     <li>Verify in <b>Command Prompt (as Administrator)</b> on the server:</li>
   </ol>
   <div class="code-label">Verify Node.js installed correctly</div>
   <div class="code-block"><pre><span class="c-p">C:\&gt; </span><span class="c-t">node --version</span>
-<span class="c-c">Should print:  v18.x.x</span>
+<span class="c-c">Should print:  v20.x.x</span>
 
 <span class="c-p">C:\&gt; </span><span class="c-t">npm --version</span>
 <span class="c-c">Should print:  9.x.x or 10.x.x</span></pre></div>
@@ -349,7 +349,7 @@ D:\MSINetData\WWW\converter\
   <div class="callout info">
     <div class="callout-icon">i</div>
     <div class="callout-body"><strong>Match the Node.js version</strong>
-    <p>Run <code>node --version</code> on both machines first. They must both be <b>Node.js 18</b>. If versions differ, the native module <code>better-sqlite3</code> will fail to load on the server.</p></div>
+    <p>Run <code>node --version</code> on both machines first. They must both be <b>Node.js 20</b>. If versions differ, the native module <code>better-sqlite3</code> will fail to load on the server.</p></div>
   </div>
 
   <h3>5b &mdash; Copy node_modules to the IIS server</h3>
@@ -668,7 +668,7 @@ Copy TO the IIS server:
       <tr><td><b>Blank page, no error</b></td><td>node_modules missing or incomplete</td><td>On your <b>local machine</b>, run <code>npm install --production</code>, then copy the <code>node_modules\</code> folder to <code>D:\MSINetData\WWW\converter\</code> on the server (Step 5). The server cannot run npm install itself.</td></tr>
       <tr><td><b>413 Request Entity Too Large</b></td><td>IIS blocking large uploads</td><td>Confirm <code>maxAllowedContentLength="104857600"</code> in <code>web.config</code>.</td></tr>
       <tr><td><b>App pool keeps crashing</b></td><td>Rapid-fail triggered</td><td>Open Windows Event Viewer &rarr; Windows Logs &rarr; Application. Look for WAS or iisnode errors.</td></tr>
-      <tr><td><b>Cannot find module 'better-sqlite3'</b></td><td>Node.js version mismatch between local machine and server</td><td>Run <code>node --version</code> on both machines &mdash; both must print <code>v18.x.x</code>. Fix whichever differs, re-run <code>npm install --production</code> on your local machine, and re-copy <code>node_modules\</code> to the server.</td></tr>
+      <tr><td><b>Cannot find module 'better-sqlite3'</b></td><td>Node.js version mismatch between local machine and server</td><td>Run <code>node --version</code> on both machines &mdash; both must print <code>v20.x.x</code>. Fix whichever differs, re-run <code>npm install --production</code> on your local machine, and re-copy <code>node_modules\</code> to the server.</td></tr>
     </tbody>
   </table></div>
 
