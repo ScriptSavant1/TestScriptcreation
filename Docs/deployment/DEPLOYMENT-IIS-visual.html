@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PerfX Studio &mdash; IIS Deployment Guide</title>
+<style>
+:root {
+  --bg:#F4F5F8; --surface:#FFFFFF; --ink:#1B2033; --ink-dim:#4E5670;
+  --ink-faint:#8B95B0; --accent:#0F6CBD; --accent-bg:#EBF3FB;
+  --warn:#D97706; --warn-bg:#FFFBEB; --success:#059669; --success-bg:#ECFDF5;
+  --danger:#DC2626; --danger-bg:#FEF2F2; --border:#D4D9E8;
+  --mono:'Cascadia Code','Consolas','Courier New',monospace; --r:6px;
+  --sw:224px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.65;color:var(--ink);background:var(--bg)}
+.wrap{display:flex;min-height:100vh}
+.sidebar{width:var(--sw);flex-shrink:0;background:#141824;color:#A0AABE;position:sticky;top:0;height:100vh;overflow-y:auto;padding:22px 0;display:flex;flex-direction:column}
+.sb-logo{padding:0 18px 18px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:10px}
+.sb-title{font-size:12.5px;font-weight:700;color:#fff;letter-spacing:.04em;text-transform:uppercase}
+.sb-sub{font-size:11px;color:#5A6B88;margin-top:2px}
+.nav-grp{margin-bottom:2px}
+.nav-grp-label{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#3D4F68;padding:12px 18px 3px}
+.nav-a{display:block;padding:5px 18px;font-size:12px;color:#7E8FAA;text-decoration:none;border-left:2px solid transparent;transition:color .12s,background .12s}
+.nav-a:hover{color:#C8D4E8;background:rgba(255,255,255,.04)}
+.nav-a.active{color:#fff;border-left-color:#0F6CBD;background:rgba(15,108,189,.16)}
+.content{flex:1;max-width:880px;padding:40px 52px 80px}
+.pg-hdr{margin-bottom:36px;padding-bottom:22px;border-bottom:1px solid var(--border)}
+.pg-hdr h1{font-size:24px;font-weight:700;margin-bottom:6px}
+.pg-hdr p{color:var(--ink-dim);font-size:14px;max-width:620px}
+.meta-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip{font-size:11px;color:var(--ink-faint);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 9px;font-family:var(--mono)}
+.sec{margin-bottom:52px;scroll-margin-top:20px}
+.sec-hdr{display:flex;align-items:baseline;gap:12px;margin-bottom:18px}
+.step-tag{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent);background:var(--accent-bg);border:1px solid #B5D7F2;border-radius:4px;padding:2px 8px;flex-shrink:0;white-space:nowrap}
+.sec h2{font-size:19px;font-weight:700}
+.sec h3{font-size:14px;font-weight:700;margin:22px 0 8px;color:var(--ink)}
+.sec p{color:var(--ink-dim);margin-bottom:11px;max-width:640px}
+.steps{list-style:none;counter-reset:st;display:flex;flex-direction:column;gap:9px;max-width:680px}
+.steps li{counter-increment:st;position:relative;padding-left:34px;color:var(--ink-dim);font-size:14.5px;line-height:1.6}
+.steps li::before{content:counter(st);position:absolute;left:0;top:2px;width:21px;height:21px;background:var(--accent);color:#fff;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:var(--mono)}
+.steps li b{color:var(--ink)}
+.callout{border-left:3px solid;border-radius:0 var(--r) var(--r) 0;padding:11px 14px;margin:14px 0;display:flex;gap:10px;font-size:13.5px;max-width:700px}
+.callout-icon{flex-shrink:0;font-size:15px;line-height:1.6}
+.callout-body{flex:1}
+.callout-body strong{display:block;margin-bottom:2px;font-size:12.5px}
+.callout-body p{margin:0;font-size:13px;color:inherit;max-width:none}
+.callout.warn {border-color:var(--warn);   background:var(--warn-bg);   color:#78420A}
+.callout.good {border-color:var(--success);background:var(--success-bg);color:#065F46}
+.callout.info {border-color:var(--accent); background:var(--accent-bg); color:#0C3D6B}
+.callout.danger{border-color:var(--danger);background:var(--danger-bg); color:#7F1D1D}
+.code-label{font-size:10.5px;font-weight:700;color:var(--ink-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px;font-family:var(--mono)}
+.code-block{background:#0F1320;border-radius:var(--r);padding:15px 18px;overflow-x:auto;margin:10px 0;max-width:720px}
+.code-block pre{font-family:var(--mono);font-size:12.5px;color:#A8BADA;line-height:1.75;white-space:pre}
+.c-p{color:#475F7A} .c-t{color:#7DB0E8} .c-c{color:#354860;font-style:italic} .c-h{color:#6BB87A}
+.ftree{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;overflow-x:auto;max-width:700px;margin:10px 0}
+.ftree pre{font-family:var(--mono);font-size:12.5px;line-height:1.9;color:var(--ink)}
+.fd{color:#0F6CBD;font-weight:600} .fn{color:var(--ink)} .ft{color:var(--ink-faint)} .fx{color:#EF4444;text-decoration:line-through;opacity:.65}
+.nav-path{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:8px 13px;max-width:700px;margin:11px 0}
+.np-s{color:var(--ink);font-weight:600} .np-sep{color:var(--ink-faint)} .np-f{color:var(--accent);font-weight:700}
+.tw{overflow-x:auto;max-width:720px;margin:10px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg);color:var(--ink);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:9px 12px;text-align:left;border:1px solid var(--border)}
+td{padding:9px 12px;border:1px solid var(--border);vertical-align:top;color:var(--ink-dim);background:var(--surface)}
+td code,th code{font-family:var(--mono);font-size:11.5px;color:var(--ink);background:var(--bg);padding:1px 4px;border-radius:3px;border:1px solid var(--border)}
+.chk{list-style:none;display:flex;flex-direction:column;gap:7px;max-width:640px}
+.chk li{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ink-dim);padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
+.chk-box{width:17px;height:17px;border:2px solid var(--border);border-radius:3px;flex-shrink:0;margin-top:2px}
+.chk-b b{color:var(--ink);display:block;font-size:13.5px} .chk-b span{font-size:12px;color:var(--ink-faint)}
+.iis{border:1px solid #AAA;border-radius:3px;overflow:hidden;font-family:'Segoe UI',sans-serif;font-size:12.5px;max-width:600px;margin:14px 0;box-shadow:2px 3px 10px rgba(0,0,0,.18)}
+.iis-bar{background:linear-gradient(to bottom,#2B6DB7,#1A57A0);color:#fff;padding:5px 11px;font-size:12px;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.iis-wc{display:flex;gap:3px}
+.iis-wc span{width:15px;height:15px;background:rgba(255,255,255,.22);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px}
+.iis-bd{background:#EDEDED;padding:14px 16px}
+.iis-sg{font-size:10.5px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px;border-bottom:1px solid #CCC;margin-bottom:2px}
+.iis-row{display:flex;align-items:center;padding:4px 2px;border-bottom:1px solid #E4E4E4;gap:6px}
+.iis-row:last-child{border-bottom:none}
+.iis-lbl{width:195px;flex-shrink:0;color:#333;font-size:12px}
+.iis-val{flex:1;color:#333;font-size:12px}
+.iis-hl{background:#0078D4}
+.iis-hl .iis-lbl,.iis-hl .iis-val{color:#fff}
+.iis-btn{display:inline-block;background:#E1E1E1;border:1px solid #777;border-radius:2px;padding:2px 7px;font-size:11px;color:#333;margin-left:3px;cursor:pointer}
+.iis-ft{background:#EDEDED;border-top:1px solid #CCC;padding:9px 14px;display:flex;justify-content:flex-end;gap:7px}
+.iis-ok{background:#0078D4;color:#fff;border:1px solid #005A9E;border-radius:2px;padding:3px 18px;font-size:12px;cursor:pointer}
+.iis-ca{background:#E1E1E1;color:#333;border:1px solid #777;border-radius:2px;padding:3px 14px;font-size:12px;cursor:pointer}
+.iis-panel{background:#fff;border:1px solid #CCC;padding:11px;margin:6px 0;border-radius:2px}
+.iis-fr{display:flex;gap:8px;align-items:center;margin-bottom:7px}
+.iis-fr:last-child{margin-bottom:0}
+.iis-fr label{width:55px;font-size:12px;color:#555;flex-shrink:0}
+.iis-fr input{flex:1;border:1px solid #999;padding:3px 7px;font-size:12px;border-radius:2px;font-family:Consolas,monospace;color:#1B2033;background:#fff;max-width:240px}
+.iis-tree-box{font-family:Consolas,monospace;font-size:12px;background:#fff;border:1px solid #CCC;padding:7px;border-radius:2px;margin:5px 0;min-height:52px}
+.iis-sel{background:#0078D4;color:#fff;padding:1px 7px;border-radius:2px;display:inline-block}
+.url{font-family:var(--mono);font-size:13.5px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:9px 15px;max-width:520px;margin:7px 0;word-break:break-all}
+.up{color:#64748B} .uh{color:var(--ink)} .ua{color:var(--accent);font-weight:600}
+hr{border:none;border-top:1px solid var(--border);margin:44px 0}
+code{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px solid var(--border);padding:1px 5px;border-radius:3px;color:var(--ink)}
+@media(max-width:720px){.sidebar{display:none}.content{padding:24px 18px}}
+.sidebar::-webkit-scrollbar{width:3px}.sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<aside class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-title">PerfX Studio</div>
+    <div class="sb-sub">IIS Deployment Guide</div>
+  </div>
+  <nav>
+    <div class="nav-grp">
+      <div class="nav-grp-label">Before You Start</div>
+      <a class="nav-a" href="#checklist">Prerequisites</a>
+      <a class="nav-a" href="#files">Files to Deploy</a>
+    </div>
+    <div class="nav-grp">
+      <div class="nav-grp-label">Installation</div>
+      <a class="nav-a" href="#nodejs">Step 1 &mdash; Node.js</a>
+      <a class="nav-a" href="#urlrewrite">Step 2 &mdash; URL Rewrite</a>
+      <a class="nav-a" href="#iisnode">Step 3 &mdash; iisnode</a>
+    </div>
+    <div class="nav-grp">
+      <div class="nav-grp-label">Server Setup</div>
+      <a class="nav-a" href="#copyfiles">Step 4 &mdash; Copy Files</a>
+      <a class="nav-a" href="#npminstall">Step 5 &mdash; node_modules</a>
+    </div>
+    <div class="nav-grp">
+      <div class="nav-grp-label">IIS Configuration</div>
+      <a class="nav-a" href="#apppool">Step 6 &mdash; App Pool</a>
+      <a class="nav-a" href="#admintoken">Step 7 &mdash; Admin Password</a>
+      <a class="nav-a" href="#application">Step 8 &mdash; IIS Application</a>
+      <a class="nav-a" href="#permissions">Step 9 &mdash; Permissions</a>
+    </div>
+    <div class="nav-grp">
+      <div class="nav-grp-label">Verification</div>
+      <a class="nav-a" href="#verify">Step 10 &mdash; Test</a>
+      <a class="nav-a" href="#admin-dashboard">Step 11 &mdash; Admin Dashboard</a>
+    </div>
+    <div class="nav-grp">
+      <div class="nav-grp-label">Reference</div>
+      <a class="nav-a" href="#updating">Updating</a>
+      <a class="nav-a" href="#envvars">Environment Variables</a>
+      <a class="nav-a" href="#troubleshooting">Troubleshooting</a>
+    </div>
+  </nav>
+</aside>
+
+<main class="content">
+
+<div class="pg-hdr">
+  <h1>PerfX Studio &mdash; IIS Deployment Guide</h1>
+  <p>Step-by-step instructions for installing PerfX Studio on Windows Server + IIS. Complete every step in order &mdash; each step tells you exactly what to click or type.</p>
+  <div class="meta-row">
+    <span class="chip">v2.8.0</span>
+    <span class="chip">July 2026</span>
+    <span class="chip">Windows Server 2019 / 2022</span>
+    <span class="chip">IIS 10 + iisnode</span>
+    <span class="chip">Node.js 18 LTS</span>
+  </div>
+</div>
+
+<!-- CHECKLIST -->
+<section class="sec" id="checklist">
+  <div class="sec-hdr"><span class="step-tag">BEFORE YOU START</span><h2>Prerequisites Checklist</h2></div>
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>The IIS server has no internet access</strong>
+    <p>All installers must be downloaded on your local machine and transferred to the server via file share or shared drive before you begin.</p></div>
+  </div>
+
+  <h3>Must be installed on the IIS server</h3>
+  <ul class="chk">
+    <li><div class="chk-box"></div><div class="chk-b"><b>Windows Server 2019 or 2022</b><span>With IIS enabled as a Windows Feature</span></div></li>
+    <li><div class="chk-box"></div><div class="chk-b"><b>Node.js 18 LTS</b><span>Download <code>node-v18.x.x-x64.msi</code> on your local machine from nodejs.org, copy to server, run installer there.</span></div></li>
+    <li><div class="chk-box"></div><div class="chk-b"><b>IIS URL Rewrite Module 2.1</b><span>Download <code>rewrite_amd64_en-US.msi</code> on your local machine from Microsoft IIS downloads, copy to server, run installer there. Without this, all pages return 404.</span></div></li>
+    <li><div class="chk-box"></div><div class="chk-b"><b>iisnode v0.2.26</b><span>Download <code>iisnode-full-v0.2.26-x64.msi</code> on your local machine from GitHub (Azure/iisnode Releases), copy to server, run installer there.</span></div></li>
+    <li><div class="chk-box"></div><div class="chk-b"><b>Administrator access on the server</b><span>Required to run commands and open IIS Manager.</span></div></li>
+  </ul>
+
+  <h3>Must be installed on your local developer machine (VCSE)</h3>
+  <ul class="chk">
+    <li><div class="chk-box"></div><div class="chk-b"><b>Node.js 18 LTS &mdash; same version as the server</b><span>Required to run <code>npm install</code> in Step 5. Version must match the server exactly or native modules will fail.</span></div></li>
+    <li><div class="chk-box"></div><div class="chk-b"><b>PerfX Studio source code</b><span>To build <code>node_modules</code> and prepare deployment files.</span></div></li>
+  </ul>
+</section>
+
+<!-- FILES TO DEPLOY -->
+<section class="sec" id="files">
+  <div class="sec-hdr"><span class="step-tag">BEFORE YOU START</span><h2>Files and Folders to Deploy</h2></div>
+  <p>The application is deployed to: <code>D:\MSINetData\WWW\converter\</code></p>
+  <p>This folder sits inside your IIS website root (<code>D:\MSINetData\WWW\</code>) and is registered in IIS as the <b>converter</b> application.</p>
+
+  <div class="code-label">Copy these files and folders to the server</div>
+  <div class="callout info">
+    <div class="callout-icon">i</div>
+    <div class="callout-body"><strong>node_modules must be built on your local machine first</strong>
+    <p>The server has no internet access. Run <code>npm install</code> on your local VCSE machine (Step 5a), then copy the <code>node_modules\</code> folder to the server (Step 5b). Copy everything else in Step 4.</p></div>
+  </div>
+  <div class="ftree"><pre>
+D:\MSINetData\WWW\converter\
+|
++-- <span class="fd">src\</span>                       &lt;-- entire folder (Step 4)
+|   +-- analytics\             admin dashboard data layer
+|   +-- analyzers\             auth + correlation detection
+|   +-- converters\            conversion engines
+|   +-- generators\            script generators
+|   +-- lib\                   shared utilities
+|   +-- parsers\               input file parsers
+|   +-- tools\                 tool entry points
+|   +-- web\                   web server + UI
+|       +-- public\            browser-side JS + HTML
+|       +-- views\             EJS page templates
+|
++-- <span class="fd">node_modules\</span>              &lt;-- built locally then copied (Step 5)
+|                                  tens of thousands of files -- copy last
+|
++-- <span class="fn">app.js</span>                     &lt;-- IIS entry point (Step 4)
++-- <span class="fn">web.config</span>                 &lt;-- IIS routing rules
++-- <span class="fn">package.json</span>               &lt;-- dependency list
++-- <span class="fn">package-lock.json</span>          &lt;-- exact dependency versions
++-- <span class="fn">DevWebSdk.d.ts</span>             &lt;-- packaged into generated scripts
++-- <span class="fn">jwt-helper.js</span>              &lt;-- packaged into generated scripts
++-- <span class="fn">jsrsasign.js</span>               &lt;-- JWT cryptography library
++-- <span class="fn">lre-utils.js</span>               &lt;-- LRE utility functions
++-- <span class="fn">lre-utils.dat</span>              &lt;-- LRE utils (AV-bypass format)
++-- <span class="fn">lre-crypto.js</span>              &lt;-- cryptography helpers
++-- <span class="fn">dpop.js</span>                    &lt;-- DPoP OAuth support
++-- <span class="fn">dpop-helper.js</span>             &lt;-- DPoP helpers
++-- <span class="fn">dpop-service.js</span>            &lt;-- DPoP service
++-- <span class="fn">transport.pem</span>              &lt;-- transport certificate</pre></div>
+
+  <div class="code-label">Do NOT copy these</div>
+  <div class="ftree"><pre>
+<span class="fx">.env</span>                       create fresh on server (contains password)
+<span class="fx">.git\</span>                      source control history, not needed at runtime
+<span class="fx">data\</span>                      auto-created by the app on first run
+<span class="fx">Docs\  *.md  *.pdf</span>         documentation only
+<span class="fx">pm2.config.js</span>              PM2 config, not used with IIS</pre></div>
+</section>
+
+<hr>
+
+<!-- STEP 1 -->
+<section class="sec" id="nodejs">
+  <div class="sec-hdr"><span class="step-tag">STEP 1 OF 11</span><h2>Install Node.js 18 LTS</h2></div>
+  <p>Node.js is the engine that runs the application. The server has no internet access, so download the installer on your local machine and copy it to the server first.</p>
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>Download on local machine, install on server</strong>
+    <p>The IIS server cannot access nodejs.org. Download <code>node-v18.x.x-x64.msi</code> on your local machine, copy it to the server via file share, then run it there.</p></div>
+  </div>
+  <ol class="steps">
+    <li>On your <b>local machine</b>, go to <b>nodejs.org</b> and download <b>"18.x.x LTS"</b> (file: <code>node-v18.x.x-x64.msi</code>). Do not choose version 20 or 22.</li>
+    <li>Copy the <code>.msi</code> file to the IIS server via file share or shared drive</li>
+    <li>On the server, run the installer as <b>Administrator</b>. Accept all defaults. Click Next through every screen.</li>
+    <li>Verify in <b>Command Prompt (as Administrator)</b> on the server:</li>
+  </ol>
+  <div class="code-label">Verify Node.js installed correctly</div>
+  <div class="code-block"><pre><span class="c-p">C:\&gt; </span><span class="c-t">node --version</span>
+<span class="c-c">Should print:  v18.x.x</span>
+
+<span class="c-p">C:\&gt; </span><span class="c-t">npm --version</span>
+<span class="c-c">Should print:  9.x.x or 10.x.x</span></pre></div>
+  <div class="callout good">
+    <div class="callout-icon">OK</div>
+    <div class="callout-body"><strong>Success</strong><p>Both commands print a version number. If you see "not recognized", close and reopen Command Prompt and try again.</p></div>
+  </div>
+</section>
+
+<!-- STEP 2 -->
+<section class="sec" id="urlrewrite">
+  <div class="sec-hdr"><span class="step-tag">STEP 2 OF 11</span><h2>Install IIS URL Rewrite Module 2.1</h2></div>
+  <p>This IIS add-on routes all web requests to the Node.js application. Without it, every page returns a 404 error.</p>
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>Download on local machine, install on server</strong>
+    <p>The IIS server cannot reach Microsoft's download site. Download <code>rewrite_amd64_en-US.msi</code> on your local machine, copy it to the server, then run it there.</p></div>
+  </div>
+  <ol class="steps">
+    <li>On your <b>local machine</b>, search the web for <b>"IIS URL Rewrite 2.1 download"</b> and download the <b>x64 English</b> installer (<code>rewrite_amd64_en-US.msi</code>) from the Microsoft IIS downloads page</li>
+    <li>Copy the <code>.msi</code> file to the IIS server via file share or shared drive</li>
+    <li>On the server, run the installer as <b>Administrator</b>. Accept the license and click <b>Install</b>.</li>
+    <li>After installation, restart IIS:</li>
+  </ol>
+  <div class="code-block"><pre><span class="c-p">C:\&gt; </span><span class="c-t">iisreset</span>
+<span class="c-c">Should print:  Internet services successfully restarted</span></pre></div>
+</section>
+
+<!-- STEP 3 -->
+<section class="sec" id="iisnode">
+  <div class="sec-hdr"><span class="step-tag">STEP 3 OF 11</span><h2>Install iisnode</h2></div>
+  <p>iisnode is the bridge between IIS and Node.js. It lets IIS host Node.js applications the same way it hosts .NET applications.</p>
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>Download on local machine, install on server</strong>
+    <p>The IIS server cannot reach GitHub. Download <code>iisnode-full-v0.2.26-x64.msi</code> on your local machine, copy it to the server, then run it there.</p></div>
+  </div>
+  <ol class="steps">
+    <li>On your <b>local machine</b>, go to <b>github.com/Azure/iisnode</b> &rarr; click <b>Releases</b> &rarr; download <b>iisnode-full-v0.2.26-x64.msi</b></li>
+    <li>Copy the <code>.msi</code> file to the IIS server via file share or shared drive</li>
+    <li>On the server, run the installer as <b>Administrator</b>. Accept all prompts.</li>
+  </ol>
+  <div class="callout good">
+    <div class="callout-icon">OK</div>
+    <div class="callout-body"><strong>How to confirm iisnode is installed</strong><p>Open <b>IIS Manager</b> &rarr; click the server name at top of left panel &rarr; double-click <b>Handler Mappings</b> in the center. Look for an entry named <b>iisnode</b>.</p></div>
+  </div>
+</section>
+
+<hr>
+
+<!-- STEP 4 -->
+<section class="sec" id="copyfiles">
+  <div class="sec-hdr"><span class="step-tag">STEP 4 OF 11</span><h2>Copy Application Files to the Server</h2></div>
+  <div class="callout info">
+    <div class="callout-icon">i</div>
+    <div class="callout-body"><strong>Already done?</strong><p>If you have already copied the files into <code>D:\MSINetData\WWW\converter\</code>, skip ahead to Step 5.</p></div>
+  </div>
+  <ol class="steps">
+    <li>If the folder does not exist yet, create it in <b>Command Prompt (as Administrator)</b>:</li>
+  </ol>
+  <div class="code-block"><pre><span class="c-p">C:\&gt; </span><span class="c-t">mkdir D:\MSINetData\WWW\converter</span></pre></div>
+  <ol class="steps" start="2">
+    <li>Copy all application source files from the "Files and Folders to Deploy" section into <code>D:\MSINetData\WWW\converter\</code> &mdash; everything <b>except</b> <code>node_modules\</code> (that is handled separately in Step 5)</li>
+    <li>Open File Explorer and verify: <b>app.js</b>, <b>web.config</b>, and the <b>src</b> folder must be visible directly inside <code>D:\MSINetData\WWW\converter\</code> &mdash; not inside a subfolder</li>
+  </ol>
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>Check the folder structure before continuing</strong><p>If everything is one level too deep (e.g., <code>converter\converter\app.js</code>), move all files up one level. <code>app.js</code> must be at the root of <code>D:\MSINetData\WWW\converter\</code>.</p></div>
+  </div>
+</section>
+
+<!-- STEP 5 -->
+<section class="sec" id="npminstall">
+  <div class="sec-hdr"><span class="step-tag">STEP 5 OF 11</span><h2>Build and Copy node_modules</h2></div>
+
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>The IIS server has no internet access</strong>
+    <p>The server is a zero-trust machine and cannot reach npmjs.com or any Artifactory. You must run <code>npm install</code> on your <b>local VCSE machine</b> and copy the result to the server.</p></div>
+  </div>
+
+  <h3>5a &mdash; Run npm install on your local developer machine</h3>
+  <p>Open <b>Command Prompt or PowerShell</b> on your local machine (not on the server):</p>
+  <div class="code-block"><pre><span class="c-p">C:\&gt; </span><span class="c-t">cd C:\path\to\bruno-devweb-converter</span>
+
+<span class="c-p">C:\path\to\bruno-devweb-converter&gt; </span><span class="c-t">npm install --production</span>
+<span class="c-c">Takes 1-3 minutes. Wait for "added NNN packages" message at the end.</span></pre></div>
+
+  <div class="callout info">
+    <div class="callout-icon">i</div>
+    <div class="callout-body"><strong>Match the Node.js version</strong>
+    <p>Run <code>node --version</code> on both machines first. They must both be <b>Node.js 18</b>. If versions differ, the native module <code>better-sqlite3</code> will fail to load on the server.</p></div>
+  </div>
+
+  <h3>5b &mdash; Copy node_modules to the IIS server</h3>
+  <p>Transfer the entire <code>node_modules</code> folder from your local machine to the server using a file share, SFTP, or shared drive:</p>
+  <div class="ftree"><pre>
+Copy FROM your local machine:
+  <span class="fd">C:\path\to\bruno-devweb-converter\node_modules\</span>
+
+Copy TO the IIS server:
+  <span class="fd">D:\MSINetData\WWW\converter\node_modules\</span></pre></div>
+
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>node_modules contains tens of thousands of small files</strong>
+    <p>Copying over a network share can take several minutes. Do not interrupt the transfer. Wait until your file transfer tool reports it is complete.</p></div>
+  </div>
+
+  <div class="callout good">
+    <div class="callout-icon">OK</div>
+    <div class="callout-body"><strong>Success</strong><p><code>D:\MSINetData\WWW\converter\node_modules\</code> exists on the server and contains many subfolders (express, multer, better-sqlite3, etc.).</p></div>
+  </div>
+</section>
+
+<hr>
+
+<!-- STEP 6 -->
+<section class="sec" id="apppool">
+  <div class="sec-hdr"><span class="step-tag">STEP 6 OF 11</span><h2>Create IIS Application Pool</h2></div>
+  <p>The Application Pool is the container IIS uses to run your application. Create one dedicated pool for PerfX Studio.</p>
+
+  <div class="nav-path">
+    <span class="np-s">IIS Manager</span><span class="np-sep">&rarr;</span>
+    <span class="np-s">Application Pools</span><span class="np-sep">&rarr;</span>
+    <span class="np-f">Add Application Pool&hellip;</span>
+  </div>
+
+  <ol class="steps">
+    <li>Open <b>IIS Manager</b> (Start &rarr; search "IIS Manager" &rarr; run as Administrator)</li>
+    <li>Click <b>Application Pools</b> in the left panel</li>
+    <li>In the right panel (Actions), click <b>Add Application Pool&hellip;</b></li>
+    <li>Fill in exactly as shown, then click <b>OK</b>:</li>
+  </ol>
+
+  <div class="iis">
+    <div class="iis-bar">Add Application Pool<div class="iis-wc"><span>-</span><span>[]</span><span>X</span></div></div>
+    <div class="iis-bd">
+      <div class="iis-sg">Application Pool Settings</div>
+      <div class="iis-row"><div class="iis-lbl">Name:</div><div class="iis-val" style="font-family:Consolas;background:#fff;border:1px solid #999;padding:3px 8px;font-weight:700;color:#0078D4">perfx-studio-pool</div></div>
+      <div class="iis-row"><div class="iis-lbl">.NET CLR Version:</div><div class="iis-val" style="font-weight:600">No Managed Code</div></div>
+      <div class="iis-row"><div class="iis-lbl">Managed Pipeline Mode:</div><div class="iis-val" style="font-weight:600">Integrated</div></div>
+      <div class="iis-row"><div class="iis-lbl">Start application pool immediately</div><div class="iis-val">[x] checked</div></div>
+    </div>
+    <div class="iis-ft"><button class="iis-ok">OK</button><button class="iis-ca">Cancel</button></div>
+  </div>
+
+  <ol class="steps" start="5">
+    <li>Find <b>perfx-studio-pool</b> in the list &rarr; right-click &rarr; <b>Advanced Settings&hellip;</b></li>
+    <li>Set these additional values and click <b>OK</b>:</li>
+  </ol>
+  <div class="tw"><table>
+    <thead><tr><th>Setting</th><th>Value</th><th>Where to find it</th></tr></thead>
+    <tbody>
+      <tr><td><b>Start Mode</b></td><td><code>AlwaysRunning</code></td><td>General section</td></tr>
+      <tr><td><b>Idle Time-out (minutes)</b></td><td><code>0</code></td><td>Process Model section</td></tr>
+      <tr><td><b>Ping Enabled</b></td><td><code>False</code></td><td>Process Model section</td></tr>
+      <tr><td><b>Identity</b></td><td><code>NetworkService</code></td><td>Process Model section</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- STEP 7 -->
+<section class="sec" id="admintoken">
+  <div class="sec-hdr"><span class="step-tag">STEP 7 OF 11</span><h2>Set the Admin Dashboard Password</h2></div>
+  <p>PerfX Studio has an Admin Dashboard showing usage analytics &mdash; who used which tools, error counts, peak times, and more. It is protected by a password set as an IIS environment variable. The password never appears in any file, URL, or browser history.</p>
+
+  <div class="callout danger">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>Security rule &mdash; never put the password in a file</strong>
+    <p>Do not put the password in <code>web.config</code>, <code>pm2.config.js</code>, or any committed file. Set it only inside IIS Manager as shown below.</p></div>
+  </div>
+
+  <div class="nav-path">
+    <span class="np-s">IIS Manager</span><span class="np-sep">&rarr;</span>
+    <span class="np-s">Application Pools</span><span class="np-sep">&rarr;</span>
+    <span class="np-s">perfx-studio-pool</span><span class="np-sep">&rarr;</span>
+    <span class="np-s">Advanced Settings</span><span class="np-sep">&rarr;</span>
+    <span class="np-f">Environment Variables &rarr; [...]</span>
+  </div>
+
+  <ol class="steps">
+    <li>In IIS Manager, click <b>Application Pools</b></li>
+    <li>Right-click <b>perfx-studio-pool</b> &rarr; click <b>Advanced Settings&hellip;</b></li>
+    <li>Scroll to the <b>General</b> section. Find the row <b>Environment Variables</b>. Click the <b>[&hellip;]</b> button on the right:</li>
+  </ol>
+
+  <div class="iis">
+    <div class="iis-bar">Advanced Settings &mdash; perfx-studio-pool<div class="iis-wc"><span>-</span><span>[]</span><span>X</span></div></div>
+    <div class="iis-bd">
+      <div class="iis-sg">General</div>
+      <div class="iis-row"><div class="iis-lbl">.NET CLR Version</div><div class="iis-val">No Managed Code</div></div>
+      <div class="iis-row"><div class="iis-lbl">Enable 32-bit Applications</div><div class="iis-val">False</div></div>
+      <div class="iis-row iis-hl">
+        <div class="iis-lbl" style="color:#fff;font-weight:600">Environment Variables</div>
+        <div class="iis-val"><span style="color:#B8D8FF">(Collection)</span> <span class="iis-btn" style="background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.4);color:#fff;font-weight:700">[...] &larr; CLICK HERE</span></div>
+      </div>
+      <div class="iis-row"><div class="iis-lbl">Managed Pipeline Mode</div><div class="iis-val">Integrated</div></div>
+      <div class="iis-row"><div class="iis-lbl">Start Mode</div><div class="iis-val">AlwaysRunning</div></div>
+    </div>
+  </div>
+
+  <ol class="steps" start="4">
+    <li>The <b>EnvironmentVariables Collection Editor</b> opens. Click <b>Add</b>.</li>
+    <li>Fill in the two fields on the right side:</li>
+  </ol>
+
+  <div class="iis">
+    <div class="iis-bar">EnvironmentVariables Collection Editor<div class="iis-wc"><span>-</span><span>[]</span><span>X</span></div></div>
+    <div class="iis-bd">
+      <div style="display:flex;gap:14px">
+        <div style="flex:0 0 170px">
+          <div class="iis-sg">Members</div>
+          <div class="iis-tree-box"><span class="iis-sel">ADMIN_TOKEN</span></div>
+          <div style="display:flex;gap:4px;margin-top:6px"><button class="iis-btn">Add</button><button class="iis-btn">Remove</button></div>
+        </div>
+        <div style="flex:1">
+          <div class="iis-sg">ADMIN_TOKEN Properties</div>
+          <div class="iis-panel">
+            <div class="iis-fr"><label>Name:</label><input type="text" value="ADMIN_TOKEN" readonly></div>
+            <div class="iis-fr"><label>Value:</label><input type="password" value="YourPassword123!" readonly></div>
+          </div>
+          <div style="font-size:11px;color:#777;margin-top:5px;font-style:italic">Use a strong password (12+ chars). Save it in your password manager.</div>
+        </div>
+      </div>
+    </div>
+    <div class="iis-ft"><button class="iis-ok">OK</button><button class="iis-ca">Cancel</button></div>
+  </div>
+
+  <ol class="steps" start="6">
+    <li>Type <b>ADMIN_TOKEN</b> in the Name field &mdash; all capitals, underscore in the middle, exactly as shown</li>
+    <li>Type your chosen password in the Value field (at least 12 characters)</li>
+    <li>Click <b>OK</b> to close the Collection Editor &rarr; click <b>OK</b> to close Advanced Settings</li>
+    <li>Right-click <b>perfx-studio-pool</b> &rarr; click <b>Recycle&hellip;</b> to apply the change immediately</li>
+  </ol>
+
+  <div class="callout info">
+    <div class="callout-icon">i</div>
+    <div class="callout-body"><strong>Share the password with your team</strong>
+    <p>Save it in your team password manager. All team members use this same password at <code>/converter/admin</code>. Do not share by email.</p></div>
+  </div>
+</section>
+
+<!-- STEP 8 -->
+<section class="sec" id="application">
+  <div class="sec-hdr"><span class="step-tag">STEP 8 OF 11</span><h2>Register the IIS Application</h2></div>
+  <p>Register the application in IIS so it is accessible at <code>/converter</code>.</p>
+
+  <div class="nav-path">
+    <span class="np-s">IIS Manager</span><span class="np-sep">&rarr;</span>
+    <span class="np-s">Sites</span><span class="np-sep">&rarr;</span>
+    <span class="np-s">Default Web Site</span><span class="np-sep">&rarr;</span>
+    <span class="np-f">Add Application&hellip;</span>
+  </div>
+
+  <ol class="steps">
+    <li>In IIS Manager, expand <b>Sites</b> in the left panel</li>
+    <li>Right-click <b>Default Web Site</b> &rarr; click <b>Add Application&hellip;</b></li>
+    <li>Fill in the dialog as shown, then click <b>OK</b>:</li>
+  </ol>
+
+  <div class="iis">
+    <div class="iis-bar">Add Application<div class="iis-wc"><span>-</span><span>[]</span><span>X</span></div></div>
+    <div class="iis-bd">
+      <div class="iis-sg">Application Settings</div>
+      <div class="iis-row"><div class="iis-lbl">Alias:</div><div class="iis-val" style="font-family:Consolas;background:#fff;border:1px solid #999;padding:3px 8px;font-weight:700;color:#0078D4">converter</div></div>
+      <div class="iis-row"><div class="iis-lbl">Application Pool:</div><div class="iis-val" style="font-weight:600">perfx-studio-pool <span style="color:#0078D4;font-weight:400">[Select&hellip;]</span></div></div>
+      <div class="iis-row"><div class="iis-lbl">Physical Path:</div><div class="iis-val" style="font-family:Consolas">D:\MSINetData\WWW\converter</div></div>
+    </div>
+    <div class="iis-ft"><button class="iis-ok">OK</button><button class="iis-ca">Cancel</button></div>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-icon">i</div>
+    <div class="callout-body"><strong>The alias "converter" is important</strong>
+    <p>It must be exactly <code>converter</code> &mdash; lowercase, no spaces. For Application Pool, click <b>Select&hellip;</b> and choose <b>perfx-studio-pool</b>.</p></div>
+  </div>
+</section>
+
+<!-- STEP 9 -->
+<section class="sec" id="permissions">
+  <div class="sec-hdr"><span class="step-tag">STEP 9 OF 11</span><h2>Set File Permissions</h2></div>
+  <p>IIS runs as <b>NetworkService</b>. It needs read permission on the application folder and write permission only on the iisnode log subfolder.</p>
+  <div class="code-label">Run all three commands in Command Prompt (as Administrator)</div>
+  <div class="code-block"><pre><span class="c-c">-- Read permission on the application folder</span>
+<span class="c-p">C:\&gt; </span><span class="c-t">icacls "D:\MSINetData\WWW\converter" /grant "NetworkService:(OI)(CI)R"</span>
+
+<span class="c-c">-- Create the iisnode log folder</span>
+<span class="c-p">C:\&gt; </span><span class="c-t">mkdir "D:\MSINetData\WWW\converter\iisnode"</span>
+
+<span class="c-c">-- Write permission on log folder only</span>
+<span class="c-p">C:\&gt; </span><span class="c-t">icacls "D:\MSINetData\WWW\converter\iisnode" /grant "NetworkService:(OI)(CI)F"</span></pre></div>
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>Write access only on the iisnode subfolder</strong>
+    <p>Do not grant write access to the entire application folder. Only <code>iisnode\</code> needs it for log files.</p></div>
+  </div>
+</section>
+
+<hr>
+
+<!-- STEP 10 -->
+<section class="sec" id="verify">
+  <div class="sec-hdr"><span class="step-tag">STEP 10 OF 11</span><h2>Test the Deployment</h2></div>
+  <p>Open a browser and test all three URLs. All must work before going live.</p>
+
+  <h3>Test 1 &mdash; Main portal</h3>
+  <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/converter</span></div>
+  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>The PerfX Studio portal page with tool cards: Postman/Bruno Converter, JMX Converter, Script Studio.</p></div></div>
+
+  <h3>Test 2 &mdash; Script Studio</h3>
+  <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/converter/studio</span></div>
+  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>The VuGen Script Studio page with a file upload area.</p></div></div>
+
+  <h3>Test 3 &mdash; Admin dashboard login</h3>
+  <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/converter/admin</span></div>
+  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>The PerfX Studio admin login page. Enter the password from Step 7 and you will be redirected to the analytics dashboard.</p></div></div>
+</section>
+
+<!-- STEP 11 -->
+<section class="sec" id="admin-dashboard">
+  <div class="sec-hdr"><span class="step-tag">STEP 11 OF 11</span><h2>Using the Admin Dashboard</h2></div>
+
+  <h3>Logging in</h3>
+  <ol class="steps">
+    <li>Go to <code>https://loadrunner.webdev.banksvcs.net/converter/admin</code></li>
+    <li>Enter the <b>ADMIN_TOKEN</b> password set in Step 7</li>
+    <li>Click <b>Sign In</b> &mdash; you stay logged in for <b>8 hours</b></li>
+  </ol>
+  <div class="callout info">
+    <div class="callout-icon">i</div>
+    <div class="callout-body"><strong>Password never appears in the URL</strong>
+    <p>After sign-in, a secure browser cookie keeps you authenticated. All team members can be logged in simultaneously with the same password.</p></div>
+  </div>
+
+  <h3>What the dashboard shows</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Section</th><th>What it shows</th></tr></thead>
+    <tbody>
+      <tr><td><b>KPI Cards</b></td><td>Total conversions, success rate, error count, timeout count, average duration, unique users</td></tr>
+      <tr><td><b>Tool Usage</b></td><td>Which converter is most used &mdash; Postman/Bruno, JMX, or Script Studio</td></tr>
+      <tr><td><b>Protocol Split</b></td><td>DevWeb JS vs VuGen C output breakdown</td></tr>
+      <tr><td><b>Success Trend</b></td><td>Daily pass/fail chart over the selected period</td></tr>
+      <tr><td><b>Usage Heatmap</b></td><td>Which days and hours have peak activity</td></tr>
+      <tr><td><b>Top Files</b></td><td>Most converted files with size and average duration</td></tr>
+      <tr><td><b>Event Log</b></td><td>Every conversion: timestamp, machine, IP, tool, file, result, error code</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Error codes in the event log</h3>
+  <p>When a conversion fails, a red error code appears below the "failed" badge. Filter by <b>Result = Failed</b> to see all errors.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Error Code</th><th>Meaning</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td><code>parse_error</code></td><td>File is corrupted or invalid</td><td>Ask user to re-export from Postman / JMeter</td></tr>
+      <tr><td><code>unsupported_format</code></td><td>File type not recognized</td><td>Check file matches the selected converter</td></tr>
+      <tr><td><code>empty_input</code></td><td>File has no requests or items</td><td>Re-export the collection</td></tr>
+      <tr><td><code>conversion_timeout</code></td><td>Took longer than 120 seconds</td><td>File is too large &mdash; split into smaller parts</td></tr>
+      <tr><td><code>conversion_failed</code></td><td>Unexpected error</td><td>Check <code>D:\MSINetData\WWW\converter\iisnode\</code> logs</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Downloading reports</h3>
+  <p>Use the <b>Download</b> buttons at the top of the dashboard to export as <b>CSV</b>, <b>Excel (XLSX)</b>, or <b>Word (DOCX)</b>.</p>
+
+  <h3>Logging out</h3>
+  <p>Click the <b>Logout</b> button in the top-right corner.</p>
+</section>
+
+<hr>
+
+<!-- UPDATING -->
+<section class="sec" id="updating">
+  <div class="sec-hdr"><span class="step-tag">REFERENCE</span><h2>Updating the Application</h2></div>
+  <p>When a new version is released, the ADMIN_TOKEN set in IIS persists automatically &mdash; no need to set it again.</p>
+  <ol class="steps">
+    <li>Copy all updated files from the "Files to Deploy" list into <code>D:\MSINetData\WWW\converter\</code>, replacing existing files</li>
+    <li>If <code>package.json</code> has changed: run <code>npm install --production</code> on your <b>local machine</b> and copy the updated <code>node_modules\</code> to the server (same as Step 5). Skip this if no new dependencies were added.</li>
+    <li>On the IIS server, recycle the app pool to load the new code:</li>
+  </ol>
+  <div class="code-block"><pre><span class="c-c">-- Run on the IIS server -- no IIS restart needed</span>
+<span class="c-p">C:\&gt; </span><span class="c-t">%windir%\system32\inetsrv\appcmd recycle apppool /apppool.name:"perfx-studio-pool"</span></pre></div>
+</section>
+
+<!-- ENV VARS -->
+<section class="sec" id="envvars">
+  <div class="sec-hdr"><span class="step-tag">REFERENCE</span><h2>Environment Variables</h2></div>
+  <p>Set in IIS Manager &rarr; Application Pool &rarr; Advanced Settings &rarr; Environment Variables (Step 7). Only <code>ADMIN_TOKEN</code> is required.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Variable</th><th>Required?</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>ADMIN_TOKEN</code></td><td style="color:#DC2626;font-weight:600">Required for admin</td><td>none &mdash; admin disabled</td><td>Password for the admin dashboard. Without this, <code>/converter/admin</code> returns 404.</td></tr>
+      <tr><td><code>MAX_CONCURRENT_CONVERSIONS</code></td><td>Optional</td><td>8</td><td>Simultaneous conversions allowed. Match to number of CPU cores.</td></tr>
+      <tr><td><code>ANALYTICS_RETENTION_DAYS</code></td><td>Optional</td><td>730</td><td>Delete analytics older than this many days. 0 = keep forever.</td></tr>
+      <tr><td><code>ANALYTICS_DB_PATH</code></td><td>Optional</td><td><code>.\data\analytics.db</code></td><td>Path to the SQLite analytics database file.</td></tr>
+      <tr><td><code>PORT</code></td><td>Optional</td><td>3000</td><td>Leave unset with iisnode &mdash; iisnode uses named pipes, not ports.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- TROUBLESHOOTING -->
+<section class="sec" id="troubleshooting">
+  <div class="sec-hdr"><span class="step-tag">REFERENCE</span><h2>Troubleshooting</h2></div>
+  <div class="tw"><table>
+    <thead><tr><th>What you see</th><th>Most likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td><b>502 Bad Gateway</b></td><td>Node.js failed to start</td><td>Check <code>D:\MSINetData\WWW\converter\iisnode\app.js-xxxxx.txt</code>. Also run <code>node app.js</code> from the app folder to see the error.</td></tr>
+      <tr><td><b>404 Not Found</b></td><td>URL Rewrite not installed or web.config missing</td><td>Confirm <code>web.config</code> is in <code>D:\MSINetData\WWW\converter\</code>. Confirm URL Rewrite installed (Step 2). Run <code>iisreset</code>.</td></tr>
+      <tr><td><b>403 Forbidden</b></td><td>NetworkService lacks read permission</td><td>Re-run the <code>icacls</code> commands from Step 9.</td></tr>
+      <tr><td><b>Admin page is 404</b></td><td>ADMIN_TOKEN not set</td><td>Go to Step 7. Confirm the name is exactly <code>ADMIN_TOKEN</code>. Recycle the app pool.</td></tr>
+      <tr><td><b>Blank page, no error</b></td><td>node_modules missing or incomplete</td><td>On your <b>local machine</b>, run <code>npm install --production</code>, then copy the <code>node_modules\</code> folder to <code>D:\MSINetData\WWW\converter\</code> on the server (Step 5). The server cannot run npm install itself.</td></tr>
+      <tr><td><b>413 Request Entity Too Large</b></td><td>IIS blocking large uploads</td><td>Confirm <code>maxAllowedContentLength="104857600"</code> in <code>web.config</code>.</td></tr>
+      <tr><td><b>App pool keeps crashing</b></td><td>Rapid-fail triggered</td><td>Open Windows Event Viewer &rarr; Windows Logs &rarr; Application. Look for WAS or iisnode errors.</td></tr>
+      <tr><td><b>Cannot find module 'better-sqlite3'</b></td><td>Node.js version mismatch between local machine and server</td><td>Run <code>node --version</code> on both machines &mdash; both must print <code>v18.x.x</code>. Fix whichever differs, re-run <code>npm install --production</code> on your local machine, and re-copy <code>node_modules\</code> to the server.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Where to find log files</h3>
+  <div class="code-block"><pre><span class="c-c">-- iisnode logs (check here first for 502 errors)</span>
+<span class="c-h">D:\MSINetData\WWW\converter\iisnode\app.js-xxxxx.txt</span>
+
+<span class="c-c">-- IIS access logs</span>
+<span class="c-h">C:\inetpub\logs\LogFiles\W3SVC1\</span>
+
+<span class="c-c">-- Windows Event Log</span>
+<span class="c-h">Start &rarr; Event Viewer &rarr; Windows Logs &rarr; Application</span></pre></div>
+</section>
+
+</main>
+</div>
+
+<script>
+var links = document.querySelectorAll('.nav-a[href]');
+var secs  = document.querySelectorAll('section[id]');
+window.addEventListener('scroll', function(){
+  var pos = window.scrollY + 90;
+  var cur = null;
+  secs.forEach(function(s){ if(s.offsetTop <= pos) cur = s.id; });
+  links.forEach(function(l){
+    l.classList.toggle('active', l.getAttribute('href') === '#' + cur);
+  });
+}, {passive:true});
+links.forEach(function(l){
+  l.addEventListener('click', function(){
+    links.forEach(function(x){ x.classList.remove('active'); });
+    l.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
