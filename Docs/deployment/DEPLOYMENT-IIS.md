@@ -298,31 +298,32 @@ icacls "D:\MSINetData\WWW\converter\iisnode" /grant "NetworkService:(OI)(CI)F"
 
 ## Step 10 of 11 -- Test the Deployment
 
-Open a browser and test all three URLs. All must work before going live.
+All tools live at the single URL below. The browser URL never changes when switching between tools -- tabs load inline or in embedded frames.
 
-**Test 1 -- Main portal:**
+**Test 1 -- Main portal (the only URL users need):**
 ```
 https://loadrunner.webdev.banksvcs.net/converter
 ```
-You should see: The PerfX Studio portal page with tool cards (Postman/Bruno Converter, JMX Converter, Script Studio).
+You should see: The PerfX Studio portal page with tool tabs at the top -- Converter, Recorder, Script Studio.
+Click each tab to confirm it loads its tool without any error.
 
-**Test 2 -- Script Studio:**
-```
-https://loadrunner.webdev.banksvcs.net/converter/studio
-```
-You should see: The VuGen Script Studio page with a "Drop a HAR file here" upload area.
+> **Note:** `/converter/studio` and `/converter/recorder` exist as internal routes used by the portal's
+> embedded frames, but users never visit them directly. Always point users to `/converter`.
 
-**Test 3 -- Admin dashboard:**
+**Test 2 -- Admin dashboard:**
 ```
 https://loadrunner.webdev.banksvcs.net/converter/admin
 ```
-You should see: A login page. Enter the password you set in Step 7. You will be redirected to the analytics dashboard.
+You should see: A password login page. Enter the ADMIN_TOKEN set in Step 7. You will be redirected to the analytics dashboard.
 
 If something does not work, see the Troubleshooting section.
 
 ---
 
 ## Step 11 of 11 -- Using the Admin Dashboard
+
+> **The admin dashboard is the only URL separate from the main portal.**
+> All other tools (Converter, Recorder, Script Studio) are accessed at `/converter`.
 
 ### Logging in
 

@@ -562,19 +562,16 @@ Copy TO the IIS server:
 <!-- STEP 10 -->
 <section class="sec" id="verify">
   <div class="sec-hdr"><span class="step-tag">STEP 10 OF 11</span><h2>Test the Deployment</h2></div>
-  <p>Open a browser and test all three URLs. All must work before going live.</p>
+  <p>All tools live at a single URL. The browser URL never changes when switching between tools &mdash; tabs load inline or inside embedded frames.</p>
 
-  <h3>Test 1 &mdash; Main portal</h3>
+  <h3>Test 1 &mdash; Main portal (the only URL users need)</h3>
   <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/converter</span></div>
-  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>The PerfX Studio portal page with tool cards: Postman/Bruno Converter, JMX Converter, Script Studio.</p></div></div>
+  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>The PerfX Studio portal with tool tabs at the top: Converter, Recorder, Script Studio. Click each tab to confirm it loads without errors.</p></div></div>
+  <div class="callout info"><div class="callout-icon">i</div><div class="callout-body"><strong>/converter/studio and /converter/recorder exist but are internal</strong><p>These are embedded frame sources used by the portal &mdash; users never visit them directly. Always point users to <code>/converter</code>.</p></div></div>
 
-  <h3>Test 2 &mdash; Script Studio</h3>
-  <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/converter/studio</span></div>
-  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>The VuGen Script Studio page with a file upload area.</p></div></div>
-
-  <h3>Test 3 &mdash; Admin dashboard login</h3>
+  <h3>Test 2 &mdash; Admin dashboard</h3>
   <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/converter/admin</span></div>
-  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>The PerfX Studio admin login page. Enter the password from Step 7 and you will be redirected to the analytics dashboard.</p></div></div>
+  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>A password login page. Enter the ADMIN_TOKEN set in Step 7 and you will be redirected to the analytics dashboard.</p></div></div>
 </section>
 
 <!-- STEP 11 -->
