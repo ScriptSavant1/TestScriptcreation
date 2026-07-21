@@ -39,16 +39,16 @@ Converts HAR recordings, Bruno/Postman collections, and JMX files into:
 ### VuGen Script Studio (primary feature, most active)
 | File | Size | Purpose |
 |------|------|---------|
-| `src/web/public/VuGen-Script-Studio.html` | ~429 L | All HTML/modals for Studio |
-| `src/web/public/shared/vugen-codegen.js` | — | Shared VuGen codegen (UMD, works browser+Node) — loaded first |
-| `src/web/public/VuGen-Script-Studio-constants.js` | — | Shared constants |
-| `src/web/public/VuGen-Script-Studio-correlation.js` | — | Correlation state management |
-| `src/web/public/studio-codegen.js` | ~4044 L | Shared codegen helpers (DevWeb + VuGen body substitution) |
-| `src/web/public/studio-advisor.js` | ~1447 L | Correlation Advisor detection engine |
-| `src/web/public/studio-ui.js` | ~2026 L | Advisor UI, modals, card rendering |
-| `src/web/public/studio-app.js` | ~741 L | **Live orchestrator** — app logic + DevWeb/VuGen C codegen wiring |
-| `src/web/public/analytics-device.js` | — | Client-side fingerprint tracking (deferred load) |
-| `src/web/public/VuGen-Script-Studio.css` | ~1630 L | All styles |
+| `src/web/public/VuGen-Script-Studio.html` | HTML | All HTML/modals for Studio |
+| `src/web/public/shared/vugen-codegen.js` | JS | Shared VuGen codegen (UMD, works browser+Node) — loaded first |
+| `src/web/public/VuGen-Script-Studio-constants.js` | JS | Shared constants |
+| `src/web/public/VuGen-Script-Studio-correlation.js` | JS | Correlation state management |
+| `src/web/public/studio-codegen.js` | JS (large) | Shared codegen helpers (DevWeb + VuGen body substitution) |
+| `src/web/public/studio-advisor.js` | JS | Correlation Advisor detection engine |
+| `src/web/public/studio-ui.js` | JS (large) | Advisor UI, modals, card rendering |
+| `src/web/public/studio-app.js` | JS | **Live orchestrator** — app logic + DevWeb/VuGen C codegen wiring |
+| `src/web/public/analytics-device.js` | JS | Client-side fingerprint tracking (deferred load) |
+| `src/web/public/VuGen-Script-Studio.css` | CSS | All styles |
 
 **Phase history:** `VuGen-Script-Studio-app.js` was the Phase 3c monolithic file
 (~5200 lines). In Phase 4B it was split into `studio-app.js` (orchestrator),
