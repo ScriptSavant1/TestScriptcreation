@@ -681,9 +681,7 @@ async function analyze() {
   } catch (err) {
     console.error(err);
     showToast(
-      "Error during analysis: " +
-        err.message +
-        " — Check browser console for details.",
+      "Analysis failed: " + err.message,
       "error",
       7000,
     );
