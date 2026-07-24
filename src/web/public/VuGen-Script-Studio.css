@@ -1628,3 +1628,140 @@
         50%      { border-color: #60a5fa;       box-shadow: 0 0 0 8px rgba(59,130,246,0); }
       }
 
+
+      /* ═══════════════════════════════════════════════
+         Background Request Review Panel (Phase 4)
+         ═══════════════════════════════════════════════ */
+
+      .bg-review-panel {
+        margin: 12px 0;
+        border: 1px solid var(--primary);
+        border-radius: var(--radius-md);
+        background: var(--bg-card);
+        overflow: hidden;
+      }
+
+      .bg-review-header {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 12px 16px 10px;
+        background: rgba(59,130,246,0.06);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .bg-review-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-1);
+      }
+
+      .bg-review-subtitle {
+        font-size: 12px;
+        color: var(--text-3);
+      }
+
+      .bg-review-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      .bg-review-table th {
+        padding: 7px 12px;
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-3);
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-2);
+      }
+
+      .bg-review-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-2);
+        vertical-align: middle;
+      }
+
+      .bg-review-table td:first-child {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        max-width: 280px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .bg-review-table tbody tr:last-child td { border-bottom: none; }
+      .bg-review-table tbody tr:hover td { background: var(--bg-2); }
+
+      /* Three-way decision toggle */
+      .bg-decision-toggle {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+      }
+
+      .bg-dec {
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 500;
+        background: var(--bg);
+        color: var(--text-3);
+        border: none;
+        border-right: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
+      }
+
+      .bg-dec:last-child { border-right: none; }
+      .bg-dec:hover { background: var(--bg-2); color: var(--text-1); }
+
+      .bg-dec.active[data-val="exclude"] {
+        background: rgba(239,68,68,0.12);
+        color: #ef4444;
+        font-weight: 700;
+      }
+      .bg-dec.active[data-val="once"] {
+        background: rgba(245,158,11,0.12);
+        color: #d97706;
+        font-weight: 700;
+      }
+      .bg-dec.active[data-val="all"] {
+        background: rgba(34,197,94,0.12);
+        color: #16a34a;
+        font-weight: 700;
+      }
+
+      .bg-review-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        border-top: 1px solid var(--border);
+        background: var(--bg-2);
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      #bgReviewStats {
+        font-size: 12px;
+        color: var(--text-3);
+      }
+
+      .bg-review-apply {
+        padding: 7px 18px;
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+
+      .bg-review-apply:hover { background: var(--primary-dark, #2563eb); }

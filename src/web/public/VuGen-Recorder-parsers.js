@@ -169,22 +169,30 @@ function processHAR(har){
   S.entries=[]; S.txns=[]; S.colorMap={}; S.selIds.clear(); S.selMode=false;
   S.isNetLogSource=false; S.hasDpop=false;
 
+  // Build page map for extension-recorded HARs (pageref id → transaction title)
+  S.harPages = new Map();
+  const _rPages = (har.log && har.log.pages) || [];
+  for (const _p of _rPages) {
+    if (_p.id && _p.title) S.harPages.set(_p.id, _p.title);
+  }
+
   const raw = har.log && har.log.entries ? har.log.entries : [];
   let id=0;
 
   S.entries = raw.map(e=>{
+    const resp = e.response || {};
     const hdrs={};
     (e.request.headers||[]).forEach(h=>{ hdrs[h.name.toLowerCase()]=h.value; });
     const respHdrs={};
-    (e.response.headers||[]).forEach(h=>{ respHdrs[h.name.toLowerCase()]=h.value; });
-    const ct=((e.response.content&&e.response.content.mimeType)||'').split(';')[0].trim();
+    (resp.headers||[]).forEach(h=>{ respHdrs[h.name.toLowerCase()]=h.value; });
+    const ct=((resp.content&&resp.content.mimeType)||'').split(';')[0].trim();
     return {
       id: ++id,
       url:   e.request.url||'',
       method: (e.request.method||'GET').toUpperCase(),
-      status: e.response.status||0,
+      status: resp.status||0,
       ct,
-      size: e.response.bodySize>0 ? e.response.bodySize : (e.response.content&&e.response.content.size>0?e.response.content.size:0),
+      size: resp.bodySize>0 ? resp.bodySize : (resp.content&&resp.content.size>0?resp.content.size:0),
       dur:  Math.round(e.time||0),
       startMs: (()=>{ try{return new Date(e.startedDateTime).getTime()||0;}catch{return 0;} })(),
       reqHdrs: e.request.headers||[],
@@ -193,6 +201,7 @@ function processHAR(har){
       body: e.request.postData||null,
       referer: hdrs['referer']||'',
       _resourceType: e._resourceType||'',
+      pageref: e.pageref||null,
       isMarker:false, markerType:null, txnName:null,
       txn:null, filtered:false
     };

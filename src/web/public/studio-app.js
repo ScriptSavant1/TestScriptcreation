@@ -191,14 +191,9 @@ async function analyze() {
     if (!S.isNetLog1) {
       const rawEntries = S.har1.log.entries;
       const truncated = rawEntries.filter((e) => {
-        const size =
-          e.response.content && e.response.content.size > 0
-            ? e.response.content.size
-            : 0;
-        const body =
-          e.response.content && e.response.content.text
-            ? e.response.content.text.length
-            : 0;
+        const rc = e.response && e.response.content;
+        const size = rc && rc.size > 0 ? rc.size : 0;
+        const body = rc && rc.text ? rc.text.length : 0;
         return size > 0 && body === 0;
       }).length;
       if (truncated > 0 && truncated / rawEntries.length > 0.1) {
@@ -223,9 +218,6 @@ async function analyze() {
     applyFilters(S.entries1);
     if (S.entries2.length) applyFilters(S.entries2);
 
-    const reqCount = S.entries1.filter(
-      (e) => !e.filtered && !e.isMarker,
-    ).length;
     setMsg("Running correlation engine...", "Detecting dynamic values");
     await tick();
 
@@ -596,88 +588,20 @@ async function analyze() {
       S.advisorCandidates = [];
     }
 
-    setMsg(
-      "Generating scripts...",
-      "Building VuGen code with correlations & parameters",
-    );
-    await tick();
-
-    const isWeb = S.format === "webhttp" || S.format === "both";
-    const isDev = S.format === "devweb" || S.format === "both";
-    S.scripts = {};
-    const _activeCorrs = (S.correlations || []).filter(c => !c._suppressed);
-    if (isWeb) {
-      S.scripts.ac = genActionC(S.entries1, _activeCorrs);
-      S.scripts.vi = genVuserInit();
-      S.scripts.ve = genVuserEnd();
-      S.scripts.gh = genGlobalsH();
-      S.scripts.prm = genParamFilePrm();
-      S.scripts.dat = genCollectionDataCsv();
-      S.tab = "ac";
+    // ── Phase 4: Background review gate ─────────────────────────────────────
+    // If this HAR was recorded by the extension and has periodic entries,
+    // show the review panel and let the user decide before generating scripts.
+    const _perfxSummary = _buildPeriodicSummary(S.entries1);
+    if (_perfxSummary.length > 0) {
+      S.bgDecisions = new Map(_perfxSummary.map(p => [p.normalizedUrl, 'exclude']));
+      renderBackgroundReview(_perfxSummary);
+      showPhase('ph-res');
+      return;
     }
-    if (isDev) {
-      S.scripts.mj = genMainJS(S.entries1, _activeCorrs);
-      S.scripts.corrjs = genCorrelationsJS(_activeCorrs);
-      S.scripts.pyml = genParamsYml();
-      S.scripts.csv = genCollectionDataCsv();
-      if (!isWeb) S.tab = "mj";
-    }
+    S.bgDecisions = new Map();
+    // ─────────────────────────────────────────────────────────────────────────
 
-    // Update stats
-    document.getElementById("st-req").textContent = reqCount;
-    const corrEl = document.getElementById("st-corr");
-    corrEl.textContent =
-      S.correlations.length +
-      (S.candidates.length > 0 ? "+" + S.candidates.length : "");
-    if (S.candidates.length > 0)
-      corrEl.closest(".stat") &&
-        (corrEl.closest(".stat").className = "stat stat-warn");
-    document.getElementById("st-mode").textContent =
-      S.mode === "two" ? "Diff" : "Pattern";
-    document.getElementById("st-fmt").textContent = {
-      webhttp: "Web HTTP/HTML",
-      devweb: "DevWeb",
-      both: "Both",
-    }[S.format];
-    // Params stat
-    const paramEl = document.getElementById("st-params");
-    if (paramEl) {
-      paramEl.textContent = S.params.length;
-      paramEl.closest(".stat").className =
-        S.params.length > 0 ? "stat stat-ok" : "stat";
-    }
-    // Show transaction count in stats if markers found
-    const txnStat = document.getElementById("st-txn");
-    if (txnStat) txnStat.textContent = S.txns.length || "Auto";
-    // Auth stat
-    const authWrap = document.getElementById("st-auth-wrap");
-    const authEl = document.getElementById("st-auth");
-    if (S.auth && authEl && authWrap) {
-      const AUTH_LABELS = {
-        kerberos: "Kerberos",
-        ntlm: "NTLM",
-        negotiate: "Negotiate",
-        basic: "Basic",
-        digest: "Digest",
-        bearer: "Bearer",
-        saml: "SAML",
-      };
-      authEl.textContent = AUTH_LABELS[S.auth.type] || S.auth.type;
-      authWrap.style.display = "";
-      authWrap.className = "stat stat-ok";
-    } else if (authWrap) {
-      authWrap.style.display = "none";
-    }
-
-    renderCorrelations();
-    renderAdvisorPanel();
-    renderParams();
-    renderTabs();
-    renderDlBar();
-    document.getElementById("code-body").textContent =
-      S.scripts[S.tab] || "// No content";
-
-    showPhase("ph-res");
+    await _generateAndRenderScripts();
   } catch (err) {
     console.error(err);
     showToast(
@@ -691,6 +615,136 @@ async function analyze() {
 
 function tick() {
   return new Promise((r) => setTimeout(r, 20));
+}
+
+// =============================================================================
+// PHASE 4 — BACKGROUND REVIEW HELPERS
+// =============================================================================
+
+/**
+ * Group S.entries1 entries that carry _perfx_class = 'periodic' by
+ * normalizedUrl and return a summary array for the review panel.
+ */
+function _buildPeriodicSummary(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    if ((entry._perfx_class || 'unknown') !== 'periodic') continue;
+    const key = entry._normalizedUrl || entry.url;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        normalizedUrl: key,
+        exampleUrl:   entry.url,
+        method:       entry.method || 'GET',
+        occurrences:  0,
+        intervalMs:   entry._perfx_interval || null,
+        userDecision: 'exclude',
+      });
+    }
+    groups.get(key).occurrences++;
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Run code generation + UI update + showPhase("ph-res").
+ * Called from analyze() (non-perfx path) and applyBgDecisions() (perfx path).
+ */
+async function _generateAndRenderScripts() {
+  setMsg("Generating scripts...", "Building VuGen code with correlations & parameters");
+  await tick();
+
+  const reqCount = S.entries1.filter(e => !e.filtered && !e.isMarker).length;
+
+  const isWeb = S.format === "webhttp" || S.format === "both";
+  const isDev = S.format === "devweb"  || S.format === "both";
+  S.scripts = {};
+  const _activeCorrs = (S.correlations || []).filter(c => !c._suppressed);
+
+  if (isWeb) {
+    S.scripts.ac  = genActionC(S.entries1, _activeCorrs);
+    S.scripts.vi  = genVuserInit();
+    S.scripts.ve  = genVuserEnd();
+    S.scripts.gh  = genGlobalsH();
+    S.scripts.prm = genParamFilePrm();
+    S.scripts.dat = genCollectionDataCsv();
+    S.tab = "ac";
+  }
+  if (isDev) {
+    S.scripts.mj     = genMainJS(S.entries1, _activeCorrs);
+    S.scripts.corrjs = genCorrelationsJS(_activeCorrs);
+    S.scripts.pyml   = genParamsYml();
+    S.scripts.csv    = genCollectionDataCsv();
+    if (!isWeb) S.tab = "mj";
+  }
+
+  // Update stats bar
+  document.getElementById("st-req").textContent = reqCount;
+  const corrEl = document.getElementById("st-corr");
+  corrEl.textContent =
+    S.correlations.length +
+    (S.candidates.length > 0 ? "+" + S.candidates.length : "");
+  if (S.candidates.length > 0)
+    corrEl.closest(".stat") &&
+      (corrEl.closest(".stat").className = "stat stat-warn");
+  document.getElementById("st-mode").textContent =
+    S.mode === "two" ? "Diff" : "Pattern";
+  document.getElementById("st-fmt").textContent = {
+    webhttp: "Web HTTP/HTML",
+    devweb:  "DevWeb",
+    both:    "Both",
+  }[S.format];
+  const paramEl = document.getElementById("st-params");
+  if (paramEl) {
+    paramEl.textContent = S.params.length;
+    paramEl.closest(".stat").className =
+      S.params.length > 0 ? "stat stat-ok" : "stat";
+  }
+  const txnStat = document.getElementById("st-txn");
+  if (txnStat) txnStat.textContent = S.txns.length || "Auto";
+  const authWrap = document.getElementById("st-auth-wrap");
+  const authEl   = document.getElementById("st-auth");
+  if (S.auth && authEl && authWrap) {
+    const AUTH_LABELS = {
+      kerberos: "Kerberos", ntlm: "NTLM", negotiate: "Negotiate",
+      basic: "Basic", digest: "Digest", bearer: "Bearer", saml: "SAML",
+    };
+    authEl.textContent = AUTH_LABELS[S.auth.type] || S.auth.type;
+    authWrap.style.display = "";
+    authWrap.className = "stat stat-ok";
+  } else if (authWrap) {
+    authWrap.style.display = "none";
+  }
+
+  renderCorrelations();
+  renderAdvisorPanel();
+  renderParams();
+  renderTabs();
+  renderDlBar();
+  document.getElementById("code-body").textContent =
+    S.scripts[S.tab] || "// No content";
+
+  showPhase("ph-res");
+}
+
+/**
+ * Called by the "Apply & Generate Script" button in the background review panel.
+ * Reads toggle decisions, updates S.bgDecisions, hides the panel, then generates.
+ */
+async function applyBgDecisions() {
+  document.querySelectorAll('.bg-decision-toggle').forEach(el => {
+    const url    = el.dataset.url;
+    const active = el.querySelector('.bg-dec.active');
+    if (url && active) S.bgDecisions.set(url, active.dataset.val);
+  });
+  const panel = document.getElementById('bgReviewPanel');
+  if (panel) panel.style.display = 'none';
+
+  try {
+    await _generateAndRenderScripts();
+  } catch (err) {
+    console.error('[BG decisions] generation failed:', err);
+    showToast('Script generation failed: ' + err.message, 'error', 6000);
+  }
 }
 
 // =============================================================================

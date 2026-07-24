@@ -2024,3 +2024,72 @@ function submitPasteCorrelate() {
   );
   if (typeof regenerateFromAdvisor !== "undefined") regenerateFromAdvisor();
 }
+
+// =============================================================================
+// BACKGROUND REQUEST REVIEW PANEL  (Phase 4)
+// Renders the classified-HAR review table and wires toggle buttons.
+// Called from studio-app.js _buildPeriodicSummary / analyze() gate.
+// =============================================================================
+
+function _bgEsc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderBackgroundReview(periodicSummary) {
+  const panel   = document.getElementById('bgReviewPanel');
+  const tbody   = document.getElementById('bgReviewBody');
+  const subtitle = document.getElementById('bgReviewSubtitle');
+  const stats   = document.getElementById('bgReviewStats');
+  if (!panel || !tbody) return;
+
+  tbody.innerHTML = '';
+
+  for (const item of periodicSummary) {
+    const intervalLabel = item.intervalMs
+      ? (item.intervalMs / 1000).toFixed(1) + 's'
+      : '—';
+    // Strip scheme+host for readability; show full URL in tooltip
+    const shortUrl = item.normalizedUrl.replace(/^https?:\/\/[^/]+/, '') || item.normalizedUrl;
+
+    const row = document.createElement('tr');
+    row.innerHTML =
+      `<td title="${_bgEsc(item.normalizedUrl)}">${_bgEsc(shortUrl)}</td>` +
+      `<td>${_bgEsc(item.method)}</td>` +
+      `<td>${intervalLabel}</td>` +
+      `<td>${item.occurrences}</td>` +
+      `<td>` +
+        `<div class="bg-decision-toggle" data-url="${_bgEsc(item.normalizedUrl)}">` +
+          `<button class="bg-dec active" data-val="exclude">Exclude</button>` +
+          `<button class="bg-dec" data-val="once">Include once</button>` +
+          `<button class="bg-dec" data-val="all">Include all</button>` +
+        `</div>` +
+      `</td>`;
+    tbody.appendChild(row);
+  }
+
+  if (subtitle) {
+    const n = periodicSummary.length;
+    subtitle.textContent = `${n} periodic endpoint${n !== 1 ? 's' : ''} detected — choose how to handle each`;
+  }
+  if (stats) {
+    const excl = periodicSummary.length;
+    stats.textContent = `Default: all ${excl} excluded from the script. Change decisions above, then click Apply.`;
+  }
+
+  // Wire toggle buttons via event delegation on the panel
+  panel.addEventListener('click', function _onToggle(e) {
+    const btn = e.target.closest('.bg-dec');
+    if (!btn) return;
+    const group = btn.closest('.bg-decision-toggle');
+    if (!group) return;
+    group.querySelectorAll('.bg-dec').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }, { once: false });  // persistent listener (panel persists)
+
+  panel.style.display = '';
+}
+

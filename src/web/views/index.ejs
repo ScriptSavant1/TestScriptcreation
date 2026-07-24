@@ -1175,6 +1175,150 @@ footer {
   font-size: 12px; color: var(--text-2); line-height: 1.55;
 }
 
+/* ── Extension download banner ──────────────────────────────────────────── */
+.ext-banner {
+  width: 100%; max-width: 1040px;
+  background: linear-gradient(135deg, rgba(52,209,122,0.07), rgba(34,181,192,0.05));
+  border: 1px solid rgba(52,209,122,0.22);
+  border-radius: var(--r-lg); padding: 16px 24px;
+  margin-bottom: 44px;
+  display: flex; align-items: center; gap: 20px;
+  flex-wrap: wrap;
+}
+.ext-banner-badge {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #34d17a, #22b5c0);
+  color: #fff; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 6px;
+}
+.ext-banner-body { flex: 1; min-width: 220px; }
+.ext-banner-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+.ext-banner-sub { font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+.ext-banner-sub strong { color: var(--text); }
+.ext-get-btn {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 22px; border-radius: var(--r-md);
+  background: linear-gradient(135deg, #0d7a3e, #1aad58, #34d17a);
+  color: #fff; font-size: 13px; font-weight: 700;
+  border: none; cursor: pointer; font-family: var(--sans);
+  box-shadow: 0 4px 16px rgba(52,209,122,0.30);
+  white-space: nowrap;
+  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), filter 0.2s ease;
+}
+.ext-get-btn:hover { transform: translateY(-2px); filter: brightness(1.10); }
+
+/* ── Extension install modal ─────────────────────────────────────────────── */
+.ext-modal-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.72); backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  align-items: center; justify-content: center; padding: 20px;
+}
+.ext-modal-backdrop.open { display: flex; }
+.ext-modal {
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--r-xl); width: 100%; max-width: 780px;
+  max-height: 88vh; overflow-y: auto;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.70); backdrop-filter: blur(24px);
+  animation: modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes modalIn {
+  from { opacity:0; transform: scale(0.94) translateY(12px); }
+  to   { opacity:1; transform: scale(1) translateY(0); }
+}
+.ext-modal-hdr {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 26px 28px 0;
+}
+.ext-modal-hdr-left { display: flex; align-items: center; gap: 14px; }
+.ext-modal-icon {
+  width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(52,209,122,0.20), rgba(34,181,192,0.14));
+  border: 1px solid rgba(52,209,122,0.28);
+  display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+.ext-modal-title { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 3px; }
+.ext-modal-sub { font-size: 12.5px; color: var(--text-2); }
+.ext-modal-close {
+  width: 32px; height: 32px; border-radius: var(--r-sm); flex-shrink: 0;
+  border: 1px solid var(--glass-border); background: var(--glass);
+  color: var(--text-2); cursor: pointer; font-size: 18px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ext-modal-close:hover { background: rgba(240,100,100,0.12); border-color: rgba(240,100,100,0.30); color: var(--danger); }
+.ext-modal-body { padding: 22px 28px 28px; }
+/* Comparison table */
+.ext-cmp {
+  width: 100%; border-collapse: collapse;
+  border: 1px solid var(--glass-border); border-radius: var(--r-md);
+  overflow: hidden; margin-bottom: 24px; font-size: 13px;
+}
+.ext-cmp th {
+  padding: 11px 14px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .07em;
+  border-bottom: 1px solid var(--glass-border);
+}
+.ext-cmp th:first-child { text-align: left; color: var(--text-3); background: var(--glass); width: 36%; }
+.ext-cmp th.col-classic { background: rgba(255,255,255,0.03); color: var(--text-3); text-align: center; }
+.ext-cmp th.col-ext    { background: rgba(52,209,122,0.08); color: var(--success); text-align: center; }
+.ext-cmp td {
+  padding: 10px 14px; border-bottom: 1px solid var(--glass-border);
+  vertical-align: middle;
+}
+.ext-cmp tr:last-child td { border-bottom: none; }
+.ext-cmp td:first-child { color: var(--text-2); font-weight: 500; }
+.ext-cmp td:nth-child(2) { text-align: center; color: var(--text-3); font-size: 12.5px; background: rgba(255,255,255,0.015); }
+.ext-cmp td:nth-child(3) { text-align: center; color: var(--text-2); font-size: 12.5px; background: rgba(52,209,122,0.04); }
+.ext-cmp .cmp-yes { color: var(--success); font-weight: 700; }
+.ext-cmp .cmp-no  { color: var(--text-3); }
+/* Install steps */
+.ext-steps-title {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.ext-steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+.ext-step {
+  display: flex; align-items: flex-start; gap: 13px;
+  background: var(--glass); border: 1px solid var(--glass-border);
+  border-radius: var(--r-md); padding: 12px 16px;
+}
+.ext-step-num {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #fff; font-size: 11px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px var(--primary-glow); margin-top: 1px;
+}
+.ext-step-text { font-size: 13px; color: var(--text-2); line-height: 1.55; }
+.ext-step-text strong { color: var(--text); }
+.ext-step-text code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--glass); border: 1px solid var(--glass-border);
+  border-radius: 4px; padding: 1px 6px; color: var(--primary);
+}
+.ext-modal-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding-top: 4px;
+}
+.ext-dl-main-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 28px; border-radius: var(--r-md);
+  background: linear-gradient(135deg, #0d7a3e, #1aad58, #34d17a);
+  color: #fff; font-size: 14px; font-weight: 700;
+  border: none; cursor: pointer; font-family: var(--sans);
+  text-decoration: none;
+  box-shadow: 0 6px 20px rgba(52,209,122,0.35);
+  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), filter 0.2s ease;
+}
+.ext-dl-main-btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
+.ext-modal-note {
+  font-size: 11.5px; color: var(--text-3); line-height: 1.55; max-width: 340px;
+}
+
 /* ── Comparison table ─────────────────────────────────────────────────── */
 .cmp-section { width: 100%; margin-bottom: 44px; }
 .cmp-table {
@@ -1461,11 +1605,11 @@ code {
       <div class="tc-icon tc-icon-green">🎙</div>
       <span class="tc-tag tc-tag-green">Browser Recording → VuGen</span>
       <div class="tc-title">Recorder</div>
-      <div class="tc-desc">VuGen recording does not work on many VCSE and corporate machines. Use your browser's built-in network capture instead. Export a HAR from DevTools — Recorder converts it into a ready-to-open VuGen script. No VuGen installation needed for recording.</div>
+      <div class="tc-desc">VuGen recording does not work on many VCSE and corporate machines. Capture traffic using your browser instead — two methods available: the classic bookmarklet (zero install) or the PerfX Extension (hands-free side panel).</div>
       <ul class="tc-features">
-        <li>Works with Chrome, Firefox, Edge DevTools (F12)</li>
+        <li>Classic: bookmarklet + F12 DevTools — no install needed</li>
+        <li>Extension: dedicated side panel, no DevTools required</li>
         <li>Filter domains and mark transaction boundaries visually</li>
-        <li>Export HAR from any modern browser — no proxy setup</li>
         <li>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
       </ul>
       <div class="tc-cta">
@@ -1496,6 +1640,16 @@ code {
 
   </div>
 
+  <!-- ── PerfX Extension banner ──────────────────────────────────────────── -->
+  <div class="ext-banner">
+    <span class="ext-banner-badge">New</span>
+    <div class="ext-banner-body">
+      <div class="ext-banner-title">PerfX Recorder Extension — record without opening DevTools</div>
+      <div class="ext-banner-sub">A dedicated Chrome side panel that captures your traffic, names transactions, and sends the HAR straight to Script Studio. <strong>No F12, no manual export.</strong> One-time install — 5 steps.</div>
+    </div>
+    <button class="ext-get-btn" onclick="openExtModal(event)">⬇ Get Extension</button>
+  </div>
+
   <!-- Which tool do I need? -->
   <div class="hw-section">
     <div class="hw-section-title">Which tool do I need?</div>
@@ -1524,7 +1678,7 @@ code {
         <div class="decision-arrow">↓</div>
         <div class="decision-a tc-green-a">
           <span class="decision-tool">🎙 Recorder → then 🧪 Script Studio</span>
-          <span class="decision-hint">Record with browser DevTools (F12 → Export HAR). Use Recorder to import it, then Script Studio to add correlation and download a VuGen script.</span>
+          <span class="decision-hint">Two recording options: <strong>Classic</strong> — F12 DevTools bookmarklet, no install. <strong>Extension</strong> — dedicated side panel, auto-exports HAR, one-time 5-step install. Both feed into Recorder, then Script Studio for correlation.</span>
         </div>
       </div>
 
@@ -2125,7 +2279,16 @@ code {
     <h3 class="help-h3">What is a HAR file?</h3>
     <p class="help-p">A HAR (HTTP Archive) file is a recording of all the network requests your browser made during a session. Every modern browser's Developer Tools (F12) can export one. It contains all the URLs, request headers, request bodies, and responses for everything that happened during your recording.</p>
 
-    <h3 class="help-h3">Step-by-step</h3>
+    <div class="help-callout" style="background:rgba(52,209,122,0.07);border-color:rgba(52,209,122,0.22);margin-bottom:20px">
+      <strong>Two ways to record — choose what works for you:</strong>
+      <br><br>
+      <strong>Option A — PerfX Extension (recommended):</strong> A Chrome/Edge extension with a dedicated side panel. No DevTools needed. Click Start, record your journey, click Stop — the HAR is automatically sent to Script Studio. One-time 5-step install.
+      <a href="#" onclick="openExtModal(event)" style="color:var(--success);font-weight:700;text-decoration:underline">Get the extension →</a>
+      <br><br>
+      <strong>Option B — Classic Bookmarklet:</strong> No install at all. Drag two buttons to your bookmark bar, open DevTools (F12), record your journey, export the HAR manually, then upload it here. Best if you can't install anything.
+    </div>
+
+    <h3 class="help-h3">Step-by-step (Classic — bookmarklet method)</h3>
     <ol class="help-steps-list">
       <li>Open the <strong>Recorder</strong> tab and follow the <em>Bookmarklet Setup</em> instructions to install the recording helper in your browser bookmarks bar. You only need to do this once.</li>
       <li>Open your browser and navigate to the application you want to test.</li>
@@ -3103,5 +3266,127 @@ function hideResults() {
 function resetResult() { hideResults(); }
 </script>
 <script src="/analytics-device.js" defer></script>
+
+<!-- ══ PerfX Extension Install Modal ════════════════════════════════════════ -->
+<div id="ext-modal-backdrop" class="ext-modal-backdrop" onclick="closeExtModal(event)">
+  <div class="ext-modal" role="dialog" aria-modal="true" aria-label="Install PerfX Recorder Extension">
+
+    <div class="ext-modal-hdr">
+      <div class="ext-modal-hdr-left">
+        <div class="ext-modal-icon">🧩</div>
+        <div>
+          <div class="ext-modal-title">PerfX Recorder Extension</div>
+          <div class="ext-modal-sub">Chrome extension — one-time install, then use from your browser toolbar</div>
+        </div>
+      </div>
+      <button class="ext-modal-close" onclick="closeExtModal()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="ext-modal-body">
+
+      <!-- Comparison table -->
+      <table class="ext-cmp">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="col-classic">Classic (Bookmarklet)</th>
+            <th class="col-ext">PerfX Extension</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Setup</td>
+            <td class="cmp-yes">Drag 2 buttons — 30 sec</td>
+            <td>5-step one-time install</td>
+          </tr>
+          <tr>
+            <td>Requires DevTools open</td>
+            <td class="cmp-no">Yes — must stay open</td>
+            <td class="cmp-yes">No — side panel instead</td>
+          </tr>
+          <tr>
+            <td>Transaction naming</td>
+            <td>Click bookmark → type name</td>
+            <td class="cmp-yes">Button in side panel</td>
+          </tr>
+          <tr>
+            <td>Send HAR to Studio</td>
+            <td>Manual export + upload</td>
+            <td class="cmp-yes">One click</td>
+          </tr>
+          <tr>
+            <td>Multi-tab / popup apps</td>
+            <td class="cmp-no">Needs chrome://net-export/</td>
+            <td class="cmp-yes">Works automatically</td>
+          </tr>
+          <tr>
+            <td>Background traffic filter</td>
+            <td class="cmp-no">Everything captured</td>
+            <td class="cmp-yes">Auto-classifies analytics vs business</td>
+          </tr>
+          <tr>
+            <td>Request body capture</td>
+            <td>Browser-dependent</td>
+            <td class="cmp-yes">Full capture via CDP</td>
+          </tr>
+          <tr>
+            <td>Live request counter</td>
+            <td class="cmp-no">—</td>
+            <td class="cmp-yes">Visible while recording</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Install guide -->
+      <div class="ext-steps-title">How to install (5 steps — done once)</div>
+      <div class="ext-steps">
+        <div class="ext-step">
+          <div class="ext-step-num">1</div>
+          <div class="ext-step-text">Click the button below to download <strong>PerfX-Recorder-Extension.zip</strong></div>
+        </div>
+        <div class="ext-step">
+          <div class="ext-step-num">2</div>
+          <div class="ext-step-text"><strong>Unzip</strong> the downloaded file to any permanent folder on your machine (e.g. <code>Documents\PerfX-Extension</code>). Don't delete the folder after installing.</div>
+        </div>
+        <div class="ext-step">
+          <div class="ext-step-num">3</div>
+          <div class="ext-step-text">Open your browser's extension manager — in Chrome type <code>chrome://extensions</code>, in Edge type <code>edge://extensions</code> — and press Enter. Enable <strong>Developer mode</strong> using the toggle in the top-right corner.</div>
+        </div>
+        <div class="ext-step">
+          <div class="ext-step-num">4</div>
+          <div class="ext-step-text">Click <strong>Load unpacked</strong> → navigate to the unzipped <code>perfx-recorder-extension</code> folder → click <strong>Select Folder</strong>.</div>
+        </div>
+        <div class="ext-step">
+          <div class="ext-step-num">5</div>
+          <div class="ext-step-text">Click the puzzle icon (🧩) in your Chrome or Edge toolbar → find <strong>PerfX Recorder</strong> → click the pin icon to keep it visible. You're done — click the icon any time to start recording.</div>
+        </div>
+      </div>
+
+      <div class="ext-modal-footer">
+        <a class="ext-dl-main-btn" href="/downloads/recorder-extension" download>
+          ⬇ Download PerfX-Recorder-Extension.zip
+        </a>
+        <div class="ext-modal-note">After installing, the extension side panel guides you through recording. You do not need to return to this page to record — just click the PerfX icon in your toolbar.</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function openExtModal(e) {
+  if (e) e.stopPropagation();
+  document.getElementById('ext-modal-backdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeExtModal(e) {
+  if (e && e.target !== document.getElementById('ext-modal-backdrop')) return;
+  document.getElementById('ext-modal-backdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeExtModal();
+});
+</script>
 </body>
 </html>
