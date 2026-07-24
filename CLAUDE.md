@@ -1,0 +1,209 @@
+# Bruno DevWeb Converter — CLAUDE.md
+# READ THIS FIRST. Updated automatically after every session.
+
+## Standing Rules (read once, apply always)
+
+Also read and follow, every session:
+- ai-assisted-development-playbook.md
+- documentation-automation-system.md
+- testing-strategy-and-definition-of-done.md
+
+These govern: impact analysis before non-trivial changes, unit test
+requirements for new/changed functions, the documentation update matrix, and
+the Definition of Done checklist. They apply in addition to everything below
+— nothing below is overridden by them.
+
+---
+
+## Session Startup Protocol (MANDATORY)
+1. Read `C:/Users/karrir/.claude/projects/c--Workspace-bruno-devweb-converter/memory/state.md` → current feature status
+2. Read `Docs/BUGS.md` → active bugs
+3. Proceed with task
+4. At end of session → update state.md, BUGS.md, any affected Docs/
+
+---
+
+## What This Tool Does
+Converts HAR recordings, Bruno/Postman collections, and JMX files into:
+- **DevWeb scripts** (JavaScript, LoadRunner Enterprise)
+- **VuGen Web HTTP/HTML scripts** (C code, LoadRunner Professional)
+- **VuGen Script Studio** — browser-based HAR analyzer at `/converter/studio`
+  - Correlation Advisor (auto-detect + manual correlation)
+  - Parameterization engine
+  - Code generation for both protocols
+
+---
+
+## Critical File Map
+
+### VuGen Script Studio (primary feature, most active)
+| File | Size | Purpose |
+|------|------|---------|
+| `src/web/public/VuGen-Script-Studio.html` | HTML | All HTML/modals for Studio |
+| `src/web/public/shared/vugen-codegen.js` | JS | Shared VuGen codegen (UMD, works browser+Node) — loaded first |
+| `src/web/public/VuGen-Script-Studio-constants.js` | JS | Shared constants |
+| `src/web/public/VuGen-Script-Studio-correlation.js` | JS | Correlation state management |
+| `src/web/public/studio-codegen.js` | JS (large) | Shared codegen helpers (DevWeb + VuGen body substitution) |
+| `src/web/public/studio-advisor.js` | JS | Correlation Advisor detection engine |
+| `src/web/public/studio-ui.js` | JS (large) | Advisor UI, modals, card rendering |
+| `src/web/public/studio-app.js` | JS | **Live orchestrator** — app logic + DevWeb/VuGen C codegen wiring |
+| `src/web/public/analytics-device.js` | JS | Client-side fingerprint tracking (deferred load) |
+| `src/web/public/VuGen-Script-Studio.css` | CSS | All styles |
+
+**Phase history:** `VuGen-Script-Studio-app.js` was the Phase 3c monolithic file
+(~5200 lines). In Phase 4B it was split into `studio-app.js` (orchestrator),
+`studio-codegen.js` (codegen), and `studio-ui.js` (UI). The HTML was updated to
+load the split files. The monolithic file is **DELETED** (commit `d641ddc`).
+Do NOT recreate it — all its functions exist in the three split files above.
+
+### Entry Point
+`src/web/public/VuGen-Script-Studio.html` loads scripts in this order
+(confirmed by reading the HTML's `<script>` tags directly, not inferred):
+1. `shared/vugen-codegen.js`
+2. `VuGen-Script-Studio-constants.js`
+3. `VuGen-Script-Studio-correlation.js`
+4. `studio-codegen.js`
+5. `studio-advisor.js`
+6. `studio-ui.js`
+7. `studio-app.js` ← live orchestrator
+8. `analytics-device.js` (deferred)
+
+All share global state object `S` (defined in `studio-app.js`).
+
+### Converters (less active)
+| File | Purpose |
+|------|---------|
+| `src/generators/advancedScriptGenerator.js` | DevWeb script generation from Bruno/Postman |
+| `src/generators/webHttpScriptGenerator.js` | VuGen C script generation from Bruno/Postman |
+| `src/web/public/shared/vugen-codegen.js` | Shared VuGen codegen (UMD, works browser+Node) |
+
+---
+
+## Global State Object `S` (studio-app.js)
+```
+S.entries1        — full HAR entries array (ALL entries, including filtered)
+S.correlations    — [{name, sourceIdx, extractorType, extractorConfig, usages[]}]
+S.advisorCandidates — [{id, value, source, usages, status, ...}]
+S.params          — parameterization entries
+S.scripts         — generated script files map
+S.auth            — detected auth config
+S.hasDpop         — DPoP enabled flag
+```
+
+---
+
+## CRITICAL Architecture Rules (NEVER BREAK THESE)
+
+### 1. Index Rule
+All `sourceIdx`, `reqIdx`, `entryIdx` in correlations/usages ALWAYS reference `S.entries1` (the FULL array including filtered entries). Never reindex after filtering.
+
+### 2. Filtered Entry Rule
+`e.filtered` and `e.isMarker` entries MUST be skipped in:
+- All dropdowns
+- All scans (body, header, query)
+- All advisor detection loops
+Never remove them from `S.entries1`.
+
+### 3. URL Rule
+NEVER use `new URL()` on URLs that may contain `{{variables}}` — it encodes braces to `%7B%7B`. Use manual string splitting (`url.split('?')`).
+
+### 4. Event Storage Rule
+Bruno/Postman events are stored in `req.tests[]` NOT `req.event[]`. Always use:
+```javascript
+const events = req.tests || req.event || [];
+```
+
+### 5. studio-advisor.js Independence Rule
+`studio-advisor.js` has ZERO dependencies on other modules. It only reads `S.entries1` and `S.correlations`. Never import/call other modules from it.
+
+### 6. Body Substitution Sentinels
+Sentinels are only used in `studio-codegen.js` (client-side Studio). The server-side generators use `replaceParameters()` directly on `{{varName}}` syntax.
+
+| Sentinel | Meaning | Generated expression |
+|----------|---------|---------------------|
+| `\x00DYNSTART_name\x00DYNEND` | Correlation value | `${load.global.name}` |
+| `\x00DYNJSON_name\x00DYNEND` | Correlation value needing JSON re-escape | `${JSON.stringify(load.global.name\|\|'').slice(1,-1)}` |
+| `\x00DYNRND_name\x00DYNEND` | Random element from correlation array (`random_select`) | `${load.global.name[Math.floor(Math.random()*load.global.name.length)]}` |
+| `\x00PARAM_key\x00PARAMEND` | Parameter value | `${load.params.key}` |
+| `\x00PARAMJSON_key\x00PARAMEND` | Parameter value needing JSON re-escape | `${JSON.stringify(load.params.key\|\|'').slice(1,-1)}` |
+| `@@ARRAY_RECONSTR_key@@` | Array reconstruction | `${JSON.stringify(_key_arr)}` |
+| `\x00SRVHOST_VarName\x00` | Host parameterization | `${VarName}` |
+
+**Resolution order** in `genMainJS()` (order matters — ARRAY_RECONSTR mutates the body object first):
+`@@ARRAY_RECONSTR@@` → `DYNSTART` → `DYNRND` → `DYNJSON` → `PARAM` → `PARAMJSON`
+
+**Unresolved sentinels** produce silently broken output (NUL bytes in JS source or C string truncation at first NUL).
+
+### 7. Extractor Types
+| Type | DevWeb | VuGen C |
+|------|--------|---------|
+| `jsonpath` | `new load.JsonPathExtractor(name, path)` | `web_reg_save_param_json(...)` |
+| `jsonpath+selectAll` | third arg `true` (boolean); runtime stores result as **JS array** at `load.global.name` (NOT `name_1`/`name_count`) | `SelectAll=Yes`; VuGen stores `{name}_1..N` + `{name}_count` |
+| `boundary` | `new load.BoundaryExtractor(name, {leftBoundary, rightBoundary, scope: load.ExtractorScope.Body})` | `web_reg_save_param(LB=..., RB=...)` |
+| `boundary_header` | `new load.BoundaryExtractor(name, {leftBoundary, rightBoundary, scope: load.ExtractorScope.Headers})` | `web_reg_save_param(LB=..., RB=..., Search=Headers)` |
+| `regexp` | `new load.RegExpExtractor(name, pattern)` | `web_reg_save_param_regexp(...)` |
+| `html` | `new load.BoundaryExtractor` with HTML-aware boundaries | `web_reg_save_param` with HTML boundary pair |
+| `random_select` | emits `DYNRND` sentinel; random array element picker at runtime | same as `jsonpath+selectAll` with random index |
+| `array_reconstruct` | IIFE `.map()` over `load.global.anchorVar` (JS array) | `web_js_run` builder + `_count`/`_N` indexing |
+| `cookie` | suppressed when ALL usages are in cookie headers; emitted as boundary extractor when mixed usage | suppressed when ALL usages are in cookie headers |
+
+---
+
+## Body Generation: DevWeb vs VuGen
+
+### DevWeb (JavaScript)
+- Body emitted as template literal when dynamic: `` body: `{"key":"${load.global.token}"}` ``
+- Body emitted as JS object when static (via `_renderJsVal`)
+- Large bodies: inline JS object
+
+### VuGen C
+- Body emitted as C string inline `"Body=..."` or split across multiple string literals
+- Body ALWAYS goes through `escBodyBinary()` — escapes `"→\"`, `\→\\`, `\n→\n`
+- Parameters use `{paramName}` syntax substituted at runtime
+- Correlations use `{corrName}` syntax
+
+---
+
+## Correlation Advisor: Key Functions
+| File | Function | Purpose |
+|------|----------|---------|
+| studio-advisor.js | `advisorScan()` | Main entry — phases 1-4 |
+| studio-advisor.js | `_advExtractResponseValues()` | Phase 1: walk all response bodies |
+| studio-advisor.js | `_advCrossReference()` | Phase 2: find values in later requests |
+| studio-advisor.js | `_advPatternScan()` | Phase 3: JWT/UUID pattern detection |
+| studio-advisor.js | `_advMergeArrayCandidates()` | F1: merge array siblings → SelectAll |
+| studio-advisor.js | `_advDetectArrayGroups()` | F2: detect array reconstruction |
+| studio-advisor.js | `advisorToCorrelation()` | Convert candidate → S.correlations entry |
+| studio-advisor.js | `advisorAddManual()` | Manual correlation via field browser |
+| studio-ui.js | `renderAdvisorPanel()` | Render candidate cards |
+| studio-ui.js | `_advCardHtml()` | HTML for one candidate card |
+| studio-ui.js | `openAdvisorModal()` | Open Add Manual modal |
+| studio-ui.js | `advisorApplyAndRegen()` | Accept candidates + regenerate |
+
+---
+
+## Session-End Checklist (run after EVERY code change session)
+- [ ] Impact analysis was done for any non-trivial change (see playbook)
+- [ ] `node --check` on all modified .js files
+- [ ] Unit tests written/updated for new or changed functions
+- [ ] Update `Docs/BUGS.md` (mark fixed, add discovered)
+- [ ] Update `C:/Users/karrir/.claude/projects/c--Workspace-bruno-devweb-converter/memory/state.md`
+- [ ] Update `Docs/CORRELATION-LOGIC-EXPLAINED.md` if correlation logic changed
+- [ ] `git add` + `git commit` with descriptive message
+- [ ] No `console.error` or unhandled exceptions in modified code paths
+
+---
+
+## CSS / Design System
+All design tokens in `:root` in `VuGen-Script-Studio.css`.
+Key token groups: `--bg-*`, `--text-*`, `--accent-*`, `--border-*`, `--radius-*`, `--shadow-*`
+Component naming: `.adv-*` (advisor), `.corr-*` (correlations), `.param-*` (parameters), `.studio-*` (main studio).
+Dark mode: `.dark` class on `<body>`.
+
+---
+
+## Auto-maintenance Conventions
+- **After bug fix**: Add entry to `Docs/BUGS.md` as FIXED
+- **After new feature**: Add one-liner to relevant section in `Docs/FUNCTIONAL-SPEC.md`
+- **After correlation change**: Update `Docs/CORRELATION-LOGIC-EXPLAINED.md`
+- **Always**: Update `memory/state.md` with current feature status

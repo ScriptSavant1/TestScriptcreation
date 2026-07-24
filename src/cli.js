@@ -8,7 +8,7 @@ const { Command } = require('commander');
 const chalk = require('chalk');
 const ora = require('ora');
 const path = require('path');
-const BrunoDevWebConverter = require('./index');
+const BrunoDevWebConverter = require('./tools/collection-converter');
 const packageJson = require('../package.json');
 
 const program = new Command();
@@ -166,6 +166,108 @@ program
     } catch (error) {
       spinner.fail(chalk.red('Analysis failed'));
       console.error(chalk.red('\n❌ Error:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('convert-jmx')
+  .description('Convert a JMeter .jmx file to DevWeb or VuGen Web HTTP/HTML script')
+  .requiredOption('-i, --input <file>', 'Input JMeter script file (.jmx)')
+  .option('-o, --output <dir>', 'Output directory', './jmx-converted')
+  .option('--protocol <protocol>', 'Output protocol: devweb (JavaScript) or web-http (VuGen C)', 'devweb')
+  .option('-t, --think-time <seconds>', 'Default think time between requests (sec)', '1')
+  .option('--no-excel', 'Skip Workload Modelling Excel file generation')
+  .option('--no-transactions', 'Disable transaction grouping')
+  .option('--no-correlation', 'Disable correlation detection')
+  .option('--no-parameterization', 'Disable parameterization')
+  .option('--no-authentication', 'Disable authentication handling')
+  .option('--no-comments', 'Disable code comments in generated script')
+  .action(async (options) => {
+    const JmxConverter = require('./tools/jmx-converter');
+    const spinner = ora('Parsing JMX file...').start();
+
+    try {
+      const converter = new JmxConverter({
+        inputFile:           options.input,
+        outputDir:           options.output,
+        protocol:            options.protocol,
+        thinkTime:           parseFloat(options.thinkTime),
+        generateWlmExcel:    options.excel,
+        useTransactions:     options.transactions,
+        useCorrelation:      options.correlation,
+        useParameterization: options.parameterization,
+        useAuthentication:   options.authentication,
+        addComments:         options.comments
+      });
+
+      spinner.text = 'Converting...';
+      const results = await converter.convert();
+      spinner.succeed(chalk.green('Conversion complete!'));
+
+      const a  = results.analysis || {};
+      const tg = results.threadGroups || [];
+
+      console.log('\n' + chalk.cyan.bold('📊 JMX Conversion Summary') + '\n');
+      console.log(chalk.bold('Script:'));
+      console.log(`  Name:          ${results.metadata.name}`);
+      console.log(`  Protocol:      ${options.protocol === 'devweb' ? 'DevWeb (JavaScript)' : 'VuGen Web HTTP/HTML (C)'}`);
+      console.log(`  Requests:      ${chalk.bold(results.metadata.totalRequests)}`);
+      console.log(`  Thread Groups: ${chalk.bold(tg.length)}`);
+      console.log(`  CSV Datasets:  ${chalk.bold(results.csvDataSets?.length || 0)}`);
+
+      if (tg.length > 0) {
+        console.log('\n' + chalk.bold('Thread Groups (→ use in LRE Workload Model):'));
+        tg.forEach((g, i) => {
+          console.log(`  ${i + 1}. [${g.type}] ${g.name}`);
+          console.log(`     VUs: ${g.virtualUsers}  Ramp-up: ${g.rampUpSec}s  Hold: ${g.holdSec}s  Iterations: ${g.iterations}`);
+        });
+      }
+
+      if (a.correlations?.totalCorrelations > 0) {
+        console.log('\n' + chalk.bold('Correlations detected:'), a.correlations.totalCorrelations);
+        (a.correlations.correlations || []).slice(0, 5).forEach(c =>
+          console.log(`  - ${c.name} (${c.type || c.extractorType})`));
+        if (a.correlations.totalCorrelations > 5)
+          console.log(`  ... and ${a.correlations.totalCorrelations - 5} more`);
+      }
+
+      if (a.authentication?.totalConfigs > 0) {
+        console.log('\n' + chalk.bold('Authentication:'), Object.entries(a.authentication.byType || {})
+          .map(([t, n]) => `${t.toUpperCase()} ×${n}`).join(', '));
+      }
+
+      console.log('\n' + chalk.bold('📁 Output:'), chalk.cyan(results.outputDir));
+      console.log(chalk.bold('📁 Files generated:'));
+
+      if (options.protocol === 'web-http') {
+        console.log('  Action.c, vuser_init.c, vuser_end.c, globals.h');
+        console.log('  default.cfg, ParameterFile.prm');
+      } else {
+        console.log('  main.js, rts.yml, scenario.yml, parameters.yml');
+        console.log('  DevWebSdk.d.ts, tsconfig.json');
+      }
+      if (options.excel) {
+        console.log(`  ${results.metadata.name.replace(/[^\w\s-]/g,'_')}_WLM.xlsx  ← Workload Model (open in Excel)`);
+      }
+
+      console.log('\n' + chalk.yellow('Next steps:'));
+      console.log(`  1. cd ${results.outputDir}`);
+      if (options.protocol === 'web-http') {
+        console.log('  2. Review Action.c, check correlations and auth');
+        console.log('  3. Open .usr file in VuGen or upload to LRE');
+      } else {
+        console.log('  2. Review main.js, check correlations and auth');
+        console.log('  3. Upload to LoadRunner Enterprise');
+      }
+      if (options.excel) {
+        console.log('  4. Open *_WLM.xlsx — copy thread group values into LRE test configuration');
+      }
+
+    } catch (error) {
+      spinner.fail(chalk.red('Conversion failed'));
+      console.error(chalk.red('\n❌ Error:'), error.message);
+      if (process.env.DEBUG) console.error(error.stack);
       process.exit(1);
     }
   });

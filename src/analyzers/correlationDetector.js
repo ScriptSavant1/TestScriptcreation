@@ -41,9 +41,10 @@ class CorrelationDetector {
   /**
    * Analyze requests to detect potential correlations
    */
-  analyzeRequests(requests) {
+  analyzeRequests(requests, collection = null) {
     const correlations = [];
     const valueRegistry = new Map(); // Track values across requests
+    const collectionAuth = collection?.auth || null;
 
     // First pass: collect all produced values from each request
     for (let i = 0; i < requests.length; i++) {
@@ -68,7 +69,7 @@ class CorrelationDetector {
       const request = requests[i];
 
       // Check if this request consumes values
-      const consumes = this.detectConsumedValues(request, i, valueRegistry);
+      const consumes = this.detectConsumedValues(request, i, valueRegistry, collectionAuth);
 
       // Create correlation rules
       consumes.forEach(consume => {
@@ -207,29 +208,46 @@ class CorrelationDetector {
   /**
    * Extract test script from request
    */
+  /**
+   * Extract the post-response (test) script from a request.
+   * Handles all storage formats across Postman, Bruno JSON, and Bruno YAML:
+   *   - request.testScript           (pre-normalized string)
+   *   - request.tests[]              (brunoParser normalized — listen:'test')
+   *   - request.event[]              (Postman raw — listen:'test')
+   *   - script.exec as Array         (standard Postman)
+   *   - script.exec as string        (some Bruno exports)
+   *   - script as plain string       (legacy)
+   */
   extractTestScript(request) {
     if (request.testScript) return request.testScript;
 
-    // Normalized format: request.tests is an array of {listen, script} event objects
-    if (request.tests && Array.isArray(request.tests)) {
-      const testEvent = request.tests.find(e => e.listen === 'test');
-      if (testEvent && testEvent.script) {
-        if (testEvent.script.exec && Array.isArray(testEvent.script.exec)) {
-          return testEvent.script.exec.join('\n');
-        }
-        if (typeof testEvent.script === 'string') return testEvent.script;
-      }
+    // Helper: extract script text from an events array
+    const fromEvents = (events) => {
+      if (!Array.isArray(events)) return null;
+      const ev = events.find(e => e.listen === 'test' || e.listen === 'post-response');
+      if (!ev) return null;
+      const s = ev.script;
+      if (!s) return null;
+      if (s.exec) return Array.isArray(s.exec) ? s.exec.join('\n') : String(s.exec);
+      if (typeof s === 'string') return s;
       return null;
-    }
-    if (typeof request.tests === 'string') return request.tests;
+    };
 
-    // Original Postman format: request.event
-    if (request.event) {
-      const testEvent = request.event.find(e => e.listen === 'test');
-      if (testEvent && testEvent.script && testEvent.script.exec) {
-        return testEvent.script.exec.join('\n');
-      }
+    // 1. brunoParser normalized requests store events in req.tests[]
+    const t = fromEvents(request.tests);
+    if (t) return t;
+
+    // 2. Postman raw format stores events in req.event[]
+    const e = fromEvents(request.event);
+    if (e) return e;
+
+    // 3. Bruno JSON export format: post-response script in request.script.res
+    if (request.script?.res) {
+      const s = request.script.res;
+      return typeof s === 'string' ? s : (Array.isArray(s) ? s.join('\n') : null);
     }
+
+    if (typeof request.tests === 'string') return request.tests;
     return null;
   }
 
@@ -266,10 +284,12 @@ class CorrelationDetector {
     }
 
     // Resolve a source expression using the local variable map.
-    // Handles two cases:
+    // Handles three cases:
     //   1. Simple variable:  bru.setEnv("x", id)          — resolves `id` to `body?.access_token`
     //   2. Property chain:   env.set("x", body2.field)     — resolves `body2` prefix to its source
     //                        (e.g. body2 = pm.response.json()) → pm.response.json().field
+    //   3. Array access:     env.set("x", match[1])        — resolves `match` prefix to its source
+    //                        (e.g. match = body.match(/re/)) → body.match(/re/)[1]
     const resolveSource = (src) => {
       const trimmed = src.trim().replace(/;$/, '');
 
@@ -288,6 +308,16 @@ class CorrelationDetector {
         }
       }
 
+      // Case 3: varName[index] — bracket array access (e.g. match[1])
+      const bracketIdx = trimmed.search(/\[/);
+      if (bracketIdx > 0) {
+        const prefix = trimmed.substring(0, bracketIdx);
+        const rest   = trimmed.substring(bracketIdx);
+        if (localVarMap.has(prefix)) {
+          return `${localVarMap.get(prefix)}${rest}`;
+        }
+      }
+
       return trimmed;
     };
 
@@ -298,16 +328,24 @@ class CorrelationDetector {
 
       // Choose the right path extractor based on source type
       let extractPath;
+      let extraFields = {};
       if (extractorType === 'header') {
         extractPath = this.extractHeaderName(source);
       } else if (extractorType === 'cookie') {
         extractPath = this.extractCookieName(source);
+      } else if (extractorType === 'regex') {
+        extractPath = '$';
+        const pat = this.extractRegexPattern(source);
+        if (pat) extraFields.pattern = pat;
+      } else if (extractorType === 'xpath') {
+        extractPath = this.extractXPathQuery(source);
+        if (extractPath) extraFields.xpathQuery = extractPath;
       } else {
         extractPath = this.extractJsonPath(source);
       }
 
       if (!variables.find(v => v.name === varName)) {
-        variables.push({ name: varName, source, extractorType, extractPath });
+        variables.push({ name: varName, source, extractorType, extractPath, ...extraFields });
       }
     };
 
@@ -347,6 +385,12 @@ class CorrelationDetector {
     const varsSetPattern = /(?:^|[^a-zA-Z0-9_])vars\.set\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
     while ((match = varsSetPattern.exec(script)) !== null) addVar(match[1], match[2]);
 
+    // ── Postman legacy: postman.setEnvironmentVariable() / postman.setGlobalVariable() ──
+    const postmanSetEnvPattern = /postman\.setEnvironmentVariable\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = postmanSetEnvPattern.exec(script)) !== null) addVar(match[1], match[2]);
+    const postmanSetGlobalPattern = /postman\.setGlobalVariable\s*\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)/g;
+    while ((match = postmanSetGlobalPattern.exec(script)) !== null) addVar(match[1], match[2]);
+
     return variables;
   }
 
@@ -362,11 +406,26 @@ class CorrelationDetector {
   determineExtractorType(source) {
     if (!source) return 'json';
 
+    // ── Regex extraction: .match(/pattern/) or .match("pattern") ─────────────
+    if (/\.match\s*\(/.test(source)) return 'regex';
+
+    // ── XML extraction: xml2js / cheerio / DOMParser ──────────────────────────
+    if (/xml2js|parseString|cheerio|DOMParser|getElementsByTagName|xpath\.|XPath/.test(source)) return 'xpath';
+
     // ── Header detection (must check BEFORE body to avoid false match on "headers") ──
     if (/(?:res|response|pm\.response)\.headers|getResponseHeader|pm\.response\.headers/.test(source)) return 'header';
 
+    // ── Bruno: res.getHeader("name") ──────────────────────────────────────────
+    if (/res\.getHeader\s*\(/.test(source)) return 'header';
+
     // ── Cookie detection ──────────────────────────────────────────────────────
     if (/(?:res|response)\.cookies|pm\.cookies/.test(source)) return 'cookie';
+
+    // ── Bruno: bru.cookies.get("name") ────────────────────────────────────────
+    if (/bru\.cookies\.get\s*\(/.test(source)) return 'cookie';
+
+    // ── Bruno: res.getBody() — JSON body ──────────────────────────────────────
+    if (/res\.getBody\s*\(/.test(source)) return 'json';
 
     // ── JSON body detection (Bruno and Postman patterns) ──────────────────────
     if (/res\.body|body\??\.|jsonData|responseBody|JSON\.parse|json\.|pm\.response\.json|res\.json/.test(source)) return 'json';
@@ -387,6 +446,9 @@ class CorrelationDetector {
    */
   extractHeaderName(source) {
     if (!source) return null;
+    // Bruno: res.getHeader("name")
+    const getHeaderMatch = source.match(/res\.getHeader\s*\(["']([^"']+)["']\)/);
+    if (getHeaderMatch) return getHeaderMatch[1];
     // bracket notation: res.headers["name"] or response.headers["name"]
     const bracketMatch = source.match(/headers\s*\[["']([^"']+)["']\]/);
     if (bracketMatch) return bracketMatch[1];
@@ -406,10 +468,18 @@ class CorrelationDetector {
    */
   extractCookieName(source) {
     if (!source) return null;
+    // Bruno: bru.cookies.get("name") or pm.cookies.jar().get(url, "name")
+    const bruCookieMatch = source.match(/bru\.cookies\.get\s*\(["']([^"']+)["']\)/);
+    if (bruCookieMatch) return bruCookieMatch[1];
+    const pmJarMatch = source.match(/pm\.cookies\.jar\(\)\.get\s*\([^,]+,\s*["']([^"']+)["']\)/);
+    if (pmJarMatch) return pmJarMatch[1];
+    // bracket notation: cookies["name"]
     const bracketMatch = source.match(/cookies\s*\[["']([^"']+)["']\]/);
     if (bracketMatch) return bracketMatch[1];
+    // .get() notation: pm.cookies.get("name") or cookies.get("name")
     const getMatch = source.match(/cookies\.get\s*\(["']([^"']+)["']\)/);
     if (getMatch) return getMatch[1];
+    // dot notation: cookies.session_id
     const dotMatch = source.match(/cookies\??\.([\w_-]+)/);
     if (dotMatch) return dotMatch[1];
     return null;
@@ -437,6 +507,13 @@ class CorrelationDetector {
       .replace(/\.$/, '')
       .trim();
 
+    // ── Bruno: res.getBody().field ────────────────────────────────────────────
+    const getBodyMatch = source.match(/res\.getBody\s*\(\s*\)\s*\??\.([\w$[\]?.]+[^;,)\s]*)/);
+    if (getBodyMatch) {
+      const path = cleanPath(getBodyMatch[1]);
+      if (path) return `$.${path}`;
+    }
+
     // ── Bruno: res.body.field or res.body?.field or response.body.field ───────
     const resBodyMatch = source.match(/(?:res|response)\.body\??\.?([\w$[\]?.]+[^;,)\s]*)/);
     if (resBodyMatch) {
@@ -458,6 +535,15 @@ class CorrelationDetector {
       const path = cleanPath(pmJsonMatch[1]);
       return path ? `$.${path}` : null;
     }
+    // Bare pm.response.json() with no field accessor → root of JSON body
+    if (/pm\.response\.json\s*\(\s*\)/.test(source)) return '$';
+
+    // ── JSON.parse(expr).field ────────────────────────────────────────────────
+    const jsonParseMatch = source.match(/JSON\.parse\s*\([^)]+\)\s*\??\.([\w$[\]?.]+[^;,)\s]*)/);
+    if (jsonParseMatch) {
+      const path = cleanPath(jsonParseMatch[1]);
+      if (path) return `$.${path}`;
+    }
 
     // ── Postman/Generic: jsonData.field, json.field, response.field, data.field
     const genericMatch = source.match(/(?:jsonData|responseBody|json|response|data)\??\.(.+)/);
@@ -468,6 +554,44 @@ class CorrelationDetector {
 
     // ── Fallback: infer from variable name ────────────────────────────────────
     return this.inferPathFromVarName(null, source);
+  }
+
+  /**
+   * Extract the regex pattern string from a .match() call.
+   * e.g. body.match(/access_token":"([^"]+)"/)[1]  → access_token":"([^"]+)"
+   *      text.match(/"token":"(.+?)"/)              → "token":"(.+?)"
+   */
+  extractRegexPattern(source) {
+    if (!source) return null;
+    // /regex/ literal
+    const regexLiteral = source.match(/\.match\s*\(\s*\/((?:[^/\\]|\\.)*)\/[gimsuy]*\s*\)/);
+    if (regexLiteral) return regexLiteral[1];
+    // "string" or 'string' pattern passed to match()
+    const stringPattern = source.match(/\.match\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (stringPattern) return stringPattern[1];
+    return null;
+  }
+
+  /**
+   * Derive an XPath query from xml2js / cheerio / DOM access expressions.
+   * Returns a best-effort path string (e.g. //root/element/text()).
+   * e.g. result.root.token[0]._  → //root/token
+   *      $("div.token").text()   → //div[@class="token"]
+   */
+  extractXPathQuery(source) {
+    if (!source) return null;
+    // Cheerio: $("selector") — convert to rough xpath comment
+    const cheerioMatch = source.match(/\$\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (cheerioMatch) return `//${cheerioMatch[1].replace(/\s+/g, '/')}`;
+    // xml2js result path: result.RootEl.ChildEl[0]._ or result.root.el[0]
+    const xml2jsMatch = source.match(/\w+\.(\w+)\.(\w+)/);
+    if (xml2jsMatch) return `//${xml2jsMatch[1]}/${xml2jsMatch[2]}`;
+    // DOM: getElementsByTagName("name") / querySelector("name")
+    const domTagMatch = source.match(/getElementsByTagName\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (domTagMatch) return `//${domTagMatch[1]}`;
+    const querySelectorMatch = source.match(/querySelector\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (querySelectorMatch) return `//${querySelectorMatch[1]}`;
+    return '$';
   }
 
   /**
@@ -509,7 +633,7 @@ class CorrelationDetector {
   /**
    * Detect values that this request consumes (needs from previous requests)
    */
-  detectConsumedValues(request, index, valueRegistry) {
+  detectConsumedValues(request, index, valueRegistry, collectionAuth = null) {
     const consumed = [];
 
     // 1. Check pre-request scripts for variable usage
@@ -535,51 +659,29 @@ class CorrelationDetector {
 
       headers.forEach(header => {
         if (header.disabled) return;
-
-        const key = header.key;
+        const key   = header.key;
         const value = header.value;
+        if (!key || !value) return;
 
-        // Skip headers without a key
-        if (!key) return;
+        // Extract ALL {{varName}} references from this header value.
+        // Using findVariablesInString() handles both:
+        //   Pure variable:   {{access_token}}         → varName = "access_token"
+        //   Embedded:        Bearer {{access_token}}   → varName = "access_token"
+        //   Multiple:        {{scheme}} {{token}}      → both extracted
+        const varsInValue = this.findVariablesInString(String(value));
+        varsInValue.forEach(varName => {
+          if (!valueRegistry.has(varName)) return;
+          if (consumed.find(c => c.name === varName)) return;
 
-        // Check if header value looks like a variable/placeholder
-        if (this.isVariablePattern(value)) {
-          const varName = this.extractVariableName(value);
-          if (valueRegistry.has(varName)) {
-            consumed.push({
-              name: varName,
-              type: 'header',
-              location: 'headers',
-              path: key
-            });
-          }
-        }
-
-        // Check for common auth patterns
-        if (key.toLowerCase() === 'authorization' && this.isVariablePattern(value)) {
-          const varName = this.extractVariableName(value);
-          if (!consumed.find(c => c.name === varName)) {
-            consumed.push({
-              name: varName || 'authToken',
-              type: 'token',
-              location: 'headers',
-              path: 'Authorization'
-            });
-          }
-        }
-
-        // Check for bearer token patterns
-        if (value && value.toLowerCase().includes('bearer') && this.isVariablePattern(value)) {
-          const varName = this.extractVariableName(value);
-          if (varName && !consumed.find(c => c.name === varName)) {
-            consumed.push({
-              name: varName,
-              type: 'token',
-              location: 'headers',
-              path: key
-            });
-          }
-        }
+          const isAuth = key.toLowerCase() === 'authorization' ||
+                         String(value).toLowerCase().includes('bearer');
+          consumed.push({
+            name: varName,
+            type: isAuth ? 'token' : 'header',
+            location: 'headers',
+            path: key
+          });
+        });
       });
     }
 
@@ -649,7 +751,64 @@ class CorrelationDetector {
       });
     }
 
+    // 5. Check auth section for variables (Postman v2.1: request.auth.bearer[0].value = "{{access_token_1}}")
+    // The auth section is separate from request.headers — must be scanned independently.
+    if (request.auth) {
+      const authVars = this._findVariablesInAuth(request.auth);
+      authVars.forEach(varName => {
+        if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
+          consumed.push({
+            name: varName,
+            type: 'token',
+            location: 'auth',
+            path: 'auth'
+          });
+        }
+      });
+    }
+
+    // 6. Collection-level auth — inherited by requests that have no per-request auth override.
+    // When the Postman collection sets Bearer {{access_token}} at collection level, individual
+    // requests don't have request.auth set, so step 5 above never fires. We must scan the
+    // collection auth here for any request that inherits it (no own auth, or own auth is noauth).
+    const hasOwnAuth = request.auth && request.auth.type && request.auth.type !== 'noauth';
+    if (!hasOwnAuth && collectionAuth) {
+      const collAuthVars = this._findVariablesInAuth(collectionAuth);
+      collAuthVars.forEach(varName => {
+        if (valueRegistry.has(varName) && !consumed.find(c => c.name === varName)) {
+          consumed.push({
+            name: varName,
+            type: 'token',
+            location: 'auth',
+            path: 'collectionAuth'
+          });
+        }
+      });
+    }
+
     return consumed;
+  }
+
+  /**
+   * Recursively scan an auth object for {{varName}} / ${varName} template variable references.
+   * Handles Postman v2.1 format: { type: "bearer", bearer: [{ key: "token", value: "{{access_token_1}}" }] }
+   */
+  _findVariablesInAuth(auth) {
+    const vars = [];
+    if (!auth || typeof auth !== 'object') return vars;
+
+    const scan = (obj) => {
+      if (typeof obj === 'string') {
+        this.findVariablesInString(obj).forEach(v => vars.push(v));
+      } else if (Array.isArray(obj)) {
+        obj.forEach(item => scan(item));
+      } else if (obj && typeof obj === 'object') {
+        Object.values(obj).forEach(v => scan(v));
+      }
+    };
+
+    scan(auth);
+    return [...new Set(vars)];
   }
 
   /**
@@ -657,13 +816,23 @@ class CorrelationDetector {
    */
   extractPreRequestScript(request) {
     if (request.preRequestScript) return request.preRequestScript;
-    if (request.event) {
-      const preEvent = request.event.find(e => e.listen === 'prerequest');
-      if (preEvent && preEvent.script && preEvent.script.exec) {
-        return preEvent.script.exec.join('\n');
-      }
-    }
-    return null;
+
+    const fromEvents = (events) => {
+      if (!Array.isArray(events)) return null;
+      const ev = events.find(e => e.listen === 'prerequest' || e.listen === 'pre-request');
+      if (!ev) return null;
+      const s = ev.script;
+      if (!s) return null;
+      if (s.exec) return Array.isArray(s.exec) ? s.exec.join('\n') : String(s.exec);
+      if (typeof s === 'string') return s;
+      return null;
+    };
+
+    // Check both req.tests[] (brunoParser), req.event[] (Postman raw), and Bruno JSON script.req
+    return fromEvents(request.tests)
+        || fromEvents(request.event)
+        || (request.script?.req ? (typeof request.script.req === 'string' ? request.script.req : null) : null)
+        || null;
   }
 
   /**
@@ -673,18 +842,19 @@ class CorrelationDetector {
     const variables = new Set();
     if (!script) return Array.from(variables);
 
-    // Pattern: pm.environment.get("varName")
-    const pmGetPattern = /pm\.(environment|globals|collectionVariables|variables)\.get\s*\(\s*["']([^"']+)["']\s*\)/g;
     let match;
-    while ((match = pmGetPattern.exec(script)) !== null) {
-      variables.add(match[2]);
-    }
 
-    // Pattern: bru.getVar("varName")
-    const bruGetPattern = /bru\.getVar\s*\(\s*["']([^"']+)["']\s*\)/g;
-    while ((match = bruGetPattern.exec(script)) !== null) {
-      variables.add(match[1]);
-    }
+    // Postman: pm.*.get("varName")
+    const pmGetPattern = /pm\.(environment|globals|collectionVariables|variables)\.get\s*\(\s*["']([^"']+)["']\s*\)/g;
+    while ((match = pmGetPattern.exec(script)) !== null) variables.add(match[2]);
+
+    // Bruno: bru.getEnv/getEnvVar/getVar/getGlobalVar/getCollectionVar("varName")
+    const bruGetPattern = /bru\.(?:getEnv|getEnvVar|getVar|getGlobalVar|getCollectionVar)\s*\(\s*["']([^"']+)["']\s*\)/g;
+    while ((match = bruGetPattern.exec(script)) !== null) variables.add(match[1]);
+
+    // Bruno legacy: env.get("varName"), vars.get("varName")
+    const legacyGetPattern = /(?:^|[^a-zA-Z0-9_])(?:env|vars)\.get\s*\(\s*["']([^"']+)["']\s*\)/gm;
+    while ((match = legacyGetPattern.exec(script)) !== null) variables.add(match[1]);
 
     return Array.from(variables);
   }
@@ -754,10 +924,10 @@ class CorrelationDetector {
       Object.entries(body).forEach(([key, value]) => {
         const currentPath = `${path}.${key}`;
         
-        if (typeof value === 'string' && this.isVariablePattern(value)) {
-          variables.push({
-            name: this.extractVariableName(value),
-            path: currentPath
+        if (typeof value === 'string') {
+          // Use findVariablesInString to catch both pure {{var}} and embedded "prefix {{var}}"
+          this.findVariablesInString(value).forEach(varName => {
+            variables.push({ name: varName, path: currentPath });
           });
         } else if (typeof value === 'object') {
           variables.push(...this.findVariablesInBody(value, currentPath));
@@ -769,45 +939,98 @@ class CorrelationDetector {
   }
 
   /**
-   * Generate extractor code for DevWeb
+   * Generate extractor code for DevWeb.
+   * Uses JSON.stringify() for all user-supplied strings to ensure proper escaping
+   * of double quotes, backslashes, and other special characters in patterns.
    */
   generateExtractor(correlation) {
+    // JSON.stringify correctly escapes ", \, control chars etc.
+    const n = JSON.stringify(correlation.name || '');
+
+    // Map JMX scope → DevWeb ExtractorScope constant (null = use default Body)
+    const scopeConst = this._dvScopeConst(correlation.scope || correlation.extractorScope);
+
     switch (correlation.extractorType) {
       case 'json':
-        return `new load.JsonPathExtractor("${correlation.name}", "${correlation.extractPath}")`;
+        return `new load.JsonPathExtractor(${n}, ${JSON.stringify(correlation.extractPath || `$.${correlation.name}`)})`;
 
-      case 'boundary':
-        return `new load.BoundaryExtractor("${correlation.name}", "${correlation.leftBound || '<'}", "${correlation.rightBound || '>'}")`;
+      case 'boundary': {
+        const lb = JSON.stringify(correlation.leftBound  || '<');
+        const rb = JSON.stringify(correlation.rightBound || '>');
+        if (scopeConst) {
+          return `new load.BoundaryExtractor(${n}, { leftBoundary: ${lb}, rightBoundary: ${rb}, scope: ${scopeConst} })`;
+        }
+        return `new load.BoundaryExtractor(${n}, ${lb}, ${rb})`;
+      }
 
       case 'regex':
-      case 'regexp':
-        return `new load.RegexpExtractor("${correlation.name}", "${correlation.pattern || '(.+)'}")`;
+      case 'regexp': {
+        const pat     = JSON.stringify(correlation.pattern || '(.+)');
+        // JMeter matchNumber: 1 = first, -1 = random, 0 = all occurrences
+        const matchNo = this._parseMatchNo(correlation.matchNumber);
+        if (scopeConst || matchNo !== 1) {
+          // Use options form — positional form 3rd arg is regex flags string, not occurrence
+          const opts = [`expression: ${pat}`];
+          if (matchNo !== 1) opts.push(`occurrence: ${matchNo}`);
+          if (scopeConst) opts.push(`scope: ${scopeConst}`);
+          return `new load.RegexpExtractor(${n}, { ${opts.join(', ')} })`;
+        }
+        return `new load.RegexpExtractor(${n}, ${pat})`;
+      }
 
       case 'textcheck':
-      case 'validation':
-        // TextCheckExtractor for validating presence of text
+      case 'validation': {
         const options = correlation.extractorOptions || {};
-        const text = correlation.expectedText || correlation.text || correlation.value;
-        const scope = options.scope || 'load.ExtractorScope.Body';
-        const failOn = options.failOn !== undefined ? options.failOn : false;
-        return `new load.TextCheckExtractor("${correlation.name}", { text: "${text}", scope: ${scope}, failOn: ${failOn} })`;
+        const text    = correlation.expectedText || correlation.text || correlation.value || '';
+        const tscope  = options.scope || 'load.ExtractorScope.Body';
+        const failOn  = options.failOn !== undefined ? options.failOn : false;
+        return `new load.TextCheckExtractor(${n}, { text: ${JSON.stringify(text)}, scope: ${tscope}, failOn: ${failOn} })`;
+      }
+
+      case 'xpath': {
+        // XpathExtractor (lowercase 'p') — SDK does not support scope for XPath
+        const xpathQuery = JSON.stringify(correlation.xpathQuery || `//${correlation.name}`);
+        return `new load.XpathExtractor(${n}, ${xpathQuery})`;
+      }
 
       case 'header': {
-        // extractPath holds the HTTP header name (e.g. "x-csrf-token")
+        // Use options form — positional BoundaryExtractor has no scope arg
         const headerName = correlation.extractPath || correlation.name.replace(/^_/, '');
-        return `new load.BoundaryExtractor("${correlation.name}", "${headerName}: ", "\\r\\n", load.ExtractorScope.Headers)`;
+        return `new load.BoundaryExtractor(${n}, { leftBoundary: ${JSON.stringify(headerName + ': ')}, rightBoundary: "\\r\\n", scope: load.ExtractorScope.Headers })`;
       }
 
       case 'cookie': {
-        // extractPath holds the cookie name (e.g. "session_id")
+        // Use dedicated CookieExtractor — extracts from response cookie jar by name
         const cookieName = correlation.extractPath || correlation.name.replace(/^_/, '');
-        // DevWeb: use BoundaryExtractor on Headers searching Set-Cookie
-        return `new load.BoundaryExtractor("${correlation.name}", "${cookieName}=", ";", load.ExtractorScope.Headers)`;
+        return `new load.CookieExtractor(${n}, { cookieName: ${JSON.stringify(cookieName)} })`;
       }
 
       default:
-        return `new load.JsonPathExtractor("${correlation.name}", "$.${correlation.name}")`;
+        return `new load.JsonPathExtractor(${n}, ${JSON.stringify(`$.${correlation.name}`)})`;
     }
+  }
+
+  /**
+   * Map JMX scope field → DevWeb ExtractorScope constant string (or null for body default).
+   */
+  _dvScopeConst(scope) {
+    const map = {
+      'response_headers': 'load.ExtractorScope.Headers',
+      'request_headers':  'load.ExtractorScope.Headers',
+      'url':              'load.ExtractorScope.Url',
+      'response_code':    'load.ExtractorScope.Status',
+      'response_message': 'load.ExtractorScope.Status',
+      'headers':          'load.ExtractorScope.Headers',  // legacy
+    };
+    return map[scope] || null;
+  }
+
+  /**
+   * Parse JMeter match_number to integer (1 = first, -1 = random, 0 = all).
+   */
+  _parseMatchNo(matchNumber) {
+    const n = parseInt(matchNumber, 10);
+    return isNaN(n) ? 1 : n;
   }
 
   /**

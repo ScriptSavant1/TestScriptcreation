@@ -53,35 +53,45 @@ function uuidv4() {
 
 // get Jwt Token - auto-generates or refreshes if expired
 // call this function whenever you need a JWT token
-function getJwtToken(params) {
+// claimMap (optional): { iss:'client_id', kid:'signing_kid', scope:'scope', aud:'_jwt_aud', secret:'private_key', ... }
+// Resolves each field from params[claimMap.field]; falls back to legacy hardcoded property names.
+function getJwtToken(params, claimMap) {
   if (global.jwtToken && Date.now() < global.jwtExpiresAt) {
-    return global.jwt_Token; // Return cached token
+    return global.jwtToken;
   }
 
-  //Token expired or doesn't exist - generate new one
-  load.log("Generating JWT token", loadLogLevel.Info);
-  const header = {
-    kid: params.signingKid,
-    typ: "JWT",
-    alg: "PS256",
-  };
-  const now = Math.floor(Date.now() / 1000); // Refresh at 9 min
+  const cm = claimMap || {};
+
+  // Resolve param values via claimMap; fall back to legacy hardcoded names for backward compat
+  const clientId  = (cm.iss ? params[cm.iss] : null) ||
+                    (cm.sub ? params[cm.sub] : null) ||
+                    params.clientId || '';
+  const signingKid = (cm.kid    ? params[cm.kid]    : null) || params.signingKid || '';
+  const scope      = (cm.scope  ? params[cm.scope]  : null) || params.scope || '';
+  const aud        = (cm.aud    ? params[cm.aud]    : null) || params.aud || '';
+  // secret: try claimMap name, then common fallbacks (private_key covers JKS-converted PEM)
+  const secret     = (cm.secret ? params[cm.secret] : null) ||
+                     params.secret || params.private_key || params.signing_private_key || '';
+
+  const header = { kid: signingKid, typ: "JWT", alg: "PS256" };
+  const now = Math.floor(Date.now() / 1000);
   const payload = {
-    aud: params.aud,
-    iss: params.clientId,
-    sub: params.clientId,
+    aud,
+    iss: clientId,
+    sub: clientId,
     iat: now,
-    exp: now + 60 * 10, // 10 minutes
+    exp: now + 60 * 10,
     jti: uuidv4(),
   };
+  if (scope) payload.scope = scope;
 
-  let prvkey = params.secret || "";
-  prvkey = prvkey.replace(/\\n/g, "\n"); // Handle escaped newlines
+  let prvkey = String(secret || "");
+  prvkey = prvkey.replace(/\\n/g, "\n");
 
-  load.global.jwt_Token = generateJWT(header, payload, prvkey);
-  load.global.jwt_expires_at = Date.now() + 9 * 60 * 1000; // Refresh at 9 min
+  global.jwtToken = generateJWT(header, payload, prvkey);
+  global.jwtExpiresAt = Date.now() + 9 * 60 * 1000;
 
-  return load.global.jwt_Token;
+  return global.jwtToken;
 }
 
-module.exports = { generateJwt, uuidv4, getJwtToken };
+module.exports = { generateJWT, uuidv4, getJwtToken };
