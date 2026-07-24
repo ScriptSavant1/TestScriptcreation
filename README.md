@@ -1,728 +1,281 @@
-# 🚀 Bruno to DevWeb Converter
+# LRE Toolkit — Performance Engineering
 
-[![Version](https://img.shields.io/badge/version-2.3.1-blue.svg)](https://gitlab.com/your-org/bruno-devweb-converter)
-[![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen.svg)](https://nodejs.org)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+> Convert Postman/Bruno collections, JMeter scripts, and browser recordings into production-ready LoadRunner Enterprise VuGen scripts — automatically.
 
-**Advanced converter for Bruno/Postman collections to LoadRunner Enterprise scripts — supports both DevWeb (JavaScript) and VuGen Web HTTP/HTML (C) protocols, with intelligent correlation, parameterization, and authentication support.**
+**Version:** 2.10.13 | **Internal tool — bank's performance engineering platform**
 
 ---
 
-## ✨ Features
+## What it does
 
-### 🎯 Core Features
-- ✅ **5 Input Formats**: Postman JSON, Bruno JSON, Bruno Single YAML, Bruno YAML Folder, Single `.bru` file
-- ✅ **2 Output Protocols**: DevWeb JavaScript (`--protocol devweb`) and VuGen Web HTTP/HTML C (`--protocol web-http`)
-- ✅ **Smart Transactions**: Automatic grouping by folders
-- ✅ **Auto-Correlation**: Intelligent detection of dynamic values
-- ✅ **3-Tier Variable Classification**: Dynamic, Config (once), Test Data (per iteration)
-- ✅ **Authentication**: OAuth 2.0, Basic, Bearer, API Key, AWS Signature v4
-- ✅ **Think Time**: Configurable delays between requests
+The LRE Toolkit eliminates ~80% of manual VuGen scripting effort by automatically generating:
 
-### 🔧 Advanced Features
-- 🔍 **Correlation Detection**: Automatically identifies tokens, IDs, session values
-- 📊 **Multi-Script Mode** (`-m multi`): Split by top-level folder for independent LRE scenarios
-- 🔐 **Auth Handlers**: Support for all major authentication methods
-- 📦 **Large Base64 Extraction**: Auto-detect and extract to external `data/*.b64` files
-- 📝 **Environment Override** (`-e`): Override collection variables with environment file
-- 🌐 **Web UI**: User-friendly interface with protocol selector
-- 🔄 **Cross-Folder Dependency Detection**: Warns about shared variables across scripts
-- 🏷️ **Collection-Level Headers/Auth**: Bruno YAML `request.headers`, `request.auth`, and before-request scripts merged into defaults
+- **Correlation** — extracts all dynamic values (tokens, session IDs, CSRF tokens) from responses
+- **3-tier parameterization** — classifies every variable as Dynamic / Config / Test Data
+- **Authentication** — OAuth2, JWT signing, DPoP (RFC 9449), PKCE (RFC 7636), NTLM/Kerberos, Basic, Bearer, API Key, AWS Sig v4, mTLS
+- **All mandatory files** — `.usr`, `rts.yml`, `scenario.yml`, `parameters.yml`, `Action.c`, `vuser_init.c`, parameter files, etc.
+- **Per-request transactions** — sequential naming (`T01_Login`, `T02_GetAccount`)
 
 ---
 
-## 📋 Supported Input Formats
+## Three Tools
 
-| Format | Extension | Export Instructions |
+| Tool | Input | Best for |
 |---|---|---|
-| **Postman Collection v2.1** | `.json` | Postman → Collection → ⋯ → Export → Collection v2.1 |
-| **Bruno JSON** | `.json` | Bruno → Collection → ⋯ → Export → JSON |
-| **Bruno Single YAML** | `.yml` | Bruno → Collection → ⋯ → Export → YAML (bundled single file) |
-| **Bruno YAML Folder** | directory | Copy/export the whole Bruno collection folder (contains `opencollection.yml`, `folder.yml`, `*.bru` files) |
-| **Single Bruno Request** | `.bru` | Any individual `.bru` file from a Bruno project |
-
-The converter **auto-detects** the format based on file extension and content.
+| **Converter** | Postman v2.1, Bruno JSON/YAML/.bru, JMeter .jmx | Convert existing API collections or JMeter scripts |
+| **Recorder** | Browser HAR export | Record journeys on VCSE/Azure VMs where VuGen proxy recording is blocked |
+| **Script Studio** | 1 or 2 HAR files | Maximum-accuracy correlation using diff-based analysis |
 
 ---
 
-## 📦 Installation
+## Output Formats
+
+| Format | Protocol | Entry file | Choose when |
+|---|---|---|---|
+| 🟦 **DevWeb** | JavaScript | `main.js` | New projects, LRE 2021+ |
+| 🟧 **Web HTTP/HTML** | C | `Action.c` | All LRE versions, existing projects |
+
+---
+
+## Quick Start
+
+### Local development
+
+```bash
+npm install
+npm start
+# → http://localhost:3000/converter
+```
+
+### Custom port
+
+```bash
+PORT=8080 npm start
+```
+
+### Run directly
+
+```bash
+node src/web/server.js
+```
+
+### CLI (no web server)
+
+```bash
+node src/index.js \
+  --input collection.json \
+  --output ./output \
+  --protocol devweb \
+  --mode single
+```
+
+---
+
+## IIS Deployment (Production)
+
+The application runs on IIS + iisnode (standard Windows Server stack).
 
 ### Prerequisites
-- Node.js >= 14.0.0
-- npm >= 6.0.0
 
-### 🚀 Quick Install (Automated)
+- Windows Server 2019/2022 with IIS 10
+- Node.js 18 LTS
+- iisnode 0.2.26
+- IIS URL Rewrite Module 2.1
 
-#### **Windows Users**
+### Quick Deploy Steps
 
-**Option 1: PowerShell (Recommended for Windows 10/11)**
 ```powershell
-cd bruno-devweb-converter
-.\install.ps1
+# 1. Create site directory
+mkdir C:\inetpub\lre-toolkit
+
+# 2. Copy application files to C:\inetpub\lre-toolkit\
+
+# 3. Install dependencies
+cd C:\inetpub\lre-toolkit
+npm install --production
+
+# 4. Set permissions (NetworkService reads app code, writes iisnode logs)
+icacls "C:\inetpub\lre-toolkit" /grant "NetworkService:(OI)(CI)R"
+mkdir C:\inetpub\lre-toolkit\iisnode
+icacls "C:\inetpub\lre-toolkit\iisnode" /grant "NetworkService:(OI)(CI)F"
+
+# 5. In IIS Manager:
+#    - Create Application Pool "lre-toolkit-pool" (No Managed Code)
+#    - Create Site pointing to C:\inetpub\lre-toolkit
+#    - Application Pool: lre-toolkit-pool
 ```
 
-**Option 2: Batch Script (All Windows versions)**
-```cmd
-cd bruno-devweb-converter
-install.bat
-```
-
-#### **Linux / macOS Users**
-
-```bash
-cd bruno-devweb-converter
-chmod +x install.sh
-./install.sh
-```
-
-> 📖 **Detailed Instructions**: See [INSTALLATION.md](INSTALLATION.md) for complete installation guide
-
-### 📋 Manual Installation
-
-```bash
-# Clone the repository
-git clone https://gitlab.com/your-org/bruno-devweb-converter.git
-cd bruno-devweb-converter
-
-# Install dependencies
-npm install
-
-# Make CLI globally available
-npm link
-```
-
-### 🐳 Docker — Zero-Install (Recommended for CI/CD)
-
-The converter is published as a Docker image to the GitLab Container Registry.
-No Node.js installation needed on the runner.
-
-**Linux runner (pull and run directly):**
-```bash
-docker run --rm \
-  -v $(pwd):/workspace \
-  registry.gitlab.com/your-org/bruno-devweb-converter:latest \
-  convert -i my-collection.json -o output/
-```
-
-**Build image locally from source:**
-```bash
-docker build -t bruno-devweb-converter .
-docker run --rm -v $(pwd):/workspace bruno-devweb-converter convert -i my-collection.json -o output/
-```
-
-### 📚 Installation Resources
-
-- **[INSTALLATION.md](INSTALLATION.md)** - Complete installation guide with troubleshooting
-- **[INSTALL_COMPARISON.md](INSTALL_COMPARISON.md)** - Compare installation methods
+The `web.config` in the repository is already configured for iisnode. See [Docs/deployment/DEPLOYMENT-IIS.md](Docs/deployment/DEPLOYMENT-IIS.md) for the complete step-by-step guide.
 
 ---
 
-## 🚀 Quick Start
+## Privacy Model
 
-### Command Line Interface
+All file processing is **entirely in-memory**. Nothing is ever written to disk.
 
-#### Direct (from project root, no global install needed):
+| Stage | What happens |
+|---|---|
+| Upload | `multer.memoryStorage()` — files stay in RAM |
+| Conversion | `AsyncLocalStorage` fs interceptor redirects all `fs.writeFile` calls → in-memory Map |
+| Download | ZIP streamed from Map → browser via `archiver.pipe(res)` — no ZIP file on disk |
+| After download | Token deleted; Map garbage-collected |
 
-```bash
-# Postman collection
-node src/cli.js convert -i collection.postman_collection.json -o ./output
+Each request has its own isolated `AsyncLocalStorage` context — no cross-request contamination.
 
-# Bruno JSON export
-node src/cli.js convert -i BrunoCollection.json -o ./output
+---
 
-# Bruno single YAML file
-node src/cli.js convert -i MyCollection.yml -o ./output
+## Project Structure
 
-# Bruno YAML folder (distributed format)
-node src/cli.js convert -i "MyCollection/" -o ./output
-
-# Single .bru request file
-node src/cli.js convert -i Login.bru -o ./output
-
-# With environment file override
-node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
-
-# Multi-script mode (one script per top-level folder)
-node src/cli.js convert -i MyCollection.yml -m multi -o ./scripts
-
-# VuGen Web HTTP/HTML (C) — same flags, add --protocol web-http
-node src/cli.js convert -i collection.json --protocol web-http -o ./output
-node src/cli.js convert -i MyCollection.yml --protocol web-http -m multi -o ./scripts
-
-# Analyze collection (no files written)
-node src/cli.js analyze -i collection.json
+```
+bruno-devweb-converter/
+│
+├── app.js                    ← IIS entry point
+├── package.json
+├── web.config                ← IIS + iisnode configuration
+│
+├── DevWebSdk.d.ts            ← TypeScript defs (included in output)
+├── jwt-helper.js             ← DevWeb JWT signing helper (included in output)
+├── jsrsasign.js              ← RSA/EC crypto for VuGen JS (included in output)
+├── lre-utils.js              ← DPoP + PKCE + JWT crypto source (→ lre-utils.dat)
+├── transport.pem             ← Placeholder PEM key (included in JWT output)
+│
+├── src/
+│   ├── index.js              ← CLI entry point
+│   ├── parsers/
+│   │   ├── brunoParser.js    ← Postman v2.1 + Bruno all formats
+│   │   └── jmxParser.js      ← JMeter .jmx XML
+│   ├── analyzers/
+│   │   ├── correlationDetector.js
+│   │   ├── parameterizationEngine.js
+│   │   ├── authenticationHandler.js
+│   │   └── customScriptParser.js  ← JWT/DPoP library fingerprinting
+│   ├── generators/
+│   │   ├── advancedScriptGenerator.js       ← DevWeb main.js
+│   │   ├── mandatoryFilesGenerator.js       ← DevWeb config files
+│   │   ├── webHttpScriptGenerator.js        ← VuGen Action.c
+│   │   └── webHttpMandatoryFilesGenerator.js
+│   ├── converters/
+│   │   └── jmxConverter.js
+│   └── lib/
+│       ├── memoryFsInterceptor.js    ← AsyncLocalStorage fs → RAM
+│       └── jmxDependencyResolver.js
+│
+└── src/web/
+    ├── server.js             ← Express app
+    ├── views/index.ejs       ← Portal SPA
+    └── public/
+        ├── VuGen-Recorder.html
+        ├── VuGen-Script-Studio.html
+        ├── VuGen-Script-Studio-app.js        ← Studio code generator
+        ├── VuGen-Script-Studio-correlation.js ← Studio correlation engine
+        └── jszip.min.js
 ```
 
-#### After global install (`npm install -g` or `npm link`):
+---
 
-```bash
-# DevWeb (JavaScript) — default
-bruno-devweb convert -i collection.json -o output/
-bruno-devweb convert -i MyCollection.yml -e environment.json -o output/
-bruno-devweb convert -i "MyCollection/" -m multi -o scripts/
+## Feature Overview
 
-# VuGen Web HTTP/HTML (C)
-bruno-devweb convert -i collection.json --protocol web-http -o output/
-bruno-devweb convert -i "MyCollection/" --protocol web-http -m multi -o scripts/
+### Authentication — Auto-detected and generated
 
-bruno-devweb analyze -i collection.json
-bruno-devweb web --port 3000
-```
+| Method | Detection |
+|---|---|
+| OAuth2 (CC, Password, Auth Code) | `auth.type`, token endpoint, `grant_type` |
+| JWT signing (8 library signatures) | jsrsasign, jose, JJWT, nimbus, BouncyCastle, JCA, Auth0 java-jwt |
+| **DPoP (RFC 9449)** | `dpop` / `dpop-pf` headers |
+| **PKCE (RFC 7636)** | `code_challenge=` in URL, `code_verifier=` in body |
+| NTLM / Kerberos | `auth.type=ntlm`, variable name patterns |
+| Basic | `auth.type=basic` |
+| Bearer Token | `Authorization: Bearer` header |
+| API Key | `X-API-Key`, `api_key` query param |
+| AWS Signature v4 | `AWS4-HMAC-SHA256` authorization |
+| mTLS | `.pem`, `.p12`, `.jks` certificate upload |
 
-### Programmatic Usage
+### Correlation — All extractor types
+
+JSON path, XPath, Regular expression, Boundary (left/right), Header, Cookie
+
+### Script Studio Correlation Strategies
+
+- **Two-HAR diff (VBAC)**: Compare two recordings — any value that differs = dynamic
+- **Single-HAR pattern**: UUID, JWT, entropy scoring
+- **Unresolved candidates**: TODO placeholders for Bearer tokens whose source wasn't in the HAR
+
+---
+
+## Configuration
+
+### Portal tab visibility
+
+Edit `PORTAL_CONFIG` in `src/web/views/index.ejs`:
 
 ```javascript
-const BrunoDevWebConverter = require('bruno-devweb-converter');
-
-const converter = new BrunoDevWebConverter({
-  inputFile: './collections/my-api.json',
-  outputDir: './devweb-script',
-  useTransactions: true,
-  useCorrelation: true,
-  useParameterization: true,
-  useAuthentication: true,
-  thinkTime: 1
-});
-
-const results = await converter.convert();
-console.log('Conversion complete!', results);
+const PORTAL_CONFIG = {
+  tabs: {
+    home:      { enabled: true  },
+    converter: { enabled: true  },
+    recorder:  { enabled: true  },  // false → hides tab
+    studio:    { enabled: true  },  // false → hides tab
+    help:      { enabled: true  }
+  }
+};
 ```
 
-### Web UI
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js 18 LTS |
+| Web framework | Express 4.18 |
+| Template | EJS |
+| File upload | multer (memoryStorage) |
+| ZIP streaming | archiver 6 (chunked, no Content-Length) |
+| XML parsing | fast-xml-parser 4.5 |
+| Excel output | ExcelJS 4.4 |
+| Client ZIP | JSZip 3.10.1 |
+| Deployment | IIS 10 + iisnode 0.2.26 |
+
+---
+
+## Documentation
+
+| Document | Audience | Link |
+|---|---|---|
+| **Documentation Index** | All | [Docs/INDEX.md](Docs/INDEX.md) |
+| Executive Summary | Business stakeholders | [Docs/business/EXECUTIVE-SUMMARY.md](Docs/business/EXECUTIVE-SUMMARY.md) |
+| Business Case | IT Management | [Docs/business/BUSINESS-CASE.md](Docs/business/BUSINESS-CASE.md) |
+| Architecture | Architects | [Docs/technical/ARCHITECTURE.md](Docs/technical/ARCHITECTURE.md) |
+| HLSD | Architecture board | [Docs/technical/HLSD.md](Docs/technical/HLSD.md) |
+| DPoP Guide | Security team | [Docs/technical/DPOP-GUIDE.md](Docs/technical/DPOP-GUIDE.md) |
+| PKCE Guide | Security team | [Docs/technical/PKCE-GUIDE.md](Docs/technical/PKCE-GUIDE.md) |
+| Developer Guide | Developers | [Docs/technical/DEVELOPER-GUIDE.md](Docs/technical/DEVELOPER-GUIDE.md) |
+| Getting Started | All users | [Docs/user/GETTING-STARTED.md](Docs/user/GETTING-STARTED.md) |
+| IIS Deployment | Admins | [Docs/deployment/DEPLOYMENT-IIS.md](Docs/deployment/DEPLOYMENT-IIS.md) |
+| Troubleshooting | All users | [Docs/user/TROUBLESHOOTING.md](Docs/user/TROUBLESHOOTING.md) |
+
+---
+
+## Tests
 
 ```bash
-# Start the web server
-npm run web
-
-# Or with custom port
-bruno-devweb web --port 8080
-```
-
-Then open `http://localhost:3000` in your browser.
-
----
-
-## 📖 Usage Guide
-
-### CLI Commands
-
-#### `convert` - Convert collection to script
-
-```bash
-node src/cli.js convert [options]
-# or after global install:
-bruno-devweb convert [options]
-
-Options:
-  -i, --input <path>           Input: .json, .yml, .bru, or folder path [required]
-  -e, --environment <file>     Environment JSON file (overrides collection variable values)
-  -o, --output <dir>           Output directory (default: ./devweb-script)
-  -m, --mode <mode>            Script mode: single or multi (default: single)
-  --protocol <protocol>        Output protocol: devweb (JavaScript) or web-http (VuGen C) (default: devweb)
-  --no-transactions            Disable transaction grouping
-  --no-correlation             Disable auto-correlation
-  --no-parameterization        Disable parameterization
-  --no-authentication          Disable authentication handling
-  -t, --think-time <seconds>   Think time between transactions (default: 1)
-  --no-comments                Disable code comments
-  --log-level <level>          Log level: error|warning|info|debug (default: info)
-  --fail-on-error              Stop execution on first error
-  -h, --help                   Display help
-```
-
-#### All Formats — Full Command Examples
-
-```bash
-# ---- POSTMAN COLLECTIONS ----
-node src/cli.js convert -i collection.postman_collection.json -o ./output
-node src/cli.js convert -i collection.json -e environment.json -o ./output
-node src/cli.js convert -i collection.json -m multi -o ./scripts
-node src/cli.js convert -i collection.json -t 3 --no-comments -o ./output
-
-# ---- BRUNO JSON EXPORT ----
-node src/cli.js convert -i BrunoCollection.json -o ./output
-node src/cli.js convert -i BrunoCollection.json -e environment.json -o ./output
-node src/cli.js convert -i BrunoCollection.json -m multi -o ./scripts
-
-# ---- BRUNO SINGLE YAML FILE ----
-node src/cli.js convert -i MyCollection.yml -o ./output
-node src/cli.js convert -i MyCollection.yml -e environment.json -o ./output
-node src/cli.js convert -i MyCollection.yml -m multi -o ./scripts
-
-# ---- BRUNO YAML FOLDER (distributed format) ----
-node src/cli.js convert -i "MyCollection/" -o ./output
-node src/cli.js convert -i MyCollection -o ./output              # trailing slash optional
-node src/cli.js convert -i "MyCollection/" -e environment.json -o ./output
-node src/cli.js convert -i "MyCollection/" -m multi -o ./scripts
-
-# ---- SINGLE .BRU FILE ----
-node src/cli.js convert -i Login.bru -o ./output
-node src/cli.js convert -i Login.bru -e environment.json -o ./output
-
-# ---- VuGen WEB HTTP/HTML (C) — add --protocol web-http to any command ----
-node src/cli.js convert -i collection.json --protocol web-http -o ./output
-node src/cli.js convert -i MyCollection.yml --protocol web-http -e environment.json -o ./output
-node src/cli.js convert -i "MyCollection/" --protocol web-http -m multi -o ./scripts
-
-# ---- ANALYZE (any format, no files written) ----
-node src/cli.js analyze -i collection.json
-node src/cli.js analyze -i MyCollection.yml
-node src/cli.js analyze -i "MyCollection/"
-```
-
-#### `analyze` - Analyze collection without converting
-
-```bash
-bruno-devweb analyze -i collections/my-api.json
-```
-
-Output:
-```
-📊 Collection Analysis
-
-Collection Info:
-  Name: My API Collection
-  Type: postman
-  Requests: 15
-
-Correlations:
-  Total: 3
-  1. authToken (token): Login → GetProfile
-  2. userId (id): Login → UpdateUser
-  3. sessionId (sessionId): CreateSession → ValidateSession
-
-Parameters:
-  Total: 8
-  email: 2
-  string: 4
-  number: 1
-  url: 1
-
-Authentication:
-  Total: 1
-  BEARER: 1
-```
-
-#### `web` - Start web UI server
-
-```bash
-bruno-devweb web [options]
-
-Options:
-  -p, --port <port>   Server port (default: 3000)
-```
-
-### Advanced Options
-
-#### Transaction Grouping
-
-By default, requests are grouped into transactions by folder:
-
-```
-Collection
-├── Authentication
-│   ├── Login          → Transaction: "Authentication"
-│   └── Logout
-├── Users
-│   ├── GetUser        → Transaction: "Users"
-│   ├── UpdateUser
-│   └── DeleteUser
-```
-
-Disable with `--no-transactions` for sequential execution.
-
-#### Correlation
-
-Automatically detects:
-- Authentication tokens
-- Session IDs
-- CSRF tokens
-- User/Order/Transaction IDs
-- Timestamps and nonces
-
-Extractors are generated for:
-- JSON responses (`JsonPathExtractor`)
-- Headers (`BoundaryExtractor`)
-- HTML content (`HtmlExtractor`)
-
-#### 3-Tier Variable Classification
-
-All `{{variables}}` are classified into:
-
-| Tier | Access | nextValue | Example |
-|------|--------|-----------|---------|
-| **Dynamic** | `load.global.var` | N/A (extractors) | auth tokens, IDs from responses |
-| **Config** | `load.params.var` | `once` | base URLs, API keys, client IDs |
-| **Test Data** | `load.params.var` | `iteration` | usernames, passwords, emails |
-
-- Config + Test Data stored in `collection_data.csv`
-- Environment file (`-e`) overrides collection variable values
-
----
-
-## 🔐 Authentication Support
-
-### OAuth 2.0
-
-**Client Credentials Flow:**
-```json
-{
-  "type": "oauth2",
-  "oauth2": [
-    { "key": "grant_type", "value": "client_credentials" },
-    { "key": "accessTokenUrl", "value": "https://api.example.com/oauth/token" },
-    { "key": "clientId", "value": "{{CLIENT_ID}}" },
-    { "key": "clientSecret", "value": "{{CLIENT_SECRET}}" }
-  ]
-}
-```
-
-**Password Flow:**
-```json
-{
-  "type": "oauth2",
-  "oauth2": [
-    { "key": "grant_type", "value": "password" },
-    { "key": "username", "value": "{{USERNAME}}" },
-    { "key": "password", "value": "{{PASSWORD}}" }
-  ]
-}
-```
-
-### Basic Authentication
-
-```json
-{
-  "type": "basic",
-  "basic": [
-    { "key": "username", "value": "admin" },
-    { "key": "password", "value": "secret" }
-  ]
-}
-```
-
-### Bearer Token
-
-```json
-{
-  "type": "bearer",
-  "bearer": [
-    { "key": "token", "value": "{{ACCESS_TOKEN}}" }
-  ]
-}
-```
-
-### API Key
-
-**In Header:**
-```json
-{
-  "type": "apikey",
-  "apikey": [
-    { "key": "key", "value": "X-API-Key" },
-    { "key": "value", "value": "{{API_KEY}}" },
-    { "key": "in", "value": "header" }
-  ]
-}
-```
-
-**In Query:**
-```json
-{
-  "type": "apikey",
-  "apikey": [
-    { "key": "key", "value": "api_key" },
-    { "key": "value", "value": "{{API_KEY}}" },
-    { "key": "in", "value": "query" }
-  ]
-}
-```
-
-### AWS Signature v4
-
-```json
-{
-  "type": "awsv4",
-  "awsv4": [
-    { "key": "accessKey", "value": "{{AWS_ACCESS_KEY}}" },
-    { "key": "secretKey", "value": "{{AWS_SECRET_KEY}}" },
-    { "key": "region", "value": "us-east-1" },
-    { "key": "service", "value": "s3" }
-  ]
-}
+npm test                                    # All tests
+npm test -- --testPathPattern=correlation  # Single suite
+npm test -- --coverage                     # With coverage
 ```
 
 ---
 
-## 🏗️ Output Structure
+## Version History
 
-### Single Mode (default: `-m single`)
-```
-devweb-script/
-├── main.js              # DevWeb script (JavaScript)
-├── scenario.yml         # Scenario config (vusers, pacing, duration)
-├── rts.yml              # Runtime settings (timeouts, SSL, etc.)
-├── tsconfig.json        # TypeScript compiler configuration
-├── DevWebSdk.d.ts       # Type definitions (from VuGen installation)
-├── parameters.yml       # Parameter definitions (when variables exist)
-├── collection_data.csv  # Actual parameter values from collection
-└── data/                # Large base64 data files (if any)
-    └── Upload_Document_content.b64
-```
-
-### Multi Mode (`-m multi`)
-```
-output/
-├── Auth/                # One folder per top-level collection folder
-│   ├── main.js
-│   ├── scenario.yml
-│   ├── rts.yml
-│   └── ...
-├── BulkV1/
-│   ├── main.js
-│   └── ...
-└── BulkV2/
-    └── ...
-```
-
-### Web HTTP/HTML Mode (`--protocol web-http`)
-
-Single mode:
-```
-output/
-├── Action.c                    # Main requests (C)
-├── vuser_init.c                # Init lifecycle
-├── vuser_end.c                 # End lifecycle
-├── globals.h                   # Standard includes
-├── [ScriptName].usr            # VuGen metadata (required for VuGen/LRE upload)
-├── default.cfg                 # Runtime settings
-├── default.usp                 # Run logic profile
-├── ParameterFile.prm           # Parameter definitions (VuGen INI format)
-├── collection_data.dat         # Parameter values (CSV)
-└── ScriptUploadMetadata.xml    # LRE upload manifest
-```
-
-Multi mode (`-m multi --protocol web-http`): one self-contained folder per top-level collection folder, each with all 10 files above.
-
-### Generated DevWeb Script Structure
-
-```javascript
-load.initialize("Initialize", async function () {
-    // Initialize dynamic variables (correlations)
-    load.global.token = null;
-    load.global.userId = null;
-});
-
-load.action("Action", async function () {
-    // Transaction declarations INSIDE action, at the top
-    let TS01 = new load.Transaction("Authentication");
-    let TS02 = new load.Transaction("Browse Products");
-
-    TS01.start();
-    const webResponse_01 = new load.WebRequest({
-        id: 1,
-        url: `${load.params.baseUrl}/auth/login`,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: {
-            "username": load.params.username,    // from collection_data.csv
-            "password": load.params.password
-        },
-        returnBody: true,
-        extractors: [
-            new load.JsonPathExtractor("token", "$.access_token")
-        ]
-    }).sendSync();
-
-    load.global.token = webResponse_01.extractors.token;
-    TS01.stop(load.TransactionStatus.Passed);
-    load.sleep(1);
-
-    TS02.start();
-    const webResponse_02 = new load.WebRequest({
-        id: 2,
-        url: `${load.params.baseUrl}/products`,
-        method: "GET",
-        headers: { "Authorization": "Bearer " + load.global.token }
-    }).sendSync();
-    TS02.stop(load.TransactionStatus.Passed);
-});
-
-load.finalize("Finalize", async function () {
-    load.log("Finalizing VUser", load.LogLevel.info);
-});
-```
-
----
-
-## 🔄 GitLab CI/CD Integration
-
-### How Teams Use the Docker Image in Their Pipelines
-
-The converter is packaged as a Docker image. Other teams include it in their own GitLab pipelines — no installation required.
-
-**Linux runner (zero setup):**
-```yaml
-convert:
-  image: registry.gitlab.com/your-org/bruno-devweb-converter:latest
-  tags: [linux]
-  script:
-    - bruno-devweb convert -i my-collection.json -o output/
-  artifacts:
-    paths: [output/]
-```
-
-**Windows runner (shell executor, Node.js must be installed):**
-```yaml
-convert:
-  tags: [windows]
-  before_script:
-    - git clone https://gitlab.com/your-org/bruno-devweb-converter.git $env:TEMP\bdw
-    - npm ci --prefix $env:TEMP\bdw --omit=dev
-  script:
-    - node $env:TEMP\bdw\src\cli.js convert -i my-collection.json -o output/
-  artifacts:
-    paths: [output/]
-```
-
-### Publishing a New Image Version
-
-The repo's own `.gitlab-ci.yml` auto-builds and pushes the image when you tag a release:
-
-```bash
-git tag v2.1.1
-git push origin v2.1.1
-# CI builds :2.1.1 and :latest automatically
-```
-
----
-
-## 📊 Example Output
-
-### Input: Postman Collection
-
-```json
-{
-  "info": { "name": "E-commerce API" },
-  "item": [
-    {
-      "name": "Authentication",
-      "item": [
-        {
-          "name": "Login",
-          "request": {
-            "method": "POST",
-            "url": "https://api.shop.com/auth/login",
-            "body": {
-              "mode": "raw",
-              "raw": "{\"email\":\"user@example.com\",\"password\":\"secret\"}"
-            }
-          }
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Output: DevWeb Script
-
-```javascript
-load.action("Action", async function () {
-    // Transaction declarations INSIDE action
-    let TS01 = new load.Transaction("Authentication");
-
-    TS01.start();
-
-    const webResponse_01 = new load.WebRequest({
-        id: 1,
-        url: `${load.params.baseUrl}/auth/login`,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: {
-            "email": load.params.email,
-            "password": load.params.password
-        },
-        returnBody: true,
-        extractors: [
-            new load.JsonPathExtractor("authToken", "$.token"),
-            new load.JsonPathExtractor("userId", "$.user.id")
-        ]
-    }).sendSync();
-
-    if (webResponse_01.status === 200) {
-        load.global.authToken = webResponse_01.extractors.authToken;
-        load.global.userId = webResponse_01.extractors.userId;
-        TS01.stop(load.TransactionStatus.Passed);
-    } else {
-        load.log("Login failed: " + webResponse_01.status, load.LogLevel.error);
-        TS01.stop(load.TransactionStatus.Failed);
-        return;
-    }
-});
-```
-
----
-
-## 🧪 Testing
-
-```bash
-# Run unit tests
-npm test
-
-# Run linting
-npm run lint
-
-# Test conversion locally
-node src/cli.js convert -i test/fixtures/sample.json -o test/output
-```
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Merge Request
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
-
----
-
-## 🆘 Support
-
-- **Issues**: [GitLab Issues](https://gitlab.com/your-org/bruno-devweb-converter/issues)
-- **Documentation**: [Wiki](https://gitlab.com/your-org/bruno-devweb-converter/wiki)
-- **Email**: support@yourorg.com
-
----
-
-## 🙏 Acknowledgments
-
-- Bruno API Client Team
-- Postman Team
-- OpenText LoadRunner Enterprise Team
-- All contributors and users
-
----
-
-## 📚 Additional Resources
-
-- [DevWeb JavaScript SDK Documentation](https://admhelp.microfocus.com/lrd/en/26.1/help/Content/DevWeb/DW-JS-SDK.htm)
-- [LoadRunner Enterprise Documentation](https://admhelp.microfocus.com/lre/)
-- [Bruno Documentation](https://docs.usebruno.com/)
-- [Postman Documentation](https://learning.postman.com/)
-
----
-
-**Made with ❤️ for Performance Engineers**
-
-*Version 2.3.1 - Last Updated: February 2026*
+| Version | Key Changes |
+|---|---|
+| **v2.10.13** | Dead file cleanup; DPoP copy bug fix; Node 20 docs alignment; devErrors disabled |
+| **v2.9.2** | PKCE (RFC 7636) support — Converter + Script Studio |
+| **v2.9.0** | DPoP (RFC 9449) full support; HTML entity decoding for PEM keys |
+| **v2.8.0** | Value-Based Auto-Correlation (VBAC) engine in Script Studio |
+| **v2.7.0** | Memory-only processing; all log statements removed from generated scripts |
+| **v2.6.0** | Per-request transaction naming with global sequential counter |
+| **v2.5.0** | Multi-certificate upload; Bruno YAML folder collection support |
+| **v2.4.0** | Proxy auto-detection; URL encoding fix for `{{variable}}` URLs |
+| **v2.3.0** | JMeter converter; Workload Model Excel generation |

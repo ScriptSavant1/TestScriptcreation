@@ -1,0 +1,429 @@
+﻿<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VuGen Script Studio — Correlation Engine</title>
+    <link rel="stylesheet" href="VuGen-Script-Studio.css" />
+
+    <!-- JSZip will be injected here -->
+    <script>
+      (function () {
+        var s = document.createElement("script");
+        var p = window.location.pathname.replace(/\/[^\/]*$/, "");
+        s.src = p + "/jszip.min.js";
+        s.onerror = function () {
+          var s2 = document.createElement("script");
+          s2.src = "/jszip.min.js";
+          document.head.appendChild(s2);
+        };
+        document.head.appendChild(s);
+      })();
+    </script>
+  </head>
+  <body>
+    <!-- ═══════════════════════════════════════════════════════
+     FIXED HEADER BAR
+═══════════════════════════════════════════════════════ -->
+    <header class="app-header">
+      <span class="app-header-title">
+        <span class="title-accent">VuGen</span> Script Studio
+      </span>
+      <span class="app-ver-badge">LRE Admin Tool</span>
+      <span class="har-count-badge" id="har-count-badge">0 HARs loaded</span>
+      <button
+        class="btn-theme"
+        id="btn-clear-hdr"
+        onclick="clearAll()"
+        title="Clear all files and start a new session"
+        style="margin-right: 4px; display: none"
+      >
+        &#x1F5D1; Clear
+      </button>
+    </header>
+
+    <div class="page-body">
+      <!-- ═══════════════════════════════════════════════════════
+     PHASE 1: UPLOAD — Two-column layout
+═══════════════════════════════════════════════════════ -->
+      <div id="ph-upload" class="phase active">
+
+        <!-- ── LEFT: Configuration Panel ── -->
+        <div class="upload-left">
+
+          <div class="ul-brand">
+            <div class="ul-brand-logo">VS</div>
+            <div class="ul-brand-text">
+              <div class="ul-brand-name"><span style="color:#93c5fd">VuGen</span> Script Studio</div>
+              <div class="ul-brand-tag">HAR &#x2192; Correlation Script Generator</div>
+            </div>
+          </div>
+
+          <div class="ul-body">
+
+            <div class="ul-features">
+              <div class="ul-feature"><span>&#x1F517;</span> 2-HAR diff-based correlation</div>
+              <div class="ul-feature"><span>&#x1F512;</span> Auth detection &amp; injection</div>
+              <div class="ul-feature"><span>&#x1F4C4;</span> DevWeb &amp; Web HTTP/HTML output</div>
+            </div>
+
+            <div class="ul-section-label">HAR Recordings</div>
+
+            <!-- HAR 1 -->
+            <div class="drop-zone" id="dz1"
+              ondrop="onDrop(event,1)" ondragover="onDragOver(event,1)" ondragleave="onDragLeave(1)">
+              <input type="file" accept=".har,.json" onchange="onFilePick(event,1)" />
+              <span class="dz-icon">&#x1F4C2;</span>
+              <div class="dz-body">
+                <div class="dz-title" id="dz1-title">Recording 1</div>
+                <div class="dz-sub" id="dz1-sub">Required &nbsp;&middot;&nbsp; .har or chrome://net-export/ .json</div>
+                <div class="dz-name" id="dz1-name" style="display:none"></div>
+              </div>
+              <button id="dz1-clear" class="dz-clear-btn"
+                onclick="event.stopPropagation();clearSlot(1)" title="Remove file" style="display:none">&#x2715;</button>
+            </div>
+
+            <!-- HAR 2 -->
+            <div class="drop-zone dz-optional-zone" id="dz2"
+              ondrop="onDrop(event,2)" ondragover="onDragOver(event,2)" ondragleave="onDragLeave(2)">
+              <input type="file" accept=".har,.json" onchange="onFilePick(event,2)" />
+              <span class="dz-icon">&#x1F4C2;</span>
+              <div class="dz-body">
+                <div class="dz-title" id="dz2-title">Recording 2 <span class="dz-opt-badge">Optional</span></div>
+                <div class="dz-sub" id="dz2-sub">For diff-based correlation &nbsp;&middot;&nbsp; Leave empty for pattern mode</div>
+                <div class="dz-name" id="dz2-name" style="display:none"></div>
+              </div>
+              <button id="dz2-clear" class="dz-clear-btn"
+                onclick="event.stopPropagation();clearSlot(2)" title="Remove file" style="display:none">&#x2715;</button>
+            </div>
+
+            <div class="ul-section-label">Output Format</div>
+
+            <div class="fmt-btns">
+              <button class="fmt-btn" id="fmt-web" onclick="setFmt('webhttp')">Web HTTP/HTML</button>
+              <button class="fmt-btn active" id="fmt-dev" onclick="setFmt('devweb')">DevWeb</button>
+              <button class="fmt-btn" id="fmt-both" onclick="setFmt('both')" style="display:none">Both</button>
+            </div>
+
+            <div id="mode-badge" class="ul-mode-badge">
+              Mode: <b style="color:var(--warning)">Pattern</b> (1 HAR)
+            </div>
+
+            <div style="margin-top:auto;padding-top:8px">
+              <button class="btn-analyze" id="btn-analyze" onclick="analyze()" disabled>
+                <span class="btn-analyze-icon">&#x26A1;</span>
+                <span>Load a HAR file to begin</span>
+              </button>
+            </div>
+
+          </div><!-- /ul-body -->
+
+        </div><!-- /upload-left -->
+
+        <!-- ── RIGHT: Filter Panel ── -->
+        <div class="upload-right">
+
+          <!-- Empty state — shown before HAR is loaded -->
+          <div class="filter-empty-state" id="filter-empty-state">
+            <div class="fes-icon">&#x1F39B;&#xFE0F;</div>
+            <div class="fes-title">Request Filters</div>
+            <div class="fes-sub">Load a HAR recording on the left to configure filters. Filters are applied before analysis, removing noise so your generated script only contains real application traffic.</div>
+            <div class="fes-list">
+              <div class="fes-item"><span class="fes-dot" style="background:#4f8ef7"></span>Resource type &mdash; Fetch/XHR, Document, CSS, JS, Images&hellip;</div>
+              <div class="fes-item"><span class="fes-dot" style="background:#22c55e"></span>Domain &mdash; include or exclude specific hostnames</div>
+            </div>
+          </div>
+
+          <!-- Active filters — shown after HAR is loaded -->
+          <div id="filter-section" style="display:none">
+
+            <div class="filter-panel-hdr">
+              <div class="filter-panel-title">&#x1F39B;&#xFE0F; Request Filters</div>
+              <div class="filter-panel-hint">Applied before analysis &mdash; filters run before correlation engine</div>
+            </div>
+
+            <!-- Resource Type -->
+            <div class="filter-group">
+              <div class="filter-group-hdr">
+                <span class="filter-group-label">Resource Type</span>
+                <div class="filter-group-acts">
+                  <button onclick="studioToggleRt('__all__')">All</button>
+                  <button onclick="studioToggleRtNone()">None</button>
+                </div>
+              </div>
+              <div class="rt-filter-list" id="rt-filter-list"></div>
+            </div>
+
+            <!-- Domains -->
+            <div class="filter-group" id="domain-filter-row" style="display:none">
+              <div class="filter-group-hdr">
+                <span class="filter-group-label">Domains</span>
+                <div class="filter-group-acts">
+                  <button onclick="studioToggleAllDomains(true)">All</button>
+                  <button onclick="studioToggleAllDomains(false)">None</button>
+                </div>
+              </div>
+              <div class="filter-group-search">
+                <input class="studio-dp-search" id="studio-dp-search" type="text"
+                  placeholder="Search domains&#x2026;"
+                  oninput="studioRenderDomains(this.value)" />
+              </div>
+              <div class="studio-dp-list" id="domain-chip-bar"></div>
+            </div>
+
+          </div><!-- /filter-section -->
+
+        </div><!-- /upload-right -->
+
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════
+     PHASE 2: PROCESSING
+═══════════════════════════════════════════════════════ -->
+      <div id="ph-proc" class="phase">
+        <div class="spinner"></div>
+        <div id="proc-step">Analyzing...</div>
+        <div id="proc-msg">Please wait</div>
+        <div class="proc-steps">
+          <div class="proc-step-item" id="pstep-1">
+            <span class="proc-step-icon">&#x1F4E5;</span>
+            <span class="proc-step-label">Parse HAR / NetLog</span>
+            <span class="proc-step-status"></span>
+          </div>
+          <div class="proc-step-item" id="pstep-2">
+            <span class="proc-step-icon">&#x1F517;</span>
+            <span class="proc-step-label">Correlate Dynamic Values</span>
+            <span class="proc-step-status"></span>
+          </div>
+          <div class="proc-step-item" id="pstep-3">
+            <span class="proc-step-icon">&#x1F4DD;</span>
+            <span class="proc-step-label">Generate Scripts</span>
+            <span class="proc-step-status"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════
+     PHASE 3: RESULTS
+═══════════════════════════════════════════════════════ -->
+      <div id="ph-res" class="phase">
+        <div class="res-header">
+          <h2>&#x2705; Generated Scripts</h2>
+          <button class="btn-back" onclick="goBack()">
+            &#x2190; Start Over
+          </button>
+        </div>
+
+        <div class="stats-bar" id="stats-bar">
+          <div class="stat stat-ok">
+            <span class="stat-icon">&#x1F310;</span>
+            <span class="stat-val" id="st-req">0</span>
+            <span class="stat-lbl">Requests</span>
+          </div>
+          <div class="stat stat-ok">
+            <span class="stat-icon">&#x1F4CB;</span>
+            <span class="stat-val" id="st-txn">0</span>
+            <span class="stat-lbl">Transactions</span>
+          </div>
+          <div class="stat stat-ok">
+            <span class="stat-icon">&#x1F517;</span>
+            <span class="stat-val" id="st-corr">0</span>
+            <span class="stat-lbl">Correlations</span>
+          </div>
+          <div class="stat stat-ok">
+            <span class="stat-icon">&#x1F522;</span>
+            <span class="stat-val" id="st-params">0</span>
+            <span class="stat-lbl">Parameters</span>
+          </div>
+          <div class="stat">
+            <span class="stat-icon">&#x1F9EA;</span>
+            <span class="stat-val" id="st-mode">-</span>
+            <span class="stat-lbl">Mode</span>
+          </div>
+          <div class="stat">
+            <span class="stat-icon">&#x1F4C4;</span>
+            <span class="stat-val" id="st-fmt">-</span>
+            <span class="stat-lbl">Format</span>
+          </div>
+          <div class="stat" id="st-auth-wrap" style="display: none">
+            <span class="stat-icon">&#x1F512;</span>
+            <span class="stat-val" id="st-auth">-</span>
+            <span class="stat-lbl">Auth</span>
+          </div>
+        </div>
+
+        <!-- ── CORRELATION ADVISOR PANEL ── -->
+        <div class="adv-panel" id="adv-panel" style="display:none">
+          <div class="adv-panel-hdr" onclick="toggleAdvisorPanel()">
+            <div class="adv-panel-hdr-left">
+              <span class="adv-panel-icon">&#x1F50D;</span>
+              <span class="adv-panel-title">Correlation Advisor</span>
+              <span class="adv-badge" id="adv-badge"></span>
+            </div>
+            <div class="adv-panel-hdr-right">
+              <button class="adv-btn-paste" onclick="event.stopPropagation();openPasteCorrelate()" title="Paste a response body and extract a value from it">&#x1F4CB; Paste &amp; Detect</button>
+              <button class="adv-btn-add" onclick="event.stopPropagation();openAdvisorModal()" title="Add a custom correlation manually">+ Add Manual</button>
+              <span class="adv-toggle-icon" id="adv-toggle-icon">&#x25BE;</span>
+            </div>
+          </div>
+          <div class="adv-info-line">
+            &#x2139;&#xFE0F; Shows up to 20 candidates &mdash; <strong>High confidence</strong> first (value traced from a prior server response), then <strong>Medium</strong> (dynamic pattern detected by shape: JWT, UUID, token). Use <strong>+ Add Manual</strong> or <strong>Paste &amp; Detect</strong> if a value is not listed.
+          </div>
+          <div class="adv-body" id="adv-body">
+
+            <!-- ── REQUEST INSPECTOR (Feature A + C) ── -->
+            <div class="adv-inspector" id="adv-inspector">
+              <div class="adv-inspector-hdr" onclick="toggleInspector()">
+                <span class="adv-inspector-title">&#x1F50D; Request Inspector</span>
+                <span class="adv-inspector-hint">Select any request to see which values need correlation</span>
+                <span class="adv-insp-toggle" id="adv-insp-toggle">&#x25B8;</span>
+              </div>
+              <div class="adv-inspector-body" id="adv-insp-body" style="display:none">
+                <select class="adv-modal-select adv-insp-req-sel" id="adv-insp-req-sel"
+                        onchange="onInspectorReqChange(this.value)">
+                  <option value="">— select a request to inspect —</option>
+                </select>
+                <div class="ri-legend">
+                  <span class="ri-dot ri-dot-green"></span><span>Traced to prior response</span>
+                  <span class="ri-dot ri-dot-yellow" style="margin-left:14px"></span><span>Dynamic pattern, source unknown</span>
+                </div>
+                <div class="ri-field-list" id="ri-field-list"></div>
+                <div class="ri-trace-panel" id="ri-trace-panel" style="display:none"></div>
+              </div>
+            </div>
+
+            <div class="adv-cards" id="adv-cards"></div>
+            <div class="adv-footer" id="adv-footer" style="display:none">
+              <span class="adv-footer-summary" id="adv-footer-summary"></span>
+              <button class="adv-btn-regen" id="adv-btn-regen" onclick="advisorApplyAndRegen()">&#x25B6; Apply &amp; Regenerate</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="corr-panel" id="corr-panel">
+          <div class="corr-panel-hdr" onclick="toggleCorrPanel()">
+            <span>&#x1F517; Correlation Details</span>
+            <span class="corr-toggle-icon" id="corr-toggle-icon">&#x25BE;</span>
+          </div>
+          <div class="corr-list" id="corr-list"></div>
+        </div>
+
+        <div class="corr-panel" id="param-panel" style="display: none">
+          <div class="corr-panel-hdr" onclick="toggleParamPanel()">
+            <span>&#x1F4CB; Parameterization Details</span>
+            <span class="corr-toggle-icon" id="param-toggle-icon"
+              >&#x25BE;</span
+            >
+          </div>
+          <div class="corr-list" id="param-list"></div>
+        </div>
+
+        <div class="code-area">
+          <div class="code-area-header">
+            <div class="code-tabs" id="code-tabs"></div>
+            <button class="btn-copy" id="btn-copy" onclick="copyCode()">
+              &#x1F4CB; Copy
+            </button>
+          </div>
+          <pre id="code-body">// Loading...</pre>
+          <div class="dl-bar" id="dl-bar"></div>
+        </div>
+      </div>
+    </div>
+    <!-- /.page-body -->
+
+    <!-- ── CORRELATION ADVISOR — Manual Add Modal ── -->
+    <div class="adv-modal-overlay" id="adv-modal-overlay" onclick="closeAdvisorModal()" style="display:none">
+      <div class="adv-modal adv-modal-wide" onclick="event.stopPropagation()">
+        <div class="adv-modal-hdr">
+          <span>Add Custom Correlation</span>
+          <button class="adv-modal-close" onclick="closeAdvisorModal()">&#x2715;</button>
+        </div>
+        <div class="adv-modal-body">
+          <!-- Step 1: Source request -->
+          <label class="adv-modal-label">Source request <span class="adv-modal-hint">(whose <b>response</b> contains the value you want to extract)</span></label>
+          <input class="adv-fb-search" id="adv-src-filter" type="text" placeholder="Filter by URL or method..." oninput="filterAdvisorSrcDropdown(this.value)" autocomplete="off" style="margin-bottom:6px" />
+          <select class="adv-modal-select" id="adv-src-select" onchange="onAdvisorSrcChange(this.value)">
+            <option value="">— select a request —</option>
+          </select>
+
+          <!-- Step 2: Field browser (shown after source is selected) -->
+          <div id="adv-fb-section" style="display:none">
+            <label class="adv-modal-label" style="margin-top:14px">Click a field to correlate</label>
+            <div class="adv-fb-search-row">
+              <input class="adv-fb-search" id="adv-fb-search" type="text" placeholder="Filter fields..." oninput="filterAdvisorFields(this.value)" autocomplete="off" />
+            </div>
+            <div class="adv-fb-list" id="adv-fb-list">
+              <!-- populated by onAdvisorSrcChange() -->
+            </div>
+          </div>
+
+          <!-- Step 3: Selected field confirmation (shown after a field is clicked) -->
+          <div class="adv-selected-info" id="adv-selected-info" style="display:none">
+            <span class="adv-fb-type adv-fb-json" id="adv-sel-type">JSON</span>
+            <span class="adv-sel-path" id="adv-sel-path"></span>
+            <span class="adv-sel-arrow">&#x2192;</span>
+            <span class="adv-sel-value" id="adv-sel-value"></span>
+          </div>
+
+          <!-- Step 4: Variable name -->
+          <label class="adv-modal-label" style="margin-top:14px">Variable name</label>
+          <input class="adv-modal-input" id="adv-varname-input" type="text" placeholder="accessToken" />
+        </div>
+        <div class="adv-modal-footer">
+          <button class="adv-modal-cancel" onclick="closeAdvisorModal()">Cancel</button>
+          <button class="adv-modal-submit" id="adv-modal-submit-btn" onclick="submitAdvisorManual()" disabled>Add Correlation</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PASTE & CORRELATE MODAL (Feature B) ── -->
+    <div class="adv-modal-overlay" id="pc-modal-overlay" onclick="closePasteCorrelate()" style="display:none">
+      <div class="adv-modal adv-modal-wide pc-modal" onclick="event.stopPropagation()">
+        <div class="adv-modal-hdr">
+          <span>&#x1F4CB; Paste &amp; Detect Correlation</span>
+          <button class="adv-modal-close" onclick="closePasteCorrelate()">&#x2715;</button>
+        </div>
+        <div class="adv-modal-body">
+          <div class="pc-step-label">
+            &#x2460; Paste the server response body
+            <span class="adv-modal-hint">(optional — if you skip this, a pattern is auto-generated from the value shape)</span>
+          </div>
+          <textarea class="pc-textarea" id="pc-response-body"
+            placeholder='{"access_token":"eyJa...","expires_in":3600}&#10;&#10;Leave empty to auto-generate from the value shape below.'
+            rows="5"></textarea>
+
+          <div class="pc-step-label" style="margin-top:10px">&#x2461; Value to extract <span class="adv-modal-hint">(paste the exact value from the request)</span></div>
+          <input class="adv-modal-input" id="pc-target-value" type="text"
+            placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off" />
+
+          <button class="pc-detect-btn" onclick="runPasteDetect()">&#x1F50D; Detect &amp; Generate</button>
+
+          <div id="pc-result-section" style="display:none"></div>
+
+          <div id="pc-src-row" style="margin-top:10px">
+            <div class="pc-step-label">&#x2462; Which request <em>uses</em> this value? <span class="adv-modal-hint">(optional — used to auto-locate all usage substitutions)</span></div>
+            <select class="adv-modal-select" id="pc-src-select">
+              <option value="">— select a request (optional) —</option>
+            </select>
+          </div>
+        </div>
+        <div class="adv-modal-footer">
+          <button class="adv-modal-cancel" onclick="closePasteCorrelate()">Cancel</button>
+          <button class="adv-modal-submit" id="pc-submit-btn" onclick="submitPasteCorrelate()" disabled>Add Correlation</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="shared/vugen-codegen.js"></script>
+    <script src="VuGen-Script-Studio-constants.js"></script>
+    <script src="VuGen-Script-Studio-correlation.js"></script>
+    <script src="studio-codegen.js"></script>
+    <script src="studio-advisor.js"></script>
+    <script src="studio-ui.js"></script>
+    <script src="studio-app.js"></script>
+    <script src="analytics-device.js" defer></script>
+  </body>
+</html>

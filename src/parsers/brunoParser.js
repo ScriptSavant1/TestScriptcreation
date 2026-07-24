@@ -75,15 +75,54 @@ class BrunoParser {
 
   /**
    * Parse .bru format (Bruno's native format)
+   * Can be a request file or environment file
    */
   async parseBru() {
     const content = await fs.readFile(this.collectionPath, 'utf8');
     this.metadata.type = 'bruno-bru';
-    
-    // Parse .bru file
+
+    // Check if its an environmnet file (contains only vars section)
+    if (content.trim().startsWith('vars {') || content.includes('\nvars {')) {
+      // It's an environment file — return empty requests, vars will be extracted seperately
+      return [];
+    }
+
+    // Parse .bru file as request
     const request = this.parseBruContent(content);
     return [request];
   }
+
+   /**
+   * Parse Bruno .bru environment file and extract variables
+   * Returns Object with variables
+   */
+  async parseBruEnvironment() {
+    const content = await fs.readFile(this.collectionPath, 'utf8');
+    const vars = {};
+
+    //Match vars { ... } block
+    const varsMatch = content.match(/vars\s*\{([^}]+)\}/s);
+    if (varsMatch) {
+      const varsContent = varsMatch[1];
+      const lines = varsContent.split('\n');
+
+      for (const line of lines){
+        const trimmed = line.trim();
+        if(!trimmed || trimmed.startsWith('//'))  {
+          continue; // Skip empty lines and comments
+        }
+
+        const colonIndex = trimmed.indexOf(':');
+        if (colonIndex > 0) {
+          const key = trimmed.substring(0, colonIndex).trim();
+          const value = trimmed.substring(colonIndex + 1).trim();
+          vars[key] = value;
+        }          
+      }
+    }
+    return vars;
+  }
+
 
   /**
    * Parse a single .bru file content
@@ -112,7 +151,7 @@ class BrunoParser {
         this.flushSection(request, currentSection, currentContent);
         currentSection = 'meta';
         currentContent = [];
-      } else if (line.match(/^(get|post|put|patch|delete|head|options)/i)) {
+      } else if (line.match(/^(get|post|put|patch|delete|head|options)\s+/i)) {
         this.flushSection(request, currentSection, currentContent);
         const parts = line.split(/\s+/);
         request.method = parts[0].toUpperCase();
@@ -310,6 +349,9 @@ class BrunoParser {
     // Extract collection-level auth (OAuth2 / API Key / Bearer / etc.)
     const collectionAuth = rootData.request?.auth || null;
 
+    //Extract proxy configuration
+    const proxyConfig = rootData.config?.proxy || null;
+
     // Initialize collection object — item[] populated after walk/traverse
     this.collection = {
       info: { name: this.metadata.name },
@@ -317,6 +359,7 @@ class BrunoParser {
       event: collectionEvents,
       collectionHeaders,   // <-- headers that apply to every request
       collectionAuth,      // <-- OAuth2/auth config at collection level
+      
       item: []
     };
 
@@ -608,7 +651,30 @@ class BrunoParser {
    */
   normalizeRequest(item, folderName, depth = 0) {
     const request = item.request || item;
-    
+
+    // Normalize scripts — handle THREE formats:
+    //   1. Postman v2.1:  item.event[] with {listen, script}
+    //   2. Bruno JSON:    item.script.req (pre-request) + item.script.res (post-response)
+    //   3. Bruno YAML:    handled separately via normalizeBrunoYamlScripts()
+    let tests = this.normalizeTests(item.event);
+
+    if (tests.length === 0 && item.script) {
+      // Bruno JSON export format — scripts live in item.script.{req,res}
+      const brunoScript = item.script;
+      if (brunoScript.req) {
+        const text = typeof brunoScript.req === 'string' ? brunoScript.req : '';
+        if (text.trim()) {
+          tests.push({ listen: 'prerequest', script: { exec: text.split(/\r?\n/) } });
+        }
+      }
+      if (brunoScript.res) {
+        const text = typeof brunoScript.res === 'string' ? brunoScript.res : '';
+        if (text.trim()) {
+          tests.push({ listen: 'test', script: { exec: text.split(/\r?\n/) } });
+        }
+      }
+    }
+
     return {
       name: item.name || 'Unnamed Request',
       folder: folderName,
@@ -619,7 +685,7 @@ class BrunoParser {
       body: this.normalizeBody(request.body),
       auth: request.auth || item.auth || null,
       description: request.description || item.description || '',
-      tests: this.normalizeTests(item.event),
+      tests: tests,
       variables: item.vars || {},
       id: item.id || this.generateId()
     };

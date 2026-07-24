@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VuGen HAR Script Generator &#x2014; LRE Admin Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="VuGen-Recorder.css">
+<script>
+(function(){
+  var s=document.createElement('script');
+  var p=window.location.pathname.replace(/\/[^\/]*$/,'');
+  s.src=p+'/jszip.min.js';
+  s.onerror=function(){var s2=document.createElement('script');s2.src='/jszip.min.js';document.head.appendChild(s2);};
+  document.head.appendChild(s);
+})();
+</script>
+</head>
+<body>
+<!-- ======= HEADER ======= -->
+<header class="hdr">
+  <h1>&#x26A1; VuGen HAR Script Generator</h1>
+  <span class="ver">LRE Admin Tool</span>
+  <button class="btn btn-ghost btn-sm" onclick="showWelcome()">&#x1F4C2; Load HAR</button>
+  <button class="btn btn-ghost btn-sm" onclick="clearAll()">&#x1F5D1; Clear</button>
+</header>
+
+<!-- ======= WELCOME ======= -->
+<div id="welcome">
+  <div class="drop-zone" id="dz"
+       onclick="document.getElementById('hf').click()"
+       ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+    <div class="icon">&#x1F4C1;</div>
+    <h2>Drop your .har or NetLog .json file here</h2>
+    <p>or click to browse &nbsp;&#xB7;&nbsp; <strong>HAR</strong> (DevTools F12) &nbsp;or&nbsp; <strong>NetLog JSON</strong> (chrome://net-export/)</p>
+    <button class="btn btn-primary" onclick="event.stopPropagation();document.getElementById('hf').click()">Browse File</button>
+  </div>
+  <input type="file" id="hf" accept=".har,.json" hidden onchange="onFilePick(event)">
+
+  <!-- BOOKMARKLET SETUP -->
+  <div class="bm-box">
+    <h3>&#x1F516; Step 1 &#x2014; Install Transaction Bookmarks <span style="font-weight:400;font-size:12px">(one-time setup)</span></h3>
+    <p>Show the Bookmarks Bar (<strong>Ctrl+Shift+B</strong>), then <strong>drag both buttons below</strong> onto it. During recording, click <strong style="color:#166534">&#x25B6; START Transaction</strong> before each transaction and <strong style="color:#991b1b">&#x25A0; END Transaction</strong> after. A prompt lets you type the transaction name each time.</p>
+    <div class="bm-links">
+      <a class="bm-drag bm-start"
+         href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('Start transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n){localStorage.setItem('_vugen_txn',n);new Image().src='https://START-'+n+'.invalid/';}}}catch(e){}})();"
+         onclick="alert('Drag this button to your Bookmarks Bar &#x2014; do not click it here.');return false;">&#x25B6; START Transaction</a>
+      <a class="bm-drag bm-end"
+         href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('End transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n)new Image().src='https://END-'+n+'.invalid/';}}catch(e){}})();"
+         onclick="alert('Drag this button to your Bookmarks Bar &#x2014; do not click it here.');return false;">&#x25A0; END Transaction</a>
+    </div>
+    <div class="bm-note">
+      <strong>How it works:</strong>
+      The last used transaction name is remembered automatically &#x2014; the END prompt pre-fills with the same name you used for START.
+      Both bookmarks fire a request to a <code>.invalid</code> domain which appears in the HAR and is detected as a transaction marker by this tool.
+    </div>
+    <div class="warn" style="margin-top:10px">&#x26A0; <strong>Bookmarklets only work on real websites.</strong> They will not respond on the browser&#x2019;s New Tab page or any <code>chrome://</code> page &#x2014; Chrome blocks them silently. Always navigate to your application URL first, then click the bookmark.</div>
+  </div>
+
+  <!-- RECORDING STEPS -->
+  <div class="instr">
+    <h3>&#x1F4CB; Step 2 &#x2014; Record Your Application</h3>
+    <ol class="steps">
+      <li><strong>Navigate to your application</strong> in the browser (e.g. <code>https://myapp.company.com</code>)</li>
+      <li>Press <strong>F12</strong> &rarr; click the <strong>Network</strong> tab &rarr; enable <strong>Preserve Log</strong> and <strong>Disable Cache</strong> checkboxes &rarr; click &#x1F6AB; to clear existing entries</li>
+      <li>Click the <strong style="color:#166534">&#x25B6; START Transaction</strong> bookmark &#x2014; type a name (e.g. <code>T01_Login</code>) and click OK</li>
+      <li>Perform all steps for that transaction (login, fill form, navigate, etc.)</li>
+      <li>Click the <strong style="color:#991b1b">&#x25A0; END Transaction</strong> bookmark &#x2014; the name is pre-filled from START, just click OK</li>
+      <li>Repeat START / END for each transaction (T02_Home, T03_Search&hellip;). Navigate freely between bookmarklet clicks &#x2014; markers always fire in the current page&#x2019;s context</li>
+      <li>After all transactions are done: in the Network tab, click the download icon &rarr; select <strong>"Export HAR (with sensitive data)"</strong> &mdash; or right-click any row &rarr; <strong>"Save all as HAR with content"</strong></li>
+      <li>Drop the saved <code>.har</code> file in the area above &#x2014; both scripts are generated automatically</li>
+    </ol>
+    <div class="warn" style="margin-bottom:10px">&#x1F512; <strong>Required: Enable "Allow to generate HAR with Sensitive Data" before recording</strong>
+      <ol style="margin:8px 0 0 0;padding-left:20px;line-height:1.9;font-size:12px">
+        <li>Press <strong>F12</strong> to open DevTools &rarr; click the <strong>Settings gear icon</strong> (top-right corner) &mdash; or press <strong>F1</strong> / <strong>Shift+?</strong></li>
+        <li>Scroll to the <strong>Network</strong> section</li>
+        <li>Tick <strong>"Allow to generate HAR with Sensitive Data"</strong></li>
+        <li>Close Settings &rarr; when downloading, choose <strong>"Export HAR (with sensitive data)"</strong></li>
+      </ol>
+      <span style="font-size:11.5px;color:var(--muted)">This ensures Authorization headers, cookies and Bearer tokens are included. NFT environments use test data only &mdash; safe to enable.</span>
+    </div>
+    <div class="tip">&#x1F4A1; <strong>DevTools settings (required before recording):</strong>
+      <ul style="margin:6px 0 0 0;padding-left:20px;line-height:1.7">
+        <li><strong>Preserve Log</strong> &#x2014; keeps all network requests visible across page navigations and redirects. Without this, requests from login redirects are lost.</li>
+        <li><strong>Disable Cache</strong> &#x2014; forces the browser to fetch fresh responses instead of using the local cache. Without this, response bodies may be empty in the HAR, making correlation extraction impossible in Script Studio.</li>
+      </ul>
+      Both checkboxes are in the Network tab toolbar at the top of the DevTools panel.
+    </div>
+    <div class="tip">&#x1F4A1; <strong>Forgot markers?</strong> Use <strong>Select Mode</strong> after loading the HAR to manually group requests into transactions.</div>
+    <div class="warn">&#x26A0; Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.</div>
+  </div>
+
+  <!-- FALLBACK METHOD -->
+  <details style="margin-bottom:16px">
+    <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;user-select:none">
+      &#x1F517; Alternative: Address Bar Method (if bookmarklets are blocked by your organisation)
+    </summary>
+    <div class="instr" style="border-top:0;border-radius:0 0 10px 10px;margin-top:0">
+      <ol class="steps" style="margin-top:10px">
+        <li>In the browser address bar, type <code>https://START-T01-Login.invalid</code> and press Enter (error page is expected)</li>
+        <li>Type your application URL to go back, then perform all steps for this transaction</li>
+        <li>Type <code>https://END-T01-Login.invalid</code> in the address bar and press Enter</li>
+        <li>Do <strong>not</strong> click the Back button &#x2014; type the next START URL directly in the address bar</li>
+        <li>Repeat for each transaction (T02, T03 etc.)</li>
+      </ol>
+    </div>
+  </details>
+
+  <!-- MULTI-TAB / POPUP RECORDING -->
+  <details style="margin-bottom:16px">
+    <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;user-select:none">
+      &#x1FA9F; Multi-tab / Popup recording &#x2014; use chrome://net-export/ when your app opens new windows or tabs
+    </summary>
+    <div class="instr" style="border-top:0;border-radius:0 0 10px 10px;margin-top:0">
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Developer Tools (F12) only records the tab it is attached to. If your app opens popup windows or new tabs, use Chrome/Edge's built-in all-tab capture instead. <strong>Note:</strong> NetLog does not capture POST request bodies  -  those requests will show a TODO comment in the generated script.</p>
+      <ol class="steps" style="margin-top:0">
+        <li>In the Chrome/Edge address bar, navigate to <code>chrome://net-export/</code></li>
+        <li>Click <strong>Start Logging to Disk</strong> &#x2014; choose a save location and click Save</li>
+        <li>Open your application in a new tab (the net-export tab stays open in the background)</li>
+        <li>Use the <strong style="color:#166534">&#x25B6; START Transaction</strong> and <strong style="color:#991b1b">&#x25A0; END Transaction</strong> bookmarks as normal &#x2014; they fire from any tab and are captured by NetLog</li>
+        <li>Complete your full user journey (including any popup windows or new tabs the app opens)</li>
+        <li>Switch back to the <code>chrome://net-export/</code> tab and click <strong>Stop Logging</strong></li>
+        <li>Drop the saved <code>.json</code> file into this tool just as you would a <code>.har</code> file</li>
+      </ol>
+      <div class="tip" style="margin-top:10px">POST bodies will show as TODO in generated scripts. Open DevTools alongside for the same session if you also need bodies  -  then use the <code>.har</code> from DevTools for a complete script.</div>
+    </div>
+  </details>
+</div>
+
+<!-- ======= MAIN PANEL ======= -->
+<div id="main" class="hidden">
+
+  <!-- TOOLBAR -->
+  <div class="tbar">
+    <span style="font-size:12px;font-weight:700">Filters:</span>
+    <label class="chk-lbl"><input type="checkbox" id="f-static" checked onchange="refresh()"> Static Assets</label>
+    <label class="chk-lbl"><input type="checkbox" id="f-noise"  checked onchange="refresh()"> Analytics/Ads</label>
+    <label class="chk-lbl"><input type="checkbox" id="f-opts"   checked onchange="refresh()"> OPTIONS</label>
+    <div class="tbar-sep"></div>
+    <div class="rt-chip-bar" id="rec-rt-bar" style="display:inline-flex">
+      <span class="rt-chip rt-all rt-active" data-key="__all__" onclick="setRecorderRt('__all__')" title="All types">All</span>
+      <span class="rt-chip" data-key="fetch"      style="--chip-color:#4f8ef7" onclick="setRecorderRt('fetch')"      title="Fetch/XHR">Fetch/XHR</span>
+      <span class="rt-chip" data-key="document"   style="--chip-color:#e8a838" onclick="setRecorderRt('document')"   title="Document">Doc</span>
+      <span class="rt-chip" data-key="stylesheet" style="--chip-color:#9b59b6" onclick="setRecorderRt('stylesheet')" title="CSS">CSS</span>
+      <span class="rt-chip" data-key="script"     style="--chip-color:#f39c12" onclick="setRecorderRt('script')"     title="JavaScript">JS</span>
+      <span class="rt-chip" data-key="font"       style="--chip-color:#16a085" onclick="setRecorderRt('font')"       title="Font">Font</span>
+      <span class="rt-chip" data-key="image"      style="--chip-color:#27ae60" onclick="setRecorderRt('image')"      title="Image">Img</span>
+      <span class="rt-chip" data-key="media"      style="--chip-color:#e74c3c" onclick="setRecorderRt('media')"      title="Media">Media</span>
+      <span class="rt-chip" data-key="other"      style="--chip-color:#7f8c8d" onclick="setRecorderRt('other')"      title="Other">Other</span>
+    </div>
+    <div class="tbar-sep"></div>
+    <button class="btn btn-muted btn-sm" id="btn-sel" onclick="toggleSelMode()">&#x2611; Select Mode</button>
+    <div id="sel-bar">
+      <span id="sel-cnt">0 selected</span>
+      <button class="btn btn-primary btn-sm" onclick="openTxnModal()">+ Create Transaction</button>
+      <button class="btn btn-muted btn-sm" onclick="clearSel()">&#x2715; Cancel</button>
+    </div>
+    <div class="tbar-sep"></div>
+    <span class="fmt-badge" id="fmt-badge">&#x1F310; Web HTTP/HTML</span>
+    <span class="fmt-badge" id="auth-badge" style="display:none;background:#6366f1;color:#fff;margin-left:4px"></span>
+    <button class="btn btn-muted btn-sm" onclick="openFmtModal(true)">&#x2699; Change Format</button>
+    <button class="btn btn-muted btn-sm" id="btn-collapse-all" style="display:none" onclick="toggleCollapseAll()">&#x2296; Collapse All</button>
+    <span id="stats"></span>
+  </div>
+
+  <!-- NetLog warning banner - visible only when loaded from chrome://net-export/ -->
+  <div id="netlog-banner" class="hidden" style="background:#fef3c7;border-bottom:2px solid #f59e0b;padding:6px 16px;font-size:12px;color:#78350f;display:flex;align-items:center;gap:8px;flex-shrink:0">
+    <span style="font-size:15px">&#x26A0;</span>
+    <span><strong>NetLog source (chrome://net-export/)</strong> &#x2014; POST request bodies are not available in NetLog files.
+    GET/HEAD requests are fully reproduced. For POST bodies, check the TODO comments in the generated scripts and add them manually.</span>
+  </div>
+
+  <!-- SPLIT VIEW -->
+  <div class="split">
+
+    <!-- DOMAIN FILTER PANEL -->
+    <div class="domain-pane" id="domain-pane">
+      <div class="dp-hdr">
+        <div class="dp-hdr-top">
+          <span class="dp-hdr-title">&#x1F310; <span id="dp-title">Domains</span></span>
+          <div class="dp-acts">
+            <button onclick="toggleAllDomains(true)">All</button>
+            <button onclick="toggleAllDomains(false)">None</button>
+          </div>
+        </div>
+        <input class="dp-search" type="text" placeholder="Search domains&#x2026;" oninput="renderDomainPanel(this.value)">
+      </div>
+      <div class="dp-list" id="dp-list">
+        <div class="dp-empty">Load a HAR file</div>
+      </div>
+    </div>
+
+    <!-- RESIZER: domain | table -->
+    <div class="resizer" id="rs-left"></div>
+
+    <!-- REQUEST TABLE -->
+    <div class="req-pane" id="req-pane">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:38px">#</th>
+            <th style="width:66px">Method</th>
+            <th>URL</th>
+            <th style="width:58px">Status</th>
+            <th style="width:88px">Type</th>
+            <th style="width:62px">Size</th>
+            <th style="width:58px">Time</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- RESIZER: table | code -->
+    <div class="resizer" id="rs-right"></div>
+
+    <!-- SCRIPT PREVIEW -->
+    <div class="code-pane" id="code-pane">
+      <div class="code-tabs">
+        <div class="code-tab act" data-tab="ac" onclick="switchTab(this,'ac')">Action.c</div>
+        <div class="code-tab" data-tab="mj" onclick="switchTab(this,'mj')">main.js (DevWeb)</div>
+        <div class="code-tab" data-tab="vi" onclick="switchTab(this,'vi')">vuser_init.c</div>
+        <div class="code-tab" data-tab="ve" onclick="switchTab(this,'ve')">vuser_end.c</div>
+        <div class="code-tab" data-tab="gh" onclick="switchTab(this,'gh')">globals.h</div>
+      </div>
+      <div class="code-panel-hdr">
+        <span class="code-panel-title" id="code-panel-title">Action.c</span>
+        <div class="code-actions">
+          <button class="btn-copy" onclick="copyCode()" title="Copy to clipboard">&#x1F4CB; Copy</button>
+        </div>
+      </div>
+      <pre class="code-body" id="code-body">// Load a HAR file to see generated scripts</pre>
+    </div>
+
+  </div><!-- /split -->
+
+  <!-- DOWNLOAD BAR -->
+  <div class="dl-bar">
+    <span id="dl-webhttp" style="display:inline-flex;align-items:center;gap:8px">
+      <label>Web HTTP/HTML:</label>
+      <button class="btn btn-success btn-sm" onclick="dlZip('webhttp')">v Download Project ZIP</button>
+    </span>
+    <div class="tbar-sep" id="dl-sep"></div>
+    <span id="dl-devweb" style="display:inline-flex;align-items:center;gap:8px">
+      <label>DevWeb:</label>
+      <button class="btn btn-primary btn-sm" onclick="dlZip('devweb')">v Download Project ZIP</button>
+    </span>
+    <div class="tbar-sep"></div>
+    <button class="btn btn-success btn-sm" onclick="dlZip('both')" style="display:none">&#x2B07; Download Both ZIPs</button>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ======= FORMAT PICKER MODAL ======= -->
+<div id="fmt-modal-bg" class="modal-bg hidden">
+  <div class="modal" style="min-width:560px;max-width:600px">
+    <h3>Choose Script Format</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px">Select the protocol your LRE project uses. You can change this later.</p>
+    <div class="fmt-cards">
+
+      <div class="fmt-card selected" id="fc-webhttp" onclick="selectFmt('webhttp')">
+        <div class="fmt-card-icon">&#x1F310;</div>
+        <div class="fmt-card-title">Web HTTP/HTML</div>
+        <div class="fmt-card-sub">C Language Protocol</div>
+        <div class="fmt-card-files">Action.c<br>vuser_init.c<br>vuser_end.c<br>globals.h</div>
+      </div>
+
+      <div class="fmt-card" id="fc-devweb" onclick="selectFmt('devweb')">
+        <div class="fmt-card-icon">&#x26A1;</div>
+        <div class="fmt-card-title">DevWeb</div>
+        <div class="fmt-card-sub">JavaScript Protocol</div>
+        <div class="fmt-card-files">main.js</div>
+      </div>
+
+      <div class="fmt-card" id="fc-both" onclick="selectFmt('both')" style="display:none">
+        <div class="fmt-card-icon">&#x1F4E6;</div>
+        <div class="fmt-card-title">Both Formats</div>
+        <div class="fmt-card-sub">All files generated</div>
+        <div class="fmt-card-files">Action.c &#xB7; main.js<br>vuser_init.c<br>vuser_end.c . globals.h</div>
+      </div>
+
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-muted btn-sm" id="fmt-cancel-btn" onclick="closeFmtModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmFmt()">Continue &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======= MODAL ======= -->
+<div id="modal-bg" class="modal-bg hidden">
+  <div class="modal">
+    <h3>Create Transaction</h3>
+    <div class="fg">
+      <label>Transaction Name</label>
+      <input id="txn-inp" type="text" placeholder="e.g. T01_Login"
+             onkeydown="if(event.key==='Enter')confirmTxn()">
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:-6px">Use format: T01_Login, T02_Search, T03_Checkout</p>
+    <div class="modal-actions">
+      <button class="btn btn-muted btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmTxn()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<!-- ======= EXTERNAL MODULES =======
+     Load order is critical — state must be first (provides S, COLORS, SKIP_HDRS).
+     All files share global scope; functions are only called after user drops a HAR
+     file, so every global is defined long before it is used.
+ -->
+<script src="VuGen-Recorder-state.js"></script>
+<script src="VuGen-Recorder-templates.js"></script>
+<script src="VuGen-Recorder-parsers.js"></script>
+<script src="VuGen-Recorder-generators.js"></script>
+<script src="VuGen-Recorder-usr-gen.js"></script>
+<script src="VuGen-Recorder-ui.js"></script>
+
+<script>
+// ===========================================================================
+// THEME
+// ===========================================================================
+(function(){
+  var t = localStorage.getItem('vr-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+
+// Called by parent portal to sync theme and hide redundant header chrome
+window.lrePortalInit = function(theme) {
+  document.documentElement.setAttribute('data-theme', theme || 'dark');
+  localStorage.setItem('vr-theme', theme || 'dark');
+  var btn = document.querySelector('.hdr .btn-icon');
+  if(btn) btn.style.display = 'none';
+};
+window.lreSetTheme = function(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('vr-theme', theme);
+};
+
+function toggleTheme() {
+  var html = document.documentElement;
+  var dark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', dark ? 'light' : 'dark');
+  localStorage.setItem('vr-theme', dark ? 'light' : 'dark');
+  document.getElementById('theme-icon').textContent = dark ? '☽' : '☀';
+}
+
+// ===========================================================================
+// TOAST NOTIFICATIONS
+// ===========================================================================
+function showToast(msg, type, duration) {
+  type = type || 'info';
+  duration = duration == null ? 3500 : duration;
+  var icons = {success:'✔', error:'✘', info:'ℹ', warning:'⚠'};
+  var container = document.getElementById('toast-container');
+  if(!container) return;
+  var toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.innerHTML = '<span class="toast-icon">' + (icons[type]||'ℹ') + '</span><span>' + msg + '</span>';
+  container.appendChild(toast);
+  setTimeout(function(){
+    toast.classList.add('removing');
+    setTimeout(function(){ if(toast.parentNode) toast.parentNode.removeChild(toast); }, 280);
+  }, duration);
+}
+
+// ===========================================================================
+// COPY CODE TO CLIPBOARD
+// ===========================================================================
+function copyCode() {
+  var body = document.getElementById('code-body');
+  if(!body) return;
+  var text = body.textContent;
+  if(!text || text.startsWith('// Load a HAR') || text.startsWith('// No content')) {
+    showToast('Load a HAR file first.', 'warning');
+    return;
+  }
+  navigator.clipboard.writeText(text).then(function(){
+    showToast('Copied to clipboard!', 'success', 2000);
+  }).catch(function(){
+    showToast('Copy failed — try selecting the text manually.', 'error');
+  });
+}
+
+// ===========================================================================
+// FILE LOADING
+// ===========================================================================
+function onFilePick(e){ const f=e.target.files[0]; if(f) readFile(f); }
+function onDrop(e){
+  e.preventDefault();
+  document.getElementById('dz').classList.remove('over');
+  const f=e.dataTransfer.files[0];
+  const nm=(f&&f.name.toLowerCase())||'';
+  if(f&&(nm.endsWith('.har')||nm.endsWith('.json'))) readFile(f);
+  else showToast('Please drop a .har file or a chrome://net-export/ NetLog .json file', 'error');
+}
+function onDragOver(e){ e.preventDefault(); document.getElementById('dz').classList.add('over'); }
+function onDragLeave(){ document.getElementById('dz').classList.remove('over'); }
+
+function readFile(file){
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      S.domainFilter={};
+      const parsed=JSON.parse(ev.target.result);
+      if(isNetLog(parsed)){
+        S.pendingNetLog=parsed;
+        S.pendingHar=null;
+      } else {
+        S.pendingHar=parsed;
+        S.pendingNetLog=null;
+      }
+      openFmtModal(false);
+    }catch(err){ showToast('Could not parse file: '+err.message, 'error'); }
+  };
+  r.readAsText(file);
+}
+
+// ===========================================================================
+// TRANSACTION MARKER DETECTION
+// ===========================================================================
+function detectMarkers(){
+  S.txns=[]; S.colorMap={};
+  let cIdx=0;
+
+  for(const e of S.entries){
+    const url=e.url;
+    // Match: https://START-TxnName.invalid  or  https://TxnName-START.invalid
+    const sm = url.match(/\/\/START[-_]([^/.\s?]+)\.invalid/i)
+            || url.match(/\/\/([^/.\s?]+)[-_]START\.invalid/i);
+    const em = url.match(/\/\/END[-_]([^/.\s?]+)\.invalid/i)
+            || url.match(/\/\/([^/.\s?]+)[-_]END\.invalid/i);
+
+    if(sm){
+      const name = sm[1].replace(/[-]/g,'_');
+      e.isMarker=true; e.markerType='start'; e.txnName=name;
+      if(!S.colorMap[name]){
+        const c=COLORS[cIdx%COLORS.length]; cIdx++;
+        S.colorMap[name]=c;
+        S.txns.push({name,color:c});
+      }
+    } else if(em){
+      const name = em[1].replace(/[-]/g,'_');
+      e.isMarker=true; e.markerType='end'; e.txnName=name;
+    }
+  }
+
+  // Assign txn membership to entries between markers
+  let active=null;
+  for(const e of S.entries){
+    if(e.isMarker){ active = e.markerType==='start' ? e.txnName : null; }
+    else { e.txn=active; }
+  }
+}
+
+// ===========================================================================
+// FILTERS
+// ===========================================================================
+function classifyHarEntry(e){
+  const rt=(e._resourceType||'').toLowerCase();
+  if(rt==='fetch'||rt==='xhr') return 'fetch';
+  if(rt==='document') return 'document';
+  if(rt==='stylesheet') return 'stylesheet';
+  if(rt==='script') return 'script';
+  if(rt==='font') return 'font';
+  if(rt==='image') return 'image';
+  if(rt==='media') return 'media';
+  if(rt==='manifest') return 'manifest';
+  if(rt==='websocket') return 'websocket';
+  if(rt&&rt!=='other'&&rt!=='') return rt;
+  const ct=(e.ct||'').toLowerCase();
+  if(/json|graphql|form-urlencoded|form-data|xml|text\/plain/.test(ct)||e.method==='POST'||e.method==='PUT'||e.method==='PATCH') return 'fetch';
+  if(ct.startsWith('text/html')||ct.startsWith('application/xhtml')) return 'document';
+  if(ct.startsWith('text/css')) return 'stylesheet';
+  if(/javascript/.test(ct)) return 'script';
+  if(ct.startsWith('font/')) return 'font';
+  if(ct.startsWith('image/')) return 'image';
+  if(ct.startsWith('audio/')||ct.startsWith('video/')) return 'media';
+  const path=(e.url||'').split('?')[0].toLowerCase();
+  if(/\.(css)$/.test(path)) return 'stylesheet';
+  if(/\.(js)$/.test(path)) return 'script';
+  if(/\.(woff2?|ttf|eot|otf)$/.test(path)) return 'font';
+  if(/\.(png|jpe?g|gif|ico|svg|webp)$/.test(path)) return 'image';
+  if(/\.(mp4|webm|mp3|ogg|wav)$/.test(path)) return 'media';
+  return 'other';
+}
+
+function applyFilters(){
+  const fSt=document.getElementById('f-static')?.checked??true;
+  const fNo=document.getElementById('f-noise')?.checked??true;
+  const fOp=document.getElementById('f-opts')?.checked??true;
+
+  for(const e of S.entries){
+    if(e.isMarker){e.filtered=false;continue;}
+    // Filter CSP violation reports  -  browser auto-sends these when our bookmarklet
+    // .invalid marker URLs are blocked by the app's Content Security Policy
+    const reqCt=(e.hdrsMap['content-type']||'').split(';')[0].trim().toLowerCase();
+    if(reqCt==='application/csp-report'||reqCt==='application/reports+json'){e.filtered=true;continue;}
+    if(e.body&&e.body.text&&e.body.text.includes('"blocked-uri"')){e.filtered=true;continue;}
+    // Filter WebSocket upgrade requests  -  wss:// and ws:// cannot be replayed by VuGen
+    // Web HTTP/HTML protocol; including them causes 400 Bad Request errors
+    if(/^wss?:\/\//i.test(e.url)){e.filtered=true;continue;}
+    // Domain filter (unchecked domains are excluded)
+    try{
+      const host=new URL(e.url).hostname;
+      if(S.domainFilter[host]===false){e.filtered=true;continue;}
+    }catch{}
+    if(fOp && e.method==='OPTIONS'){e.filtered=true;continue;}
+    if(fSt){
+      if(STATIC_CT.has(e.ct)){e.filtered=true;continue;}
+      if(STATIC_EXT.test(e.url.split('?')[0])){e.filtered=true;continue;}
+    }
+    if(fNo){
+      try{ if(NOISY.test(new URL(e.url).hostname)){e.filtered=true;continue;} }catch{}
+    }
+    if(S.resourceTypeFilter&&S.resourceTypeFilter.size>0){
+      if(!S.resourceTypeFilter.has(classifyHarEntry(e))){e.filtered=true;continue;}
+    }
+    e.filtered=false;
+  }
+}
+
+function refresh(){
+  applyFilters(); buildScripts(); renderTable(); renderStats(); showScript();
+}
+
+function setRecorderRt(key){
+  const bar=document.getElementById('rec-rt-bar');
+  if(!bar) return;
+  const allChip=bar.querySelector('[data-key="__all__"]');
+  if(key==='__all__'){
+    S.resourceTypeFilter=null;
+    bar.querySelectorAll('.rt-chip').forEach(c=>c.classList.remove('rt-active'));
+    if(allChip) allChip.classList.add('rt-active');
+    refresh(); return;
+  }
+  const chip=bar.querySelector(`[data-key="${key}"]`);
+  if(!chip) return;
+  if(!S.resourceTypeFilter){
+    const allKeys=['fetch','document','stylesheet','script','font','image','media','other'];
+    S.resourceTypeFilter=new Set(allKeys);
+    if(allChip) allChip.classList.remove('rt-active');
+    allKeys.forEach(k=>{ const c=bar.querySelector(`[data-key="${k}"]`); if(c) c.classList.add('rt-active'); });
+  }
+  if(S.resourceTypeFilter.has(key)){
+    S.resourceTypeFilter.delete(key);
+    chip.classList.remove('rt-active');
+  } else {
+    S.resourceTypeFilter.add(key);
+    chip.classList.add('rt-active');
+  }
+  if(S.resourceTypeFilter.size===0){ S.resourceTypeFilter=new Set([key]); chip.classList.add('rt-active'); }
+  refresh();
+}
+
+// ===========================================================================
+// INITIALISATION — runs after all external modules are loaded
+// ===========================================================================
+setupResizer('rs-left','left');
+setupResizer('rs-right','right');
+
+document.getElementById('modal-bg').addEventListener('click',function(e){
+  if(e.target===this) closeModal();
+});
+document.getElementById('fmt-modal-bg').addEventListener('click',function(e){
+  if(e.target===this && !document.getElementById('fmt-cancel-btn').classList.contains('hidden')) closeFmtModal();
+});
+</script>
+</body>
+</html>
