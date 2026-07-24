@@ -7,27 +7,35 @@
 // HAR PROCESSING
 // ═══════════════════════════════════════════════════════════════════════════
 function parseHar(har) {
+  // Build page map for extension-recorded HARs (pageref id → transaction title)
+  S.harPages = new Map();
+  const _harPgs = (har.log && har.log.pages) || [];
+  for (const _p of _harPgs) {
+    if (_p.id && _p.title) S.harPages.set(_p.id, _p.title);
+  }
+
   const raw = (har.log && har.log.entries) || [];
   let id = 0;
   return raw.map((e) => {
+    const resp = e.response || {};
     const hdrsMap = {};
     (e.request.headers || []).forEach((h) => {
       hdrsMap[h.name.toLowerCase()] = h.value;
     });
     const respHdrsMap = {};
-    (e.response.headers || []).forEach((h) => {
+    (resp.headers || []).forEach((h) => {
       respHdrsMap[h.name.toLowerCase()] = h.value;
     });
-    const ct = ((e.response.content && e.response.content.mimeType) || "")
+    const ct = ((resp.content && resp.content.mimeType) || "")
       .split(";")[0]
       .trim();
     const respBody =
-      (e.response.content && e.response.content.text) || "";
+      (resp.content && resp.content.text) || "";
     return {
       id: ++id,
       url: e.request.url || "",
       method: (e.request.method || "GET").toUpperCase(),
-      status: e.response.status || 0,
+      status: resp.status || 0,
       ct,
       dur: Math.round(e.time || 0),
       startMs: (() => { try { return new Date(e.startedDateTime).getTime() || 0; } catch { return 0; } })(),
@@ -37,8 +45,15 @@ function parseHar(har) {
       respCt: ct,
       respBody,
       respHdrsMap,
-      respCookies: e.response.cookies || [],
-      _resourceType: e._resourceType || "", // Chrome HAR extension: fetch|xhr|document|stylesheet|script|font|image|media|manifest|websocket|wasm|other
+      respCookies: resp.cookies || [],
+      _resourceType:    e._resourceType || "", // Chrome HAR extension
+      // PerfX Studio Recorder fields (present only when HAR came from the extension)
+      pageref:          e.pageref || null,
+      _perfx_class:     e._perfx_class     || null,
+      _perfx_interval:  e._perfx_interval  || null,
+      _perfx_occurrences: e._perfx_occurrences || null,
+      _perfx_burst_id:  e._perfx_burst_id  || null,
+      _normalizedUrl:   e._normalizedUrl   || null,
       filtered: false,
       isMarker: false,
       markerType: null,
@@ -366,6 +381,13 @@ function detectMarkers(entries) {
     }
   }
 
+  // Extension pageref-based transactions: if no bookmarklet markers found
+  // and the HAR has pages (recorded by PerfX extension), inject synthetic
+  // start/end marker entries so generators emit lr_start/end_transaction.
+  if (S.txns.length === 0 && S.harPages && S.harPages.size > 0) {
+    _injectPagerefMarkers(entries, S.harPages);
+  }
+
   // Assign txn membership to requests between markers
   let active = null;
   for (const e of entries) {
@@ -375,6 +397,54 @@ function detectMarkers(entries) {
       e.txn = active;
     }
   }
+}
+
+function _injectPagerefMarkers(entries, harPages) {
+  // Build ordered unique pagerefs in first-appearance order, populate S.txns
+  const prSeen = new Set();
+  for (const e of entries) {
+    if (e.isMarker || !e.pageref || !harPages.has(e.pageref)) continue;
+    if (!prSeen.has(e.pageref)) {
+      prSeen.add(e.pageref);
+      S.txns.push({ name: harPages.get(e.pageref) });
+    }
+  }
+  if (prSeen.size === 0) return;
+
+  // Rebuild entries in one pass, injecting start/end markers at pageref boundaries
+  const result = [];
+  let currentPr = null;
+  for (const e of entries) {
+    const pr = e.isMarker ? null : (e.pageref || null);
+    if (pr !== currentPr) {
+      if (currentPr !== null && harPages.has(currentPr)) {
+        result.push(_makeStudioMarker("end", harPages.get(currentPr)));
+      }
+      if (pr !== null && harPages.has(pr)) {
+        result.push(_makeStudioMarker("start", harPages.get(pr)));
+      }
+      currentPr = pr;
+    }
+    result.push(e);
+  }
+  if (currentPr !== null && harPages.has(currentPr)) {
+    result.push(_makeStudioMarker("end", harPages.get(currentPr)));
+  }
+
+  // Replace contents of entries in-place (preserves S.entries1 reference)
+  entries.length = 0;
+  for (const e of result) entries.push(e);
+}
+
+function _makeStudioMarker(markerType, txnName) {
+  return {
+    id: -1, url: "", method: "GET", status: 0, ct: "", dur: 0, startMs: 0,
+    reqHdrs: [], hdrsMap: {}, body: null, respCt: "", respBody: "",
+    respHdrsMap: {}, respCookies: [], _resourceType: "", pageref: null,
+    _perfx_class: null, _perfx_interval: null, _perfx_occurrences: null,
+    _perfx_burst_id: null, _normalizedUrl: null,
+    filtered: false, isMarker: true, markerType, txnName, txn: null,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

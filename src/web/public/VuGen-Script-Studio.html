@@ -252,6 +252,34 @@
           </div>
         </div>
 
+        <!-- ── BACKGROUND REQUEST REVIEW PANEL (Phase 4) ── -->
+        <div id="bgReviewPanel" class="bg-review-panel" style="display:none">
+          <div class="bg-review-header">
+            <span class="bg-review-title">&#x1F6AB; Background Requests Detected</span>
+            <span class="bg-review-subtitle" id="bgReviewSubtitle"></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="bg-review-table" id="bgReviewTable">
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Method</th>
+                  <th>Interval</th>
+                  <th>Count</th>
+                  <th>Decision</th>
+                </tr>
+              </thead>
+              <tbody id="bgReviewBody"></tbody>
+            </table>
+          </div>
+          <div class="bg-review-footer">
+            <span id="bgReviewStats"></span>
+            <button class="bg-review-apply" onclick="applyBgDecisions()">
+              &#x25B6; Apply &amp; Generate Script
+            </button>
+          </div>
+        </div>
+
         <!-- ── CORRELATION ADVISOR PANEL ── -->
         <div class="adv-panel" id="adv-panel" style="display:none">
           <div class="adv-panel-hdr" onclick="toggleAdvisorPanel()">

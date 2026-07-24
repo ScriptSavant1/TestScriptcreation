@@ -184,19 +184,24 @@ Generate deeply correlated VuGen scripts from 1 or 2 HAR files. The primary tool
 
 | HARs uploaded | Mode | Method |
 |---------------|------|--------|
-| 1 HAR | Pattern mode | Regex-based dynamic value identification |
+| 1 HAR | Advisor mode | Correlation Advisor (Phase 1 response scan → Phase 2 cross-reference → Phase 2.5 CSRF name scan → Phase 3 pattern scan) |
 | 2 HARs | Diff mode | Cross-recording comparison |
 
-### Pattern mode (1 HAR) — what it detects
+### Advisor mode (1 HAR) — what it detects
 
-| Pattern type | Examples |
-|--------------|---------|
-| UUID v4 | `550e8400-e29b-41d4-a716-446655440000` |
-| JWT tokens | `eyJ...` (three base64 segments) |
-| Long hex tokens | 32+ char hex strings |
-| Long base64 values | 40+ char base64 strings |
-| Unix timestamps | 10-digit numeric values |
-| CSRF tokens | Values in response headers or hidden form fields |
+The Correlation Advisor runs four phases and uses the Advisor panel for user confirmation:
+
+| Pattern type | Detection method | Examples |
+|--------------|-----------------|---------|
+| UUID v4 | Pattern scan (Phase 3) | `550e8400-e29b-41d4-a716-446655440000` |
+| JWT tokens | Pattern scan (Phase 3) | `eyJ...` (three base64 segments) |
+| Long hex tokens | Pattern scan (Phase 3) | 32+ char hex strings |
+| Long base64 values | Pattern scan (Phase 3) | 40+ char base64 strings |
+| Unix timestamps | Pattern scan (Phase 3) | 10-digit numeric values |
+| CSRF / anti-forgery tokens | Phase 2.5 name-pattern scan | `authenticity_token`, `csrf_token`, `__RequestVerificationToken`, and 11 more well-known field names |
+| Dynamic response values | Phase 2 cross-reference | Any JSON response value appearing in a later request |
+
+**Phase 2.5 CSRF scan (single-HAR mode):** Scans each request's form body for fields whose name matches a built-in list of 14 CSRF field name patterns. When a match is found, the preceding response bodies (including HTML pages) are backward-searched for the token value. This detects CSRF tokens even when the source HTML page is filtered as a Document-type navigation request — previously these were only detectable in two-HAR diff mode.
 
 ### Diff mode (2 HARs) — what it detects
 
@@ -224,13 +229,15 @@ For each detected dynamic value:
 
 ### Parameterization candidates
 
-Script Studio also identifies fields that could be parameterized (fed from a data file). It looks for:
-- Login form fields (username, password, email)
+Script Studio identifies fields that should be parameterized (fed from a data file at runtime). It looks for:
+- Login form fields (username, password, email, login)
 - Search fields
 - Payment fields (card number, amount)
 - User-settable profile fields
 
-These are presented to the user as suggestions — not automatically parameterized.
+Known credential fields (matching the `PARAM_KEYS_MAP` patterns: `username`, `login`, `email`, `password`, `creditCard`, etc.) are **always parameterized** — even when the same value also appears as a correlation target. This ensures multi-user load tests substitute the correct per-VU credential instead of a hardcoded or correlated value.
+
+**Epoch timestamp substitution:** When a request body contains a 13-digit millisecond epoch timestamp that matches the HAR recording time within a 1-day window, the generated script replaces the hardcoded value with `Date.now()` (current time at runtime). For timestamps more than 1 day in the past relative to the recording, `getEpochMsDaysAgo(N)` is emitted with the correct day offset.
 
 ### Authentication detection
 

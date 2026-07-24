@@ -68,11 +68,35 @@ for each entry in entries:
           usedIn: current entry, jsonPath in body
 ```
 
+### Phase 2.5 — CSRF / hidden-form-token scan (single-HAR mode)
+
+```
+for each entry in entries:
+  collect form body fields whose NAME matches _CSRF_FIELD_RE
+    (authenticity_token, csrf_token, __RequestVerificationToken, csrfmiddlewaretoken,
+     _token, antiforgery, __VIEWSTATE, __VIEWSTATEGENERATOR, __EVENTVALIDATION,
+     xsrf_token, x-xsrf-token, x-csrf-token, form_token — 14 patterns total)
+  for each matched CSRF field:
+    if value already in Phase 2 highConfValues → skip (Phase 2 found it already)
+    backward-scan ALL preceding response bodies (including HTML) for the token value
+    on first match → HIGH CONFIDENCE candidate
+      source: matching prior response entry
+      extractor: boundary type (LB/RB around the token value in the response)
+```
+
+WHY: In single-HAR mode, CSRF tokens are invisible to Phase 2 because the HTML page
+containing `<input type="hidden" name="authenticity_token">` is a Document-type navigation
+request and is filtered out of the scan set before Phase 1 runs. Phase 2.5 detects them by
+field NAME instead of field VALUE — the name never changes across sessions, only the value does.
+
+In two-HAR diff mode, CSRF tokens are detected automatically by value difference, so Phase 2.5
+adds no value there (and the highConfValues guard prevents duplicates).
+
 ### Phase 3 — Pattern scan (secondary, for truncated HARs)
 
 ```
 for each entry in entries:
-  for each request body value NOT already found in Phase 2:
+  for each request body value NOT already found in Phase 2 or Phase 2.5:
     if matches DYNAMIC_PATTERNS (JWT, UUID, hex32, hex64, longToken):
       → MEDIUM CONFIDENCE candidate
 ```
@@ -255,3 +279,4 @@ The existing code generation pipeline is NOT changed — it already handles `S.c
 | F3 | **Advisor-tagged rows in Correlation Details** — show `[Advisor]` badge on correlations that came from the advisor, distinct from auto-detected ones | Small | ✅ done |
 | F4 | **Header value scanning** — extend Phase 2 to also check request headers (not just request bodies) for values that appeared in prior responses | Small | ✅ done |
 | F5 | **Field browser manual modal** — redesigned Add Manual modal: select source, auto-parse response body + headers, show clickable field list, auto-detect extractor type | Medium | ✅ done |
+| F6 | **Phase 2.5 CSRF scan** — in single-HAR mode, detect CSRF / anti-forgery tokens by field NAME pattern (`_CSRF_FIELD_RE`, 14 names). Backward-scans all preceding response bodies (including HTML) for the token value. Emits high-confidence candidates. Two-HAR diff mode already detects them via value difference; this fills the single-HAR gap. | Medium | ✅ done |

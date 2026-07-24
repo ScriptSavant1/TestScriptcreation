@@ -155,6 +155,21 @@ Navigate to: **Recorder** tab
 
 A HAR (HTTP Archive) file captures every network request your browser makes during a session. Your browser's Developer Tools (F12) can export one. It contains all URLs, headers, request bodies, and response data.
 
+### Two ways to record
+
+| | Classic (Bookmarklet) | PerfX Recorder Extension (Chrome/Edge) |
+|--|----------------------|----------------------------------------|
+| **Setup** | Drag 2 links to bookmarks bar — 30 sec | 5-step one-time install |
+| **DevTools open?** | Yes — must stay open during recording | No — uses a side panel instead |
+| **Transaction naming** | Click bookmark → type name | Button in the extension side panel |
+| **Export HAR** | Manual — Network tab → Export | One-click "Open in Studio" |
+| **Multi-tab / popup apps** | Needs chrome://net-export/ | Works automatically |
+| **Live request counter** | No | Yes |
+
+Choose **Classic** for a quick start. Choose the **Extension** for a cleaner experience, especially on apps that open popups or spawn new tabs.
+
+To download the extension: open the Home page and click **⬇ Get Extension** in the banner. Follow the 5-step modal to install it in Chrome (`chrome://extensions`) or Edge (`edge://extensions`).
+
 ### One-time setup: install the bookmarklet
 
 The bookmarklet marks the start of your recording session so the Recorder can identify your user journey correctly.
@@ -206,10 +221,10 @@ Without correlation, your script will fail on replay. Script Studio generates al
 
 | | 1 HAR | 2 HARs (recommended) |
 |--|-------|---------------------|
-| **Method** | Pattern-based analysis | Diff-based comparison |
-| **How it works** | Finds values that look dynamic (UUIDs, long random strings, timestamps) | Compares two recordings and finds every value that changed between runs |
-| **Quality** | Good for simple apps | Best for any app with login, tokens, sessions |
-| **Best use** | Quick result, simpler apps | Production-quality scripts |
+| **Method** | Correlation Advisor (4-phase analysis) | Diff-based comparison |
+| **How it works** | Finds values that look dynamic (UUIDs, tokens, timestamps) AND detects CSRF tokens by field name (authenticity_token, csrf_token, etc.) in form bodies | Compares two recordings and finds every value that changed between runs |
+| **Quality** | Good for most apps — CSRF and common tokens auto-detected | Best for any app with complex session management or app-specific IDs |
+| **Best use** | Quick result; single-session recording | Production-quality scripts where all dynamic values must be found |
 
 **To use 2 HARs:** record the exact same user journey twice using different test credentials or data sets (e.g. user1@company.com then user2@company.com). The tool finds everything that changed — those are the values that must be correlated.
 
@@ -246,7 +261,7 @@ Ask your LRE administrator or project lead. For new projects on LRE 2021+, use D
 Download links are single-use and expire after 5 minutes. Go back and run the conversion again — it only takes seconds.
 
 **My script replays but fails with "invalid token" or "session expired".**
-A value needs to be correlated. Record the same journey twice and use Script Studio with both HAR files. The diff-based analysis will find the exact values causing the failure.
+A value needs to be correlated. If the failing value is an `authenticity_token`, `csrf_token`, or similar anti-forgery field, Script Studio now auto-detects these in single-HAR mode via the Correlation Advisor — look for them in the Advisor panel after clicking Analyze. For other dynamic values, recording the same journey twice and using both HAR files (diff mode) will find any remaining values that change between sessions.
 
 **The Converter produced a script but it looks incomplete.**
 Check you uploaded the right format (Postman v2.1, not v2.0). For JMeter, ensure all referenced CSV files were uploaded alongside the `.jmx`.

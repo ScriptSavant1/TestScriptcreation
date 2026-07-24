@@ -149,6 +149,26 @@ function esc(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+function shouldIncludeEntry(entry, bgDecisions) {
+  const cls = entry._perfx_class;
+  if (!cls || cls === 'action' || cls === 'unknown') return true;
+  if (cls === 'once') return false;
+  if (cls === 'periodic') {
+    const decision = bgDecisions?.get(entry._normalizedUrl) ?? 'exclude';
+    return decision === 'all';
+  }
+  return true;
+}
+function getSetupEntries(entries, bgDecisions) {
+  return entries.filter(e => {
+    if (e.filtered || e.isMarker) return false;
+    if (e._perfx_class === 'once') return true;
+    if (e._perfx_class === 'periodic') {
+      return (bgDecisions?.get(e._normalizedUrl) ?? 'exclude') === 'once';
+    }
+    return false;
+  });
+}
 function fmtSize(b) {
   if (!b || b <= 0) return "-";
   if (b < 1024) return b + "B";
@@ -491,6 +511,8 @@ function detectDateSubstitution(value, recordingMs, entryMs) {
     dDay.setUTCHours(0, 0, 0, 0);
     const offsetDays = Math.round((recDay.getTime() - dDay.getTime()) / 86400000);
     if (Math.abs(offsetDays) > _DATE_MAX_DAYS || offsetDays < 0) return null;
+    // offset=0 → use Date.now() (current precise epoch ms), not UTC midnight
+    if (offsetDays === 0) return { fn: "Date.now", arg: null };
     return { fn: "getEpochMsDaysAgo", arg: offsetDays };
   }
 
@@ -978,16 +1000,23 @@ function detectParams(entries, correlations) {
       return;
     if (String(value).length < 2) return;
     const sv = String(value);
-    if (
-      corrValues.has(sv) ||
-      corrValues.has(decodeURIComponent(sv)) ||
-      corrValues.has(encodeURIComponent(sv))
-    )
-      return;
+    const isKnownParam = !!matchParamKey(key);
+    // Known param fields (login, password, username, etc.) bypass the corrValues gate:
+    // the same value (e.g. the username) may also appear as a correlation target, but it
+    // must still be parameterised so multi-user tests use load.params.Username, not a
+    // correlated value that is the same for every virtual user.
+    if (!isKnownParam) {
+      if (
+        corrValues.has(sv) ||
+        corrValues.has(decodeURIComponent(sv)) ||
+        corrValues.has(encodeURIComponent(sv))
+      )
+        return;
+    }
     // Allow known user-input param fields (creditCard, username, etc.) to bypass the isDynamic gate.
     // These are user-entered values that look like tokens (e.g. 16-digit card = numericId) but are
     // never in a server response — they must be parameterised, not correlated.
-    if (isDynamic(sv) && !matchParamKey(key)) return;
+    if (isDynamic(sv) && !isKnownParam) return;
     // Try full key, dot-suffix ("order.creditCard"→"creditCard"), and colon-suffix ("f:cust:firstName"→"firstName")
     const keysToTry = [key];
     const dotIdx = key.lastIndexOf(".");
@@ -1452,6 +1481,14 @@ function genMainJS(entries, correlations) {
     o += `        host: ${hostArg}\n`;
     o += `    });\n\n`;
   }
+  const _setupEntriesMj = getSetupEntries(entries, S.bgDecisions);
+  if (_setupEntriesMj.length > 0) {
+    o += '\n    // Setup requests — background-detected endpoints, run once at initialize\n';
+    for (const _se of _setupEntriesMj) {
+      o += `    await (new load.WebRequest({ url: '${escJs(_se.url || '')}', method: '${(_se.method || 'GET').toUpperCase()}' })).send();\n`;
+    }
+    o += '\n';
+  }
   o += '    load.log("Initialization complete", load.LogLevel.debug);\n';
   o += "});\n\n";
 
@@ -1506,6 +1543,7 @@ function genMainJS(entries, correlations) {
     }
 
     if (e.filtered) continue;
+    if (!shouldIncludeEntry(e, S.bgDecisions)) continue;
 
     // Skip auto-follow redirect entries (300-303/307) and 401 challenge entries — VuGen handles these automatically.
     // Correlation extractors have been re-anchored to the triggering entry above.
@@ -2815,6 +2853,7 @@ function genActionC(entries, correlations) {
     }
 
     if (e.filtered) continue;
+    if (!shouldIncludeEntry(e, S.bgDecisions)) continue;
 
     // Skip auto-follow redirect entries (300-303/307) and 401 challenge entries — VuGen handles these automatically.
     // web_reg_save_param extractors have been re-anchored to the triggering entry.
@@ -3632,6 +3671,21 @@ var _LRE_SETUP_COMMENT =
   " */\n\n";
 
 function genVuserInit() {
+  // Build setup block for once-only background-detected requests
+  const _setupEntriesVi = getSetupEntries(S.entries1 || [], S.bgDecisions);
+  let _viSetup = '';
+  if (_setupEntriesVi.length > 0) {
+    _viSetup += '\t/* --- Setup requests (background-detected, run once per VUser) --- */\n';
+    for (let _i = 0; _i < _setupEntriesVi.length; _i++) {
+      const _se = _setupEntriesVi[_i];
+      const _sn = `setup_${String(_i + 1).padStart(2, '0')}`;
+      _viSetup += `\tweb_custom_request("${_sn}",\n`;
+      _viSetup += `\t\t"URL=${escJs(_se.url || '')}",\n`;
+      _viSetup += `\t\t"Method=${(_se.method || 'GET').toUpperCase()}",\n`;
+      _viSetup += `\t\tLAST);\n\n`;
+    }
+  }
+
   if (S.hasDpop) {
     return (
       _LRE_SETUP_COMMENT +
@@ -3644,6 +3698,7 @@ function genVuserInit() {
       '\t\t\t"File=lre-utils.js", ENDITEM,\n' +
       "\t\tLAST);\n\n" +
       '\tlr_output_message("DPoP Initialization: %s", lr_eval_string("{dpop_init_result}"));\n\n' +
+      _viSetup +
       "\treturn 0;\n}\n\n"
     );
   }
@@ -3658,8 +3713,12 @@ function genVuserInit() {
       "\t\tSOURCES,\n" +
       '\t\t\t"File=lre-utils.js", ENDITEM,\n' +
       "\t\tLAST);\n\n" +
+      _viSetup +
       "\treturn 0;\n}\n\n"
     );
+  }
+  if (_viSetup) {
+    return "vuser_init()\n{\n\n" + _viSetup + "\treturn 0;\n}\n\n";
   }
   return "vuser_init()\n{\n\treturn 0;\n}\n\n";
 }

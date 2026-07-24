@@ -449,12 +449,68 @@ function detectMarkers(){
     }
   }
 
+  // Extension pageref-based transactions: if no bookmarklet markers found
+  // and the HAR has pages, inject synthetic start/end markers so generators
+  // emit lr_start_transaction / lr_end_transaction with the correct names.
+  if(S.txns.length===0 && S.harPages && S.harPages.size>0){
+    _recInjectPagerefMarkers();
+    cIdx=S.txns.length; // keep cIdx in sync for any future use
+  }
+
   // Assign txn membership to entries between markers
   let active=null;
   for(const e of S.entries){
     if(e.isMarker){ active = e.markerType==='start' ? e.txnName : null; }
     else { e.txn=active; }
   }
+}
+
+function _recInjectPagerefMarkers(){
+  const harPages=S.harPages;
+  // Build ordered unique pagerefs, populate S.txns and S.colorMap
+  const prSeen=new Set();
+  let cIdx=0;
+  for(const e of S.entries){
+    if(e.isMarker||!e.pageref||!harPages.has(e.pageref)) continue;
+    if(!prSeen.has(e.pageref)){
+      prSeen.add(e.pageref);
+      const name=harPages.get(e.pageref);
+      const c=COLORS[cIdx%COLORS.length]; cIdx++;
+      S.colorMap[name]=c;
+      S.txns.push({name,color:c});
+    }
+  }
+  if(prSeen.size===0) return;
+
+  // Rebuild S.entries in one pass injecting start/end at pageref boundaries
+  const result=[];
+  let currentPr=null;
+  for(const e of S.entries){
+    const pr=e.isMarker?null:(e.pageref||null);
+    if(pr!==currentPr){
+      if(currentPr!==null&&harPages.has(currentPr))
+        result.push(_makeRecMarker('end',harPages.get(currentPr)));
+      if(pr!==null&&harPages.has(pr))
+        result.push(_makeRecMarker('start',harPages.get(pr)));
+      currentPr=pr;
+    }
+    result.push(e);
+  }
+  if(currentPr!==null&&harPages.has(currentPr))
+    result.push(_makeRecMarker('end',harPages.get(currentPr)));
+
+  // Replace S.entries in-place
+  S.entries.length=0;
+  for(const e of result) S.entries.push(e);
+}
+
+function _makeRecMarker(markerType,txnName){
+  return{
+    id:-1, url:'', method:'GET', status:0, ct:'', size:0, dur:0, startMs:0,
+    reqHdrs:[], hdrsMap:{}, respHdrsMap:{}, body:null, referer:'',
+    _resourceType:'', pageref:null,
+    filtered:false, isMarker:true, markerType, txnName, txn:null
+  };
 }
 
 // ===========================================================================

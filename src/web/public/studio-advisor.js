@@ -39,6 +39,10 @@ const ADV_AUTH_HDRS = new Set([
   'x-api-key','x-csrf-token','x-xsrf-token','x-request-id','x-correlation-id',
 ]);
 
+// Known CSRF / hidden-form-token field names — always server-generated per-session values
+// that must be correlated even in single-HAR mode (two-HAR mode detects them via value diff).
+const _CSRF_FIELD_RE = /^(authenticity_token|csrf_?token|_csrf_?token|_?csrf|csrfToken|csrfmiddlewaretoken|__RequestVerificationToken|_token|form_token|antiforgery|__antiForgery|__VIEWSTATE|__VIEWSTATEGENERATOR|__EVENTVALIDATION|xsrf_?token|x-xsrf-token|x-csrf-token)$/i;
+
 // Request headers that are always static infrastructure and should not be correlated
 const ADV_SKIP_REQ_HDRS = new Set([
   'host','connection','content-type','content-length','content-encoding',
@@ -363,6 +367,92 @@ function _advCrossReference(entries, responseValueMap) {
       _advAddUsage(found, seg, src, { entryIdx: i, url: _advShortUrl(e), location: 'url_path', jsonPath: null }, 'high');
     }
   }
+  return Array.from(found.values());
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 2.5: CSRF / hidden-form-token scan (single-HAR mode).
+//
+// Two-HAR comparison mode detects CSRF tokens by value difference between
+// sessions. In single-HAR mode those values are the same in source + usage,
+// so Phase 2 (responseValueMap lookup) never fires. This phase catches them
+// by NAME pattern instead:
+//   1. Walk each request's form body looking for fields whose name matches
+//      _CSRF_FIELD_RE (authenticity_token, csrf_token, __RequestVerificationToken…)
+//   2. For each such field, backward-scan ALL preceding response bodies
+//      (HTML, JSON, plain text) for the token value
+//   3. Emit a high-confidence boundary-extractor candidate
+//
+// entries must be the same S.entries1 slice passed to Phase 2.
+// highConfValues is the Set of values already captured by Phase 2 — CSRF
+// tokens that Phase 2 already found are skipped to avoid duplicates.
+// ---------------------------------------------------------------------------
+function _advCsrfScan(entries, highConfValues) {
+  const found = new Map();
+
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.filtered || e.isMarker) continue;
+
+    // Collect CSRF-named fields from the request body
+    const csrfFields = [];
+
+    // Path A: HAR parser already split body into params array
+    const bodyParams = (e.body && e.body.params) || [];
+    for (const p of bodyParams) {
+      const name = p.name || '';
+      const val = String(p.value || '');
+      if (_CSRF_FIELD_RE.test(name) && val.length >= ADV_MIN_LEN) {
+        csrfFields.push({ name, value: val });
+      }
+    }
+
+    // Path B: raw text body (application/x-www-form-urlencoded)
+    if (!csrfFields.length && e.body && e.body.text) {
+      const mime = (e.body.mimeType || '').toLowerCase();
+      if (mime.includes('x-www-form-urlencoded') || mime.includes('form')) {
+        try {
+          for (const part of e.body.text.split('&')) {
+            const eqIdx = part.indexOf('=');
+            if (eqIdx < 0) continue;
+            const name = decodeURIComponent(part.slice(0, eqIdx).replace(/\+/g, ' '));
+            let val;
+            try { val = decodeURIComponent(part.slice(eqIdx + 1).replace(/\+/g, ' ')); }
+            catch { val = part.slice(eqIdx + 1); }
+            if (_CSRF_FIELD_RE.test(name) && val && val.length >= ADV_MIN_LEN) {
+              csrfFields.push({ name, value: val });
+            }
+          }
+        } catch { /* malformed body — skip */ }
+      }
+    }
+
+    if (!csrfFields.length) continue;
+
+    for (const cf of csrfFields) {
+      if (highConfValues.has(cf.value)) continue; // Phase 2 already found it
+      if (found.has(cf.value)) continue;           // deduplicate across requests
+
+      // Backward-scan ALL preceding responses (including HTML) for the token value
+      for (let j = i - 1; j >= 0; j--) {
+        const src = entries[j];
+        if (src.filtered || src.isMarker) continue;
+        const srcBody = src.respBody || '';
+        if (srcBody.length < cf.value.length || !srcBody.includes(cf.value)) continue;
+
+        // Found the CSRF token in a prior response body
+        _advAddUsage(
+          found,
+          cf.value,
+          { entryIdx: j, url: _advShortUrl(src), jsonPath: cf.name },
+          { entryIdx: i, url: _advShortUrl(e), location: 'body_form', jsonPath: cf.name },
+          'high'
+        );
+        break; // use the nearest (most recent) preceding response
+      }
+    }
+  }
+
   return Array.from(found.values());
 }
 
@@ -839,12 +929,18 @@ function advisorScan(entries, existingCorrelations) {
   // Phase 2
   const highConf = _advCrossReference(entries, responseValueMap);
 
-  // Phase 3 — only for values not already in Phase 2
+  // Phase 2.5 — CSRF / hidden-form-token scan (single-HAR mode)
+  // Catches tokens like authenticity_token that are never in Phase 1's responseValueMap
+  // because the HTML page that contains them is filtered as a Document-type navigation request.
   const highConfValues = new Set(highConf.map(c => c.value));
-  const medConf = _advPatternScan(entries, highConfValues);
+  const csrfCandidates = _advCsrfScan(entries, highConfValues);
 
-  // Merge
-  let all = [...highConf, ...medConf];
+  // Phase 3 — only for values not already in Phase 2 or 2.5
+  const allHighValues = new Set([...highConfValues, ...csrfCandidates.map(c => c.value)]);
+  const medConf = _advPatternScan(entries, allHighValues);
+
+  // Merge: Phase 2 (high) → Phase 2.5 CSRF (high) → Phase 3 (medium)
+  let all = [...highConf, ...csrfCandidates, ...medConf];
 
   // Phase 4 — filter
   all = all.filter(c => {

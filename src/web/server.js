@@ -266,6 +266,27 @@ class WebServer {
       res.sendFile(path.join(__dirname, "public", "VuGen-Script-Studio.html"));
     });
 
+    // ── PerfX Recorder Extension download ────────────────────────────────────
+    // Dynamically ZIPs the perfx-recorder-extension/ folder on each request.
+    // Called by the "Download Extension" button on the home page — users never
+    // navigate to this URL directly; the browser handles it as a file download.
+    const EXTENSION_DIR = path.join(__dirname, "..", "..", "perfx-recorder-extension");
+    this.app.get("/downloads/recorder-extension", (req, res) => {
+      const fs = require("fs");
+      if (!fs.existsSync(EXTENSION_DIR)) {
+        return res.status(404).json({ error: "extension_not_available" });
+      }
+      res.setHeader("Content-Disposition", 'attachment; filename="PerfX-Recorder-Extension.zip"');
+      res.setHeader("Content-Type", "application/zip");
+      const archive = archiver("zip", { zlib: { level: 6 } });
+      archive.on("error", (err) => {
+        if (!res.headersSent) res.status(500).json({ error: "zip_failed" });
+      });
+      archive.pipe(res);
+      archive.directory(EXTENSION_DIR, "perfx-recorder-extension");
+      archive.finalize();
+    });
+
     // ── Crypto helper file routes ─────────────────────────────────────────────
     const PROJECT_ROOT = path.join(__dirname, "..", "..");
     const cryptoFileRoutes = [

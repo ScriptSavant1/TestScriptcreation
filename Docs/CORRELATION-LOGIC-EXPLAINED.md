@@ -100,6 +100,20 @@ Advisor check:
 
 ---
 
+### Phase 2.5 — CSRF / Hidden-Form-Token Scan (Single-HAR Mode)
+
+Standard HTML form-protection tokens (e.g. `authenticity_token`, `csrf_token`, `__RequestVerificationToken`) are always server-generated per session and must always be correlated — but they are invisible to Phase 2 in single-HAR mode.
+
+**Why Phase 2 misses them:** The HTML page that contains `<input type="hidden" name="authenticity_token" value="abc...">` is a Document-type navigation request. These are filtered out of the scan set before Phase 1 runs. With no `authenticity_token` value in the `responseValueMap`, Phase 2 finds nothing when it sees the same value in the login POST body.
+
+**Why two-HAR mode works fine:** The value CHANGES between sessions, so the diff produces a correlation candidate automatically.
+
+**Phase 2.5 solution:** Instead of looking up values, look up NAMES. The advisor scans each request's form body for fields whose name matches a known list of CSRF field name patterns (`_CSRF_FIELD_RE`: 14 well-known names like `authenticity_token`, `csrfmiddlewaretoken`, `__RequestVerificationToken`). When a match is found, it backward-scans ALL preceding response bodies — including HTML — for the literal token value. On a match, a high-confidence boundary-extractor candidate is emitted.
+
+This means: in single-HAR mode, CSRF tokens are now auto-detected and appear in the Correlation Advisor's high-confidence section, exactly like they would in two-HAR mode.
+
+---
+
 ### Phase 3 — Pattern Scan (Backup)
 
 Sometimes the HAR is incomplete and the source response is missing.

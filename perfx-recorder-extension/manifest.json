@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "PerfX Studio Recorder",
+  "version": "1.0.0",
+  "description": "Record browser traffic across all tabs and popup windows for PerfX Studio script generation.",
+  "minimum_chrome_version": "114",
+
+  "permissions": [
+    "debugger",
+    "tabs",
+    "storage",
+    "sidePanel"
+  ],
+  "host_permissions": ["<all_urls>"],
+
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+
+  "action": {
+    "default_title": "PerfX Studio Recorder — Click to open"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/gesture-detector.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

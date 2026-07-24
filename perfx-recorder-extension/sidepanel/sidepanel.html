@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PerfX Studio Recorder</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="header-logo">
+      <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="8" r="7" stroke="white" stroke-width="1.5" fill="none"/>
+        <circle cx="8" cy="8" r="3.5" fill="white"/>
+      </svg>
+    </div>
+    <span class="header-title">PerfX Studio Recorder</span>
+    <div id="statusBadge" class="status-badge idle">
+      <span class="status-dot"></span>
+      <span id="statusText">Idle</span>
+    </div>
+  </div>
+
+  <!-- ── Timers ── -->
+  <div id="timerRow" class="timer-row hidden">
+    <div class="timer-item">
+      <span class="timer-label">Recording</span>
+      <span id="recTimer" class="timer-value">00:00</span>
+    </div>
+    <div id="txTimerItem" class="timer-item hidden">
+      <span class="timer-label">Transaction</span>
+      <span id="txTimer" class="timer-value accent">00:00</span>
+    </div>
+  </div>
+
+  <!-- ── Error banner ── -->
+  <div id="errorBanner" class="error-banner hidden" role="alert"></div>
+
+  <!-- ── Active request count ── -->
+  <div id="countCard" class="count-card hidden">
+    <div id="countValue" class="count-value">0</div>
+    <div class="count-label">Active Requests</div>
+    <div id="bgNote" class="bg-note hidden"></div>
+    <div id="settledPill" class="settled-pill hidden">Settled — safe to act</div>
+    <div id="waitingHint" class="waiting-hint hidden">Waiting for requests to finish…</div>
+  </div>
+
+  <!-- ── Transaction naming input ── -->
+  <div id="namingArea" class="naming-area hidden">
+    <label class="naming-label" for="txNameInput">Transaction name</label>
+    <input
+      id="txNameInput"
+      class="naming-input"
+      type="text"
+      placeholder="e.g. Login, Search, Checkout"
+      maxlength="60"
+      autocomplete="off"
+    >
+    <div class="naming-hint">Press Enter to begin, Escape to cancel</div>
+  </div>
+
+  <!-- ── Trail: completed transaction chips ── -->
+  <div id="trailArea" class="trail-area hidden">
+    <div class="trail-label">Completed transactions</div>
+    <div id="trailChips" class="trail-chips"></div>
+  </div>
+
+  <!-- ── HAR ready (shown after stop) ── -->
+  <div id="harReady" class="har-ready hidden">
+    <div class="har-ready-title">Recording complete</div>
+    <div id="harSummary" class="har-summary"></div>
+    <div class="btn-row">
+      <button id="btnDownloadHar" class="btn btn-primary">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 1v9M5 7l3 3 3-3M2 13h12"/>
+        </svg>
+        Download HAR
+      </button>
+      <button id="btnOpenStudio" class="btn btn-secondary">
+        Open in PerfX Studio
+      </button>
+      <button id="btnNewRecording" class="btn btn-secondary">
+        New Recording
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Main action buttons ── -->
+  <div id="actionArea" class="btn-row">
+
+    <!-- State: IDLE -->
+    <button id="btnStart" class="btn btn-primary">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+           xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="8" r="6.5"/>
+        <circle cx="8" cy="8" r="3" fill="currentColor" stroke="none"/>
+      </svg>
+      Start Recording
+    </button>
+
+    <!-- State: RECORDING or TX — Stop is always visible when recording -->
+    <button id="btnStop" class="btn btn-danger hidden">
+      <svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="4" width="8" height="8" rx="1.5"/>
+      </svg>
+      Stop Recording
+    </button>
+
+    <!-- State: RECORDING_READY — start a transaction -->
+    <button id="btnStartTx" class="btn btn-tx hidden">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 8h10M9 4l4 4-4 4"/>
+      </svg>
+      Start Transaction
+    </button>
+
+    <!-- State: NAMING — confirm or cancel -->
+    <button id="btnBeginTx" class="btn btn-primary hidden">Begin Transaction</button>
+    <button id="btnCancelNaming" class="btn btn-secondary hidden">Cancel</button>
+
+    <!-- State: TX_LOADING / TX_READY — end transaction -->
+    <button id="btnEndTx" class="btn btn-tx-end hidden">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" xmlns="http://www.w3.org/2000/svg">
+        <path d="M13 8H3M7 4L3 8l4 4"/>
+      </svg>
+      End Transaction
+    </button>
+
+  </div>
+
+  <!-- ── Enterprise install note (shown in IDLE state only) ── -->
+  <div id="enterpriseNote" class="notice">
+    <strong>Enterprise users:</strong> If you cannot install from the Web Store,
+    ask IT to allowlist via Group Policy, or use <em>Load unpacked</em> in a
+    developer Edge/Chrome profile.
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="footer">PerfX Studio Recorder v1.0.0</div>
+
+  <script src="sidepanel.js" type="module"></script>
+</body>
+</html>
