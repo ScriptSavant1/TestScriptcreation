@@ -106,6 +106,18 @@
 
 ---
 
+---
+
+## Governance fixes (2026-07-29 session)
+
+| ID | Type | Fixed In | Description |
+|----|------|----------|-------------|
+| GOV-001 | Unit tests | best_Practices | Created 3 new unit test suites in `tests/unit/`: `harBuilder.test.js` (56 tests — HarBuilder lifecycle, build(), field stripping, transaction→pages), `advisorCsrfScan.test.js` (33 tests — _advCsrfScan() CSRF field detection, backward scan, deduplication), `studioCodegenDates.test.js` (46 tests — detectDateSubstitution() ISO/epoch/RFC1123 date patterns). Total test suite: 165 tests across 5 files, all passing. |
+| GOV-002 | DECISIONS.md | best_Practices | Created `Docs/DECISIONS.md` with 7 ADRs: ADR-001 studio-advisor independence rule, ADR-002 bookmarklet approach, ADR-003 CDP via debugger API, ADR-004 in-memory FS privacy model, ADR-005 Phase 4B monolith split, ADR-006 extension distribution via ZIP (incl. corporate browser policy finding), ADR-007 `new Function()` test loading strategy. |
+| GOV-003 | regression-tests/ | best_Practices | Created `regression-tests/` folder structure: `README.md` (prioritised capture list: OAuth2+JWT, Bruno YAML Event Storage Rule, JMX multi-thread-group, HAR CSRF, DPoP, array correlation), `run-all.sh` (shell runner skeleton), `postman/` + `har-studio/` + `jmx/` placeholder subdirectories. No test fixtures yet — see README for next steps. |
+
+---
+
 ## Bug Template (for new entries)
 
 ```

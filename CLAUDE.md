@@ -245,6 +245,11 @@ Dark mode: `.dark` class on `<body>`.
 - **BUGS.md archiving**: When fixed-bugs list grows very long, move old FIXED entries to `Docs/BUGS-ARCHIVE.md` — keep them findable but out of the active file.
 
 ## Known Governance Gaps (track, don't ignore)
-- **No unit tests exist** — `testing-strategy-and-definition-of-done.md` requires them but `/unit-tests/` folder has never been created. Highest-risk candidates: `_advCsrfScan()`, `detectDateSubstitution()`, `processField()`, `fetchBodyAndFinish()`, `harBuilder.build()`.
-- **No `DECISIONS.md`** — significant architectural decisions (split monolith, extension distribution via download, corporate browser policy findings) are unrecorded. Create `Docs/DECISIONS.md` and backfill key decisions.
-- **No `/regression-tests/` folder** — pipeline-level regression tests don't exist.
+- **`processField()` untested** — inner closure of `genParamSuggestions()` in `studio-codegen.js`; not directly accessible. Requires refactoring to export or testing via `genParamSuggestions()`. Lowest-priority remaining gap.
+- **`fetchBodyAndFinish()` untested** — `perfx-recorder-extension/background/cdp-capture.js`; depends on live Chrome `chrome.debugger` API. Requires a Chrome mock or integration test. Not yet implemented.
+- **`/regression-tests/` has no test cases yet** — folder + README + `run-all.sh` skeleton exist; no input fixtures or expected outputs captured. See `regression-tests/README.md` for the prioritised list.
+
+## Governance items RESOLVED (2026-07-29)
+- ~~No unit tests~~ → **FIXED**: 165 tests across 5 suites in `tests/unit/`. New: `harBuilder.test.js`, `advisorCsrfScan.test.js`, `studioCodegenDates.test.js`.
+- ~~No `DECISIONS.md`~~ → **FIXED**: `Docs/DECISIONS.md` with 7 ADRs (monolith split, extension distribution, memory FS, CDP, bookmarklet, advisor independence, test loading).
+- ~~No `/regression-tests/`~~ → **FIXED**: Folder structure, README (prioritised capture list), and `run-all.sh` skeleton created.
