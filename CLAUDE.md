@@ -70,6 +70,36 @@ Do NOT recreate it — all its functions exist in the three split files above.
 
 All share global state object `S` (defined in `studio-app.js`).
 
+### VuGen Recorder (HAR → script, browser tool)
+| File | Purpose |
+|------|---------|
+| `src/web/public/VuGen-Recorder.html` | Recorder tool HTML + UI |
+| `src/web/public/VuGen-Recorder-parsers.js` | HAR parsing for Recorder; handles extension HARs (pageref markers, null-response guard) |
+| `src/web/public/VuGen-Recorder-generators.js` | Script generation for Recorder tool |
+
+### PerfX Recorder Chrome/Edge Extension
+| File | Purpose |
+|------|---------|
+| `perfx-recorder-extension/manifest.json` | MV3 manifest — permissions: debugger, tabs, storage, sidePanel; host_permissions: `<all_urls>`; minimum_chrome_version: 114 |
+| `perfx-recorder-extension/background/service-worker.js` | Session lifecycle, port management, SETTLED fallback timer |
+| `perfx-recorder-extension/background/cdp-capture.js` | CDP capture, active/background count separation, stale watchdog |
+| `perfx-recorder-extension/background/har-builder.js` | HAR 1.2 assembler with `_perfx_*` fields, pendingBodyFetches |
+| `perfx-recorder-extension/background/bg-detector.js` | BackgroundDetector: CoV frequency analysis (stdDev/mean < 0.30, ≥3 calls, ≤30s mean) + known path-pattern pre-classification (27 fragments: /ping, /heartbeat, /analytics/event, etc.) + 200ms burst grouping |
+| `perfx-recorder-extension/background/url-normalizer.js` | normalize() strips 20 known cache-buster params, replaces UUIDs and numeric path segments (4+ digits) with `{id}`, drops fragment. Note: uses `new URL()` safely — CDP URLs are fully resolved, not `{{variable}}` templates |
+| `perfx-recorder-extension/content/gesture-detector.js` | USER_GESTURE messages on click/submit/Enter |
+| `perfx-recorder-extension/sidepanel/sidepanel.html` | Side panel HTML |
+| `perfx-recorder-extension/sidepanel/sidepanel.js` | 7-state UI machine (IDLE→RECORDING_LOADING→RECORDING_READY→NAMING→TX_LOADING→TX_READY→STOPPED) |
+| `perfx-recorder-extension/sidepanel/sidepanel.css` | Side panel styles |
+
+**Extension distribution**: Users download via `GET /downloads/recorder-extension` (server.js route — ZIPs the folder on demand via `archiver`). Accessed from the home page banner. **Load unpacked is blocked by enterprise Group Policy at corporate clients (e.g. NatWest/RBS) — the only route there is IT allowlisting via Chrome Web Store publishing.**
+
+**Key extension architecture rules:**
+- `startSettledTimer()` in cdp-capture.js only fires when a request FINISHES. If recording starts on an idle page, a 600ms fallback in service-worker.js `START_RECORDING` broadcasts SETTLED directly (BUG-EXT-012).
+- PERSISTENT_TYPES (WebSocket, EventSource) are excluded from ACTIVE_REQUESTS — they never fire loadingFinished.
+- 8s stale watchdog per request as universal fallback for stuck connections.
+- `harBuilder.pendingBodyFetches` (Set of Promises) — STOP_RECORDING awaits them before flush().
+- HAR pages[]/pageref → synthetic isMarker entries injected by `_injectPagerefMarkers` in both Studio and Recorder detectMarkers().
+
 ### Converters (less active)
 | File | Purpose |
 |------|---------|
@@ -88,6 +118,8 @@ S.params          — parameterization entries
 S.scripts         — generated script files map
 S.auth            — detected auth config
 S.hasDpop         — DPoP enabled flag
+S.harPages        — Map<pageref, title> built from har.log.pages[] (extension HARs only; empty for bookmarklet HARs)
+S.bgDecisions     — Map<requestId, 'once'|'periodic'|'all'> — background traffic classification from Phase 5
 ```
 
 ---
@@ -170,6 +202,7 @@ Sentinels are only used in `studio-codegen.js` (client-side Studio). The server-
 | studio-advisor.js | `advisorScan()` | Main entry — phases 1-4 |
 | studio-advisor.js | `_advExtractResponseValues()` | Phase 1: walk all response bodies |
 | studio-advisor.js | `_advCrossReference()` | Phase 2: find values in later requests |
+| studio-advisor.js | `_advCsrfScan()` | Phase 2.5: detect CSRF tokens by field NAME (`_CSRF_FIELD_RE`, 14 patterns); backward-scans all preceding responses (including HTML) |
 | studio-advisor.js | `_advPatternScan()` | Phase 3: JWT/UUID pattern detection |
 | studio-advisor.js | `_advMergeArrayCandidates()` | F1: merge array siblings → SelectAll |
 | studio-advisor.js | `_advDetectArrayGroups()` | F2: detect array reconstruction |
@@ -203,7 +236,15 @@ Dark mode: `.dark` class on `<body>`.
 ---
 
 ## Auto-maintenance Conventions
-- **After bug fix**: Add entry to `Docs/BUGS.md` as FIXED
-- **After new feature**: Add one-liner to relevant section in `Docs/FUNCTIONAL-SPEC.md`
+- **After bug fix**: Add entry to `Docs/BUGS.md` as FIXED; add to `CHANGELOG.md`
+- **After new feature**: Add one-liner to relevant section in `Docs/FUNCTIONAL-SPEC.md`; add to `CHANGELOG.md`
 - **After correlation change**: Update `Docs/CORRELATION-LOGIC-EXPLAINED.md`
+- **After extension change**: Update `Docs/EXTENSION-RECORDER-PLAN.md` phase status table
 - **Always**: Update `memory/state.md` with current feature status
+- **CHANGELOG.md**: Append-only, lives at project root. Never rewrite or summarize away old entries. When it exceeds ~1 year of entries, move older entries to `CHANGELOG-ARCHIVE.md`.
+- **BUGS.md archiving**: When fixed-bugs list grows very long, move old FIXED entries to `Docs/BUGS-ARCHIVE.md` — keep them findable but out of the active file.
+
+## Known Governance Gaps (track, don't ignore)
+- **No unit tests exist** — `testing-strategy-and-definition-of-done.md` requires them but `/unit-tests/` folder has never been created. Highest-risk candidates: `_advCsrfScan()`, `detectDateSubstitution()`, `processField()`, `fetchBodyAndFinish()`, `harBuilder.build()`.
+- **No `DECISIONS.md`** — significant architectural decisions (split monolith, extension distribution via download, corporate browser policy findings) are unrecorded. Create `Docs/DECISIONS.md` and backfill key decisions.
+- **No `/regression-tests/` folder** — pipeline-level regression tests don't exist.
