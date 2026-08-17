@@ -1376,25 +1376,58 @@ footer {
   border-bottom: 1px solid var(--glass-border);
   margin-bottom: 14px;
 }
-.help-topnav {
-  display: flex; gap: 5px; overflow-x: auto;
-  padding-bottom: 2px; scrollbar-width: none;
+/* ── Contents dropdown — replaces overflow pill row; scales to any # of sections ── */
+.help-toc-bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.help-toc-trigger-wrap { position: relative; flex-shrink: 0; }
+.help-toc-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px 5px 10px; border-radius: 99px;
+  background: var(--surface); border: 1px solid var(--glass-border);
+  color: var(--text-2); cursor: pointer; font-size: 12px; font-weight: 600;
+  white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.help-topnav::-webkit-scrollbar { display: none; }
-.help-pill {
-  flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 12px; border-radius: 99px;
-  font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em;
-  border: 1px solid var(--glass-border);
-  background: var(--surface); color: var(--text-2);
-  cursor: pointer; white-space: nowrap;
-  transition: background 0.18s, color 0.18s, border-color 0.18s;
+.help-toc-btn:hover { background: var(--surface2); color: var(--text); border-color: rgba(79,142,247,0.25); }
+.help-toc-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.help-toc-btn.open { background: var(--primary-dim); color: var(--primary); border-color: rgba(79,142,247,0.40); }
+.htoc-list-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.7; }
+.htoc-chevron { width: 13px; height: 13px; flex-shrink: 0; transition: transform 0.22s cubic-bezier(0.4,0,0.2,1); }
+.help-toc-btn.open .htoc-chevron { transform: rotate(180deg); }
+.help-toc-sep { color: var(--text-3); font-size: 14px; flex-shrink: 0; line-height: 1; }
+.help-toc-cur-label { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Dropdown panel */
+.help-toc-panel {
+  position: absolute; top: calc(100% + 8px); left: 0;
+  width: 500px; max-width: calc(100vw - 32px);
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg); padding: 14px 12px 10px;
+  box-shadow: 0 20px 56px rgba(0,0,0,0.45);
+  z-index: 200; display: none;
 }
-.help-pill:hover { background: var(--surface2); color: var(--text); }
-.help-pill:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.help-pill.active {
-  background: var(--primary-dim); color: var(--primary);
-  border-color: rgba(79,142,247,0.4);
+.help-toc-panel.open {
+  display: block;
+  animation: htocIn 0.18s cubic-bezier(0.4,0,0.2,1) both;
+}
+@keyframes htocIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:none; } }
+.htoc-group { margin-bottom: 10px; }
+.htoc-group:last-child { margin-bottom: 0; }
+.htoc-group-label {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--text-3); margin-bottom: 4px; padding: 0 4px;
+}
+.htoc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.htoc-link {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 8px; border-radius: 8px;
+  background: none; border: none; cursor: pointer; text-align: left;
+  font-size: 12.5px; font-weight: 600; color: var(--text-2);
+  transition: background 0.13s, color 0.13s; white-space: nowrap;
+}
+.htoc-link:hover { background: rgba(79,142,247,0.09); color: var(--text); }
+.htoc-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 8px; }
+.htoc-link-icon {
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; background: var(--surface2);
 }
 
 /* ── Accordion cards ── */
@@ -2159,21 +2192,52 @@ code {
     <p class="help-intro">Everything you need to use PerfX Studio — from first-time setup to advanced correlation.</p>
   </div>
 
-  <!-- Sticky topic pill nav -->
+  <!-- Sticky contents nav — dropdown approach; scales to any number of sections -->
   <div class="help-topnav-wrap">
-    <div class="help-topnav">
-      <button class="help-pill active" data-id="hacc-quickstart" onclick="haccJump('hacc-quickstart')">⚡ Quick Start</button>
-      <button class="help-pill" data-id="hacc-overview" onclick="haccJump('hacc-overview')">📋 Overview</button>
-      <button class="help-pill" data-id="hacc-formats" onclick="haccJump('hacc-formats')">🎯 Output Formats</button>
-      <button class="help-pill" data-id="hacc-converter" onclick="haccJump('hacc-converter')">📂 Converter</button>
-      <button class="help-pill" data-id="hacc-jmeter" onclick="haccJump('hacc-jmeter')">♨ JMeter</button>
-      <button class="help-pill" data-id="hacc-recorder" onclick="haccJump('hacc-recorder')">🎙 Recorder</button>
-      <button class="help-pill" data-id="hacc-studio" onclick="haccJump('hacc-studio')">🧪 Script Studio</button>
-      <button class="help-pill" data-id="hacc-capabilities" onclick="haccJump('hacc-capabilities')">🔧 Capabilities</button>
-      <button class="help-pill" data-id="hacc-privacy" onclick="haccJump('hacc-privacy')">🔒 Privacy</button>
-      <button class="help-pill" data-id="hacc-glossary" onclick="haccJump('hacc-glossary')">📖 Glossary</button>
-      <button class="help-pill" data-id="hacc-new" onclick="haccJump('hacc-new')">🆕 What's New</button>
-      <button class="help-pill" data-id="hacc-faq" onclick="haccJump('hacc-faq')">❓ FAQ</button>
+    <div class="help-toc-bar">
+      <div class="help-toc-trigger-wrap">
+        <button class="help-toc-btn" id="htoc-btn" onclick="hTocToggle(event)" aria-expanded="false" aria-haspopup="true">
+          <svg class="htoc-list-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="10" y2="12"/></svg>
+          On this page
+          <svg class="htoc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+        </button>
+        <div class="help-toc-panel" id="htoc-panel" role="menu">
+          <div class="htoc-group">
+            <div class="htoc-group-label">Getting Started</div>
+            <div class="htoc-grid">
+              <button class="htoc-link" onclick="haccJump('hacc-quickstart')"><span class="htoc-link-icon">⚡</span>Quick Start</button>
+              <button class="htoc-link" onclick="haccJump('hacc-overview')"><span class="htoc-link-icon">📋</span>Overview</button>
+            </div>
+          </div>
+          <div class="htoc-group">
+            <div class="htoc-group-label">Tools</div>
+            <div class="htoc-grid">
+              <button class="htoc-link" onclick="haccJump('hacc-converter')"><span class="htoc-link-icon">📂</span>Converter</button>
+              <button class="htoc-link" onclick="haccJump('hacc-jmeter')"><span class="htoc-link-icon">♨</span>JMeter</button>
+              <button class="htoc-link" onclick="haccJump('hacc-recorder')"><span class="htoc-link-icon">🎙</span>Recorder</button>
+              <button class="htoc-link" onclick="haccJump('hacc-studio')"><span class="htoc-link-icon">🧪</span>Script Studio</button>
+            </div>
+          </div>
+          <div class="htoc-group">
+            <div class="htoc-group-label">Capabilities</div>
+            <div class="htoc-grid">
+              <button class="htoc-link" onclick="haccJump('hacc-formats')"><span class="htoc-link-icon">🎯</span>Output Formats</button>
+              <button class="htoc-link" onclick="haccJump('hacc-capabilities')"><span class="htoc-link-icon">🔧</span>Capabilities</button>
+            </div>
+          </div>
+          <div class="htoc-group">
+            <div class="htoc-group-label">Reference</div>
+            <div class="htoc-grid">
+              <button class="htoc-link" onclick="haccJump('hacc-privacy')"><span class="htoc-link-icon">🔒</span>Privacy &amp; Security</button>
+              <button class="htoc-link" onclick="haccJump('hacc-glossary')"><span class="htoc-link-icon">📖</span>Glossary</button>
+              <button class="htoc-link" onclick="haccJump('hacc-new')"><span class="htoc-link-icon">🆕</span>What's New</button>
+              <button class="htoc-link" onclick="haccJump('hacc-faq')"><span class="htoc-link-icon">❓</span>FAQ</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <span class="help-toc-sep">·</span>
+      <span class="help-toc-cur-label" id="htoc-cur">Quick Start</span>
     </div>
   </div>
 
@@ -2791,21 +2855,58 @@ code {
   </div>
 
   <script>
+  var HTOC_NAMES = {
+    'hacc-quickstart':   'Quick Start',
+    'hacc-overview':     'Overview',
+    'hacc-formats':      'Output Formats',
+    'hacc-converter':    'Converter',
+    'hacc-jmeter':       'JMeter',
+    'hacc-recorder':     'Recorder',
+    'hacc-studio':       'Script Studio',
+    'hacc-capabilities': 'Capabilities',
+    'hacc-privacy':      'Privacy & Security',
+    'hacc-glossary':     'Glossary',
+    'hacc-new':          "What's New",
+    'hacc-faq':          'FAQ'
+  };
+  function hTocClose() {
+    var btn = document.getElementById('htoc-btn');
+    var panel = document.getElementById('htoc-panel');
+    if (btn)   { btn.classList.remove('open');   btn.setAttribute('aria-expanded','false'); }
+    if (panel) { panel.classList.remove('open'); }
+  }
+  function hTocToggle(e) {
+    if (e) e.stopPropagation();
+    var btn = document.getElementById('htoc-btn');
+    var panel = document.getElementById('htoc-panel');
+    var open = panel.classList.toggle('open');
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function hTocSetCur(id) {
+    var el = document.getElementById('htoc-cur');
+    if (el && HTOC_NAMES[id]) el.textContent = HTOC_NAMES[id];
+  }
+  document.addEventListener('click', function(e) {
+    var panel = document.getElementById('htoc-panel');
+    var btn   = document.getElementById('htoc-btn');
+    if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) hTocClose();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') hTocClose();
+  });
   function haccToggle(id) {
     var item = document.getElementById(id);
     if (!item) return;
     item.classList.toggle('open');
-    document.querySelectorAll('.help-pill').forEach(function(p) {
-      p.classList.toggle('active', p.dataset.id === id && item.classList.contains('open'));
-    });
+    if (item.classList.contains('open')) hTocSetCur(id);
   }
   function haccJump(id) {
+    hTocClose();
     var item = document.getElementById(id);
     if (!item) return;
     if (!item.classList.contains('open')) item.classList.add('open');
-    document.querySelectorAll('.help-pill').forEach(function(p) {
-      p.classList.toggle('active', p.dataset.id === id);
-    });
+    hTocSetCur(id);
     setTimeout(function() { item.scrollIntoView({behavior:'smooth',block:'start'}); }, 20);
   }
   function hfaqToggle(btn) {
