@@ -1349,131 +1349,183 @@ footer {
 .cmp-th-green  { color: var(--success) !important; }
 .cmp-th-purple { color: #b39dfa !important; }
 
-/* ══ Help Panel ══════════════════════════════════════════════════════════ */
-#portal-help {
-  width: 100%; justify-content: center;
-}
+/* ══ Help Panel — Modern Accordion ════════════════════════════════════════ */
+#portal-help { width: 100%; justify-content: center; }
 .help-wrap {
-  width: 100%; max-width: 860px;
+  width: 100%; max-width: 900px;
   display: flex; flex-direction: column;
   padding-bottom: 80px;
 }
 .help-page-title {
-  text-align: center; padding: 44px 0 36px;
+  text-align: center; padding: 40px 0 22px;
   animation: fadeDown 0.45s cubic-bezier(0.4,0,0.2,1) both;
 }
 .help-h1 {
-  font-size: clamp(24px, 3.5vw, 36px); font-weight: 800;
-  letter-spacing: -0.8px; color: var(--text); margin-bottom: 12px;
+  font-size: clamp(22px, 3.5vw, 34px); font-weight: 800;
+  letter-spacing: -0.8px; color: var(--text); margin-bottom: 10px;
 }
 .help-intro {
-  font-size: 15px; color: var(--text-2); line-height: 1.7;
-  max-width: 620px; margin: 0 auto;
+  font-size: 14.5px; color: var(--text-2); line-height: 1.7;
+  max-width: 580px; margin: 0 auto;
 }
-.help-section {
+
+/* ── Sticky topic pill nav ── */
+.help-topnav-wrap {
+  position: sticky; top: 56px; z-index: 10;
+  background: var(--bg); padding: 10px 0 11px;
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 14px;
+}
+.help-topnav {
+  display: flex; gap: 5px; overflow-x: auto;
+  padding-bottom: 2px; scrollbar-width: none;
+}
+.help-topnav::-webkit-scrollbar { display: none; }
+.help-pill {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 12px; border-radius: 99px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em;
+  border: 1px solid var(--glass-border);
+  background: var(--surface); color: var(--text-2);
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+.help-pill:hover { background: var(--surface2); color: var(--text); }
+.help-pill:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.help-pill.active {
+  background: var(--primary-dim); color: var(--primary);
+  border-color: rgba(79,142,247,0.4);
+}
+
+/* ── Accordion cards ── */
+.help-acc-item {
   background: var(--surface); border: 1px solid var(--glass-border);
-  border-radius: var(--r-xl); padding: 32px 36px;
-  margin-bottom: 20px; backdrop-filter: blur(16px);
+  border-radius: var(--r-xl); margin-bottom: 7px;
+  overflow: hidden; backdrop-filter: blur(16px);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  scroll-margin-top: 130px;
 }
-@media (max-width: 600px) { .help-section { padding: 24px 20px; } }
+.help-acc-item.open {
+  border-color: rgba(79,142,247,0.28);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+}
+.help-acc-hdr {
+  width: 100%; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px;
+  padding: 15px 20px; background: none; border: none;
+  cursor: pointer; text-align: left; transition: background 0.15s;
+}
+.help-acc-hdr:hover { background: rgba(79,142,247,0.04); }
+.help-acc-hdr:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.help-acc-hdr-left { display: flex; align-items: center; gap: 11px; }
+.help-acc-icon {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.hacc-blue   { background: var(--primary-dim); }
+.hacc-orange { background: rgba(240,136,62,0.12); }
+.hacc-green  { background: rgba(52,209,122,0.12); }
+.hacc-purple { background: rgba(124,92,252,0.12); }
+.hacc-slate  { background: var(--surface2); }
+.help-acc-title { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+.help-acc-sub   { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.help-acc-chevron {
+  width: 17px; height: 17px; flex-shrink: 0; color: var(--text-3);
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+.help-acc-item.open .help-acc-chevron { transform: rotate(180deg); }
+
+/* Grid trick: smooth height animation without JS height calculation */
+.help-acc-body {
+  display: grid; grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+.help-acc-item.open .help-acc-body { grid-template-rows: 1fr; }
+.help-acc-inner { overflow: hidden; padding: 0 20px; }
+.help-acc-item.open .help-acc-inner { padding-bottom: 22px; }
+
+/* ── Content styles ── */
 .help-tool-badge {
   display: inline-flex; align-items: center;
-  padding: 4px 14px; border-radius: 99px; margin-bottom: 12px;
+  padding: 3px 12px; border-radius: 99px; margin-bottom: 11px;
   font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
 }
 .help-badge-blue   { background: var(--primary-dim); color: var(--primary); border: 1px solid rgba(79,142,247,0.25); }
 .help-badge-orange { background: rgba(240,136,62,0.10); color: var(--vugen); border: 1px solid rgba(240,136,62,0.22); }
 .help-badge-green  { background: rgba(52,209,122,0.10); color: var(--success); border: 1px solid rgba(52,209,122,0.22); }
 .help-badge-purple { background: rgba(124,92,252,0.12); color: #b39dfa; border: 1px solid rgba(124,92,252,0.22); }
-.help-h2 {
-  font-size: 20px; font-weight: 800; letter-spacing: -0.4px;
-  color: var(--text); margin-bottom: 14px;
-}
-.help-h3 {
-  font-size: 14px; font-weight: 700; color: var(--text);
-  margin: 22px 0 8px; letter-spacing: -0.1px;
-}
-.help-p {
-  font-size: 14px; color: var(--text-2); line-height: 1.72;
-  margin-bottom: 12px;
-}
+.help-h2 { font-size: 16.5px; font-weight: 800; letter-spacing: -0.3px; color: var(--text); margin-bottom: 12px; }
+.help-h3 { font-size: 13px; font-weight: 700; color: var(--text); margin: 17px 0 7px; letter-spacing: -0.1px; }
+.help-p  { font-size: 13.5px; color: var(--text-2); line-height: 1.72; margin-bottom: 11px; }
 .help-p:last-child { margin-bottom: 0; }
 .help-list, .help-steps-list {
-  margin: 0 0 14px 0; padding-left: 22px;
-  display: flex; flex-direction: column; gap: 7px;
+  margin: 0 0 12px; padding-left: 20px;
+  display: flex; flex-direction: column; gap: 6px;
 }
-.help-list li, .help-steps-list li {
-  font-size: 13.5px; color: var(--text-2); line-height: 1.6;
-}
+.help-list li, .help-steps-list li { font-size: 13px; color: var(--text-2); line-height: 1.6; }
 .help-steps-list { list-style: decimal; }
 .help-steps-list li::marker { color: var(--primary); font-weight: 700; }
 .help-list li strong, .help-steps-list li strong { color: var(--text); }
 code {
-  font-family: var(--mono); font-size: 12.5px;
+  font-family: var(--mono); font-size: 12px;
   background: var(--surface2); color: var(--primary);
-  padding: 1px 6px; border-radius: 4px;
-  border: 1px solid var(--glass-border);
+  padding: 1px 5px; border-radius: 4px; border: 1px solid var(--glass-border);
 }
 .help-callout {
-  border-radius: var(--r-md); padding: 14px 18px;
-  font-size: 13px; line-height: 1.6; margin-top: 16px;
-  border-left: 3px solid;
+  border-radius: var(--r-md); padding: 13px 16px;
+  font-size: 13px; line-height: 1.6; margin-top: 14px; border-left: 3px solid;
 }
 .help-callout strong { display: block; margin-bottom: 3px; }
-.help-callout-blue   { background: var(--primary-dim); border-color: var(--primary); color: var(--text-2); }
-.help-callout-amber  { background: rgba(245,158,11,0.10); border-color: var(--warn); color: var(--text-2); }
-.help-callout-green  { background: rgba(52,209,122,0.08); border-color: var(--success); color: var(--text-2); }
-.help-formats {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 14px; margin: 12px 0 14px;
-}
-@media (max-width: 580px) { .help-formats { grid-template-columns: 1fr; } }
-.help-format-card {
-  border-radius: var(--r-md); padding: 18px 20px;
-  border: 1px solid var(--glass-border);
-}
+.help-callout-blue  { background: var(--primary-dim); border-color: var(--primary); color: var(--text-2); }
+.help-callout-amber { background: rgba(245,158,11,0.10); border-color: var(--warn); color: var(--text-2); }
+.help-callout-green { background: rgba(52,209,122,0.08); border-color: var(--success); color: var(--text-2); }
+.help-formats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.help-format-card   { border-radius: var(--r-md); padding: 15px 17px; border: 1px solid var(--glass-border); }
 .help-format-blue   { background: var(--primary-dim); border-color: rgba(79,142,247,0.22); }
 .help-format-orange { background: rgba(240,136,62,0.08); border-color: rgba(240,136,62,0.22); }
 .help-format-purple1{ background: rgba(124,92,252,0.08); border-color: rgba(124,92,252,0.20); }
 .help-format-purple2{ background: rgba(124,92,252,0.14); border-color: rgba(124,92,252,0.30); }
-.help-format-title {
-  font-size: 14px; font-weight: 700; color: var(--text);
-  margin-bottom: 8px;
-}
-.help-format-desc {
-  font-size: 13px; color: var(--text-2); line-height: 1.6;
-  margin-bottom: 8px;
-}
-.help-format-rec {
-  font-size: 12.5px; color: var(--text-3); line-height: 1.5;
-}
+.help-format-title { font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 7px; }
+.help-format-desc  { font-size: 12.5px; color: var(--text-2); line-height: 1.6; margin-bottom: 7px; }
+.help-format-rec   { font-size: 12px; color: var(--text-3); line-height: 1.5; }
 .help-format-rec strong { color: var(--text-2); }
 /* Glossary */
-.help-glossary {
-  display: flex; flex-direction: column; gap: 0;
-}
-.help-glossary dt {
-  font-size: 14px; font-weight: 700; color: var(--text);
-  padding: 14px 0 4px;
-  border-top: 1px solid var(--glass-border);
-}
+.help-glossary { display: flex; flex-direction: column; }
+.help-glossary dt { font-size: 13.5px; font-weight: 700; color: var(--text); padding: 12px 0 3px; border-top: 1px solid var(--glass-border); }
 .help-glossary dt:first-child { border-top: none; padding-top: 0; }
-.help-glossary dd {
-  font-size: 13.5px; color: var(--text-2); line-height: 1.65;
-  margin: 0; padding-bottom: 2px;
+.help-glossary dd { font-size: 13px; color: var(--text-2); line-height: 1.65; margin: 0; }
+/* FAQ — nested accordion inside main FAQ card */
+.help-faq { display: flex; flex-direction: column; }
+.help-faq-item { border-top: 1px solid var(--glass-border); }
+.help-faq-item:first-child { border-top: none; }
+.help-faq-btn {
+  width: 100%; display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; padding: 13px 0; font-size: 13.5px; font-weight: 700; color: var(--text);
+  background: none; border: none; cursor: pointer; text-align: left; letter-spacing: -0.1px;
+  transition: color 0.15s;
 }
-/* FAQ */
-.help-faq { display: flex; flex-direction: column; gap: 0; }
-.help-faq-item {
-  border-top: 1px solid var(--glass-border); padding: 16px 0;
+.help-faq-btn:hover { color: var(--primary); }
+.help-faq-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.help-faq-chevron {
+  width: 14px; height: 14px; flex-shrink: 0; margin-top: 3px; color: var(--text-3);
+  transition: transform 0.25s ease;
 }
-.help-faq-item:first-child { border-top: none; padding-top: 0; }
-.help-faq-q {
-  font-size: 14px; font-weight: 700; color: var(--text);
-  margin-bottom: 7px; letter-spacing: -0.1px;
+.help-faq-item.open .help-faq-chevron { transform: rotate(180deg); color: var(--primary); }
+.help-faq-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.28s ease; }
+.help-faq-item.open .help-faq-body { grid-template-rows: 1fr; }
+.help-faq-body > div { overflow: hidden; }
+.help-faq-a { font-size: 13px; color: var(--text-2); line-height: 1.7; padding-bottom: 13px; }
+
+@media (max-width: 600px) {
+  .help-topnav-wrap { top: 48px; }
+  .help-acc-hdr { padding: 13px 14px; }
+  .help-acc-inner { padding: 0 14px; }
+  .help-acc-item.open .help-acc-inner { padding-bottom: 18px; }
+  .help-formats { grid-template-columns: 1fr; }
 }
-.help-faq-a {
-  font-size: 13.5px; color: var(--text-2); line-height: 1.68;
+@media (prefers-reduced-motion: reduce) {
+  .help-acc-body, .help-faq-body, .help-acc-chevron, .help-faq-chevron { transition: none; }
 }
 </style>
 </head>
@@ -2102,517 +2154,664 @@ code {
 
   <!-- Page title -->
   <div class="help-page-title">
-    <div class="home-hero-badge" style="margin-bottom:16px">📖 Documentation</div>
+    <div class="home-hero-badge" style="margin-bottom:14px">📖 Documentation</div>
     <h1 class="help-h1">Help &amp; User Guide</h1>
-    <p class="help-intro">Everything you need to use PerfX Studio — from first-time setup to advanced correlation. Designed for both technical and non-technical users.</p>
+    <p class="help-intro">Everything you need to use PerfX Studio — from first-time setup to advanced correlation.</p>
   </div>
 
-  <!-- ── SECTION: Quick Start ──────────────────────────────────────────── -->
-  <section class="help-section">
-    <h2 class="help-h2">Quick Start — pick your path</h2>
-    <p class="help-p">Every path below produces a ready-to-run VuGen script ZIP in under 2 minutes. Choose the one that matches your starting point.</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0">
-      <div style="padding:16px 18px;border-radius:8px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2)">
-        <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;color:var(--primary)">📂 Path A — Postman / Bruno</div>
-        <ol style="margin:0;padding-left:16px;font-size:0.82rem;color:var(--text-2);line-height:1.95">
-          <li>Click <strong>Converter</strong> in the nav</li>
-          <li>Select the <strong>Postman / Bruno</strong> tab</li>
-          <li>Upload your .json / .yml / .bru file</li>
-          <li>Choose output format → <strong>Convert</strong></li>
-          <li>Download ZIP → open in VuGen</li>
+  <!-- Sticky topic pill nav -->
+  <div class="help-topnav-wrap">
+    <div class="help-topnav">
+      <button class="help-pill active" data-id="hacc-quickstart" onclick="haccJump('hacc-quickstart')">⚡ Quick Start</button>
+      <button class="help-pill" data-id="hacc-overview" onclick="haccJump('hacc-overview')">📋 Overview</button>
+      <button class="help-pill" data-id="hacc-formats" onclick="haccJump('hacc-formats')">🎯 Output Formats</button>
+      <button class="help-pill" data-id="hacc-converter" onclick="haccJump('hacc-converter')">📂 Converter</button>
+      <button class="help-pill" data-id="hacc-jmeter" onclick="haccJump('hacc-jmeter')">♨ JMeter</button>
+      <button class="help-pill" data-id="hacc-recorder" onclick="haccJump('hacc-recorder')">🎙 Recorder</button>
+      <button class="help-pill" data-id="hacc-studio" onclick="haccJump('hacc-studio')">🧪 Script Studio</button>
+      <button class="help-pill" data-id="hacc-capabilities" onclick="haccJump('hacc-capabilities')">🔧 Capabilities</button>
+      <button class="help-pill" data-id="hacc-privacy" onclick="haccJump('hacc-privacy')">🔒 Privacy</button>
+      <button class="help-pill" data-id="hacc-glossary" onclick="haccJump('hacc-glossary')">📖 Glossary</button>
+      <button class="help-pill" data-id="hacc-new" onclick="haccJump('hacc-new')">🆕 What's New</button>
+      <button class="help-pill" data-id="hacc-faq" onclick="haccJump('hacc-faq')">❓ FAQ</button>
+    </div>
+  </div>
+
+  <!-- 1. Quick Start (open by default) -->
+  <div id="hacc-quickstart" class="help-acc-item open">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-quickstart')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-blue">⚡</div>
+        <div>
+          <div class="help-acc-title">Quick Start — pick your path</div>
+          <div class="help-acc-sub">Four paths · under 2 minutes each</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <p class="help-p">Every path below produces a ready-to-run VuGen script ZIP in under 2 minutes. Choose the one that matches your starting point.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:11px;margin:14px 0">
+          <div style="padding:15px 17px;border-radius:8px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2)">
+            <div style="font-weight:700;font-size:0.85rem;margin-bottom:9px;color:var(--primary)">📂 Path A — Postman / Bruno</div>
+            <ol style="margin:0;padding-left:15px;font-size:0.81rem;color:var(--text-2);line-height:1.95">
+              <li>Click <strong>Converter</strong> in the nav</li>
+              <li>Select the <strong>Postman / Bruno</strong> tab</li>
+              <li>Upload your .json / .yml / .bru file</li>
+              <li>Choose output format → <strong>Convert</strong></li>
+              <li>Download ZIP → open in VuGen</li>
+            </ol>
+          </div>
+          <div style="padding:15px 17px;border-radius:8px;background:rgba(240,136,62,0.07);border:1px solid rgba(240,136,62,0.2)">
+            <div style="font-weight:700;font-size:0.85rem;margin-bottom:9px;color:var(--vugen)">♨ Path B — JMeter (.jmx)</div>
+            <ol style="margin:0;padding-left:15px;font-size:0.81rem;color:var(--text-2);line-height:1.95">
+              <li>Click <strong>Converter</strong> in the nav</li>
+              <li>Select the <strong>JMeter (.jmx)</strong> tab</li>
+              <li>Upload your .jmx file + any CSV files</li>
+              <li>Choose output format → <strong>Convert</strong></li>
+              <li>Download ZIP → open in VuGen</li>
+            </ol>
+          </div>
+          <div style="padding:15px 17px;border-radius:8px;background:rgba(52,209,122,0.07);border:1px solid rgba(52,209,122,0.2)">
+            <div style="font-weight:700;font-size:0.85rem;margin-bottom:9px;color:var(--success)">🎙 Path C — Record in browser</div>
+            <ol style="margin:0;padding-left:15px;font-size:0.81rem;color:var(--text-2);line-height:1.95">
+              <li>Click <strong>Recorder</strong> in the nav</li>
+              <li>Install the bookmarklet (one-time)</li>
+              <li>Press F12 → Network → record your journey</li>
+              <li>Export HAR → upload to Recorder</li>
+              <li>Generate Script → Download ZIP</li>
+            </ol>
+          </div>
+          <div style="padding:15px 17px;border-radius:8px;background:rgba(124,92,252,0.07);border:1px solid rgba(124,92,252,0.2)">
+            <div style="font-weight:700;font-size:0.85rem;margin-bottom:9px;color:#b39dfa">🧪 Path D — Deep correlation</div>
+            <ol style="margin:0;padding-left:15px;font-size:0.81rem;color:var(--text-2);line-height:1.95">
+              <li>Click <strong>Script Studio</strong> in the nav</li>
+              <li>Record the same journey twice → two HARs</li>
+              <li>Upload both → <strong>Analyze</strong></li>
+              <li>Review Advisor → Accept → Regenerate</li>
+              <li>Download ZIP → open in VuGen</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. What is PerfX Studio? -->
+  <div id="hacc-overview" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-overview')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-slate">📋</div>
+        <div>
+          <div class="help-acc-title">What is PerfX Studio?</div>
+          <div class="help-acc-sub">Four tools · any input → VuGen script</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <p class="help-p">PerfX Studio is a four-tool platform that converts any performance testing input — Postman/Bruno collections, JMeter test plans, or browser recordings — into production-ready VuGen scripts in minutes. It handles the work that normally takes days: correlation, parameterisation, authentication, and transaction boundaries.</p>
+        <div style="overflow-x:auto;margin:12px 0">
+          <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Tool</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What you give it</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What you get</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Best for</th>
+            </tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--primary)">📂 Postman / Bruno Converter</td><td style="padding:8px 12px">.json / .yml / .bru collection</td><td style="padding:8px 12px">VuGen script ZIP</td><td style="padding:8px 12px">Teams already using Postman or Bruno</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--vugen)">♨ JMeter Converter</td><td style="padding:8px 12px">.jmx file + optional CSVs</td><td style="padding:8px 12px">VuGen script ZIP + Workload Excel</td><td style="padding:8px 12px">Migrating from JMeter to LoadRunner</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--success)">🎙 Recorder</td><td style="padding:8px 12px">Browser HAR file (F12 export)</td><td style="padding:8px 12px">VuGen script ZIP</td><td style="padding:8px 12px">VCSE / Azure machines where VuGen can't record</td></tr>
+              <tr><td style="padding:8px 12px;font-weight:600;color:#b39dfa">🧪 Script Studio</td><td style="padding:8px 12px">1 or 2 HAR files</td><td style="padding:8px 12px">Fully correlated VuGen script ZIP</td><td style="padding:8px 12px">Any app with tokens, session IDs, or CSRF values</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="help-callout help-callout-blue">
+          <strong>🔒 Privacy first.</strong> Everything you upload is processed in-memory and never written to disk. Nothing is stored between requests. Download links expire after 5 minutes and are single-use.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Output Formats -->
+  <div id="hacc-formats" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-formats')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-slate">🎯</div>
+        <div>
+          <div class="help-acc-title">Output Formats</div>
+          <div class="help-acc-sub">DevWeb JavaScript vs Web HTTP/HTML C — which to choose?</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <p class="help-p">All four tools can generate scripts in either of two formats:</p>
+        <div class="help-formats">
+          <div class="help-format-card help-format-blue">
+            <div class="help-format-title">🟦 DevWeb · JavaScript</div>
+            <p class="help-format-desc">The modern LoadRunner protocol. Scripts are written in JavaScript and run in a Node.js-like environment. Generates a <code>main.js</code> file.</p>
+            <p class="help-format-rec"><strong>Choose this if:</strong> your team uses LRE 2021 or later, or you are comfortable with JavaScript.</p>
+          </div>
+          <div class="help-format-card help-format-orange">
+            <div class="help-format-title">🟧 Web HTTP/HTML · C</div>
+            <p class="help-format-desc">The classic VuGen protocol. Scripts are written in C and use familiar VuGen functions like <code>web_url()</code> and <code>web_custom_request()</code>. Generates an <code>Action.c</code> file.</p>
+            <p class="help-format-rec"><strong>Choose this if:</strong> your team uses older LRE versions or prefers the traditional VuGen scripting style.</p>
+          </div>
+        </div>
+        <p class="help-p">Not sure? Ask your LRE administrator which protocol your project uses. When in doubt, choose <strong>DevWeb</strong> — it is the current default for new projects.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Postman / Bruno Converter -->
+  <div id="hacc-converter" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-converter')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-blue">📂</div>
+        <div>
+          <div class="help-acc-title">Postman / Bruno Converter</div>
+          <div class="help-acc-sub">Upload a collection → get a VuGen script ZIP</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <div class="help-tool-badge help-badge-blue">📂 Postman / Bruno Converter</div>
+        <p class="help-p">Convert your API collection directly into a VuGen script — no scripting knowledge required. The converter reads all requests, headers, bodies, auth, and pre/post scripts, and generates a complete VuGen project.</p>
+        <h3 class="help-h3">Supported input formats</h3>
+        <ul class="help-list">
+          <li><strong>Postman v2.1</strong> — export from Postman: <em>Collection → ⋯ → Export → Collection v2.1</em></li>
+          <li><strong>Bruno JSON</strong> — the <code>.json</code> export from Bruno desktop</li>
+          <li><strong>Bruno YAML</strong> — <code>.yml</code> or <code>.yaml</code> collection files</li>
+          <li><strong>Bruno folder</strong> — a zipped directory of <code>.bru</code> files</li>
+          <li><strong>Single .bru file</strong> — a single Bruno request</li>
+        </ul>
+        <p class="help-p">Optionally upload an <strong>Environment file</strong> alongside your collection. It fills in variable values — base URLs, API keys, usernames — directly in the generated script so you do not need to edit them by hand.</p>
+        <h3 class="help-h3">Step-by-step</h3>
+        <ol class="help-steps-list">
+          <li>Click <strong>Converter</strong> in the top navigation, then select the <strong>Postman / Bruno</strong> tab.</li>
+          <li>Choose your output format: <strong>DevWeb</strong> (JavaScript) or <strong>Web HTTP/HTML</strong> (C).</li>
+          <li>Drag and drop your collection file into the upload area, or click to browse.</li>
+          <li>Optionally upload an environment file in the second upload area.</li>
+          <li>Adjust options as needed: think time, transactions, correlation toggles.</li>
+          <li>Click <strong>Convert</strong> and wait a few seconds.</li>
+          <li>Click <strong>Download ZIP</strong> when it appears.</li>
+          <li>Extract the ZIP and open the <code>.usr</code> file in VuGen, or upload it to LoadRunner Enterprise.</li>
         </ol>
+        <div class="help-callout help-callout-blue">
+          <strong>Multi-script mode:</strong> Enable this when your collection has multiple folders. Instead of one large script, you get one separate script per folder — ideal for modular test design.
+        </div>
       </div>
-      <div style="padding:16px 18px;border-radius:8px;background:rgba(240,136,62,0.07);border:1px solid rgba(240,136,62,0.2)">
-        <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;color:var(--vugen)">♨ Path B — JMeter (.jmx)</div>
-        <ol style="margin:0;padding-left:16px;font-size:0.82rem;color:var(--text-2);line-height:1.95">
-          <li>Click <strong>Converter</strong> in the nav</li>
-          <li>Select the <strong>JMeter (.jmx)</strong> tab</li>
-          <li>Upload your .jmx file + any CSV files</li>
-          <li>Choose output format → <strong>Convert</strong></li>
-          <li>Download ZIP → open in VuGen</li>
+    </div>
+  </div>
+
+  <!-- 5. JMeter Converter -->
+  <div id="hacc-jmeter" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-jmeter')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-orange">♨</div>
+        <div>
+          <div class="help-acc-title">JMeter Converter</div>
+          <div class="help-acc-sub">Migrate .jmx test plans to VuGen + Workload Excel</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <div class="help-tool-badge help-badge-orange">♨ JMeter Converter</div>
+        <p class="help-p">Migrating from Apache JMeter to LoadRunner? Upload your <code>.jmx</code> test plan and receive an equivalent VuGen script, plus a <strong>Workload Model Excel</strong> file that translates your JMeter thread groups into a LoadRunner workload definition.</p>
+        <h3 class="help-h3">What to upload</h3>
+        <ul class="help-list">
+          <li><strong>.jmx file</strong> — your JMeter test plan (exported from JMeter: <em>File → Save Test Plan As</em>)</li>
+          <li><strong>CSV files</strong> — any data files referenced by CSVDataSet elements in the plan (optional but recommended)</li>
+          <li><strong>Certificate files</strong> — client certificates (.pem / .p12) used for mTLS authentication (optional)</li>
+        </ul>
+        <h3 class="help-h3">Step-by-step</h3>
+        <ol class="help-steps-list">
+          <li>Click <strong>Converter</strong> in the top navigation, then select the <strong>JMeter (.jmx)</strong> tab.</li>
+          <li>Choose your output format: <strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>.</li>
+          <li>Upload your <code>.jmx</code> file. Optionally add CSV and certificate files.</li>
+          <li>Select script mode: <strong>Single script</strong> or <strong>Per thread group</strong>.</li>
+          <li>Click <strong>Convert</strong>.</li>
+          <li>Download the ZIP — it includes VuGen scripts and a Workload Model Excel file.</li>
         </ol>
+        <div class="help-callout help-callout-amber">
+          <strong>Per-thread-group mode:</strong> Each JMeter Thread Group becomes its own VuGen script. Recommended when thread groups represent different user roles or business flows.
+        </div>
+        <h3 class="help-h3">What gets converted</h3>
+        <ul class="help-list">
+          <li>HTTP Sampler requests → VuGen web requests with headers and bodies</li>
+          <li>CSVDataSet → VuGen parameterisation with matching data files</li>
+          <li>Extractors (JSON, RegEx, XPath, Boundary) → equivalent VuGen correlation code</li>
+          <li>setUp / tearDown Thread Groups → <code>vuser_init.c</code> / <code>vuser_end.c</code></li>
+          <li>JSR223 Groovy scripts → converted where possible, flagged where manual review needed</li>
+          <li>Thread Group settings → Workload Model Excel (ramp, users, duration)</li>
+        </ul>
       </div>
-      <div style="padding:16px 18px;border-radius:8px;background:rgba(52,209,122,0.07);border:1px solid rgba(52,209,122,0.2)">
-        <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;color:var(--success)">🎙 Path C — Record in browser</div>
-        <ol style="margin:0;padding-left:16px;font-size:0.82rem;color:var(--text-2);line-height:1.95">
-          <li>Click <strong>Recorder</strong> in the nav</li>
-          <li>Install the bookmarklet (one-time)</li>
-          <li>Press F12 → Network → record your journey</li>
-          <li>Export HAR → upload to Recorder</li>
-          <li>Generate Script → Download ZIP</li>
+    </div>
+  </div>
+
+  <!-- 6. Recorder -->
+  <div id="hacc-recorder" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-recorder')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-green">🎙</div>
+        <div>
+          <div class="help-acc-title">Recorder</div>
+          <div class="help-acc-sub">Browser HAR → VuGen script · works when VuGen recording is blocked</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <div class="help-tool-badge help-badge-green">🎙 Recorder</div>
+        <p class="help-p">In a standard workflow, VuGen records user journeys directly via its built-in proxy. However, on some corporate VCSE and Azure virtual machines, VuGen recording does not function due to security policies and incomplete installations. The Recorder addresses this by capturing network traffic through your browser's Developer Tools (F12) as a HAR file, then converting it into a structured VuGen script.</p>
+        <h3 class="help-h3">What is a HAR file?</h3>
+        <p class="help-p">A HAR (HTTP Archive) file is a recording of all the network requests your browser made during a session. Every modern browser's Developer Tools (F12) can export one. It contains all the URLs, request headers, request bodies, and responses for everything that happened during your recording.</p>
+        <div class="help-callout help-callout-green">
+          <strong>Two ways to record — choose what works for you:</strong><br><br>
+          <strong>Option A — PerfX Extension (recommended):</strong> A Chrome/Edge extension with a dedicated side panel. No DevTools needed. Click Start, record your journey, click Stop — the HAR is automatically sent to Script Studio.
+          <a href="#" onclick="openExtModal(event)" style="color:var(--success);font-weight:700;text-decoration:underline">Get the extension →</a><br><br>
+          <strong>Option B — Classic Bookmarklet:</strong> No install at all. Drag two buttons to your bookmark bar, open DevTools (F12), record your journey, export the HAR manually, then upload it here.
+        </div>
+        <h3 class="help-h3">Step-by-step (Classic — bookmarklet method)</h3>
+        <ol class="help-steps-list">
+          <li>Open the <strong>Recorder</strong> tab and follow the <em>Bookmarklet Setup</em> instructions to install the recording helper in your browser bookmarks bar. You only need to do this once.</li>
+          <li>Open your browser and navigate to the application you want to test.</li>
+          <li>Open <strong>DevTools</strong> (press F12) and go to the <strong>Network</strong> tab. Make sure recording is on (the red circle should be active).</li>
+          <li>Perform your complete user journey — log in, navigate pages, submit forms — exactly as a real user would.</li>
+          <li>When done, in DevTools Network tab click the <strong>Export HAR</strong> button (the download icon) and save the <code>.har</code> file.</li>
+          <li>Come back to the Recorder tool and drag the <code>.har</code> file into the drop zone, or click to browse.</li>
+          <li>Use the <strong>Domain Filter</strong> to uncheck domains you do not want in your script (e.g. analytics, CDNs, fonts).</li>
+          <li>Drag request rows to group them into named <strong>transactions</strong> if needed.</li>
+          <li>Choose your output format (<strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>) and click <strong>Generate Script</strong>.</li>
+          <li>Download the ZIP and open it in VuGen.</li>
         </ol>
+        <div class="help-callout help-callout-blue">
+          <strong>Tip:</strong> For deeper correlation (auto-detection of dynamic values like tokens and session IDs), take your HAR file into <strong>Script Studio</strong>. Record the same journey twice and upload both HAR files to Script Studio for the most complete result.
+        </div>
       </div>
-      <div style="padding:16px 18px;border-radius:8px;background:rgba(124,92,252,0.07);border:1px solid rgba(124,92,252,0.2)">
-        <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;color:#b39dfa">🧪 Path D — Deep correlation</div>
-        <ol style="margin:0;padding-left:16px;font-size:0.82rem;color:var(--text-2);line-height:1.95">
-          <li>Click <strong>Script Studio</strong> in the nav</li>
-          <li>Record the same journey twice → two HARs</li>
-          <li>Upload both → <strong>Analyze</strong></li>
-          <li>Review Advisor → Accept → Regenerate</li>
-          <li>Download ZIP → open in VuGen</li>
+    </div>
+  </div>
+
+  <!-- 7. Script Studio -->
+  <div id="hacc-studio" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-studio')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-purple">🧪</div>
+        <div>
+          <div class="help-acc-title">Script Studio</div>
+          <div class="help-acc-sub">HAR correlation engine · tokens, sessions, CSRF auto-detected</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <div class="help-tool-badge help-badge-purple">🧪 Script Studio</div>
+        <p class="help-p">Script Studio takes HAR files and generates VuGen scripts with <strong>correlation</strong> already built in. Correlation means the script automatically captures dynamic values (like login tokens, session IDs, CSRF tokens, and order IDs) from server responses and reuses them in later requests — just like a real user's browser does.</p>
+        <h3 class="help-h3">What is correlation and why does it matter?</h3>
+        <p class="help-p">When you log in to a web application, the server sends back a token or session ID. Every request after that must include this token. If your script has the token hard-coded from your recording session, it will fail when run again because the server issues a new token each time. Correlation solves this by extracting the token dynamically at runtime and passing it forward automatically.</p>
+        <p class="help-p">Without correlation, your script will fail on replay. Script Studio generates the extraction and substitution code for you automatically.</p>
+        <h3 class="help-h3">1 HAR vs 2 HARs</h3>
+        <div class="help-formats">
+          <div class="help-format-card help-format-purple1">
+            <div class="help-format-title">1 HAR file</div>
+            <p class="help-format-desc">Pattern-based analysis to find values that look dynamic (UUIDs, tokens, long random strings, timestamps). Fast and works well for simple applications.</p>
+            <p class="help-format-rec"><strong>Use when:</strong> you have one recording and want a quick result. Some correlations may need manual adjustment.</p>
+          </div>
+          <div class="help-format-card help-format-purple2">
+            <div class="help-format-title">2 HAR files (recommended)</div>
+            <p class="help-format-desc">Record the exact same user journey twice with different data (e.g. two different logins). Script Studio compares both and finds every value that changed — guaranteed to be dynamic. Far more complete and accurate correlation.</p>
+            <p class="help-format-rec"><strong>Use when:</strong> you want the most reliable script. Recommended for any app with login, tokens, or session management.</p>
+          </div>
+        </div>
+        <h3 class="help-h3">Step-by-step</h3>
+        <ol class="help-steps-list">
+          <li>Use the <strong>Recorder</strong> tool (or browser DevTools directly) to create your HAR file(s).</li>
+          <li>For 2-HAR mode: record the same journey twice using different test credentials or data.</li>
+          <li>Open <strong>Script Studio</strong> from the navigation.</li>
+          <li>Drag your first HAR file into the <strong>Recording 1</strong> drop zone. For 2-HAR mode, drag the second into <strong>Recording 2</strong>.</li>
+          <li>Choose your output format: <strong>DevWeb</strong>, <strong>Web HTTP/HTML</strong>, or <strong>Both</strong>.</li>
+          <li>Click <strong>Analyze</strong>.</li>
+          <li>Review the correlation and parameterization results shown.</li>
+          <li>Click <strong>Download ZIP</strong> and open the script in VuGen.</li>
         </ol>
+        <h3 class="help-h3">Correlation Advisor</h3>
+        <p class="help-p">After analysis, the <strong>Correlation Advisor</strong> panel appears at the top of the results. It lists every dynamic value it found — each as a card showing confidence level, where the value came from, and where it is used. Review each card and click <strong>Accept</strong> to add it as a correlation, then click <strong>▶ Apply &amp; Regenerate</strong> to rebuild the script.</p>
+        <p class="help-p">You can add your own correlations manually (click <strong>+ Add Manual</strong>) or use <strong>Paste &amp; Detect</strong> when you know the value but it is not visible in the HAR.</p>
+        <h3 class="help-h3">Request Inspector — Traffic Light Highlighting</h3>
+        <p class="help-p">Expand the <strong>Request Inspector</strong> inside the Advisor panel and select any request from the dropdown. Every field in that request is colour-coded:</p>
+        <ul class="help-steps-list">
+          <li><span style="color:#4ade80;font-weight:700">● Green</span> — value traced to a prior server response. Click <strong>Trace</strong> to see which request produced it, or <strong>+ Correlate</strong> to add it in one click.</li>
+          <li><span style="color:#fbbf24;font-weight:700">● Yellow</span> — looks dynamic (JWT, UUID, or token pattern) but its source was not found in the HAR. Use <strong>Paste &amp; Detect</strong> to create the extractor manually.</li>
+        </ul>
+        <p class="help-p">The inspector scans request headers, JSON body, form parameters, query string, <strong>and URL path segments</strong> — so a session ID embedded in a REST URL like <code>/api/users/286522</code> is detected just like any other field.</p>
+        <h3 class="help-h3">Paste &amp; Detect</h3>
+        <p class="help-p">Click <strong>Paste &amp; Detect</strong> in the Advisor header. Paste the server response body and the exact value you want to extract, then click <strong>Detect &amp; Generate</strong>. The tool automatically picks the best extractor (JSONPath for JSON, Boundary for HTML/XML, RegExp for JWT / UUID / hex tokens) and shows radio buttons or occurrence dropdowns when values appear multiple times.</p>
+        <h3 class="help-h3">Extractor types — how they are chosen</h3>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.83rem;margin:10px 0">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Extractor</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">When used</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">DevWeb function</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">VuGen C function</th>
+            </tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JSONPath</td><td style="padding:8px 12px">JSON response bodies</td><td style="padding:8px 12px"><code>JsonPathExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param_json</code></td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Boundary</td><td style="padding:8px 12px">HTML, XML, plain text</td><td style="padding:8px 12px"><code>BoundaryExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param</code></td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">RegExp</td><td style="padding:8px 12px">JWT, UUID, hex, token shapes</td><td style="padding:8px 12px"><code>RegExpExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param_regexp</code></td></tr>
+              <tr><td style="padding:8px 12px;font-weight:600">Header</td><td style="padding:8px 12px">Response header value</td><td style="padding:8px 12px"><code>BoundaryExtractor</code> (Headers scope)</td><td style="padding:8px 12px"><code>web_reg_save_param</code> (Search=Headers)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="help-h3">Request Filters</h3>
+        <p class="help-p">Filters run <em>before</em> analysis. By default only <strong>Fetch/XHR</strong> and <strong>Document</strong> requests are included — CSS, JS, fonts, images, and media are excluded as they are never relevant to load test scripting. Use the <strong>All</strong> button in the filter panel to include them if needed.</p>
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- — SECTION: What Is This Toolkit? ————————————————————— -->
-  <section class="help-section">
-    <h2 class="help-h2">What is PerfX Studio?</h2>
-    <p class="help-p">PerfX Studio is a four-tool platform that converts any performance testing input — Postman/Bruno collections, JMeter test plans, or browser recordings — into production-ready VuGen scripts in minutes. It handles the work that normally takes days: correlation, parameterisation, authentication, and transaction boundaries.</p>
-    <div style="overflow-x:auto;margin:14px 0">
-      <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
-        <thead><tr style="border-bottom:2px solid var(--border)">
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Tool</th>
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What you give it</th>
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What you get</th>
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Best for</th>
-        </tr></thead>
-        <tbody>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--primary)">📂 Postman / Bruno Converter</td><td style="padding:8px 12px">.json / .yml / .bru collection</td><td style="padding:8px 12px">VuGen script ZIP</td><td style="padding:8px 12px">Teams already using Postman or Bruno</td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--vugen)">♨ JMeter Converter</td><td style="padding:8px 12px">.jmx file + optional CSVs</td><td style="padding:8px 12px">VuGen script ZIP + Workload Excel</td><td style="padding:8px 12px">Migrating from JMeter to LoadRunner</td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600;color:var(--success)">🎙 Recorder</td><td style="padding:8px 12px">Browser HAR file (F12 export)</td><td style="padding:8px 12px">VuGen script ZIP</td><td style="padding:8px 12px">VCSE / Azure machines where VuGen can't record</td></tr>
-          <tr><td style="padding:8px 12px;font-weight:600;color:#b39dfa">🧪 Script Studio</td><td style="padding:8px 12px">1 or 2 HAR files</td><td style="padding:8px 12px">Fully correlated VuGen script ZIP</td><td style="padding:8px 12px">Any app with tokens, session IDs, or CSRF values</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="help-callout help-callout-blue">
-      <strong>🔒 Privacy first.</strong> Everything you upload is processed in-memory and never written to disk. Nothing is stored between requests. Download links expire after 5 minutes and are single-use.
-    </div>
-  </section>
-
-
-  <!-- ── SECTION: Output formats ─────────────────────────────────────────── -->
-  <section class="help-section">
-    <h2 class="help-h2">Output formats — which should I choose?</h2>
-    <p class="help-p">All four tools can generate scripts in either of two formats:</p>
-    <div class="help-formats">
-      <div class="help-format-card help-format-blue">
-        <div class="help-format-title">🟦 DevWeb · JavaScript</div>
-        <p class="help-format-desc">The modern LoadRunner protocol. Scripts are written in JavaScript and run in a Node.js-like environment. Generates a <code>main.js</code> file.</p>
-        <p class="help-format-rec"><strong>Choose this if:</strong> your team uses LRE 2021 or later, or you are comfortable with JavaScript.</p>
+  <!-- 8. Capabilities -->
+  <div id="hacc-capabilities" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-capabilities')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-slate">🔧</div>
+        <div>
+          <div class="help-acc-title">Capabilities</div>
+          <div class="help-acc-sub">Auth methods, correlation, parameterisation — all handled automatically</div>
+        </div>
       </div>
-      <div class="help-format-card help-format-orange">
-        <div class="help-format-title">🟧 Web HTTP/HTML · C</div>
-        <p class="help-format-desc">The classic VuGen protocol. Scripts are written in C and use familiar VuGen functions like <code>web_url()</code> and <code>web_custom_request()</code>. Generates an <code>Action.c</code> file.</p>
-        <p class="help-format-rec"><strong>Choose this if:</strong> your team uses older LRE versions or prefers the traditional VuGen scripting style.</p>
-      </div>
-    </div>
-    <p class="help-p">Not sure? Ask your LRE administrator which protocol your project uses. When in doubt, choose <strong>DevWeb</strong> — it is the current default for new projects.</p>
-  </section>
-
-  <!-- ── SECTION: Postman / Bruno Converter ────────────────────────────── -->
-  <section class="help-section">
-    <div class="help-tool-badge help-badge-blue">📂 Postman / Bruno Converter</div>
-    <h2 class="help-h2">Postman / Bruno Converter</h2>
-    <p class="help-p">Convert your API collection directly into a VuGen script — no scripting knowledge required. The converter reads all requests, headers, bodies, auth, and pre/post scripts, and generates a complete VuGen project.</p>
-
-    <h3 class="help-h3">Supported input formats</h3>
-    <ul class="help-list">
-      <li><strong>Postman v2.1</strong> — export from Postman: <em>Collection → ⋯ → Export → Collection v2.1</em></li>
-      <li><strong>Bruno JSON</strong> — the <code>.json</code> export from Bruno desktop</li>
-      <li><strong>Bruno YAML</strong> — <code>.yml</code> or <code>.yaml</code> collection files</li>
-      <li><strong>Bruno folder</strong> — a zipped directory of <code>.bru</code> files</li>
-      <li><strong>Single .bru file</strong> — a single Bruno request</li>
-    </ul>
-    <p class="help-p">Optionally upload an <strong>Environment file</strong> alongside your collection. It fills in variable values — base URLs, API keys, usernames — directly in the generated script so you do not need to edit them by hand.</p>
-
-    <h3 class="help-h3">Step-by-step</h3>
-    <ol class="help-steps-list">
-      <li>Click <strong>Converter</strong> in the top navigation, then select the <strong>Postman / Bruno</strong> tab.</li>
-      <li>Choose your output format: <strong>DevWeb</strong> (JavaScript) or <strong>Web HTTP/HTML</strong> (C).</li>
-      <li>Drag and drop your collection file into the upload area, or click to browse.</li>
-      <li>Optionally upload an environment file in the second upload area.</li>
-      <li>Adjust options as needed: think time, transactions, correlation toggles.</li>
-      <li>Click <strong>Convert</strong> and wait a few seconds.</li>
-      <li>Click <strong>Download ZIP</strong> when it appears.</li>
-      <li>Extract the ZIP and open the <code>.usr</code> file in VuGen, or upload it to LoadRunner Enterprise.</li>
-    </ol>
-
-    <div class="help-callout help-callout-blue">
-      <strong>Multi-script mode:</strong> Enable this when your collection has multiple folders. Instead of one large script, you get one separate script per folder — ideal for modular test design.
-    </div>
-  </section>
-
-  <!-- ── SECTION: JMeter Converter ─────────────────────────────────────── -->
-  <section class="help-section">
-    <div class="help-tool-badge help-badge-orange">♨ JMeter Converter</div>
-    <h2 class="help-h2">JMeter Converter</h2>
-    <p class="help-p">Migrating from Apache JMeter to LoadRunner? Upload your <code>.jmx</code> test plan and receive an equivalent VuGen script, plus a <strong>Workload Model Excel</strong> file that translates your JMeter thread groups into a LoadRunner workload definition.</p>
-
-    <h3 class="help-h3">What to upload</h3>
-    <ul class="help-list">
-      <li><strong>.jmx file</strong> — your JMeter test plan (exported from JMeter: <em>File → Save Test Plan As</em>)</li>
-      <li><strong>CSV files</strong> — any data files referenced by CSVDataSet elements in the plan (optional but recommended)</li>
-      <li><strong>Certificate files</strong> — client certificates (.pem / .p12) used for mTLS authentication (optional)</li>
-    </ul>
-
-    <h3 class="help-h3">Step-by-step</h3>
-    <ol class="help-steps-list">
-      <li>Click <strong>Converter</strong> in the top navigation, then select the <strong>JMeter (.jmx)</strong> tab.</li>
-      <li>Choose your output format: <strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>.</li>
-      <li>Upload your <code>.jmx</code> file. Optionally add CSV and certificate files.</li>
-      <li>Select script mode: <strong>Single script</strong> or <strong>Per thread group</strong>.</li>
-      <li>Click <strong>Convert</strong>.</li>
-      <li>Download the ZIP — it includes VuGen scripts and a Workload Model Excel file.</li>
-    </ol>
-
-    <div class="help-callout help-callout-amber">
-      <strong>Per-thread-group mode:</strong> Each JMeter Thread Group becomes its own VuGen script. Recommended when thread groups represent different user roles or business flows.
-    </div>
-
-    <h3 class="help-h3">What gets converted</h3>
-    <ul class="help-list">
-      <li>HTTP Sampler requests → VuGen web requests with headers and bodies</li>
-      <li>CSVDataSet → VuGen parameterisation with matching data files</li>
-      <li>Extractors (JSON, RegEx, XPath, Boundary) → equivalent VuGen correlation code</li>
-      <li>setUp / tearDown Thread Groups → <code>vuser_init.c</code> / <code>vuser_end.c</code></li>
-      <li>JSR223 Groovy scripts → converted where possible, flagged where manual review needed</li>
-      <li>Thread Group settings → Workload Model Excel (ramp, users, duration)</li>
-    </ul>
-  </section>
-
-  <!-- ── SECTION: Recorder ───────────────────────────────────────────────── -->
-  <section class="help-section">
-    <div class="help-tool-badge help-badge-green">🎙 Recorder</div>
-    <h2 class="help-h2">Recorder — HAR File to VuGen Script</h2>
-    <p class="help-p">In a standard workflow, VuGen records user journeys directly via its built-in proxy. However, on some corporate VCSE and Azure virtual machines, VuGen recording does not function due to security policies and incomplete installations. The Recorder addresses this by capturing network traffic through your browser's Developer Tools (F12) as a HAR file, then converting it into a structured VuGen script. Open the generated script in VuGen to validate and enhance before uploading to LRE.</p>
-    <h3 class="help-h3">What is a HAR file?</h3>
-    <p class="help-p">A HAR (HTTP Archive) file is a recording of all the network requests your browser made during a session. Every modern browser's Developer Tools (F12) can export one. It contains all the URLs, request headers, request bodies, and responses for everything that happened during your recording.</p>
-
-    <div class="help-callout" style="background:rgba(52,209,122,0.07);border-color:rgba(52,209,122,0.22);margin-bottom:20px">
-      <strong>Two ways to record — choose what works for you:</strong>
-      <br><br>
-      <strong>Option A — PerfX Extension (recommended):</strong> A Chrome/Edge extension with a dedicated side panel. No DevTools needed. Click Start, record your journey, click Stop — the HAR is automatically sent to Script Studio. One-time 5-step install.
-      <a href="#" onclick="openExtModal(event)" style="color:var(--success);font-weight:700;text-decoration:underline">Get the extension →</a>
-      <br><br>
-      <strong>Option B — Classic Bookmarklet:</strong> No install at all. Drag two buttons to your bookmark bar, open DevTools (F12), record your journey, export the HAR manually, then upload it here. Best if you can't install anything.
-    </div>
-
-    <h3 class="help-h3">Step-by-step (Classic — bookmarklet method)</h3>
-    <ol class="help-steps-list">
-      <li>Open the <strong>Recorder</strong> tab and follow the <em>Bookmarklet Setup</em> instructions to install the recording helper in your browser bookmarks bar. You only need to do this once.</li>
-      <li>Open your browser and navigate to the application you want to test.</li>
-      <li>Open <strong>DevTools</strong> (press F12) and go to the <strong>Network</strong> tab. Make sure recording is on (the red circle should be active).</li>
-      <li>Perform your complete user journey — log in, navigate pages, submit forms — exactly as a real user would.</li>
-      <li>When done, in DevTools Network tab click the <strong>Export HAR</strong> button (the download icon) and save the <code>.har</code> file.</li>
-      <li>Come back to the Recorder tool and drag the <code>.har</code> file into the drop zone, or click to browse.</li>
-      <li>Use the <strong>Domain Filter</strong> to uncheck domains you do not want in your script (e.g. analytics, CDNs, fonts).</li>
-      <li>Drag request rows to group them into named <strong>transactions</strong> if needed.</li>
-      <li>Choose your output format (<strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>) and click <strong>Generate Script</strong>.</li>
-      <li>Download the ZIP and open it in VuGen.</li>
-    </ol>
-
-    <div class="help-callout help-callout-green">
-      <strong>Tip:</strong> For deeper correlation (auto-detection of dynamic values like tokens and session IDs), take your HAR file into <strong>Script Studio</strong> after recording. Record the same journey twice and upload both HAR files to Script Studio for the most complete result.
-    </div>
-  </section>
-
-  <!-- ── SECTION: Script Studio ──────────────────────────────────────────── -->
-  <section class="help-section">
-    <div class="help-tool-badge help-badge-purple">🧪 Script Studio</div>
-    <h2 class="help-h2">Script Studio — HAR Correlation Engine</h2>
-    <p class="help-p">Script Studio takes HAR files and generates VuGen scripts with <strong>correlation</strong> already built in. Correlation means the script automatically captures dynamic values (like login tokens, session IDs, CSRF tokens, and order IDs) from server responses and reuses them in later requests — just like a real user's browser does.</p>
-
-    <h3 class="help-h3">What is correlation and why does it matter?</h3>
-    <p class="help-p">When you log in to a web application, the server sends back a token or session ID. Every request after that must include this token. If your script has the token hard-coded from your recording session, it will fail when run again because the server issues a new token each time. Correlation solves this by extracting the token dynamically at runtime and passing it forward automatically.</p>
-    <p class="help-p">Without correlation, your script will fail on replay. Script Studio generates the extraction and substitution code for you automatically.</p>
-
-    <h3 class="help-h3">1 HAR vs 2 HARs — what is the difference?</h3>
-    <div class="help-formats">
-      <div class="help-format-card help-format-purple1">
-        <div class="help-format-title">1 HAR file</div>
-        <p class="help-format-desc">Script Studio uses pattern-based analysis to find values that look dynamic (UUIDs, tokens, long random strings, timestamps). This is fast and works well for simple applications.</p>
-        <p class="help-format-rec"><strong>Use when:</strong> you have one recording and want a quick result. Some correlations may need manual adjustment.</p>
-      </div>
-      <div class="help-format-card help-format-purple2">
-        <div class="help-format-title">2 HAR files (recommended)</div>
-        <p class="help-format-desc">Record the exact same user journey twice with different data (e.g. two different logins). Script Studio compares both recordings and finds every value that changed between runs — these are guaranteed to be dynamic. This produces far more complete and accurate correlation.</p>
-        <p class="help-format-rec"><strong>Use when:</strong> you want the most reliable script. This is the recommended approach for any application with login, tokens, or session management.</p>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <p class="help-p">The toolkit detects and generates code for the following — no manual configuration needed.</p>
+        <h3 class="help-h3">Authentication</h3>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.83rem;margin:10px 0">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Method</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What the toolkit does</th>
+            </tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">OAuth2</td><td style="padding:8px 12px">Client Credentials, Password Grant, Authorization Code flows</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JWT</td><td style="padding:8px 12px">Detects signing libraries (jsrsasign, jose, JJWT, nimbus), extracts claim mappings, generates token creation code</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06)"><td style="padding:8px 12px;font-weight:600">DPoP</td><td style="padding:8px 12px">RFC 9449 – generates unique cryptographic proofs per request using EC P-256 keys. Detected from <code>dpop</code> / <code>dpop-pf</code> headers.</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06)"><td style="padding:8px 12px;font-weight:600">PKCE <span style="font-size:0.72rem;color:var(--primary);font-weight:700;margin-left:4px">NEW</span></td><td style="padding:8px 12px">RFC 7636 – generates <code>code_verifier</code> + <code>code_challenge</code> per iteration. Detected from <code>code_challenge</code> in auth URLs and <code>code_verifier</code> in token exchange bodies.</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Kerberos / NTLM</td><td style="padding:8px 12px">Windows SSO – generates <code>web_set_user()</code> in VuGen, <code>setUserCredentials()</code> in DevWeb, configures runtime settings</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Basic / Bearer / API Key</td><td style="padding:8px 12px">Username/password, static or correlated tokens, header-based or query parameter keys</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">AWS Signature v4</td><td style="padding:8px 12px">AWS API request signing</td></tr>
+              <tr><td style="padding:8px 12px;font-weight:600">mTLS</td><td style="padding:8px 12px">Client certificate authentication – upload <code>.pem</code> or <code>.p12</code> files alongside your collection</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="help-h3">Analysis &amp; optimisation</h3>
+        <ul class="help-list">
+          <li><strong>Correlation</strong> – finds dynamic values (tokens, session IDs, CSRF tokens) in responses and extracts them for reuse in later requests</li>
+          <li><strong>3-tier parameterisation</strong> – classifies variables as Dynamic (runtime), Config (environment), or Test Data (per-user)</li>
+          <li><strong>Server host detection</strong> – parameterises hostnames so you can switch environments (dev/test/prod) by changing one value</li>
+          <li><strong>Redirect detection</strong> – identifies HTTP 301/302/307 redirects that VuGen follows automatically and omits them from the script</li>
+        </ul>
+        <h3 class="help-h3">Accepted input formats</h3>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.83rem;margin:10px 0">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Format</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Source</th>
+            </tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Postman Collection v2.1</td><td style="padding:8px 12px"><code>.json</code> – Postman → Export → Collection v2.1</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Bruno Collection</td><td style="padding:8px 12px"><code>.json</code> / <code>.yml</code> / <code>.bru</code> / folder (zipped)</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JMeter Test Plan</td><td style="padding:8px 12px"><code>.jmx</code> – with optional CSV data files and certificates</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">HAR file</td><td style="padding:8px 12px"><code>.har</code> – any browser → F12 → Network → Export HAR</td></tr>
+              <tr><td style="padding:8px 12px;font-weight:600">Chrome NetLog</td><td style="padding:8px 12px"><code>.json</code> – chrome://net-export/ (captures all tabs including popups)</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
+  </div>
 
-    <h3 class="help-h3">Step-by-step</h3>
-    <ol class="help-steps-list">
-      <li>Use the <strong>Recorder</strong> tool (or browser DevTools directly) to create your HAR file(s).</li>
-      <li>For 2-HAR mode: record the same journey twice using different test credentials or data.</li>
-      <li>Open <strong>Script Studio</strong> from the navigation.</li>
-      <li>Drag your first HAR file into the <strong>Recording 1</strong> drop zone. For 2-HAR mode, drag the second into the <strong>Recording 2</strong> drop zone.</li>
-      <li>Choose your output format: <strong>DevWeb</strong>, <strong>Web HTTP/HTML</strong>, or <strong>Both</strong>.</li>
-      <li>Click <strong>Analyze</strong>.</li>
-      <li>Review the correlation and parameterization results shown.</li>
-      <li>Click <strong>Download ZIP</strong> and open the script in VuGen.</li>
-    </ol>
-
-    <h3 class="help-h3">Correlation Advisor</h3>
-    <p class="help-p">After analysis, the <strong>Correlation Advisor</strong> panel appears at the top of the results. It lists every dynamic value it found — each as a card showing confidence level, where the value came from, and where it is used. Review each card and click <strong>Accept</strong> to add it as a correlation, then click <strong>▶ Apply &amp; Regenerate</strong> to rebuild the script.</p>
-    <p class="help-p">You can add your own correlations manually (click <strong>+ Add Manual</strong>) or use <strong>Paste &amp; Detect</strong> when you know the value but it is not visible in the HAR (e.g. a value extracted by an upstream service not captured in the recording).</p>
-
-    <h3 class="help-h3">Request Inspector — Traffic Light Highlighting</h3>
-    <p class="help-p">Expand the <strong>Request Inspector</strong> inside the Advisor panel and select any request from the dropdown. Every field in that request is colour-coded:</p>
-    <ul class="help-steps-list">
-      <li><span style="color:#4ade80;font-weight:700">● Green</span> — value traced to a prior server response. Click <strong>Trace</strong> to see which request produced it, or <strong>+ Correlate</strong> to add the correlation in one click.</li>
-      <li><span style="color:#fbbf24;font-weight:700">● Yellow</span> — looks dynamic (JWT, UUID, or token pattern) but its source was not found in the HAR. Use <strong>Paste &amp; Detect</strong> to create the extractor manually.</li>
-    </ul>
-    <p class="help-p">The inspector scans request headers, JSON body, form parameters, query string, <strong>and URL path segments</strong> — so a session ID embedded in a REST URL like <code>/api/users/286522</code> is detected and shown just like any other field.</p>
-
-    <h3 class="help-h3">Paste &amp; Detect</h3>
-    <p class="help-p">Click <strong>Paste &amp; Detect</strong> in the Advisor header. Paste the server response body (JSON, HTML, XML, or plain text) and the exact value you want to extract, then click <strong>Detect &amp; Generate</strong>. The tool automatically:</p>
-    <ul class="help-steps-list">
-      <li>Identifies the response content type and chooses the best extractor (JSONPath for JSON, Boundary for HTML/XML, RegExp for JWT / UUID / hex tokens)</li>
-      <li>When the value appears at multiple JSON paths — shows a radio list so you pick the right one</li>
-      <li>When the value appears multiple times in an HTML/XML response — shows an occurrence dropdown so you choose position 1, 2, 3…</li>
-      <li>When no response is pasted — auto-generates a shape-based RegExp pattern from the value itself (works for JWT, UUID, hex tokens, and opaque base64 strings)</li>
-    </ul>
-
-    <h3 class="help-h3">URL Path Parameters</h3>
-    <p class="help-p">Dynamic values embedded in URL paths (e.g. the session ID <code>286522</code> in <code>/scfm/alert_tuned/LIVE/286522</code>) are automatically detected and replaced in the generated script — <code>${load.global.sessionId}</code> in DevWeb or <code>{sessionId}</code> in VuGen C. No extra steps are needed; the Advisor finds them the same way it finds body and header values.</p>
-
-    <h3 class="help-h3">Extractor types — how they are chosen</h3>
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin:12px 0">
-        <thead><tr style="border-bottom:2px solid var(--border)">
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Extractor</th>
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">When used</th>
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">DevWeb function</th>
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">VuGen C function</th>
-        </tr></thead>
-        <tbody>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JSONPath</td><td style="padding:8px 12px">JSON response bodies</td><td style="padding:8px 12px"><code>JsonPathExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param_json</code></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Boundary</td><td style="padding:8px 12px">HTML, XML, plain text</td><td style="padding:8px 12px"><code>BoundaryExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param</code></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">RegExp</td><td style="padding:8px 12px">JWT, UUID, hex, token shapes</td><td style="padding:8px 12px"><code>RegExpExtractor</code></td><td style="padding:8px 12px"><code>web_reg_save_param_regexp</code></td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Header</td><td style="padding:8px 12px">Response header value</td><td style="padding:8px 12px"><code>BoundaryExtractor</code> (Headers scope)</td><td style="padding:8px 12px"><code>web_reg_save_param</code> (Search=Headers)</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h3 class="help-h3">Request Filters</h3>
-    <p class="help-p">Filters run <em>before</em> analysis. By default only <strong>Fetch/XHR</strong> and <strong>Document</strong> requests are included — CSS, JS, fonts, images, and media are excluded as they are never relevant to load test scripting. Use the <strong>All</strong> button in the filter panel to include them if needed.</p>
-  </section>
-
-   <!-- — SECTION: Capabilities ————————————————————————————— -->
-    <section class="help-section">
-      <h2 class="help-h2">What it handles automatically</h2>
-      <p class="help-p">The toolkit detects and generates code for the following – no manual configuration needed.</p>
-
-      <h3 class="help-h3">Authentication</h3>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin:12px 0">
-          <thead><tr style="border-bottom:2px solid var(--border)">
-            <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Method</th>
-            <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">What the toolkit does</th>
-          </tr></thead>
-          <tbody>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">OAuth2</td><td style="padding:8px 12px">Client Credentials, Password Grant, Authorization Code flows</td></tr>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JWT</td><td style="padding:8px 12px">Detects signing libraries (jsrsasign, jose, JJWT, nimbus), extracts claim mappings, generates token creation code</td></tr>
-            <tr style="border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06)"><td style="padding:8px 12px;font-weight:600">DPoP</td><td style="padding:8px 12px">RFC 9449 – generates unique cryptographic proofs per request using EC P-256 keys. Detected from <code>dpop</code> / <code>dpop-pf</code> headers.</td></tr>
-            <tr style="border-bottom:1px solid var(--border);background:rgba(59,130,246,0.06)"><td style="padding:8px 12px;font-weight:600">PKCE <span style="font-size:0.72rem;color:var(--primary);font-weight:700;margin-left:4px">NEW</span></td><td style="padding:8px 12px">RFC 7636 – generates <code>code_verifier</code> + <code>code_challenge</code> per iteration. Detected from <code>code_challenge</code> in auth URLs and <code>code_verifier</code> in token exchange bodies.</td></tr>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Kerberos / NTLM</td><td style="padding:8px 12px">Windows SSO – generates <code>web_set_user()</code> in VuGen, <code>setUserCredentials()</code> in DevWeb, configures runtime settings</td></tr>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Basic / Bearer / API Key</td><td style="padding:8px 12px">Username/password, static or correlated tokens, header-based or query parameter keys</td></tr>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">AWS Signature v4</td><td style="padding:8px 12px">AWS API request signing</td></tr>
-            <tr><td style="padding:8px 12px;font-weight:600">mTLS</td><td style="padding:8px 12px">Client certificate authentication – upload <code>.pem</code> or <code>.p12</code>files alongside your collection</td></tr>
-          </tbody>
-        </table>
+  <!-- 9. Technology & Privacy -->
+  <div id="hacc-privacy" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-privacy')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-green">🔒</div>
+        <div>
+          <div class="help-acc-title">Technology &amp; Privacy</div>
+          <div class="help-acc-sub">In-memory processing · no disk writes · no data retained</div>
+        </div>
       </div>
-      <h3 class="help-h3">Analysis &amp; optimisation</h3>
-      <ul class="help-list">
-        <li><strong>Correlation</strong> – finds dynamic values (tokens, session IDs, CSRF tokens) in responses and extracts them for reuse in later requests</li>
-        <li><strong>3-tier parameterisation</strong> – classifies variables as Dynamic (runtime), Config (environment), or Test Data (per-user)</li>
-        <li><strong>Server host detection</strong> – parameterises hostnames so you can switch environments (dev/test/prod) by changing one value</li>
-        <li><strong>Redirect detection</strong> – identifies HTTP 301/302/307 redirects that VuGen follows automatically and omits them from the script</li>
-      </ul>
-
-      <h3 class="help-h3">Accepted input formats</h3>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin:12px 0">
-          <thead><tr style="border-bottom:2px solid var(--border)">
-            <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Format</th>
-            <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Source</th>
-          </tr></thead>
-          <tbody>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight: 600">Postman Collection v2.1</td><td style="padding:8px 12px"><code>.json</code> – Postman → Export → Collection v2.1</td></tr>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight: 600">Bruno Collection</td><td style="padding:8px 12px"><code>.json</code> / <code>.yml</code> / <code>.bru</code> / folder (zipped)</td></tr>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight: 600">JMeter Test Plan</td><td style="padding:8px 12px"><code>.jmx</code> – with optional CSV data files and certificates</td></tr>
-            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight: 600">HAR file</td><td style="padding:8px 12px"><code>.har</code> – any browser → F12 → Network → Export HAR</td></tr>
-            <tr><td style="padding:8px 12px;font-weight: 600">Chrome NetLog</td><td style="padding:8px 12px"><code>.json</code> – chrome://net-export/ (captures all tabs including popups)</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  <!-- — SECTION: Technology & Privacy ————————————————————— -->
-  <section class="help-section">
-    <h2 class="help-h2">Technology &amp; privacy</h2>
-
-    <div class="help-callout help-callout-green" style="margin-bottom:16px">
-      <strong>🔒 Designed for regulated environments.</strong> PerfX Studio processes all uploaded files in-memory and never writes data to disk. No data persists between requests. This design was chosen specifically to suit enterprise and banking environments where data handling policies are strict.
-    </div>
-
-    <h3 class="help-h3">Data handling — what happens to your files</h3>
-    <div style="overflow-x:auto;margin:10px 0">
-      <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
-        <thead><tr style="border-bottom:2px solid var(--border)">
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Question</th>
-          <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Answer</th>
-        </tr></thead>
-        <tbody>
-          <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">Is my file saved to disk?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Files are received directly into memory (RAM). No temporary files are created on disk at any point.</td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Is my data stored between requests?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Each conversion runs in its own isolated in-memory context. When your request ends, all data is released. The next user starts completely fresh.</td></tr>
-          <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">Can anyone else see my upload?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Data lives only in your request's memory scope. Other users cannot access it, and server logs do not contain file contents.</td></tr>
-          <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Are external services called?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> All processing is local. No data leaves the server other than the ZIP file returned to you.</td></tr>
-          <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">How long does the download link last?</td><td style="padding:8px 12px">Download tokens expire after <strong>5 minutes</strong> and are single-use. Once clicked, the token is invalidated. If it expires, run the conversion again — it takes only a few seconds.</td></tr>
-          <tr><td style="padding:8px 12px;font-weight:600">Do HAR files contain sensitive data?</td><td style="padding:8px 12px">Yes — HAR files exported from your browser contain all request headers, cookies, and response bodies from your recorded session. This may include session tokens, API keys, or personal data. Treat your HAR files as sensitive, use them only on trusted machines, and delete them after conversion.</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h3 class="help-h3">Technical stack</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0">
-      <div style="padding:14px 16px;border-radius:8px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15)">
-        <div style="font-weight:700;font-size:0.84rem;margin-bottom:6px;color:var(--primary)">⚙ Server</div>
-        <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0"><strong>Node.js</strong> + <strong>Express</strong>. File uploads handled by <strong>Multer</strong> with in-memory storage — no disk writes. File size limits enforced at the upload boundary. Served on your internal network only.</p>
-      </div>
-      <div style="padding:14px 16px;border-radius:8px;background:rgba(124,92,252,0.06);border:1px solid rgba(124,92,252,0.15)">
-        <div style="font-weight:700;font-size:0.84rem;margin-bottom:6px;color:#b39dfa">🔐 Crypto library</div>
-        <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0"><code>lre-utils.dat</code> — zero-dependency crypto runtime for VuGen scripts. Handles EC P-256 key gen, ECDSA signing, RSA-PSS (PS256), SHA-256, PKCE pair generation. DevWeb uses Node.js built-in <code>crypto</code>.</p>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <div class="help-callout help-callout-green">
+          <strong>🔒 Designed for regulated environments.</strong> PerfX Studio processes all uploaded files in-memory and never writes data to disk. No data persists between requests. This design was chosen specifically to suit enterprise and banking environments where data handling policies are strict.
+        </div>
+        <h3 class="help-h3">Data handling — what happens to your files</h3>
+        <div style="overflow-x:auto;margin:10px 0">
+          <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Question</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Answer</th>
+            </tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">Is my file saved to disk?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Files are received directly into memory (RAM). No temporary files are created on disk at any point.</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Is my data stored between requests?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Each conversion runs in its own isolated in-memory context. When your request ends, all data is released.</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">Can anyone else see my upload?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> Data lives only in your request's memory scope. Other users cannot access it, and server logs do not contain file contents.</td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Are external services called?</td><td style="padding:8px 12px"><strong style="color:var(--success)">No.</strong> All processing is local. No data leaves the server other than the ZIP file returned to you.</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:rgba(22,163,74,0.04)"><td style="padding:8px 12px;font-weight:600">How long does the download link last?</td><td style="padding:8px 12px">Download tokens expire after <strong>5 minutes</strong> and are single-use. Once clicked, the token is invalidated. Run the conversion again if it expires — it takes only a few seconds.</td></tr>
+              <tr><td style="padding:8px 12px;font-weight:600">Do HAR files contain sensitive data?</td><td style="padding:8px 12px">Yes — HAR files contain all request headers, cookies, and response bodies from your recorded session. This may include session tokens, API keys, or personal data. Treat your HAR files as sensitive, use them only on trusted machines, and delete them after conversion.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="help-h3">Technical stack</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0">
+          <div style="padding:14px 16px;border-radius:8px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15)">
+            <div style="font-weight:700;font-size:0.84rem;margin-bottom:6px;color:var(--primary)">⚙ Server</div>
+            <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0"><strong>Node.js</strong> + <strong>Express</strong>. File uploads handled by <strong>Multer</strong> with in-memory storage — no disk writes. File size limits enforced at the upload boundary. Served on your internal network only.</p>
+          </div>
+          <div style="padding:14px 16px;border-radius:8px;background:rgba(124,92,252,0.06);border:1px solid rgba(124,92,252,0.15)">
+            <div style="font-weight:700;font-size:0.84rem;margin-bottom:6px;color:#b39dfa">🔐 Crypto library</div>
+            <p style="font-size:0.82rem;color:var(--text-2);line-height:1.6;margin:0"><code>lre-utils.dat</code> — zero-dependency crypto runtime for VuGen scripts. Handles EC P-256 key gen, ECDSA signing, RSA-PSS (PS256), SHA-256, PKCE pair generation. DevWeb uses Node.js built-in <code>crypto</code>.</p>
+          </div>
+        </div>
       </div>
     </div>
-  </section>
-  <!-- ── SECTION: Glossary ────────────────────────────────────────────────── -->
-  <section class="help-section">
-    <h2 class="help-h2">Glossary</h2>
-    <dl class="help-glossary">
-      <dt>VuGen</dt>
-      <dd>Virtual User Generator — the tool in LoadRunner Enterprise used to create and edit performance test scripts that simulate real users.</dd>
-      <dt>LRE / LoadRunner Enterprise</dt>
-      <dd>The performance testing platform. Scripts created by this toolkit are designed to run on LRE.</dd>
-      <dt>DevWeb</dt>
-      <dd>A modern LoadRunner protocol where scripts are written in JavaScript. Scripts run as <code>main.js</code>.</dd>
-      <dt>Web HTTP/HTML (C)</dt>
-      <dd>The classic LoadRunner protocol where scripts are written in C. Scripts run as <code>Action.c</code>.</dd>
-      <dt>HAR file</dt>
-      <dd>HTTP Archive — a JSON file exported from your browser's Developer Tools that contains a complete recording of all network requests made during a session.</dd>
-      <dt>Correlation</dt>
-      <dd>The process of capturing a dynamic value (like a token or session ID) from a server response and automatically inserting it into later requests, so the script works correctly on every run.</dd>
-      <dt>Parameterization</dt>
-      <dd>Replacing a hard-coded value (like a username or password) in a script with a variable that reads from a data file, so different virtual users use different data.</dd>
-      <dt>Transaction</dt>
-      <dd>A named measurement boundary in a VuGen script. LoadRunner records response time for each transaction separately, so you can see performance for specific user actions (e.g. "Login", "Search", "Checkout").</dd>
-      <dt>OAuth2</dt>
-      <dd>An industry-standard authorization framework. Applications use it to obtain access tokens from an authorization server, which are then sent with each API request.</dd>
-      <dt>JWT (JSON Web Token)</dt>
-      <dd>A compact, signed token used for authentication. Contains claims (like client ID, audience, expiry) and is signed with a private key. The toolkit generates JWT creation code automatically when detected.</dd>
-      <dt>DPoP (Demonstrating Proof-of-Possession)</dt>
-      <dd>A security mechanism (RFC 9449) that binds an access token to a specific cryptographic key. Each request includes a unique signed proof – preventing stolen tokens from being reused by attackers.</dd>
-      <dt>PKCE (Proof Key for Code Exchange)</dt>
-      <dd>A security extension to the OAuth2 Authorization Code flow (RFC 7636). The client generates a random <code>code_verifier</code> and sends a derived <code>code_challenge</code> in the authorization request, then proves it knows the verifier in the token exchange. Prevents authorization code interception attacks. Generated fresh each iteration — not correlated from a server response.</dd>
-      <dt>mTLS (Mutual TLS)</dt>
-      <dd>Two-way certificate authentication where both the client and server present certificates. Upload your client certificate (<code>.pem</code> or <code>.p12</code>) alongside your collection.</dd>
-      <dt>CSRF token</dt>
-      <dd>Cross-Site Request Forgery token – a server-generated value included in forms and headers to prevent unauthorized requests. The toolkit extracts and correlates these automatically.</dd>
-      <dt>CSVDataSet (JMeter)</dt>
-      <dd>A JMeter feature that reads test data from a CSV file at runtime. When converting a JMX file, upload any CSV files your script references alongside the .jmx.</dd>
-    </dl>
-  </section>
+  </div>
 
-  <!-- ── SECTION: FAQ ─────────────────────────────────────────────────────── -->
-  <!-- — SECTION: What's New + FAQ ————————————————————————— -->
-    <section class="help-section">
-      <h2 class="help-h2">What's new in v2.10</h2>
-      <ul class="help-list">
-        <li><strong>Per-request JWT for VuGen (BUG-036/038/039)</strong> – collections with multiple distinct JWT-signing scripts now generate <code>createJWTFromMap()</code> calls per request in VuGen C, and <code>getJwtTokenFromMap()</code> in DevWeb. Each request gets its own claim set.</li>
-        <li><strong><code>createJWTFromMap</code> in lre-utils.dat</strong> – new function added to the VuGen crypto runtime library. Accepts a JSON string of already-resolved claims, kid, and PEM secret; performs PS256 RSA-PSS signing. No LRE parameter syntax needed.</li>
-        <li><strong>ES3 compliance (BUG-040)</strong> – removed 21 trailing commas from <code>lre-utils.js</code> / <code>lre-utils.dat</code> that caused <code>SyntaxError</code> in VuGen's ES3 JavaScript engine at line 1589.</li>
-      </ul>
-      <h2 class="help-h2" style="margin-top:20px">v2.9 highlights</h2>
-      <ul class="help-list">
-        <li><strong>PKCE support (RFC 7636)</strong> – automatic detection of <code>code_challenge</code> / <code>code_verifier</code> patterns. Generates per-iteration PKCE pair creation code (not correlated — client-generated). Works in both Converter and Script Studio, for DevWeb and VuGen.</li>
-        <li><strong>DPoP support (RFC 9449)</strong> – automatic detection and handling of <code>dpop</code> and <code>dpop-pf</code> headers. Generates EC P-256 key pair + per-request proof JWT code automatically.</li>
-        <li><strong>HTML entity decoding</strong> – PEM keys with <code>&amp;amp;</code>, <code>&amp;#10;</code> from Postman/JMX exports are correctly decoded before crypto operations and parameter files.</li>
-      </ul>
-    </section>
-
-  <!-- ── SECTION: FAQ ──────────────────────────────────────────────────── -->
-  <section class="help-section">
-    <h2 class="help-h2">Frequently Asked Questions</h2>
-
-    <div class="help-faq">
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">Which tool should I use?</div>
-        <div class="help-faq-a">It depends on what you already have. If you have a <strong>Postman or Bruno collection</strong>, use the Postman / Bruno Converter. If you have a <strong>JMeter .jmx file</strong>, use the JMeter Converter. If you need to record a new journey and VuGen cannot record on your machine, use the <strong>Recorder</strong>. If you have a HAR file and want deep correlation (tokens, session IDs), use <strong>Script Studio</strong>. The home page also has a decision guide — click <strong>Home</strong> in the navigation.</div>
+  <!-- 10. Glossary -->
+  <div id="hacc-glossary" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-glossary')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-slate">📖</div>
+        <div>
+          <div class="help-acc-title">Glossary</div>
+          <div class="help-acc-sub">VuGen, LRE, HAR, correlation, JWT, DPoP, PKCE and more</div>
+        </div>
       </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">Which output format should I choose — DevWeb or Web HTTP/HTML?</div>
-        <div class="help-faq-a">Ask your LRE administrator or project lead. If your project runs on LRE 2021 or later and there is no existing script convention, choose <strong>DevWeb (JavaScript)</strong> — it is the current default for new projects. If your team has existing VuGen C scripts or uses an older LRE version, choose <strong>Web HTTP/HTML (C)</strong>. You can always convert again with the other format — it takes seconds.</div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <dl class="help-glossary">
+          <dt>VuGen</dt>
+          <dd>Virtual User Generator — the tool in LoadRunner Enterprise used to create and edit performance test scripts that simulate real users.</dd>
+          <dt>LRE / LoadRunner Enterprise</dt>
+          <dd>The performance testing platform. Scripts created by this toolkit are designed to run on LRE.</dd>
+          <dt>DevWeb</dt>
+          <dd>A modern LoadRunner protocol where scripts are written in JavaScript. Scripts run as <code>main.js</code>.</dd>
+          <dt>Web HTTP/HTML (C)</dt>
+          <dd>The classic LoadRunner protocol where scripts are written in C. Scripts run as <code>Action.c</code>.</dd>
+          <dt>HAR file</dt>
+          <dd>HTTP Archive — a JSON file exported from your browser's Developer Tools that contains a complete recording of all network requests made during a session.</dd>
+          <dt>Correlation</dt>
+          <dd>The process of capturing a dynamic value (like a token or session ID) from a server response and automatically inserting it into later requests, so the script works correctly on every run.</dd>
+          <dt>Parameterization</dt>
+          <dd>Replacing a hard-coded value (like a username or password) in a script with a variable that reads from a data file, so different virtual users use different data.</dd>
+          <dt>Transaction</dt>
+          <dd>A named measurement boundary in a VuGen script. LoadRunner records response time for each transaction separately, so you can see performance for specific user actions (e.g. "Login", "Search", "Checkout").</dd>
+          <dt>OAuth2</dt>
+          <dd>An industry-standard authorization framework. Applications use it to obtain access tokens from an authorization server, which are then sent with each API request.</dd>
+          <dt>JWT (JSON Web Token)</dt>
+          <dd>A compact, signed token used for authentication. Contains claims (like client ID, audience, expiry) and is signed with a private key. The toolkit generates JWT creation code automatically when detected.</dd>
+          <dt>DPoP (Demonstrating Proof-of-Possession)</dt>
+          <dd>A security mechanism (RFC 9449) that binds an access token to a specific cryptographic key. Each request includes a unique signed proof – preventing stolen tokens from being reused by attackers.</dd>
+          <dt>PKCE (Proof Key for Code Exchange)</dt>
+          <dd>A security extension to the OAuth2 Authorization Code flow (RFC 7636). The client generates a random <code>code_verifier</code> and sends a derived <code>code_challenge</code> in the authorization request. Prevents authorization code interception attacks. Generated fresh each iteration — not correlated from a server response.</dd>
+          <dt>mTLS (Mutual TLS)</dt>
+          <dd>Two-way certificate authentication where both the client and server present certificates. Upload your client certificate (<code>.pem</code> or <code>.p12</code>) alongside your collection.</dd>
+          <dt>CSRF token</dt>
+          <dd>Cross-Site Request Forgery token – a server-generated value included in forms and headers to prevent unauthorized requests. The toolkit extracts and correlates these automatically.</dd>
+          <dt>CSVDataSet (JMeter)</dt>
+          <dd>A JMeter feature that reads test data from a CSV file at runtime. When converting a JMX file, upload any CSV files your script references alongside the .jmx.</dd>
+        </dl>
       </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">Are my files stored on the server?</div>
-        <div class="help-faq-a">No. Everything is processed in RAM and immediately discarded when your request completes. Nothing is written to disk, nothing persists between requests, and no other user can see your data. Download links expire after 5 minutes and are single-use. See the <em>Technology &amp; Privacy</em> section for a full breakdown.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">My HAR file contains real session tokens and credentials — is that a security risk?</div>
-        <div class="help-faq-a">The tool itself does not retain your data (see above). However, the HAR file you export from your browser is a sensitive document — it contains all request headers, cookies, session tokens, and API keys from your recorded session. Best practices: <strong>(1)</strong> record against a test environment, not production; <strong>(2)</strong> use test credentials, not personal or admin accounts; <strong>(3)</strong> delete the HAR file from your machine once the conversion is complete; <strong>(4)</strong> never email or share HAR files from production sessions.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">My script runs but fails with "invalid token" or "session expired" errors.</div>
-        <div class="help-faq-a">The script has a hard-coded value from your recording session that the server no longer accepts — this is a missing correlation. The fix: open <strong>Script Studio</strong>, record the same journey <strong>twice</strong> using different credentials or test data, upload both HAR files, and click Analyze. The diff between the two recordings pinpoints every value that changed between runs — exactly the values that need to be correlated. Accept the suggestions, click Apply &amp; Regenerate, then download the updated script.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">How do I get the best correlation result from Script Studio?</div>
-        <div class="help-faq-a">Use two HAR files, not one. Record the <em>exact same journey</em> twice with <em>different</em> test data (two different usernames, for example). Script Studio compares the two and identifies every value that changed — these are guaranteed to be dynamic values that need correlation. A single HAR uses pattern matching only and may miss some correlations. After analysis, review each card in the Correlation Advisor — click <strong>Trace</strong> to see where a value came from, and <strong>Accept</strong> to add it. Then click <strong>▶ Apply &amp; Regenerate</strong>.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">What is the difference between the Recorder and Script Studio?</div>
-        <div class="help-faq-a"><strong>Recorder</strong> captures network traffic and converts it into a basic VuGen script. It is the capture and conversion tool — use it first. <strong>Script Studio</strong> takes one or two HAR files and produces a <em>correlated</em> script — it identifies dynamic values and generates the extraction and reuse code automatically. The recommended workflow is: record with the Recorder (or browser DevTools), then feed the HAR into Script Studio for correlation. Both tools export the same script formats (DevWeb or VuGen C).</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">My download failed or the ZIP is empty. What happened?</div>
-        <div class="help-faq-a">The download link is single-use and expires after 5 minutes. If you waited too long or clicked the link more than once, it will no longer work. Simply run the conversion again — it takes only a few seconds. If the ZIP downloads but appears empty, check that you uploaded the correct file and that the conversion did not show an error message.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">The conversion completed but the script doesn't look right. What should I check?</div>
-        <div class="help-faq-a">First confirm the file format: Postman must be <strong>v2.1</strong> (not v2.0). For Bruno YAML, make sure you exported the full collection (not a single .bru file if your collection spans multiple requests). For JMeter, verify the .jmx was saved from JMeter 3.x or later and that all referenced CSV files were uploaded. If the script is missing auth headers, check that your collection includes an environment file with the relevant variable values.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">Can I upload files from a shared drive or network path?</div>
-        <div class="help-faq-a">Yes — the upload areas accept any file accessible from your machine. Browse to the file on your shared drive or network location just as you would on your local drive.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">Why can't I record in VuGen on my VCSE / Azure machine?</div>
-        <div class="help-faq-a">Corporate security policies and incomplete VuGen installations on VCSE and some Azure virtual machines prevent VuGen's built-in proxy recording from working. The <strong>Recorder</strong> tool is the solution — it captures traffic through your browser's built-in Developer Tools (F12 → Network tab), so no proxy or certificate is needed. Export the HAR from DevTools, upload it to the Recorder, and download the VuGen script. Open the script in VuGen to validate and enhance before uploading to LRE.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">My application uses JWT tokens in pre-request scripts — will those be converted?</div>
-        <div class="help-faq-a">Yes. PerfX Studio scans pre-request and test scripts for JWT signing code — including jsrsasign, jsonwebtoken, jose (JavaScript) and JJWT, nimbus-jose-jwt, BouncyCastle, JCA (Java/Groovy). It extracts the claim mappings and generates equivalent signing code: <code>lre-utils.dat</code> + <code>createJWTFromMap()</code> for VuGen, or <code>jwt-helper.js</code> + <code>getJwtTokenFromMap()</code> for DevWeb. Each request with a distinct claim set gets its own JWT call.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">My application uses DPoP — will the generated script handle it?</div>
-        <div class="help-faq-a">Yes. If your application sends <code>dpop</code> or <code>dpop-pf</code> headers, the toolkit detects them automatically and generates the full cryptographic proof code (RFC 9449). For VuGen, it initialises the EC P-256 key pair once in <code>vuser_init.c</code> and generates a unique signed proof for every request that needs it. No manual configuration is needed.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">My application uses PKCE in its OAuth2 flow — is that handled?</div>
-        <div class="help-faq-a">Yes. The toolkit detects <code>code_challenge</code> in authorization URLs and <code>code_verifier</code> in token exchange bodies. Because these values are freshly generated by the client on each login, the script generates a new PKCE pair at the start of each iteration using <code>crypto.subtle</code> (DevWeb) or <code>generatePkce()</code> in <code>lre-utils.dat</code> (VuGen). They are never correlated from a server response — the toolkit handles this distinction automatically.</div>
-      </div>
-
-      <div class="help-faq-item">
-        <div class="help-faq-q">My application uses Kerberos / NTLM / Windows SSO — is that supported?</div>
-        <div class="help-faq-a">Yes. The toolkit detects Negotiate, Kerberos, and NTLM challenges from response headers and generates the appropriate authentication code: <code>web_set_user()</code> in VuGen C, or <code>setUserCredentials()</code> in DevWeb. It also sets the runtime configuration (<code>IntegratedAuthentication=1</code>) automatically so no manual VuGen setup is needed.</div>
-      </div>
-
     </div>
-  </section>
+  </div>
+
+  <!-- 11. What's New -->
+  <div id="hacc-new" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-new')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-blue">🆕</div>
+        <div>
+          <div class="help-acc-title">What's New</div>
+          <div class="help-acc-sub">v2.10 · v2.9 highlights</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <h3 class="help-h3" style="margin-top:0">v2.10</h3>
+        <ul class="help-list">
+          <li><strong>Per-request JWT for VuGen (BUG-036/038/039)</strong> – collections with multiple distinct JWT-signing scripts now generate <code>createJWTFromMap()</code> calls per request in VuGen C, and <code>getJwtTokenFromMap()</code> in DevWeb. Each request gets its own claim set.</li>
+          <li><strong><code>createJWTFromMap</code> in lre-utils.dat</strong> – new function added to the VuGen crypto runtime library. Accepts a JSON string of already-resolved claims, kid, and PEM secret; performs PS256 RSA-PSS signing.</li>
+          <li><strong>ES3 compliance (BUG-040)</strong> – removed 21 trailing commas from <code>lre-utils.js</code> / <code>lre-utils.dat</code> that caused <code>SyntaxError</code> in VuGen's ES3 JavaScript engine at line 1589.</li>
+        </ul>
+        <h3 class="help-h3">v2.9 highlights</h3>
+        <ul class="help-list">
+          <li><strong>PKCE support (RFC 7636)</strong> – automatic detection of <code>code_challenge</code> / <code>code_verifier</code> patterns. Generates per-iteration PKCE pair creation code. Works in both Converter and Script Studio, for DevWeb and VuGen.</li>
+          <li><strong>DPoP support (RFC 9449)</strong> – automatic detection and handling of <code>dpop</code> and <code>dpop-pf</code> headers. Generates EC P-256 key pair + per-request proof JWT code automatically.</li>
+          <li><strong>HTML entity decoding</strong> – PEM keys with <code>&amp;amp;</code>, <code>&amp;#10;</code> from Postman/JMX exports are correctly decoded before crypto operations and parameter files.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12. FAQ -->
+  <div id="hacc-faq" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-faq')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-slate">❓</div>
+        <div>
+          <div class="help-acc-title">Frequently Asked Questions</div>
+          <div class="help-acc-sub">Click any question to expand</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <div class="help-faq">
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">Which tool should I use?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">It depends on what you already have. If you have a <strong>Postman or Bruno collection</strong>, use the Postman / Bruno Converter. If you have a <strong>JMeter .jmx file</strong>, use the JMeter Converter. If you need to record a new journey and VuGen cannot record on your machine, use the <strong>Recorder</strong>. If you have a HAR file and want deep correlation (tokens, session IDs), use <strong>Script Studio</strong>.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">Which output format should I choose — DevWeb or Web HTTP/HTML?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">Ask your LRE administrator or project lead. If your project runs on LRE 2021 or later and there is no existing script convention, choose <strong>DevWeb (JavaScript)</strong> — it is the current default for new projects. If your team has existing VuGen C scripts or uses an older LRE version, choose <strong>Web HTTP/HTML (C)</strong>. You can always convert again with the other format — it takes seconds.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">Are my files stored on the server?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">No. Everything is processed in RAM and immediately discarded when your request completes. Nothing is written to disk, nothing persists between requests, and no other user can see your data. Download links expire after 5 minutes and are single-use. See the <em>Technology &amp; Privacy</em> section for a full breakdown.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">My HAR file contains real session tokens and credentials — is that a security risk?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">The tool itself does not retain your data. However, the HAR file you export from your browser is a sensitive document. Best practices: <strong>(1)</strong> record against a test environment, not production; <strong>(2)</strong> use test credentials, not personal or admin accounts; <strong>(3)</strong> delete the HAR file from your machine once the conversion is complete; <strong>(4)</strong> never email or share HAR files from production sessions.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">My script runs but fails with "invalid token" or "session expired" errors.<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">The script has a hard-coded value from your recording session that the server no longer accepts — this is a missing correlation. The fix: open <strong>Script Studio</strong>, record the same journey <strong>twice</strong> using different credentials or test data, upload both HAR files, and click Analyze. The diff between the two recordings pinpoints every value that changed between runs. Accept the suggestions, click Apply &amp; Regenerate, then download the updated script.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">How do I get the best correlation result from Script Studio?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">Use two HAR files, not one. Record the <em>exact same journey</em> twice with <em>different</em> test data (two different usernames, for example). Script Studio compares the two and identifies every value that changed — these are guaranteed dynamic values that need correlation. After analysis, review each card in the Correlation Advisor — click <strong>Trace</strong> to see where a value came from, and <strong>Accept</strong> to add it. Then click <strong>▶ Apply &amp; Regenerate</strong>.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">What is the difference between the Recorder and Script Studio?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a"><strong>Recorder</strong> captures network traffic and converts it into a basic VuGen script — use it first. <strong>Script Studio</strong> takes one or two HAR files and produces a <em>correlated</em> script — it identifies dynamic values and generates the extraction and reuse code automatically. The recommended workflow is: record with the Recorder (or browser DevTools), then feed the HAR into Script Studio for correlation.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">My download failed or the ZIP is empty. What happened?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">The download link is single-use and expires after 5 minutes. If you waited too long or clicked the link more than once, it will no longer work. Simply run the conversion again — it takes only a few seconds. If the ZIP downloads but appears empty, check that you uploaded the correct file and that the conversion did not show an error message.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">The conversion completed but the script doesn't look right. What should I check?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">First confirm the file format: Postman must be <strong>v2.1</strong> (not v2.0). For Bruno YAML, make sure you exported the full collection. For JMeter, verify the .jmx was saved from JMeter 3.x or later and that all referenced CSV files were uploaded. If the script is missing auth headers, check that your collection includes an environment file with the relevant variable values.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">Can I upload files from a shared drive or network path?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">Yes — the upload areas accept any file accessible from your machine. Browse to the file on your shared drive or network location just as you would on your local drive.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">Why can't I record in VuGen on my VCSE / Azure machine?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">Corporate security policies and incomplete VuGen installations on VCSE and some Azure virtual machines prevent VuGen's built-in proxy recording from working. The <strong>Recorder</strong> tool is the solution — it captures traffic through your browser's built-in Developer Tools (F12 → Network tab), so no proxy or certificate is needed. Export the HAR from DevTools, upload it to the Recorder, and download the VuGen script.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">My application uses JWT tokens in pre-request scripts — will those be converted?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">Yes. PerfX Studio scans pre-request and test scripts for JWT signing code — including jsrsasign, jsonwebtoken, jose (JavaScript) and JJWT, nimbus-jose-jwt, BouncyCastle, JCA (Java/Groovy). It extracts the claim mappings and generates equivalent signing code: <code>lre-utils.dat</code> + <code>createJWTFromMap()</code> for VuGen, or <code>jwt-helper.js</code> + <code>getJwtTokenFromMap()</code> for DevWeb. Each request with a distinct claim set gets its own JWT call.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">My application uses DPoP — will the generated script handle it?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">Yes. If your application sends <code>dpop</code> or <code>dpop-pf</code> headers, the toolkit detects them automatically and generates the full cryptographic proof code (RFC 9449). For VuGen, it initialises the EC P-256 key pair once in <code>vuser_init.c</code> and generates a unique signed proof for every request that needs it. No manual configuration is needed.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">My application uses PKCE in its OAuth2 flow — is that handled?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">Yes. The toolkit detects <code>code_challenge</code> in authorization URLs and <code>code_verifier</code> in token exchange bodies. Because these values are freshly generated by the client on each login, the script generates a new PKCE pair at the start of each iteration using <code>crypto.subtle</code> (DevWeb) or <code>generatePkce()</code> in <code>lre-utils.dat</code> (VuGen). They are never correlated from a server response.</p></div></div>
+          </div>
+          <div class="help-faq-item">
+            <button class="help-faq-btn" onclick="hfaqToggle(this)">My application uses Kerberos / NTLM / Windows SSO — is that supported?<svg class="help-faq-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">Yes. The toolkit detects Negotiate, Kerberos, and NTLM challenges from response headers and generates the appropriate authentication code: <code>web_set_user()</code> in VuGen C, or <code>setUserCredentials()</code> in DevWeb. It also sets the runtime configuration (<code>IntegratedAuthentication=1</code>) automatically so no manual VuGen setup is needed.</p></div></div>
+          </div>
+        </div><!-- /.help-faq -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+  function haccToggle(id) {
+    var item = document.getElementById(id);
+    if (!item) return;
+    item.classList.toggle('open');
+    document.querySelectorAll('.help-pill').forEach(function(p) {
+      p.classList.toggle('active', p.dataset.id === id && item.classList.contains('open'));
+    });
+  }
+  function haccJump(id) {
+    var item = document.getElementById(id);
+    if (!item) return;
+    if (!item.classList.contains('open')) item.classList.add('open');
+    document.querySelectorAll('.help-pill').forEach(function(p) {
+      p.classList.toggle('active', p.dataset.id === id);
+    });
+    setTimeout(function() { item.scrollIntoView({behavior:'smooth',block:'start'}); }, 20);
+  }
+  function hfaqToggle(btn) {
+    btn.closest('.help-faq-item').classList.toggle('open');
+  }
+  </script>
 
 </div><!-- /.help-wrap -->
 </div><!-- /#portal-help -->
