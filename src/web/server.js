@@ -198,6 +198,11 @@ class WebServer {
     );
     this.app.disable("x-powered-by");
 
+    // Trust the first proxy hop (IIS ARR) so req.ip reads from X-Forwarded-For
+    // rather than the loopback address IIS connects on. Without this, all
+    // analytics records show ip_address = 127.0.0.1 and hostname = unknown.
+    this.app.set("trust proxy", 1);
+
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
 
@@ -638,7 +643,11 @@ class WebServer {
     // ── Studio analytics ping ─────────────────────────────────────────────────
     // No auth required — Studio generates scripts entirely client-side, so this
     // is the only way to record Studio usage. Input is untrusted; we sanitise.
-    this.app.post("/analytics/track", express.json({ limit: "2kb" }), (req, res) => {
+    // Registered at both /analytics/track and /converter/analytics/track so it
+    // works whether the app is accessed directly (localhost:3000) or via IIS
+    // sub-app mount at /converter/.
+    const _studioTrackHandler = express.json({ limit: "2kb" });
+    const _studioTrackRoute   = (req, res) => {
       res.status(204).end(); // respond immediately, work happens below
       if (!analytics) return;
       try {
@@ -663,7 +672,9 @@ class WebServer {
       } catch (err) {
         console.warn("[analytics] studio track failed:", err.message);
       }
-    });
+    };
+    this.app.post("/analytics/track",           _studioTrackHandler, _studioTrackRoute);
+    this.app.post("/converter/analytics/track", _studioTrackHandler, _studioTrackRoute);
 
     // ── Admin analytics dashboard ─────────────────────────────────────────────
     // Auth: token entered once via login form → httpOnly session cookie.

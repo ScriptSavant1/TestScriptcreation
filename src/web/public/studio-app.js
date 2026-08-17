@@ -47,10 +47,7 @@ async function dlZip(fmt) {
     // Parameterization files
     if (S.params && S.params.length > 0) {
       zip.file("ParameterFile.prm", S.scripts.prm || genParamFilePrm());
-      zip.file(
-        "collection_data.dat",
-        S.scripts.dat || genCollectionDataCsv(),
-      );
+      zip.file("collection_data.dat", S.scripts.dat || genCollectionDataCsv());
     }
     const blob = await zip.generateAsync({
       type: "blob",
@@ -74,10 +71,7 @@ async function dlZip(fmt) {
     zip.file("default.cfg", DEVWEB_DEFAULT_CFG);
     zip.file("default.usp", DEVWEB_DEFAULT_USP);
     zip.file(nm + ".usr", genDevWebUsrFile(nm));
-    zip.file(
-      "ScriptUploadMetadata.xml",
-      genDevWebScriptUploadMetadata(nm),
-    );
+    zip.file("ScriptUploadMetadata.xml", genDevWebScriptUploadMetadata(nm));
     zip.file("Action.c", "Action()\n{\n\treturn 0;\n}\n");
     zip.file("vuser_init.c", "vuser_init()\n{\n\treturn 0;\n}\n");
     zip.file("vuser_end.c", "vuser_end()\n{\n\treturn 0;\n}\n");
@@ -92,10 +86,7 @@ async function dlZip(fmt) {
     );
     // Parameterization data file
     if (S.params && S.params.length > 0) {
-      zip.file(
-        "collection_data.csv",
-        S.scripts.csv || genCollectionDataCsv(),
-      );
+      zip.file("collection_data.csv", S.scripts.csv || genCollectionDataCsv());
     }
     // DevWebSdk.d.ts — fetch from local static file instead of embedding
     try {
@@ -126,7 +117,6 @@ async function dlZip(fmt) {
   if (isWeb) await makeWebHttpZip();
   if (isDev) await makeDevWebZip();
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN ANALYZE FUNCTION
@@ -186,10 +176,7 @@ async function analyze() {
       }
     }
 
-    setMsg(
-      "Detecting transactions...",
-      "Finding START/END markers in HAR",
-    );
+    setMsg("Detecting transactions...", "Finding START/END markers in HAR");
     await tick();
     detectMarkers(S.entries1); // sets isMarker, txnName, S.txns
 
@@ -238,12 +225,19 @@ async function analyze() {
     // and custom JSON paths that the pattern engine misses (e.g. x-xsrf-token,
     // x-financial-id, custom session headers where we see the VALUE but not the name).
     try {
-      var vbacCorrs = valueBasedCorrelate(S.entries1, S.correlations, S.entries2);
+      var vbacCorrs = valueBasedCorrelate(
+        S.entries1,
+        S.correlations,
+        S.entries2,
+      );
       if (vbacCorrs && vbacCorrs.length) {
         S.correlations = S.correlations.concat(vbacCorrs);
       }
     } catch (vbacErr) {
-      console.warn('[VBAC] Value-based correlation error (non-fatal):', vbacErr);
+      console.warn(
+        "[VBAC] Value-based correlation error (non-fatal):",
+        vbacErr,
+      );
     }
 
     setMsg(
@@ -258,9 +252,7 @@ async function analyze() {
     // Add username / password / domain params when credential-based auth is present
     if (
       S.auth &&
-      ["kerberos", "negotiate", "ntlm", "basic", "digest"].includes(
-        S.auth.type,
-      )
+      ["kerberos", "negotiate", "ntlm", "basic", "digest"].includes(S.auth.type)
     ) {
       if (!S.params.some((p) => p.csvKey === "username")) {
         const usernameDefault = S.auth.username || "<enter_username>";
@@ -397,8 +389,7 @@ async function analyze() {
     const SSO_URL_PATTERN =
       /\/oauth2?\/|\/oidc\/|\/as\/authoris|\/sso\/|\/saml\/|\/connect\/token|\.ping$|authorization\.oauth|response_type=|client_id=|\.okta\.|\/adfs\/|\/realms\/|login\.microsoftonline\.com/i;
     const redirectEntries = S.entries1.filter(
-      (e) =>
-        !e.filtered && !e.isMarker && e.status >= 300 && e.status < 400,
+      (e) => !e.filtered && !e.isMarker && e.status >= 300 && e.status < 400,
     );
     const ssoRedirects = redirectEntries.filter(
       (e) =>
@@ -469,9 +460,7 @@ async function analyze() {
         const adfsInChain = ssoRedirects.some(
           (e) =>
             /\/adfs\/|\/wsfed/i.test(e.url) ||
-            /\/adfs\/|\/wsfed/i.test(
-              (e.respHdrsMap || {})["location"] || "",
-            ),
+            /\/adfs\/|\/wsfed/i.test((e.respHdrsMap || {})["location"] || ""),
         );
         // Check 3: Any SSO hostname uses a non-public (corporate internal) TLD.
         // Corporate internal networks (e.g. .mde .local .corp .internal .nwgrp) are never used
@@ -480,9 +469,7 @@ async function analyze() {
           (h) => !PUBLIC_TLD.test(h),
         );
         // Check 4: Known public Windows auth IdP (Azure AD)
-        const azureAdSso = [...ssoHostSet].some((h) =>
-          AZURE_WIN_AUTH.test(h),
-        );
+        const azureAdSso = [...ssoHostSet].some((h) => AZURE_WIN_AUTH.test(h));
 
         if (
           negotiateOnSso ||
@@ -530,9 +517,7 @@ async function analyze() {
             );
           }
         }
-      } else if (
-        ["kerberos", "ntlm", "negotiate"].includes(S.auth.type)
-      ) {
+      } else if (["kerberos", "ntlm", "negotiate"].includes(S.auth.type)) {
         ssoWindowsAuth = true; // detectAuth() already found it in the main scan
       }
 
@@ -551,9 +536,7 @@ async function analyze() {
         `Redirect tokens and state parameters are correlated automatically. ` +
         `${authNote} ` +
         `Verify manually: (1) login form POST is in the script, (2) OAuth callback POST (id_token/code) is in the script.`;
-      S.harWarning = S.harWarning
-        ? S.harWarning + " | " + ssoMsg
-        : ssoMsg;
+      S.harWarning = S.harWarning ? S.harWarning + " | " + ssoMsg : ssoMsg;
     }
 
     // Correlation Advisor — scan request bodies for values that came from prior responses.
@@ -562,9 +545,12 @@ async function analyze() {
     try {
       // Pass only active (non-suppressed) correlations so _advAlreadyCorrelated doesn't
       // block candidates whose auto-generated correlation was suppressed by array_reconstruct.
-      advisorScan(S.entries1, (S.correlations || []).filter(c => !c._suppressed));
+      advisorScan(
+        S.entries1,
+        (S.correlations || []).filter((c) => !c._suppressed),
+      );
     } catch (advErr) {
-      console.warn('[Advisor] Non-fatal scan error:', advErr);
+      console.warn("[Advisor] Non-fatal scan error:", advErr);
       S.advisorCandidates = [];
     }
 
@@ -573,9 +559,11 @@ async function analyze() {
     // show the review panel and let the user decide before generating scripts.
     const _perfxSummary = _buildPeriodicSummary(S.entries1);
     if (_perfxSummary.length > 0) {
-      S.bgDecisions = new Map(_perfxSummary.map(p => [p.normalizedUrl, 'exclude']));
+      S.bgDecisions = new Map(
+        _perfxSummary.map((p) => [p.normalizedUrl, "exclude"]),
+      );
       renderBackgroundReview(_perfxSummary);
-      showPhase('ph-res');
+      showPhase("ph-res");
       return;
     }
     S.bgDecisions = new Map();
@@ -584,11 +572,7 @@ async function analyze() {
     await _generateAndRenderScripts();
   } catch (err) {
     console.error(err);
-    showToast(
-      "Analysis failed: " + err.message,
-      "error",
-      7000,
-    );
+    showToast("Analysis failed: " + err.message, "error", 7000);
     showPhase("ph-upload");
   }
 }
@@ -608,16 +592,16 @@ function tick() {
 function _buildPeriodicSummary(entries) {
   const groups = new Map();
   for (const entry of entries) {
-    if ((entry._perfx_class || 'unknown') !== 'periodic') continue;
+    if ((entry._perfx_class || "unknown") !== "periodic") continue;
     const key = entry._normalizedUrl || entry.url;
     if (!groups.has(key)) {
       groups.set(key, {
         normalizedUrl: key,
-        exampleUrl:   entry.url,
-        method:       entry.method || 'GET',
-        occurrences:  0,
-        intervalMs:   entry._perfx_interval || null,
-        userDecision: 'exclude',
+        exampleUrl: entry.url,
+        method: entry.method || "GET",
+        occurrences: 0,
+        intervalMs: entry._perfx_interval || null,
+        userDecision: "exclude",
       });
     }
     groups.get(key).occurrences++;
@@ -630,30 +614,33 @@ function _buildPeriodicSummary(entries) {
  * Called from analyze() (non-perfx path) and applyBgDecisions() (perfx path).
  */
 async function _generateAndRenderScripts() {
-  setMsg("Generating scripts...", "Building VuGen code with correlations & parameters");
+  setMsg(
+    "Generating scripts...",
+    "Building VuGen code with correlations & parameters",
+  );
   await tick();
 
-  const reqCount = S.entries1.filter(e => !e.filtered && !e.isMarker).length;
+  const reqCount = S.entries1.filter((e) => !e.filtered && !e.isMarker).length;
 
   const isWeb = S.format === "webhttp" || S.format === "both";
-  const isDev = S.format === "devweb"  || S.format === "both";
+  const isDev = S.format === "devweb" || S.format === "both";
   S.scripts = {};
-  const _activeCorrs = (S.correlations || []).filter(c => !c._suppressed);
+  const _activeCorrs = (S.correlations || []).filter((c) => !c._suppressed);
 
   if (isWeb) {
-    S.scripts.ac  = genActionC(S.entries1, _activeCorrs);
-    S.scripts.vi  = genVuserInit();
-    S.scripts.ve  = genVuserEnd();
-    S.scripts.gh  = genGlobalsH();
+    S.scripts.ac = genActionC(S.entries1, _activeCorrs);
+    S.scripts.vi = genVuserInit();
+    S.scripts.ve = genVuserEnd();
+    S.scripts.gh = genGlobalsH();
     S.scripts.prm = genParamFilePrm();
     S.scripts.dat = genCollectionDataCsv();
     S.tab = "ac";
   }
   if (isDev) {
-    S.scripts.mj     = genMainJS(S.entries1, _activeCorrs);
+    S.scripts.mj = genMainJS(S.entries1, _activeCorrs);
     S.scripts.corrjs = genCorrelationsJS(_activeCorrs);
-    S.scripts.pyml   = genParamsYml();
-    S.scripts.csv    = genCollectionDataCsv();
+    S.scripts.pyml = genParamsYml();
+    S.scripts.csv = genCollectionDataCsv();
     if (!isWeb) S.tab = "mj";
   }
 
@@ -670,8 +657,8 @@ async function _generateAndRenderScripts() {
     S.mode === "two" ? "Diff" : "Pattern";
   document.getElementById("st-fmt").textContent = {
     webhttp: "Web HTTP/HTML",
-    devweb:  "DevWeb",
-    both:    "Both",
+    devweb: "DevWeb",
+    both: "Both",
   }[S.format];
   const paramEl = document.getElementById("st-params");
   if (paramEl) {
@@ -682,11 +669,16 @@ async function _generateAndRenderScripts() {
   const txnStat = document.getElementById("st-txn");
   if (txnStat) txnStat.textContent = S.txns.length || "Auto";
   const authWrap = document.getElementById("st-auth-wrap");
-  const authEl   = document.getElementById("st-auth");
+  const authEl = document.getElementById("st-auth");
   if (S.auth && authEl && authWrap) {
     const AUTH_LABELS = {
-      kerberos: "Kerberos", ntlm: "NTLM", negotiate: "Negotiate",
-      basic: "Basic", digest: "Digest", bearer: "Bearer", saml: "SAML",
+      kerberos: "Kerberos",
+      ntlm: "NTLM",
+      negotiate: "Negotiate",
+      basic: "Basic",
+      digest: "Digest",
+      bearer: "Bearer",
+      saml: "SAML",
     };
     authEl.textContent = AUTH_LABELS[S.auth.type] || S.auth.type;
     authWrap.style.display = "";
@@ -706,10 +698,20 @@ async function _generateAndRenderScripts() {
   // Silently record Studio usage — fires when analysis completes (not on download).
   // Mirrors the server-side analytics.finishEvent() used by the converter tools.
   try {
-    const _entries = (S.entries1 || []).filter(function(e){ return !e.filtered && !e.isMarker; });
-    const _corrs   = (S.correlations || []).filter(function(c){ return !c._suppressed; });
-    const _found   = ((S.advisorCandidates || S.candidates || []).length + _corrs.length) || null;
-    fetch("/analytics/track", {
+    const _entries = (S.entries1 || []).filter(function (e) {
+      return !e.filtered && !e.isMarker;
+    });
+    const _corrs = (S.correlations || []).filter(function (c) {
+      return !c._suppressed;
+    });
+    const _found =
+      (S.advisorCandidates || S.candidates || []).length + _corrs.length ||
+      null;
+    const _trackBase = window.location.pathname.replace(
+      /\/studio$|\/[^/]*\.html$/,
+      "",
+    );
+    fetch(_trackBase + "/analytics/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -722,7 +724,7 @@ async function _generateAndRenderScripts() {
         result: "success",
         duration: S._analyzeStart ? Date.now() - S._analyzeStart : null,
       }),
-    }).catch(function(){});
+    }).catch(function () {});
   } catch (_) {}
 
   showPhase("ph-res");
@@ -733,19 +735,19 @@ async function _generateAndRenderScripts() {
  * Reads toggle decisions, updates S.bgDecisions, hides the panel, then generates.
  */
 async function applyBgDecisions() {
-  document.querySelectorAll('.bg-decision-toggle').forEach(el => {
-    const url    = el.dataset.url;
-    const active = el.querySelector('.bg-dec.active');
+  document.querySelectorAll(".bg-decision-toggle").forEach((el) => {
+    const url = el.dataset.url;
+    const active = el.querySelector(".bg-dec.active");
     if (url && active) S.bgDecisions.set(url, active.dataset.val);
   });
-  const panel = document.getElementById('bgReviewPanel');
-  if (panel) panel.style.display = 'none';
+  const panel = document.getElementById("bgReviewPanel");
+  if (panel) panel.style.display = "none";
 
   try {
     await _generateAndRenderScripts();
   } catch (err) {
-    console.error('[BG decisions] generation failed:', err);
-    showToast('Script generation failed: ' + err.message, 'error', 6000);
+    console.error("[BG decisions] generation failed:", err);
+    showToast("Script generation failed: " + err.message, "error", 6000);
   }
 }
 
@@ -757,40 +759,46 @@ async function applyBgDecisions() {
 // =============================================================================
 function regenerateFromAdvisor() {
   try {
-    const isWeb = S.format === 'webhttp' || S.format === 'both';
-    const isDev = S.format === 'devweb'  || S.format === 'both';
+    const isWeb = S.format === "webhttp" || S.format === "both";
+    const isDev = S.format === "devweb" || S.format === "both";
     // Exclude suppressed correlations (auto-generated ones overridden by array_reconstruct)
-    const _activeCorrs = (S.correlations || []).filter(c => !c._suppressed);
+    const _activeCorrs = (S.correlations || []).filter((c) => !c._suppressed);
 
     if (isWeb) {
-      S.scripts.ac  = genActionC(S.entries1, _activeCorrs);
-      S.scripts.vi  = genVuserInit();
-      S.scripts.ve  = genVuserEnd();
-      S.scripts.gh  = genGlobalsH();
+      S.scripts.ac = genActionC(S.entries1, _activeCorrs);
+      S.scripts.vi = genVuserInit();
+      S.scripts.ve = genVuserEnd();
+      S.scripts.gh = genGlobalsH();
       S.scripts.prm = genParamFilePrm();
       S.scripts.dat = genCollectionDataCsv();
     }
     if (isDev) {
-      S.scripts.mj     = genMainJS(S.entries1, _activeCorrs);
+      S.scripts.mj = genMainJS(S.entries1, _activeCorrs);
       S.scripts.corrjs = genCorrelationsJS(_activeCorrs);
-      S.scripts.pyml   = genParamsYml();
-      S.scripts.csv    = genCollectionDataCsv();
+      S.scripts.pyml = genParamsYml();
+      S.scripts.csv = genCollectionDataCsv();
     }
 
     // Update correlation count stat
-    const corrEl = document.getElementById('st-corr');
-    if (corrEl) corrEl.textContent = S.correlations.length + (S.candidates.length > 0 ? '+' + S.candidates.length : '');
+    const corrEl = document.getElementById("st-corr");
+    if (corrEl)
+      corrEl.textContent =
+        S.correlations.length +
+        (S.candidates.length > 0 ? "+" + S.candidates.length : "");
 
     renderCorrelations();
     renderAdvisorPanel(); // re-render to reflect applied state
     renderTabs();
     renderDlBar();
-    const codeEl = document.getElementById('code-body');
-    if (codeEl) codeEl.textContent = S.scripts[S.tab] || '// No content';
+    const codeEl = document.getElementById("code-body");
+    if (codeEl) codeEl.textContent = S.scripts[S.tab] || "// No content";
 
-    showToast('Script regenerated with ' + S.correlations.length + ' correlations.', 'success');
+    showToast(
+      "Script regenerated with " + S.correlations.length + " correlations.",
+      "success",
+    );
   } catch (err) {
-    console.error('[Advisor regen]', err);
-    showToast('Regeneration error: ' + err.message, 'error', 6000);
+    console.error("[Advisor regen]", err);
+    showToast("Regeneration error: " + err.message, "error", 6000);
   }
-}
+}
