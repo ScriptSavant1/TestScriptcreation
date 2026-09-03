@@ -170,6 +170,11 @@ Choose **Classic** for a quick start. Choose the **Extension** for a cleaner exp
 
 To download the extension: open the Home page and click **⬇ Get Extension** in the banner. Follow the 5-step modal to install it in Chrome (`chrome://extensions`) or Edge (`edge://extensions`).
 
+> **Note:** the home page banner is temporarily hidden (see `Docs/EXTENSION-RECORDER-PLAN.md` →
+> "Distribution status") because "Load unpacked" is blocked by Group Policy on some corporate
+> machines. While hidden, open **Help → Recorder** in the app and use the "Get the extension →"
+> link — it opens the same install modal.
+
 ### One-time setup: install the bookmarklet
 
 The bookmarklet marks the start of your recording session so the Recorder can identify your user journey correctly.

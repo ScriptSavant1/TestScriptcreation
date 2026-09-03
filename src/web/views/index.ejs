@@ -1726,6 +1726,11 @@ code {
   </div>
 
   <!-- ── PerfX Extension banner ──────────────────────────────────────────── -->
+  <!-- Temporarily hidden: many corporate environments block "Load unpacked" via -->
+  <!-- Group Policy, so the extension install path isn't usable for those users. -->
+  <!-- Flip SHOW_EXT_BANNER back to true to bring it back — code left intact. -->
+  <% const SHOW_EXT_BANNER = false; %>
+  <% if (SHOW_EXT_BANNER) { %>
   <div class="ext-banner">
     <span class="ext-banner-badge">New</span>
     <div class="ext-banner-body">
@@ -1734,6 +1739,7 @@ code {
     </div>
     <button class="ext-get-btn" onclick="openExtModal(event)">⬇ Get Extension</button>
   </div>
+  <% } %>
 
   <!-- Which tool do I need? -->
   <div class="hw-section">
@@ -2898,6 +2904,12 @@ code {
   function haccToggle(id) {
     var item = document.getElementById(id);
     if (!item) return;
+    var wasOpen = item.classList.contains('open');
+    if (!wasOpen) {
+      document.querySelectorAll('.help-acc-item.open').forEach(function(other) {
+        if (other !== item) other.classList.remove('open');
+      });
+    }
     item.classList.toggle('open');
     if (item.classList.contains('open')) hTocSetCur(id);
   }
@@ -2905,7 +2917,12 @@ code {
     hTocClose();
     var item = document.getElementById(id);
     if (!item) return;
-    if (!item.classList.contains('open')) item.classList.add('open');
+    if (!item.classList.contains('open')) {
+      document.querySelectorAll('.help-acc-item.open').forEach(function(other) {
+        if (other !== item) other.classList.remove('open');
+      });
+      item.classList.add('open');
+    }
     hTocSetCur(id);
     setTimeout(function() { item.scrollIntoView({behavior:'smooth',block:'start'}); }, 20);
   }

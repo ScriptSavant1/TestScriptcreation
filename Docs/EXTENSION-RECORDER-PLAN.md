@@ -8,6 +8,32 @@
 
 ---
 
+## Distribution status (2026-09-03)
+
+**Home page promo banner is temporarily HIDDEN.** The extension code, download route, and
+install modal are all still fully functional and untouched — only the "New / PerfX Recorder
+Extension" banner between the tool grid and "Which tool?" section on the home page is
+suppressed.
+
+**Why:** Several corporate environments (e.g. NatWest/RBS-style locked-down desktops) block
+`chrome://extensions` → **Load unpacked** via Group Policy — see "Extension distribution"
+note in `CLAUDE.md`. Promoting an install path those users can't complete was generating
+confusion, so the banner is hidden until there's an IT-allowlisted (Chrome Web Store)
+distribution path or a company-specific rollout plan.
+
+**What still works while hidden:**
+- `GET /downloads/recorder-extension` (ZIP download route in `src/web/server.js`) — reachable directly
+- The install modal (`#ext-modal-backdrop` in `src/web/views/index.ejs`) — opened via `openExtModal()`
+- The **Help → Recorder** in-app doc section still has a working "Get the extension →" link that opens the same modal
+- `Docs/USER-GUIDE.md` §5 "Two ways to record" still documents the extension for users who ask about it directly
+
+**How to re-enable the home page banner:** in `src/web/views/index.ejs`, find the
+`SHOW_EXT_BANNER` constant just above the `<!-- ── PerfX Extension banner ── -->` block
+(currently `const SHOW_EXT_BANNER = false;`) and flip it to `true`. No other code changes
+needed — the banner markup, CSS, and modal were left in place, not deleted.
+
+---
+
 ## Problem Statement
 
 Current recording method (browser favourites/bookmarklets) has two hard blockers:

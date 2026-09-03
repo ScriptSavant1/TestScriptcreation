@@ -5,6 +5,32 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Changed — PerfX Recorder Extension home page banner temporarily hidden
+The "New / PerfX Recorder Extension" promo banner on the home page is now hidden by default.
+Several corporate environments block `chrome://extensions` → Load unpacked via Group Policy,
+so promoting an install path some users can't complete was creating confusion.
+
+Nothing was removed — the banner markup, CSS, download route, and install modal are all
+still in place and functional. The extension is still reachable via the **Help → Recorder**
+in-app doc link ("Get the extension →") and via `GET /downloads/recorder-extension` directly.
+
+To re-enable: flip `SHOW_EXT_BANNER` from `false` to `true` in `src/web/views/index.ejs`
+(just above the `<!-- PerfX Extension banner -->` block). See
+`Docs/EXTENSION-RECORDER-PLAN.md` → "Distribution status" for full detail.
+
+Files changed: `src/web/views/index.ejs`
+
+---
+
+### Fixed — Help section accordion now single-open
+Expanding a Help topic (e.g. "Converter") no longer leaves previously expanded topics open —
+only one section stays expanded at a time, matching standard accordion behavior. Applies to
+both clicking a section header and jumping via the "On this page" dropdown.
+
+Files changed: `src/web/views/index.ejs` (`haccToggle()`, `haccJump()`)
+
+---
+
 ### Added — PerfX Recorder Extension download (home page)
 Users can now download the PerfX Chrome extension directly from the home page without any new
 user-facing URL. A banner card between the tool grid and "Which tool?" section shows the
