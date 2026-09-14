@@ -1471,6 +1471,12 @@ ${
           const cmJson = this.jwtClaimMap
             ? JSON.stringify(this.jwtClaimMap)
             : "null";
+          // Store the token under the SAME variable name the original script used
+          // (cm.output, e.g. "client_assertion") — that's the name request bodies
+          // actually reference via {{client_assertion}} -> load.global.client_assertion
+          // in replaceParameters(). Falling back to the literal "jwt_token" here
+          // silently broke every script whose output var wasn't literally that name.
+          const jwtOutVar = this.sanitizeVarName(cm.output || "jwt_token");
           // Dynamic audience: resolve {paramName} placeholders from the merged params object
           const audLine = cm._audTemplate
             ? `    const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{(\\w+)\\}/g, (_, k) => _jwtParams[k] || '');\n    _jwtParams['_jwt_aud'] = _jwtAud;\n`
@@ -1479,7 +1485,7 @@ ${
     // Merge parameters.yml and rts.yml userArguments — covers both Postman/Bruno (load.params)
     // and JMX UDVs (load.config.user.args) without requiring one specific source.
     const _jwtParams = Object.assign({}, load.params, (load.config && load.config.user && load.config.user.args) || {});
-${audLine}    load.global.jwt_token = getJwtToken(_jwtParams, ${cmJson});
+${audLine}    load.global.${jwtOutVar} = getJwtToken(_jwtParams, ${cmJson});
     load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
 `;
         })()
@@ -2075,13 +2081,16 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
           const cmJson = this.jwtClaimMap
             ? JSON.stringify(this.jwtClaimMap)
             : "null";
+          // Same variable as generateInitialize() — must match so the refresh
+          // check/assignment and the initial one operate on the same global.
+          const jwtOutVar = this.sanitizeVarName(cm.output || "jwt_token");
           const audLine = cm._audTemplate
             ? `        const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{(\\w+)\\}/g, (_, k) => _jwtParams[k] || '');\n        _jwtParams['_jwt_aud'] = _jwtAud;\n`
             : "";
           return `
-    if (!load.global.jwt_token || Date.now() >= load.global.jwt_expires_at) {
+    if (!load.global.${jwtOutVar} || Date.now() >= load.global.jwt_expires_at) {
         const _jwtParams = Object.assign({}, load.params, (load.config && load.config.user && load.config.user.args) || {});
-${audLine}        load.global.jwt_token = getJwtToken(_jwtParams, ${cmJson});
+${audLine}        load.global.${jwtOutVar} = getJwtToken(_jwtParams, ${cmJson});
         load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);${globalHeaderUpdate}
     }
 `;
