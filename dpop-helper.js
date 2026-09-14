@@ -26,6 +26,23 @@ function generateEcP256KeyPair() {
 }
 
 /**
+ * Cache of resolved DPoP signing state, keyed by the exact raw JWK JSON
+ * string a caller passes in. The generated DevWeb script (see
+ * scriptGenerator.js) creates the EC key ONCE per Vuser session (the first
+ * call, when load.global.dpop_jwk is still null) and then passes that same
+ * JSON string into getDpopProof() again on every subsequent request that
+ * needs a DPoP proof — often hundreds/thousands of times over a load test,
+ * far more frequently than a JWT refresh. Without this cache, every single
+ * proof re-ran JSON.parse + validation + crypto.createPrivateKey() on an EC
+ * key that never actually changes. A Node KeyObject is immutable and safe
+ * to reuse across any number of sign() calls — this mirrors the signing-key
+ * cache already added to jwt-helper.js, and matches what the VuGen/lre-utils
+ * DPoP path already does (initDpopKey() resolves the key once in
+ * vuser_init(); generateDpopProof() just reuses the cached raw key bytes).
+ */
+const _dpopKeyCache = new Map(); // raw jwk JSON string -> { privateKey: KeyObject, publicJwk }
+
+/**
  * Generate DPoP proof JWT
  * @param {string} htu - HTTP Target URI (without query parameters)
  * @param {string} htm - HTTP method (POST, GET, etc.)
@@ -34,63 +51,90 @@ function generateEcP256KeyPair() {
  * @returns {string} DPoP proof JWT
  */
 function getDpopProof(htu, htm, jwk, accessToken) {
-  // Parse JWK if it's a string
-  let privateJwk;
+  // Fast path: identical raw jwk string as a previous call on this Vuser —
+  // skip parsing, validation, and EC key reconstruction entirely.
+  const cached =
+    typeof jwk === "string" && jwk.length > 0 ? _dpopKeyCache.get(jwk) : undefined;
 
-  // Handle undefined, null, or empty string JWK - generate new key
-  if (!jwk || jwk === "" || jwk === "null" || jwk === "undefined") {
-    console.log(
-      "No JWK provided, generating new EC P-256 key pair for DPoP...",
-    );
-    privateJwk = generateEcP256KeyPair();
-    // Store the generated key back to load.global for reuse
-    if (typeof load !== "undefined" && load.global) {
-      load.global.dpop_jwk = JSON.stringify(privateJwk);
-    }
-  } else if (typeof jwk === "string") {
-    try {
-      privateJwk = JSON.parse(jwk);
-    } catch (e) {
-      console.log("Invalid JWK string, generating new key pair:", e.message);
+  let privateKey, publicJwk;
+
+  if (cached) {
+    privateKey = cached.privateKey;
+    publicJwk = cached.publicJwk;
+  } else {
+    // Parse JWK if it's a string
+    let privateJwk;
+    let cacheKey = null; // raw string this resolved key should be cached under
+
+    // Handle undefined, null, or empty string JWK - generate new key
+    if (!jwk || jwk === "" || jwk === "null" || jwk === "undefined") {
+      console.log(
+        "No JWK provided, generating new EC P-256 key pair for DPoP...",
+      );
       privateJwk = generateEcP256KeyPair();
+      cacheKey = JSON.stringify(privateJwk);
+      // Store the generated key back to load.global for reuse
       if (typeof load !== "undefined" && load.global) {
-        load.global.dpop_jwk = JSON.stringify(privateJwk);
+        load.global.dpop_jwk = cacheKey;
+      }
+    } else if (typeof jwk === "string") {
+      try {
+        privateJwk = JSON.parse(jwk);
+        cacheKey = jwk;
+      } catch (e) {
+        console.log("Invalid JWK string, generating new key pair:", e.message);
+        privateJwk = generateEcP256KeyPair();
+        cacheKey = JSON.stringify(privateJwk);
+        if (typeof load !== "undefined" && load.global) {
+          load.global.dpop_jwk = cacheKey;
+        }
+      }
+    } else if (typeof jwk === "object" && jwk !== null) {
+      privateJwk = jwk;
+      cacheKey = JSON.stringify(jwk);
+    } else {
+      console.log("Invalid JWK type, generating new key pair");
+      privateJwk = generateEcP256KeyPair();
+      cacheKey = JSON.stringify(privateJwk);
+      if (typeof load !== "undefined" && load.global) {
+        load.global.dpop_jwk = cacheKey;
       }
     }
-  } else if (typeof jwk === "object" && jwk !== null) {
-    privateJwk = jwk;
-  } else {
-    console.log("Invalid JWK type, generating new key pair");
-    privateJwk = generateEcP256KeyPair();
-    if (typeof load !== "undefined" && load.global) {
-      load.global.dpop_jwk = JSON.stringify(privateJwk);
-    }
-  }
 
-  // Validate that we have a proper EC P-256 key
-  if (
-    !privateJwk ||
-    !privateJwk.d ||
-    privateJwk.kty !== "EC" ||
-    privateJwk.crv !== "P-256"
-  ) {
-    console.log(
-      "Invalid or incomplete JWK, generating new EC P-256 key pair for DPoP...",
-    );
-    privateJwk = generateEcP256KeyPair();
-    // Store generated key back to load.global for reuse
-    if (typeof load !== "undefined" && load.global) {
-      load.global.dpop_jwk = JSON.stringify(privateJwk);
+    // Validate that we have a proper EC P-256 key
+    if (
+      !privateJwk ||
+      !privateJwk.d ||
+      privateJwk.kty !== "EC" ||
+      privateJwk.crv !== "P-256"
+    ) {
+      console.log(
+        "Invalid or incomplete JWK, generating new EC P-256 key pair for DPoP...",
+      );
+      privateJwk = generateEcP256KeyPair();
+      cacheKey = JSON.stringify(privateJwk);
+      // Store generated key back to load.global for reuse
+      if (typeof load !== "undefined" && load.global) {
+        load.global.dpop_jwk = cacheKey;
+      }
     }
-  }
 
-  // Build public JWK for header (without private key 'd')
-  const publicJwk = {
-    kty: privateJwk.kty,
-    crv: privateJwk.crv,
-    x: privateJwk.x,
-    y: privateJwk.y,
-  };
+    // Build public JWK for header (without private key 'd')
+    publicJwk = {
+      kty: privateJwk.kty,
+      crv: privateJwk.crv,
+      x: privateJwk.x,
+      y: privateJwk.y,
+    };
+
+    // Sign with ES256 (ECDSA using P-256 and SHA-256)
+    privateKey = crypto.createPrivateKey({
+      key: privateJwk,
+      format: "jwk",
+    });
+
+    if (cacheKey) _dpopKeyCache.set(cacheKey, { privateKey, publicJwk });
+  }
 
   // Create DPoP header
   const header = {
@@ -134,12 +178,6 @@ function getDpopProof(htu, htm, jwk, accessToken) {
   const encodedHeader = base64UrlEncode(header);
   const encodedPayload = base64UrlEncode(payload);
   const signingInput = `${encodedHeader}.${encodedPayload}`;
-
-  // Sign with ES256 (ECDSA using P-256 and SHA-256)
-  const privateKey = crypto.createPrivateKey({
-    key: privateJwk,
-    format: "jwk",
-  });
 
   // Node.js crypto.sign() returns DER-encoded ECDSA signature, but JWS (RFC 7515)
   // requires raw R||S format (64 bytes for P-256). Convert DER → raw.

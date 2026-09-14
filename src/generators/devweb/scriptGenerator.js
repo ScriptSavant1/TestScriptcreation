@@ -1489,7 +1489,7 @@ ${audLine}    load.global.jwt_token = getJwtToken(_jwtParams, ${cmJson});
     const dpopBlock = this.hasDpop
       ? `
     // Initialize DPoP key pair and proof generation
-    load.global.${this.dpopKeyVar || "dpop_jwk"}" = load.global.${this.dpopKeyVar || "dpop_jwk"} || null;
+    load.global.${this.dpopKeyVar || "dpop_jwk"} = load.global.${this.dpopKeyVar || "dpop_jwk"} || null;
     `
       : "";
 

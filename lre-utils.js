@@ -2742,19 +2742,42 @@ function generatePkce() {
 }
 
 /* =========================================================
+   RSA key cache — keyed by the exact raw secret string.
+   Parsing a PEM secret (HTML-entity decode, base64 -> DER, DER TLV walk,
+   BigInteger construction for n/d) is pure CPU work that only depends on
+   the secret text. refreshJWT() already limits createJWT() to once per
+   ~9-minute token refresh, but createJWTFromMap() (per-request JWTs, see
+   refreshJWT doc below) has no such gate and may run once per request —
+   re-parsing the same unchanging secret every time is wasted work over a
+   multi-hour load test. Keying by the raw string (rather than assuming a
+   single fixed secret) keeps this correct even if a script signs with
+   more than one distinct secret in the same process.
+   ========================================================= */
+var _rsaKeyCache = {};
+function _getRsaKey(secret) {
+  var raw = String(secret || "");
+  if (Object.prototype.hasOwnProperty.call(_rsaKeyCache, raw)) {
+    return _rsaKeyCache[raw];
+  }
+  /* PEM -> DER */
+  var pem = _decodeHtmlEntities(raw);
+  pem = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  /* standard base64: _b64uDecode handles + and / correctly (only converts - and _) */
+  var der = _b64uDecode(pem);
+  /* parse RSA key */
+  var key = _parseRsaKey(der);
+  _rsaKeyCache[raw] = key;
+  return key;
+}
+
+/* =========================================================
    createJWT  —  PS256 (RSA-PSS / SHA-256)
    signingKid:  key ID string
    secret:      PEM-encoded RSA private key (PKCS#8 or PKCS#1)
                 May contain HTML entities (e.g. &#10; for newlines)
    ========================================================= */
 function createJWT(clientId, aud, scope, signingKid, secret) {
-  /* PEM -> DER */
-  var pem = _decodeHtmlEntities(String(secret));
-  pem = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
-  /* standard base64: _b64uDecode handles + and / correctly (only converts - and _) */
-  var der = _b64uDecode(pem);
-  /* parse RSA key */
-  var key = _parseRsaKey(der);
+  var key = _getRsaKey(secret);
   /* build JWT header + payload */
   var now = Math.floor(Date.now() / 1000);
   var header = { alg: "PS256", typ: "JWT", kid: String(signingKid) };
@@ -2784,11 +2807,7 @@ function createJWT(clientId, aud, scope, signingKid, secret) {
 function createJWTFromMap(claimsJson, signingKid, secret) {
   var claims = JSON.parse(claimsJson);
   var expOffset = claims._expOffset !== undefined ? parseInt(String(claims._expOffset), 10) : 300;
-  /* PEM -> DER */
-  var pem = _decodeHtmlEntities(String(secret));
-  pem = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
-  var der = _b64uDecode(pem);
-  var key = _parseRsaKey(der);
+  var key = _getRsaKey(secret);
   /* build JWT header + payload */
   var now = Math.floor(Date.now() / 1000);
   var header = { alg: "PS256", typ: "JWT", kid: String(signingKid) };
