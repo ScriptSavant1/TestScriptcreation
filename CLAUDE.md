@@ -248,6 +248,7 @@ Dark mode: `.dark` class on `<body>`.
 - **`processField()` untested** — inner closure of `genParamSuggestions()` in `studio-codegen.js`; not directly accessible. Requires refactoring to export or testing via `genParamSuggestions()`. Lowest-priority remaining gap.
 - **`fetchBodyAndFinish()` untested** — `perfx-recorder-extension/background/cdp-capture.js`; depends on live Chrome `chrome.debugger` API. Requires a Chrome mock or integration test. Not yet implemented.
 - **`/regression-tests/` has no test cases yet** — folder + README + `run-all.sh` skeleton exist; no input fixtures or expected outputs captured. See `regression-tests/README.md` for the prioritised list.
+- **No route-registration tests for `server.js`** — BUG-EXT-013 (POST /convert, /convert-jmx, GET /recorder, /studio missing their bare-root registration) shipped and reached a user before being caught, because nothing exercises Express route matching. Needs a `supertest`-based harness that boots the app and asserts each route responds at both `/` and `/converter`. Not yet implemented.
 
 ## Governance items RESOLVED (2026-07-29)
 - ~~No unit tests~~ → **FIXED**: 165 tests across 5 suites in `tests/unit/`. New: `harBuilder.test.js`, `advisorCsrfScan.test.js`, `studioCodegenDates.test.js`.

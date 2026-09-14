@@ -258,10 +258,13 @@ class WebServer {
     this.app.get("/converter/", (req, res) => res.redirect("/converter"));
 
     // ── Tool routes ───────────────────────────────────────────────────────────
-    this.app.get("/converter/recorder", (req, res) => {
+    // Also dual-registered (bare root + /converter) — the portal's iframe src is
+    // built as BASE_PATH + '/recorder' / '/studio', which resolves to the
+    // bare-root path when the page itself was loaded at '/' (BUG-EXT-013).
+    this.app.get(["/recorder", "/converter/recorder"], (req, res) => {
       res.sendFile(path.join(__dirname, "public", "VuGen-Recorder.html"));
     });
-    this.app.get("/converter/studio", (req, res) => {
+    this.app.get(["/studio", "/converter/studio"], (req, res) => {
       res.sendFile(path.join(__dirname, "public", "VuGen-Script-Studio.html"));
     });
     this.app.get("/tools/recorder", (req, res) => {
@@ -317,8 +320,12 @@ class WebServer {
     }
 
     // ── Convert (Postman / Bruno collections) ─────────────────────────────────
+    // Registered at both bare root and /converter — the home page is reachable
+    // at either path (see `renderHome` above), and BASE_PATH on the client is
+    // derived from window.location.pathname, so it can be '' or '/converter'.
+    // A single-path registration here left the bare-root case 404ing (BUG-EXT-013).
     this.app.post(
-      "/converter/convert",
+      ["/convert", "/converter/convert"],
       convertLimiter,
       uploadCollection.fields([
         { name: "collection", maxCount: 1 },
@@ -485,8 +492,9 @@ class WebServer {
     });
 
     // ── Convert JMX ───────────────────────────────────────────────────────────
+    // Same bare-root + /converter dual registration as /convert above (BUG-EXT-013).
     this.app.post(
-      "/converter/convert-jmx",
+      ["/convert-jmx", "/converter/convert-jmx"],
       convertLimiter,
       uploadJmx.fields([
         { name: "jmxFile",   maxCount: 1  },
