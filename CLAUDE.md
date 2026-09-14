@@ -179,6 +179,25 @@ Sentinels are only used in `studio-codegen.js` (client-side Studio). The server-
 | `array_reconstruct` | IIFE `.map()` over `load.global.anchorVar` (JS array) | `web_js_run` builder + `_count`/`_N` indexing |
 | `cookie` | suppressed when ALL usages are in cookie headers; emitted as boundary extractor when mixed usage | suppressed when ALL usages are in cookie headers |
 
+### 8. lre-utils.js / lre-utils.dat MUST be ES3 — `node --check` does NOT verify this
+VuGen's `web_js_run` JS engine only accepts ES3-level syntax: no trailing commas in
+object/array literals or function calls, no `let`/`const`/arrow functions/`Map`/`Set`/
+template literals/`for...of`/destructuring. `node --check` (or any Node.js execution) is
+**useless** as a compatibility gate for this specific file — Node's parser has accepted
+every one of those constructs since ES5/ES2015 and will silently pass code that VuGen's
+real engine rejects with a parse error at runtime (`SyntaxError`, sometimes reported as the
+unrelated-looking `invalid label`).
+
+This has broken production code twice from the exact same root cause (trailing commas):
+BUG-040 (21 instances, in function-call args and array literals) and a follow-up (3 more
+instances, this time in **object literals** — a category BUG-040's cleanup didn't check —
+found only after a real user hit a VuGen runtime error running a DPoP script).
+
+**Always run `tests/unit/lreUtilsEs3Compat.test.js`** (parses both files with `acorn` at
+`ecmaVersion: 3`) after ANY edit to `lre-utils.js` — update `lre-utils.dat` identically
+(`cp lre-utils.js lre-utils.dat`) and re-run the test to confirm both still parse. `git diff
+lre-utils.js lre-utils.dat` should always be empty.
+
 ---
 
 ## Body Generation: DevWeb vs VuGen

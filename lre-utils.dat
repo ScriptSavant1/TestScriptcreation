@@ -2626,7 +2626,7 @@ function _generateDpopKeyPair() {
     kty: "EC",
     crv: "P-256",
     x: _b64uEncode(xBytes),
-    y: _b64uEncode(yBytes),
+    y: _b64uEncode(yBytes)
   };
   _dpopPriv = dBytes;
   _dpopPubJwk = jwk;
@@ -2670,7 +2670,7 @@ function generateDpopProof(htu, htm, accessToken) {
     jti: _uuidv4(),
     iat: Math.floor(Date.now() / 1000),
     htu: String(htu),
-    htm: String(htm).toUpperCase(),
+    htm: String(htm).toUpperCase()
   };
   if (accessToken && accessToken.length > 0) {
     payload.ath = _b64uEncode(_sha256(_strToBytes(String(accessToken))));
@@ -2788,7 +2788,7 @@ function createJWT(clientId, aud, scope, signingKid, secret) {
     scope: String(scope),
     iat: now,
     exp: now + 300,
-    jti: _uuidv4(),
+    jti: _uuidv4()
   };
   var sigInput = _b64uJson(header) + "." + _b64uJson(payload);
   var sig = _rsaPssSign(_strToBytes(sigInput), key.n, key.d);
