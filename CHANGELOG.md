@@ -5,6 +5,51 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed (BUG-047) — Hardened generated package.json against ESM/CJS ancestor conflicts
+User reported `require is not defined in ES module scope, you can use import instead`
+running a generated DevWeb script. Root cause is environmental: Node.js resolves module
+type by walking UP the directory tree for the nearest `package.json`; if a DIFFERENT
+`package.json` above the script's actual folder has `"type": "module"` (a stray file, or
+an IDE-scaffolded DevWeb project template) and our own shipped `package.json` isn't present
+in that exact folder, `require()` disappears entirely. Confirmed via direct reproduction
+that our generated `package.json` never had `"type": "module"`.
+
+Fix: `generatePackageJson()` in `src/tools/collection-converter/index.js` now explicitly
+sets `"type": "commonjs"` (previously relied on the implicit default), and the generated
+`README.md` now has a Troubleshooting entry explaining the directory-walk mechanism.
+
+Files changed: `src/tools/collection-converter/index.js`
+
+---
+
+### Fixed (BUG-046) — VuGen "invalid label" SyntaxError running DPoP or JWT scripts
+User reported `Error from JS Engine: SyntaxError: invalid label` executing a generated
+VuGen script with DPoP in real LoadRunner, right after generating it successfully.
+
+Root cause: 3 ES3-illegal trailing commas in object literals in `lre-utils.js`/`.dat` —
+in `_generateDpopKeyPair()`, `generateDpopProof()` (every per-request DPoP proof, not just
+init), and `createJWT()` (every plain VuGen JWT, unrelated to DPoP). `git blame` traced them
+to a commit that landed hours BEFORE BUG-040's cleanup the same day — that cleanup covered
+function-call and array-literal trailing commas but never checked object literals, so these
+3 survived. `node --check` cannot catch this class of bug: Node's parser has accepted
+trailing commas in object/array literals since ES5/ES2015 and silently allows them, but
+VuGen's real JS engine (ES3-level) rejects them.
+
+Fix: removed all 3 trailing commas (semantically a no-op — all existing tests pass
+unchanged) in both `lre-utils.js` and `lre-utils.dat` (kept byte-identical).
+
+**New regression test**: `tests/unit/lreUtilsEs3Compat.test.js` parses both files under
+`ecmaVersion: 3` via `acorn` (added as an explicit devDependency), plus an independent regex
+cross-check and a byte-identical check — closing the gap that let this bug class through
+twice. Verified as a real guard (not a false pass) by reintroducing one trailing comma and
+confirming the test correctly fails. New CLAUDE.md rule (`CRITICAL Architecture Rules` #8)
+documents that `node --check` is not a valid compatibility gate for this file.
+
+Files changed: `lre-utils.js`, `lre-utils.dat`, `package.json`, `package-lock.json`,
+`tests/unit/lreUtilsEs3Compat.test.js` (new), `CLAUDE.md`
+
+---
+
 ### Fixed (BUG-045) — Syntax error in every DevWeb script using DPoP
 `generateInitialize()` in `src/generators/devweb/scriptGenerator.js` emitted a stray `"` in
 the DPoP key-init line: `` load.global.${this.dpopKeyVar || "dpop_jwk"}" = load.global... ``.
