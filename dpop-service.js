@@ -55,6 +55,16 @@ const PORT = parseInt(
 // A single key pair per LG is therefore correct for load testing.
 let sharedKeyPair = null;
 
+// ─── Per-VUser key cache (/dpop/vuser) ─────────────────────────────────────────
+// Each VUser calls /dpop/vuser once per request that needs a DPoP proof,
+// resending the SAME jwk JSON string every time (generated once via
+// /dpop/init, then stored as an LR param for the rest of the session) —
+// often hundreds/thousands of calls per VUser over a load test. Without this
+// cache, every call re-parsed and re-validated that JSON and rebuilt a Node
+// KeyObject via crypto.createPrivateKey() on a key that never changes. A
+// KeyObject is immutable and safe to reuse across any number of sign() calls.
+const vuserKeyCache = new Map(); // raw jwk string -> { privateKeyObj, publicJwk }
+
 function generateKeyPair() {
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ec", {
     namedCurve: "prime256v1",
@@ -203,20 +213,28 @@ const server = http.createServer(async (req, res) => {
       if (err) return send(res, 400, { error: err });
       if (!body.jwk) return send(res, 400, { error: "Missing field: jwk" });
 
-      let jwk;
-      try {
-        jwk = typeof body.jwk === "string" ? JSON.parse(body.jwk) : body.jwk;
-      } catch (e) {
-        return send(res, 400, { error: "Invalid JWK JSON: " + e.message });
+      const cacheKey = typeof body.jwk === "string" ? body.jwk : JSON.stringify(body.jwk);
+      let resolved = vuserKeyCache.get(cacheKey);
+
+      if (!resolved) {
+        let jwk;
+        try {
+          jwk = typeof body.jwk === "string" ? JSON.parse(body.jwk) : body.jwk;
+        } catch (e) {
+          return send(res, 400, { error: "Invalid JWK JSON: " + e.message });
+        }
+
+        const privateKeyObj = crypto.createPrivateKey({ key: jwk, format: "jwk" });
+        const publicJwk = { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y };
+        resolved = { privateKeyObj, publicJwk };
+        vuserKeyCache.set(cacheKey, resolved);
       }
 
-      const privateKeyObj = crypto.createPrivateKey({ key: jwk, format: "jwk" });
-      const publicJwk = { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y };
       const proof = buildProof(
         body.url,
         body.method,
-        privateKeyObj,
-        publicJwk,
+        resolved.privateKeyObj,
+        resolved.publicJwk,
         body.ath || ""
       );
       return send(res, 200, { proof });

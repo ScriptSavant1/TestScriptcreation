@@ -5,6 +5,85 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed (BUG-045) — Syntax error in every DevWeb script using DPoP
+`generateInitialize()` in `src/generators/devweb/scriptGenerator.js` emitted a stray `"` in
+the DPoP key-init line: `` load.global.${this.dpopKeyVar || "dpop_jwk"}" = load.global... ``.
+This rendered as `load.global.dpop_jwk" = load.global.dpop_jwk || null;` in every generated
+DevWeb script that uses DPoP signing — a JavaScript syntax error that broke the whole
+`initialize()` block. Found while re-checking JWT/DPoP code for other issues (not previously
+reported by a user).
+
+Fix: removed the stray `"`, matching the dot-notation `load.global.<var>` pattern already used
+everywhere else DPoP touches `load.global` in this file. Verified by calling the real
+`generateInitialize()` (default and custom key-variable name) and parsing the actual returned
+string with `new Function()`; confirmed the new regression test fails against the original
+buggy code before confirming it passes against the fix.
+
+Files changed: `src/generators/devweb/scriptGenerator.js`,
+`tests/unit/devwebDpopInit.test.js` (new)
+
+---
+
+### Performance — DPoP EC key resolution now cached (DevWeb)
+Same redundant-parsing pattern as the JWT fix below, found while re-checking JWT/DPoP code
+for other performance issues — and worse in practice, since a DPoP proof is generated once
+per HTTP request rather than once per ~9-minute JWT refresh.
+
+`getDpopProof()` in `dpop-helper.js` re-ran `JSON.parse()` + validation +
+`crypto.createPrivateKey()` on every single call, even though the EC key never changes after
+the first call in a Vuser session. Checked the VuGen equivalent (`lre-utils.dat`/`.js`
+`generateDpopProof()`/`initDpopKey()`) and confirmed it was already correct — the key is
+resolved once in `vuser_init()` and reused via a module-level cache, so no VuGen change was
+needed. Also fixed the identical pattern in `dpop-service.js`'s `/dpop/vuser` endpoint (a
+standalone optional helper — confirmed via grep to not be wired into any generator, fixed
+for consistency anyway).
+
+Fix: added a cache keyed by the exact raw JWK JSON string in both files
+(`_dpopKeyCache` / `vuserKeyCache`, both `Map`), mirroring the JWT fix's approach. Every
+existing validation branch and side effect (`console.log` messages, `load.global.dpop_jwk`
+writes) is preserved exactly on the cache-miss path.
+
+Verified with 8 new tests (`tests/unit/dpopHelperKeyCache.test.js`) that independently verify
+every produced DPoP proof's ES256 signature via Node's own `crypto.verify()`
+(`dsaEncoding: 'ieee-p1363'` for the raw R||S format RFC 7515 requires), covering the
+empty/string/object/invalid-JWK branches, plus spies on `crypto.createPrivateKey` proving the
+cache is hit/bypassed correctly. All 183 unit tests pass (was 175 after the JWT fix below).
+
+Files changed: `dpop-helper.js`, `dpop-service.js`,
+`tests/unit/dpopHelperKeyCache.test.js` (new)
+
+---
+
+### Performance — JWT signing key parsing now cached (DevWeb + VuGen)
+JWT generation re-parsed the same unchanging private key from scratch on every call instead
+of reusing the already-resolved key — pure wasted CPU on a long-running load test, no
+functional bug (reported by a user reviewing generated script performance).
+
+DevWeb (`jwt-helper.js`): `generateJWT()` called `normalisePem()` + `resolveSignKey()`
+(→ `crypto.createPrivateKey()`) every time, even though `getJwtToken()`'s own 9-minute
+expiry gate means the same key text gets re-processed on every refresh across a multi-hour
+run. VuGen (`lre-utils.dat` / `lre-utils.js`): `createJWT()` / `createJWTFromMap()` re-ran
+the full PEM → DER → BigInteger parse (`_parseRsaKey`) every call — `createJWTFromMap`
+(per-request JWTs) has no caller-side expiry gate at all, so it could re-parse the identical
+secret once per request.
+
+Fix: added a small cache keyed by the exact raw key/secret string — `getCachedSignKey()`
+(a `Map`) in `jwt-helper.js`, and `_getRsaKey()` (a plain object — the file is ES3-only) in
+`lre-utils.dat`/`lre-utils.js`. Keying by the raw string means a script signing with more
+than one distinct secret still gets its own correct cache entry.
+
+Verified with 10 new tests (`tests/unit/jwtHelperKeyCache.test.js`,
+`tests/unit/lreUtilsRsaKeyCache.test.js`) that independently verify every produced JWT
+signature against the matching RSA public key via Node's own `crypto.verify()` (PKCS#8,
+PKCS#1, and HTML-entity-corrupted PEM inputs all covered), and confirm the cache is hit on
+a repeat call with the same key but correctly bypassed for a different one. All 175 unit
+tests pass (was 165).
+
+Files changed: `jwt-helper.js`, `lre-utils.dat`, `lre-utils.js`,
+`tests/unit/jwtHelperKeyCache.test.js` (new), `tests/unit/lreUtilsRsaKeyCache.test.js` (new)
+
+---
+
 ### Fixed (BUG-EXT-013) — Conversion / Recorder / Studio 404 at bare site root
 Converting a Postman/Bruno collection (or JMX file) failed with "Conversion Failed — Server
 error (404): Not Found" whenever the app was reached at the bare root URL (`/`) instead of

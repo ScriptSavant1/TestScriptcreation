@@ -124,6 +124,30 @@ function resolveSignKey(normKey) {
 }
 
 /**
+ * Cache of resolved signing keys, keyed by the exact raw (un-normalised) PEM
+ * string passed in. normalisePem() + resolveSignKey() are pure functions of
+ * that raw text, and the private key value does not change between token
+ * refreshes for a given Vuser — only the JWT payload (iat/exp/jti) does — so
+ * re-running PEM cleanup and crypto.createPrivateKey() on every refresh
+ * (every ~9 min per Vuser, for hours in a real load test) is wasted CPU.
+ * A Node KeyObject is immutable and safe to reuse across any number of
+ * sign() calls. Keying by the raw string (rather than assuming a single
+ * fixed key) keeps this correct even if a script ever signs with more than
+ * one distinct secret in the same process — a different raw value simply
+ * gets its own cache entry instead of colliding with a stale one.
+ */
+const _signKeyCache = new Map();
+
+function getCachedSignKey(privateKey) {
+  const raw = String(privateKey || "");
+  const cached = _signKeyCache.get(raw);
+  if (cached !== undefined) return cached;
+  const signKey = resolveSignKey(normalisePem(raw));
+  _signKeyCache.set(raw, signKey);
+  return signKey;
+}
+
+/**
  * Generate JWT token with RS256/PS256 algorithm.
  * Accepts PKCS#1 ('BEGIN RSA PRIVATE KEY') and PKCS#8 ('BEGIN PRIVATE KEY') PEM keys.
  * Normalises the key before signing to handle delivery corruption from YAML/CSV/HTML.
@@ -141,9 +165,8 @@ function generateJWT(header, payload, privateKey) {
   const payloadEncoded = base64UrlEncode(JSON.stringify(payload));
   const signatureInput = headerEncoded + "." + payloadEncoded;
 
-  // Normalise and resolve key — handles all corruption modes and Node versions
-  const normKey = normalisePem(privateKey);
-  const signKey = resolveSignKey(normKey);
+  // Resolve signing key — cached per distinct raw key value (see getCachedSignKey above)
+  const signKey = getCachedSignKey(privateKey);
 
   const sign = crypto.createSign("RSA-SHA256");
   sign.update(signatureInput);
