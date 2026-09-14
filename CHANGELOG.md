@@ -5,6 +5,36 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed (BUG-048) — DevWeb primary JWT stored under the wrong variable, sent as undefined
+Found while proactively reviewing the JWT path before the user had tested it (not a user
+report). `generateInitialize()` and the refresh block in `generateAction()`
+(`src/generators/devweb/scriptGenerator.js`) hardcoded `load.global.jwt_token` as the
+storage variable for the primary JWT. But `replaceParameters()` substitutes the original
+script's real output variable (e.g. `{{client_assertion}}` -> `load.global.client_assertion`,
+extracted from `pm.environment.set('client_assertion', ...)` into
+`jwtClaimMap.output`) — a different variable that was never assigned. The JWT was correctly
+generated but stored somewhere nothing ever read; any request body/header referencing it sent
+`undefined`. Invisible to `node --check` and to every existing test, since nothing previously
+verified the variable a generated script *writes* matches the one it *reads*. Confirmed by
+generating a realistic JWT-only script end-to-end and inspecting the actual output.
+
+VuGen's generator was checked and already did this correctly
+(`src/generators/vugen/scriptGenerator.js:1228`); DevWeb's per-request/secondary-JWT path
+(BUG-036) was also already correct — only the primary JWT path in `generateInitialize()`/
+`generateAction()` had the hardcoded literal.
+
+Fix: both locations now derive the target variable from `cm.output` (sanitized), falling
+back to `"jwt_token"` only when no output variable was ever detected.
+
+New regression test: `tests/unit/devwebJwtOutputVar.test.js` (5 tests) — verified as a real
+guard by reverting the fix and confirming it fails before restoring. All 195 unit tests pass
+(was 190).
+
+Files changed: `src/generators/devweb/scriptGenerator.js`,
+`tests/unit/devwebJwtOutputVar.test.js` (new)
+
+---
+
 ### Fixed (BUG-047) — Hardened generated package.json against ESM/CJS ancestor conflicts
 User reported `require is not defined in ES module scope, you can use import instead`
 running a generated DevWeb script. Root cause is environmental: Node.js resolves module
