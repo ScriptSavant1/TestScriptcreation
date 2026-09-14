@@ -5,6 +5,27 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed (BUG-EXT-013) — Conversion / Recorder / Studio 404 at bare site root
+Converting a Postman/Bruno collection (or JMX file) failed with "Conversion Failed — Server
+error (404): Not Found" whenever the app was reached at the bare root URL (`/`) instead of
+`/converter`. The Recorder and Studio tabs would fail the same way — their iframes couldn't
+load either.
+
+Root cause: `POST /convert`, `POST /convert-jmx`, `GET /recorder`, and `GET /studio` were only
+registered under the `/converter/*` prefix in `server.js`, while the home page itself renders
+at both `/` and `/converter`, and the client's `BASE_PATH` (used to build these request URLs)
+is computed from `window.location.pathname` — empty at root, `/converter` under the IIS
+virtual directory. Every other route in the file (home, downloads, crypto helper files,
+`/status`, `/health`, `/analytics/track`) was already dual-registered at both paths; these
+four were the exception.
+
+Fix: registered all four routes at both paths using Express array-path syntax, e.g.
+`this.app.post(["/convert", "/converter/convert"], ...)`.
+
+Files changed: `src/web/server.js`
+
+---
+
 ### Changed — PerfX Recorder Extension home page banner temporarily hidden
 The "New / PerfX Recorder Extension" promo banner on the home page is now hidden by default.
 Several corporate environments block `chrome://extensions` → Load unpacked via Group Policy,
