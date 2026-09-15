@@ -685,7 +685,7 @@ function genVuserInit(){
         +`vuser_init()\n{\n\n`
         +`\t// Load lre-utils.dat ONCE and initialize DPoP engine\n`
         +`\tweb_js_run(\n`
-        +`\t\t"Code=initDpopKey(LR.getParam('dpop_jwk')); 'DPoP engine initialized successfully':",\n`
+        +`\t\t"Code=initDpopKey(LR.getParam('dpop_jwk')); 'DPoP engine initialized successfully';",\n`
         +`\t\t"ResultParam=dpop_init_result",\n`
         +`\t\tSOURCES,\n`
         +`\t\t"File=lre-utils.js", ENDITEM,\n`
