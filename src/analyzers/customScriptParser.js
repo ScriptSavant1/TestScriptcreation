@@ -788,10 +788,22 @@ class CustomScriptParser {
     }
 
     // Detect output variable: pm.environment.set('jwt_token', ...) / postman.setEnvironmentVariable('jwt_token', ...)
+    // Take the FIRST match, not the last. A pre-request script commonly signs the
+    // JWT first and stores it, then goes on to set OTHER, unrelated variables
+    // afterward (e.g. a DPoP proof placeholder, a nonce, a correlation seed) — the
+    // LAST .set() call in the script is not reliably "the JWT output". Taking the
+    // last one previously caused the JWT to be stored under a completely wrong
+    // variable name whenever a script combined JWT signing with any other .set()
+    // call later on (observed: a JWT+DPoP script stored the JWT as "dpop_proof"
+    // instead of "client_assertion", leaving the real "client_assertion" reference
+    // in the request body permanently undefined). First-wins also matches
+    // detectJwtUsage()'s outputVars, which scriptGenerator.js's `_primaryOut`
+    // already treats as "first non-library match wins".
     const setRe =
       /(?:pm\.(?:environment|globals|collectionVariables|variables)\.set|postman\.(?:setEnvironmentVariable|setGlobalVariable)|bru\.(?:setVar|setEnvVar))\s*\(\s*['"]([^'"]+)['"]/g;
-    while ((m = setRe.exec(script)) !== null) {
-      map.output = m[1];
+    const setMatch = setRe.exec(script);
+    if (setMatch) {
+      map.output = setMatch[1];
     }
 
     // ── Java / Groovy JMX patterns (JSR223 / BeanShell) ─────────────────────────
