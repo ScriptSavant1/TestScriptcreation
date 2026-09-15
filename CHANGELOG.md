@@ -5,6 +5,60 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed (BUG-050) — VuGen DPoP header sent unresolved/empty on every request
+Found by cross-checking JWT+DPoP together after the user asked to verify DPoP worked
+following an unrelated fix. `analyzeCommonHeaders()` in
+`src/generators/vugen/scriptGenerator.js` classified a "DPoP" header as GLOBAL whenever it
+appeared in >=70% of requests with the same value template — always true for DPoP, since
+every request uses the literal same `{{dpop_proof}}` placeholder even though each one needs
+a genuinely different, per-request-bound signed value.
+
+That misclassification broke DPoP two ways at once: `generateAddHeaders()` skips any header
+already in `globalHeaders`, so the already-correct per-request wiring
+(`request._dpopParamMap`, sequence-numbered params like `_dpop_proof_1`/`_dpop_proof_2`)
+never ran; the only thing emitted was `web_add_auto_header("DPoP", "{_dpop_proof}")`, a
+parameter that is never populated anywhere. Every VuGen script with a DPoP header has
+always sent an unresolved/empty value — in every DPoP script this tool has ever generated.
+
+Fix: DPoP/DPoP-PF headers are now always forced into `perRequestKeys`, mirroring the
+existing Content-Type special-case, so the already-correct per-request logic actually runs.
+
+New regression test: `tests/unit/vugenDpopHeaderClassification.test.js` (4 tests) — verified
+by reverting the fix and confirming all 4 correctly failed. DevWeb was unaffected (calls
+`getDpopProof()` inline per-request already, never goes through this code path).
+
+Files changed: `src/generators/vugen/scriptGenerator.js`,
+`tests/unit/vugenDpopHeaderClassification.test.js` (new)
+
+---
+
+### Fixed (BUG-049) — Shared JWT output-variable detection picked the wrong variable
+The real root cause behind a user report that a combined JWT+DPoP script still failed
+after BUG-048 was fixed. `CustomScriptParser.extractJwtClaimMap()`
+(`src/analyzers/customScriptParser.js`, shared by both DevWeb and VuGen generators) scanned
+every `.set()` call in a pre-request script and kept overwriting `map.output` on each
+match, so the LAST `.set()` call won — regardless of whether it had anything to do with the
+JWT. A script that signs a JWT and stores it first (`pm.environment.set('client_assertion',
+sJWT)`), then does something unrelated afterward (e.g. a DPoP proof placeholder), ended up
+with the JWT's output variable wrongly named after the LATER, unrelated `.set()` call.
+
+BUG-048's fix (use `cm.output` as the storage variable) faithfully propagated this wrong
+name — the JWT got stored under the wrong variable in both DevWeb and VuGen output, while
+the real `{{client_assertion}}` reference in the request body was never assigned.
+
+Fix: `extractJwtClaimMap()` now takes the FIRST `.set()` match, not the last — consistent
+with `detectJwtUsage()`'s outputVars, which the generators' `_primaryOut` already treats as
+"first non-library match wins" elsewhere in the same pipeline. Fixes both protocols at once
+since the analyzer is shared.
+
+New regression test: `tests/unit/extractJwtClaimMap.test.js` (4 tests) — verified by
+reverting the fix and confirming 2 of 4 correctly failed. All 203 unit tests pass (was 195).
+
+Files changed: `src/analyzers/customScriptParser.js`,
+`tests/unit/extractJwtClaimMap.test.js` (new)
+
+---
+
 ### Fixed (BUG-048) — DevWeb primary JWT stored under the wrong variable, sent as undefined
 Found while proactively reviewing the JWT path before the user had tested it (not a user
 report). `generateInitialize()` and the refresh block in `generateAction()`
