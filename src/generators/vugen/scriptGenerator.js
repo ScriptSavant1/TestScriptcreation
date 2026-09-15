@@ -1346,6 +1346,23 @@ ${teardownBlock}
         return;
       }
 
+      // DPoP / DPoP-Nonce-bound proofs share the SAME "{{dpop_proof}}" template
+      // string across every request (that's why they'd otherwise pass the ≥70%
+      // "same value template" check below and get classified as global), but
+      // each request needs a GENUINELY DIFFERENT signed value bound to its own
+      // htu/htm — generateDpopBatchBlock() already generates one per request
+      // into a sequence-numbered param (_dpop_proof_N) and tags it via
+      // request._dpopParamMap for generateAddHeaders() to consume. If this
+      // header were classified as global, generateAddHeaders() would skip it
+      // entirely (already present in globalHeaders) and the ONLY thing emitted
+      // would be web_add_auto_header("DPoP", "{_dpop_proof}") — a parameter
+      // that is never actually set anywhere, silently sending an unresolved
+      // placeholder as the DPoP header on every request.
+      if (/^dpop(-pf)?$/i.test(key)) {
+        perRequestKeys.add(key);
+        return;
+      }
+
       const freq = entry.count / totalRequests;
       if (freq < THRESHOLD) {
         perRequestKeys.add(key);
