@@ -5,6 +5,32 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed (BUG-051) — Same VuGen "invalid label" typo in two more, separate generators
+The user reported still hitting the "SyntaxError: invalid label" error after BUG-046, found
+a colon-instead-of-semicolon typo in their own generated `vuser_init.c`, fixed it locally,
+and asked for a cross-check. Confirmed via full git history that the server-side converter
+(`src/generators/vugen/scriptGenerator.js`) has never had this typo — it lives in two other,
+entirely separate VuGen generators that a prior fix never touched: `src/web/public/
+studio-codegen.js` (Script Studio) and `src/web/public/VuGen-Recorder-generators.js`
+(Recorder tool). Both render `'DPoP engine initialized successfully':` (colon) instead of
+`;` in the DPoP init `Code=` string. Fixed both (one character each).
+
+Self-correction during this fix: initially also suspected both files shared BUG-050's
+DPoP-header-classification bug and added a matching fix to each, but direct end-to-end
+testing (loading each file and calling its real code-generating function with fabricated
+HAR data) showed both already correctly exclude DPoP headers from global classification via
+their own pre-existing `SKIP_HDR_AC` set — that bug never existed there. Reverted those
+unnecessary additions rather than leave dead code implying a fix that wasn't needed.
+
+New regression test: `tests/unit/vugenClientCodegenDpopInit.test.js` (3 tests) — extracts
+the real `Code=` string from each generator's live output and parses it with `new
+Function()`; verified against the original typo. All 206 unit tests pass (was 203).
+
+Files changed: `src/web/public/studio-codegen.js`, `src/web/public/VuGen-Recorder-generators.js`,
+`tests/unit/vugenClientCodegenDpopInit.test.js` (new)
+
+---
+
 ### Fixed (BUG-050) — VuGen DPoP header sent unresolved/empty on every request
 Found by cross-checking JWT+DPoP together after the user asked to verify DPoP worked
 following an unrelated fix. `analyzeCommonHeaders()` in
