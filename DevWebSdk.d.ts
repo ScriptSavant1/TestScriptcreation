@@ -1,4 +1,8 @@
 // Type definitions for [DevWeb SDK] [25.3.0]
+// Verified API-compatible through LRE 26.3 — no load.* additions, removals, or
+// signature changes between 25.3 and 26.1-26.3 (confirmed via direct diff of the
+// live DevWeb JS SDK reference docs, 2026-09-21). Safe to treat this file as
+// current for 26.3 without a content update.
 // Project: [DevWeb]
 // Definitions by: [DevWeb Team]
 
