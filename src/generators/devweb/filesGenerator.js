@@ -377,7 +377,7 @@ tearDown: 0      #Not used
     return `[General]
 Type=DevWeb
 DefaultCfg=default.cfg
-MajorVersion=25
+MajorVersion=26
 MinorVersion=3
 ParameterFile=
 GlobalParameterFile=
@@ -388,7 +388,7 @@ LastActiveAction=Main
 ScriptLanguage=JavaScript
 Encoding=UTF8
 DevelopTool=Vugen
-LastModifyVer=25.3.0.0
+LastModifyVer=26.3.0.0
 ActiveTypes=DevWeb
 AdditionalTypes=DevWeb
 GenerateTypes=DevWeb
