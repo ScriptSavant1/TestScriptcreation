@@ -8,6 +8,16 @@ environment, delete this folder and nothing else needs to change — see
 `../CDP-RECORDER-IMPLEMENTATION-PLAN.md` for what to do instead (§2's
 "if 2.1–2.3 fail" note).
 
+## Two subfolders
+
+- **`probe/`** — Phase 0's feasibility probe. Answers one yes/no question
+  (does raw CDP access work here at all?) and does nothing else. Confirmed
+  PASS on both the dev machine and the real corporate-managed machine — see
+  `../CDP-RECORDER-IMPLEMENTATION-PLAN.md` §2.
+- **`recorder/`** — Phase 1's actual capture engine. A CLI tool that records
+  real HAR files, built on the mechanism `probe/` proved viable. See
+  `recorder/README.md`.
+
 ## What this is
 
 The feasibility probe for a possible extension-free recorder, described in
