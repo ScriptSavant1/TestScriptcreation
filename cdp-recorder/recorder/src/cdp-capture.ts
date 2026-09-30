@@ -205,24 +205,30 @@ function wireEventListeners(client: Client): void {
   });
 }
 
+async function resumeIfWaiting(client: Client, sessionId: string, targetId: string): Promise<void> {
+  try {
+    await client.send("Runtime.runIfWaitingForDebugger", undefined, sessionId);
+  } catch (err) {
+    // If this fails, the target stays paused (blank/frozen) forever — no
+    // silent catch here, this needs to be visible.
+    console.warn(`[cdp-recorder] FAILED to resume target ${targetId} — it may stay blank: ${(err as Error).message}`);
+  }
+}
+
 async function handleAttached(
   client: Client,
   params: { sessionId: string; targetInfo: { type: string; targetId: string }; waitingForDebugger: boolean },
 ): Promise<void> {
   const { sessionId, targetInfo, waitingForDebugger } = params;
+
   if (targetInfo.type !== "page") {
     // Not a page (e.g. a service worker or extension target) — resume it if
     // paused so it doesn't hang, but don't capture Network on it.
-    if (waitingForDebugger) {
-      try {
-        await client.send("Runtime.runIfWaitingForDebugger", undefined, sessionId);
-      } catch {
-        /* ignore */
-      }
-    }
+    if (waitingForDebugger) await resumeIfWaiting(client, sessionId, targetInfo.targetId);
     return;
   }
 
+  console.log(`\n[cdp-recorder] new page target attached: ${targetInfo.targetId}`);
   ATTACHED_SESSIONS.add(sessionId);
   try {
     // Turn Network capture on BEFORE resuming — this ordering is the whole
@@ -232,11 +238,19 @@ async function handleAttached(
       { maxResourceBufferSize: 10 * 1024 * 1024, maxTotalBufferSize: 50 * 1024 * 1024 },
       sessionId,
     );
-    if (waitingForDebugger) {
-      await client.send("Runtime.runIfWaitingForDebugger", undefined, sessionId);
-    }
   } catch (err) {
-    console.warn(`[cdp-recorder] could not attach to target ${targetInfo.targetId}: ${(err as Error).message}`);
+    // A real bug found on the corporate machine: this used to be a single
+    // try/catch around BOTH Network.enable and the resume below. When
+    // Network.enable threw, the catch swallowed it and the resume call was
+    // never reached — the target stayed paused (waitForDebuggerOnStart)
+    // forever, which looks exactly like "the new tab opened but the page
+    // never loads at all." Losing Network capture on one target is
+    // recoverable; leaving a page permanently frozen is not — so the resume
+    // below must run unconditionally, in `finally`, regardless of whether
+    // Network.enable succeeded.
+    console.warn(`[cdp-recorder] Network.enable failed for target ${targetInfo.targetId} (capturing without it): ${(err as Error).message}`);
+  } finally {
+    if (waitingForDebugger) await resumeIfWaiting(client, sessionId, targetInfo.targetId);
   }
 }
 
