@@ -1,0 +1,98 @@
+# Packaging prototype — Step 1: prove it works standalone
+
+**Result: it works.** A single `.exe`, no Node.js install, no `npm install`,
+no `node_modules` on the target machine, built from this exact codebase.
+Full lifecycle (launch browser → connect CDP → serve the control API →
+open the floating toolbar → start/stop a recording → clean teardown)
+verified working identically to the normal `npm start` (tsx) path.
+
+**Two real caveats found, not glossed over** — see the end of this file
+before deciding whether to build Step 2 on top of this.
+
+## How it's built
+
+```bash
+cd ..
+npm install -D esbuild          # already a devDependency after this prototype
+
+# 1. Bundle everything (TS source + all node_modules deps) into one CJS file,
+#    with the control page's HTML inlined as a string at build time instead
+#    of read from a sibling file at runtime (a packaged single-file exe
+#    shouldn't depend on finding files next to itself on disk).
+npx esbuild pkg-prototype/entry.ts --bundle --platform=node --format=cjs \
+  --target=node20 --loader:.html=text --outfile=pkg-prototype/bundle.cjs
+
+cd pkg-prototype
+
+# 2. Generate the SEA (Single Executable Application) preparation blob —
+#    Node's own built-in feature for this, no third-party packager needed.
+node --experimental-sea-config sea-config.json
+
+# 3. Copy node.exe itself as the base, then inject the blob into the copy.
+cp "$(where node)" ./cdp-recorder.exe
+npx postject cdp-recorder.exe NODE_SEA_BLOB sea-prep.blob \
+  --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+
+# 4. Run it. That's the whole program — no other files needed alongside it.
+./cdp-recorder.exe
+```
+
+## Why `pkg-prototype/entry.ts` exists instead of bundling `../src/main.ts` directly
+
+`main.ts` loads `control-page.html` via `readFileSync(join(__dirname, ...))`,
+where `__dirname` comes from `import.meta.url` — that doesn't survive
+bundling to CJS (`import.meta` is empty in CJS output; Node's SEA format
+currently wants a CJS main script). `entry.ts` is functionally identical to
+`main.ts`, except the HTML is `import`ed directly so esbuild's `text` loader
+inlines its contents as a plain string at build time. If Step 2 goes ahead,
+`main.ts` itself should probably switch to this import style instead of
+keeping two near-duplicate entry points — this is the *correct* fix, not a
+packaging-specific workaround, since a single-file exe genuinely shouldn't
+need a sibling file to find.
+
+## Verified, not assumed
+
+Ran the resulting `cdp-recorder.exe` directly (no `node`, no `npx`, no
+project folder needed — copied nothing else alongside it): it found Edge,
+launched the dedicated recording browser, connected over CDP, started
+serving `http://localhost:8787`, and opened the floating toolbar — all
+exactly as `npm start` does. Drove a full `start` → `status` → `quit` cycle
+against its HTTP API and confirmed zero leftover `msedge.exe` or
+`cdp-recorder.exe` processes afterward.
+
+## Two real caveats — read before building Step 2
+
+1. **The resulting `.exe`'s code signature is invalidated.** `postject`
+   prints `warning: The signature seems corrupted!` during injection — it's
+   modifying a copy of the official, Microsoft/OpenJS-Foundation-signed
+   `node.exe`, which invalidates that signature. This is expected and
+   documented behavior for SEA on Windows, not something unique to this
+   build. **But**: "take a legitimate signed binary and inject a payload
+   into it" is also a generic malware pattern, and this is a bank's
+   corporate-managed environment that has *already* blocked unrelated
+   things (extension installs) on far less suspicious grounds. A
+   signature-invalidated executable has a real chance of being flagged or
+   blocked by corporate AV/EDR, or by Windows SmartScreen, independent of
+   whether the code inside it is doing anything untoward. **This needs a
+   real-world test on an actual corporate-managed machine before relying on
+   it**, the same way Phase 0's CDP-access question did — a clean result
+   here proves the packaging mechanism works, not that it will be let
+   through where it needs to run. Signing the final `.exe` with a real
+   certificate (if your organization has a code-signing process) would be
+   the proper fix, not something to skip.
+2. **A deprecation warning prints on every launch**
+   (`DEP0169: url.parse() behavior is not standardized...`) — harmless,
+   comes from a dependency (not this project's own code), but worth
+   suppressing with `--no-deprecation` or similar in the final build so it
+   doesn't look like something is wrong on every launch.
+
+## What Step 2 would add on top of this
+
+- Fold `entry.ts`'s approach back into the real `src/main.ts` (one entry
+  point, not two).
+- A build script (`npm run build:exe` or similar) that does steps 1–3 above
+  in one command, instead of typed manually.
+- The custom URL protocol registration discussed with the user, so a real
+  link on the shared `/converter` page hands off to this exe directly.
+- Testing the actual `.exe` (not just the dev `tsx` path) on the real
+  corporate-managed machine — given caveat 1 above, this is not optional.
