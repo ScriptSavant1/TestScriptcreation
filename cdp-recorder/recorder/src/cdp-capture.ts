@@ -205,13 +205,49 @@ function wireEventListeners(client: Client): void {
   });
 }
 
+// How long to wait for a single CDP command to the newly-attached target
+// before giving up on it. This is the fix for a second, worse bug than the
+// one a `finally` block can catch: on the corporate machine, `Network.enable`
+// wasn't throwing — it (or the resume command itself) was simply never
+// resolving at all. An `await` on a promise that never settles never reaches
+// a `finally` either, so the previous fix (guarantee resume runs in
+// `finally`) didn't help here — the code was still parked on the earlier
+// `await`, forever. A hard timeout is the only thing that can force forward
+// progress when the CDP round-trip itself never completes, which a slower
+// corporate endpoint (AV/EDR hooking renderer process startup, etc.) can
+// plausibly cause.
+const CDP_COMMAND_TIMEOUT_MS = 4000;
+
+async function sendWithTimeout(
+  client: Client,
+  method: string,
+  params: object | undefined,
+  sessionId: string,
+  timeoutMs: number,
+): Promise<{ ok: true } | { ok: false; reason: "error" | "timeout"; message?: string }> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<{ ok: false; reason: "timeout" }>((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, reason: "timeout" }), timeoutMs);
+  });
+  const send = (client.send as (m: string, p: object | undefined, s: string) => Promise<unknown>)(method, params, sessionId)
+    .then(() => ({ ok: true as const }))
+    .catch((err: unknown) => ({ ok: false as const, reason: "error" as const, message: (err as Error).message }));
+  const outcome = await Promise.race([send, timeout]);
+  clearTimeout(timer!);
+  return outcome;
+}
+
 async function resumeIfWaiting(client: Client, sessionId: string, targetId: string): Promise<void> {
-  try {
-    await client.send("Runtime.runIfWaitingForDebugger", undefined, sessionId);
-  } catch (err) {
-    // If this fails, the target stays paused (blank/frozen) forever — no
-    // silent catch here, this needs to be visible.
-    console.warn(`[cdp-recorder] FAILED to resume target ${targetId} — it may stay blank: ${(err as Error).message}`);
+  const outcome = await sendWithTimeout(client, "Runtime.runIfWaitingForDebugger", undefined, sessionId, CDP_COMMAND_TIMEOUT_MS);
+  if (!outcome.ok) {
+    // If even this times out, the CDP round-trip to this target isn't
+    // completing at all — nothing further this process can do forces it;
+    // this needs to be visible, not swallowed, so it can be reported.
+    console.warn(
+      `[cdp-recorder] could not resume target ${targetId} (${outcome.reason}${
+        outcome.message ? `: ${outcome.message}` : ""
+      }) — it may stay blank`,
+    );
   }
 }
 
@@ -230,28 +266,26 @@ async function handleAttached(
 
   console.log(`\n[cdp-recorder] new page target attached: ${targetInfo.targetId}`);
   ATTACHED_SESSIONS.add(sessionId);
-  try {
-    // Turn Network capture on BEFORE resuming — this ordering is the whole
-    // fix. Anything the page does after resume is already being observed.
-    await client.send(
-      "Network.enable",
-      { maxResourceBufferSize: 10 * 1024 * 1024, maxTotalBufferSize: 50 * 1024 * 1024 },
-      sessionId,
+
+  // Turn Network capture on BEFORE resuming — this ordering is the whole
+  // Problem-2 fix. Anything the page does after resume is already being
+  // observed. But never wait longer than CDP_COMMAND_TIMEOUT_MS for it —
+  // resuming the page (even without capture on it) beats leaving it frozen.
+  const enableOutcome = await sendWithTimeout(
+    client,
+    "Network.enable",
+    { maxResourceBufferSize: 10 * 1024 * 1024, maxTotalBufferSize: 50 * 1024 * 1024 },
+    sessionId,
+    CDP_COMMAND_TIMEOUT_MS,
+  );
+  if (!enableOutcome.ok) {
+    console.warn(
+      `[cdp-recorder] Network.enable ${enableOutcome.reason === "timeout" ? "timed out" : "failed"} for target ${targetInfo.targetId} — resuming anyway so the page isn't stuck; capture on it may be missing or incomplete${
+        enableOutcome.message ? `: ${enableOutcome.message}` : ""
+      }`,
     );
-  } catch (err) {
-    // A real bug found on the corporate machine: this used to be a single
-    // try/catch around BOTH Network.enable and the resume below. When
-    // Network.enable threw, the catch swallowed it and the resume call was
-    // never reached — the target stayed paused (waitForDebuggerOnStart)
-    // forever, which looks exactly like "the new tab opened but the page
-    // never loads at all." Losing Network capture on one target is
-    // recoverable; leaving a page permanently frozen is not — so the resume
-    // below must run unconditionally, in `finally`, regardless of whether
-    // Network.enable succeeded.
-    console.warn(`[cdp-recorder] Network.enable failed for target ${targetInfo.targetId} (capturing without it): ${(err as Error).message}`);
-  } finally {
-    if (waitingForDebugger) await resumeIfWaiting(client, sessionId, targetInfo.targetId);
   }
+  if (waitingForDebugger) await resumeIfWaiting(client, sessionId, targetInfo.targetId);
 }
 
 function handleDetached(sessionId: string): void {
