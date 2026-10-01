@@ -19,22 +19,35 @@ npm install
 npm start
 ```
 
-Launches the browser (a **temporary, throwaway profile** by default — see
-"Profile modes" below), connects, and drops you into a prompt:
+This launches two separate browser contexts:
 
-```
-recorder> start
-Recording started.
-recorder> tx start Login
-Transaction started: Login
-recorder> tx end
-Transaction ended.
-recorder> stop my-recording.har
-Recording stopped. 14 entries written to my-recording.har
-recorder> quit
-```
+1. A **dedicated, isolated recording browser** (a temporary, throwaway
+   profile by default — see "Profile modes" below) — this is the one you
+   actually browse your target application in.
+2. A **control page**, opened automatically in your normal, everyday
+   browser — buttons for Start/Stop Recording and Start/End Transaction,
+   modeled on `perfx-recorder-extension/sidepanel/sidepanel.html`'s layout.
 
-Type `help` at the prompt for the full command list.
+These are deliberately separate: the control page is just a local webpage
+(`http://localhost:8787` by default), not a browser extension, so it isn't
+affected by the corporate extension-install block this whole project exists
+to work around. It must stay out of the dedicated recording browser, too —
+if it ran there, its own traffic would pollute the HAR.
+
+If the control page doesn't open automatically, the terminal prints the URL
+to open yourself. Status (active/background request counts, "settled",
+completed transactions) refreshes every ~1s by polling — no WebSocket
+dependency.
+
+Press Ctrl+C in the terminal, or click **Quit** on the control page, to stop
+everything and clean up the recording browser.
+
+### Options
+
+- `--out <dir>` — where recorded `.har` files are written (default: current directory)
+- `--ui-port <n>` — control page port (default 8787)
+- `--cdp-port <n>` — CDP debug port for the dedicated recording browser (default 9333)
+- `--profile <dir>` / `--real-profile` — see "Profile modes" below
 
 ## Profile modes
 
@@ -74,5 +87,20 @@ machine and the real corporate-managed one.
 - No background-vs-foreground UI surfacing (the classification data is in
   the HAR's `_perfx_*` fields, same as the extension, but nothing displays
   it yet — that's Phase 5+ / studio-side work).
-- No `recorder open <url>` convenience command — navigate manually in the
-  browser window the tool launches.
+- No "open this URL for me" convenience — navigate manually in the dedicated
+  recording browser window.
+
+## Diagnostic scripts
+
+Two standalone scripts for troubleshooting a specific recorded `.har`
+without needing to open it in a browser:
+
+- `node inspect-har.mjs <file.har>` — prints the transactions recorded and
+  how many requests landed in each (and how many fell outside any
+  transaction — e.g. traffic from before the first `Start Transaction`).
+- `node diagnose-codegen.mjs <file.har>` — runs Script Studio's *actual*
+  production parsing and code-generation files (not a reimplementation)
+  against the HAR outside the browser, and prints what transactions it
+  detects and what the generated VuGen C / DevWeb JS transaction code looks
+  like. Useful for telling apart "the HAR itself is wrong" from "Script
+  Studio's browser-side UI isn't showing something that's actually there."

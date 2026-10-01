@@ -5,7 +5,7 @@
   "description": "Phase 1 standalone CDP recorder (no browser extension) — see ../../CDP-RECORDER-IMPLEMENTATION-PLAN.md",
   "type": "module",
   "scripts": {
-    "start": "tsx src/cli.ts",
+    "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
