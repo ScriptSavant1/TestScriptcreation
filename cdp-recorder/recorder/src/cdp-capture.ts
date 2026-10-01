@@ -111,6 +111,27 @@ export function forceSettledCheck(): void {
   if (activeCount === 0) fireSettled();
 }
 
+/** Currently-attached page session IDs — for recorder.ts to screenshot at transaction boundaries. */
+export function getAttachedSessionIds(): string[] {
+  return [...ATTACHED_SESSIONS];
+}
+
+/**
+ * Screenshots one page session via CDP. Returns a data: URL (PNG) or null if
+ * the target is gone / the command fails (e.g. mid-navigation) — callers
+ * should skip a failed capture rather than let it break the transaction
+ * start/end flow it's attached to.
+ */
+export async function captureScreenshot(client: Client, sessionId: string): Promise<string | null> {
+  try {
+    const result = await client.send("Page.captureScreenshot", { format: "png" }, sessionId);
+    const base64 = (result as { data?: string })?.data;
+    return base64 ? `data:image/png;base64,${base64}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function resetCapture(): void {
   for (const t of staleTimers.values()) clearTimeout(t);
   staleTimers.clear();

@@ -103,14 +103,14 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
       if (req.method === "POST" && url.pathname === "/api/tx/start") {
         const body = await readJsonBody(req);
         const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : "Transaction";
-        recorder.startTransaction(name);
+        await recorder.startTransaction(name); // awaits the start screenshot
         state.activeTransaction = name;
         sendJson(res, 200, { ok: true, name });
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/api/tx/end") {
-        recorder.endTransaction();
+        await recorder.endTransaction(); // awaits the end screenshot
         if (state.activeTransaction) state.transactions.push(state.activeTransaction);
         state.activeTransaction = null;
         sendJson(res, 200, { ok: true });
