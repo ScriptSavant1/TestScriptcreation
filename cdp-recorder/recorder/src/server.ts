@@ -18,6 +18,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { Recorder } from "./recorder.js";
+import { scrubHar } from "./scrub-har.js";
 import { onSettled } from "./cdp-capture.js";
 
 export interface ServerState {
@@ -120,6 +121,7 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
         const body = await readJsonBody(req);
         const fileName = typeof body.fileName === "string" && body.fileName.trim() ? body.fileName.trim() : "recording.har";
         const har = (await recorder.stop()) as { log: { entries: unknown[] } };
+        scrubHar(har); // redacts password/PIN/CVV-type request-body fields only — see scrub-har.ts header
         const outFile = join(outDir, fileName);
         writeFileSync(outFile, JSON.stringify(har, null, 2));
         state.lastHarPath = outFile;
