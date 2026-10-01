@@ -36,6 +36,8 @@ import {
   getActiveCount,
   getBackgroundCount,
   forceSettledCheck,
+  getAttachedSessionIds,
+  captureScreenshot,
 } from "./cdp-capture.js";
 // Ported plain-JS modules, imported as `any` — see cdp-capture.ts's header
 // comment on its own imports for why.
@@ -49,6 +51,10 @@ export class Recorder {
   private child: import("node:child_process").ChildProcess | undefined;
   private profile: ResolvedProfile | undefined;
   private recording = false;
+  // transaction id (har-builder.js's `tx_N`) -> screenshots taken at its
+  // start/end. Attached onto the HAR's log.pages[] entries in stop(), after
+  // build() has assigned each transaction its final `id`.
+  private screenshots = new Map<string, { start: string[]; end: string[] }>();
 
   async connect(profileMode: ProfileMode, port = DEFAULT_PORT, browserChoice: BrowserChoice = "auto"): Promise<void> {
     const browserPath = findBrowser(browserChoice);
@@ -90,11 +96,33 @@ export class Recorder {
     setTimeout(forceSettledCheck, 600);
   }
 
-  startTransaction(name: string): string {
-    return harBuilder.startTransaction(name);
+  /** Screenshots every currently-attached page session (main tab + any open popup). */
+  private async captureAllScreenshots(): Promise<string[]> {
+    if (!this.client) return [];
+    const client = this.client;
+    const sessionIds = getAttachedSessionIds();
+    const shots = await Promise.all(sessionIds.map((sid) => captureScreenshot(client, sid)));
+    return shots.filter((s): s is string => s !== null);
   }
 
-  endTransaction(): void {
+  async startTransaction(name: string): Promise<string> {
+    const id = harBuilder.startTransaction(name) as string;
+    const shots = await this.captureAllScreenshots();
+    this.screenshots.set(id, { start: shots, end: [] });
+    return id;
+  }
+
+  /** Shared by the public endTransaction() and stop()'s auto-close of a still-open transaction. */
+  private async captureEndScreenshot(): Promise<void> {
+    const active = harBuilder.activeTransaction as { id?: string } | null;
+    if (!active?.id) return;
+    const shots = await this.captureAllScreenshots();
+    const entry = this.screenshots.get(active.id);
+    if (entry) entry.end = shots;
+  }
+
+  async endTransaction(): Promise<void> {
+    await this.captureEndScreenshot();
     harBuilder.endTransaction();
   }
 
@@ -104,7 +132,7 @@ export class Recorder {
    * extension's STOP_RECORDING handler) before flushing whatever's left as
    * "Incomplete".
    */
-  async stop(): Promise<object> {
+  async stop(): Promise<{ log: { pages?: Array<{ id: string; [k: string]: unknown }> } }> {
     if (!this.client) throw new Error("not connected");
     if (!this.recording) throw new Error("not recording");
 
@@ -114,13 +142,28 @@ export class Recorder {
     }
     harBuilder.flush();
 
+    // Capture a final screenshot for any still-open transaction BEFORE
+    // detaching sessions below — stopCapture() detaches every CDP session,
+    // after which no screenshot can be taken at all.
+    await this.captureEndScreenshot();
+
     await stopCapture(this.client);
     resetCapture();
     this.recording = false;
 
     harBuilder.endTransaction();
     harBuilder.enrichFromDetector(bgDetector);
-    return harBuilder.build();
+    const har = harBuilder.build() as { log: { pages?: Array<{ id: string; [k: string]: unknown }> } };
+
+    for (const page of har.log.pages ?? []) {
+      const shots = this.screenshots.get(page.id);
+      if (!shots) continue;
+      if (shots.start.length) page._perfx_screenshots_start = shots.start;
+      if (shots.end.length) page._perfx_screenshots_end = shots.end;
+    }
+    this.screenshots.clear();
+
+    return har;
   }
 
   async shutdown(): Promise<void> {

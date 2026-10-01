@@ -87,10 +87,26 @@ anything on it can run, and turns Network capture on before ever resuming it.
 Verified end-to-end by the Phase 0 probe's §2.5 check, on both the dev
 machine and the real corporate-managed one.
 
+## Transaction screenshots
+
+Every `Start Transaction` / `End Transaction` takes a screenshot of every
+currently-open page (main tab, and any popup that's open at that moment) and
+embeds it directly in the HAR, on that transaction's `log.pages[]` entry —
+`_perfx_screenshots_start` / `_perfx_screenshots_end`, arrays of base64 PNG
+`data:` URLs. Not part of the standard HAR 1.2 spec, same convention as this
+project's other `_perfx_*` custom fields.
+
+They're not meant to be read as raw base64 text — use `inspect-har.mjs` (see
+below), which extracts them into real `.png` files next to the HAR you can
+just double-click open.
+
 ## What this does NOT do yet
 
-- No sensitive-data scrubbing (plan §6, Phase 3) — don't record anything
-  with real credentials in it until that lands.
+- Only *narrow* sensitive-data redaction (password/PIN/CVV-type request-body
+  fields — see `scrub-har.ts` and plan §6). Cookies, auth headers, and
+  response bodies are still recorded in full — don't record anything with
+  real credentials in it without understanding that, and don't share a
+  recorded `.har` casually.
 - No background-vs-foreground UI surfacing (the classification data is in
   the HAR's `_perfx_*` fields, same as the extension, but nothing displays
   it yet — that's Phase 5+ / studio-side work).
@@ -105,6 +121,8 @@ without needing to open it in a browser:
 - `node inspect-har.mjs <file.har>` — prints the transactions recorded and
   how many requests landed in each (and how many fell outside any
   transaction — e.g. traffic from before the first `Start Transaction`).
+  Also extracts any embedded transaction screenshots into real `.png` files
+  in a `<file>-screenshots/` folder next to the HAR.
 - `node diagnose-codegen.mjs <file.har>` — runs Script Studio's *actual*
   production parsing and code-generation files (not a reimplementation)
   against the HAR outside the browser, and prints what transactions it
