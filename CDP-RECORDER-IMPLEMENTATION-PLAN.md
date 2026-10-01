@@ -126,13 +126,20 @@ Folded into Phase 1's CLI rather than built separately: `recorder.ts`'s `startTr
 
 ## 6. Sensitive-data scrubbing — do this early, not last
 
-Unlike the ChatGPT plan's own ordering (Phase 5 of 11), this plan puts it at Phase 3 — before Phase 4 ever writes a HAR file that might be looked at, shared, or fed into the existing pipeline. Reference behavior (from the ChatGPT plan §25, adopted as-is):
+Unlike the ChatGPT plan's own ordering (Phase 5 of 11), this plan puts it at Phase 3 — before Phase 4 ever writes a HAR file that might be looked at, shared, or fed into the existing pipeline.
+
+**Correction (2026-10-01) to this section's original reference behavior**, found while actually implementing it: the ChatGPT plan's §25 example (redact `Authorization`/`Cookie` headers wholesale to a placeholder) does not survive contact with how `src/web/public/VuGen-Script-Studio-correlation.js`'s `singleHarCorrelate()` actually works — confirmed by reading the code, not assumed. It reads `Authorization`/session-cookie header **values** specifically to detect which ones are dynamic tokens worth extracting into the generated script (`AUTH_HEADER_NAMES`/`SESSION_COOKIE_NAMES` checks around lines 948/1059). Redact those to a fixed placeholder before correlation ever runs, and every request shows the identical literal string — the engine can no longer tell "this token came from that earlier response," which is the entire point of the tool. Full header/cookie scrubbing is incompatible with this project's own correlation engine, not just an oversight to fix later.
+
+What's actually safe to redact, implemented in `cdp-recorder/recorder/src/scrub-har.ts` (Phase 1, shipped 2026-10-01, ahead of the rest of Phase 3): one-way secret fields a script never re-extracts from a prior response — `password`, PIN, CVV, SSN, generic `secret` fields — in request bodies only. Deliberately excludes card/account numbers too: in a banking app specifically, an account number is often legitimately something extracted from one response and reused in another, the same category of problem as cookies.
 
 ```
-Authorization: Bearer eyJ...        →  Authorization: Bearer {{AUTH_TOKEN}}
-Cookie: SESSION=abcdef...           →  Cookie: SESSION={{SESSION_COOKIE}}
-{"password": "secret"}              →  {"password": "{{PASSWORD}}"}
+{"password": "secret"}              →  {"password": "[REDACTED]"}     (safe — one-way secret, done)
+password=secret&csrf=abc            →  password=[REDACTED]&csrf=abc   (safe — only the password field)
+Authorization: Bearer eyJ...        →  left untouched                 (would break correlation if redacted)
+Cookie: SESSION=abcdef...           →  left untouched                 (would break correlation if redacted)
 ```
+
+**The recorded `.har` file still contains real cookies, auth headers, and full response bodies in plaintext.** Handle it like credential material — don't email it, attach it to tickets, or store it longer than needed. This remains an open gap shared with `perfx-recorder-extension`'s HARs too (never scrubbed either) — not a regression introduced by this track.
 
 ---
 
