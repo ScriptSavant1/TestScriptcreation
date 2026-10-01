@@ -100,6 +100,17 @@ export function getBackgroundCount(): number {
   return backgroundCount;
 }
 
+/**
+ * For recorder.ts's 600ms post-start fallback (a page with nothing in
+ * flight never finishes a request, so startSettledTimer() below would
+ * otherwise never fire SETTLED at all). Goes through the same fireSettled()
+ * as the real signal, so every onSettled() listener — CLI, UI, or anything
+ * else — reacts consistently regardless of which path triggered it.
+ */
+export function forceSettledCheck(): void {
+  if (activeCount === 0) fireSettled();
+}
+
 export function resetCapture(): void {
   for (const t of staleTimers.values()) clearTimeout(t);
   staleTimers.clear();
