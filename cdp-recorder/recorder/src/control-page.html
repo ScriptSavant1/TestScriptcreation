@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDP Recorder</title>
+<style>
+:root {
+  --bg: #ffffff; --bg-subtle: #f5f7fa; --bg-card: #ffffff; --border: #dde1e8;
+  --text: #1a1d24; --text-muted: #6b7280; --accent: #0070f3; --accent-hover: #005cc5;
+  --success: #16a34a; --warning: #d97706; --danger: #dc2626;
+  --tx-color: #7c3aed; --tx-hover: #6d28d9; --radius-sm: 4px; --radius-md: 8px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1117; --bg-subtle: #1a1d24; --bg-card: #1e2230; --border: #2e3347;
+    --text: #e8eaf0; --text-muted: #8892a4; --accent: #3b9eff; --accent-hover: #66b3ff;
+    --success: #34d26a; --warning: #f5a623; --danger: #f05252;
+    --tx-color: #a78bfa; --tx-hover: #c4b5fd;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px; line-height: 1.5; background: var(--bg); color: var(--text);
+  max-width: 480px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 14px;
+}
+.hidden { display: none !important; }
+.header { display: flex; align-items: center; gap: 10px; }
+.header-title { font-weight: 600; font-size: 16px; flex: 1; }
+.status-badge { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg-subtle); color: var(--text-muted); }
+.status-badge.recording { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.status-badge.tx { background: color-mix(in srgb, var(--tx-color) 18%, transparent); color: var(--tx-color); }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.status-badge.recording .status-dot { animation: pulse 1.4s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm); }
+.count-row { display: flex; gap: 24px; }
+.count-item { text-align: center; flex: 1; }
+.count-value { font-size: 28px; font-weight: 700; }
+.count-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+.settled-pill { margin-top: 10px; text-align: center; font-size: 12px; color: var(--success); font-weight: 600; }
+
+.naming-area { display: flex; flex-direction: column; gap: 8px; }
+.naming-label { font-size: 12px; color: var(--text-muted); }
+.naming-input { padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text); font-size: 14px; }
+.naming-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.trail-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.trail-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.trail-chip { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { flex: 1; min-width: 120px; padding: 11px 16px; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-tx { background: var(--tx-color); color: white; }
+.btn-tx:hover:not(:disabled) { background: var(--tx-hover); }
+.btn-tx-end { background: var(--bg-subtle); color: var(--tx-color); border: 1px solid var(--tx-color); }
+.btn-secondary { background: var(--bg-subtle); color: var(--text); border: 1px solid var(--border); }
+
+.har-ready-title { font-weight: 600; margin-bottom: 4px; }
+.har-summary { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; word-break: break-all; }
+
+.error-banner { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); padding: 10px 12px; border-radius: var(--radius-sm); font-size: 13px; }
+.notice { font-size: 12px; color: var(--text-muted); background: var(--bg-subtle); border-radius: var(--radius-sm); padding: 10px 12px; }
+.footer { text-align: center; font-size: 11px; color: var(--text-muted); padding-top: 4px; }
+.footer a { color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <span class="header-title">CDP Recorder</span>
+    <div id="statusBadge" class="status-badge">
+      <span class="status-dot"></span>
+      <span id="statusText">Idle</span>
+    </div>
+  </div>
+
+  <div id="errorBanner" class="error-banner hidden"></div>
+
+  <div id="countCard" class="card hidden">
+    <div class="count-row">
+      <div class="count-item"><div id="countActive" class="count-value">0</div><div class="count-label">Active</div></div>
+      <div class="count-item"><div id="countBackground" class="count-value">0</div><div class="count-label">Background</div></div>
+    </div>
+    <div id="settledPill" class="settled-pill hidden">Settled — safe to start a transaction</div>
+  </div>
+
+  <div id="namingCard" class="card hidden">
+    <div class="naming-area">
+      <label class="naming-label" for="txNameInput">Transaction name</label>
+      <input id="txNameInput" class="naming-input" type="text" placeholder="e.g. Login, Search, Checkout" maxlength="60" autocomplete="off">
+    </div>
+  </div>
+
+  <div id="trailCard" class="card hidden">
+    <div class="trail-label">Completed transactions</div>
+    <div id="trailChips" class="trail-chips"></div>
+  </div>
+
+  <div id="harReadyCard" class="card hidden">
+    <div class="har-ready-title">Recording complete</div>
+    <div id="harSummary" class="har-summary"></div>
+    <div class="btn-row">
+      <button id="btnDownload" class="btn btn-primary">Download HAR</button>
+      <button id="btnNewRecording" class="btn btn-secondary">New Recording</button>
+    </div>
+  </div>
+
+  <div id="actionArea" class="btn-row">
+    <button id="btnStart" class="btn btn-primary">Start Recording</button>
+    <button id="btnStop" class="btn btn-danger hidden">Stop Recording</button>
+    <button id="btnStartTx" class="btn btn-tx hidden">Start Transaction</button>
+    <button id="btnEndTx" class="btn btn-tx-end hidden">End Transaction</button>
+  </div>
+
+  <div class="notice">
+    This tool launches its own dedicated, isolated browser window for recording — this control page runs separately in your normal browser and is not part of the recording.
+  </div>
+
+  <div class="footer">
+    <button id="btnQuit" class="btn btn-secondary" style="max-width:140px;margin:0 auto;">Quit</button>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let polling = null;
+let lastState = null;
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+function setError(msg) {
+  $("errorBanner").textContent = msg;
+  $("errorBanner").classList.toggle("hidden", !msg);
+}
+
+function render(s) {
+  lastState = s;
+  const badge = $("statusBadge");
+  badge.classList.toggle("recording", s.recording && !s.activeTransaction);
+  badge.classList.toggle("tx", !!s.activeTransaction);
+  $("statusText").textContent = s.activeTransaction ? `Recording — ${s.activeTransaction}` : (s.recording ? "Recording" : "Idle");
+
+  $("countCard").classList.toggle("hidden", !s.recording);
+  $("countActive").textContent = s.active;
+  $("countBackground").textContent = s.background;
+  $("settledPill").classList.toggle("hidden", !(s.recording && s.settled));
+
+  $("trailCard").classList.toggle("hidden", s.transactions.length === 0);
+  $("trailChips").innerHTML = s.transactions.map(t => `<span class="trail-chip">${escapeHtml(t)}</span>`).join("");
+
+  $("btnStart").classList.toggle("hidden", s.recording);
+  $("btnStop").classList.toggle("hidden", !s.recording);
+  $("namingCard").classList.toggle("hidden", !(s.recording && !s.activeTransaction));
+  $("btnStartTx").classList.toggle("hidden", !(s.recording && !s.activeTransaction));
+  $("btnStartTx").disabled = !s.settled;
+  $("btnEndTx").classList.toggle("hidden", !s.activeTransaction);
+
+  $("harReadyCard").classList.toggle("hidden", !s.lastHarPath || s.recording);
+  if (s.lastHarPath) {
+    $("harSummary").textContent = `${s.lastHarEntryCount} entries — ${s.lastHarPath}`;
+  }
+
+  setError(s.error);
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function poll() {
+  try {
+    const s = await api("GET", "/api/status");
+    render(s);
+  } catch (err) {
+    setError("Lost connection to the recorder process: " + err.message);
+  }
+}
+
+$("btnStart").addEventListener("click", async () => {
+  $("btnStart").disabled = true;
+  try { await api("POST", "/api/start"); await poll(); }
+  catch (err) { setError(err.message); }
+  finally { $("btnStart").disabled = false; }
+});
+
+$("btnStop").addEventListener("click", async () => {
+  const fileName = prompt("File name for the recording:", "recording.har");
+  if (!fileName) return;
+  $("btnStop").disabled = true;
+  try { await api("POST", "/api/stop", { fileName }); await poll(); }
+  catch (err) { setError(err.message); }
+  finally { $("btnStop").disabled = false; }
+});
+
+$("btnStartTx").addEventListener("click", async () => {
+  const name = $("txNameInput").value.trim() || "Transaction";
+  try { await api("POST", "/api/tx/start", { name }); $("txNameInput").value = ""; await poll(); }
+  catch (err) { setError(err.message); }
+});
+
+$("btnEndTx").addEventListener("click", async () => {
+  try { await api("POST", "/api/tx/end"); await poll(); }
+  catch (err) { setError(err.message); }
+});
+
+$("txNameInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("btnStartTx").click();
+});
+
+$("btnDownload").addEventListener("click", () => {
+  window.location.href = "/api/download";
+});
+
+$("btnNewRecording").addEventListener("click", () => {
+  $("harReadyCard").classList.add("hidden");
+});
+
+$("btnQuit").addEventListener("click", async () => {
+  if (!confirm("Quit the recorder and close its browser window?")) return;
+  try { await api("POST", "/api/quit"); } catch {}
+  $("statusText").textContent = "Stopped";
+  clearInterval(polling);
+  document.body.innerHTML = "<div class=\"card\">Recorder stopped. You can close this tab.</div>";
+});
+
+poll();
+polling = setInterval(poll, 1000);
+</script>
+</body>
+</html>

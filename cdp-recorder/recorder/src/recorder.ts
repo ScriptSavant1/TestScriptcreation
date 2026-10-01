@@ -34,8 +34,7 @@ import {
   resetCapture,
   getActiveCount,
   getBackgroundCount,
-  onCountChange,
-  onSettled,
+  forceSettledCheck,
 } from "./cdp-capture.js";
 // Ported plain-JS modules, imported as `any` — see cdp-capture.ts's header
 // comment on its own imports for why.
@@ -44,30 +43,20 @@ import { bgDetector as _bgDetector } from "./bg-detector.js";
 const harBuilder = _harBuilder as any;
 const bgDetector = _bgDetector as any;
 
-export interface RecorderEvents {
-  onCount?: (active: number, background: number) => void;
-  onSettled?: () => void;
-}
-
 export class Recorder {
   private client: CDP.Client | undefined;
   private child: import("node:child_process").ChildProcess | undefined;
   private profile: ResolvedProfile | undefined;
   private recording = false;
-  private events: RecorderEvents = {};
 
-  async connect(profileMode: ProfileMode, port = DEFAULT_PORT, events: RecorderEvents = {}): Promise<void> {
+  async connect(profileMode: ProfileMode, port = DEFAULT_PORT): Promise<void> {
     const browserPath = findBrowser();
     if (!browserPath) {
       throw new Error("No Edge/Chrome install found in the usual locations — set EDGE_PATH.");
     }
-    this.events = events;
     this.profile = await resolveProfile(profileMode);
     this.child = await launchAndWaitForPort(browserPath, this.profile.userDataDir, port);
     this.client = await connectBrowserLevel(port);
-
-    if (events.onCount) onCountChange(events.onCount);
-    if (events.onSettled) onSettled(events.onSettled);
   }
 
   isRecording(): boolean {
@@ -96,9 +85,7 @@ export class Recorder {
     // in cdp-capture only fires when a request FINISHES, so a page that's
     // already fully loaded with nothing in flight would otherwise never
     // emit SETTLED at all.
-    setTimeout(() => {
-      if (getActiveCount() === 0) this.events.onSettled?.();
-    }, 600);
+    setTimeout(forceSettledCheck, 600);
   }
 
   startTransaction(name: string): string {
