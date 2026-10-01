@@ -148,6 +148,44 @@ export async function launchAndWaitForPort(
   throw new Error(`remote debugging port never opened (${lastErr}) — may be disabled by policy`);
 }
 
+/**
+ * Launches the control page as a minimal, chrome-less "app window" — Edge/
+ * Chrome's `--app=` mode strips the address bar, tabs, and toolbar, so it
+ * renders like a floating panel rather than a normal browser tab. This is
+ * the closest equivalent to VuGen's own recording toolbar: a separate
+ * floating window, not something living inside the browser being recorded.
+ *
+ * Deliberately a SEPARATE process from the dedicated recording browser (own
+ * --user-data-dir, no --remote-debugging-port at all) — it must never be a
+ * target the recording browser's Target.setAutoAttach could pick up, or its
+ * own traffic (the page's status polling) would pollute the HAR.
+ */
+export async function launchAppWindow(browserPath: string, url: string, userDataDir: string): Promise<ChildProcess> {
+  const args = [
+    `--app=${url}`,
+    `--user-data-dir=${userDataDir}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--window-size=420,760",
+  ];
+
+  const child = spawn(browserPath, args, { stdio: "ignore", windowsHide: false });
+
+  const spawnError = await new Promise<Error | null>((resolve) => {
+    const t = setTimeout(() => resolve(null), 1500);
+    child.once("error", (e) => {
+      clearTimeout(t);
+      resolve(e);
+    });
+    child.once("spawn", () => {
+      clearTimeout(t);
+      resolve(null);
+    });
+  });
+  if (spawnError) throw spawnError;
+  return child;
+}
+
 export async function connectBrowserLevel(port: number): Promise<CDP.Client> {
   const version = await CDP.Version({ port });
   return CDP({ target: version.webSocketDebuggerUrl });
