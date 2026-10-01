@@ -1,17 +1,28 @@
 /**
  * main.ts — entry point. Replaces the old CLI REPL (cli.ts, removed) with a
  * local web UI: connects the recorder, starts server.ts's HTTP server, and
- * opens the control page in the user's normal browser (NOT the dedicated
- * browser instance this tool launches for the actual recording — opening it
- * there would add the control page's own traffic to the HAR).
+ * opens the control page as a floating, chrome-less "app window" — the
+ * closest equivalent to VuGen's own recording toolbar. Deliberately a
+ * SEPARATE browser process from the dedicated recording browser (own
+ * profile, no CDP debug port) — it must never be a target the recording
+ * browser's Target.setAutoAttach could pick up, or its own traffic (status
+ * polling) would pollute the HAR.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { exec } from "node:child_process";
+import { exec, type ChildProcess } from "node:child_process";
 import { Recorder } from "./recorder.js";
 import { startServer } from "./server.js";
-import { DEFAULT_PORT, type ProfileMode } from "./browser-launcher.js";
+import {
+  DEFAULT_PORT,
+  findBrowser,
+  resolveProfile,
+  launchAppWindow,
+  teardown,
+  type ProfileMode,
+  type ResolvedProfile,
+} from "./browser-launcher.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -32,19 +43,13 @@ function parseArgs(argv: string[]): { profileMode: ProfileMode; cdpPort: number;
   return { profileMode, cdpPort, uiPort, outDir };
 }
 
-function openInBrowser(url: string): void {
-  // Opens in the user's DEFAULT browser/profile — a completely separate
-  // process from the dedicated, isolated browser this tool launches for the
-  // actual recording (different --user-data-dir, different port). This is
-  // deliberate: the control page must never be a target this tool's own
-  // Target.setAutoAttach captures.
-  if (process.platform === "win32") {
-    exec(`start "" "${url}"`);
-  } else if (process.platform === "darwin") {
-    exec(`open "${url}"`);
-  } else {
-    exec(`xdg-open "${url}"`);
-  }
+function openAsNormalTab(url: string): void {
+  // Last-resort fallback if the floating app-window launch fails for any
+  // reason (browser not found, spawn error) — opens a normal tab in the
+  // user's default browser instead of leaving them with no UI at all.
+  if (process.platform === "win32") exec(`start "" "${url}"`);
+  else if (process.platform === "darwin") exec(`open "${url}"`);
+  else exec(`xdg-open "${url}"`);
 }
 
 async function main(): Promise<void> {
@@ -78,10 +83,24 @@ async function main(): Promise<void> {
 
   const controlUrl = `http://localhost:${uiPort}`;
   console.log(`Control page: ${controlUrl}`);
-  console.log("Opening it in your default browser now (this is a separate, non-recorded browser —");
-  console.log("the recording happens in the dedicated window this tool just launched).\n");
-  console.log("Press Ctrl+C here, or click Quit on the control page, to stop and clean up.\n");
-  openInBrowser(controlUrl);
+  console.log("Opening it as a floating toolbar window (a separate browser process from the");
+  console.log("dedicated recording window above — it is never part of the recording).\n");
+  console.log("Press Ctrl+C here, or click Quit on the toolbar, to stop and clean up.\n");
+
+  let controlChild: ChildProcess | undefined;
+  let controlProfile: ResolvedProfile | undefined;
+  const browserPath = findBrowser();
+  if (browserPath) {
+    try {
+      controlProfile = await resolveProfile({ kind: "temp" });
+      controlChild = await launchAppWindow(browserPath, controlUrl, controlProfile.userDataDir);
+    } catch (err) {
+      console.warn(`Could not open the floating toolbar (${(err as Error).message}) — opening a normal browser tab instead.`);
+      openAsNormalTab(controlUrl);
+    }
+  } else {
+    openAsNormalTab(controlUrl);
+  }
 
   const shutdown = async () => {
     console.log("\nShutting down...");
@@ -91,6 +110,7 @@ async function main(): Promise<void> {
       /* best-effort */
     }
     await recorder.shutdown();
+    await teardown(undefined, controlChild, controlProfile);
     process.exit(0);
   };
   process.on("SIGINT", shutdown);

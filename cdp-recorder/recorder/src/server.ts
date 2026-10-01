@@ -145,10 +145,12 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
 
       if (req.method === "POST" && url.pathname === "/api/quit") {
         sendJson(res, 200, { ok: true });
-        setTimeout(async () => {
-          await recorder.shutdown();
-          process.exit(0);
-        }, 200);
+        // Signal SIGTERM rather than tearing down here directly — main.ts's
+        // shutdown handler (registered for SIGINT/SIGTERM) also tears down
+        // the floating control-window process itself, which this handler
+        // has no reference to. Quitting from the page and Ctrl+C in the
+        // terminal should do exactly the same full cleanup either way.
+        setTimeout(() => process.kill(process.pid, "SIGTERM"), 200);
         return;
       }
 
