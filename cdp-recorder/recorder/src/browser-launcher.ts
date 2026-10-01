@@ -26,16 +26,29 @@ const execFileAsync = promisify(execFile);
 export const DEFAULT_PORT = 9333;
 const LAUNCH_TIMEOUT_MS = 15_000;
 
-const CANDIDATE_PATHS = [
+const EDGE_PATHS = [
   process.env.EDGE_PATH,
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
   "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+].filter((p): p is string => !!p);
+
+const CHROME_PATHS = [
+  process.env.CHROME_PATH,
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
 ].filter((p): p is string => !!p);
 
-export function findBrowser(): string | null {
-  for (const p of CANDIDATE_PATHS) {
+export type BrowserChoice = "auto" | "edge" | "chrome";
+
+/**
+ * `auto` (default) tries Edge first, then Chrome — matches this project's
+ * usual corporate-managed-Edge environment. Pass `edge` or `chrome`
+ * explicitly (CLI: `--browser edge` / `--browser chrome`) to force one, e.g.
+ * if both are installed and the default pick isn't the one you want.
+ */
+export function findBrowser(choice: BrowserChoice = "auto"): string | null {
+  const paths = choice === "edge" ? EDGE_PATHS : choice === "chrome" ? CHROME_PATHS : [...EDGE_PATHS, ...CHROME_PATHS];
+  for (const p of paths) {
     if (existsSync(p)) return p;
   }
   return null;
@@ -166,7 +179,7 @@ export async function launchAppWindow(browserPath: string, url: string, userData
     `--user-data-dir=${userDataDir}`,
     "--no-first-run",
     "--no-default-browser-check",
-    "--window-size=420,760",
+    "--window-size=300,420",
   ];
 
   const child = spawn(browserPath, args, { stdio: "ignore", windowsHide: false });

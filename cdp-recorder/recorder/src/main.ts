@@ -22,15 +22,23 @@ import {
   teardown,
   type ProfileMode,
   type ResolvedProfile,
+  type BrowserChoice,
 } from "./browser-launcher.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function parseArgs(argv: string[]): { profileMode: ProfileMode; cdpPort: number; uiPort: number; outDir: string } {
+function parseArgs(argv: string[]): {
+  profileMode: ProfileMode;
+  cdpPort: number;
+  uiPort: number;
+  outDir: string;
+  browserChoice: BrowserChoice;
+} {
   let profileMode: ProfileMode = { kind: "temp" };
   let cdpPort = DEFAULT_PORT;
   let uiPort = 8787;
   let outDir = process.cwd();
+  let browserChoice: BrowserChoice = "auto";
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -39,8 +47,13 @@ function parseArgs(argv: string[]): { profileMode: ProfileMode; cdpPort: number;
     else if (a === "--cdp-port") cdpPort = Number(argv[++i]);
     else if (a === "--ui-port") uiPort = Number(argv[++i]);
     else if (a === "--out") outDir = resolve(argv[++i] ?? ".");
+    else if (a === "--browser") {
+      const v = (argv[++i] ?? "").toLowerCase();
+      if (v === "edge" || v === "chrome") browserChoice = v;
+      else console.warn(`Unrecognized --browser value "${v}" — expected "edge" or "chrome". Falling back to auto-detect.`);
+    }
   }
-  return { profileMode, cdpPort, uiPort, outDir };
+  return { profileMode, cdpPort, uiPort, outDir, browserChoice };
 }
 
 function openAsNormalTab(url: string): void {
@@ -53,7 +66,7 @@ function openAsNormalTab(url: string): void {
 }
 
 async function main(): Promise<void> {
-  const { profileMode, cdpPort, uiPort, outDir } = parseArgs(process.argv.slice(2));
+  const { profileMode, cdpPort, uiPort, outDir, browserChoice } = parseArgs(process.argv.slice(2));
 
   console.log("CDP standalone recorder — see cdp-recorder/README.md before recording anything real.\n");
   if (profileMode.kind === "real") {
@@ -69,9 +82,9 @@ async function main(): Promise<void> {
   }
 
   const recorder = new Recorder();
-  console.log("Launching browser and connecting...");
+  console.log(`Launching browser (${browserChoice === "auto" ? "Edge, falling back to Chrome" : browserChoice}) and connecting...`);
   try {
-    await recorder.connect(profileMode, cdpPort);
+    await recorder.connect(profileMode, cdpPort, browserChoice);
   } catch (err) {
     console.error(`Could not start: ${(err as Error).message}`);
     process.exit(1);
@@ -89,7 +102,7 @@ async function main(): Promise<void> {
 
   let controlChild: ChildProcess | undefined;
   let controlProfile: ResolvedProfile | undefined;
-  const browserPath = findBrowser();
+  const browserPath = findBrowser(browserChoice);
   if (browserPath) {
     try {
       controlProfile = await resolveProfile({ kind: "temp" });

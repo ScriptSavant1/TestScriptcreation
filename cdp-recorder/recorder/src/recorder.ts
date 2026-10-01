@@ -27,6 +27,7 @@ import {
   DEFAULT_PORT,
   type ProfileMode,
   type ResolvedProfile,
+  type BrowserChoice,
 } from "./browser-launcher.js";
 import {
   startCapture,
@@ -49,10 +50,11 @@ export class Recorder {
   private profile: ResolvedProfile | undefined;
   private recording = false;
 
-  async connect(profileMode: ProfileMode, port = DEFAULT_PORT): Promise<void> {
-    const browserPath = findBrowser();
+  async connect(profileMode: ProfileMode, port = DEFAULT_PORT, browserChoice: BrowserChoice = "auto"): Promise<void> {
+    const browserPath = findBrowser(browserChoice);
     if (!browserPath) {
-      throw new Error("No Edge/Chrome install found in the usual locations — set EDGE_PATH.");
+      const which = browserChoice === "auto" ? "Edge/Chrome" : browserChoice === "edge" ? "Edge" : "Chrome";
+      throw new Error(`No ${which} install found in the usual locations — set EDGE_PATH/CHROME_PATH, or pass --browser to pick the other one.`);
     }
     this.profile = await resolveProfile(profileMode);
     this.child = await launchAndWaitForPort(browserPath, this.profile.userDataDir, port);
