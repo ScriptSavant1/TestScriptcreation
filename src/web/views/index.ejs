@@ -1741,6 +1741,52 @@ code {
   </div>
   <% } %>
 
+  <!-- ── CDP Recorder banner ─────────────────────────────────────────────── -->
+  <!-- Replaces the extension banner above for corporate environments where -->
+  <!-- Group Policy blocks "Load unpacked": no browser extension at all, a -->
+  <!-- single self-contained .exe instead. See CDP-RECORDER-IMPLEMENTATION-PLAN.md -->
+  <!-- for the full architecture notes on why this exists and how it works. -->
+  <div class="ext-banner" id="cdpBanner">
+    <span class="ext-banner-badge">New</span>
+    <div class="ext-banner-body">
+      <div class="ext-banner-title">CDP Recorder — record without opening DevTools, no extension install</div>
+      <div class="ext-banner-sub" id="cdpBannerSub">A floating toolbar that captures your traffic — including new tabs and popups — names transactions, and sends the HAR straight to Script Studio. <strong>Works even where browser extensions are blocked.</strong> One-time setup: download once, run it.</div>
+    </div>
+    <button class="ext-get-btn" id="cdpBannerBtn" onclick="handleCdpBannerClick(event)">⬇ Get CDP Recorder</button>
+  </div>
+  <script>
+    (function () {
+      var sub = document.getElementById('cdpBannerSub');
+      var btn = document.getElementById('cdpBannerBtn');
+      var LOCAL_URL = 'http://localhost:8787';
+
+      window.handleCdpBannerClick = function (e) {
+        e.preventDefault();
+        window.location.href = '/downloads/cdp-recorder';
+      };
+
+      // Best-effort: if a recorder is already running on this machine, this
+      // page's own JS can see it (localhost fetch from HTTPS is exempt from
+      // mixed-content blocking) and offer to open its toolbar directly
+      // instead of prompting another download. Silently falls back to the
+      // default "Get CDP Recorder" state if nothing responds — most visits
+      // to this page won't have one running, and that's fine, not an error.
+      fetch(LOCAL_URL + '/api/status', { signal: AbortSignal.timeout(1500) })
+        .then(function (res) { if (!res.ok) throw new Error('not ok'); return res.json(); })
+        .then(function (status) {
+          sub.innerHTML = status.recording
+            ? 'Recording in progress (' + status.active + ' active, ' + status.background + ' background). <strong>Click to open the control toolbar.</strong>'
+            : 'Recorder is running and ready. <strong>Click to open the control toolbar.</strong>';
+          btn.textContent = '↗ Open Toolbar';
+          window.handleCdpBannerClick = function (e) {
+            e.preventDefault();
+            window.open(LOCAL_URL, 'cdpRecorderToolbar', 'width=300,height=480');
+          };
+        })
+        .catch(function () { /* nothing running locally — default download state stands */ });
+    })();
+  </script>
+
   <!-- Which tool do I need? -->
   <div class="hw-section">
     <div class="hw-section-title">Which tool do I need?</div>
