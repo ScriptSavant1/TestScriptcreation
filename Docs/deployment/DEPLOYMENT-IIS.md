@@ -69,7 +69,6 @@ D:\MSINetData\WWW\converter\
 +-- jsrsasign.js                <- JWT cryptography library
 +-- lre-utils.js                <- LRE utility functions
 +-- lre-utils.dat               <- LRE utils (AV-bypass format)
-+-- lre-crypto.js               <- cryptography helpers
 +-- dpop.js                     <- DPoP OAuth support
 +-- dpop-helper.js              <- DPoP helpers
 +-- dpop-service.js             <- DPoP service
