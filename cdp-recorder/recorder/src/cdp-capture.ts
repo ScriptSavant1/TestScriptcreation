@@ -312,12 +312,48 @@ async function handleAttached(
   );
   if (!enableOutcome.ok) {
     console.warn(
-      `[cdp-recorder] Network.enable ${enableOutcome.reason === "timeout" ? "timed out" : "failed"} for target ${targetInfo.targetId} — resuming anyway so the page isn't stuck; capture on it may be missing or incomplete${
-        enableOutcome.message ? `: ${enableOutcome.message}` : ""
+      `[cdp-recorder] Network.enable ${enableOutcome.reason === "timeout" ? "timed out" : "failed"} for target ${targetInfo.targetId} — resuming anyway so the page isn't stuck; retrying Network.enable in the background${
+        enableOutcome.message ? ` (${enableOutcome.message})` : ""
       }`,
     );
+    // Real gap found via a corporate-machine report: giving up here entirely
+    // meant a target's FIRST request — sometimes the only request anyone
+    // cared about — was silently never captured, with no further attempt
+    // ever made. Resuming the page must stay prompt (bounded by the timeout
+    // above) so it doesn't freeze, but that's a separate concern from
+    // whether Network capture ever turns on — keep trying in the
+    // background, independent of resume, so a slow renderer costs at most
+    // the gap until this succeeds, not the whole target for the rest of the
+    // recording.
+    void retryNetworkEnable(client, sessionId, targetInfo.targetId);
   }
   if (waitingForDebugger) await resumeIfWaiting(client, sessionId, targetInfo.targetId);
+}
+
+const NETWORK_ENABLE_RETRY_DELAY_MS = 1500;
+const NETWORK_ENABLE_MAX_RETRIES = 6; // ~9s of further retrying on top of the initial 4s timeout
+
+async function retryNetworkEnable(client: Client, sessionId: string, targetId: string, attempt = 1): Promise<void> {
+  if (!ATTACHED_SESSIONS.has(sessionId)) return; // target closed/detached — nothing left to retry
+  await new Promise((r) => setTimeout(r, NETWORK_ENABLE_RETRY_DELAY_MS));
+  if (!ATTACHED_SESSIONS.has(sessionId)) return;
+
+  const outcome = await sendWithTimeout(
+    client,
+    "Network.enable",
+    { maxResourceBufferSize: 10 * 1024 * 1024, maxTotalBufferSize: 50 * 1024 * 1024 },
+    sessionId,
+    CDP_COMMAND_TIMEOUT_MS,
+  );
+  if (outcome.ok) {
+    console.log(`[cdp-recorder] Network.enable succeeded for target ${targetId} on retry ${attempt} — capture resumed for this target`);
+    return;
+  }
+  if (attempt >= NETWORK_ENABLE_MAX_RETRIES) {
+    console.warn(`[cdp-recorder] Network.enable still failing for target ${targetId} after ${attempt} retries — giving up; this target's capture may remain incomplete`);
+    return;
+  }
+  await retryNetworkEnable(client, sessionId, targetId, attempt + 1);
 }
 
 function handleDetached(sessionId: string): void {
