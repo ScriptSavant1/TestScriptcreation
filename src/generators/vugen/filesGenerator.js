@@ -46,7 +46,7 @@ class WebHttpMandatoryFilesGenerator {
    * @param {string[]} dataFiles  - Large body data files extracted to data/ subfolder
    * @param {boolean}  hasJwt    - If true, add lre-utils.js + transport.pem to [ManuallyExtraFiles]
    * @param {Object}   proxy     - Proxy config { enabled, host, port, username, password } or null
-   * @param {boolean}  hasDpop   - If true, also add lre-crypto.js (DPoP-only scripts)
+   * @param {boolean}  hasDpop   - DPoP scripts; DPoP crypto lives in lre-utils.js/.dat, not a separate file
    */
   async generateAll(
     outputDir,
