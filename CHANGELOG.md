@@ -5,6 +5,57 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Added — CDP Recorder: standalone HAR recording with no browser extension
+
+The existing `perfx-recorder-extension` requires installing a Chrome/Edge extension, which
+corporate Group Policy blocks on several client machines (the original reason this track
+started). CDP Recorder solves the same problem — recording a browsing session, including new
+tabs and popups, into a HAR for Script Studio — using Chrome DevTools Protocol directly
+instead, with no extension install at all.
+
+Built in `cdp-recorder/` as a fully isolated, deletable folder (per the project's own "safe
+to remove if it doesn't work" convention). Key pieces:
+
+- `cdp-recorder/probe/` — Phase 0 feasibility probe, confirmed raw CDP access, custom launch
+  flags, and `Target.setAutoAttach`'s popup-race fix all work on the actual corporate-managed
+  machine, not just a dev box.
+- `cdp-recorder/recorder/` — the real capture engine. `bg-detector.js`, `har-builder.js`,
+  `url-normalizer.js` ported byte-identical from the extension (zero `chrome.*` dependency).
+  `cdp-capture.ts` is the actual fix for the extension's reactive-attach popup race:
+  `Target.setAutoAttach({waitForDebuggerOnStart: true})` pauses every new target, including
+  the very first tab, before anything on it can run, and turns Network capture on before ever
+  resuming it — architecturally closes the race instead of trying to win it.
+- A local web UI (not a CLI) — a floating, chrome-less toolbar window (Edge/Chrome `--app=`
+  mode), deliberately a separate browser process from the one being recorded, so its own
+  traffic never pollutes the HAR. Start/Stop/Transaction buttons, live active/background
+  counts, a completed-transactions trail.
+- Transaction boundaries now embed a screenshot of every open page (main tab + any popup) in
+  the HAR (`_perfx_screenshots_start`/`_perfx_screenshots_end`), extractable via
+  `inspect-har.mjs` into real `.png` files.
+- Packaged as a single self-contained `.exe` (Node's built-in Single Executable Applications
+  feature + esbuild bundling) — no Node.js or npm install needed on the machine that runs it.
+  Confirmed running clean on the real corporate-managed machine, no AV/EDR or SmartScreen
+  block.
+- Integrated into the Converter portal: a new banner on `/converter` (same visual slot as the
+  currently-disabled extension banner) offers a download, or detects an already-running
+  recorder via a local `fetch()` from the visitor's own browser and offers to open its toolbar
+  directly instead.
+
+Two real bugs found via actual corporate-machine testing, not assumed away: a `Network.enable`
+timeout on a slow renderer start (corporate AV/EDR overhead, not reproducible on a dev
+machine) that originally meant a target's first request was silently never captured — fixed
+with a background retry instead of giving up after one timeout; and a stale deployment of
+`src/web/public/VuGen-Script-Studio-correlation.js` on the corporate machine (no `git pull`
+access there, prior updates had been ad-hoc copy-paste) that made transactions appear to not
+work in Script Studio at all, traced down to the actual missing code via direct inspection of
+the user's real `parseHar`/`detectMarkers` functions rather than guessed at.
+
+Full history: `CDP-RECORDER-IMPLEMENTATION-PLAN.md`.
+
+Files changed: `cdp-recorder/` (new), `src/web/server.js` (new `/downloads/cdp-recorder`
+route), `src/web/views/index.ejs` (new banner + updated Help/decision-card copy),
+`Docs/deployment/DEPLOYMENT-IIS.md`, `Docs/deployment/DEPLOYMENT-IIS-visual.html` (new Step 5c)
+
 ### Fixed (BUG-051) — Same VuGen "invalid label" typo in two more, separate generators
 The user reported still hitting the "SyntaxError: invalid label" error after BUG-046, found
 a colon-instead-of-semicolon typo in their own generated `vuser_init.c`, fixed it locally,
