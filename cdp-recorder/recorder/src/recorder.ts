@@ -105,25 +105,45 @@ export class Recorder {
     return shots.filter((s): s is string => s !== null);
   }
 
-  async startTransaction(name: string): Promise<string> {
+  /**
+   * Synchronous on purpose — a user clicking Start/End Transaction
+   * repeatedly through a session should never feel it waiting on a CDP
+   * round-trip. Screenshots are captured fire-and-forget in the background;
+   * by the time stop() reads this.screenshots to build the final HAR, any
+   * screenshot kicked off moments earlier during active recording has had
+   * plenty of time to land. (stop()'s own end-of-recording screenshot is
+   * different — see captureEndScreenshotSync below — it has to be awaited
+   * because stopCapture() detaches every CDP session right after, and a
+   * screenshot can't be taken once that's happened.)
+   */
+  startTransaction(name: string): string {
     const id = harBuilder.startTransaction(name) as string;
-    const shots = await this.captureAllScreenshots();
-    this.screenshots.set(id, { start: shots, end: [] });
+    this.screenshots.set(id, { start: [], end: [] });
+    void this.captureAllScreenshots().then((shots) => {
+      const entry = this.screenshots.get(id);
+      if (entry) entry.start = shots;
+    });
     return id;
   }
 
-  /** Shared by the public endTransaction() and stop()'s auto-close of a still-open transaction. */
-  private async captureEndScreenshot(): Promise<void> {
+  endTransaction(): void {
+    const active = harBuilder.activeTransaction as { id?: string } | null;
+    harBuilder.endTransaction();
+    if (!active?.id) return;
+    const txId = active.id;
+    void this.captureAllScreenshots().then((shots) => {
+      const entry = this.screenshots.get(txId);
+      if (entry) entry.end = shots;
+    });
+  }
+
+  /** stop()-only: awaited, because stopCapture() detaches every CDP session right after this. */
+  private async captureEndScreenshotSync(): Promise<void> {
     const active = harBuilder.activeTransaction as { id?: string } | null;
     if (!active?.id) return;
     const shots = await this.captureAllScreenshots();
     const entry = this.screenshots.get(active.id);
     if (entry) entry.end = shots;
-  }
-
-  async endTransaction(): Promise<void> {
-    await this.captureEndScreenshot();
-    harBuilder.endTransaction();
   }
 
   /**
@@ -145,7 +165,7 @@ export class Recorder {
     // Capture a final screenshot for any still-open transaction BEFORE
     // detaching sessions below — stopCapture() detaches every CDP session,
     // after which no screenshot can be taken at all.
-    await this.captureEndScreenshot();
+    await this.captureEndScreenshotSync();
 
     await stopCapture(this.client);
     resetCapture();
