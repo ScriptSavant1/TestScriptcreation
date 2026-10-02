@@ -377,12 +377,27 @@ Copy TO the IIS server:
   </div>
 
   <h3>5c &mdash; Build and copy cdp-recorder.exe</h3>
-  <p>CDP Recorder (the "record without a browser extension" option on the Recorder tool) is downloaded by end users as a single pre-built <code>.exe</code> &mdash; built once on your local machine, same pattern as <code>node_modules</code> above, then copied to the server as a plain file.</p>
+  <p>CDP Recorder (the "record without a browser extension" option on the Recorder tool and the home-page banner) is downloaded by end users as a single pre-built <code>.exe</code> &mdash; no Node.js, no npm install, nothing else needed on the machine that runs it. Like <code>node_modules</code> above, it must be built once on a machine with internet access and Node.js, then copied to the server as a plain file &mdash; the server never builds anything itself and has no internet access to do so.</p>
+
+  <p><b>What the build actually does</b>, so the output makes sense: bundles the recorder's TypeScript source and all dependencies into one file (<code>esbuild</code>), generates a Node.js "Single Executable Application" blob from that bundle (a built-in Node.js feature, not a third-party packager), then copies <code>node.exe</code> itself and injects that blob into the copy (<code>postject</code>). The result is a complete, standalone Node.js runtime with the recorder baked in &mdash; which is also why it's &asymp;90 MB, not a few hundred KB.</p>
+
   <div class="code-block"><pre><span class="c-p">C:\&gt; </span><span class="c-t">cd C:\path\to\bruno-devweb-converter\cdp-recorder\recorder</span>
 
 <span class="c-p">...\recorder&gt; </span><span class="c-t">npm install</span>
 <span class="c-p">...\recorder&gt; </span><span class="c-t">npm run build:exe</span>
 <span class="c-c">Wait for "Done: ...\dist\cdp-recorder.exe" to print.</span></pre></div>
+
+  <p>You'll see output like this &mdash; the <code>postject</code> warning is expected, explained below, not a failure:</p>
+  <div class="code-block"><pre><span class="c-c">&gt; Bundling (esbuild)
+&gt; Generating SEA blob
+Wrote single executable preparation blob to sea-prep.blob
+&gt; Copying C:\Program Files\nodejs\node.exe
+&gt; Injecting app into the executable (postject)
+Start injection of NODE_SEA_BLOB in ...\dist\cdp-recorder.exe...
+warning: The signature seems corrupted!
+Injection done!
+
+Done: C:\path\to\...\cdp-recorder\recorder\dist\cdp-recorder.exe</span></pre></div>
 
   <div class="ftree"><pre>
 Copy FROM your local machine:
@@ -391,15 +406,21 @@ Copy FROM your local machine:
 Copy TO the IIS server:
   <span class="fd">D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe</span></pre></div>
 
+  <div class="callout warn">
+    <div class="callout-icon">!</div>
+    <div class="callout-body"><strong>About the "signature seems corrupted" warning</strong>
+    <p><code>node.exe</code> ships signed by the Node.js project / Microsoft. Injecting the application blob modifies the file after that signature was applied, invalidating it &mdash; expected, inherent to how this packaging works on Windows, not a mistake to fix. Two practical notes: a signature-invalidated <code>.exe</code> is a pattern some antivirus/EDR software treats with more suspicion by default &mdash; <b>this has already been tested and confirmed running clean on a real corporate-managed machine</b>, but test on a representative machine first if your environment's security posture is stricter. If your organization has a code-signing process for internal tools, running the built <code>.exe</code> through it before the copy step is worth doing, though it hasn't been required in testing so far.</p></div>
+  </div>
+
   <div class="callout info">
     <div class="callout-icon">i</div>
-    <div class="callout-body"><strong>About the file size and signature</strong>
-    <p>The built file is roughly 90 MB &mdash; it bundles a full Node.js runtime, not just application code. Building it also invalidates its Windows code signature; this is expected, documented in <code>cdp-recorder\recorder\pkg-prototype\README.md</code>, not something to troubleshoot. Run it through your organization's code-signing process before this copy step if one is available.</p></div>
+    <div class="callout-body"><strong>About the deprecation warning end users will see</strong>
+    <p>The running tool prints <code>DeprecationWarning: url.parse() behavior is not standardized...</code> on every launch. This comes from a dependency's internal code, not this project's own code, and is harmless &mdash; worth knowing so it doesn't look like something broke.</p></div>
   </div>
 
   <div class="callout good">
     <div class="callout-icon">OK</div>
-    <div class="callout-body"><strong>Success</strong><p>The "Get CDP Recorder" button on the portal downloads a working file instead of returning an error. Test this in Step 10.</p></div>
+    <div class="callout-body"><strong>Success</strong><p>The "Get CDP Recorder" button on the portal downloads a working file instead of returning a 404 error. Test this in Step 10, Test 3.</p></div>
   </div>
 </section>
 
