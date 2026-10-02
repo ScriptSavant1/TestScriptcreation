@@ -227,7 +227,13 @@ D:\MSINetData\WWW\converter\
 +-- <span class="fn">dpop.js</span>                    &lt;-- DPoP OAuth support
 +-- <span class="fn">dpop-helper.js</span>             &lt;-- DPoP helpers
 +-- <span class="fn">dpop-service.js</span>            &lt;-- DPoP service
-+-- <span class="fn">transport.pem</span>              &lt;-- transport certificate</pre></div>
++-- <span class="fn">transport.pem</span>              &lt;-- transport certificate
+|
++-- <span class="fd">cdp-recorder\</span>
+    +-- <span class="fd">recorder\</span>
+        +-- <span class="fd">dist\</span>
+            +-- <span class="fn">cdp-recorder.exe</span>  &lt;-- pre-built (Step 5c)
+                                 Served by GET /downloads/cdp-recorder</pre></div>
 
   <div class="code-label">Do NOT copy these</div>
   <div class="ftree"><pre>
@@ -235,7 +241,8 @@ D:\MSINetData\WWW\converter\
 <span class="fx">.git\</span>                      source control history, not needed at runtime
 <span class="fx">data\</span>                      auto-created by the app on first run
 <span class="fx">Docs\  *.md  *.pdf</span>         documentation only
-<span class="fx">pm2.config.js</span>              PM2 config, not used with IIS</pre></div>
+<span class="fx">pm2.config.js</span>              PM2 config, not used with IIS
+<span class="fx">cdp-recorder\recorder\src\, node_modules\</span>  build-time only, see Step 5c</pre></div>
 </section>
 
 <hr>
@@ -370,6 +377,32 @@ Copy TO the IIS server:
   <div class="callout good">
     <div class="callout-icon">OK</div>
     <div class="callout-body"><strong>Success</strong><p><code>D:\MSINetData\WWW\converter\node_modules\</code> exists on the server and contains many subfolders (express, multer, better-sqlite3, etc.).</p></div>
+  </div>
+
+  <h3>5c &mdash; Build and copy cdp-recorder.exe</h3>
+  <p>CDP Recorder (the "record without a browser extension" option on the Recorder tool) is downloaded by end users as a single pre-built <code>.exe</code> &mdash; built once on your local machine, same pattern as <code>node_modules</code> above, then copied to the server as a plain file.</p>
+  <div class="code-block"><pre><span class="c-p">C:\&gt; </span><span class="c-t">cd C:\path\to\bruno-devweb-converter\cdp-recorder\recorder</span>
+
+<span class="c-p">...\recorder&gt; </span><span class="c-t">npm install</span>
+<span class="c-p">...\recorder&gt; </span><span class="c-t">npm run build:exe</span>
+<span class="c-c">Wait for "Done: ...\dist\cdp-recorder.exe" to print.</span></pre></div>
+
+  <div class="ftree"><pre>
+Copy FROM your local machine:
+  <span class="fd">C:\path\to\bruno-devweb-converter\cdp-recorder\recorder\dist\cdp-recorder.exe</span>
+
+Copy TO the IIS server:
+  <span class="fd">D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe</span></pre></div>
+
+  <div class="callout info">
+    <div class="callout-icon">i</div>
+    <div class="callout-body"><strong>About the file size and signature</strong>
+    <p>The built file is roughly 90 MB &mdash; it bundles a full Node.js runtime, not just application code. Building it also invalidates its Windows code signature; this is expected, documented in <code>cdp-recorder\recorder\pkg-prototype\README.md</code>, not something to troubleshoot. Run it through your organization's code-signing process before this copy step if one is available.</p></div>
+  </div>
+
+  <div class="callout good">
+    <div class="callout-icon">OK</div>
+    <div class="callout-body"><strong>Success</strong><p>The "Get CDP Recorder" button on the portal downloads a working file instead of returning an error. Test this in Step 10.</p></div>
   </div>
 </section>
 
@@ -572,6 +605,10 @@ Copy TO the IIS server:
   <h3>Test 2 &mdash; Admin dashboard</h3>
   <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/converter/admin</span></div>
   <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>A password login page. Enter the ADMIN_TOKEN set in Step 7 and you will be redirected to the analytics dashboard.</p></div></div>
+
+  <h3>Test 3 &mdash; CDP Recorder download</h3>
+  <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/downloads/cdp-recorder</span></div>
+  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>Your browser starts downloading <code>cdp-recorder.exe</code> (roughly 90 MB). A JSON error page instead means Step 5c was skipped or the file didn't make it to the server.</p></div></div>
 </section>
 
 <!-- STEP 11 -->
@@ -669,6 +706,7 @@ Copy TO the IIS server:
       <tr><td><b>413 Request Entity Too Large</b></td><td>IIS blocking large uploads</td><td>Confirm <code>maxAllowedContentLength="104857600"</code> in <code>web.config</code>.</td></tr>
       <tr><td><b>App pool keeps crashing</b></td><td>Rapid-fail triggered</td><td>Open Windows Event Viewer &rarr; Windows Logs &rarr; Application. Look for WAS or iisnode errors.</td></tr>
       <tr><td><b>Cannot find module 'better-sqlite3'</b></td><td>Node.js version mismatch between local machine and server</td><td>Run <code>node --version</code> on both machines &mdash; both must print <code>v20.x.x</code>. Fix whichever differs, re-run <code>npm install --production</code> on your local machine, and re-copy <code>node_modules\</code> to the server.</td></tr>
+      <tr><td><b>"Get CDP Recorder" downloads nothing</b></td><td>cdp-recorder.exe was never built, or wasn't copied to the server</td><td>Redo Step 5c. Confirm the file exists at <code>D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe</code> on the server.</td></tr>
     </tbody>
   </table></div>
 

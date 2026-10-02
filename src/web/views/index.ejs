@@ -1815,7 +1815,7 @@ code {
         <div class="decision-arrow">↓</div>
         <div class="decision-a tc-green-a">
           <span class="decision-tool">🎙 Recorder → then 🧪 Script Studio</span>
-          <span class="decision-hint">Two recording options: <strong>Classic</strong> — F12 DevTools bookmarklet, no install. <strong>Extension</strong> — dedicated side panel, auto-exports HAR, one-time 5-step install. Both feed into Recorder, then Script Studio for correlation.</span>
+          <span class="decision-hint">Three recording options: <strong>Classic</strong> — F12 DevTools bookmarklet, no install. <strong>Extension</strong> — dedicated side panel, auto-exports HAR, one-time 5-step install (blocked on some corporate machines). <strong>CDP Recorder</strong> — floating toolbar, no browser extension at all, works even where extensions are blocked. All three feed into Recorder, then Script Studio for correlation.</span>
         </div>
       </div>
 
@@ -2533,10 +2533,12 @@ code {
         <h3 class="help-h3">What is a HAR file?</h3>
         <p class="help-p">A HAR (HTTP Archive) file is a recording of all the network requests your browser made during a session. Every modern browser's Developer Tools (F12) can export one. It contains all the URLs, request headers, request bodies, and responses for everything that happened during your recording.</p>
         <div class="help-callout help-callout-green">
-          <strong>Two ways to record — choose what works for you:</strong><br><br>
-          <strong>Option A — PerfX Extension (recommended):</strong> A Chrome/Edge extension with a dedicated side panel. No DevTools needed. Click Start, record your journey, click Stop — the HAR is automatically sent to Script Studio.
+          <strong>Three ways to record — choose what works for you:</strong><br><br>
+          <strong>Option A — CDP Recorder (recommended if extensions are blocked):</strong> A floating toolbar, no browser extension install at all — works on locked-down corporate machines where "Load unpacked" is disabled by Group Policy. One-time setup: download a single file, run it. Click Start, record your journey (including new tabs and popups), click Stop — the HAR downloads straight from the toolbar.
+          <a href="/downloads/cdp-recorder" style="color:var(--success);font-weight:700;text-decoration:underline">Get CDP Recorder →</a><br><br>
+          <strong>Option B — PerfX Extension:</strong> A Chrome/Edge extension with a dedicated side panel. No DevTools needed. Click Start, record your journey, click Stop — the HAR is automatically sent to Script Studio.
           <a href="#" onclick="openExtModal(event)" style="color:var(--success);font-weight:700;text-decoration:underline">Get the extension →</a><br><br>
-          <strong>Option B — Classic Bookmarklet:</strong> No install at all. Drag two buttons to your bookmark bar, open DevTools (F12), record your journey, export the HAR manually, then upload it here.
+          <strong>Option C — Classic Bookmarklet:</strong> No install at all. Drag two buttons to your bookmark bar, open DevTools (F12), record your journey, export the HAR manually, then upload it here.
         </div>
         <h3 class="help-h3">Step-by-step (Classic — bookmarklet method)</h3>
         <ol class="help-steps-list">
