@@ -21,12 +21,29 @@
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12.5px; line-height: 1.4; background: var(--bg); color: var(--text);
   margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  height: 100vh; overflow: hidden;
 }
 .hidden { display: none !important; }
+/* Transaction trail is the one thing that grows unboundedly (one chip per
+   recorded transaction) — it must scroll within its own bounded area, not
+   push the Stop/Transaction buttons below out of the visible toolbar. A
+   recording with 20 transactions previously pushed those buttons entirely
+   off-screen; confirmed with a Playwright screenshot before fixing this.
+   Everything else gets flex-shrink:0 so the flex layout's automatic
+   shrink-to-fit only ever squeezes the trail, not the fixed chrome around
+   it — without this, the browser shrinks whichever flex item has the
+   weakest minimum size when content overflows, which turned out to be the
+   chip list itself (collapsing to 0px), not the header/buttons as intended. */
+.header, #errorBanner, #countCard, #namingCard, #harReadyCard, #actionArea, .notice, .footer {
+  flex-shrink: 0;
+}
+#trailCard { display: flex; flex-direction: column; min-height: 0; flex: 0 1 auto; }
+.trail-chips { overflow-y: auto; max-height: 110px; min-height: 36px; padding-right: 2px; flex-shrink: 1; }
 .header { display: flex; align-items: center; gap: 8px; }
 .header-title { font-weight: 600; font-size: 13px; flex: 1; }
 .status-badge { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--bg-subtle); color: var(--text-muted); }
@@ -120,7 +137,7 @@ body {
     <button id="btnEndTx" class="btn btn-tx-end hidden">End Transaction</button>
   </div>
 
-  <div class="notice">
+  <div id="notice" class="notice">
     This tool launches its own dedicated, isolated browser window for recording — this control page runs separately in your normal browser and is not part of the recording.
   </div>
 
@@ -177,6 +194,11 @@ function render(s) {
   if (s.lastHarPath) {
     $("harSummary").textContent = `${s.lastHarEntryCount} entries — ${s.lastHarPath}`;
   }
+
+  // One-time orientation text — only useful before the first recording;
+  // hiding it once active frees real vertical space for the transaction
+  // trail below, which is what actually needs the room by then.
+  $("notice").classList.toggle("hidden", s.recording);
 
   setError(s.error);
 }
