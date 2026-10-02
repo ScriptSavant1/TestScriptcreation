@@ -130,6 +130,12 @@ When `generateWlmExcel: true` (default), a Workload Model Excel file (`.xlsx`) i
 ### Purpose
 Convert a browser HAR recording into a VuGen script, for use when VuGen's built-in recording is unavailable (VCSE machines, corporate proxy restrictions).
 
+### Recording sources (how the HAR is produced)
+Three ways to produce the HAR this tool consumes, all producing the same HAR 1.2 shape:
+1. **Classic bookmarklet** — F12 DevTools, no install.
+2. **PerfX Extension** (`perfx-recorder-extension/`) — dedicated side panel, auto-exports HAR. Blocked on machines where Group Policy disables "Load unpacked."
+3. **CDP Recorder** (`cdp-recorder/`) — standalone, no browser extension at all; a single downloadable `.exe`, works where (2) is blocked. See `CDP-RECORDER-IMPLEMENTATION-PLAN.md`.
+
 ### Inputs
 
 | Input | Format | Notes |
