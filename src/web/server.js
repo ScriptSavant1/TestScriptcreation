@@ -295,6 +295,27 @@ class WebServer {
       archive.finalize();
     });
 
+    // ── CDP Recorder download ────────────────────────────────────────────────
+    // Serves the pre-built, self-contained cdp-recorder.exe — a single file,
+    // no Node.js/npm install needed on the machine that runs it (see
+    // cdp-recorder/recorder/pkg-prototype/README.md). This is a BUILD
+    // ARTIFACT, not source — it has to be built once via
+    // `npm run build:exe` (in cdp-recorder/recorder/) before this route has
+    // anything to serve; it is deliberately not committed to git (90MB+
+    // binary) and not built on every request (packaging takes several
+    // seconds, unlike the extension zip above which is cheap to build live).
+    const CDP_RECORDER_EXE = path.join(__dirname, "..", "..", "cdp-recorder", "recorder", "dist", "cdp-recorder.exe");
+    this.app.get("/downloads/cdp-recorder", (req, res) => {
+      const fs = require("fs");
+      if (!fs.existsSync(CDP_RECORDER_EXE)) {
+        return res.status(404).json({
+          error: "cdp_recorder_not_built",
+          message: "Run `npm run build:exe` in cdp-recorder/recorder/ to produce dist/cdp-recorder.exe before this download is available.",
+        });
+      }
+      res.download(CDP_RECORDER_EXE, "cdp-recorder.exe");
+    });
+
     // ── Crypto helper file routes ─────────────────────────────────────────────
     const PROJECT_ROOT = path.join(__dirname, "..", "..");
     const cryptoFileRoutes = [
