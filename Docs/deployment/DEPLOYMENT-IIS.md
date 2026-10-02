@@ -207,9 +207,11 @@ Use any file transfer method available on your network -- Windows file share (UN
 
 ### 5c -- Build and copy cdp-recorder.exe
 
-CDP Recorder (the "record without a browser extension" option on the portal's Recorder tool) is downloaded by end users as a single pre-built `.exe` -- it has to be built once, the same way `node_modules` is built locally in step 5a, then copied to the server as a plain file.
+CDP Recorder (the "record without a browser extension" option on the portal's Recorder tool and home-page banner) is downloaded by end users as a single pre-built `.exe` -- no Node.js, no npm install, nothing else needed on the machine that runs it. Like `node_modules` in Step 5a, it has to be **built once on a machine with internet access and Node.js, then copied to the IIS server as a plain file** -- the server itself never builds anything and has no internet access to do so even if it tried.
 
-On your **local developer machine** (same machine as 5a, same Node.js version):
+**What the build actually does**, so the output makes sense: it bundles the recorder's TypeScript source and all its dependencies into one JavaScript file (`esbuild`), generates a Node.js "Single Executable Application" blob from that bundle (a built-in Node.js feature, not a third-party packager), then copies `node.exe` itself and injects that blob into the copy (`postject`). The result is a complete, standalone Node.js runtime with the recorder baked in -- which is also why it's roughly 90 MB and not a few hundred KB.
+
+On your **local developer machine** (does not need to be the same machine as Step 5a, but does need internet access and Node.js 20+):
 
 ```cmd
 cd C:\path\to\your\bruno-devweb-converter\cdp-recorder\recorder
@@ -218,9 +220,28 @@ npm install
 npm run build:exe
 ```
 
-This produces `dist\cdp-recorder.exe` (roughly 90 MB -- it's a full, self-contained Node.js runtime with the recorder bundled in, not just the application code). Wait for `Done: ...\dist\cdp-recorder.exe` to print.
+You'll see output like this -- the `postject` warning is expected, explained below, not a failure:
 
-Copy that one file to the server:
+```
+> Bundling (esbuild)
+> Generating SEA blob
+Wrote single executable preparation blob to sea-prep.blob
+> Copying C:\Program Files\nodejs\node.exe
+> Injecting app into the executable (postject)
+Start injection of NODE_SEA_BLOB in ...\dist\cdp-recorder.exe...
+warning: The signature seems corrupted!
+Injection done!
+
+Done: C:\path\to\...\cdp-recorder\recorder\dist\cdp-recorder.exe
+```
+
+Wait for that final `Done: ...\dist\cdp-recorder.exe` line before moving on.
+
+> **About the "signature seems corrupted" warning:** `node.exe` ships signed by the Node.js project / Microsoft. Injecting the application blob into the copy modifies the file after that signature was applied, which invalidates it -- this is expected, inherent to how Node's Single Executable Application packaging works on Windows, not a mistake in the build or something to "fix." Two practical consequences: (1) a signature-invalidated `.exe` is also a pattern some antivirus/EDR software treats with more suspicion by default, independent of what the code actually does -- **this has been tested and confirmed running clean on a real corporate-managed machine already**, but if your environment's security posture is stricter, test on a representative machine before rolling it out broadly, the same way you'd test any new unsigned internal tool; (2) if your organization has a code-signing process for internal tools, running the built `.exe` through it before the copy step below is worth doing, though it has not been required in testing so far.
+
+> **About the deprecation warning when end users run it:** the running tool prints `DeprecationWarning: url.parse() behavior is not standardized...` on every launch. This comes from a dependency's internal code, not this project's own code, and is harmless -- it doesn't affect functionality. Worth knowing so it doesn't look like something broke.
+
+Copy the one built file to the server:
 
 ```
 Source (your local machine):
@@ -230,9 +251,7 @@ Destination (IIS server):
   D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe
 ```
 
-> **Note:** The injection step (`postject`) that produces this file invalidates its Windows code signature -- this is expected, not something to "fix," and is explained in `cdp-recorder\recorder\pkg-prototype\README.md`'s caveats section. If your organization has a code-signing process, running the built `.exe` through it before this copy step is worth doing; it has not been required so far in testing.
-
-> **Success:** The portal's "Get CDP Recorder" button (on the Recorder tool, or the banner on the home page) downloads a working file instead of returning a 404. Test this once deployment is complete (Step 10).
+> **Success:** The portal's "Get CDP Recorder" button (on the Recorder tool, or the banner on the home page) downloads a working file instead of returning a 404 JSON error. Test this once deployment is complete (Step 10, Test 3).
 
 ---
 
