@@ -161,6 +161,36 @@ export async function launchAndWaitForPort(
   throw new Error(`remote debugging port never opened (${lastErr}) — may be disabled by policy`);
 }
 
+const APP_WINDOW_SIZE = { width: 300, height: 480 };
+const APP_WINDOW_MARGIN = 20; // px from the screen edge
+
+/**
+ * Best-effort: positions the toolbar in the screen's top-right corner,
+ * matching where most utility/recording toolbars conventionally sit (not
+ * dead center, which is where Chromium puts an --app= window by default
+ * with no --window-position — fine for one window, but gets in the way
+ * sitting on top of whatever the recording browser is showing). Returns
+ * null on any failure (no PowerShell, no primary screen info, etc.) — the
+ * caller falls back to letting the OS choose, same as before this existed;
+ * positioning is a nice-to-have, never worth failing the whole launch over.
+ */
+async function getTopRightPosition(windowWidth: number): Promise<{ x: number; y: number } | null> {
+  try {
+    const { stdout } = await execFileAsync("powershell", [
+      "-NoProfile",
+      "-Command",
+      "Add-Type -AssemblyName System.Windows.Forms; " +
+        "$s = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea; " +
+        "Write-Output \"$($s.Width),$($s.Height)\"",
+    ]);
+    const [screenWidth] = stdout.trim().split(",").map(Number);
+    if (!Number.isFinite(screenWidth) || screenWidth <= 0) return null;
+    return { x: Math.max(0, screenWidth - windowWidth - APP_WINDOW_MARGIN), y: APP_WINDOW_MARGIN };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Launches the control page as a minimal, chrome-less "app window" — Edge/
  * Chrome's `--app=` mode strips the address bar, tabs, and toolbar, so it
@@ -179,8 +209,11 @@ export async function launchAppWindow(browserPath: string, url: string, userData
     `--user-data-dir=${userDataDir}`,
     "--no-first-run",
     "--no-default-browser-check",
-    "--window-size=300,420",
+    `--window-size=${APP_WINDOW_SIZE.width},${APP_WINDOW_SIZE.height}`,
   ];
+
+  const position = await getTopRightPosition(APP_WINDOW_SIZE.width);
+  if (position) args.push(`--window-position=${position.x},${position.y}`);
 
   const child = spawn(browserPath, args, { stdio: "ignore", windowsHide: false });
 
