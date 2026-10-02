@@ -11,9 +11,33 @@ before deciding whether to build Step 2 on top of this.
 
 ## How it's built
 
+**One command**, from `cdp-recorder/recorder/`:
+
+```bash
+npm run build:exe
+```
+
+Produces `dist/cdp-recorder.exe` — this is the exact file `server.js`'s
+`/downloads/cdp-recorder` route serves, so run this (and restart the main
+web server, or it'll just pick up the new file on the next request) any
+time `pkg-prototype/entry.ts` or anything it imports changes.
+
+See `scripts/build-exe.mjs` for what it actually does — the same steps
+documented manually below, automated. Two Windows-specific gotchas it
+works around, worth knowing about if the script ever needs touching:
+`execFileSync` can't launch a `.cmd` shim (like `npx`) without
+`shell: true`, but `shell: true` breaks on `cmd.exe`'s own concatenation
+when the command path has a space in it (`C:\Program Files\nodejs\...`) —
+so `node.exe` itself is invoked directly (no shell needed, it's a real
+`.exe`) and `postject` is invoked via its own `dist/cli.js` through `node`
+directly too (installed as a devDependency for this, rather than shelled
+out to `npx postject`), sidestepping the whole shell question instead of
+fighting it.
+
+### Manual steps (what the script above automates)
+
 ```bash
 cd ..
-npm install -D esbuild          # already a devDependency after this prototype
 
 # 1. Bundle everything (TS source + all node_modules deps) into one CJS file,
 #    with the control page's HTML inlined as a string at build time instead
@@ -86,13 +110,22 @@ against its HTTP API and confirmed zero leftover `msedge.exe` or
    suppressing with `--no-deprecation` or similar in the final build so it
    doesn't look like something is wrong on every launch.
 
-## What Step 2 would add on top of this
+## Step 2 progress
 
-- Fold `entry.ts`'s approach back into the real `src/main.ts` (one entry
-  point, not two).
-- A build script (`npm run build:exe` or similar) that does steps 1–3 above
-  in one command, instead of typed manually.
-- The custom URL protocol registration discussed with the user, so a real
-  link on the shared `/converter` page hands off to this exe directly.
-- Testing the actual `.exe` (not just the dev `tsx` path) on the real
-  corporate-managed machine — given caveat 1 above, this is not optional.
+- [x] **Tested the actual `.exe` on the real corporate-managed machine** —
+  ran clean, no AV/EDR block, no SmartScreen block (2026-10-02). Caveat 1
+  above is resolved, at least on that machine/profile.
+- [x] **`npm run build:exe`** — one-command build (`scripts/build-exe.mjs`),
+  see above.
+- [x] **CORS on `server.ts`** — the shared `/converter` page can now call
+  this local server's API directly from the browser.
+- [x] **`/downloads/cdp-recorder` route** on the main `server.js` — serves
+  `dist/cdp-recorder.exe` for direct download, same pattern as the existing
+  extension distribution route.
+- [ ] Fold `entry.ts`'s approach back into the real `src/main.ts` (one entry
+  point, not two) — still outstanding, not blocking anything.
+- [ ] The custom URL protocol registration discussed with the user, so a
+  real link on the shared `/converter` page hands off to this exe directly
+  instead of a plain download link — deferred; needs a registry change,
+  which may hit the same kind of corporate lockdown the extension install
+  did, so not pursued without confirming it's viable first.
