@@ -218,14 +218,12 @@ D:\MSINetData\WWW\converter\
 +-- <span class="fn">web.config</span>                 &lt;-- IIS routing rules
 +-- <span class="fn">package.json</span>               &lt;-- dependency list
 +-- <span class="fn">package-lock.json</span>          &lt;-- exact dependency versions
-+-- <span class="fn">DevWebSdk.d.ts</span>             &lt;-- packaged into generated scripts
-+-- <span class="fn">jwt-helper.js</span>              &lt;-- packaged into generated scripts
-+-- <span class="fn">jsrsasign.js</span>               &lt;-- JWT cryptography library
-+-- <span class="fn">lre-utils.js</span>               &lt;-- LRE utility functions
-+-- <span class="fn">lre-utils.dat</span>              &lt;-- LRE utils (AV-bypass format)
-+-- <span class="fn">dpop.js</span>                    &lt;-- DPoP OAuth support
-+-- <span class="fn">dpop-helper.js</span>             &lt;-- DPoP helpers
-+-- <span class="fn">dpop-service.js</span>            &lt;-- DPoP service
++-- <span class="fn">DevWebSdk.d.ts</span>             &lt;-- packaged into generated DevWeb scripts
++-- <span class="fn">jwt-helper.js</span>              &lt;-- JWT for DevWeb scripts (Node crypto, no external lib)
++-- <span class="fn">dpop-helper.js</span>             &lt;-- DPoP for DevWeb scripts
++-- <span class="fn">lre-utils.js</span>               &lt;-- JWT + DPoP for VuGen Web HTTP/HTML (source form)
++-- <span class="fn">lre-utils.dat</span>              &lt;-- same as lre-utils.js, AV-bypass filename VuGen loads
++-- <span class="fn">dpop-service.js</span>            &lt;-- optional standalone local DPoP helper tool
 +-- <span class="fn">transport.pem</span>              &lt;-- transport certificate
 |
 +-- <span class="fd">cdp-recorder\</span>

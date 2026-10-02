@@ -64,14 +64,12 @@ D:\MSINetData\WWW\converter\
 +-- package.json                <- dependency list
 +-- package-lock.json           <- exact dependency versions
 |
-+-- DevWebSdk.d.ts              <- packaged into generated scripts
-+-- jwt-helper.js               <- packaged into generated scripts
-+-- jsrsasign.js                <- JWT cryptography library
-+-- lre-utils.js                <- LRE utility functions
-+-- lre-utils.dat               <- LRE utils (AV-bypass format)
-+-- dpop.js                     <- DPoP OAuth support
-+-- dpop-helper.js              <- DPoP helpers
-+-- dpop-service.js             <- DPoP service
++-- DevWebSdk.d.ts              <- packaged into generated DevWeb scripts
++-- jwt-helper.js               <- JWT for DevWeb scripts (Node crypto, no external lib)
++-- dpop-helper.js              <- DPoP for DevWeb scripts
++-- lre-utils.js                <- JWT + DPoP for VuGen Web HTTP/HTML (source form)
++-- lre-utils.dat               <- same as lre-utils.js, AV-bypass filename VuGen scripts load
++-- dpop-service.js             <- optional standalone local DPoP helper tool
 +-- transport.pem               <- transport certificate
 |
 +-- cdp-recorder\
