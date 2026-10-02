@@ -711,8 +711,9 @@ class WebHttpScriptGenerator {
   async analyze() {
     // Filter out jsrsasign library-loading requests (kjur.github.io/jsrsasign).
     // These are script-runner HTTP fetches used by Postman/Bruno pre-request scripts to
-    // load the jsrsasign JWT library. In our generated scripts we ship jsrsasign.js as a
-    // local file, so the library-fetch request must never become a web_custom_request().
+    // load the jsrsasign JWT library. Our generated scripts use lre-utils.dat's own
+    // createJWT()/generateDpopProof() instead (self-contained, no external library),
+    // so the library-fetch request must never become a web_custom_request().
     {
       const beforeFilter = this.requests.length;
       this.requests = this.requests.filter(

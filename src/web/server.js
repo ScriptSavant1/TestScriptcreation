@@ -321,9 +321,6 @@ class WebServer {
     const cryptoFileRoutes = [
       { name: "dpop-helper.js" },
       { name: "lre-utils-helper.js", fallback: "lre-utils.js" },
-      { name: "dpop.js" },
-      { name: "jsrsasign.js" },
-      { name: "jsrsasign-vugen.js", fallback: "jsrsasign.js" },
     ];
 
     for (const { name, fallback } of cryptoFileRoutes) {

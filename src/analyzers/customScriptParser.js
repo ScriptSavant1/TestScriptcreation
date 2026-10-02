@@ -503,8 +503,9 @@ class CustomScriptParser {
 
   /**
    * Scan a script string (pre-request or test) for JWT generation patterns.
-   * Used by generators to decide whether to add jwt-lib.js / jsrsasign.js
-   * to the script's extra files and emit the appropriate boilerplate.
+   * Used by generators to decide whether to add jwt-helper.js (DevWeb) or
+   * lre-utils.dat (VuGen) to the script's extra files and emit the
+   * appropriate boilerplate.
    *
    * @param  {string} script - Raw script text
    * @returns {{ isJwt: boolean, library: string, outputVars: string[], algorithm: string }}

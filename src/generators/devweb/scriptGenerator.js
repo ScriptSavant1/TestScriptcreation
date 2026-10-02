@@ -1033,8 +1033,9 @@ ${finalizeSection}
    *
    * In Postman/Bruno collections, users sometimes add a request to load the jsrsasign
    * library from kjur.github.io before their JWT-signing pre-request script runs.
-   * We replace this with our own jwt-helper.js / jsrsasign.js, so the request itself
-   * must be dropped — it would otherwise generate a meaningless HTTP call in the script.
+   * We replace this with our own jwt-helper.js (using Node's built-in crypto, no
+   * external library needed), so the request itself must be dropped — it would
+   * otherwise generate a meaningless HTTP call in the script.
    *
    * Detection is intentionally broad to handle parameterized hostnames, e.g.:
    *   http://kjur.github.io/jsrassign/jsrassign-latest-all-min.js   (direct)
