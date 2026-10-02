@@ -65,6 +65,30 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${uiPort}`);
 
+    // CORS: lets the shared /converter page (a different origin —
+    // https://loadrunner.webdev.banksvcs.net, or localhost during dev) call
+    // this local server directly from the browser, so "Start Recording" on
+    // that page can detect and drive an already-running recorder without a
+    // server-side round trip (which is impossible here anyway — see
+    // CDP-RECORDER-IMPLEMENTATION-PLAN.md's Converter-menu integration
+    // notes on why this has to be a local-to-browser call). Reflecting the
+    // request's own Origin rather than a fixed one keeps this working from
+    // both the real shared site and localhost during development — this
+    // server only ever answers status/control requests for a recording on
+    // THIS machine, there's no cross-origin data to protect here the way
+    // there would be on a server serving shared/sensitive resources.
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    }
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     try {
       if (req.method === "GET" && url.pathname === "/") {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
