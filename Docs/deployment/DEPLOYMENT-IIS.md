@@ -74,6 +74,15 @@ D:\MSINetData\WWW\converter\
 +-- dpop-helper.js              <- DPoP helpers
 +-- dpop-service.js             <- DPoP service
 +-- transport.pem               <- transport certificate
+|
++-- cdp-recorder\
+    +-- recorder\
+        +-- dist\
+            +-- cdp-recorder.exe   <- pre-built, see Step 5c below. Served by
+                                      GET /downloads/cdp-recorder. Do NOT copy
+                                      the rest of cdp-recorder\ (source,
+                                      node_modules) -- the server only needs
+                                      this one file to exist at this path.
 ```
 
 ### Do NOT copy these
@@ -86,6 +95,7 @@ D:\MSINetData\WWW\converter\
 | `Docs\`, `*.md`, `*.pdf`, `*.pptx` | Documentation only |
 | `pm2.config.js` | PM2 config -- not used with IIS |
 | `collection-examples\`, `examples\` | Sample files -- not needed |
+| `cdp-recorder\recorder\src\`, `cdp-recorder\recorder\node_modules\`, `cdp-recorder\probe\` | Build-time only -- the server just needs the built `dist\cdp-recorder.exe` (Step 5c) |
 
 ---
 
@@ -197,6 +207,35 @@ Use any file transfer method available on your network -- Windows file share (UN
 > **WARNING:** `node_modules` contains tens of thousands of small files. Copying over a network can take several minutes. Do not interrupt the transfer.
 
 > **Success:** After copying, `D:\MSINetData\WWW\converter\node_modules\` exists on the server and contains many subfolders (express, multer, better-sqlite3, etc.).
+
+### 5c -- Build and copy cdp-recorder.exe
+
+CDP Recorder (the "record without a browser extension" option on the portal's Recorder tool) is downloaded by end users as a single pre-built `.exe` -- it has to be built once, the same way `node_modules` is built locally in step 5a, then copied to the server as a plain file.
+
+On your **local developer machine** (same machine as 5a, same Node.js version):
+
+```cmd
+cd C:\path\to\your\bruno-devweb-converter\cdp-recorder\recorder
+
+npm install
+npm run build:exe
+```
+
+This produces `dist\cdp-recorder.exe` (roughly 90 MB -- it's a full, self-contained Node.js runtime with the recorder bundled in, not just the application code). Wait for `Done: ...\dist\cdp-recorder.exe` to print.
+
+Copy that one file to the server:
+
+```
+Source (your local machine):
+  C:\path\to\bruno-devweb-converter\cdp-recorder\recorder\dist\cdp-recorder.exe
+
+Destination (IIS server):
+  D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe
+```
+
+> **Note:** The injection step (`postject`) that produces this file invalidates its Windows code signature -- this is expected, not something to "fix," and is explained in `cdp-recorder\recorder\pkg-prototype\README.md`'s caveats section. If your organization has a code-signing process, running the built `.exe` through it before this copy step is worth doing; it has not been required so far in testing.
+
+> **Success:** The portal's "Get CDP Recorder" button (on the Recorder tool, or the banner on the home page) downloads a working file instead of returning a 404. Test this once deployment is complete (Step 10).
 
 ---
 
@@ -316,6 +355,12 @@ https://loadrunner.webdev.banksvcs.net/converter/admin
 ```
 You should see: A password login page. Enter the ADMIN_TOKEN set in Step 7. You will be redirected to the analytics dashboard.
 
+**Test 3 -- CDP Recorder download:**
+```
+https://loadrunner.webdev.banksvcs.net/downloads/cdp-recorder
+```
+You should see: your browser starts downloading `cdp-recorder.exe` (roughly 90 MB). If you instead see a JSON error page, Step 5c was skipped or the file didn't make it to the server -- see Troubleshooting.
+
 If something does not work, see the Troubleshooting section.
 
 ---
@@ -382,6 +427,7 @@ When a new version is released, the ADMIN_TOKEN set in IIS persists -- you do no
 1. Copy all updated files from the "Files to Deploy" list into `D:\MSINetData\WWW\converter\`, replacing existing files
 2. On your **local developer machine**, run `npm install --production` to update `node_modules`, then copy it to the server (same procedure as Step 5)
 3. Skip step 2 if `package.json` has not changed -- no new dependencies means no need to re-copy `node_modules`
+4. If anything under `cdp-recorder\recorder\src\` changed, re-run `npm run build:exe` there (Step 5c) and re-copy the new `dist\cdp-recorder.exe` -- the download button otherwise keeps serving the old build indefinitely, with no error to notice it
 
 ```cmd
 REM On the IIS server -- recycle the pool to load new code (no IIS restart needed)
@@ -419,6 +465,7 @@ Only `ADMIN_TOKEN` is required.
 | 413 Request Entity Too Large | IIS blocking large file uploads | Confirm `maxAllowedContentLength="104857600"` in `web.config`. |
 | App pool keeps crashing | Rapid-fail protection triggered | Open Windows Event Viewer -> Windows Logs -> Application. Look for WAS or iisnode errors. |
 | Cannot find module 'better-sqlite3' | Node.js version mismatch between local machine and server | Run `node --version` on both machines -- both must print `v20.x.x`. Fix whichever is wrong, then re-run `npm install --production` on your local machine and re-copy `node_modules\` to the server. |
+| "Get CDP Recorder" downloads nothing / shows an error page | `cdp-recorder.exe` was never built, or wasn't copied to the server | Redo Step 5c. Confirm the file actually exists at `D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe` on the server. |
 
 ### Where to find log files
 
