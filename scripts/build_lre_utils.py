@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # Build lre-utils.js from jsrsasign.js + clean DPoP/JWT crypto
-# Run: python build_lre_utils.py
+# Reads/writes paths relative to the CURRENT WORKING DIRECTORY, not this
+# file's own location -- must be run from the repo root (where jsrsasign.js
+# and lre-utils.js actually live), not from inside scripts/.
+# Run (from the repo root): python scripts/build_lre_utils.py
 
 import re
 
