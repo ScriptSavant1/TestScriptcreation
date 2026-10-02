@@ -103,14 +103,16 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
       if (req.method === "POST" && url.pathname === "/api/tx/start") {
         const body = await readJsonBody(req);
         const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : "Transaction";
-        await recorder.startTransaction(name); // awaits the start screenshot
+        // Synchronous — screenshot capture happens in the background, not
+        // on this request's critical path. See recorder.ts's startTransaction().
+        recorder.startTransaction(name);
         state.activeTransaction = name;
         sendJson(res, 200, { ok: true, name });
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/api/tx/end") {
-        await recorder.endTransaction(); // awaits the end screenshot
+        recorder.endTransaction(); // same — background screenshot, not on the critical path
         if (state.activeTransaction) state.transactions.push(state.activeTransaction);
         state.activeTransaction = null;
         sendJson(res, 200, { ok: true });
