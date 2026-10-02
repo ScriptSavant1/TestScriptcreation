@@ -178,7 +178,10 @@ function render(s) {
   $("countCard").classList.toggle("hidden", !s.recording);
   $("countActive").textContent = s.active;
   $("countBackground").textContent = s.background;
-  $("settledPill").classList.toggle("hidden", !(s.recording && s.settled));
+  // Only relevant when Start Transaction is actually an option — showing
+  // "safe to start a transaction" while one is already running is confusing
+  // (there's nothing to start; End Transaction is the only action available).
+  $("settledPill").classList.toggle("hidden", !(s.recording && s.settled && !s.activeTransaction));
 
   $("trailCard").classList.toggle("hidden", s.transactions.length === 0);
   $("trailChips").innerHTML = s.transactions.map(t => `<span class="trail-chip">${escapeHtml(t)}</span>`).join("");
@@ -192,7 +195,11 @@ function render(s) {
 
   $("harReadyCard").classList.toggle("hidden", !s.lastHarPath || s.recording);
   if (s.lastHarPath) {
-    $("harSummary").textContent = `${s.lastHarEntryCount} entries — ${s.lastHarPath}`;
+    // Show just the filename in the narrow toolbar — the full path wraps
+    // awkwardly at 300px wide; it's still available on hover.
+    const fileName = s.lastHarPath.split(/[\\/]/).pop();
+    $("harSummary").textContent = `${s.lastHarEntryCount} entries — ${fileName}`;
+    $("harSummary").title = s.lastHarPath;
   }
 
   // One-time orientation text — only useful before the first recording;
