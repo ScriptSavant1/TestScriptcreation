@@ -43,6 +43,18 @@ type Client = CDP.Client;
 // ── Attached session registry ────────────────────────────────────────────
 const ATTACHED_SESSIONS = new Set<string>();
 
+// Sessions where Network.enable has CONFIRMED succeeded — distinct from
+// ATTACHED_SESSIONS, which only means a target was seen and resumed. A real
+// bug: "Settled" used to fire off a flat 600ms timer checking only "zero
+// requests in flight", which is trivially true before Network.enable has
+// even succeeded — capture isn't watching yet, so of course nothing is
+// "in flight". On a slow corporate machine the very first tab is the
+// slowest to get Network.enable working (cold process, AV/EDR scanning a
+// freshly-spawned browser), so this silently dropped exactly the first
+// transaction's traffic while the UI confidently said "Settled — safe to
+// start a transaction." See forceSettledCheck() below and recorder.ts's start().
+const CONFIRMED_CAPTURING_SESSIONS = new Set<string>();
+
 // ── Active request tracking ──────────────────────────────────────────────
 // Key: `${sessionId}:${requestId}`
 interface ActiveRequest {
@@ -101,14 +113,38 @@ export function getBackgroundCount(): number {
 }
 
 /**
- * For recorder.ts's 600ms post-start fallback (a page with nothing in
- * flight never finishes a request, so startSettledTimer() below would
- * otherwise never fire SETTLED at all). Goes through the same fireSettled()
- * as the real signal, so every onSettled() listener — CLI, UI, or anything
- * else — reacts consistently regardless of which path triggered it.
+ * For recorder.ts's post-start polling (a page with nothing in flight never
+ * finishes a request, so startSettledTimer() below would otherwise never
+ * fire SETTLED at all). Goes through the same fireSettled() as the real
+ * signal, so every onSettled() listener — CLI, UI, or anything else —
+ * reacts consistently regardless of which path triggered it.
+ *
+ * Requires every currently-attached session to have CONFIRMED Network.enable
+ * success, not just "zero requests in flight" — that alone is trivially true
+ * before capture has even started, which is exactly how the corporate-machine
+ * missing-first-transaction bug happened (see CONFIRMED_CAPTURING_SESSIONS's
+ * own comment above). Returns whether it actually fired, so recorder.ts can
+ * keep polling instead of declaring "settled" on a technicality.
  */
-export function forceSettledCheck(): void {
-  if (activeCount === 0) fireSettled();
+export function forceSettledCheck(): boolean {
+  const allConfirmed = [...ATTACHED_SESSIONS].every((id) => CONFIRMED_CAPTURING_SESSIONS.has(id));
+  if (activeCount === 0 && allConfirmed) {
+    fireSettled();
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Escape hatch for recorder.ts's polling ceiling: fires Settled
+ * unconditionally, even if capture is still unconfirmed. Used only after
+ * forceSettledCheck() has genuinely failed to confirm for ~20s straight —
+ * the alternative is "Start Transaction" stays disabled forever, which is
+ * worse than letting the user proceed with a visible warning that capture
+ * may still be incomplete.
+ */
+export function forceFireSettledRegardless(): void {
+  fireSettled();
 }
 
 /** Currently-attached page session IDs — for recorder.ts to screenshot at transaction boundaries. */
@@ -204,6 +240,7 @@ export async function stopCapture(client: Client): Promise<void> {
       /* target may already be gone */
     }
     ATTACHED_SESSIONS.delete(sessionId);
+    CONFIRMED_CAPTURING_SESSIONS.delete(sessionId);
   }
 }
 
@@ -310,7 +347,9 @@ async function handleAttached(
     sessionId,
     CDP_COMMAND_TIMEOUT_MS,
   );
-  if (!enableOutcome.ok) {
+  if (enableOutcome.ok) {
+    CONFIRMED_CAPTURING_SESSIONS.add(sessionId);
+  } else {
     console.warn(
       `[cdp-recorder] Network.enable ${enableOutcome.reason === "timeout" ? "timed out" : "failed"} for target ${targetInfo.targetId} — resuming anyway so the page isn't stuck; retrying Network.enable in the background${
         enableOutcome.message ? ` (${enableOutcome.message})` : ""
@@ -346,7 +385,9 @@ async function retryNetworkEnable(client: Client, sessionId: string, targetId: s
     CDP_COMMAND_TIMEOUT_MS,
   );
   if (outcome.ok) {
+    CONFIRMED_CAPTURING_SESSIONS.add(sessionId);
     console.log(`[cdp-recorder] Network.enable succeeded for target ${targetId} on retry ${attempt} — capture resumed for this target`);
+    void forceSettledCheck(); // the earlier 600ms check may have fired "settled" without this target confirmed — re-check now that it is
     return;
   }
   if (attempt >= NETWORK_ENABLE_MAX_RETRIES) {
@@ -359,6 +400,7 @@ async function retryNetworkEnable(client: Client, sessionId: string, targetId: s
 function handleDetached(sessionId: string): void {
   if (!ATTACHED_SESSIONS.has(sessionId)) return;
   ATTACHED_SESSIONS.delete(sessionId);
+  CONFIRMED_CAPTURING_SESSIONS.delete(sessionId);
 
   for (const [key, info] of ACTIVE_REQUESTS) {
     if (key.startsWith(`${sessionId}:`)) {

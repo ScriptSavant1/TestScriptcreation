@@ -36,6 +36,7 @@ import {
   getActiveCount,
   getBackgroundCount,
   forceSettledCheck,
+  forceFireSettledRegardless,
   getAttachedSessionIds,
   captureScreenshot,
 } from "./cdp-capture.js";
@@ -89,11 +90,37 @@ export class Recorder {
     await startCapture(this.client);
     this.recording = true;
 
-    // Mirrors service-worker.js's 600ms SETTLED fallback: startSettledTimer()
-    // in cdp-capture only fires when a request FINISHES, so a page that's
+    // Mirrors service-worker.js's SETTLED fallback: startSettledTimer() in
+    // cdp-capture only fires when a request FINISHES, so a page that's
     // already fully loaded with nothing in flight would otherwise never
-    // emit SETTLED at all.
-    setTimeout(forceSettledCheck, 600);
+    // emit SETTLED at all. A single 600ms check used to be enough — but on a
+    // slow corporate machine, Network.enable for the very first tab can
+    // still be retrying well past 600ms (cold process, AV/EDR scanning a
+    // freshly-spawned browser), and the old code declared "Settled — safe to
+    // start a transaction" regardless, silently losing exactly the first
+    // transaction's traffic since capture wasn't actually confirmed live
+    // yet. Now polls forceSettledCheck() — which itself requires every
+    // attached session to have CONFIRMED Network.enable, not just "zero
+    // requests in flight" — until it actually fires, instead of trusting a
+    // flat timer. Bounded at 20s: if it never confirms, fire the signal
+    // anyway with a visible warning rather than leave "Start Transaction"
+    // disabled forever — same bounded-wait-and-warn posture as the
+    // Network.enable retry logic itself.
+    void this.pollUntilSettled();
+  }
+
+  private async pollUntilSettled(): Promise<void> {
+    const POLL_INTERVAL_MS = 500;
+    const MAX_ATTEMPTS = 40; // ~20s
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      if (!this.recording) return; // stopped while we were waiting
+      if (forceSettledCheck()) return;
+    }
+    console.warn(
+      "[cdp-recorder] Network capture never confirmed within 20s — firing Settled anyway so Start Transaction isn't stuck disabled forever; capture on the current target(s) may still be incomplete.",
+    );
+    forceFireSettledRegardless();
   }
 
   /** Screenshots every currently-attached page session (main tab + any open popup). */
