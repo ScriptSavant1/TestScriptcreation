@@ -314,7 +314,7 @@ tearDown: 0      #Not used
 
   /**
    * Copy a file from the project root to the output directory.
-   * jwt-helper.js, jsrsasign.js, DevWebSdk.d.ts, and transport.pem all live
+   * jwt-helper.js, dpop-helper.js, DevWebSdk.d.ts, and transport.pem all live
    * in the project root — place them there before running the converter.
    * Returns true on success, false if source not found (logs warning, does NOT generate a stub).
    */
