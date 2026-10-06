@@ -2801,20 +2801,27 @@ function createJWT(clientId, aud, scope, signingKid, secret) {
                 Code= expression. All values must already be resolved
                 (use LR.getParam() calls before JSON.stringify).
                 May include _expOffset (seconds until exp; default 300).
+                May include _typ / _alg (header overrides; default
+                "JWT" / "PS256") — leading underscore keeps them out of
+                the copied-into-payload loop below, same convention as
+                _expOffset, so a real claim literally named "typ"/"alg"
+                is never shadowed by these header-only markers.
    signingKid:  key ID string
    secret:      PEM-encoded RSA private key (PKCS#8 or PKCS#1)
    ========================================================= */
 function createJWTFromMap(claimsJson, signingKid, secret) {
   var claims = JSON.parse(claimsJson);
   var expOffset = claims._expOffset !== undefined ? parseInt(String(claims._expOffset), 10) : 300;
+  var typ = claims._typ !== undefined ? claims._typ : "JWT";
+  var alg = claims._alg !== undefined ? claims._alg : "PS256";
   var key = _getRsaKey(secret);
   /* build JWT header + payload */
   var now = Math.floor(Date.now() / 1000);
-  var header = { alg: "PS256", typ: "JWT", kid: String(signingKid) };
+  var header = { alg: alg, typ: typ, kid: String(signingKid) };
   var payload = { iat: now, exp: now + expOffset, jti: _uuidv4() };
-  /* copy all provided claims (skip private _expOffset marker) */
+  /* copy all provided claims (skip private markers) */
   for (var k in claims) {
-    if (Object.prototype.hasOwnProperty.call(claims, k) && k !== "_expOffset") {
+    if (Object.prototype.hasOwnProperty.call(claims, k) && k !== "_expOffset" && k !== "_typ" && k !== "_alg") {
       payload[k] = claims[k];
     }
   }
@@ -2848,6 +2855,30 @@ function refreshJWT(clientId, aud, scope, signingKid, secret, tokenParam) {
   var expiresAt = parseInt(LR.getParam("_jwt_expires_at") || "0");
   if (Date.now() < expiresAt) return LR.getParam(param);
   var token = createJWT(clientId, aud, scope, signingKid, secret);
+  LR.setParam("_jwt_expires_at", String(Date.now() + 9 * 60 * 1000));
+  return token;
+}
+
+/* ============================================================
+    refreshJWTFromMap  -  same caching contract as refreshJWT, for the
+    primary JWT when it carries non-standard claims (extraClaims /
+    literalClaims) or a non-default typ/alg that createJWT()'s fixed
+    5-param signature cannot express. See createJWTFromMap for claimsJson.
+
+    Usage in Action.c:
+
+      web_js_run(
+        "Code=refreshJWTFromMap(JSON.stringify({...}),"
+            "LR.getParam('signing_kid'),LR.getParam('private_key'),"
+            "'_jwt_token');",
+        "ResultParam=_jwt_token",
+        LAST);
+============================================================ */
+function refreshJWTFromMap(claimsJson, signingKid, secret, tokenParam) {
+  var param = tokenParam || "_jwt_token";
+  var expiresAt = parseInt(LR.getParam("_jwt_expires_at") || "0");
+  if (Date.now() < expiresAt) return LR.getParam(param);
+  var token = createJWTFromMap(claimsJson, signingKid, secret);
   LR.setParam("_jwt_expires_at", String(Date.now() + 9 * 60 * 1000));
   return token;
 }
