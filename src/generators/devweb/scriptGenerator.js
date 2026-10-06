@@ -1355,8 +1355,11 @@ ${finalizeSection}
     // ── Module-level declarations ────────────────────────────────────────────
     // These run ONCE when the script loads — before any lifecycle function.
 
+    const needsJwtTokenFromMapImport =
+      (this.perRequestJwt && this.perRequestJwt.size > 0) ||
+      this._jwtClaimMapNeedsTokenFromMap(this.jwtClaimMap || {});
     const jwtRequire = this.hasJwt
-      ? `// JWT Helper — fast token generation using Node.js built-in crypto (no npm install)\nconst { getJwtToken${this.perRequestJwt && this.perRequestJwt.size > 0 ? ", getJwtTokenFromMap" : ""} } = require('./jwt-helper.js');\n`
+      ? `// JWT Helper — fast token generation using Node.js built-in crypto (no npm install)\nconst { getJwtToken${needsJwtTokenFromMapImport ? ", getJwtTokenFromMap" : ""} } = require('./jwt-helper.js');\n`
       : "";
 
     const dpopRequire = this.hasDpop
@@ -1461,6 +1464,21 @@ ${
   }
 
   /**
+   * True when a JWT claim map needs the arbitrary-claim getJwtTokenFromMap()
+   * instead of the fixed-shape getJwtToken(). getJwtToken() has no mechanism
+   * for custom claims and always hardcodes typ:"JWT" — so routing is needed
+   * whenever the script carried non-standard claims (extraClaims/literalClaims)
+   * or an explicit typ other than the default (e.g. "JWS").
+   */
+  _jwtClaimMapNeedsTokenFromMap(cm) {
+    return !!(
+      (cm.extraClaims && Object.keys(cm.extraClaims).length > 0) ||
+      (cm.literalClaims && Object.keys(cm.literalClaims).length > 0) ||
+      (cm.typ && cm.typ !== "JWT")
+    );
+  }
+
+  /**
    * Generate initialize section
    */
   generateInitialize() {
@@ -1482,11 +1500,14 @@ ${
           const audLine = cm._audTemplate
             ? `    const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{(\\w+)\\}/g, (_, k) => _jwtParams[k] || '');\n    _jwtParams['_jwt_aud'] = _jwtAud;\n`
             : "";
+          const tokenCall = this._jwtClaimMapNeedsTokenFromMap(cm)
+            ? `getJwtTokenFromMap(${cmJson}, _jwtParams)`
+            : `getJwtToken(_jwtParams, ${cmJson})`;
           return `
     // Merge parameters.yml and rts.yml userArguments — covers both Postman/Bruno (load.params)
     // and JMX UDVs (load.config.user.args) without requiring one specific source.
     const _jwtParams = Object.assign({}, load.params, (load.config && load.config.user && load.config.user.args) || {});
-${audLine}    load.global.${jwtOutVar} = getJwtToken(_jwtParams, ${cmJson});
+${audLine}    load.global.${jwtOutVar} = ${tokenCall};
     load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);
 `;
         })()
@@ -2088,10 +2109,13 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
           const audLine = cm._audTemplate
             ? `        const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{(\\w+)\\}/g, (_, k) => _jwtParams[k] || '');\n        _jwtParams['_jwt_aud'] = _jwtAud;\n`
             : "";
+          const tokenCall = this._jwtClaimMapNeedsTokenFromMap(cm)
+            ? `getJwtTokenFromMap(${cmJson}, _jwtParams)`
+            : `getJwtToken(_jwtParams, ${cmJson})`;
           return `
     if (!load.global.${jwtOutVar} || Date.now() >= load.global.jwt_expires_at) {
         const _jwtParams = Object.assign({}, load.params, (load.config && load.config.user && load.config.user.args) || {});
-${audLine}        load.global.${jwtOutVar} = getJwtToken(_jwtParams, ${cmJson});
+${audLine}        load.global.${jwtOutVar} = ${tokenCall};
         load.global.jwt_expires_at = Date.now() + (9 * 60 * 1000);${globalHeaderUpdate}
     }
 `;
@@ -2392,18 +2416,20 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
       const safeOv = this.sanitizeVarName(outputvar);
       const paramsVar = `_jwtParams_${safeOv}`;
       code += `\n${this.indent(`const ${paramsVar} = Object.assign({}, load.params, (load.config && load.config.user && load.config.user.args) || {});`, indentLevel)}`;
-      if (cm.extraClaims && Object.keys(cm.extraClaims).length > 0) {
+      // Dynamic audience injection must happen before either branch below —
+      // getJwtTokenFromMap()'s aud resolution also depends on paramsVar['_jwt_aud']
+      // being pre-populated (same "_jwt_aud" sentinel convention as the standard path).
+      if (cm._audTemplate) {
+        const audExpr = JSON.stringify(cm._audTemplate);
+        code += `\n${this.indent(`const _jwtAud_${safeOv} = ${audExpr}.replace(/\\{(\\w+)\\}/g, (_, k) => ${paramsVar}[k] || '');`, indentLevel)}`;
+        code += `\n${this.indent(`${paramsVar}['_jwt_aud'] = _jwtAud_${safeOv};`, indentLevel)}`;
+      }
+      const cmJson = JSON.stringify(cm);
+      if (this._jwtClaimMapNeedsTokenFromMap(cm)) {
         // Non-standard claim set — use getJwtTokenFromMap
-        const cmJson = JSON.stringify(cm);
         code += `\n${this.indent(`load.global.${safeOv} = getJwtTokenFromMap(${cmJson}, ${paramsVar});`, indentLevel)}`;
       } else {
         // Standard claim set — use getJwtToken
-        const cmJson = JSON.stringify(cm);
-        if (cm._audTemplate) {
-          const audExpr = JSON.stringify(cm._audTemplate);
-          code += `\n${this.indent(`const _jwtAud_${safeOv} = ${audExpr}.replace(/\\{(\\w+)\\}/g, (_, k) => ${paramsVar}[k] || '');`, indentLevel)}`;
-          code += `\n${this.indent(`${paramsVar}['_jwt_aud'] = _jwtAud_${safeOv};`, indentLevel)}`;
-        }
         code += `\n${this.indent(`load.global.${safeOv} = getJwtToken(${paramsVar}, ${cmJson});`, indentLevel)}`;
       }
     }

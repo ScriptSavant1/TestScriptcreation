@@ -733,9 +733,28 @@ class CustomScriptParser {
       ].join("|") +
       ")\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)";
 
-    // Pattern: "claimName" : getter("paramName")  — with optional quotes on claim key
+    // Pattern: "claimName" : getter("paramName")  — with optional quotes on claim key.
+    // [\w-]+ (not just \w+) so hyphenated custom claims like "openbanking-intent-id"
+    // are recognized here too, not just in the literal-value pass below.
+    //
+    // Two negative lookbehinds guard the match start:
+    //  - (?<![\w-]) forbids starting mid-identifier. Without it, a plain
+    //    negative lookbehind for "var/let/const " can be defeated by the regex
+    //    engine simply trying the next start position one character later
+    //    (e.g. "var prvKey = x" failing to match at "prvKey" but still
+    //    matching at "rvKey", since "ar p" doesn't end in "var ").
+    //  - (?<!(?:var|let|const)\s+) excludes `var prvKey = getter("secret")`
+    //    style KEY-VARIABLE declarations, which keyAssignRe below already
+    //    handles as the signing secret. Without this, a declaration like
+    //    `var prvKey = postman.getEnvironmentVariable("secret")` was ALSO
+    //    matching here as if "prvKey" were a JWT claim, landing in
+    //    extraClaims.prvKey — which getJwtTokenFromMap() would then inject
+    //    into the JWT PAYLOAD as a visible claim holding the raw private key
+    //    value. Property-assignment claims like `data.iss = getter(...)`
+    //    still match fine, since "." isn't a word/hyphen character.
     const claimRe = new RegExp(
-      "[\"']?([\\w]+)[\"']?\\s*[:=]\\s*" + GETTER,
+      "(?<![\\w-])(?<!(?:var|let|const)\\s+)[\"']?([\\w-]+)[\"']?\\s*[:=]\\s*" +
+        GETTER,
       "g",
     );
 
@@ -805,6 +824,76 @@ class CustomScriptParser {
     const setMatch = setRe.exec(script);
     if (setMatch) {
       map.output = setMatch[1];
+    }
+
+    // ── Literal-valued + templated claims (Postman/Bruno JS) ────────────────────
+    // The getter-based pass above only ever matches `claim: getter("param")` —
+    // a claim whose value is a plain literal (e.g. "login_hint_token": "loginhinttoken")
+    // or a concatenation ("aud": "https://" + getter("host") + "/path") never matches
+    // that pattern at all, so it was silently dropped entirely, not just miscategorized.
+    // Scoped to the actual header/payload object literal(s), not the whole script —
+    // a literal-value regex run unscoped would risk matching unrelated key/value pairs
+    // anywhere else in the script.
+    for (const [, body] of findJwtPayloadObjectLiterals(script)) {
+      // Literal values: "claim": "value" | 'claim': 'value' | claim: 123 | claim: true
+      // The trailing part is a LOOKAHEAD (doesn't consume), requiring a comma,
+      // closing brace, or end-of-string after any whitespace — critically, NOT
+      // just "the next character is a newline". A naive `\s*(?:,|\n|\})` would
+      // still match a value that's actually one piece of a multi-line
+      // concatenation (e.g. "aud": "https://"\n + getter("host") + "/path"),
+      // because `\s*` backtracks down to consuming zero characters and matches
+      // on the newline itself, right before the real `+` continuation. The
+      // lookahead can't take that shortcut — it has to find [,}]/end-of-string
+      // genuinely after ALL the whitespace, so a "+" anywhere in that gap
+      // correctly fails the match instead of silently truncating the value.
+      const literalRe =
+        /["']?([\w-]+)["']?\s*:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(-?\d+(?:\.\d+)?)|(true|false))(?=\s*[,}]|\s*$)/g;
+      let lm;
+      while ((lm = literalRe.exec(body)) !== null) {
+        const claim = lm[1];
+        const claimLower = claim.toLowerCase();
+        const value = lm[2] !== undefined ? lm[2] : lm[3] !== undefined ? lm[3] : lm[4] !== undefined ? lm[4] : lm[5];
+        // typ/alg are special: unlike iss/sub/aud/scope/kid/secret (which
+        // getJwtToken()/getJwtTokenFromMap() always treat as a PARAM NAME to
+        // resolve via resolve()), the runtime already consumes cm.alg as the
+        // literal algorithm string directly (see jwt-helper.js's
+        // `const alg = cm.alg || "PS256"` — never passed through resolve()).
+        // So a literal "alg"/"typ" in the script merges straight into the
+        // same top-level field the getter-sourced path would have used.
+        // Other standard claims found as literals here are intentionally
+        // NOT captured — treating a literal iss/sub/aud/scope value as if it
+        // were a param NAME via resolve() would silently resolve to "",
+        // which is worse than not extracting it at all. Not part of any
+        // reported scenario, so left as a known gap rather than risking that.
+        if (claimLower === "typ" || claimLower === "alg") {
+          if (map[claimLower] !== undefined) continue; // getter-sourced value already won
+          map[claimLower] = value;
+        } else if (!/^(kid|iss|sub|aud|scope|iat|exp|jti|nbf|nonce)$/i.test(claim)) {
+          if (map.extraClaims && map.extraClaims[claim] !== undefined) continue; // getter-sourced value already won
+          if (!map.literalClaims) map.literalClaims = {};
+          map.literalClaims[claim] = value;
+        }
+      }
+
+      // Templated "aud" specifically: literal + ONE getter call + literal, e.g.
+      // "aud": "https://" + postman.getEnvironmentVariable("iam-host") + "/as/token.oauth2".
+      // Reuses the EXISTING _audTemplate mechanism already built (and already tested) for
+      // the JMeter/Java extraction path below — both generators already know how to turn
+      // `map._audTemplate` + `map.aud = "_jwt_aud"` into working code, so this only needs
+      // to populate the same two fields, not add any new downstream codegen.
+      if (map.aud === undefined && !map._audTemplate) {
+        // Same lookahead-terminator fix as the literal-value regex above — a
+        // multi-line concatenation must not be truncated at its first newline.
+        const audConcatRe = new RegExp("[\"']?aud[\"']?\\s*:\\s*([\\s\\S]+?)(?=\\s*[,}]|\\s*$)", "i");
+        const audMatch = body.match(audConcatRe);
+        if (audMatch && audMatch[1].includes("+")) {
+          const template = buildConcatTemplate(audMatch[1], GETTER);
+          if (template && template.includes("{")) {
+            map._audTemplate = template;
+            map.aud = "_jwt_aud";
+          }
+        }
+      }
     }
 
     // ── Java / Groovy JMX patterns (JSR223 / BeanShell) ─────────────────────────
@@ -1013,6 +1102,106 @@ class CustomScriptParser {
 
     return results;
   }
+}
+
+// ── Private helpers for extractJwtClaimMap's literal/templated-claim support ──
+// (module-level, not static class methods — internal only, not part of the
+// public API other generators call)
+
+/**
+ * Finds `var/let/const <name> = { ... };` object-literal blocks in a script
+ * via balanced-brace scanning (string-aware, so a `{`/`}` inside a quoted
+ * value doesn't throw off the depth count), and returns the ones that look
+ * like they hold a JWT header or payload — either because the script itself
+ * passes that variable to JSON.stringify(), or because the variable name
+ * matches a common convention (header/payload/data/claims/...). Deliberately
+ * NOT a full JS parser — good enough for the hand-written pre-request scripts
+ * these come from, and scoping to just these blocks (rather than the whole
+ * script) is what makes the new literal-value regex below safe to add without
+ * risking a false match somewhere unrelated in the script.
+ *
+ * @returns {Array<[string, string]>} [varName, blockTextIncludingBraces][]
+ */
+function findJwtPayloadObjectLiterals(script) {
+  const blocks = []; // [varName, startIndex, endIndex]
+  const declRe = /\b(?:var|let|const)\s+(\w+)\s*=\s*\{/g;
+  let dm;
+  while ((dm = declRe.exec(script)) !== null) {
+    const varName = dm[1];
+    const braceStart = script.indexOf("{", dm.index);
+    if (braceStart === -1) continue;
+    let depth = 0;
+    let inString = null; // null | '"' | "'"
+    let end = -1;
+    for (let i = braceStart; i < script.length; i++) {
+      const ch = script[i];
+      if (inString) {
+        if (ch === "\\") i++; // skip escaped char
+        else if (ch === inString) inString = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inString = ch;
+      } else if (ch === "{") {
+        depth++;
+      } else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (end !== -1) blocks.push([varName, braceStart, end]);
+  }
+
+  const likelyNameRe = /^(header|payload|data|claims|claimspayload|jwtpayload|jwtheader|jwtclaims|jwtbody)$/i;
+  const result = [];
+  for (const [varName, start, end] of blocks) {
+    const stringified = new RegExp("JSON\\.stringify\\s*\\(\\s*" + varName + "\\s*\\)").test(script);
+    if (stringified || likelyNameRe.test(varName)) {
+      result.push([varName, script.slice(start, end)]);
+    }
+  }
+  return result;
+}
+
+/**
+ * Turns a string-concatenation expression (e.g. `"https://" + postman.getEnvironmentVariable("host") + "/path"`)
+ * into an LR-style template string (`"https://{host}/path"`), reusing the exact
+ * template syntax the JMeter/Java extraction path already produces via its own
+ * buildLRTemplate() — both generators already know how to turn this shape into
+ * working DevWeb/VuGen code for `_audTemplate`, so producing the same shape
+ * here means zero new downstream codegen is needed.
+ *
+ * Unlike the Java-path version, this deliberately returns null (bail out
+ * entirely) if ANY piece of the expression can't be resolved — silently
+ * dropping a piece of e.g. an audience URL would produce a subtly wrong but
+ * plausible-looking value, which is worse than not extracting it at all.
+ *
+ * @param {string} expr - the full `"lit" + getter("x") + "lit"` expression text
+ * @param {string} getterPattern - the GETTER regex fragment from extractJwtClaimMap
+ * @returns {string|null}
+ */
+function buildConcatTemplate(expr, getterPattern) {
+  const getterRe = new RegExp("^" + getterPattern + "$");
+  const pieces = expr.split(/\s*\+\s*/);
+  let result = "";
+  for (const raw of pieces) {
+    const piece = raw.trim();
+    const strLit = piece.match(/^["'](.*)["']$/);
+    if (strLit) {
+      result += strLit[1];
+      continue;
+    }
+    const getterMatch = piece.match(getterRe);
+    if (getterMatch) {
+      result += "{" + getterMatch[1] + "}";
+      continue;
+    }
+    return null; // unresolvable piece — bail rather than silently drop it
+  }
+  return result;
 }
 
 module.exports = CustomScriptParser;

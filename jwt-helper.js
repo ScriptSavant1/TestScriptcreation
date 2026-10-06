@@ -256,7 +256,11 @@ function getJwtToken(params, claimMap) {
  *
  * claimObj: plain object where each value is either a literal or a param name to resolve.
  *   Standard claims (iss, sub, aud, scope, kid, secret, expOffset) are resolved from params.
+ *   typ, alg: used as literal values directly (not resolved — a script rarely sources
+ *     these from a variable, and the extractor only ever captures them as literals).
  *   extraClaims: { claimName: paramName } — each resolved from params.
+ *   literalClaims: { claimName: value } — each applied as-is, no param resolution
+ *     (e.g. a custom claim the script hardcoded, like "login_hint_token": "loginhinttoken").
  * params: load.params merged with load.config.user.args
  */
 function getJwtTokenFromMap(claimObj, params) {
@@ -269,9 +273,10 @@ function getJwtTokenFromMap(claimObj, params) {
 
   const kid = resolve(cm.kid || "signing_kid");
   const alg = cm.alg || "PS256";
+  const typ = cm.typ || "JWT";
   const expOffset = cm.expOffset ? parseInt(cm.expOffset, 10) : 600;
 
-  const header = { kid, typ: "JWT", alg };
+  const header = { kid, typ, alg };
   const now = Math.floor(Date.now() / 1000);
   const payload = { iat: now, exp: now + expOffset, jti: load.utils.uuid() };
 
@@ -281,10 +286,16 @@ function getJwtTokenFromMap(claimObj, params) {
   if (cm.aud) payload.aud = resolve(cm.aud);
   if (cm.scope) payload.scope = resolve(cm.scope);
 
-  // Non-standard extra claims
+  // Non-standard extra claims — each value is a PARAM NAME to resolve
   const extra = cm.extraClaims || {};
   for (const claimName of Object.keys(extra)) {
     payload[claimName] = resolve(extra[claimName]);
+  }
+
+  // Non-standard claims with literal values straight from the script (not param names)
+  const literal = cm.literalClaims || {};
+  for (const claimName of Object.keys(literal)) {
+    payload[claimName] = literal[claimName];
   }
 
   const prvkey = resolve(cm.secret || "private_key");

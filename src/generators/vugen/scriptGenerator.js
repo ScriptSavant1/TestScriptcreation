@@ -1133,6 +1133,81 @@ static void gen_hex64(const char *param_name) {
 `;
   }
 
+  /**
+   * True when a JWT claim map needs createJWTFromMap()/refreshJWTFromMap()
+   * instead of the fixed-shape createJWT()/refreshJWT() — mirrors DevWeb's
+   * equivalent check (src/generators/devweb/scriptGenerator.js): those fixed
+   * functions have no mechanism for custom claims and always hardcode
+   * typ:"JWT", so routing is needed whenever the script carried non-standard
+   * claims (extraClaims/literalClaims) or an explicit typ other than the default.
+   */
+  _jwtClaimMapNeedsTokenFromMap(cm) {
+    return !!(
+      (cm.extraClaims && Object.keys(cm.extraClaims).length > 0) ||
+      (cm.literalClaims && Object.keys(cm.literalClaims).length > 0) ||
+      (cm.typ && cm.typ !== "JWT")
+    );
+  }
+
+  /**
+   * Escapes a value for use as a single-quoted JS string literal embedded
+   * inside a C double-quoted "Code=..." string. Two escaping passes: JS-level
+   * first (backslash, single-quote — what a JS single-quoted string needs),
+   * then C-level on the RESULT (backslash, double-quote — what the enclosing
+   * C string literal needs) — mirrors the existing `_audTemplate.replace(/"/g,
+   * '\\"')` C-embedding convention used elsewhere in this file.
+   */
+  _jsSingleQuotedForCString(value) {
+    let s = String(value);
+    s = s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    s = s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return "'" + s + "'";
+  }
+
+  /**
+   * Builds the JS object-literal string (for web_js_run's Code=) and any
+   * lr_save_string() pre-step for a dynamic `aud`, for the Map-based JWT
+   * path (createJWTFromMap/refreshJWTFromMap). Every claim value must
+   * already be resolved via LR.getParam() inside the literal itself — unlike
+   * DevWeb's getJwtTokenFromMap(), nothing is resolved at runtime here.
+   * audVarName: the LR parameter name to store the resolved aud under —
+   * callers pick one that won't collide across call sites (e.g. per-request
+   * JWTs suffix it with the request's own output var).
+   */
+  _buildJwtMapClaimsLiteral(cm, audVarName, indent) {
+    const expOffset = cm.expOffset || 600;
+    const hasDynAud = !!cm._audTemplate;
+    const audParam = hasDynAud ? audVarName : cm.aud;
+    const audPreStep = hasDynAud
+      ? `${indent}lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "${audVarName}");\n\n`
+      : "";
+
+    const claimParts = [];
+    if (audParam) claimParts.push(`aud:LR.getParam('${audParam}')`);
+    if (cm.iss) claimParts.push(`iss:LR.getParam('${cm.iss}')`);
+    if (cm.sub) claimParts.push(`sub:LR.getParam('${cm.sub}')`);
+    if (cm.scope) claimParts.push(`scope:LR.getParam('${cm.scope}')`);
+    for (const [claimName, paramName] of Object.entries(cm.extraClaims || {})) {
+      // Key quoted — claim names are arbitrary script-sourced strings and can
+      // contain characters invalid in a bare JS identifier (e.g. a hyphenated
+      // claim like "openbanking-intent-id" would otherwise parse as a
+      // subtraction expression instead of an object key).
+      claimParts.push(`${this._jsSingleQuotedForCString(claimName)}:LR.getParam('${paramName}')`);
+    }
+    for (const [claimName, value] of Object.entries(cm.literalClaims || {})) {
+      claimParts.push(`${this._jsSingleQuotedForCString(claimName)}:${this._jsSingleQuotedForCString(value)}`);
+    }
+    if (cm.typ && cm.typ !== "JWT") {
+      claimParts.push(`_typ:${this._jsSingleQuotedForCString(cm.typ)}`);
+    }
+    if (cm.alg && cm.alg !== "PS256") {
+      claimParts.push(`_alg:${this._jsSingleQuotedForCString(cm.alg)}`);
+    }
+    claimParts.push(`_expOffset:${expOffset}`);
+
+    return { objLiteral: `{${claimParts.join(",")}}`, audPreStep };
+  }
+
   generateVuserInitC() {
     // NTLM / Kerberos authentication block (unchanged)
     const ntlmBlock = this.hasNtlm
@@ -1217,19 +1292,28 @@ static void gen_hex64(const char *param_name) {
     const jwtInitBlock = this.hasJwt
       ? (() => {
           const cm = this.jwtClaimMap || {};
-          const clientIdParam = cm.iss || cm.sub || "client_id";
-          const hasDynAud = !!cm._audTemplate;
-          const audParam = hasDynAud ? "_jwt_aud" : cm.aud || "token_url";
-          const audPreStep = hasDynAud
-            ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
-            : "";
-          const scopeParam = cm.scope || "scope";
           const kidParam = cm.kid || "signing_kid";
           const secretParam = cm.secret || "private_key";
           const outputParam = cm.output || "jwt";
           const resultParam = outputParam.startsWith("_")
             ? outputParam
             : "_" + outputParam;
+
+          let audPreStep, createCall;
+          if (this._jwtClaimMapNeedsTokenFromMap(cm)) {
+            const built = this._buildJwtMapClaimsLiteral(cm, "_jwt_aud", "  ");
+            audPreStep = built.audPreStep;
+            createCall = `createJWTFromMap(JSON.stringify(${built.objLiteral}),LR.getParam('${kidParam}'),LR.getParam('${secretParam}'))`;
+          } else {
+            const clientIdParam = cm.iss || cm.sub || "client_id";
+            const hasDynAud = !!cm._audTemplate;
+            const audParam = hasDynAud ? "_jwt_aud" : cm.aud || "token_url";
+            audPreStep = hasDynAud
+              ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
+              : "";
+            const scopeParam = cm.scope || "scope";
+            createCall = `createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'))`;
+          }
           return `
   web_set_certificate_ex(
     "CertFilePath=transport.pem",
@@ -1239,7 +1323,7 @@ static void gen_hex64(const char *param_name) {
     LAST);
 
 ${audPreStep}  web_js_run(
-    "Code=createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'));",
+    "Code=${createCall};",
     "ResultParam=${resultParam}",
     SOURCES,
     "File=lre-utils.js", ENDITEM,
@@ -1425,25 +1509,34 @@ ${teardownBlock}
     const jwtSetup = this.hasJwt
       ? (() => {
           const cm = this.jwtClaimMap || {};
-          const clientIdParam = cm.iss || cm.sub || "client_id";
-          const hasDynAud = !!cm._audTemplate;
-          const audParam = hasDynAud ? "_jwt_aud" : cm.aud || "token_url";
-          const audPreStep = hasDynAud
-            ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
-            : "";
-          const scopeParam = cm.scope || "scope";
           const kidParam = cm.kid || "signing_kid";
           const secretParam = cm.secret || "private_key";
           const outputParam = cm.output || "jwt";
           const resultParam = outputParam.startsWith("_")
             ? outputParam
             : "_" + outputParam;
-          // refreshJWT() in lre-utils.dat owns all state: checks expiry,
-          // calls createJWT() when needed, updates _jwt_expires_at via LR.setParam,
-          // and returns the (possibly refreshed) token — one call instead of two.
-          const refreshCall =
-            `refreshJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
-            `LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'), '${resultParam}')`;
+
+          // refreshJWT()/refreshJWTFromMap() in lre-utils.dat own all state: check
+          // expiry, call createJWT()/createJWTFromMap() when needed, update
+          // _jwt_expires_at via LR.setParam, and return the (possibly refreshed)
+          // token — one call instead of two.
+          let audPreStep, refreshCall;
+          if (this._jwtClaimMapNeedsTokenFromMap(cm)) {
+            const built = this._buildJwtMapClaimsLiteral(cm, "_jwt_aud", "  ");
+            audPreStep = built.audPreStep;
+            refreshCall = `refreshJWTFromMap(JSON.stringify(${built.objLiteral}),LR.getParam('${kidParam}'),LR.getParam('${secretParam}'),'${resultParam}')`;
+          } else {
+            const clientIdParam = cm.iss || cm.sub || "client_id";
+            const hasDynAud = !!cm._audTemplate;
+            const audParam = hasDynAud ? "_jwt_aud" : cm.aud || "token_url";
+            audPreStep = hasDynAud
+              ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
+              : "";
+            const scopeParam = cm.scope || "scope";
+            refreshCall =
+              `refreshJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
+              `LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'), '${resultParam}')`;
+          }
           return `
 ${audPreStep}  web_js_run(
     "Code=${refreshCall};",
@@ -1758,31 +1851,25 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     const safeOv = outputvar.replace(/[^a-zA-Z0-9_]/g, "_");
     const resultParam = outputvar.startsWith("_") ? outputvar : "_" + outputvar;
 
-    if (cm.extraClaims && Object.keys(cm.extraClaims).length > 0) {
-      // Non-standard claim set — build claims object in JS using LR.getParam() calls.
-      // createJWTFromMap() receives a JSON string with values already resolved.
+    if (this._jwtClaimMapNeedsTokenFromMap(cm)) {
+      // Non-standard claim set (or non-default typ) — build claims object in
+      // JS using LR.getParam() calls. createJWTFromMap() receives a JSON
+      // string with values already resolved. Dynamic-aud injection reuses
+      // the same lr_save_string() pre-step the standard branch below uses —
+      // without it, a per-request JWT combining extraClaims/literalClaims
+      // WITH a concatenated aud (e.g. "https://" + getter("host") + "/path")
+      // would silently resolve aud to empty, since nothing would have
+      // populated the LR parameter createJWTFromMap's generated object
+      // literal reads it from.
       const kidParam    = cm.kid    || "signing_kid";
       const secretParam = cm.secret || "private_key";
-      const expOffset   = cm.expOffset || 600;
+      const built = this._buildJwtMapClaimsLiteral(cm, `_jwt_aud_${safeOv}`, indent);
 
-      // Build JS object literal: {claim:LR.getParam('param'),...,_expOffset:N}
-      const claimParts = [];
-      if (cm.aud)   claimParts.push(`aud:LR.getParam('${cm.aud}')`);
-      if (cm.iss)   claimParts.push(`iss:LR.getParam('${cm.iss}')`);
-      if (cm.sub)   claimParts.push(`sub:LR.getParam('${cm.sub}')`);
-      if (cm.scope) claimParts.push(`scope:LR.getParam('${cm.scope}')`);
-      for (const [claimName, paramName] of Object.entries(cm.extraClaims || {})) {
-        claimParts.push(`${claimName}:LR.getParam('${paramName}')`);
-      }
-      claimParts.push(`_expOffset:${expOffset}`);
-      const objLiteral = `{${claimParts.join(",")}}`;
-
-      // Code= is pure JS — no C escaping of JSON quotes needed
       const createCall =
-        `createJWTFromMap(JSON.stringify(${objLiteral}),LR.getParam('${kidParam}'),LR.getParam('${secretParam}'))`;
+        `createJWTFromMap(JSON.stringify(${built.objLiteral}),LR.getParam('${kidParam}'),LR.getParam('${secretParam}'))`;
 
       return (
-        `${indent}web_js_run(\n` +
+        `${built.audPreStep}${indent}web_js_run(\n` +
         `${indent}    "Code=${createCall};",\n` +
         `${indent}    "ResultParam=${resultParam}",\n` +
         `${indent}    LAST);\n\n`
