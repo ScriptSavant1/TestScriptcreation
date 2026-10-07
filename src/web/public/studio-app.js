@@ -184,6 +184,9 @@ async function analyze() {
     await tick();
     applyFilters(S.entries1);
     if (S.entries2.length) applyFilters(S.entries2);
+    // Must run after applyFilters() — see pruneEmptyPagerefTransactions's own
+    // doc comment for why this can't happen inside detectMarkers() itself.
+    pruneEmptyPagerefTransactions(S.entries1);
 
     setMsg("Running correlation engine...", "Detecting dynamic values");
     await tick();
