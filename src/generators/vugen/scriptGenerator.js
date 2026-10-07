@@ -1165,6 +1165,56 @@ static void gen_hex64(const char *param_name) {
   }
 
   /**
+   * Parses a `_audTemplate` string (e.g. "https://{iam-host}/as/token.oauth2",
+   * produced by customScriptParser.js's buildConcatTemplate/buildLRTemplate)
+   * into a JS concatenation expression that resolves each {name} placeholder
+   * via LR.getParam(name) — e.g. 'https://'+LR.getParam('iam-host')+'/as/token.oauth2'.
+   *
+   * Deliberately does NOT rely on LoadRunner's own lr_eval_string() `{name}`
+   * substitution. The placeholder name is whatever literal string the
+   * original script passed to its getter call (e.g.
+   * postman.getEnvironmentVariable("iam-host")) — unrestricted, can contain
+   * hyphens, dots, anything. LR.getParam() takes a plain JS string with no
+   * such restriction, so resolving the substitution in JS (inside
+   * web_js_run's own engine) sidesteps the question entirely, instead of
+   * depending on lr_eval_string correctly matching a parameter name that may
+   * contain characters its own `{...}` substitution doesn't handle.
+   */
+  _buildAudConcatExpr(template) {
+    const re = /\{([^{}]+)\}/g;
+    const parts = [];
+    let lastIndex = 0;
+    let m;
+    while ((m = re.exec(template)) !== null) {
+      if (m.index > lastIndex) {
+        parts.push(this._jsSingleQuotedForCString(template.slice(lastIndex, m.index)));
+      }
+      parts.push(`LR.getParam(${this._jsSingleQuotedForCString(m[1])})`);
+      lastIndex = re.lastIndex;
+    }
+    if (lastIndex < template.length) {
+      parts.push(this._jsSingleQuotedForCString(template.slice(lastIndex)));
+    }
+    return parts.length > 0 ? parts.join("+") : "''";
+  }
+
+  /**
+   * Builds the pre-step that resolves a dynamic `aud` BEFORE the main JWT
+   * web_js_run call: a single extra web_js_run that computes the
+   * concatenated string (via _buildAudConcatExpr) and stores it under
+   * audVarName via LR.setParam() — the main call then reads it back with
+   * LR.getParam(audVarName), exactly like every other claim.
+   */
+  _buildJwtAudResolutionStep(audTemplate, audVarName, indent) {
+    const audExpr = this._buildAudConcatExpr(audTemplate);
+    return (
+      `${indent}web_js_run(\n` +
+      `${indent}    "Code=LR.setParam(${this._jsSingleQuotedForCString(audVarName)}, ${audExpr});",\n` +
+      `${indent}    LAST);\n\n`
+    );
+  }
+
+  /**
    * Builds the JS object-literal string (for web_js_run's Code=) and any
    * lr_save_string() pre-step for a dynamic `aud`, for the Map-based JWT
    * path (createJWTFromMap/refreshJWTFromMap). Every claim value must
@@ -1179,7 +1229,7 @@ static void gen_hex64(const char *param_name) {
     const hasDynAud = !!cm._audTemplate;
     const audParam = hasDynAud ? audVarName : cm.aud;
     const audPreStep = hasDynAud
-      ? `${indent}lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "${audVarName}");\n\n`
+      ? this._buildJwtAudResolutionStep(cm._audTemplate, audVarName, indent)
       : "";
 
     const claimParts = [];
@@ -1309,7 +1359,7 @@ static void gen_hex64(const char *param_name) {
             const hasDynAud = !!cm._audTemplate;
             const audParam = hasDynAud ? "_jwt_aud" : cm.aud || "token_url";
             audPreStep = hasDynAud
-              ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
+              ? this._buildJwtAudResolutionStep(cm._audTemplate, "_jwt_aud", "  ")
               : "";
             const scopeParam = cm.scope || "scope";
             createCall = `createJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'))`;
@@ -1530,7 +1580,7 @@ ${teardownBlock}
             const hasDynAud = !!cm._audTemplate;
             const audParam = hasDynAud ? "_jwt_aud" : cm.aud || "token_url";
             audPreStep = hasDynAud
-              ? `  lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "_jwt_aud");\n\n`
+              ? this._buildJwtAudResolutionStep(cm._audTemplate, "_jwt_aud", "  ")
               : "";
             const scopeParam = cm.scope || "scope";
             refreshCall =
@@ -1881,7 +1931,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     const hasDynAud = !!cm._audTemplate;
     const audParam = hasDynAud ? `_jwt_aud_${safeOv}` : cm.aud || "token_url";
     const audPreStep = hasDynAud
-      ? `${indent}lr_save_string(lr_eval_string("${cm._audTemplate.replace(/"/g, '\\"')}"), "${audParam}");\n\n`
+      ? this._buildJwtAudResolutionStep(cm._audTemplate, audParam, indent)
       : "";
     const scopeParam  = cm.scope  || "scope";
     const kidParam    = cm.kid    || "signing_kid";
