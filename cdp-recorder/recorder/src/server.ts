@@ -28,6 +28,7 @@ export interface ServerState {
   transactions: string[]; // completed transaction names, for the "trail" display
   activeTransaction: string | null;
   error: string | null;
+  warning: string | null;
 }
 
 function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -60,6 +61,7 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
     transactions: [],
     activeTransaction: null,
     error: null,
+    warning: null,
   };
 
   const server = createServer(async (req, res) => {
@@ -108,6 +110,7 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
           lastHarPath: state.lastHarPath,
           lastHarEntryCount: state.lastHarEntryCount,
           error: state.error,
+          warning: state.warning,
         });
         return;
       }
@@ -119,6 +122,7 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
         state.transactions = [];
         state.activeTransaction = null;
         state.error = null;
+        state.warning = null;
         await recorder.start();
         sendJson(res, 200, { ok: true });
         return;
@@ -131,12 +135,19 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
         // on this request's critical path. See recorder.ts's startTransaction().
         recorder.startTransaction(name);
         state.activeTransaction = name;
+        state.warning = null;
         sendJson(res, 200, { ok: true, name });
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/api/tx/end") {
-        recorder.endTransaction(); // same — background screenshot, not on the critical path
+        const ended = recorder.endTransaction(); // same — background screenshot, not on the critical path
+        if (ended && ended.requestCount === 0 && state.activeTransaction) {
+          state.warning =
+            `No network requests were captured during "${state.activeTransaction}". ` +
+            `Make sure you are clicking in the RECORDING browser window (the one showing the orange ` +
+            `"This is the RECORDING window" page), not your usual browser.`;
+        }
         if (state.activeTransaction) state.transactions.push(state.activeTransaction);
         state.activeTransaction = null;
         sendJson(res, 200, { ok: true });
@@ -178,7 +189,11 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
         // the floating control-window process itself, which this handler
         // has no reference to. Quitting from the page and Ctrl+C in the
         // terminal should do exactly the same full cleanup either way.
-        setTimeout(() => process.kill(process.pid, "SIGTERM"), 200);
+        // process.emit, NOT process.kill: on Windows, process.kill(self, "SIGTERM")
+        // terminates abruptly WITHOUT running the SIGTERM handler, so the browser
+        // teardown and temp-profile deletion never happened — every session leaked
+        // two temp Edge profiles on disk. Emitting invokes the registered handler.
+        setTimeout(() => process.emit("SIGTERM"), 200);
         return;
       }
 
