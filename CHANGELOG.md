@@ -5,6 +5,17 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — CDP Recorder: empty transactions, unclear recording window, Quit cleanup (BUG-EXT-014, BUG-EXT-015)
+
+- The recording browser now opens on a "This is the RECORDING window" page instead of a blank
+  `about:blank`, and the toolbar's notice points users to it — previously nothing identified
+  which window was being recorded, and browsing in a normal browser silently captured nothing.
+- The toolbar warns immediately when a transaction ends with zero captured requests.
+- Script Studio no longer shows an empty transaction whose only traffic was filtered noise
+  (`pruneEmptyPagerefTransactions()`), and no longer generates an empty transaction for it.
+- Quit now actually runs cleanup on Windows (was leaking two temp Edge profiles per session).
+- New Playwright end-to-end test: `cd cdp-recorder/recorder && npm run test:e2e`.
+
 ### Added — CDP Recorder: standalone HAR recording with no browser extension
 
 The existing `perfx-recorder-extension` requires installing a Chrome/Edge extension, which

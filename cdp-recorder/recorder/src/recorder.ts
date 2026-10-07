@@ -153,15 +153,29 @@ export class Recorder {
     return id;
   }
 
-  endTransaction(): void {
+  /**
+   * Returns how many requests were tagged to the transaction being ended, so
+   * the UI can warn immediately on a zero — the classic symptom of browsing
+   * in a window that isn't the recording browser.
+   */
+  endTransaction(): { requestCount: number } | null {
     const active = harBuilder.activeTransaction as { id?: string } | null;
     harBuilder.endTransaction();
-    if (!active?.id) return;
+    if (!active?.id) return null;
     const txId = active.id;
+    const requestCount = this.countRequestsForTransaction(txId);
     void this.captureAllScreenshots().then((shots) => {
       const entry = this.screenshots.get(txId);
       if (entry) entry.end = shots;
     });
+    return { requestCount };
+  }
+
+  private countRequestsForTransaction(txId: string): number {
+    let n = 0;
+    for (const e of harBuilder.completedEntries as Array<{ pageref?: string | null }>) if (e.pageref === txId) n++;
+    for (const e of (harBuilder.pendingEntries as Map<string, { pageref?: string | null }>).values()) if (e.pageref === txId) n++;
+    return n;
   }
 
   /** stop()-only: awaited, because stopCapture() detaches every CDP session right after this. */

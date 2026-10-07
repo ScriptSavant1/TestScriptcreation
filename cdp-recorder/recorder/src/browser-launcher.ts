@@ -116,6 +116,24 @@ export async function resolveProfile(mode: ProfileMode): Promise<ResolvedProfile
   };
 }
 
+// Landing page for the recording window. A bare about:blank gave no clue
+// that THIS is the window being recorded — a real user browsed in their
+// normal (favourites/logged-in) browser instead, and every transaction came
+// out empty. A data: URL is skipped by cdp-capture's shouldCapture(), so this
+// page never appears in the HAR.
+const RECORDING_WINDOW_LANDING_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>PerfX Recording Window</title>
+<style>body{font-family:Segoe UI,Arial,sans-serif;background:#fff7ed;color:#1f2937;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.box{max-width:620px;border:3px solid #ea580c;border-radius:12px;padding:28px 32px;background:#fff}
+h1{color:#c2410c;margin:0 0 12px;font-size:24px}li{margin:6px 0}</style></head><body><div class="box">
+<h1>&#9679; This is the RECORDING window</h1>
+<p>Only activity in <b>this</b> browser window (and tabs/popups it opens) is recorded.</p>
+<ol><li>Click <b>Start Recording</b> on the floating toolbar.</li>
+<li>Type your application URL in <b>this window's address bar</b> and log in here.</li>
+<li>Do NOT use your usual browser window &mdash; it is not being recorded.</li></ol>
+<p style="color:#6b7280;font-size:13px">This window uses its own temporary profile, separate from your usual browser. You may need to log in again here.</p>
+</div></body></html>`;
+const RECORDING_WINDOW_LANDING_URL = "data:text/html;charset=utf-8," + encodeURIComponent(RECORDING_WINDOW_LANDING_HTML);
+
 export async function launchAndWaitForPort(
   browserPath: string,
   userDataDir: string,
@@ -127,7 +145,7 @@ export async function launchAndWaitForPort(
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-popup-blocking", // same rationale as the Phase 0 probe — see its src/probe.ts
-    "about:blank",
+    RECORDING_WINDOW_LANDING_URL,
   ];
 
   const child = spawn(browserPath, args, { stdio: "ignore", windowsHide: false });

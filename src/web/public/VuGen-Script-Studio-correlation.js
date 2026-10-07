@@ -411,24 +411,31 @@ function _injectPagerefMarkers(entries, harPages) {
   }
   if (prSeen.size === 0) return;
 
-  // Rebuild entries in one pass, injecting start/end markers at pageref boundaries
+  // Rebuild entries in one pass, injecting start/end markers at pageref boundaries.
+  // Markers are tagged _pagerefSynthetic so a later pass (pruneEmptyPagerefTransactions,
+  // called after applyFilters() has run) can drop any pair that ends up empty once
+  // filtering removes every entry between them — e.g. a transaction whose only
+  // captured traffic was a background image/favicon request that applyFilters()
+  // classifies as noise. detectMarkers() runs BEFORE applyFilters() (filtering needs
+  // S.txns settled first), so at injection time there is no way yet to know which
+  // entries will end up filtered — this has to be a separate, later pass.
   const result = [];
   let currentPr = null;
   for (const e of entries) {
     const pr = e.isMarker ? null : (e.pageref || null);
     if (pr !== currentPr) {
       if (currentPr !== null && harPages.has(currentPr)) {
-        result.push(_makeStudioMarker("end", harPages.get(currentPr)));
+        result.push(_makeStudioMarker("end", harPages.get(currentPr), true));
       }
       if (pr !== null && harPages.has(pr)) {
-        result.push(_makeStudioMarker("start", harPages.get(pr)));
+        result.push(_makeStudioMarker("start", harPages.get(pr), true));
       }
       currentPr = pr;
     }
     result.push(e);
   }
   if (currentPr !== null && harPages.has(currentPr)) {
-    result.push(_makeStudioMarker("end", harPages.get(currentPr)));
+    result.push(_makeStudioMarker("end", harPages.get(currentPr), true));
   }
 
   // Replace contents of entries in-place (preserves S.entries1 reference)
@@ -436,7 +443,7 @@ function _injectPagerefMarkers(entries, harPages) {
   for (const e of result) entries.push(e);
 }
 
-function _makeStudioMarker(markerType, txnName) {
+function _makeStudioMarker(markerType, txnName, pagerefSynthetic) {
   return {
     id: -1, url: "", method: "GET", status: 0, ct: "", dur: 0, startMs: 0,
     reqHdrs: [], hdrsMap: {}, body: null, respCt: "", respBody: "",
@@ -444,7 +451,47 @@ function _makeStudioMarker(markerType, txnName) {
     _perfx_class: null, _perfx_interval: null, _perfx_occurrences: null,
     _perfx_burst_id: null, _normalizedUrl: null,
     filtered: false, isMarker: true, markerType, txnName, txn: null,
+    _pagerefSynthetic: !!pagerefSynthetic,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Removes synthetic (pageref-injected) start/end marker pairs that ended up
+// with ZERO visible (non-filtered) requests between them once applyFilters()
+// has run — e.g. a transaction whose only captured traffic was a background
+// image/favicon request classified as static-asset noise. Left in place, the
+// UI would show a confusing "transaction with no requests," and generators
+// would emit a start/end transaction pair with nothing inside it. Must run
+// AFTER applyFilters(), since filtering is what determines "visible."
+//
+// Explicit bookmarklet markers (//START-Name.invalid, user-authored) are
+// deliberately NOT touched here — only synthetic ones this tool injected
+// itself are second-guessed.
+// ═══════════════════════════════════════════════════════════════════════════
+function pruneEmptyPagerefTransactions(entries) {
+  const toRemoveNames = new Set();
+  let i = 0;
+  while (i < entries.length) {
+    const e = entries[i];
+    if (e.isMarker && e._pagerefSynthetic && e.markerType === "start") {
+      let j = i + 1;
+      let hasVisible = false;
+      while (j < entries.length && !(entries[j].isMarker && entries[j]._pagerefSynthetic && entries[j].markerType === "end" && entries[j].txnName === e.txnName)) {
+        if (!entries[j].isMarker && !entries[j].filtered) hasVisible = true;
+        j++;
+      }
+      if (!hasVisible && j < entries.length) {
+        entries.splice(j, 1); // end marker
+        entries.splice(i, 1); // start marker
+        toRemoveNames.add(e.txnName);
+        continue; // re-examine from the same index — entries shifted left
+      }
+    }
+    i++;
+  }
+  if (toRemoveNames.size > 0 && S.txns) {
+    S.txns = S.txns.filter((t) => !toRemoveNames.has(t.name));
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

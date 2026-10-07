@@ -7,7 +7,8 @@
   "scripts": {
     "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit",
-    "build:exe": "node scripts/build-exe.mjs"
+    "build:exe": "node scripts/build-exe.mjs",
+    "test:e2e": "node --import tsx tests-manual/repro-multi-tx.mjs"
   },
   "dependencies": {
     "chrome-remote-interface": "^0.33.2"
