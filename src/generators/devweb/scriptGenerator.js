@@ -1496,9 +1496,14 @@ ${
           // in replaceParameters(). Falling back to the literal "jwt_token" here
           // silently broke every script whose output var wasn't literally that name.
           const jwtOutVar = this.sanitizeVarName(cm.output || "jwt_token");
-          // Dynamic audience: resolve {paramName} placeholders from the merged params object
+          // Dynamic audience: resolve {paramName} placeholders from the merged params object.
+          // [^{}] (not \w) because the placeholder name is whatever literal string the
+          // original script passed to its getter call (e.g. getEnvironmentVariable("iam-host"))
+          // — unrestricted, can contain hyphens/dots/anything. \w alone silently left
+          // "{iam-host}" unresolved (hyphen doesn't match \w), producing a broken aud
+          // like "https:///as/token.oauth2" with no error at generation time.
           const audLine = cm._audTemplate
-            ? `    const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{(\\w+)\\}/g, (_, k) => _jwtParams[k] || '');\n    _jwtParams['_jwt_aud'] = _jwtAud;\n`
+            ? `    const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{([^{}]+)\\}/g, (_, k) => _jwtParams[k] || '');\n    _jwtParams['_jwt_aud'] = _jwtAud;\n`
             : "";
           const tokenCall = this._jwtClaimMapNeedsTokenFromMap(cm)
             ? `getJwtTokenFromMap(${cmJson}, _jwtParams)`
@@ -2106,8 +2111,9 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
           // Same variable as generateInitialize() — must match so the refresh
           // check/assignment and the initial one operate on the same global.
           const jwtOutVar = this.sanitizeVarName(cm.output || "jwt_token");
+          // [^{}] not \w — see generateInitialize()'s matching comment for why.
           const audLine = cm._audTemplate
-            ? `        const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{(\\w+)\\}/g, (_, k) => _jwtParams[k] || '');\n        _jwtParams['_jwt_aud'] = _jwtAud;\n`
+            ? `        const _jwtAud = ${JSON.stringify(cm._audTemplate)}.replace(/\\{([^{}]+)\\}/g, (_, k) => _jwtParams[k] || '');\n        _jwtParams['_jwt_aud'] = _jwtAud;\n`
             : "";
           const tokenCall = this._jwtClaimMapNeedsTokenFromMap(cm)
             ? `getJwtTokenFromMap(${cmJson}, _jwtParams)`
@@ -2420,8 +2426,9 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
       // getJwtTokenFromMap()'s aud resolution also depends on paramsVar['_jwt_aud']
       // being pre-populated (same "_jwt_aud" sentinel convention as the standard path).
       if (cm._audTemplate) {
+        // [^{}] not \w — see generateInitialize()'s matching comment for why.
         const audExpr = JSON.stringify(cm._audTemplate);
-        code += `\n${this.indent(`const _jwtAud_${safeOv} = ${audExpr}.replace(/\\{(\\w+)\\}/g, (_, k) => ${paramsVar}[k] || '');`, indentLevel)}`;
+        code += `\n${this.indent(`const _jwtAud_${safeOv} = ${audExpr}.replace(/\\{([^{}]+)\\}/g, (_, k) => ${paramsVar}[k] || '');`, indentLevel)}`;
         code += `\n${this.indent(`${paramsVar}['_jwt_aud'] = _jwtAud_${safeOv};`, indentLevel)}`;
       }
       const cmJson = JSON.stringify(cm);

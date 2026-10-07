@@ -87,8 +87,10 @@ describe('VuGen JWT generation routes to createJWTFromMap()/refreshJWTFromMap() 
     expect(code).toContain("'openbanking-intent-id':'consentid'");
     expect(code).toContain("'login_hint_token':'loginhinttoken'");
     expect(code).toContain("_typ:'JWS'");
-    // Dynamic aud pre-step still present.
-    expect(code).toContain('lr_save_string(lr_eval_string("https://{iam-host}/as/token.oauth2"), "_jwt_aud");');
+    // Dynamic aud is resolved via LR.getParam() inside web_js_run's own JS engine,
+    // not lr_eval_string()'s native {name} substitution — see
+    // _buildJwtAudResolutionStep's doc comment for why (hyphenated param names).
+    expect(code).toContain("Code=LR.setParam('_jwt_aud', 'https://'+LR.getParam('iam-host')+'/as/token.oauth2');");
   });
 
   test('generateActionC() refresh block routes to refreshJWTFromMap() for the new scenario', () => {
@@ -132,7 +134,7 @@ describe('VuGen per-request JWT — hyphenated keys quoted + dynamic aud resolve
     const g = makePerRequestGenerator(cm, 'reg_jwt');
     const block = g.generatePerRequestJwtCode({ name: 'MyRequest' }, '  ');
 
-    expect(block).toContain("lr_save_string(lr_eval_string(\"https://{host}/token\"), \"_jwt_aud_reg_jwt\");");
+    expect(block).toContain("Code=LR.setParam('_jwt_aud_reg_jwt', 'https://'+LR.getParam('host')+'/token');");
     expect(block).toContain("aud:LR.getParam('_jwt_aud_reg_jwt')");
     expect(block).toContain("'software_statement':LR.getParam('software_statement_param')");
     expect(block).toContain("'x-custom-claim':'literal-value'");
