@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CDP Recorder User Guide</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --text: #1f2937; --muted: #5b6472; --border: #e2e6ec;
+  --accent: #2563eb; --accent-soft: #eaf1ff; --warn: #9a3412; --warn-bg: #fff7ed; --warn-border: #fdba74;
+  --ok: #15803d; --ok-bg: #effaf3; --ok-border: #a7e3bd; --code-bg: #f1f3f6; --shadow: 0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151a; --card: #1b1f26; --text: #e6e9ee; --muted: #9aa3b0; --border: #2c323b;
+    --accent: #6ea0ff; --accent-soft: #1e2a40; --warn: #fdba74; --warn-bg: #2b1d12; --warn-border: #7c4a1d;
+    --ok: #6fdc95; --ok-bg: #13261b; --ok-border: #2b5a3c; --code-bg: #232831; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151a; --card: #1b1f26; --text: #e6e9ee; --muted: #9aa3b0; --border: #2c323b;
+  --accent: #6ea0ff; --accent-soft: #1e2a40; --warn: #fdba74; --warn-bg: #2b1d12; --warn-border: #7c4a1d;
+  --ok: #6fdc95; --ok-bg: #13261b; --ok-border: #2b5a3c; --code-bg: #232831; --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15.5px/1.6 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+header.top { margin-bottom: 24px; }
+header.top h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; }
+header.top p { margin: 0; color: var(--muted); }
+h2 { font-size: 21px; margin: 44px 0 10px; padding-top: 8px; scroll-margin-top: 16px; }
+h3 { font-size: 16.5px; margin: 22px 0 6px; }
+p, li { max-width: 72ch; }
+a { color: var(--accent); }
+code, kbd { font-family: Consolas, "Cascadia Mono", monospace; font-size: 13.5px; background: var(--code-bg); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13.5px; }
+pre code { padding: 0; background: none; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); }
+.summary ol { margin: 6px 0 0; padding-left: 22px; }
+.summary li { margin: 3px 0; }
+nav.toc { margin: 20px 0 8px; }
+nav.toc ol { columns: 2; column-gap: 28px; margin: 6px 0 0; padding-left: 20px; }
+nav.toc li { break-inside: avoid; margin: 2px 0; }
+@media (max-width: 640px) { nav.toc ol { columns: 1; } }
+.callout { border-radius: 10px; padding: 12px 16px; margin: 14px 0; border: 1px solid; }
+.callout strong:first-child { display: block; margin-bottom: 2px; }
+.callout.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--text); }
+.callout.warn strong:first-child { color: var(--warn); }
+.callout.ok { background: var(--ok-bg); border-color: var(--ok-border); }
+.callout.ok strong:first-child { color: var(--ok); }
+.callout.info { background: var(--accent-soft); border-color: var(--border); }
+.step { display: grid; grid-template-columns: 34px 1fr; gap: 14px; margin: 26px 0; }
+.step .num { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; display: grid; place-items: center; }
+.step h3 { margin-top: 4px; }
+.shots { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; margin: 12px 0 4px; }
+figure { margin: 0; }
+figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 10px; background: #fff; box-shadow: var(--shadow); }
+figure.toolbar img { width: 300px; }
+figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; max-width: 520px; }
+table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+.table-wrap { overflow-x: auto; }
+td.opt code { white-space: nowrap; overflow-wrap: normal; }
+td.opt { width: 1%; }
+footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
+@media print {
+  body { background: #fff; }
+  .card, figure img { box-shadow: none; }
+  h2 { break-after: avoid; }
+  figure { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>CDP Recorder: User Guide</h1>
+  <p>Record a browser journey as a HAR file for PerfX Script Studio, without installing a browser extension. Updated {{date}}.</p>
+</header>
+
+<section class="card summary">
+  <strong>In short</strong>
+  <ol>
+    <li>Download <code>cdp-recorder.exe</code> from the PerfX Studio home page and double-click it.</li>
+    <li>Two windows open: a small <b>toolbar</b>, and an orange <b>"This is the RECORDING window"</b> browser.</li>
+    <li>Click <b>Start Recording</b>, name a transaction, click <b>Start Transaction</b>.</li>
+    <li>Do your steps <b>in the recording window</b>, then click <b>End Transaction</b>. Repeat for each step.</li>
+    <li>Click <b>Stop Recording</b> and give the file a name. The HAR is saved next to the <code>.exe</code>.</li>
+    <li>Load the HAR into <b>Script Studio</b> to generate your script.</li>
+  </ol>
+</section>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#what">What it is</a></li>
+    <li><a href="#get">Get the recorder</a></li>
+    <li><a href="#launch">Start it</a></li>
+    <li><a href="#record">Record your journey</a></li>
+    <li><a href="#warning">The orange "no requests" warning</a></li>
+    <li><a href="#stop">Stop and save</a></li>
+    <li><a href="#studio">Open it in Script Studio</a></li>
+    <li><a href="#quit">Finish up</a></li>
+    <li><a href="#chrome">Use Chrome instead of Edge</a></li>
+    <li><a href="#data">Your data</a></li>
+    <li><a href="#trouble">Troubleshooting</a></li>
+    <li><a href="#options">Command-line options</a></li>
+  </ol>
+</nav>
+
+<h2 id="what">1. What it is</h2>
+<p>CDP Recorder is a single program (<code>cdp-recorder.exe</code>) that records everything your browser sends and receives while you use an application, including new tabs and pop-ups, and saves it as a HAR file. Script Studio turns that HAR into a DevWeb or VuGen Web HTTP/HTML script.</p>
+<p>Use it when the PerfX browser extension can't be installed on your machine. You don't need to open DevTools (F12) either.</p>
+
+<h2 id="get">2. Get the recorder</h2>
+<p>On the PerfX Studio home page, click <b>⬇ Get CDP Recorder</b>. This downloads <code>cdp-recorder.exe</code>.</p>
+<p>Move it into a folder you'll keep your recordings in, such as <code>C:\PerfX\Recordings</code>. Recordings are saved in the same folder the <code>.exe</code> runs from.</p>
+<div class="callout info"><strong>Nothing is installed</strong>It's a single file. It runs on your PC only, and nothing you record is sent to the PerfX server.</div>
+
+<h2 id="launch">3. Start it</h2>
+<p>Double-click <code>cdp-recorder.exe</code>. After a few seconds two windows open:</p>
+<div class="shots">
+  <figure class="toolbar"><img src="{{img:01-toolbar-idle.png}}" alt="CDP Recorder toolbar showing a Start Recording button, status Idle, and a note pointing to the recording window"><figcaption><b>The toolbar</b> (top-right of your screen). You control the recording from here. It is not recorded.</figcaption></figure>
+</div>
+<div class="shots">
+  <figure><img src="{{img:02-recording-window.png}}" alt="Browser window with an orange-bordered box reading: This is the RECORDING window"><figcaption><b>The recording window</b>: a separate Edge (or Chrome) window. Everything you do in this window, and in any tabs or pop-ups it opens, is recorded.</figcaption></figure>
+</div>
+<div class="callout warn"><strong>Use only the recording window</strong>Your usual browser window is <b>not</b> recorded, even if it's the same browser. If you click around in your normal browser, the recording comes out empty. The recording window uses its own temporary profile, so you may need to log in to your application again there.</div>
+
+<h2 id="record">4. Record your journey</h2>
+
+<div class="step"><div class="num">1</div><div>
+<h3>Click Start Recording, then wait for "Settled"</h3>
+<p>The toolbar shows two counters and, once it's ready, a green <b>"Settled — safe to start a transaction"</b> line. This usually takes a second or two, but can take up to about 20 seconds on a slow or heavily managed PC. <b>Start Transaction</b> stays greyed out until then.</p>
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+<h3>Name your transaction and click Start Transaction</h3>
+<p>Type a short name for the business step, such as <i>Login</i>, <i>Search</i> or <i>Checkout</i>. Each transaction becomes a timed transaction in your script. You can also press <kbd>Enter</kbd> instead of clicking.</p>
+<div class="shots"><figure class="toolbar"><img src="{{img:03-toolbar-ready.png}}" alt="Toolbar showing Settled, a transaction name field containing Login, and a Start Transaction button"><figcaption>Ready to start a transaction named "Login".</figcaption></figure></div>
+</div></div>
+
+<div class="step"><div class="num">3</div><div>
+<h3>Do the step in the recording window</h3>
+<p>The toolbar badge now reads <b>Recording — Login</b>. Go to the recording window, type your application's address in its address bar, and carry out the step.</p>
+<div class="shots">
+  <figure class="toolbar"><img src="{{img:04-toolbar-in-transaction.png}}" alt="Toolbar with status Recording — Login and an End Transaction button"><figcaption>A transaction in progress.</figcaption></figure>
+  <figure style="flex:1 1 380px"><img src="{{img:05-recording-app.png}}" alt="An application's sign-in page open in the recording window"><figcaption>Your application in the recording window. (A sample app is shown here.)</figcaption></figure>
+</div>
+<p><b>Active</b> counts requests still in progress. <b>Background</b> counts repeating "heartbeat" calls the app makes on its own; these are kept separate.</p>
+</div></div>
+
+<div class="step"><div class="num">4</div><div>
+<h3>Click End Transaction, then repeat for the next step</h3>
+<p>Wait until the page has finished loading (Active back to <b>0</b>), then click <b>End Transaction</b>. Name the next step and start it. Finished transactions are listed under <b>Completed transactions</b>.</p>
+<div class="shots"><figure class="toolbar"><img src="{{img:06-toolbar-trail.png}}" alt="Toolbar listing completed transactions Login and Search"><figcaption>Two transactions done: Login and Search.</figcaption></figure></div>
+<div class="callout ok"><strong>New tabs and pop-ups are recorded too</strong>If a link opens a new tab or a sign-in pop-up, keep going in that tab. It belongs to the recording window and its traffic is captured in the current transaction.</div>
+</div></div>
+
+<h3>Tips for a clean recording</h3>
+<ul>
+  <li>One business step per transaction. Don't put a whole journey in one transaction.</li>
+  <li>Start the transaction <i>before</i> you click, and end it <i>after</i> the page has loaded.</li>
+  <li>Close other tabs in the recording window that you don't need, so their traffic doesn't end up in your transactions.</li>
+</ul>
+
+<h2 id="warning">5. The orange "no requests" warning</h2>
+<p>If a transaction ends without recording a single request, the toolbar shows this straight away:</p>
+<div class="shots"><figure class="toolbar"><img src="{{img:07-toolbar-warning.png}}" alt="Toolbar with an orange warning: No network requests were captured during Logout"><figcaption>"Logout" captured nothing.</figcaption></figure></div>
+<p>Almost always this means the clicks happened in a different browser window. Switch to the window with the orange <b>"This is the RECORDING window"</b> page (or a tab it opened) and do that step again as a new transaction.</p>
+<p>An empty transaction is left out when Script Studio builds your script, so it does no harm. It just won't be there.</p>
+
+<h2 id="stop">6. Stop and save</h2>
+<p>Click <b>Stop Recording</b>. You're asked for a file name (the default is <code>recording.har</code>). The toolbar then shows <b>Recording complete</b> with the number of requests captured.</p>
+<div class="shots"><figure class="toolbar"><img src="{{img:08-toolbar-complete.png}}" alt="Toolbar showing Recording complete, 8 entries, my-recording.har, with Download HAR and New Recording buttons"><figcaption>The recording is saved.</figcaption></figure></div>
+<p>Where your file is:</p>
+<ul>
+  <li><b>Saved automatically</b> in the same folder as <code>cdp-recorder.exe</code>.</li>
+  <li><b>Download HAR</b> saves another copy through your browser, usually to your <i>Downloads</i> folder.</li>
+</ul>
+<p>To record again, click <b>New Recording</b> or <b>Start Recording</b>. If the toolbar gets long, scroll it.</p>
+
+<h2 id="studio">7. Open it in Script Studio</h2>
+<p>In PerfX Studio, open <b>Script Studio</b>, drop your HAR into <b>Recording 1</b>, choose <b>DevWeb</b> or <b>Web HTTP/HTML</b>, and click <b>Analyze &amp; Generate</b>.</p>
+<div class="shots"><figure><img src="{{img:09-studio-upload.png}}" alt="Script Studio with my-recording.har loaded as Recording 1"><figcaption>The HAR loaded into Script Studio.</figcaption></figure></div>
+<div class="shots"><figure><img src="{{img:10-studio-result.png}}" alt="Script Studio results: 6 requests, 2 transactions, and the generated main.js"><figcaption>The generated script. Your transactions appear as <code>SC01_01_LOGIN</code>, <code>SC01_02_SEARCH</code> and so on. Here the empty "Logout" transaction was correctly left out.</figcaption></figure></div>
+<div class="callout info"><strong>"Responses have empty bodies" warning</strong>Script Studio may say that some responses have empty bodies and suggest re-recording with DevTools' "Disable cache". For CDP Recorder files you can ignore this when it's about images, styles or scripts: the recorder deliberately keeps response bodies only for pages and API calls, which is what correlation needs.</div>
+
+<h2 id="quit">8. Finish up</h2>
+<p>Click <b>Quit</b> on the toolbar. This closes both windows and deletes the temporary browser profile, including anything you logged in to during the session. Your HAR files are kept.</p>
+
+<h2 id="chrome">9. Use Chrome instead of Edge</h2>
+<p>By default the recorder uses Microsoft Edge, and falls back to Chrome only if Edge isn't installed. To use Chrome, make a shortcut once:</p>
+<ol>
+  <li>Right-click <code>cdp-recorder.exe</code> → <b>Show more options</b> → <b>Create shortcut</b>.</li>
+  <li>Right-click the new shortcut → <b>Properties</b>.</li>
+  <li>In <b>Target</b>, add <code> --browser chrome</code> after the closing quote:
+    <pre><code>"C:\PerfX\Recordings\cdp-recorder.exe" --browser chrome</code></pre></li>
+  <li>Click <b>OK</b> and rename it, for example <i>CDP Recorder (Chrome)</i>.</li>
+</ol>
+<p>Double-click the shortcut whenever you want Chrome. Double-clicking the <code>.exe</code> itself still opens Edge.</p>
+<p>If you then see <i>"No Chrome install found"</i>, Chrome is installed somewhere non-standard (for example under your user profile). Ask your support team, or see <a href="#options">Command-line options</a>.</p>
+
+<h2 id="data">10. Your data</h2>
+<ul>
+  <li>Everything runs on your PC. Recordings are saved only to your disk. Nothing is uploaded to the PerfX server.</li>
+  <li>Values of request fields whose names look like passwords, PINs, CVVs or secrets are replaced with a placeholder.</li>
+  <li>Cookies, sign-in tokens (<code>Authorization</code> headers) and response content are kept in full, because Script Studio needs them to find dynamic values.</li>
+  <li>The temporary browser profile is deleted when you click <b>Quit</b>.</li>
+</ul>
+<div class="callout warn"><strong>Treat HAR files as sensitive</strong>A HAR can contain live session tokens and personal data from the application. Record with test accounts, store HARs in an approved location, and delete them when you've finished.</div>
+
+<h2 id="trouble">11. Troubleshooting</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td>Start Transaction stays greyed out</td><td>Wait for the green "Settled" line. It can take up to about 20 seconds on a slow PC. If it still hasn't appeared after about 20 seconds, the button is enabled anyway, but capture may be incomplete. Record a short test transaction and make sure the orange "no requests" warning doesn't appear.</td></tr>
+<tr><td>Orange "No network requests were captured" warning</td><td>You were clicking in the wrong window. See <a href="#warning">section 5</a>.</td></tr>
+<tr><td>Transactions are empty in Script Studio</td><td>Same cause as the orange warning. Record again using only the recording window.</td></tr>
+<tr><td>Have to log in again every time</td><td>Expected: the recording window starts fresh each time. To stay logged in between runs, start it with <code>--profile C:\PerfX\profile</code> (see <a href="#options">options</a>).</td></tr>
+<tr><td>Windows warns about an unrecognised app</td><td>Follow your organisation's process for running approved tools, or ask your support team.</td></tr>
+<tr><td>"Remote debugging port never opened — may be disabled by policy"</td><td>Your PC's IT policy blocks the browser feature the recorder relies on. Contact your IT team; use the bookmarklet (Classic) recording option meanwhile.</td></tr>
+<tr><td>"No Edge/Chrome install found"</td><td>The browser isn't in its usual location. See <a href="#options">options</a> for <code>EDGE_PATH</code> / <code>CHROME_PATH</code>.</td></tr>
+<tr><td>It won't start, or the toolbar is blank</td><td>An earlier recorder may still be running. Close it (Task Manager → <code>cdp-recorder.exe</code> → End task) and try again.</td></tr>
+<tr><td>Can't find the HAR file</td><td>Look in the folder you ran <code>cdp-recorder.exe</code> from, or click <b>Download HAR</b> on the toolbar before clicking Quit.</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="options">12. Command-line options</h2>
+<p>For a shortcut's <b>Target</b>, or a Command Prompt in the recorder's folder:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Option</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td class="opt"><code>--browser chrome</code><br><code>--browser edge</code></td><td>Choose the browser. The default tries Edge first, then Chrome.</td></tr>
+<tr><td class="opt"><code>--profile C:\PerfX\profile</code></td><td>Keep the recording window's profile in this folder between runs, so you stay logged in. It is not deleted on Quit.</td></tr>
+<tr><td class="opt"><code>--real-profile</code></td><td>Use your own everyday Edge profile (bookmarks, saved logins). Close <b>every</b> Edge window first, or it won't start.</td></tr>
+<tr><td class="opt"><code>--out C:\PerfX\HARs</code></td><td>Save recordings to this folder instead of the recorder's own folder.</td></tr>
+<tr><td class="opt"><code>--ui-port 8787</code><br><code>--cdp-port 9333</code></td><td>Change the local ports used, if something else already uses them. Rarely needed.</td></tr>
+</tbody>
+</table></div>
+<p>If the browser is installed in a non-standard location, tell the recorder where it is before starting it, for example:</p>
+<pre><code>set CHROME_PATH=C:\Users\you\AppData\Local\Google\Chrome\Application\chrome.exe
+cdp-recorder.exe --browser chrome</code></pre>
+<p>(<code>EDGE_PATH</code> works the same way for Edge.)</p>
+
+<footer>PerfX Studio · CDP Recorder user guide · Screenshots taken from the current version of the tool.</footer>
+</div>
+</body>
+</html>

@@ -26,7 +26,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12.5px; line-height: 1.4; background: var(--bg); color: var(--text);
   margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px;
-  height: 100vh; overflow: hidden;
+  height: 100vh; overflow-y: auto;
 }
 .hidden { display: none !important; }
 /* Transaction trail is the one thing that grows unboundedly (one chip per
@@ -42,7 +42,10 @@ body {
 .header, #errorBanner, #warningBanner, #countCard, #namingCard, #harReadyCard, #actionArea, .notice, .footer {
   flex-shrink: 0;
 }
-#trailCard { display: flex; flex-direction: column; min-height: 0; flex: 0 1 auto; }
+/* min-height keeps the label + one row of chips visible; previously min-height:0
+   let the card shrink below its own content when the toolbar was full (e.g. a
+   warning banner + "Recording complete"), so the chips spilled out of the card. */
+#trailCard { display: flex; flex-direction: column; min-height: 78px; flex: 0 1 auto; }
 .trail-chips { overflow-y: auto; max-height: 110px; min-height: 36px; padding-right: 2px; flex-shrink: 1; }
 .header { display: flex; align-items: center; gap: 8px; }
 .header-title { font-weight: 600; font-size: 13px; flex: 1; }
@@ -66,7 +69,8 @@ body {
 .naming-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 .trail-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-.trail-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+/* flex-start: without it, wrapped rows stretch to fill min-height and chips render oversized. */
+.trail-chips { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; align-items: flex-start; }
 .trail-chip { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px; font-size: 11px; }
 
 .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
