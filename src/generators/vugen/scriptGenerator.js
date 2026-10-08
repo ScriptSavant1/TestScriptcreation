@@ -1159,7 +1159,10 @@ static void gen_hex64(const char *param_name) {
    */
   _jsSingleQuotedForCString(value) {
     let s = String(value);
-    s = s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    // "/" → "\/" (same character to JS): VuGen scans web_js_run Code= for "//"
+    // line comments and warns (MWAR-26311) on e.g. 'https://', which must not
+    // appear literally in a Code= string.
+    s = s.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\//g, "\\/");
     s = s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     return "'" + s + "'";
   }

@@ -5,6 +5,14 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — VuGen JWT: "RSA parse: expected outer SEQUENCE" and "// line comment" warning (BUG-054)
+
+- `lre-utils.js`/`.dat` now accept a private key whose newlines are written as `\n`, which
+  is how `default.cfg` stores it — previously every VuGen JWT using a multi-line PEM from
+  `[CommandArguments]` failed in vuser_init. DevWeb was unaffected.
+- Generated VuGen JWT code no longer contains a literal `//` inside `web_js_run` (VuGen
+  warning MWAR-26311).
+
 ### Added — CDP Recorder user guide (HTML, with screenshots)
 
 - `Docs/user/CDP-RECORDER-USER-GUIDE.html`: a single self-contained page for end users —
