@@ -19,6 +19,7 @@ This is the master index for all LRE Toolkit documentation. Documentation is org
 | Use the Converter tool | [Converter Guide](user/CONVERTER-GUIDE.md) |
 | Use Script Studio | [Script Studio Guide](user/STUDIO-GUIDE.md) |
 | Use the HAR Recorder | [Recorder Guide](user/RECORDER-GUIDE.md) |
+| Record with CDP Recorder (no extension) | [CDP Recorder User Guide](user/CDP-RECORDER-USER-GUIDE.html) (HTML, with screenshots) |
 | Understand JWT / DPoP / PKCE | [Auth Guide](technical/AUTH-GUIDE.md), [JWT Guide](technical/JWT-GUIDE.md), [DPoP Guide](technical/DPOP-GUIDE.md), [PKCE Guide](technical/PKCE-GUIDE.md) |
 | Fix a problem | [Troubleshooting](user/TROUBLESHOOTING.md) |
 
@@ -66,6 +67,7 @@ For performance engineers and QA teams who use the tool daily.
 | [Converter Guide](user/CONVERTER-GUIDE.md) | Convert Postman/Bruno/JMX → VuGen step-by-step | Performance Engineers |
 | [Script Studio Guide](user/STUDIO-GUIDE.md) | HAR correlation engine, 1-HAR and 2-HAR workflows | Performance Engineers |
 | [Recorder Guide](user/RECORDER-GUIDE.md) | HAR recording on VCSE/Azure VMs, bookmarklet setup | Performance Engineers |
+| [CDP Recorder User Guide](user/CDP-RECORDER-USER-GUIDE.html) | Self-contained HTML with real screenshots: launch, transactions, warnings, Chrome, troubleshooting. Regenerate: `cdp-recorder/recorder/scripts/build-user-guide.mjs` | Performance Engineers |
 | [Troubleshooting](user/TROUBLESHOOTING.md) | Common errors, FAQ, known limitations | All users |
 
 ---
