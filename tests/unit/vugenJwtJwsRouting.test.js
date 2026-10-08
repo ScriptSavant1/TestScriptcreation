@@ -31,6 +31,15 @@
 
 const WebHttpScriptGenerator = require('../../src/generators/vugen/scriptGenerator.js');
 
+// Every web_js_run "Code=..." argument, decoded from its C string literal into
+// the exact JavaScript VuGen's engine receives (\\ → \, \" → ").
+function eachCodeArg(cSource) {
+  return [...cSource.matchAll(/"Code=((?:[^"\\]|\\.)*)"/g)].map((m) => JSON.parse('"' + m[1] + '"'));
+}
+function cJsOf(cSource, startsWith) {
+  return eachCodeArg(cSource).find((js) => js.startsWith(startsWith));
+}
+
 function makeGenerator(jwtClaimMap) {
   const g = new WebHttpScriptGenerator([], { info: { name: 'VugenJwtJwsRoutingTest' } }, {});
   g.hasJwt = true;
@@ -90,7 +99,9 @@ describe('VuGen JWT generation routes to createJWTFromMap()/refreshJWTFromMap() 
     // Dynamic aud is resolved via LR.getParam() inside web_js_run's own JS engine,
     // not lr_eval_string()'s native {name} substitution — see
     // _buildJwtAudResolutionStep's doc comment for why (hyphenated param names).
-    expect(code).toContain("Code=LR.setParam('_jwt_aud', 'https://'+LR.getParam('iam-host')+'/as/token.oauth2');");
+    // "/" is emitted as "\/" so VuGen never sees "//" in Code= (MWAR-26311 warning).
+    expect(cJsOf(code, "LR.setParam('_jwt_aud'")).toBe("LR.setParam('_jwt_aud', 'https:\\/\\/'+LR.getParam('iam-host')+'\\/as\\/token.oauth2');");
+    expect(eachCodeArg(code).every((js) => !js.includes('//'))).toBe(true);
   });
 
   test('generateActionC() refresh block routes to refreshJWTFromMap() for the new scenario', () => {
@@ -134,7 +145,8 @@ describe('VuGen per-request JWT — hyphenated keys quoted + dynamic aud resolve
     const g = makePerRequestGenerator(cm, 'reg_jwt');
     const block = g.generatePerRequestJwtCode({ name: 'MyRequest' }, '  ');
 
-    expect(block).toContain("Code=LR.setParam('_jwt_aud_reg_jwt', 'https://'+LR.getParam('host')+'/token');");
+    expect(cJsOf(block, "LR.setParam('_jwt_aud_reg_jwt'")).toBe("LR.setParam('_jwt_aud_reg_jwt', 'https:\\/\\/'+LR.getParam('host')+'\\/token');");
+    expect(eachCodeArg(block).every((js) => !js.includes('//'))).toBe(true);
     expect(block).toContain("aud:LR.getParam('_jwt_aud_reg_jwt')");
     expect(block).toContain("'software_statement':LR.getParam('software_statement_param')");
     expect(block).toContain("'x-custom-claim':'literal-value'");
