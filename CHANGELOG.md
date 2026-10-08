@@ -5,6 +5,20 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Added — CDP Recorder user guide (HTML, with screenshots)
+
+- `Docs/user/CDP-RECORDER-USER-GUIDE.html`: a single self-contained page for end users —
+  download, launch, recording transactions, the "no requests" warning, saving, loading into
+  Script Studio, using Chrome, data handling, troubleshooting and command-line options.
+  All screenshots are captured from the real tool by
+  `cdp-recorder/recorder/tests-manual/capture-guide-screenshots.mjs`; rebuild the page with
+  `cdp-recorder/recorder/scripts/build-user-guide.mjs`.
+
+### Fixed — CDP Recorder toolbar layout (BUG-EXT-016)
+
+- Completed-transaction chips no longer render oversized or spill out of their card; the
+  toolbar scrolls instead of clipping when it's full.
+
 ### Fixed — CDP Recorder: empty transactions, unclear recording window, Quit cleanup (BUG-EXT-014, BUG-EXT-015)
 
 - The recording browser now opens on a "This is the RECORDING window" page instead of a blank
