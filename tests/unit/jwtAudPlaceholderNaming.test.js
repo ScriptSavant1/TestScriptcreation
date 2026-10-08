@@ -115,13 +115,19 @@ describe('VuGen — aud placeholder resolution handles any variable-name shape',
     // Execute the extracted Code= expression for real against a fake LR object.
     const audStepMatch = code.match(/"Code=(LR\.setParam\([\s\S]*?)\);"/);
     expect(audStepMatch).not.toBeNull();
+    // Decode the C string literal the way the C compiler / VuGen does (\\ → \, \" → "),
+    // so what runs below is exactly the JavaScript VuGen's engine receives.
+    const jsCode = JSON.parse('"' + audStepMatch[1] + '"');
+    // VuGen scans Code= for "//" line comments and warns (MWAR-26311) — the
+    // 'https://' in the aud template must reach it escaped, not literal.
+    expect(jsCode).not.toContain('//');
     const fakeParams = { [paramName]: 'auth.example.com' };
     const sandboxParams = {};
     const LR = {
       getParam: (k) => (fakeParams[k] !== undefined ? fakeParams[k] : (sandboxParams[k] || '')),
       setParam: (k, v) => { sandboxParams[k] = v; },
     };
-    const fn = new Function('LR', `${audStepMatch[1]});`);
+    const fn = new Function('LR', `${jsCode});`);
     fn(LR);
     expect(sandboxParams['_jwt_aud']).toBe('https://auth.example.com/as/token.oauth2');
     expect(sandboxParams['_jwt_aud']).not.toContain('{');

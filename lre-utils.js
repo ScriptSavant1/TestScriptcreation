@@ -2761,7 +2761,11 @@ function _getRsaKey(secret) {
   }
   /* PEM -> DER */
   var pem = _decodeHtmlEntities(raw);
-  pem = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  /* Literal "\n"/"\r" (backslash + letter) must go too: default.cfg's
+     [CommandArguments] stores a multi-line PEM on one line that way, and
+     lr_get_attrib_string() returns it unchanged. Backslash is not a base64
+     character, so stripping these can never remove real key data. */
+  pem = pem.replace(/-----[^-]+-----/g, "").replace(/\\[rn]/g, "").replace(/\s+/g, "");
   /* standard base64: _b64uDecode handles + and / correctly (only converts - and _) */
   var der = _b64uDecode(pem);
   /* parse RSA key */
