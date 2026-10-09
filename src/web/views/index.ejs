@@ -1762,7 +1762,7 @@ code {
 
       window.handleCdpBannerClick = function (e) {
         e.preventDefault();
-        window.location.href = '/downloads/cdp-recorder';
+        window.location.href = '<%= basePath %>/downloads/cdp-recorder';
       };
 
       // Best-effort: if a recorder is already running on this machine, this
@@ -2535,7 +2535,7 @@ code {
         <div class="help-callout help-callout-green">
           <strong>Three ways to record — choose what works for you:</strong><br><br>
           <strong>Option A — CDP Recorder (recommended if extensions are blocked):</strong> A floating toolbar, no browser extension install at all — works on locked-down corporate machines where "Load unpacked" is disabled by Group Policy. One-time setup: download a single file, run it. Click Start, record your journey (including new tabs and popups), click Stop — the HAR downloads straight from the toolbar.
-          <a href="/downloads/cdp-recorder" style="color:var(--success);font-weight:700;text-decoration:underline">Get CDP Recorder →</a><br><br>
+          <a href="<%= basePath %>/downloads/cdp-recorder" style="color:var(--success);font-weight:700;text-decoration:underline">Get CDP Recorder →</a><br><br>
           <strong>Option B — PerfX Extension:</strong> A Chrome/Edge extension with a dedicated side panel. No DevTools needed. Click Start, record your journey, click Stop — the HAR is automatically sent to Script Studio.
           <a href="#" onclick="openExtModal(event)" style="color:var(--success);font-weight:700;text-decoration:underline">Get the extension →</a><br><br>
           <strong>Option C — Classic Bookmarklet:</strong> No install at all. Drag two buttons to your bookmark bar, open DevTools (F12), record your journey, export the HAR manually, then upload it here.
@@ -3630,7 +3630,7 @@ function hideResults() {
 }
 function resetResult() { hideResults(); }
 </script>
-<script src="/analytics-device.js" defer></script>
+<script src="<%= basePath %>/analytics-device.js" defer></script>
 
 <!-- ══ PerfX Extension Install Modal ════════════════════════════════════════ -->
 <div id="ext-modal-backdrop" class="ext-modal-backdrop" onclick="closeExtModal(event)">
@@ -3728,7 +3728,7 @@ function resetResult() { hideResults(); }
       </div>
 
       <div class="ext-modal-footer">
-        <a class="ext-dl-main-btn" href="/downloads/recorder-extension" download>
+        <a class="ext-dl-main-btn" href="<%= basePath %>/downloads/recorder-extension" download>
           ⬇ Download PerfX-Recorder-Extension.zip
         </a>
         <div class="ext-modal-note">After installing, the extension side panel guides you through recording. You do not need to return to this page to record — just click the PerfX icon in your toolbar.</div>

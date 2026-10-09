@@ -248,9 +248,13 @@ class WebServer {
     });
 
     // ── Home ──────────────────────────────────────────────────────────────────
+    // basePath: '' at the bare root, '/converter' under the IIS virtual
+    // directory. Any root-absolute link in the page must be prefixed with it —
+    // a bare '/downloads/...' resolves outside the IIS application and 404s.
     const renderHome = (req, res) => {
       res.render("index", {
         title: "PerfX Studio — Performance Script Generation",
+        basePath: req.path.startsWith("/converter") ? "/converter" : "",
       });
     };
     this.app.get("/", renderHome);
@@ -279,7 +283,7 @@ class WebServer {
     // Called by the "Download Extension" button on the home page — users never
     // navigate to this URL directly; the browser handles it as a file download.
     const EXTENSION_DIR = path.join(__dirname, "..", "..", "perfx-recorder-extension");
-    this.app.get("/downloads/recorder-extension", (req, res) => {
+    this.app.get(["/downloads/recorder-extension", "/converter/downloads/recorder-extension"], (req, res) => {
       const fs = require("fs");
       if (!fs.existsSync(EXTENSION_DIR)) {
         return res.status(404).json({ error: "extension_not_available" });
@@ -305,12 +309,17 @@ class WebServer {
     // binary) and not built on every request (packaging takes several
     // seconds, unlike the extension zip above which is cheap to build live).
     const CDP_RECORDER_EXE = path.join(__dirname, "..", "..", "cdp-recorder", "recorder", "dist", "cdp-recorder.exe");
-    this.app.get("/downloads/cdp-recorder", (req, res) => {
+    this.app.get(["/downloads/cdp-recorder", "/converter/downloads/cdp-recorder"], (req, res) => {
       const fs = require("fs");
       if (!fs.existsSync(CDP_RECORDER_EXE)) {
+        // dist/ is gitignored, so a fresh deployment never has the exe until an
+        // admin copies it in (DEPLOYMENT-IIS.md Step 5c).
         return res.status(404).json({
           error: "cdp_recorder_not_built",
-          message: "Run `npm run build:exe` in cdp-recorder/recorder/ to produce dist/cdp-recorder.exe before this download is available.",
+          message:
+            "cdp-recorder.exe is not on this server yet. An administrator must build it " +
+            "(npm run build:exe in cdp-recorder/recorder/) and copy it to " +
+            "cdp-recorder\\recorder\\dist\\cdp-recorder.exe inside the application folder.",
         });
       }
       res.download(CDP_RECORDER_EXE, "cdp-recorder.exe");
