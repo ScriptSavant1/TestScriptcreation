@@ -76,7 +76,7 @@ D:\MSINetData\WWW\converter\
     +-- recorder\
         +-- dist\
             +-- cdp-recorder.exe   <- pre-built, see Step 5c below. Served by
-                                      GET /downloads/cdp-recorder. Do NOT copy
+                                      GET /converter/downloads/cdp-recorder. Do NOT copy
                                       the rest of cdp-recorder\ (source,
                                       node_modules) -- the server only needs
                                       this one file to exist at this path.
@@ -373,7 +373,7 @@ You should see: A password login page. Enter the ADMIN_TOKEN set in Step 7. You 
 
 **Test 3 -- CDP Recorder download:**
 ```
-https://loadrunner.webdev.banksvcs.net/downloads/cdp-recorder
+https://loadrunner.webdev.banksvcs.net/converter/downloads/cdp-recorder
 ```
 You should see: your browser starts downloading `cdp-recorder.exe` (roughly 90 MB). If you instead see a JSON error page, Step 5c was skipped or the file didn't make it to the server -- see Troubleshooting.
 
@@ -481,7 +481,8 @@ Only `ADMIN_TOKEN` is required.
 | 413 Request Entity Too Large | IIS blocking large file uploads | Confirm `maxAllowedContentLength="104857600"` in `web.config`. |
 | App pool keeps crashing | Rapid-fail protection triggered | Open Windows Event Viewer -> Windows Logs -> Application. Look for WAS or iisnode errors. |
 | Cannot find module 'better-sqlite3' | Node.js version mismatch between local machine and server | Run `node --version` on both machines -- both must print `v20.x.x`. Fix whichever is wrong, then re-run `npm install --production` on your local machine and re-copy `node_modules\` to the server. |
-| "Get CDP Recorder" downloads nothing / shows an error page | `cdp-recorder.exe` was never built, or wasn't copied to the server | Redo Step 5c. Confirm the file actually exists at `D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe` on the server. |
+| "Get CDP Recorder" shows an IIS **HTTP 404 page** (HTML), and the address bar shows `/downloads/cdp-recorder` with no `/converter` | The link is outside the `/converter` application. Fixed in code (links are now prefixed with `/converter` automatically) — redeploy the latest `src/web/server.js` and `src/web/views/index.ejs` | Redeploy, then use `https://loadrunner.webdev.banksvcs.net/converter/downloads/cdp-recorder` |
+| "Get CDP Recorder" shows a **JSON** error `cdp_recorder_not_built` | `cdp-recorder.exe` was never built, or wasn't copied to the server (it is not in git, so a code deployment never includes it) | Redo Step 5c. Confirm the file actually exists at `D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe` on the server. |
 
 ### Where to find log files
 
