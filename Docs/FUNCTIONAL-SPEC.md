@@ -134,7 +134,7 @@ Convert a browser HAR recording into a VuGen script, for use when VuGen's built-
 Three ways to produce the HAR this tool consumes, all producing the same HAR 1.2 shape:
 1. **Classic bookmarklet** — F12 DevTools, no install.
 2. **PerfX Extension** (`perfx-recorder-extension/`) — dedicated side panel, auto-exports HAR. Blocked on machines where Group Policy disables "Load unpacked."
-3. **CDP Recorder** (`cdp-recorder/`) — standalone, no browser extension at all; a single downloadable `.exe`, works where (2) is blocked. See `CDP-RECORDER-IMPLEMENTATION-PLAN.md`.
+3. **CDP Recorder** (`cdp-recorder/`) — standalone, no browser extension at all; a single `.exe` downloaded as `cdp-recorder.zip` (some proxies block bare `.exe` downloads), works where (2) is blocked. See `CDP-RECORDER-IMPLEMENTATION-PLAN.md`.
 
 ### Inputs
 

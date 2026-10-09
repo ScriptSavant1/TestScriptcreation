@@ -229,7 +229,7 @@ D:\MSINetData\WWW\converter\
 +-- <span class="fd">cdp-recorder\</span>
     +-- <span class="fd">recorder\</span>
         +-- <span class="fd">dist\</span>
-            +-- <span class="fn">cdp-recorder.exe</span>  &lt;-- pre-built (Step 5c)
+            +-- <span class="fn">cdp-recorder.zip</span>  &lt;-- pre-built (Step 5c)
                                  Served by GET /converter/downloads/cdp-recorder</pre></div>
 
   <div class="code-label">Do NOT copy these</div>
@@ -376,8 +376,8 @@ Copy TO the IIS server:
     <div class="callout-body"><strong>Success</strong><p><code>D:\MSINetData\WWW\converter\node_modules\</code> exists on the server and contains many subfolders (express, multer, better-sqlite3, etc.).</p></div>
   </div>
 
-  <h3>5c &mdash; Build and copy cdp-recorder.exe</h3>
-  <p>CDP Recorder (the "record without a browser extension" option on the Recorder tool and the home-page banner) is downloaded by end users as a single pre-built <code>.exe</code> &mdash; no Node.js, no npm install, nothing else needed on the machine that runs it. Like <code>node_modules</code> above, it must be built once on a machine with internet access and Node.js, then copied to the server as a plain file &mdash; the server never builds anything itself and has no internet access to do so.</p>
+  <h3>5c &mdash; Build and copy cdp-recorder.zip</h3>
+  <p>CDP Recorder (the "record without a browser extension" option on the Recorder tool and the home-page banner) is downloaded by end users as a ZIP containing a single pre-built <code>.exe</code> (a ZIP because some corporate proxies block <code>.exe</code> downloads) &mdash; no Node.js, no npm install, nothing else needed on the machine that runs it. Like <code>node_modules</code> above, it must be built once on a machine with internet access and Node.js, then copied to the server as a plain file &mdash; the server never builds anything itself and has no internet access to do so.</p>
 
   <p><b>What the build actually does</b>, so the output makes sense: bundles the recorder's TypeScript source and all dependencies into one file (<code>esbuild</code>), generates a Node.js "Single Executable Application" blob from that bundle (a built-in Node.js feature, not a third-party packager), then copies <code>node.exe</code> itself and injects that blob into the copy (<code>postject</code>). The result is a complete, standalone Node.js runtime with the recorder baked in &mdash; which is also why it's &asymp;90 MB, not a few hundred KB.</p>
 
@@ -385,7 +385,8 @@ Copy TO the IIS server:
 
 <span class="c-p">...\recorder&gt; </span><span class="c-t">npm install</span>
 <span class="c-p">...\recorder&gt; </span><span class="c-t">npm run build:exe</span>
-<span class="c-c">Wait for "Done: ...\dist\cdp-recorder.exe" to print.</span></pre></div>
+<span class="c-c">Wait for "Done: ...\dist\cdp-recorder.zip" to print.
+(Already have the .exe? "npm run build:zip" makes just the ZIP.)</span></pre></div>
 
   <p>You'll see output like this &mdash; the <code>postject</code> warning is expected, explained below, not a failure:</p>
   <div class="code-block"><pre><span class="c-c">&gt; Bundling (esbuild)
@@ -397,14 +398,19 @@ Start injection of NODE_SEA_BLOB in ...\dist\cdp-recorder.exe...
 warning: The signature seems corrupted!
 Injection done!
 
-Done: C:\path\to\...\cdp-recorder\recorder\dist\cdp-recorder.exe</span></pre></div>
+Built: C:\path\to\...\cdp-recorder\recorder\dist\cdp-recorder.exe
+
+&gt; Zipping (cdp-recorder.exe + README.txt)
+
+Done: C:\path\to\...\cdp-recorder\recorder\dist\cdp-recorder.zip</span></pre></div>
 
   <div class="ftree"><pre>
-Copy FROM your local machine:
-  <span class="fd">C:\path\to\bruno-devweb-converter\cdp-recorder\recorder\dist\cdp-recorder.exe</span>
+Copy FROM your local machine (the ZIP only):
+  <span class="fd">C:\path\to\bruno-devweb-converter\cdp-recorder\recorder\dist\cdp-recorder.zip</span>
 
 Copy TO the IIS server:
-  <span class="fd">D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe</span></pre></div>
+  <span class="fd">D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.zip</span></pre></div>
+  <p>Older servers that still have only <code>dist\cdp-recorder.exe</code> keep working: the download falls back to it until the ZIP is copied in. After that, you can delete the old <code>.exe</code>.</p>
 
   <div class="callout warn">
     <div class="callout-icon">!</div>
@@ -626,7 +632,7 @@ Copy TO the IIS server:
 
   <h3>Test 3 &mdash; CDP Recorder download</h3>
   <div class="url"><span class="up">https://</span><span class="uh">loadrunner.webdev.banksvcs.net</span><span class="ua">/converter/downloads/cdp-recorder</span></div>
-  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>Your browser starts downloading <code>cdp-recorder.exe</code> (roughly 90 MB). A JSON error page instead means Step 5c was skipped or the file didn't make it to the server.</p></div></div>
+  <div class="callout good"><div class="callout-icon">OK</div><div class="callout-body"><strong>You should see</strong><p>Your browser starts downloading <code>cdp-recorder.zip</code> (roughly 35 MB). A JSON error page instead means Step 5c was skipped or the file didn't make it to the server.</p></div></div>
 </section>
 
 <!-- STEP 11 -->
@@ -724,7 +730,7 @@ Copy TO the IIS server:
       <tr><td><b>413 Request Entity Too Large</b></td><td>IIS blocking large uploads</td><td>Confirm <code>maxAllowedContentLength="104857600"</code> in <code>web.config</code>.</td></tr>
       <tr><td><b>App pool keeps crashing</b></td><td>Rapid-fail triggered</td><td>Open Windows Event Viewer &rarr; Windows Logs &rarr; Application. Look for WAS or iisnode errors.</td></tr>
       <tr><td><b>Cannot find module 'better-sqlite3'</b></td><td>Node.js version mismatch between local machine and server</td><td>Run <code>node --version</code> on both machines &mdash; both must print <code>v20.x.x</code>. Fix whichever differs, re-run <code>npm install --production</code> on your local machine, and re-copy <code>node_modules\</code> to the server.</td></tr>
-      <tr><td><b>"Get CDP Recorder" downloads nothing</b></td><td>cdp-recorder.exe was never built, or wasn't copied to the server</td><td>Redo Step 5c. Confirm the file exists at <code>D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe</code> on the server.</td></tr>
+      <tr><td><b>"Get CDP Recorder" downloads nothing</b></td><td>cdp-recorder.zip was never built, or wasn't copied to the server</td><td>Redo Step 5c. Confirm the file exists at <code>D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.zip</code> on the server.</td></tr>
     </tbody>
   </table></div>
 
