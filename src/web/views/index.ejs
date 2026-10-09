@@ -1744,13 +1744,13 @@ code {
   <!-- ── CDP Recorder banner ─────────────────────────────────────────────── -->
   <!-- Replaces the extension banner above for corporate environments where -->
   <!-- Group Policy blocks "Load unpacked": no browser extension at all, a -->
-  <!-- single self-contained .exe instead. See CDP-RECORDER-IMPLEMENTATION-PLAN.md -->
+  <!-- single self-contained .exe (downloaded as a .zip) instead. See CDP-RECORDER-IMPLEMENTATION-PLAN.md -->
   <!-- for the full architecture notes on why this exists and how it works. -->
   <div class="ext-banner" id="cdpBanner">
     <span class="ext-banner-badge">New</span>
     <div class="ext-banner-body">
       <div class="ext-banner-title">CDP Recorder — record without opening DevTools, no extension install</div>
-      <div class="ext-banner-sub" id="cdpBannerSub">A floating toolbar that captures your traffic — including new tabs and popups — names transactions, and sends the HAR straight to Script Studio. <strong>Works even where browser extensions are blocked.</strong> One-time setup: download once, run it.</div>
+      <div class="ext-banner-sub" id="cdpBannerSub">A floating toolbar that captures your traffic — including new tabs and popups — names transactions, and sends the HAR straight to Script Studio. <strong>Works even where browser extensions are blocked.</strong> One-time setup: download the ZIP once, extract it, run <strong>cdp-recorder.exe</strong>.</div>
     </div>
     <button class="ext-get-btn" id="cdpBannerBtn" onclick="handleCdpBannerClick(event)">⬇ Get CDP Recorder</button>
   </div>
@@ -2534,7 +2534,7 @@ code {
         <p class="help-p">A HAR (HTTP Archive) file is a recording of all the network requests your browser made during a session. Every modern browser's Developer Tools (F12) can export one. It contains all the URLs, request headers, request bodies, and responses for everything that happened during your recording.</p>
         <div class="help-callout help-callout-green">
           <strong>Three ways to record — choose what works for you:</strong><br><br>
-          <strong>Option A — CDP Recorder (recommended if extensions are blocked):</strong> A floating toolbar, no browser extension install at all — works on locked-down corporate machines where "Load unpacked" is disabled by Group Policy. One-time setup: download a single file, run it. Click Start, record your journey (including new tabs and popups), click Stop — the HAR downloads straight from the toolbar.
+          <strong>Option A — CDP Recorder (recommended if extensions are blocked):</strong> A floating toolbar, no browser extension install at all — works on locked-down corporate machines where "Load unpacked" is disabled by Group Policy. One-time setup: download the ZIP, extract it, then run cdp-recorder.exe. Click Start, record your journey (including new tabs and popups), click Stop — the HAR downloads straight from the toolbar.
           <a href="<%= basePath %>/downloads/cdp-recorder" style="color:var(--success);font-weight:700;text-decoration:underline">Get CDP Recorder →</a><br><br>
           <strong>Option B — PerfX Extension:</strong> A Chrome/Edge extension with a dedicated side panel. No DevTools needed. Click Start, record your journey, click Stop — the HAR is automatically sent to Script Studio.
           <a href="#" onclick="openExtModal(event)" style="color:var(--success);font-weight:700;text-decoration:underline">Get the extension →</a><br><br>

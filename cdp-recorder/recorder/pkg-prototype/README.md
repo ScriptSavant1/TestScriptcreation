@@ -17,10 +17,12 @@ before deciding whether to build Step 2 on top of this.
 npm run build:exe
 ```
 
-Produces `dist/cdp-recorder.exe` — this is the exact file `server.js`'s
-`/downloads/cdp-recorder` route serves, so run this (and restart the main
-web server, or it'll just pick up the new file on the next request) any
-time `pkg-prototype/entry.ts` or anything it imports changes.
+Produces `dist/cdp-recorder.exe` and `dist/cdp-recorder.zip` (the .exe plus
+a README.txt). The ZIP is what `server.js`'s `/downloads/cdp-recorder` route
+serves — some corporate proxies block a bare `.exe` download — falling back
+to the `.exe` if no ZIP is present. Run this (the web server picks up the new
+file on the next request) any time `pkg-prototype/entry.ts` or anything it
+imports changes. `npm run build:zip` re-zips an existing `.exe` only.
 
 See `scripts/build-exe.mjs` for what it actually does — the same steps
 documented manually below, automated. Two Windows-specific gotchas it
@@ -120,8 +122,8 @@ against its HTTP API and confirmed zero leftover `msedge.exe` or
 - [x] **CORS on `server.ts`** — the shared `/converter` page can now call
   this local server's API directly from the browser.
 - [x] **`/downloads/cdp-recorder` route** on the main `server.js` — serves
-  `dist/cdp-recorder.exe` for direct download, same pattern as the existing
-  extension distribution route.
+  `dist/cdp-recorder.zip` (falls back to `dist/cdp-recorder.exe`) for direct
+  download, same pattern as the existing extension distribution route.
 - [ ] Fold `entry.ts`'s approach back into the real `src/main.ts` (one entry
   point, not two) — still outstanding, not blocking anything.
 - [ ] The custom URL protocol registration discussed with the user, so a

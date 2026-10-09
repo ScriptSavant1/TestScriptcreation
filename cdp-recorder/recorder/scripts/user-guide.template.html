@@ -83,7 +83,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <section class="card summary">
   <strong>In short</strong>
   <ol>
-    <li>Download <code>cdp-recorder.exe</code> from the PerfX Studio home page and double-click it.</li>
+    <li>Download <code>cdp-recorder.zip</code> from the PerfX Studio home page, extract it, and double-click <code>cdp-recorder.exe</code>.</li>
     <li>Two windows open: a small <b>toolbar</b>, and an orange <b>"This is the RECORDING window"</b> browser.</li>
     <li>Click <b>Start Recording</b>, name a transaction, click <b>Start Transaction</b>.</li>
     <li>Do your steps <b>in the recording window</b>, then click <b>End Transaction</b>. Repeat for each step.</li>
@@ -115,9 +115,10 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <p>Use it when the PerfX browser extension can't be installed on your machine. You don't need to open DevTools (F12) either.</p>
 
 <h2 id="get">2. Get the recorder</h2>
-<p>On the PerfX Studio home page, click <b>⬇ Get CDP Recorder</b>. This downloads <code>cdp-recorder.exe</code>.</p>
-<p>Move it into a folder you'll keep your recordings in, such as <code>C:\PerfX\Recordings</code>. Recordings are saved in the same folder the <code>.exe</code> runs from.</p>
-<div class="callout info"><strong>Nothing is installed</strong>It's a single file. It runs on your PC only, and nothing you record is sent to the PerfX server.</div>
+<p>On the PerfX Studio home page, click <b>⬇ Get CDP Recorder</b>. This downloads <code>cdp-recorder.zip</code>.</p>
+<p>Right-click the ZIP, choose <b>Extract All…</b>, and extract it to a folder you'll keep your recordings in, such as <code>C:\PerfX\Recordings</code>. Recordings are saved in the same folder <code>cdp-recorder.exe</code> runs from.</p>
+<div class="callout warn"><strong>Extract it first</strong>Don't double-click <code>cdp-recorder.exe</code> while it is still inside the ZIP. Windows runs it from a temporary folder, and your recordings end up there.</div>
+<div class="callout info"><strong>Nothing is installed</strong>It's a single program. It runs on your PC only, and nothing you record is sent to the PerfX server.</div>
 
 <h2 id="launch">3. Start it</h2>
 <p>Double-click <code>cdp-recorder.exe</code>. After a few seconds two windows open:</p>
