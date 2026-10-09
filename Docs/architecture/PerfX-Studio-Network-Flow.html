@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PerfX Studio Network Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root { --bg: #f4f6fb; --ink: #0f1729; --ink2: #475069; --ink3: #6b7489; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Inter, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1680px; margin: 0 auto; padding: 40px 40px 56px; }
+  header h1 { font-size: 38px; letter-spacing: -.03em; margin: 0; font-weight: 800; }
+  header h1 span { background: linear-gradient(92deg, #4f46e5, #7c3aed); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header p { font-size: 17px; color: var(--ink2); margin: 8px 0 26px; max-width: 95ch; }
+  figure { margin: 0 0 30px; background: #fff; border: 1px solid #e4e7ee; border-radius: 22px; padding: 18px; box-shadow: 0 18px 40px -22px rgba(15,23,41,.25); }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: 14px; color: var(--ink2); padding: 12px 8px 2px; }
+  figcaption b { color: var(--ink); }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 22px; }
+  .card { background: #fff; border: 1px solid #e4e7ee; border-radius: 18px; padding: 20px 24px; box-shadow: 0 8px 24px -14px rgba(15,23,41,.18); }
+  .card h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -.01em; }
+  ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  ol.steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; font-size: 14.5px; color: var(--ink2); line-height: 1.45; }
+  ol.steps li b { color: var(--ink); }
+  .n { width: 28px; height: 28px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 13px; display: grid; place-items: center; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #eef0f5; vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); }
+  td code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; background: #f1f5f9; padding: 1px 6px; border-radius: 6px; color: var(--ink); }
+  .note { margin-top: 16px; font-size: 13.5px; color: var(--ink2); background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 12px 14px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } .wrap { padding: 20px 16px; } }
+  @media print { body { background: #fff; } figure, .card { box-shadow: none; break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span>PerfX Studio</span> — network flow</h1>
+    <p>Which machine talks to which, over what, and in what order — from opening the portal to running a load test. Recordings are processed on the tester's own PC; only collections and test plans travel to the server, and they are held in memory only.</p>
+  </header>
+
+  <figure id="fig-network">
+    <svg viewBox="0 0 1600 1000" role="img" aria-label="PerfX Studio network flow: the tester's browser reaches the IIS web server over HTTPS for the portal, the recorder download and collection conversion; the CDP Recorder runs on the tester's PC using only localhost ports and records the application under test; recordings are processed locally in the browser; finished script ZIPs are uploaded to LoadRunner, whose load generators drive traffic to the application under test." font-family="Inter, Segoe UI, sans-serif">
+      <defs>
+        <linearGradient id="zS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef2ff"/><stop offset="1" stop-color="#e0e7ff"/></linearGradient>
+        <linearGradient id="zW" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ecfdf5"/><stop offset="1" stop-color="#d1fae5"/></linearGradient>
+        <linearGradient id="zA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff7ed"/><stop offset="1" stop-color="#ffedd5"/></linearGradient>
+        <linearGradient id="gIIS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4338ca"/><stop offset="1" stop-color="#6d28d9"/></linearGradient>
+        <linearGradient id="gLR" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e1b4b"/><stop offset="1" stop-color="#4c1d95"/></linearGradient>
+        <linearGradient id="gMem" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0f766e"/><stop offset="1" stop-color="#0e7490"/></linearGradient>
+        <filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f1729" flood-opacity=".10"/></filter>
+        <marker id="mI" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#4338ca"/></marker>
+        <marker id="mG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#059669"/></marker>
+        <marker id="mO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#ea580c"/></marker>
+        <marker id="mV" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#6d28d9"/></marker>
+        <marker id="mS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#64748b"/></marker>
+      </defs>
+
+      <!-- ═══ ZONE: IIS WEB SERVER ═══ -->
+      <rect x="20" y="20" width="440" height="880" rx="24" fill="url(#zS)" stroke="#c7d2fe"/>
+      <rect x="40" y="38" width="196" height="30" rx="15" fill="#4338ca"/>
+      <text x="138" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">IIS WEB SERVER</text>
+
+      <!-- IIS front door bar -->
+      <g filter="url(#sh)"><rect x="372" y="90" width="68" height="790" rx="14" fill="url(#gIIS)"/></g>
+      <text transform="translate(412 485) rotate(-90)" text-anchor="middle" font-size="15" font-weight="700" fill="#fff" letter-spacing=".04em">IIS  ·  HTTPS 443  ·  URL Rewrite → iisnode</text>
+
+      <!-- Express app -->
+      <g filter="url(#sh)"><rect x="40" y="90" width="312" height="480" rx="16" fill="#fff"/></g>
+      <rect x="56" y="104" width="34" height="34" rx="9" fill="#e0e7ff"/>
+      <path d="M64 114h18M64 121h18M64 128h18" stroke="#4338ca" stroke-width="2.2" stroke-linecap="round"/>
+      <text x="102" y="119" font-size="15.5" font-weight="700" fill="#0f1729">Node.js · Express app</text>
+      <text x="102" y="136" font-size="12" fill="#475069">virtual directory /converter</text>
+
+      <g font-family="JetBrains Mono, Consolas, monospace">
+        <!-- rows: y = 150, 202, 254, 306, 358 -->
+        <rect x="56" y="150" width="280" height="44" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <rect x="64" y="161" width="44" height="22" rx="6" fill="#dbeafe"/><text x="86" y="176" text-anchor="middle" font-size="11" font-weight="700" fill="#1d4ed8">GET</text>
+        <text x="118" y="169" font-size="12.5" font-weight="600" fill="#0f1729">/converter</text>
+        <text x="118" y="186" font-size="11" fill="#64748b" font-family="Inter, Segoe UI, sans-serif">portal pages, scripts, styles</text>
+
+        <rect x="56" y="202" width="280" height="44" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <rect x="64" y="213" width="44" height="22" rx="6" fill="#ede9fe"/><text x="86" y="228" text-anchor="middle" font-size="11" font-weight="700" fill="#6d28d9">POST</text>
+        <text x="118" y="221" font-size="12.5" font-weight="600" fill="#0f1729">/convert · /convert-jmx</text>
+        <text x="118" y="238" font-size="11" fill="#64748b" font-family="Inter, Segoe UI, sans-serif">collection or .jmx · rate-limited</text>
+
+        <rect x="56" y="254" width="280" height="44" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <rect x="64" y="265" width="44" height="22" rx="6" fill="#dbeafe"/><text x="86" y="280" text-anchor="middle" font-size="11" font-weight="700" fill="#1d4ed8">GET</text>
+        <text x="118" y="273" font-size="12.5" font-weight="600" fill="#0f1729">/downloads/…</text>
+        <text x="118" y="290" font-size="11" fill="#64748b" font-family="Inter, Segoe UI, sans-serif">CDP Recorder program</text>
+
+        <rect x="56" y="306" width="280" height="44" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <rect x="64" y="317" width="44" height="22" rx="6" fill="#ede9fe"/><text x="86" y="332" text-anchor="middle" font-size="11" font-weight="700" fill="#6d28d9">POST</text>
+        <text x="118" y="325" font-size="12.5" font-weight="600" fill="#0f1729">/analytics/track</text>
+        <text x="118" y="342" font-size="11" fill="#64748b" font-family="Inter, Segoe UI, sans-serif">usage event</text>
+
+        <rect x="56" y="358" width="280" height="44" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <rect x="64" y="369" width="44" height="22" rx="6" fill="#dbeafe"/><text x="86" y="384" text-anchor="middle" font-size="11" font-weight="700" fill="#1d4ed8">GET</text>
+        <text x="118" y="377" font-size="12.5" font-weight="600" fill="#0f1729">/admin</text>
+        <text x="118" y="394" font-size="11" fill="#64748b" font-family="Inter, Segoe UI, sans-serif">sign-in · usage dashboard</text>
+      </g>
+      <!-- IIS → routes -->
+      <g stroke="#4338ca" stroke-width="2" fill="none">
+        <path d="M372 172 H 340" marker-end="url(#mI)"/><path d="M372 224 H 340" marker-end="url(#mI)"/><path d="M372 276 H 340" marker-end="url(#mI)"/><path d="M372 328 H 340" marker-end="url(#mI)"/><path d="M372 380 H 340" marker-end="url(#mI)"/>
+      </g>
+
+      <rect x="56" y="418" width="280" height="76" rx="12" fill="url(#gMem)"/>
+      <rect x="70" y="432" width="26" height="26" rx="7" fill="#fff" fill-opacity=".18"/>
+      <rect x="76" y="444" width="14" height="10" rx="2" fill="none" stroke="#fff" stroke-width="2"/><path d="M79 444v-3a4 4 0 0 1 8 0v3" fill="none" stroke="#fff" stroke-width="2"/>
+      <text x="106" y="444" font-size="13.5" font-weight="700" fill="#fff">In-memory processing</text>
+      <text x="106" y="462" font-size="11.5" fill="#ccfbf1">Parse → Analyse → Generate in RAM</text>
+      <text x="106" y="479" font-size="11.5" fill="#ccfbf1">ZIP streamed back · nothing on disk</text>
+
+      <text x="196" y="526" text-anchor="middle" font-size="12" fill="#475069">Upload size limits and a per-user</text>
+      <text x="196" y="544" text-anchor="middle" font-size="12" fill="#475069">rate limit protect the server</text>
+
+      <!-- analytics db -->
+      <path d="M196 570 V 606" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#mS)"/>
+      <g filter="url(#sh)"><rect x="40" y="610" width="312" height="110" rx="16" fill="#fff"/></g>
+      <ellipse cx="78" cy="640" rx="18" ry="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.8"/>
+      <path d="M60 640v26c0 3.3 8 6 18 6s18-2.7 18-6v-26" fill="#fef3c7" stroke="#d97706" stroke-width="1.8"/>
+      <path d="M60 653c0 3.3 8 6 18 6s18-2.7 18-6" fill="none" stroke="#d97706" stroke-width="1.8"/>
+      <text x="110" y="644" font-size="15" font-weight="700" fill="#0f1729">analytics.db (SQLite)</text>
+      <text x="110" y="664" font-size="12" fill="#475069">tool used, time, browser details</text>
+      <text x="110" y="682" font-size="12" fill="#475069">for the admin dashboard</text>
+      <text x="110" y="704" font-size="12" font-weight="600" fill="#b45309">never stores file contents</text>
+
+      <!-- dist folder -->
+      <g filter="url(#sh)"><rect x="40" y="750" width="312" height="130" rx="16" fill="#fff"/></g>
+      <path d="M58 776h14l5 6h21v26H58z" fill="#d1fae5" stroke="#059669" stroke-width="1.8" stroke-linejoin="round"/>
+      <text x="110" y="784" font-size="15" font-weight="700" fill="#0f1729">Download folder</text>
+      <text x="110" y="804" font-size="12" fill="#475069" font-family="JetBrains Mono, Consolas, monospace">…\cdp-recorder\recorder\dist</text>
+      <text x="110" y="826" font-size="12" fill="#475069">cdp-recorder.exe, served by</text>
+      <text x="110" y="844" font-size="12" fill="#475069">GET /downloads</text>
+      <text x="110" y="866" font-size="12" font-weight="600" fill="#047857">copied once at deployment</text>
+
+      <!-- ═══ ZONE: TESTER WORKSTATION ═══ -->
+      <rect x="580" y="20" width="480" height="880" rx="24" fill="url(#zW)" stroke="#a7f3d0"/>
+      <rect x="600" y="38" width="256" height="30" rx="15" fill="#059669"/>
+      <text x="728" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">TESTER'S WORKSTATION</text>
+
+      <!-- browser -->
+      <g filter="url(#sh)"><rect x="600" y="90" width="440" height="250" rx="16" fill="#fff"/></g>
+      <rect x="600" y="90" width="440" height="34" rx="16" fill="#f1f5f9"/><rect x="600" y="108" width="440" height="16" fill="#f1f5f9"/>
+      <circle cx="620" cy="107" r="5" fill="#f87171"/><circle cx="636" cy="107" r="5" fill="#fbbf24"/><circle cx="652" cy="107" r="5" fill="#34d399"/>
+      <rect x="672" y="98" width="250" height="18" rx="9" fill="#fff"/>
+      <text x="684" y="111" font-size="11" fill="#64748b" font-family="JetBrains Mono, Consolas, monospace">https://…/converter</text>
+      <text x="616" y="152" font-size="15.5" font-weight="700" fill="#0f1729">Web browser — PerfX Studio portal</text>
+      <rect x="616" y="168" width="200" height="156" rx="12" fill="#eef2ff" stroke="#c7d2fe"/>
+      <text x="632" y="194" font-size="14" font-weight="700" fill="#3730a3">Converter</text>
+      <text x="632" y="216" font-size="12" fill="#475069">sends a collection or</text>
+      <text x="632" y="233" font-size="12" fill="#475069">.jmx to the server and</text>
+      <text x="632" y="250" font-size="12" fill="#475069">receives the script ZIP</text>
+      <text x="632" y="282" font-size="11.5" font-weight="600" fill="#4338ca">server-side</text>
+      <rect x="828" y="168" width="196" height="156" rx="12" fill="#ecfdf5" stroke="#a7f3d0"/>
+      <text x="844" y="194" font-size="14" font-weight="700" fill="#047857">Recorder · Studio</text>
+      <text x="844" y="216" font-size="12" fill="#475069">opens the HAR and builds</text>
+      <text x="844" y="233" font-size="12" fill="#475069">the script ZIP inside</text>
+      <text x="844" y="250" font-size="12" fill="#475069">the browser</text>
+      <text x="844" y="282" font-size="11.5" font-weight="600" fill="#047857">never uploaded</text>
+
+      <!-- local disk -->
+      <g filter="url(#sh)"><rect x="600" y="380" width="440" height="130" rx="16" fill="#fff"/></g>
+      <rect x="616" y="396" width="34" height="34" rx="9" fill="#d1fae5"/>
+      <rect x="623" y="405" width="20" height="16" rx="3" fill="none" stroke="#059669" stroke-width="2"/><circle cx="638" cy="413" r="1.8" fill="#059669"/>
+      <text x="662" y="411" font-size="15" font-weight="700" fill="#0f1729">Local disk</text>
+      <text x="662" y="428" font-size="12" fill="#475069">Downloads folder</text>
+      <g font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="600">
+        <rect x="616" y="450" width="134" height="40" rx="10" fill="#ecfdf5" stroke="#a7f3d0"/><text x="683" y="475" text-anchor="middle" fill="#047857">recording.har</text>
+        <rect x="760" y="450" width="120" height="40" rx="10" fill="#f5f3ff" stroke="#ddd6fe"/><text x="820" y="475" text-anchor="middle" fill="#6d28d9">script.zip</text>
+        <rect x="890" y="450" width="134" height="40" rx="10" fill="#f1f5f9" stroke="#e2e8f0"/><text x="957" y="475" text-anchor="middle" fill="#334155">cdp-recorder.exe</text>
+      </g>
+
+      <!-- CDP recorder -->
+      <rect x="600" y="550" width="440" height="330" rx="18" fill="#fff" fill-opacity=".6" stroke="#6ee7b7" stroke-dasharray="6 5"/>
+      <rect x="820" y="562" width="204" height="26" rx="13" fill="#047857"/>
+      <text x="922" y="580" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">cdp-recorder.exe running</text>
+      <g filter="url(#sh)">
+        <rect x="616" y="604" width="180" height="260" rx="14" fill="#fff"/>
+        <rect x="820" y="604" width="204" height="110" rx="14" fill="#fff"/>
+        <rect x="820" y="744" width="204" height="120" rx="14" fill="#fff"/>
+      </g>
+      <rect x="616" y="604" width="6" height="260" rx="3" fill="#059669"/>
+      <text x="636" y="632" font-size="14.5" font-weight="700" fill="#0f1729">Recorder process</text>
+      <g font-size="12" fill="#475069"><text x="636" y="656">• capture engine</text><text x="636" y="676">• transaction tagging</text><text x="636" y="696">• noise detection</text><text x="636" y="716">• password scrubber</text><text x="636" y="736">• HAR writer</text></g>
+      <text x="636" y="772" font-size="11.5" font-weight="600" fill="#047857">listens on localhost</text>
+      <text x="636" y="790" font-size="11.5" font-weight="600" fill="#047857">only — no inbound</text>
+      <text x="636" y="808" font-size="11.5" font-weight="600" fill="#047857">network ports</text>
+
+      <text x="836" y="630" font-size="14" font-weight="700" fill="#0f1729">Floating toolbar</text>
+      <text x="836" y="650" font-size="12" fill="#475069">start, stop, name steps</text>
+      <rect x="836" y="664" width="172" height="34" rx="8" fill="#f1f5f9"/>
+      <text x="922" y="686" text-anchor="middle" font-size="12" font-weight="600" fill="#0f1729" font-family="JetBrains Mono, Consolas, monospace">127.0.0.1:8787</text>
+
+      <text x="836" y="770" font-size="14" font-weight="700" fill="#0f1729">Recording window</text>
+      <text x="836" y="790" font-size="12" fill="#475069">Edge / Chrome, own profile</text>
+      <rect x="836" y="804" width="172" height="44" rx="8" fill="#f1f5f9"/>
+      <text x="922" y="822" text-anchor="middle" font-size="11.5" font-weight="600" fill="#0f1729" font-family="JetBrains Mono, Consolas, monospace">DevTools port 9333</text>
+      <text x="922" y="839" text-anchor="middle" font-size="11" fill="#64748b">localhost only</text>
+
+      <!-- local arrows -->
+      <path d="M800 659 H 816" stroke="#059669" stroke-width="2.2" marker-start="url(#mG)" marker-end="url(#mG)"/>
+      <path d="M800 804 H 816" stroke="#059669" stroke-width="2.2" marker-start="url(#mG)" marker-end="url(#mG)"/>
+      <path d="M683 604 V 494" stroke="#059669" stroke-width="2.4" marker-end="url(#mG)"/>
+      <rect x="692" y="530" width="76" height="20" rx="10" fill="#fff" stroke="#a7f3d0"/><text x="730" y="544" text-anchor="middle" font-size="11" font-weight="700" fill="#047857">saves HAR</text>
+      <path d="M926 450 V 328" stroke="#059669" stroke-width="2.4" marker-end="url(#mG)"/>
+      <circle cx="926" cy="364" r="13" fill="#059669"/><text x="926" y="369" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">4</text>
+      <rect x="944" y="354" width="86" height="20" rx="10" fill="#fff" stroke="#a7f3d0"/><text x="987" y="368" text-anchor="middle" font-size="11" font-weight="700" fill="#047857">open HAR</text>
+      <path d="M800 324 V 446" stroke="#6d28d9" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#mV)"/>
+      <rect x="810" y="354" width="78" height="20" rx="10" fill="#fff" stroke="#ddd6fe"/><text x="849" y="368" text-anchor="middle" font-size="11" font-weight="700" fill="#6d28d9">save ZIP</text>
+
+      <!-- ═══ server ↔ workstation ═══ -->
+      <path d="M444 150 H 596" stroke="#4338ca" stroke-width="2.6" marker-start="url(#mI)" marker-end="url(#mI)"/>
+      <circle cx="476" cy="128" r="13" fill="#4338ca"/><text x="476" y="133" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">1</text>
+      <text x="496" y="133" font-size="12" font-weight="700" fill="#3730a3">open portal</text>
+
+      <path d="M612 214 V 214 H 444" stroke="#4338ca" stroke-width="2.6" marker-end="url(#mI)"/>
+      <circle cx="476" cy="196" r="13" fill="#4338ca"/><text x="476" y="201" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">5</text>
+      <text x="496" y="201" font-size="12" font-weight="700" fill="#3730a3">upload file</text>
+      <path d="M444 246 H 612" stroke="#6d28d9" stroke-width="2.6" marker-end="url(#mV)"/>
+      <text x="476" y="266" font-size="12" font-weight="700" fill="#6d28d9">ZIP stream back</text>
+
+      <path d="M612 304 H 444" stroke="#64748b" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#mS)"/>
+      <circle cx="476" cy="286" r="11" fill="#64748b"/><text x="476" y="290.5" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">6</text>
+      <text x="494" y="290" font-size="11.5" font-weight="700" fill="#475069">usage event</text>
+      <text x="476" y="324" font-size="11" fill="#64748b">no file data</text>
+
+      <!-- download recorder -->
+      <path d="M440 815 H 510 V 470 H 596" stroke="#059669" stroke-width="2.6" fill="none" marker-end="url(#mG)"/>
+      <circle cx="510" cy="640" r="13" fill="#059669"/><text x="510" y="645" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">2</text>
+      <rect x="470" y="660" width="80" height="38" rx="10" fill="#fff" stroke="#a7f3d0"/>
+      <text x="510" y="676" text-anchor="middle" font-size="11" font-weight="700" fill="#047857">download</text>
+      <text x="510" y="691" text-anchor="middle" font-size="11" fill="#475069">once, HTTPS</text>
+
+      <!-- ═══ RIGHT: LoadRunner ═══ -->
+      <g filter="url(#sh)"><rect x="1160" y="20" width="420" height="400" rx="24" fill="url(#gLR)"/></g>
+      <rect x="1180" y="38" width="196" height="30" rx="15" fill="#ffffff" fill-opacity=".14"/>
+      <text x="1278" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">LOAD TEST PLATFORM</text>
+      <circle cx="1530" cy="62" r="20" fill="none" stroke="#a78bfa" stroke-width="2"/><circle cx="1530" cy="62" r="11" fill="none" stroke="#c4b5fd" stroke-width="2"/><circle cx="1530" cy="62" r="4" fill="#ddd6fe"/>
+      <rect x="1180" y="90" width="380" height="130" rx="14" fill="#ffffff" fill-opacity=".1" stroke="#a78bfa" stroke-opacity=".5"/>
+      <text x="1200" y="120" font-size="16" font-weight="700" fill="#fff">LoadRunner Enterprise · VuGen</text>
+      <text x="1200" y="144" font-size="12.5" fill="#ddd6fe">DevWeb script ZIP uploaded to LRE,</text>
+      <text x="1200" y="163" font-size="12.5" fill="#ddd6fe">or VuGen project opened, replayed</text>
+      <text x="1200" y="182" font-size="12.5" fill="#ddd6fe">and checked before the test</text>
+      <text x="1200" y="206" font-size="12" font-weight="600" fill="#c4b5fd">scenario · users · ramp-up · pacing</text>
+      <rect x="1180" y="240" width="380" height="160" rx="14" fill="#ffffff" fill-opacity=".1" stroke="#a78bfa" stroke-opacity=".5"/>
+      <text x="1200" y="270" font-size="16" font-weight="700" fill="#fff">Load generators</text>
+      <text x="1200" y="294" font-size="12.5" fill="#ddd6fe">run hundreds of virtual users,</text>
+      <text x="1200" y="313" font-size="12.5" fill="#ddd6fe">each replaying the script with its</text>
+      <text x="1200" y="332" font-size="12.5" fill="#ddd6fe">own data, tokens and signatures</text>
+      <g fill="#c4b5fd"><circle cx="1210" cy="370" r="6"/><circle cx="1232" cy="370" r="6"/><circle cx="1254" cy="370" r="6"/><circle cx="1276" cy="370" r="6"/><circle cx="1298" cy="370" r="6"/><circle cx="1320" cy="370" r="6"/><circle cx="1342" cy="370" r="6"/><circle cx="1364" cy="370" r="6"/></g>
+      <text x="1384" y="375" font-size="12" fill="#ddd6fe">virtual users</text>
+
+      <!-- workstation → LRE -->
+      <path d="M1040 420 H 1100 V 155 H 1156" stroke="#6d28d9" stroke-width="2.6" fill="none" marker-end="url(#mV)"/>
+      <circle cx="1100" cy="300" r="13" fill="#6d28d9"/><text x="1100" y="305" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">7</text>
+      <rect x="1064" y="320" width="72" height="38" rx="10" fill="#fff" stroke="#ddd6fe"/>
+      <text x="1100" y="336" text-anchor="middle" font-size="11" font-weight="700" fill="#6d28d9">upload</text>
+      <text x="1100" y="351" text-anchor="middle" font-size="11" fill="#475069">script</text>
+
+      <!-- ═══ RIGHT: App under test ═══ -->
+      <rect x="1160" y="480" width="420" height="420" rx="24" fill="url(#zA)" stroke="#fed7aa"/>
+      <rect x="1180" y="498" width="256" height="30" rx="15" fill="#ea580c"/>
+      <text x="1308" y="518" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">APPLICATION UNDER TEST</text>
+      <g filter="url(#sh)"><rect x="1180" y="548" width="380" height="330" rx="16" fill="#fff"/></g>
+      <g transform="translate(1200 568)">
+        <circle cx="24" cy="24" r="22" fill="#ffedd5"/>
+        <circle cx="24" cy="24" r="13" fill="none" stroke="#ea580c" stroke-width="2"/>
+        <path d="M11 24h26M24 11c-5 4-5 22 0 26M24 11c5 4 5 22 0 26" fill="none" stroke="#ea580c" stroke-width="1.8"/>
+      </g>
+      <text x="1260" y="588" font-size="16" font-weight="700" fill="#0f1729">Web application + APIs</text>
+      <text x="1260" y="608" font-size="12.5" fill="#475069">test environment, over HTTPS</text>
+      <g>
+        <rect x="1200" y="636" width="110" height="64" rx="10" fill="#fff7ed" stroke="#fdba74"/><text x="1255" y="664" text-anchor="middle" font-size="12.5" font-weight="700" fill="#c2410c">Web UI</text><text x="1255" y="682" text-anchor="middle" font-size="11" fill="#475069">pages, assets</text>
+        <rect x="1325" y="636" width="110" height="64" rx="10" fill="#fff7ed" stroke="#fdba74"/><text x="1380" y="664" text-anchor="middle" font-size="12.5" font-weight="700" fill="#c2410c">APIs</text><text x="1380" y="682" text-anchor="middle" font-size="11" fill="#475069">JSON / REST</text>
+        <rect x="1450" y="636" width="90" height="64" rx="10" fill="#fff7ed" stroke="#fdba74"/><text x="1495" y="664" text-anchor="middle" font-size="12.5" font-weight="700" fill="#c2410c">Sign-in</text><text x="1495" y="682" text-anchor="middle" font-size="11" fill="#475069">SSO · JWT</text>
+      </g>
+      <text x="1200" y="736" font-size="12.5" fill="#475069">Recorded once by a tester (step 3),</text>
+      <text x="1200" y="756" font-size="12.5" fill="#475069">then loaded by many virtual users (step 8).</text>
+      <rect x="1200" y="780" width="340" height="74" rx="12" fill="#fff7ed"/>
+      <text x="1216" y="806" font-size="12.5" font-weight="700" fill="#9a3412">PerfX Studio never connects to this</text>
+      <text x="1216" y="826" font-size="12" fill="#475069">application itself — only the tester's browser</text>
+      <text x="1216" y="844" font-size="12" fill="#475069">and the load generators do.</text>
+
+      <!-- record journey -->
+      <path d="M1028 804 H 1176" stroke="#ea580c" stroke-width="2.6" marker-start="url(#mO)" marker-end="url(#mO)"/>
+      <circle cx="1100" cy="780" r="13" fill="#ea580c"/><text x="1100" y="785" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">3</text>
+      <rect x="1046" y="818" width="108" height="38" rx="10" fill="#fff" stroke="#fdba74"/>
+      <text x="1100" y="834" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">tester uses</text>
+      <text x="1100" y="849" text-anchor="middle" font-size="11" fill="#475069">the app · HTTPS</text>
+
+      <!-- load test -->
+      <path d="M1475 400 V 544" stroke="#ea580c" stroke-width="3" marker-end="url(#mO)"/>
+      <path d="M1505 400 V 544" stroke="#ea580c" stroke-width="3" marker-end="url(#mO)"/>
+      <path d="M1535 400 V 544" stroke="#ea580c" stroke-width="3" marker-end="url(#mO)"/>
+      <circle cx="1446" cy="451" r="13" fill="#ea580c"/><text x="1446" y="456" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">8</text>
+      <rect x="1310" y="436" width="116" height="30" rx="10" fill="#fff" stroke="#fdba74"/>
+      <text x="1368" y="456" text-anchor="middle" font-size="11.5" font-weight="700" fill="#c2410c">load traffic</text>
+
+      <!-- legend -->
+      <rect x="20" y="926" width="1560" height="60" rx="16" fill="#0f1729"/>
+      <g font-size="13" fill="#e2e8f0">
+        <text x="48" y="961" font-weight="800" fill="#fff" letter-spacing=".06em">KEY</text>
+        <path d="M110 956 H 160" stroke="#818cf8" stroke-width="3"/><text x="170" y="961">HTTPS to the portal</text>
+        <path d="M350 956 H 400" stroke="#34d399" stroke-width="3"/><text x="410" y="961">stays on the tester's PC (localhost, local files)</text>
+        <path d="M760 956 H 810" stroke="#fb923c" stroke-width="3"/><text x="820" y="961">traffic to the application under test</text>
+        <path d="M1090 956 H 1140" stroke="#a78bfa" stroke-width="3"/><text x="1150" y="961">script hand-off</text>
+        <path d="M1300 956 H 1350" stroke="#94a3b8" stroke-width="2.4" stroke-dasharray="6 4"/><text x="1360" y="961">metadata only</text>
+      </g>
+    </svg>
+    <figcaption><b>Network flow, steps 1–8.</b> Only three kinds of traffic reach the PerfX Studio server: page loads, collection uploads (handled in memory and returned as a ZIP), and small usage events. Recording and HAR processing never leave the tester's PC, and the recorder uses only localhost ports.</figcaption>
+  </figure>
+
+  <div class="cols">
+    <div class="card">
+      <h2>The flow, step by step</h2>
+      <ol class="steps">
+        <li><span class="n" style="background:#4338ca">1</span><span><b>Open the portal.</b> The browser loads PerfX Studio from the IIS server over HTTPS. IIS hands the request to the Node.js app through iisnode.</span></li>
+        <li><span class="n" style="background:#059669">2</span><span><b>Download the recorder (once).</b> The tester downloads <i>cdp-recorder.exe</i> from the portal and runs it locally. Nothing is installed.</span></li>
+        <li><span class="n" style="background:#ea580c">3</span><span><b>Record the journey.</b> The recorder opens its own Edge or Chrome window. The tester uses the application under test, naming each step from the floating toolbar. The recorder saves <i>recording.har</i> to the local disk.</span></li>
+        <li><span class="n" style="background:#059669">4</span><span><b>Build the script locally.</b> The HAR is opened in the Recorder or Script Studio, which filter, correlate and produce the script ZIP <b>inside the browser</b>. The recording is never uploaded.</span></li>
+        <li><span class="n" style="background:#4338ca">5</span><span><b>Or convert a collection.</b> A Postman or Bruno collection, or a JMeter plan, is uploaded. The server parses, analyses and generates the scripts in memory and streams the ZIP back.</span></li>
+        <li><span class="n" style="background:#64748b">6</span><span><b>Usage event.</b> A small record (which tool, when, browser details) goes to the admin dashboard. It never includes file contents.</span></li>
+        <li><span class="n" style="background:#6d28d9">7</span><span><b>Hand off to LoadRunner.</b> The tester uploads the ZIP to LoadRunner Enterprise or opens it in VuGen.</span></li>
+        <li><span class="n" style="background:#ea580c">8</span><span><b>Run the load test.</b> Load generators run many virtual users against the application under test.</span></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Ports and protocols</h2>
+      <table>
+        <tr><th>From → to</th><th>Port / channel</th><th>Carries</th></tr>
+        <tr><td>Browser → IIS</td><td><code>HTTPS 443</code></td><td>portal pages, uploads, ZIP downloads, recorder download</td></tr>
+        <tr><td>IIS → Node.js</td><td><code>iisnode pipe</code></td><td>same requests, inside the server</td></tr>
+        <tr><td>Toolbar → recorder</td><td><code>127.0.0.1:8787</code></td><td>start, stop, step names</td></tr>
+        <tr><td>Recorder → its browser</td><td><code>localhost:9333</code></td><td>DevTools protocol: network events</td></tr>
+        <tr><td>Browser → app under test</td><td><code>HTTPS</code></td><td>the tester's real journey</td></tr>
+        <tr><td>Load generators → app</td><td><code>HTTPS</code></td><td>virtual-user load</td></tr>
+      </table>
+      <div class="note"><b>Privacy by design:</b> uploads are held only in server memory for the length of one request. Recordings stay on the tester's PC. Password, PIN and CVV fields are redacted before a recording is saved.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

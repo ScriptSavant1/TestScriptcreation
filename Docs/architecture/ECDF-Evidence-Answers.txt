@@ -1,0 +1,13 @@
+Assign to Pillars: tick Designs, Delivers, Influences, Controls. Each answer below names these pillars, as the form asks.
+
+Ownership (807 characters, minimum 500)
+
+I was the sole engineer on PerfX Studio, owning it end to end from idea to production. Designs: I gathered requirements from performance engineers and designed the architecture, including a privacy-first approach where uploads are processed in memory only. Delivers: I wrote all the code - the file parsers, the correlation and parameterisation engine, the DevWeb and VuGen script generators, the browser-based Script Studio and the standalone CDP Recorder - with 265 commits since February 2026 (current version 2.10.13). I deployed it on our IIS servers and I own its support: when users report issues I reproduce, fix and release quickly. Controls: I added 254 automated tests, end-to-end browser tests, a bug log, decision records and user guides. Influences: I promote the tool and help teams adopt it.
+
+Impact (812 characters; fill in the placeholders)
+
+Delivers: PerfX Studio replaces manual scripting that typically took [X days] per user journey with a process that takes [Y minutes]. It is used by [N] engineers across [N] teams, with [N] scripts generated so far (tracked in the built-in usage dashboard). Scripts are now consistent, because correlation, data parameters and authentication are generated the same way every time, which reduces rework and failed test runs. It made testing possible for applications using modern token security (JWT and DPoP signing) in VuGen, which previously needed specialist hand-coding. Influences: the CDP Recorder lets testers record on locked-down corporate PCs where browser extensions are blocked by policy. Controls: uploads are never stored, recordings stay on the tester's PC, and passwords are removed automatically.
+
+Complexity (860 characters)
+
+Designs: the challenge was turning many different input formats into reliable scripts for two very different LoadRunner engines. Correlation means finding dynamic values, such as session tokens, hidden among hundreds of requests; I built detection that ranks candidates by confidence so engineers can accept or skip each one. VuGen only supports a very old JavaScript version, so I implemented RSA and elliptic-curve token signing within that limit. Controls: I added an automated check that blocks unsupported code before release. Recording on locked-down PCs meant capturing new tabs and sign-in pop-ups before their first request, packaged as one program with no installation. Delivers: I also handled hosting under a sub-path on IIS, data privacy risk, and backward compatibility - every new scenario is tested alongside existing ones so nothing regresses.

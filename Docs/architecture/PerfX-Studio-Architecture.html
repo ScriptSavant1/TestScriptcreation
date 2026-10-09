@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PerfX Studio Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root { --bg: #f4f6fb; --ink: #0f1729; --ink2: #475069; --ink3: #6b7489; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Inter, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1680px; margin: 0 auto; padding: 40px 40px 56px; }
+  header h1 { font-size: 38px; letter-spacing: -.03em; margin: 0; font-weight: 800; }
+  header h1 span { background: linear-gradient(92deg, #4f46e5, #7c3aed); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header p { font-size: 17px; color: var(--ink2); margin: 8px 0 0; max-width: 90ch; }
+  .stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin: 26px 0 30px; }
+  .stat { background: #fff; border: 1px solid #e4e7ee; border-radius: 16px; padding: 16px 18px; box-shadow: 0 8px 24px -14px rgba(15,23,41,.18); }
+  .stat b { display: block; font-size: 26px; letter-spacing: -.02em; }
+  .stat span { font-size: 13px; color: var(--ink3); }
+  figure { margin: 0 0 34px; background: #fff; border: 1px solid #e4e7ee; border-radius: 22px; padding: 18px; box-shadow: 0 18px 40px -22px rgba(15,23,41,.25); }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: 14px; color: var(--ink2); padding: 12px 8px 2px; }
+  figcaption b { color: var(--ink); }
+  @media (max-width: 900px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wrap { padding: 20px 16px; } }
+  @media print { body { background: #fff; } figure { box-shadow: none; break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span>PerfX Studio</span> — architecture</h1>
+    <p>A web portal that turns API collections, JMeter test plans and browser recordings into ready-to-run LoadRunner scripts, with correlation, parameterization and authentication generated automatically.</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><b>4 tools</b><span>Converter · Recorder · Script Studio · CDP Recorder</span></div>
+    <div class="stat"><b>4 input types</b><span>Postman · Bruno · JMeter · HAR recordings</span></div>
+    <div class="stat"><b>2 protocols</b><span>DevWeb (JavaScript) · VuGen Web HTTP/HTML (C)</span></div>
+    <div class="stat"><b>0 bytes</b><span>of user files written to the server disk</span></div>
+    <div class="stat"><b>254 tests</b><span>Jest unit tests + Playwright end-to-end checks</span></div>
+  </div>
+
+  <!-- ═════════════════════ FIGURE 1 — SYSTEM ARCHITECTURE ═════════════════════ -->
+  <figure id="fig-system">
+    <svg viewBox="0 0 1600 1010" role="img" aria-label="PerfX Studio system architecture: API collections, JMeter plans and browser recordings captured on the tester's PC flow into the web portal; recordings are processed in the browser, collections and test plans on the Node.js server entirely in memory; both produce DevWeb or VuGen script projects that run in LoadRunner." font-family="Inter, Segoe UI, sans-serif">
+      <defs>
+        <linearGradient id="gA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ecfdf5"/><stop offset="1" stop-color="#d1fae5"/></linearGradient>
+        <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef2ff"/><stop offset="1" stop-color="#e0e7ff"/></linearGradient>
+        <linearGradient id="gC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5f3ff"/><stop offset="1" stop-color="#ede9fe"/></linearGradient>
+        <linearGradient id="gHead" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#7c3aed"/></linearGradient>
+        <linearGradient id="gTarget" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e1b4b"/><stop offset="1" stop-color="#4c1d95"/></linearGradient>
+        <linearGradient id="gMem" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0f766e"/><stop offset="1" stop-color="#0e7490"/></linearGradient>
+        <filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f1729" flood-opacity=".10"/></filter>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#334155"/></marker>
+        <marker id="arG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#059669"/></marker>
+        <marker id="arP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#6d28d9"/></marker>
+        <marker id="arI" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#4338ca"/></marker>
+      </defs>
+
+      <!-- Zone A: tester's PC -->
+      <rect x="20" y="20" width="370" height="860" rx="24" fill="url(#gA)" stroke="#a7f3d0"/>
+      <rect x="40" y="40" width="200" height="30" rx="15" fill="#059669"/>
+      <text x="140" y="60" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">ON THE TESTER'S PC</text>
+
+      <!-- A1 collections -->
+      <g filter="url(#sh)"><rect x="40" y="90" width="330" height="96" rx="14" fill="#fff"/></g>
+      <rect x="40" y="90" width="6" height="96" rx="3" fill="#f97316"/>
+      <rect x="62" y="108" width="40" height="40" rx="10" fill="#fff1e6"/>
+      <path d="M74 116h12l6 6v18H74z M86 116v6h6" fill="none" stroke="#ea580c" stroke-width="2" stroke-linejoin="round"/>
+      <text x="116" y="122" font-size="16" font-weight="700" fill="#0f1729">API collections</text>
+      <text x="116" y="142" font-size="13" fill="#475069">Postman · Bruno JSON / YAML / .bru</text>
+      <text x="116" y="162" font-size="13" fill="#475069">+ environment file, certificates</text>
+
+      <!-- A2 JMeter -->
+      <g filter="url(#sh)"><rect x="40" y="204" width="330" height="96" rx="14" fill="#fff"/></g>
+      <rect x="40" y="204" width="6" height="96" rx="3" fill="#dc2626"/>
+      <rect x="62" y="222" width="40" height="40" rx="10" fill="#fdecec"/>
+      <path d="M82 230l12 7-12 7-12-7z M70 247l12 7 12-7" fill="none" stroke="#dc2626" stroke-width="2" stroke-linejoin="round"/>
+      <text x="116" y="236" font-size="16" font-weight="700" fill="#0f1729">JMeter test plans</text>
+      <text x="116" y="256" font-size="13" fill="#475069">.jmx · CSV data sets · keystores</text>
+      <text x="116" y="276" font-size="13" fill="#475069">thread groups, extractors, JSR223</text>
+
+      <!-- A3 recording sub-zone -->
+      <rect x="40" y="322" width="330" height="440" rx="16" fill="#ffffff" fill-opacity=".55" stroke="#6ee7b7" stroke-dasharray="6 5"/>
+      <text x="58" y="348" font-size="13" font-weight="700" fill="#047857" letter-spacing=".06em">RECORD A BROWSER JOURNEY</text>
+
+      <g filter="url(#sh)"><rect x="56" y="362" width="298" height="166" rx="14" fill="#fff"/></g>
+      <rect x="56" y="362" width="6" height="166" rx="3" fill="#059669"/>
+      <rect x="76" y="378" width="40" height="40" rx="10" fill="#059669"/>
+      <circle cx="96" cy="398" r="11" fill="none" stroke="#fff" stroke-width="2.2"/><circle cx="96" cy="398" r="4" fill="#fff"/>
+      <text x="128" y="393" font-size="16" font-weight="700" fill="#0f1729">CDP Recorder</text>
+      <text x="128" y="412" font-size="12.5" fill="#059669" font-weight="600">single .exe · no extension needed</text>
+      <text x="76" y="442" font-size="12.5" fill="#475069">• Drives Edge / Chrome via DevTools Protocol</text>
+      <text x="76" y="462" font-size="12.5" fill="#475069">• Captures every tab and sign-in pop-up</text>
+      <text x="76" y="482" font-size="12.5" fill="#475069">• Floating toolbar names each transaction</text>
+      <text x="76" y="502" font-size="12.5" fill="#475069">• Warns when a step captures nothing</text>
+
+      <g filter="url(#sh)"><rect x="56" y="544" width="226" height="74" rx="14" fill="#fff"/></g>
+      <rect x="68" y="560" width="40" height="40" rx="10" fill="#fff6e6"/>
+      <path d="M80 568h16v26l-8-5-8 5z" fill="none" stroke="#d97706" stroke-width="2" stroke-linejoin="round"/>
+      <text x="118" y="576" font-size="14" font-weight="700" fill="#0f1729">START/END bookmarks</text>
+      <text x="118" y="596" font-size="12.5" fill="#475069">+ DevTools HAR export</text>
+
+      <!-- HAR artifact -->
+      <g filter="url(#sh)"><path d="M94 660h202l24 24v62H94z" fill="#fff" stroke="#10b981" stroke-width="1.5"/></g>
+      <path d="M296 660v24h24" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <text x="207" y="702" text-anchor="middle" font-size="16" font-weight="800" fill="#047857">recording.har</text>
+      <text x="207" y="724" text-anchor="middle" font-size="12" fill="#475069">requests + named transactions</text>
+
+      <path d="M305 528 V 652" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arG)"/>
+      <path d="M150 618 V 652" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arG)"/>
+      <rect x="214" y="626" width="58" height="20" rx="10" fill="#ecfdf5" stroke="#a7f3d0"/><text x="243" y="640" text-anchor="middle" font-size="11.5" font-weight="600" fill="#047857">saves</text>
+
+      <!-- Zone B: portal -->
+      <rect x="430" y="20" width="740" height="860" rx="24" fill="url(#gB)" stroke="#c7d2fe"/>
+      <rect x="450" y="40" width="262" height="30" rx="15" fill="url(#gHead)"/>
+      <text x="581" y="60" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">PERFX STUDIO WEB PORTAL</text>
+
+      <!-- B1 browser sub-zone -->
+      <rect x="450" y="86" width="700" height="352" rx="18" fill="#fff" fill-opacity=".6" stroke="#a5b4fc"/>
+      <text x="470" y="112" font-size="13" font-weight="700" fill="#4338ca" letter-spacing=".06em">RUNS IN THE TESTER'S BROWSER</text>
+      <text x="1130" y="112" text-anchor="end" font-size="12" fill="#6b7489">recordings never leave the PC</text>
+
+      <g filter="url(#sh)"><rect x="470" y="126" width="660" height="62" rx="14" fill="#fff"/></g>
+      <rect x="488" y="137" width="40" height="40" rx="10" fill="url(#gHead)"/>
+      <path d="M502 147h12M500 157h16M502 167h12" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+      <text x="542" y="153" font-size="16" font-weight="700" fill="#0f1729">Portal UI</text>
+      <text x="542" y="173" font-size="12.5" fill="#475069">Home · Converter · Recorder · Script Studio · Help — one sign-in-free page, light / dark</text>
+
+      <g filter="url(#sh)"><rect x="470" y="204" width="318" height="168" rx="14" fill="#fff"/></g>
+      <rect x="470" y="204" width="6" height="168" rx="3" fill="#059669"/>
+      <text x="492" y="232" font-size="16" font-weight="700" fill="#0f1729">Recorder engine</text>
+      <text x="492" y="251" font-size="12.5" fill="#059669" font-weight="600">quick script from a HAR</text>
+      <text x="492" y="276" font-size="12.5" fill="#475069">• Exclude static, analytics, OPTIONS</text>
+      <text x="492" y="296" font-size="12.5" fill="#475069">• Filter by type and domain</text>
+      <text x="492" y="316" font-size="12.5" fill="#475069">• Group requests into transactions</text>
+      <text x="492" y="336" font-size="12.5" fill="#475069">• Preview, copy, download ZIP</text>
+      <text x="492" y="356" font-size="12.5" fill="#475069">• Detects NTLM, Kerberos, Bearer…</text>
+
+      <g filter="url(#sh)"><rect x="812" y="204" width="318" height="168" rx="14" fill="#fff"/></g>
+      <rect x="812" y="204" width="6" height="168" rx="3" fill="#7c3aed"/>
+      <text x="834" y="232" font-size="16" font-weight="700" fill="#0f1729">Script Studio</text>
+      <text x="834" y="251" font-size="12.5" fill="#7c3aed" font-weight="600">automatic correlation</text>
+      <text x="834" y="276" font-size="12.5" fill="#475069">• 1 HAR pattern or 2 HAR diff analysis</text>
+      <text x="834" y="296" font-size="12.5" fill="#475069">• Correlation Advisor: accept / skip</text>
+      <text x="834" y="316" font-size="12.5" fill="#475069">• Request Inspector, Paste &amp; Detect</text>
+      <text x="834" y="336" font-size="12.5" fill="#475069">• CSRF, JWT, UUID, array detection</text>
+      <text x="834" y="356" font-size="12.5" fill="#475069">• Parameterization to CSV</text>
+
+      <rect x="470" y="388" width="660" height="34" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+      <text x="800" y="410" text-anchor="middle" font-size="13" font-weight="600" fill="#3730a3">Shared VuGen code generator — the same module runs in the browser and on the server</text>
+
+      <!-- B2 server sub-zone -->
+      <rect x="450" y="458" width="700" height="402" rx="18" fill="#fff" fill-opacity=".6" stroke="#a5b4fc"/>
+      <text x="470" y="484" font-size="13" font-weight="700" fill="#4338ca" letter-spacing=".06em">RUNS ON THE SERVER</text>
+      <text x="1130" y="484" text-anchor="end" font-size="12" fill="#6b7489">Node.js · Express · hosted on IIS</text>
+
+      <!-- pipeline -->
+      <g filter="url(#sh)">
+        <rect x="470" y="500" width="150" height="186" rx="14" fill="#fff"/>
+        <rect x="640" y="500" width="150" height="186" rx="14" fill="#fff"/>
+        <rect x="810" y="500" width="150" height="186" rx="14" fill="#fff"/>
+        <rect x="980" y="500" width="150" height="186" rx="14" fill="#fff"/>
+      </g>
+      <rect x="470" y="500" width="150" height="34" rx="14" fill="#4338ca"/><rect x="470" y="520" width="150" height="14" fill="#4338ca"/>
+      <rect x="640" y="500" width="150" height="34" rx="14" fill="#4f46e5"/><rect x="640" y="520" width="150" height="14" fill="#4f46e5"/>
+      <rect x="810" y="500" width="150" height="34" rx="14" fill="#6d28d9"/><rect x="810" y="520" width="150" height="14" fill="#6d28d9"/>
+      <rect x="980" y="500" width="150" height="34" rx="14" fill="#7c3aed"/><rect x="980" y="520" width="150" height="14" fill="#7c3aed"/>
+      <text x="545" y="522" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">1 · Upload</text>
+      <text x="715" y="522" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">2 · Parse</text>
+      <text x="885" y="522" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">3 · Analyse</text>
+      <text x="1055" y="522" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">4 · Generate</text>
+      <g font-size="12" fill="#475069">
+        <text x="484" y="556">Multipart upload</text><text x="484" y="574">held in memory</text><text x="484" y="600">Format detected</text><text x="484" y="618">from the file</text><text x="484" y="644">Dependency check</text><text x="484" y="662">(missing CSVs)</text>
+        <text x="654" y="556">Postman v2.1</text><text x="654" y="574">Bruno JSON/YAML</text><text x="654" y="592">Bruno .bru</text><text x="654" y="610">JMeter .jmx</text><text x="654" y="628">HAR</text><text x="654" y="652">Pre/post scripts</text><text x="654" y="670">kept for analysis</text>
+        <text x="824" y="556">Correlation</text><text x="824" y="574">Parameterization</text><text x="824" y="592">Authentication</text><text x="824" y="610">JWT / DPoP script</text><text x="824" y="628">  detection</text><text x="824" y="652">Variable tiers:</text><text x="824" y="670">dynamic · data · static</text>
+        <text x="994" y="556">DevWeb project</text><text x="994" y="574">VuGen Web HTTP/</text><text x="994" y="592">  HTML project</text><text x="994" y="616">Workload Model</text><text x="994" y="634">  Excel (.xlsx)</text><text x="994" y="658">Single or multi-</text><text x="994" y="676">script output</text>
+      </g>
+      <path d="M620 593 H 636" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+      <path d="M790 593 H 806" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+      <path d="M960 593 H 976" stroke="#334155" stroke-width="2" marker-end="url(#ar)"/>
+
+      <!-- in-memory band -->
+      <rect x="470" y="704" width="660" height="52" rx="12" fill="url(#gMem)"/>
+      <rect x="488" y="716" width="28" height="28" rx="7" fill="#ffffff" fill-opacity=".18"/>
+      <rect x="495" y="729" width="14" height="11" rx="2" fill="none" stroke="#fff" stroke-width="2"/><path d="M498 729v-3a4 4 0 0 1 8 0v3" fill="none" stroke="#fff" stroke-width="2"/>
+      <text x="530" y="727" font-size="14" font-weight="700" fill="#fff">In-memory file system</text>
+      <text x="530" y="746" font-size="12.5" fill="#ccfbf1">Every upload and generated file lives in RAM for one request; the ZIP streams straight to the browser</text>
+
+      <!-- side services -->
+      <g filter="url(#sh)"><rect x="470" y="772" width="320" height="70" rx="14" fill="#fff"/><rect x="810" y="772" width="320" height="70" rx="14" fill="#fff"/></g>
+      <rect x="488" y="787" width="40" height="40" rx="10" fill="#fff6e6"/><path d="M498 817v-8M507 817v-14M516 817v-20" stroke="#d97706" stroke-width="2.6" stroke-linecap="round"/>
+      <text x="540" y="802" font-size="15" font-weight="700" fill="#0f1729">Usage analytics</text>
+      <text x="540" y="822" font-size="12.5" fill="#475069">Admin dashboard · CSV, XLSX, DOCX</text>
+      <rect x="828" y="787" width="40" height="40" rx="10" fill="#e6f7f0"/><path d="M848 795v18M841 806l7 7 7-7M839 820h18" fill="none" stroke="#059669" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="880" y="802" font-size="15" font-weight="700" fill="#0f1729">Tool downloads</text>
+      <text x="880" y="822" font-size="12.5" fill="#475069">CDP Recorder .exe for testers</text>
+
+      <!-- Zone C: outputs -->
+      <rect x="1210" y="20" width="370" height="860" rx="24" fill="url(#gC)" stroke="#ddd6fe"/>
+      <rect x="1230" y="40" width="250" height="30" rx="15" fill="#6d28d9"/>
+      <text x="1355" y="60" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">READY-TO-RUN SCRIPTS</text>
+
+      <g filter="url(#sh)"><rect x="1230" y="90" width="330" height="200" rx="14" fill="#fff"/></g>
+      <rect x="1230" y="90" width="6" height="200" rx="3" fill="#2563eb"/>
+      <rect x="1252" y="108" width="40" height="40" rx="10" fill="#dbeafe"/>
+      <text x="1272" y="133" text-anchor="middle" font-size="13" font-weight="800" fill="#1d4ed8" font-family="JetBrains Mono, Consolas, monospace">JS</text>
+      <text x="1306" y="124" font-size="16" font-weight="700" fill="#0f1729">DevWeb project</text>
+      <text x="1306" y="143" font-size="12.5" fill="#475069">for LoadRunner Enterprise</text>
+      <g font-size="12" fill="#334155" font-family="JetBrains Mono, Consolas, monospace">
+        <text x="1252" y="176">main.js</text><text x="1252" y="196">rts.yml · parameters.yml</text><text x="1252" y="216">jwt-helper.js · dpop-helper.js</text><text x="1252" y="236">test-data CSV · README</text>
+      </g>
+      <text x="1252" y="268" font-size="12" fill="#1d4ed8" font-weight="600">Transactions · correlations · auth refresh</text>
+
+      <g filter="url(#sh)"><rect x="1230" y="308" width="330" height="222" rx="14" fill="#fff"/></g>
+      <rect x="1230" y="308" width="6" height="222" rx="3" fill="#ea580c"/>
+      <rect x="1252" y="326" width="40" height="40" rx="10" fill="#ffedd5"/>
+      <text x="1272" y="351" text-anchor="middle" font-size="15" font-weight="800" fill="#c2410c" font-family="JetBrains Mono, Consolas, monospace">C</text>
+      <text x="1306" y="342" font-size="16" font-weight="700" fill="#0f1729">VuGen Web HTTP/HTML</text>
+      <text x="1306" y="361" font-size="12.5" fill="#475069">project for VuGen / LRE</text>
+      <g font-size="12" fill="#334155" font-family="JetBrains Mono, Consolas, monospace">
+        <text x="1252" y="394">Action.c · vuser_init.c</text><text x="1252" y="414">default.cfg · .usr · globals.h</text><text x="1252" y="434">lre-utils.dat</text>
+      </g>
+      <text x="1252" y="462" font-size="12" fill="#475069">In-script crypto (ES3 JavaScript engine):</text>
+      <text x="1252" y="482" font-size="12" fill="#475069">JWT/JWS PS256 · DPoP ES256 · PKCE</text>
+      <text x="1252" y="510" font-size="12" fill="#c2410c" font-weight="600">web_reg_save_param extractors · CSV params</text>
+
+      <g filter="url(#sh)"><rect x="1230" y="548" width="330" height="64" rx="14" fill="#fff"/></g>
+      <rect x="1252" y="560" width="40" height="40" rx="10" fill="#dcfce7"/>
+      <path d="M1262 568h20v24h-20z M1262 576h20 M1262 584h20 M1272 568v24" fill="none" stroke="#15803d" stroke-width="1.8"/>
+      <text x="1306" y="580" font-size="15" font-weight="700" fill="#0f1729">Workload Model Excel</text>
+      <text x="1306" y="599" font-size="12.5" fill="#475069">users · ramp-up · pacing per thread group</text>
+
+      <!-- target -->
+      <g filter="url(#sh)"><rect x="1230" y="660" width="330" height="200" rx="18" fill="url(#gTarget)"/></g>
+      <circle cx="1395" cy="725" r="34" fill="none" stroke="#a78bfa" stroke-width="2"/>
+      <circle cx="1395" cy="725" r="22" fill="none" stroke="#c4b5fd" stroke-width="2"/>
+      <circle cx="1395" cy="725" r="9" fill="#ddd6fe"/>
+      <text x="1395" y="800" text-anchor="middle" font-size="18" font-weight="800" fill="#fff">LoadRunner</text>
+      <text x="1395" y="822" text-anchor="middle" font-size="13" fill="#ddd6fe">Enterprise · VuGen</text>
+      <text x="1395" y="842" text-anchor="middle" font-size="12" fill="#c4b5fd">performance tests at scale</text>
+
+      <!-- ── cross-zone arrows ── -->
+      <!-- collections + jmx → upload -->
+      <path d="M370 138 H 400 V 590 H 466" stroke="#4338ca" stroke-width="2.4" fill="none" marker-end="url(#arI)"/>
+      <path d="M370 252 H 400" stroke="#4338ca" stroke-width="2.4" fill="none"/>
+      <rect x="374" y="402" width="52" height="40" rx="10" fill="#fff" stroke="#c7d2fe"/>
+      <text x="400" y="418" text-anchor="middle" font-size="11.5" font-weight="700" fill="#4338ca">upload</text>
+      <text x="400" y="433" text-anchor="middle" font-size="11" fill="#475069">files</text>
+
+      <!-- HAR → browser engines -->
+      <path d="M320 700 H 412 V 290 H 466" stroke="#059669" stroke-width="2.4" fill="none" marker-end="url(#arG)"/>
+      <rect x="350" y="252" width="104" height="22" rx="11" fill="#fff" stroke="#a7f3d0"/>
+      <text x="402" y="267" text-anchor="middle" font-size="11.5" font-weight="700" fill="#047857">load HAR</text>
+
+      <!-- downloads → CDP recorder -->
+      <path d="M810 842 V 900 H 364 V 445 H 358" stroke="#059669" stroke-width="2" stroke-dasharray="7 5" fill="none" marker-end="url(#arG)"/>
+      <rect x="500" y="889" width="200" height="22" rx="11" fill="#fff" stroke="#a7f3d0"/>
+      <text x="600" y="904" text-anchor="middle" font-size="11.5" font-weight="700" fill="#047857">download once · run locally</text>
+
+      <!-- browser engines → outputs -->
+      <path d="M1130 288 H 1180 V 200 H 1226" stroke="#6d28d9" stroke-width="2.4" fill="none" marker-end="url(#arP)"/>
+      <path d="M1180 288 V 420 H 1226" stroke="#6d28d9" stroke-width="2.4" fill="none" marker-end="url(#arP)"/>
+      <rect x="1144" y="296" width="72" height="40" rx="10" fill="#fff" stroke="#ddd6fe"/>
+      <text x="1180" y="312" text-anchor="middle" font-size="11.5" font-weight="700" fill="#6d28d9">ZIP built</text>
+      <text x="1180" y="327" text-anchor="middle" font-size="11" fill="#475069">in browser</text>
+
+      <!-- server → outputs -->
+      <path d="M1130 593 H 1190 V 580 H 1226" stroke="#6d28d9" stroke-width="2.4" fill="none" marker-end="url(#arP)"/>
+      <path d="M1190 593 V 470 H 1226" stroke="#6d28d9" stroke-width="2.4" fill="none" marker-end="url(#arP)"/>
+      <rect x="1146" y="608" width="74" height="40" rx="10" fill="#fff" stroke="#ddd6fe"/>
+      <text x="1183" y="624" text-anchor="middle" font-size="11.5" font-weight="700" fill="#6d28d9">ZIP stream</text>
+      <text x="1183" y="639" text-anchor="middle" font-size="11" fill="#475069">from memory</text>
+
+      <!-- outputs → LoadRunner -->
+      <path d="M1395 612 V 654" stroke="#4c1d95" stroke-width="2.4" fill="none" marker-end="url(#arP)"/>
+      <rect x="1405" y="622" width="96" height="22" rx="11" fill="#fff" stroke="#ddd6fe"/>
+      <text x="1453" y="637" text-anchor="middle" font-size="11.5" font-weight="700" fill="#6d28d9">open &amp; run</text>
+
+      <!-- engineering band -->
+      <rect x="20" y="926" width="1560" height="70" rx="18" fill="#0f1729"/>
+      <g font-size="13" fill="#e2e8f0">
+        <text x="48" y="956" font-weight="800" fill="#fff" letter-spacing=".06em">ENGINEERING</text>
+        <text x="48" y="978" fill="#94a3b8">built and verified</text>
+        <circle cx="236" cy="961" r="4" fill="#34d399"/><text x="248" y="966">254 Jest unit tests</text>
+        <circle cx="436" cy="961" r="4" fill="#34d399"/><text x="448" y="966">Playwright end-to-end checks</text>
+        <circle cx="706" cy="961" r="4" fill="#818cf8"/><text x="718" y="966">ES3 compatibility gate for VuGen</text>
+        <circle cx="1000" cy="961" r="4" fill="#a78bfa"/><text x="1012" y="966">Recorder packaged as one .exe (Node SEA)</text>
+        <circle cx="1338" cy="961" r="4" fill="#fbbf24"/><text x="1350" y="966">Deployed on IIS (iisnode)</text>
+      </g>
+    </svg>
+    <figcaption><b>Figure 1 — System architecture.</b> Sources on the tester's PC (left) flow into the portal (centre). Browser recordings are turned into scripts <b>inside the browser</b>; collections and JMeter plans go through a four-stage server pipeline that runs <b>entirely in memory</b>. Both paths produce DevWeb or VuGen projects that open directly in LoadRunner (right).</figcaption>
+  </figure>
+
+  <!-- ═════════════════════ FIGURE 2 — CDP RECORDER ═════════════════════ -->
+  <figure id="fig-cdp">
+    <svg viewBox="0 0 1600 600" role="img" aria-label="CDP Recorder internals: the floating toolbar controls a local recorder process, which launches Edge or Chrome with a debugging port, pauses every new tab or pop-up until network capture is switched on, then streams network events into a HAR builder that tags each request with the active transaction and saves recording.har." font-family="Inter, Segoe UI, sans-serif">
+      <defs>
+        <linearGradient id="h2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#047857"/><stop offset="1" stop-color="#0e7490"/></linearGradient>
+        <linearGradient id="z2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0fdf4"/><stop offset="1" stop-color="#dcfce7"/></linearGradient>
+        <linearGradient id="z3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eff6ff"/><stop offset="1" stop-color="#dbeafe"/></linearGradient>
+        <filter id="sh2" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f1729" flood-opacity=".10"/></filter>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#334155"/></marker>
+        <marker id="a2g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#059669"/></marker>
+      </defs>
+
+      <text x="30" y="44" font-size="22" font-weight="800" fill="#0f1729">CDP Recorder — how a recording is captured</text>
+      <text x="30" y="70" font-size="14" fill="#475069">One self-contained Windows program. No browser extension, no DevTools — works on machines where extensions are blocked by policy.</text>
+
+      <!-- process boundary -->
+      <rect x="20" y="96" width="1000" height="420" rx="22" fill="url(#z2)" stroke="#86efac"/>
+      <rect x="40" y="114" width="250" height="28" rx="14" fill="url(#h2)"/>
+      <text x="165" y="133" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">cdp-recorder.exe (Node.js)</text>
+
+      <!-- toolbar -->
+      <g filter="url(#sh2)"><rect x="40" y="166" width="230" height="150" rx="14" fill="#fff"/></g>
+      <rect x="58" y="182" width="194" height="20" rx="6" fill="#f1f5f9"/>
+      <rect x="64" y="186" width="70" height="12" rx="6" fill="#e2e8f0"/>
+      <rect x="196" y="186" width="50" height="12" rx="6" fill="#fee2e2"/>
+      <rect x="58" y="210" width="92" height="22" rx="6" fill="#dc2626"/><rect x="158" y="210" width="94" height="22" rx="6" fill="#7c3aed"/>
+      <text x="104" y="225" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Stop</text>
+      <text x="205" y="225" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Start step</text>
+      <text x="58" y="262" font-size="15" font-weight="700" fill="#0f1729">Floating toolbar</text>
+      <text x="58" y="282" font-size="12.5" fill="#475069">local page · localhost:8787</text>
+      <text x="58" y="300" font-size="12.5" fill="#475069">start, stop, name transactions</text>
+
+      <!-- control server -->
+      <g filter="url(#sh2)"><rect x="320" y="166" width="230" height="150" rx="14" fill="#fff"/></g>
+      <rect x="320" y="166" width="6" height="150" rx="3" fill="#059669"/>
+      <text x="342" y="196" font-size="15" font-weight="700" fill="#0f1729">Recorder control</text>
+      <text x="342" y="218" font-size="12.5" fill="#475069">• Session start / stop</text>
+      <text x="342" y="238" font-size="12.5" fill="#475069">• Transaction boundaries</text>
+      <text x="342" y="258" font-size="12.5" fill="#475069">• "Settled" signal</text>
+      <text x="342" y="278" font-size="12.5" fill="#475069">• Empty-step warning</text>
+      <text x="342" y="298" font-size="12.5" fill="#475069">• Clean shutdown</text>
+
+      <!-- capture engine -->
+      <g filter="url(#sh2)"><rect x="600" y="166" width="400" height="150" rx="14" fill="#fff"/></g>
+      <rect x="600" y="166" width="6" height="150" rx="3" fill="#0e7490"/>
+      <text x="622" y="196" font-size="15" font-weight="700" fill="#0f1729">Capture engine</text>
+      <text x="622" y="216" font-size="12.5" fill="#0e7490" font-weight="600">Target.setAutoAttach · waitForDebuggerOnStart</text>
+      <text x="622" y="242" font-size="12.5" fill="#475069">① New tab or pop-up opens → paused before it runs</text>
+      <text x="622" y="262" font-size="12.5" fill="#475069">② Network capture switched on for that target</text>
+      <text x="622" y="282" font-size="12.5" fill="#475069">③ Target resumed — its first request is never missed</text>
+      <text x="622" y="302" font-size="12.5" fill="#475069">Time-outs + retries for slow, locked-down PCs</text>
+
+      <!-- HAR builder row -->
+      <g filter="url(#sh2)">
+        <rect x="40" y="360" width="300" height="130" rx="14" fill="#fff"/>
+        <rect x="360" y="360" width="300" height="130" rx="14" fill="#fff"/>
+        <rect x="680" y="360" width="320" height="130" rx="14" fill="#fff"/>
+      </g>
+      <text x="62" y="390" font-size="15" font-weight="700" fill="#0f1729">HAR builder</text>
+      <text x="62" y="412" font-size="12.5" fill="#475069">Assembles HAR 1.2 entries, timings,</text>
+      <text x="62" y="430" font-size="12.5" fill="#475069">response bodies for pages and APIs,</text>
+      <text x="62" y="448" font-size="12.5" fill="#475069">tags each request with its transaction</text>
+      <text x="62" y="472" font-size="12" fill="#059669" font-weight="600">transactions → HAR pages[]</text>
+      <text x="382" y="390" font-size="15" font-weight="700" fill="#0f1729">Background detector</text>
+      <text x="382" y="412" font-size="12.5" fill="#475069">Spots heartbeats and polling</text>
+      <text x="382" y="430" font-size="12.5" fill="#475069">by frequency analysis and known</text>
+      <text x="382" y="448" font-size="12.5" fill="#475069">patterns; URL normaliser groups IDs</text>
+      <text x="382" y="472" font-size="12" fill="#059669" font-weight="600">keeps scripts free of noise</text>
+      <text x="702" y="390" font-size="15" font-weight="700" fill="#0f1729">Sensitive-field scrubber</text>
+      <text x="702" y="412" font-size="12.5" fill="#475069">Redacts password, PIN, CVV and</text>
+      <text x="702" y="430" font-size="12.5" fill="#475069">secret fields before saving; keeps</text>
+      <text x="702" y="448" font-size="12.5" fill="#475069">tokens that correlation needs</text>
+      <text x="702" y="472" font-size="12" fill="#059669" font-weight="600">saved next to the .exe</text>
+
+      <!-- browser zone -->
+      <rect x="1080" y="96" width="500" height="420" rx="22" fill="url(#z3)" stroke="#93c5fd"/>
+      <rect x="1100" y="114" width="250" height="28" rx="14" fill="#2563eb"/>
+      <text x="1225" y="133" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">Edge / Chrome (own profile)</text>
+      <g filter="url(#sh2)"><rect x="1100" y="166" width="460" height="150" rx="14" fill="#fff"/></g>
+      <rect x="1100" y="166" width="460" height="30" rx="14" fill="#f1f5f9"/><rect x="1100" y="182" width="460" height="14" fill="#f1f5f9"/>
+      <circle cx="1120" cy="181" r="5" fill="#f87171"/><circle cx="1136" cy="181" r="5" fill="#fbbf24"/><circle cx="1152" cy="181" r="5" fill="#34d399"/>
+      <rect x="1176" y="173" width="150" height="16" rx="8" fill="#fff"/><rect x="1334" y="173" width="110" height="16" rx="8" fill="#e2e8f0"/>
+      <rect x="1124" y="212" width="412" height="88" rx="10" fill="#fff7ed" stroke="#fb923c"/>
+      <text x="1330" y="242" text-anchor="middle" font-size="14" font-weight="700" fill="#c2410c">● This is the RECORDING window</text>
+      <text x="1330" y="264" text-anchor="middle" font-size="12.5" fill="#475069">tester uses the application here,</text>
+      <text x="1330" y="282" text-anchor="middle" font-size="12.5" fill="#475069">including new tabs and sign-in pop-ups</text>
+
+      <g filter="url(#sh2)"><rect x="1100" y="360" width="460" height="130" rx="14" fill="#fff"/></g>
+      <text x="1122" y="392" font-size="15" font-weight="700" fill="#0f1729">Tabs &amp; pop-ups</text>
+      <g>
+        <rect x="1122" y="410" width="120" height="58" rx="10" fill="#eff6ff" stroke="#93c5fd"/><text x="1182" y="444" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1d4ed8">main tab</text>
+        <rect x="1262" y="410" width="120" height="58" rx="10" fill="#eff6ff" stroke="#93c5fd"/><text x="1322" y="444" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1d4ed8">new tab</text>
+        <rect x="1402" y="410" width="138" height="58" rx="10" fill="#eff6ff" stroke="#93c5fd"/><text x="1471" y="444" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1d4ed8">SSO pop-up</text>
+      </g>
+
+      <!-- arrows -->
+      <path d="M270 241 H 316" stroke="#334155" stroke-width="2.2" marker-end="url(#a2)"/>
+      <rect x="273" y="252" width="44" height="20" rx="10" fill="#fff" stroke="#cbd5e1"/><text x="295" y="266" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">HTTP</text>
+      <path d="M550 241 H 596" stroke="#334155" stroke-width="2.2" marker-end="url(#a2)"/>
+      <path d="M1000 210 H 1096" stroke="#2563eb" stroke-width="2.4" marker-end="url(#a2)"/>
+      <rect x="1006" y="186" width="84" height="20" rx="10" fill="#fff" stroke="#93c5fd"/><text x="1048" y="200" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">launch · attach</text>
+      <path d="M1096 272 H 1004" stroke="#059669" stroke-width="2.4" marker-end="url(#a2g)"/>
+      <rect x="1004" y="280" width="92" height="20" rx="10" fill="#fff" stroke="#86efac"/><text x="1050" y="294" text-anchor="middle" font-size="11" font-weight="600" fill="#047857">network events</text>
+      <path d="M1330 316 V 356" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 4"/>
+      <path d="M800 316 V 344 H 190 V 356" stroke="#059669" stroke-width="2.2" fill="none" marker-end="url(#a2g)"/>
+      <path d="M340 425 H 356" stroke="#334155" stroke-width="2" marker-end="url(#a2)"/>
+      <path d="M660 425 H 676" stroke="#334155" stroke-width="2" marker-end="url(#a2)"/>
+
+      <!-- output -->
+      <g filter="url(#sh2)"><path d="M700 540h150l20 20v32H700z" fill="#fff" stroke="#10b981" stroke-width="1.5"/></g>
+      <text x="785" y="572" text-anchor="middle" font-size="14" font-weight="800" fill="#047857">recording.har</text>
+      <path d="M840 490 V 536" stroke="#059669" stroke-width="2.2" marker-end="url(#a2g)"/>
+      <path d="M870 566 H 1096" stroke="#7c3aed" stroke-width="2.4" marker-end="url(#a2)"/>
+      <rect x="890" y="538" width="190" height="20" rx="10" fill="#fff" stroke="#ddd6fe"/><text x="985" y="552" text-anchor="middle" font-size="11" font-weight="600" fill="#6d28d9">loaded into Recorder / Studio</text>
+      <rect x="1100" y="546" width="460" height="40" rx="12" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="1330" y="571" text-anchor="middle" font-size="13.5" font-weight="700" fill="#5b21b6">PerfX Studio portal → script ZIP</text>
+    </svg>
+    <figcaption><b>Figure 2 — CDP Recorder internals.</b> The recorder pauses every new browser tab or pop-up until network capture is on, which closes the gap where a fast sign-in pop-up's first request would otherwise be lost. Each request is tagged with the transaction that was active, background noise is identified, sensitive fields are redacted, and the result is a standard HAR file.</figcaption>
+  </figure>
+</div>
+</body>
+</html>
