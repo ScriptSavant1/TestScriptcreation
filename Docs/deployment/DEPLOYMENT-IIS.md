@@ -75,7 +75,7 @@ D:\MSINetData\WWW\converter\
 +-- cdp-recorder\
     +-- recorder\
         +-- dist\
-            +-- cdp-recorder.exe   <- pre-built, see Step 5c below. Served by
+            +-- cdp-recorder.zip   <- pre-built, see Step 5c below. Served by
                                       GET /converter/downloads/cdp-recorder. Do NOT copy
                                       the rest of cdp-recorder\ (source,
                                       node_modules) -- the server only needs
@@ -92,7 +92,7 @@ D:\MSINetData\WWW\converter\
 | `Docs\`, `*.md`, `*.pdf`, `*.pptx` | Documentation only |
 | `pm2.config.js` | PM2 config -- not used with IIS |
 | `collection-examples\`, `examples\` | Sample files -- not needed |
-| `cdp-recorder\recorder\src\`, `cdp-recorder\recorder\node_modules\`, `cdp-recorder\probe\` | Build-time only -- the server just needs the built `dist\cdp-recorder.exe` (Step 5c) |
+| `cdp-recorder\recorder\src\`, `cdp-recorder\recorder\node_modules\`, `cdp-recorder\probe\` | Build-time only -- the server just needs the built `dist\cdp-recorder.zip` (Step 5c) |
 
 ---
 
@@ -205,9 +205,9 @@ Use any file transfer method available on your network -- Windows file share (UN
 
 > **Success:** After copying, `D:\MSINetData\WWW\converter\node_modules\` exists on the server and contains many subfolders (express, multer, better-sqlite3, etc.).
 
-### 5c -- Build and copy cdp-recorder.exe
+### 5c -- Build and copy cdp-recorder.zip
 
-CDP Recorder (the "record without a browser extension" option on the portal's Recorder tool and home-page banner) is downloaded by end users as a single pre-built `.exe` -- no Node.js, no npm install, nothing else needed on the machine that runs it. Like `node_modules` in Step 5a, it has to be **built once on a machine with internet access and Node.js, then copied to the IIS server as a plain file** -- the server itself never builds anything and has no internet access to do so even if it tried.
+CDP Recorder (the "record without a browser extension" option on the portal's Recorder tool and home-page banner) is downloaded by end users as a ZIP containing a single pre-built `.exe` (a ZIP because some corporate proxies block `.exe` downloads) -- no Node.js, no npm install, nothing else needed on the machine that runs it. Like `node_modules` in Step 5a, it has to be **built once on a machine with internet access and Node.js, then copied to the IIS server as a plain file** -- the server itself never builds anything and has no internet access to do so even if it tried.
 
 **What the build actually does**, so the output makes sense: it bundles the recorder's TypeScript source and all its dependencies into one JavaScript file (`esbuild`), generates a Node.js "Single Executable Application" blob from that bundle (a built-in Node.js feature, not a third-party packager), then copies `node.exe` itself and injects that blob into the copy (`postject`). The result is a complete, standalone Node.js runtime with the recorder baked in -- which is also why it's roughly 90 MB and not a few hundred KB.
 
@@ -232,24 +232,30 @@ Start injection of NODE_SEA_BLOB in ...\dist\cdp-recorder.exe...
 warning: The signature seems corrupted!
 Injection done!
 
-Done: C:\path\to\...\cdp-recorder\recorder\dist\cdp-recorder.exe
+Built: C:\path\to\...\cdp-recorder\recorder\dist\cdp-recorder.exe
+
+> Zipping (cdp-recorder.exe + README.txt)
+
+Done: C:\path\to\...\cdp-recorder\recorder\dist\cdp-recorder.zip  <- copy this file to the server's dist folder
 ```
 
-Wait for that final `Done: ...\dist\cdp-recorder.exe` line before moving on.
+Wait for that final `Done: ...\dist\cdp-recorder.zip` line before moving on. The ZIP holds `cdp-recorder.exe` plus a short `README.txt` telling users to extract it before running it. If you already have a built `.exe` and only need the ZIP, run `npm run build:zip` instead.
 
 > **About the "signature seems corrupted" warning:** `node.exe` ships signed by the Node.js project / Microsoft. Injecting the application blob into the copy modifies the file after that signature was applied, which invalidates it -- this is expected, inherent to how Node's Single Executable Application packaging works on Windows, not a mistake in the build or something to "fix." Two practical consequences: (1) a signature-invalidated `.exe` is also a pattern some antivirus/EDR software treats with more suspicion by default, independent of what the code actually does -- **this has been tested and confirmed running clean on a real corporate-managed machine already**, but if your environment's security posture is stricter, test on a representative machine before rolling it out broadly, the same way you'd test any new unsigned internal tool; (2) if your organization has a code-signing process for internal tools, running the built `.exe` through it before the copy step below is worth doing, though it has not been required in testing so far.
 
 > **About the deprecation warning when end users run it:** the running tool prints `DeprecationWarning: url.parse() behavior is not standardized...` on every launch. This comes from a dependency's internal code, not this project's own code, and is harmless -- it doesn't affect functionality. Worth knowing so it doesn't look like something broke.
 
-Copy the one built file to the server:
+Copy the one built file to the server -- the ZIP only, not the `.exe`:
 
 ```
 Source (your local machine):
-  C:\path\to\bruno-devweb-converter\cdp-recorder\recorder\dist\cdp-recorder.exe
+  C:\path\to\bruno-devweb-converter\cdp-recorder\recorder\dist\cdp-recorder.zip
 
 Destination (IIS server):
-  D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe
+  D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.zip
 ```
+
+> **Older servers:** if the ZIP is missing but an older `dist\cdp-recorder.exe` is still there, the download falls back to serving that `.exe`. Once the ZIP is copied in, the ZIP is always served, and you can delete the old `.exe` from the server.
 
 > **Success:** The portal's "Get CDP Recorder" button (on the Recorder tool, or the banner on the home page) downloads a working file instead of returning a 404 JSON error. Test this once deployment is complete (Step 10, Test 3).
 
@@ -375,7 +381,7 @@ You should see: A password login page. Enter the ADMIN_TOKEN set in Step 7. You 
 ```
 https://loadrunner.webdev.banksvcs.net/converter/downloads/cdp-recorder
 ```
-You should see: your browser starts downloading `cdp-recorder.exe` (roughly 90 MB). If you instead see a JSON error page, Step 5c was skipped or the file didn't make it to the server -- see Troubleshooting.
+You should see: your browser starts downloading `cdp-recorder.zip` (roughly 35 MB). If you instead see a JSON error page, Step 5c was skipped or the file didn't make it to the server -- see Troubleshooting.
 
 If something does not work, see the Troubleshooting section.
 
@@ -443,7 +449,7 @@ When a new version is released, the ADMIN_TOKEN set in IIS persists -- you do no
 1. Copy all updated files from the "Files to Deploy" list into `D:\MSINetData\WWW\converter\`, replacing existing files
 2. On your **local developer machine**, run `npm install --production` to update `node_modules`, then copy it to the server (same procedure as Step 5)
 3. Skip step 2 if `package.json` has not changed -- no new dependencies means no need to re-copy `node_modules`
-4. If anything under `cdp-recorder\recorder\src\` changed, re-run `npm run build:exe` there (Step 5c) and re-copy the new `dist\cdp-recorder.exe` -- the download button otherwise keeps serving the old build indefinitely, with no error to notice it
+4. If anything under `cdp-recorder\recorder\src\` changed, re-run `npm run build:exe` there (Step 5c) and re-copy the new `dist\cdp-recorder.zip` -- the download button otherwise keeps serving the old build indefinitely, with no error to notice it
 
 ```cmd
 REM On the IIS server -- recycle the pool to load new code (no IIS restart needed)
@@ -482,7 +488,8 @@ Only `ADMIN_TOKEN` is required.
 | App pool keeps crashing | Rapid-fail protection triggered | Open Windows Event Viewer -> Windows Logs -> Application. Look for WAS or iisnode errors. |
 | Cannot find module 'better-sqlite3' | Node.js version mismatch between local machine and server | Run `node --version` on both machines -- both must print `v20.x.x`. Fix whichever is wrong, then re-run `npm install --production` on your local machine and re-copy `node_modules\` to the server. |
 | "Get CDP Recorder" shows an IIS **HTTP 404 page** (HTML), and the address bar shows `/downloads/cdp-recorder` with no `/converter` | The link is outside the `/converter` application. Fixed in code (links are now prefixed with `/converter` automatically) — redeploy the latest `src/web/server.js` and `src/web/views/index.ejs` | Redeploy, then use `https://loadrunner.webdev.banksvcs.net/converter/downloads/cdp-recorder` |
-| "Get CDP Recorder" shows a **JSON** error `cdp_recorder_not_built` | `cdp-recorder.exe` was never built, or wasn't copied to the server (it is not in git, so a code deployment never includes it) | Redo Step 5c. Confirm the file actually exists at `D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.exe` on the server. |
+| "Get CDP Recorder" shows a **JSON** error `cdp_recorder_not_built` | `cdp-recorder.zip` was never built, or wasn't copied to the server (it is not in git, so a code deployment never includes it) | Redo Step 5c. Confirm the file actually exists at `D:\MSINetData\WWW\converter\cdp-recorder\recorder\dist\cdp-recorder.zip` on the server. |
+| Users report the download is **blocked** by the company proxy | Some proxies inspect ZIPs and block an `.exe` inside them too | Raise an allow-list request for `/converter/downloads/cdp-recorder` with your proxy team. |
 
 ### Where to find log files
 

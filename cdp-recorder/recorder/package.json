@@ -8,6 +8,7 @@
     "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit",
     "build:exe": "node scripts/build-exe.mjs",
+    "build:zip": "node scripts/build-exe.mjs --zip-only",
     "test:e2e": "node --import tsx tests-manual/repro-multi-tx.mjs"
   },
   "dependencies": {

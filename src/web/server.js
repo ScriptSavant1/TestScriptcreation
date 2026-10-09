@@ -51,6 +51,7 @@ const helmet     = require("helmet");
 const rateLimit  = require("express-rate-limit");
 
 const { runWithMemoryFs }       = require("../lib/memoryFsInterceptor");
+const { resolveCdpRecorderDownload } = require("./cdpRecorderDownload");
 const BrunoDevWebConverter      = require("../tools/collection-converter");
 const JmxConverter              = require("../tools/jmx-converter");
 const JmxDependencyResolver     = require("../lib/jmxDependencyResolver");
@@ -300,29 +301,30 @@ class WebServer {
     });
 
     // ── CDP Recorder download ────────────────────────────────────────────────
-    // Serves the pre-built, self-contained cdp-recorder.exe — a single file,
-    // no Node.js/npm install needed on the machine that runs it (see
-    // cdp-recorder/recorder/pkg-prototype/README.md). This is a BUILD
-    // ARTIFACT, not source — it has to be built once via
-    // `npm run build:exe` (in cdp-recorder/recorder/) before this route has
-    // anything to serve; it is deliberately not committed to git (90MB+
-    // binary) and not built on every request (packaging takes several
-    // seconds, unlike the extension zip above which is cheap to build live).
-    const CDP_RECORDER_EXE = path.join(__dirname, "..", "..", "cdp-recorder", "recorder", "dist", "cdp-recorder.exe");
+    // Serves the pre-built, self-contained recorder — no Node.js/npm install
+    // needed on the machine that runs it (see
+    // cdp-recorder/recorder/pkg-prototype/README.md). Prefers
+    // dist/cdp-recorder.zip (some corporate proxies block .exe downloads),
+    // falling back to dist/cdp-recorder.exe. Both are BUILD ARTIFACTS, not
+    // source — `npm run build:exe` (in cdp-recorder/recorder/) writes them;
+    // they are deliberately not committed to git (90MB+ binary) and not built
+    // on every request (packaging takes several seconds, unlike the extension
+    // zip above which is cheap to build live).
+    const CDP_RECORDER_DIST = path.join(__dirname, "..", "..", "cdp-recorder", "recorder", "dist");
     this.app.get(["/downloads/cdp-recorder", "/converter/downloads/cdp-recorder"], (req, res) => {
-      const fs = require("fs");
-      if (!fs.existsSync(CDP_RECORDER_EXE)) {
-        // dist/ is gitignored, so a fresh deployment never has the exe until an
-        // admin copies it in (DEPLOYMENT-IIS.md Step 5c).
+      const file = resolveCdpRecorderDownload(CDP_RECORDER_DIST);
+      if (!file) {
+        // dist/ is gitignored, so a fresh deployment never has the file until
+        // an admin copies it in (DEPLOYMENT-IIS.md Step 5c).
         return res.status(404).json({
           error: "cdp_recorder_not_built",
           message:
-            "cdp-recorder.exe is not on this server yet. An administrator must build it " +
+            "cdp-recorder.zip is not on this server yet. An administrator must build it " +
             "(npm run build:exe in cdp-recorder/recorder/) and copy it to " +
-            "cdp-recorder\\recorder\\dist\\cdp-recorder.exe inside the application folder.",
+            "cdp-recorder\\recorder\\dist\\cdp-recorder.zip inside the application folder.",
         });
       }
-      res.download(CDP_RECORDER_EXE, "cdp-recorder.exe");
+      res.download(file.filePath, file.fileName);
     });
 
     // ── Crypto helper file routes ─────────────────────────────────────────────

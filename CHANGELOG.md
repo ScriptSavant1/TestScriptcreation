@@ -5,6 +5,18 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Changed — CDP Recorder is downloaded as a ZIP
+
+- "Get CDP Recorder" now downloads `cdp-recorder.zip` (the `.exe` plus a README.txt)
+  instead of a bare `.exe`, which some corporate proxies block. The ZIP is also smaller
+  (about 35 MB against 90 MB).
+- `npm run build:exe` now writes `dist/cdp-recorder.zip` as well; `npm run build:zip`
+  re-zips an existing `.exe`. Deploy only the ZIP to the server's `dist` folder.
+- Servers that still have only `dist/cdp-recorder.exe` keep working: the download falls
+  back to it when no ZIP is present.
+- Home page, help text, CDP Recorder user guide and IIS deployment guide updated
+  ("extract the ZIP first, then run cdp-recorder.exe").
+
 ### Fixed — CDP Recorder / extension downloads 404 on IIS (BUG-EXT-017)
 
 - Download links (and the analytics script) on the home page now include the `/converter`
