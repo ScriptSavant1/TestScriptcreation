@@ -5,6 +5,14 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — CDP Recorder / extension downloads 404 on IIS (BUG-EXT-017)
+
+- Download links (and the analytics script) on the home page now include the `/converter`
+  prefix when the app runs under the IIS virtual directory; download routes answer at both
+  `/downloads/...` and `/converter/downloads/...`.
+- Clearer message when `cdp-recorder.exe` hasn't been copied to the server.
+- IIS deployment guide: corrected the download test URL and split the 404 troubleshooting row.
+
 ### Fixed — VuGen JWT: "RSA parse: expected outer SEQUENCE" and "// line comment" warning (BUG-054)
 
 - `lre-utils.js`/`.dat` now accept a private key whose newlines are written as `\n`, which
