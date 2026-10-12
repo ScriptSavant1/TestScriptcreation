@@ -152,6 +152,14 @@
                 </div>
               </div>
               <div class="rt-filter-list" id="rt-filter-list"></div>
+              <details class="rt-res-help" style="margin-top:8px;font-size:12px;line-height:1.55;color:var(--text-2)">
+                <summary style="cursor:pointer;color:var(--text)">&#x24D8; Should I include Img / CSS / JS / Font?</summary>
+                <ul style="margin:6px 0 4px 18px;padding:0">
+                  <li><strong>Leave them out</strong> (default) for server / API load. On replay only the files written in the page HTML are downloaded (VuGen <code>Mode=HTML</code>, DevWeb <code>downloadHtmlStaticResources</code>).</li>
+                  <li><strong>Select them (or All)</strong> for realistic page load, and always for <strong>JavaScript-based apps</strong> (React, Angular, Vue&hellip;): files that JavaScript or CSS requests &#x2014; lazy-loaded code, fonts, images on later screens &#x2014; are never in the HTML, so they are only downloaded if they are in the script.</li>
+                </ul>
+                Included files are added to the page step that loaded them (<code>EXTRARES</code> / <code>resources[]</code>), never as separate requests and never twice. Known analytics/ads domains are always left out here. VuGen also needs the run-time setting <strong>Download non-HTML resources</strong> on (default).
+              </details>
             </div>
 
             <!-- Domains -->

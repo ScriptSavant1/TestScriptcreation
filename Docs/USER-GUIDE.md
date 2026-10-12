@@ -198,6 +198,7 @@ The bookmarklet marks the start of your recording session so the Recorder can id
 1. Drag the `.har` file into the Recorder's drop zone, or click to browse
 2. The request table will populate with all captured requests
 3. **Filter domains:** uncheck any domains you don't want in your script (CDNs, analytics, fonts, telemetry)
+   - **Static assets:** keep them excluded (default) for server/API load; untick **Static Assets** for realistic page load and for JavaScript-based apps (React, Angular, Vue…) — the replay settings only download files named in the page HTML, not files JavaScript requests. Click **ⓘ** next to the filters for details.
 4. **Set transactions:** drag request rows to group them into named transactions
 5. Choose output format: **DevWeb** or **Web HTTP/HTML**
 6. Click **Generate Script** (or the format card if prompted)

@@ -135,6 +135,34 @@ If you skip this step, the toolkit auto-generates transaction names based on req
 
 ---
 
+## Static Assets — Should I Include Them?
+
+Click the **ⓘ** button next to the filters for this guidance inside the tool.
+
+| You want | Do this | On replay |
+|---|---|---|
+| Server / API load | Leave **Static Assets** ticked (default) | Only the files written in the page HTML are downloaded. Files that JavaScript or CSS requests (fonts, lazy-loaded code, images on later screens, analytics) are **not**. |
+| Realistic page load, or a **JavaScript-based app** (React, Angular, Vue…) | Untick **Static Assets** (and **Analytics/Ads** if wanted) | Files in the HTML still download automatically; files loaded by JavaScript/CSS are listed on their page step. Nothing is downloaded twice. |
+
+**Why:** DevWeb's `downloadHtmlStaticResources` and VuGen's `Mode=HTML` read the page's HTML
+text and download the files it names — they do not run the page's JavaScript. On a modern
+single-page app the HTML is a small shell, and after the first screen the app talks to the
+server through API calls only, so most files are never in any HTML. Keep both settings on in
+every script (the generated scripts already do).
+
+**Not sure which kind your app is?** Generate once with static assets included and read the
+comment above each page step, for example:
+
+```
+// Page resources: 15 in the page HTML download automatically (Mode=HTML); 2 loaded by script/CSS are listed under EXTRARES
+```
+
+If many are listed, the app is JavaScript-heavy — keep static assets included.
+
+**VuGen:** the run-time setting **Download non-HTML resources** must be on (it is on by default).
+
+---
+
 ## Recorder vs Script Studio — Which to Use?
 
 | Scenario | Recommendation |

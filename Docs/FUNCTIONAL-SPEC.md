@@ -163,6 +163,17 @@ Automatically filtered out (can be re-enabled via toolbar):
 When static assets or analytics are re-enabled they are **not** scripted as separate
 requests — see "Page resources" under Script generation rules.
 
+**User guidance (shown in the tool: ⓘ button, Help → Recorder):**
+
+| Goal | Setting | Replay behaviour |
+|---|---|---|
+| Server / API load | Static assets excluded (default) | Only files named in the page HTML are downloaded (`Mode=HTML` / `downloadHtmlStaticResources`); JS/CSS-requested files are not |
+| Realistic page load, JavaScript-based apps | Static assets included | HTML-named files still auto-download; JS/CSS-requested files listed on the page step (`EXTRARES` / `resources[]`) |
+
+`downloadHtmlStaticResources` / `Mode=HTML` parse the HTML text only — they do not execute
+JavaScript — so they stay on in every generated script; including static assets adds only what
+the HTML cannot reveal. VuGen also requires the run-time setting "Download non-HTML resources".
+
 ### Script generation rules
 
 - Each included page or API request becomes one HTTP call (HTML-mode style)
@@ -207,7 +218,9 @@ Generate deeply correlated VuGen scripts from 1 or 2 HAR files. The primary tool
   media) are dropped unless their type is selected; **All** includes everything. Included
   static files are scripted as page resources, the same rules as the Recorder (section 3),
   except that a resource used by a correlation (source or usage) stays its own request so
-  its extractor/substitution still applies.
+  its extractor/substitution still applies. Guidance on when to include them (API load vs
+  realistic page load / JavaScript-based apps) is shown under the Resource Type list (ⓘ) and
+  in Help → Script Studio — same rule as the Recorder table above.
 - **Domains** — uncheck any host to drop its requests.
 - Always dropped: OPTIONS preflights, known analytics/ads hosts, CSP reports, WebSocket URLs.
 

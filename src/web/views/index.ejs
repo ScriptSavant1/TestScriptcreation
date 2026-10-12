@@ -2556,6 +2556,24 @@ code {
         <div class="help-callout help-callout-blue">
           <strong>Tip:</strong> For deeper correlation (auto-detection of dynamic values like tokens and session IDs), take your HAR file into <strong>Script Studio</strong>. Record the same journey twice and upload both HAR files to Script Studio for the most complete result.
         </div>
+        <h3 class="help-h3">Static assets — should I include them?</h3>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.83rem;margin:10px 0">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">You want</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">Do this</th>
+              <th style="text-align:left;padding:8px 12px;color:var(--text-2);font-weight:700">On replay</th>
+            </tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Server / API load</td><td style="padding:8px 12px">Leave <strong>Static Assets</strong> ticked (default)</td><td style="padding:8px 12px">Only files written in the page HTML are downloaded. Files that JavaScript or CSS requests (fonts, lazy-loaded code, images on later screens, analytics) are not.</td></tr>
+              <tr><td style="padding:8px 12px;font-weight:600">Realistic page load, or a <strong>JavaScript-based app</strong> (React, Angular, Vue&hellip;)</td><td style="padding:8px 12px">Untick <strong>Static Assets</strong> (and <strong>Analytics/Ads</strong> if wanted)</td><td style="padding:8px 12px">Files in the HTML still download automatically; files loaded by JavaScript/CSS are listed on their page step. Nothing is downloaded twice.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="help-p">Why: <code>downloadHtmlStaticResources</code> (DevWeb) and <code>Mode=HTML</code> (VuGen) read the page&#x2019;s HTML text and download what it names &#x2014; they do not run the page&#x2019;s JavaScript. Keep both on in every script. Included files are never separate requests: they are added to the page step that loaded them (VuGen <code>EXTRARES</code>, DevWeb <code>resources: [...]</code>).</p>
+        <div class="help-callout help-callout-amber">
+          <strong>Not sure which kind your app is?</strong> Generate once with static assets included and read the comment above each page step, e.g. <code>// Page resources: 15 in the page HTML download automatically; 2 loaded by script/CSS are listed</code>. If many are listed, keep them included. VuGen also needs the run-time setting <strong>Download non-HTML resources</strong> switched on (it is on by default).
+        </div>
       </div>
     </div>
   </div>
@@ -2633,7 +2651,7 @@ code {
           </table>
         </div>
         <h3 class="help-h3">Request Filters</h3>
-        <p class="help-p">Filters run <em>before</em> analysis. By default only <strong>Fetch/XHR</strong> and <strong>Document</strong> requests are included — CSS, JS, fonts, images, and media are excluded as they are never relevant to load test scripting. Use the <strong>All</strong> button in the filter panel to include them if needed.</p>
+        <p class="help-p">Filters run <em>before</em> analysis. By default only <strong>Fetch/XHR</strong> and <strong>Document</strong> requests are included — CSS, JS, fonts, images and media are left out, which suits server / API load. Select their types (or <strong>All</strong>) for realistic page load, and always for <strong>JavaScript-based apps</strong>: files that JavaScript or CSS requests are never in the page HTML, so <code>downloadHtmlStaticResources</code> / <code>Mode=HTML</code> cannot download them on their own. Included files are added to the page step that loaded them (<code>EXTRARES</code> / <code>resources: [...]</code>), never as separate requests. Known analytics/ads domains are always left out in Script Studio. See <strong>Recorder → Static assets — should I include them?</strong> for the full guidance.</p>
       </div>
     </div>
   </div>

@@ -149,6 +149,16 @@ If the browser reuses an existing session, the recording may not capture the aut
 **Check filter settings**  
 By default Script Studio includes only Fetch/XHR and Document requests, and filters out static assets (images, CSS, JS, fonts). To include them, select their types (or **All**) under **Resource Type** — they are then downloaded as part of their page step, not as separate requests. Known analytics/ads domains are always filtered out. If you notice a request missing, check the resource type and domain filters.
 
+**Should I include Img / CSS / JS / Font?** (also under **ⓘ** below the Resource Type list)
+- **Leave them out** (default) for server / API load. On replay only the files written in the
+  page HTML are downloaded (VuGen `Mode=HTML`, DevWeb `downloadHtmlStaticResources`).
+- **Select them (or All)** for realistic page load, and always for **JavaScript-based apps**
+  (React, Angular, Vue…). Files that JavaScript or CSS requests are never in the page HTML,
+  so the HTML-based download cannot find them — they are only downloaded if they are in the
+  script. Included files are listed on their page step (`EXTRARES` / `resources: [...]`) and
+  never downloaded twice. See the Recorder Guide, "Static Assets — Should I Include Them?",
+  for the full explanation.
+
 ---
 
 ## Downloading and Using the Output
