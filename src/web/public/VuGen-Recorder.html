@@ -92,41 +92,27 @@
     <div class="warn">&#x26A0; Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.</div>
   </div>
 
-  <!-- FALLBACK METHOD -->
-  <details style="margin-bottom:16px">
-    <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;user-select:none">
-      &#x1F517; Alternative: Address Bar Method (if bookmarklets are blocked by your organisation)
-    </summary>
-    <div class="instr" style="border-top:0;border-radius:0 0 10px 10px;margin-top:0">
-      <ol class="steps" style="margin-top:10px">
-        <li>In the browser address bar, type <code>https://START-T01-Login.invalid</code> and press Enter (error page is expected)</li>
-        <li>Type your application URL to go back, then perform all steps for this transaction</li>
-        <li>Type <code>https://END-T01-Login.invalid</code> in the address bar and press Enter</li>
-        <li>Do <strong>not</strong> click the Back button &#x2014; type the next START URL directly in the address bar</li>
-        <li>Repeat for each transaction (T02, T03 etc.)</li>
-      </ol>
-    </div>
-  </details>
-
-  <!-- MULTI-TAB / POPUP RECORDING -->
-  <details style="margin-bottom:16px">
-    <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;user-select:none">
-      &#x1FA9F; Multi-tab / Popup recording &#x2014; use chrome://net-export/ when your app opens new windows or tabs
-    </summary>
-    <div class="instr" style="border-top:0;border-radius:0 0 10px 10px;margin-top:0">
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Developer Tools (F12) only records the tab it is attached to. If your app opens popup windows or new tabs, use Chrome/Edge's built-in all-tab capture instead. <strong>Note:</strong> NetLog does not capture POST request bodies  -  those requests will show a TODO comment in the generated script.</p>
-      <ol class="steps" style="margin-top:0">
-        <li>In the Chrome/Edge address bar, navigate to <code>chrome://net-export/</code></li>
-        <li>Click <strong>Start Logging to Disk</strong> &#x2014; choose a save location and click Save</li>
-        <li>Open your application in a new tab (the net-export tab stays open in the background)</li>
-        <li>Use the <strong style="color:#166534">&#x25B6; START Transaction</strong> and <strong style="color:#991b1b">&#x25A0; END Transaction</strong> bookmarks as normal &#x2014; they fire from any tab and are captured by NetLog</li>
-        <li>Complete your full user journey (including any popup windows or new tabs the app opens)</li>
-        <li>Switch back to the <code>chrome://net-export/</code> tab and click <strong>Stop Logging</strong></li>
-        <li>Drop the saved <code>.json</code> file into this tool just as you would a <code>.har</code> file</li>
-      </ol>
-      <div class="tip" style="margin-top:10px">POST bodies will show as TODO in generated scripts. Open DevTools alongside for the same session if you also need bodies  -  then use the <code>.har</code> from DevTools for a complete script.</div>
-    </div>
-  </details>
+  <!-- CDP RECORDER -->
+  <div class="instr">
+    <h3>&#x23FA;&#xFE0F; Pop-ups, new tabs, or DevTools / bookmarks blocked? Use CDP Recorder</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">A small Windows program that records your whole journey &#x2014; including every new tab and pop-up window (for example a sign-in pop-up) &#x2014; and names transactions from a floating toolbar. No DevTools, no bookmarks and no browser extension needed.</p>
+    <ol class="steps" style="margin-top:0">
+      <li><span>Download <a id="cdp-dl" href="downloads/cdp-recorder" style="font-weight:700;color:var(--primary)">cdp-recorder.zip</a> (one time only)</span></li>
+      <li><span>Right-click the ZIP &rarr; <strong>Extract All&hellip;</strong> &rarr; open the extracted folder and double-click <code>cdp-recorder.exe</code></span></li>
+      <li><span>Two windows open: a small <strong>toolbar</strong> and an orange-bordered <strong>RECORDING window</strong>. Use your application <strong>only in the recording window</strong> &#x2014; your normal browser is not recorded</span></li>
+      <li><span>On the toolbar click <strong>Start Recording</strong>, type a transaction name (e.g. <code>T01_Login</code>) and click <strong>Start Transaction</strong></span></li>
+      <li><span>Do the steps for that transaction, then click <strong>End Transaction</strong>. Repeat for each transaction</span></li>
+      <li><span>Click <strong>Stop Recording</strong> &#x2014; the <code>.har</code> file is saved in the same folder as <code>cdp-recorder.exe</code>. Drop it in the area above</span></li>
+    </ol>
+    <div class="tip" style="margin-top:10px">&#x1F4A1; Transactions named on the toolbar are picked up automatically &#x2014; no START/END bookmarks needed. Don&#x2019;t run <code>cdp-recorder.exe</code> from inside the ZIP: Windows would run it from a temporary folder and your recordings would be saved there.</div>
+  </div>
+  <script>
+    // Works at /recorder and under the IIS /converter virtual directory.
+    (function () {
+      var a = document.getElementById('cdp-dl');
+      if (a) a.href = (location.pathname.indexOf('/converter') === 0 ? '/converter' : '') + '/downloads/cdp-recorder';
+    })();
+  </script>
 </div>
 
 <!-- ======= MAIN PANEL ======= -->

@@ -54,6 +54,17 @@ function buildAutoFollowMap(entries) {
 // ===========================================================================
 // SCRIPT GENERATION  -  Web HTTP/HTML (Action.c)
 // ===========================================================================
+// Split an application/x-www-form-urlencoded body into decoded {k,v} pairs for
+// web_submit_data ITEMDATA — VuGen re-encodes the values itself on replay.
+// Same rule as Script Studio's genActionC (studio-codegen.js).
+function parseFormUrlEncoded(raw){
+  const dec=s=>{ try{ return decodeURIComponent(s.replace(/\+/g,' ')); }catch{ return s; } };
+  return raw.split('&').filter(Boolean).map(pair=>{
+    const eq=pair.indexOf('=');
+    return eq>=0 ? {k:dec(pair.substring(0,eq)), v:dec(pair.substring(eq+1))} : {k:dec(pair), v:''};
+  });
+}
+
 function genActionC(){
   const nc={};
   function name(url){
@@ -282,6 +293,18 @@ function genActionC(){
       if(rawBodyText&&rawBodyText.length>1500&&!rawBodyText.includes('{')&&/__VIEWSTATE|__EVENTVALIDATION|__RequestVerificationToken/.test(rawBodyText)){
         o+=`\t// TODO: Large .NET hidden field(s) detected. These values are dynamic per-session.\n`;
         o+=`\t// Use VuGen-Script-Studio.html with two HARs to auto-correlate these values.\n`;
+      }
+      // Standard HTML form POST -> web_submit_data with ITEMDATA, as VuGen records it in
+      // HTML mode. Everything else (JSON, XML, multipart, PUT/PATCH/DELETE) stays a
+      // web_custom_request. Must match Script Studio's genActionC.
+      if(e.method==='POST'&&encType==='application/x-www-form-urlencoded'&&rawBodyText&&rawBodyText.indexOf('=')>=0){
+        o+=`\tweb_submit_data("${n}",\n\t\t"Action=${subHdrValC(e.url,acHostVarMap)}",\n\t\t"Method=POST",\n`;
+        o+=`\t\t"RecContentType=${ct}",\n\t\t"Referer=${subHdrValC(ref,acHostVarMap)}",\n`;
+        o+=`\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n\t\tITEMDATA,\n`;
+        for(const {k,v} of parseFormUrlEncoded(rawBodyText))
+          o+=`\t\t"Name=${escJs(k)}","Value=${escJs(subHdrValC(v,acHostVarMap))}",ENDITEM,\n`;
+        o+=`\t\tLAST);\n\n`;
+        continue;
       }
       o+=`\tweb_custom_request("${n}",\n\t\t"URL=${subHdrValC(e.url,acHostVarMap)}",\n\t\t"Method=${e.method}",\n`;
       o+=`\t\t"Resource=0",\n\t\t"RecContentType=${ct}",\n`;
