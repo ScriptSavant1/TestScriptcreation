@@ -319,11 +319,17 @@ function applyFilters(entries) {
       e.filtered = true;
       continue;
     }
-    if (STATIC_CT.has(ct)) {
+    // Static files are dropped unless the user selected their resource type
+    // (null = "All" selected). Included ones are scripted as part of their page
+    // step, not as separate requests — see shared/page-resources.js.
+    const staticSelected =
+      S.filterResourceTypes === null ||
+      (S.filterResourceTypes instanceof Set && S.filterResourceTypes.has(classifyHarEntry(e)));
+    if (!staticSelected && STATIC_CT.has(ct)) {
       e.filtered = true;
       continue;
     }
-    if (STATIC_EXT.test(e.url.split("?")[0])) {
+    if (!staticSelected && STATIC_EXT.test(e.url.split("?")[0])) {
       e.filtered = true;
       continue;
     }

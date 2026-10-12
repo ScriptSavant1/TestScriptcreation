@@ -28,9 +28,10 @@ function loadRecorderGenerators(S) {
     'function escBodyBinary(s){ return s; }\n' +
     'function buildHdrHostMap(){ return {}; }\n' +
     'function subHdrValC(v){ return v; }\n';
+  const PageResources = require('../../src/web/public/shared/page-resources.js');
   // eslint-disable-next-line no-new-func
-  const factory = new Function('S', stubs + code + '\nreturn { genActionC, parseFormUrlEncoded };');
-  return factory(S);
+  const factory = new Function('S', 'PageResources', stubs + code + '\nreturn { genActionC, parseFormUrlEncoded };');
+  return factory(S, PageResources);
 }
 
 function post(url, mimeType, text) {
@@ -94,6 +95,26 @@ describe('Recorder genActionC — form POSTs use web_submit_data (HTML mode)', (
     ]);
     const out = loadRecorderGenerators(S).genActionC();
     expect(out).toContain('"Name=text","Value=say \\"hi\\"",ENDITEM,');
+  });
+});
+
+describe('Recorder genActionC — included static resources belong to their page step', () => {
+  test('HTML-referenced resources are not scripted; script-loaded ones go under EXTRARES', () => {
+    const get = (url, ct, rt, extra = {}) => ({
+      method: 'GET', url, status: 200, ct, _resourceType: rt, referer: 'https://shop.example.com/',
+      reqHdrs: [], hdrsMap: {}, body: null, filtered: false, isMarker: false, ...extra,
+    });
+    const S = baseState([
+      get('https://shop.example.com/', 'text/html', 'document', { referer: '', respBody: '<img src="/img/logo.gif">' }),
+      get('https://shop.example.com/img/logo.gif', 'image/gif', 'image'),
+      get('https://www.google-analytics.com/collect?v=1', 'image/gif', 'image'),
+    ]);
+    const out = loadRecorderGenerators(S).genActionC();
+
+    expect((out.match(/web_url\(/g) || []).length).toBe(1);
+    expect(out).not.toContain('logo.gif');
+    expect(out).toContain('// Page resources: 1 in the page HTML download automatically (Mode=HTML); 1 loaded by script/CSS is listed under EXTRARES');
+    expect(out).toContain('"Mode=HTML",\n\t\tEXTRARES,\n\t\t"Url=https://www.google-analytics.com/collect?v=1", "Referer=https://shop.example.com/", ENDITEM,\n\t\tLAST);');
   });
 });
 

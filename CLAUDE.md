@@ -41,6 +41,7 @@ Converts HAR recordings, Bruno/Postman collections, and JMX files into:
 |------|------|---------|
 | `src/web/public/VuGen-Script-Studio.html` | HTML | All HTML/modals for Studio |
 | `src/web/public/shared/vugen-codegen.js` | JS | Shared VuGen codegen (UMD, works browser+Node) — loaded first |
+| `src/web/public/shared/page-resources.js` | JS | Groups static resources under their page step (VuGen EXTRARES / DevWeb resources[]) — shared with the Recorder (UMD) |
 | `src/web/public/VuGen-Script-Studio-constants.js` | JS | Shared constants |
 | `src/web/public/VuGen-Script-Studio-correlation.js` | JS | Correlation state management |
 | `src/web/public/studio-codegen.js` | JS (large) | Shared codegen helpers (DevWeb + VuGen body substitution) |
@@ -62,11 +63,12 @@ Do NOT recreate it — all its functions exist in the three split files above.
 1. `shared/vugen-codegen.js`
 2. `VuGen-Script-Studio-constants.js`
 3. `VuGen-Script-Studio-correlation.js`
-4. `studio-codegen.js`
-5. `studio-advisor.js`
-6. `studio-ui.js`
-7. `studio-app.js` ← live orchestrator
-8. `analytics-device.js` (deferred)
+4. `shared/page-resources.js` (also loaded by the Recorder — attaches static resources to their page step, BUG-056)
+5. `studio-codegen.js`
+6. `studio-advisor.js`
+7. `studio-ui.js`
+8. `studio-app.js` ← live orchestrator
+9. `analytics-device.js` (deferred)
 
 All share global state object `S` (defined in `studio-app.js`).
 
@@ -74,8 +76,8 @@ All share global state object `S` (defined in `studio-app.js`).
 | File | Purpose |
 |------|---------|
 | `src/web/public/VuGen-Recorder.html` | Recorder tool HTML + UI |
-| `src/web/public/VuGen-Recorder-parsers.js` | HAR parsing for Recorder; handles extension HARs (pageref markers, null-response guard) |
-| `src/web/public/VuGen-Recorder-generators.js` | Script generation for Recorder tool |
+| `src/web/public/VuGen-Recorder-parsers.js` | HAR parsing for Recorder; handles extension HARs (pageref markers, null-response guard); keeps `respBody` for HTML pages only (page-resource grouping) |
+| `src/web/public/VuGen-Recorder-generators.js` | Script generation for Recorder tool — HTML-mode: form POSTs → `web_submit_data` (BUG-055), page resources via `shared/page-resources.js` (BUG-056) |
 
 ### PerfX Recorder Chrome/Edge Extension
 | File | Purpose |

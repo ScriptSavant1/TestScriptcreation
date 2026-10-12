@@ -5,6 +5,18 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — Static resources belong to their page, not separate requests (BUG-056)
+
+- When static assets or analytics are included (Recorder, Script Studio), CSS, JS, images,
+  fonts and beacons are no longer scripted as separate requests. Each one is attached to
+  the page that loaded it: resources in the page HTML are downloaded automatically
+  (VuGen `Mode=HTML`, DevWeb `downloadHtmlStaticResources`); the rest are listed on the page
+  step (VuGen `EXTRARES`, DevWeb `resources: [...]`). DevWeb no longer downloads them twice.
+- Script Studio: selecting Img / CSS / JS / Font (or "All") in the resource-type filter now
+  actually includes those files — they were always dropped before. Resources used by a
+  correlation stay as their own request.
+- Default output (static assets excluded) is unchanged.
+
 ### Fixed — Recorder: HTML form POSTs now generated in HTML mode (BUG-055)
 
 - The Recorder tool now writes standard HTML form POSTs (`application/x-www-form-urlencoded`)
