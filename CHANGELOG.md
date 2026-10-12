@@ -5,6 +5,20 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — Recorder: HTML form POSTs now generated in HTML mode (BUG-055)
+
+- The Recorder tool now writes standard HTML form POSTs (`application/x-www-form-urlencoded`)
+  as `web_submit_data` with `ITEMDATA` fields, the same as Script Studio and VuGen's own
+  HTML-mode recording, instead of `web_custom_request` with a raw body (URL-mode style).
+  JSON, XML, multipart and PUT/PATCH/DELETE requests are unchanged. DevWeb output unchanged.
+
+### Changed — Recorder page: CDP Recorder replaces the address-bar and net-export methods
+
+- Removed the "Alternative: Address Bar Method" and "Multi-tab / Popup recording
+  (chrome://net-export/)" panels from the Recorder tool. In their place, a CDP Recorder
+  section: download the ZIP, extract, run `cdp-recorder.exe`, record in the recording
+  window, and drop the HAR in. The download link works at `/recorder` and under `/converter`.
+
 ### Changed — CDP Recorder is downloaded as a ZIP
 
 - "Get CDP Recorder" now downloads `cdp-recorder.zip` (the `.exe` plus a README.txt)
