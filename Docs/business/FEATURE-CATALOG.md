@@ -85,7 +85,10 @@ After uploading a recording, engineers can uncheck domains they don't want in th
 Engineers can visually group requests into named transactions representing logical user steps (e.g. "Login", "Search Products", "Add to Cart"). These become named measurements in the LoadRunner report.
 
 #### Static asset filtering
-Images, CSS files, JavaScript bundles, and font files are automatically identified and excluded from the script (they are handled by LoadRunner's resource-level settings, not the action script).
+Images, CSS files, JavaScript bundles, and font files are automatically identified and excluded from the script by default. If an engineer chooses to include them, they are not added as separate requests: each one is downloaded as part of the page that loaded it, exactly as LoadRunner's own HTML-mode recording does. Files the page's HTML refers to are fetched automatically; others (such as analytics beacons) are listed on that page step.
+
+#### HTML-mode form submissions
+Standard web form submissions (login, checkout, search forms) are generated the way VuGen records them in HTML mode — one named field per form value — so scripts are easy to read and parameterize.
 
 ---
 

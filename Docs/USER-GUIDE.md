@@ -163,7 +163,7 @@ A HAR (HTTP Archive) file captures every network request your browser makes duri
 | **DevTools open?** | Yes — must stay open during recording | No — uses a side panel instead |
 | **Transaction naming** | Click bookmark → type name | Button in the extension side panel |
 | **Export HAR** | Manual — Network tab → Export | One-click "Open in Studio" |
-| **Multi-tab / popup apps** | Needs chrome://net-export/ | Works automatically |
+| **Multi-tab / popup apps** | Not captured — use the **CDP Recorder** (download `cdp-recorder.zip` from the Recorder page) | Works automatically |
 | **Live request counter** | No | Yes |
 
 Choose **Classic** for a quick start. Choose the **Extension** for a cleaner experience, especially on apps that open popups or spawn new tabs.

@@ -9,6 +9,38 @@ decision, the context/drivers, the alternatives considered, and the outcome.
 
 ---
 
+## ADR-008 — Page resources are grouped by one shared module, scripted the HTML-mode way
+**Date:** 2026-10-12
+**Status:** Decided
+
+**Decision:** When static resources (CSS, JS, images, fonts, media, beacons) are included,
+both HAR tools attach them to the page step that loaded them instead of scripting each one.
+The grouping lives in one UMD module, `src/web/public/shared/page-resources.js`
+(`groupPageResources()`), loaded by both the Recorder and Script Studio and used by all
+four HAR generators (Recorder + Studio × VuGen + DevWeb). Resources referenced in the page
+HTML are not scripted; the rest are listed on the page step (VuGen `EXTRARES`, DevWeb
+`resources: [...]`). Resources involved in a Studio correlation stay standalone.
+
+**Context:** BUG-056. Scripting each resource separately is URL-mode structure, inflates
+scripts (one request per image per page), and in DevWeb downloaded every resource twice,
+because the scripts already set `downloadHtmlStaticResources = true`. The Recorder and Studio
+have separate generators (no shared code apart from `vugen-codegen.js`, which the Recorder
+does not load), so the same fix written four times would drift.
+
+**Alternatives considered:**
+- Keep dropping static files entirely → rejected: users need page-resource load for
+  realistic tests, and VuGen's own HTML-mode recording keeps them on the page step
+- List every resource on the page step (no HTML check) → rejected: duplicates the
+  automatic HTML-mode download
+- Copy the logic into each generator → rejected: four copies to keep in sync
+- Put it in `vugen-codegen.js` → rejected: it is VuGen-specific and the Recorder does not load it
+
+**Outcome:** One pure, unit-tested module (`tests/unit/pageResources.test.js`); each
+generator only skips `absorbed` indices and renders `byPage` in its own format. Default
+output (static assets excluded) is byte-identical to before.
+
+---
+
 ## ADR-007 — Unit tests use `new Function()` wrapper to load browser globals in Jest
 **Date:** 2026-07-29
 **Status:** Decided

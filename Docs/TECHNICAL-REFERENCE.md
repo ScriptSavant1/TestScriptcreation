@@ -433,6 +433,10 @@ All unique domains from the HAR are extracted and displayed as checkboxes. The u
 - Telemetry and monitoring endpoints
 
 Static asset filtering (images, CSS, fonts, JS bundles) is also available via toolbar toggle.
+When static assets are included they are grouped under their page step by
+`src/web/public/shared/page-resources.js` (`groupPageResources()`), shared by the Recorder
+and Script Studio: HTML-referenced resources are left to `"Mode=HTML"` /
+`downloadHtmlStaticResources`, the rest become VuGen `EXTRARES` / DevWeb `resources[]`.
 
 ### Transaction marking
 

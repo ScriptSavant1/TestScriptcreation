@@ -201,6 +201,14 @@ function processHAR(har){
       body: e.request.postData||null,
       referer: hdrs['referer']||'',
       _resourceType: e._resourceType||'',
+      // HTML pages only — lets the generators tell which page resources the HTML
+      // references (downloaded automatically in HTML mode) — see shared/page-resources.js
+      respBody: (()=>{
+        if(!/^(text\/html|application\/xhtml)/i.test(ct)) return '';
+        const c=resp.content||{}; let t=c.text||'';
+        if(t&&c.encoding==='base64'){ try{ t=decodeURIComponent(escape(atob(t))); }catch{ try{ t=atob(t); }catch{ t=''; } } }
+        return t;
+      })(),
       pageref: e.pageref||null,
       isMarker:false, markerType:null, txnName:null,
       txn:null, filtered:false

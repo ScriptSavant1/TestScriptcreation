@@ -65,15 +65,22 @@ If you prefer to use DevTools directly (without the bookmarklet), follow the sta
 
 Same as Chrome — Edge uses the same Chromium DevTools.
 
-### Chrome NetLog (for capturing hidden browser requests)
+### CDP Recorder (pop-ups, new tabs, or DevTools / bookmarks blocked)
 
-For applications that use Chrome internals, popups, or service workers that don't appear in normal DevTools:
+DevTools only records the tab it is open in. If your application opens pop-ups (for example a
+sign-in window) or new tabs, or DevTools and bookmarklets are blocked on your machine, use the
+**CDP Recorder** instead — it records every tab and pop-up and names transactions from a toolbar:
 
-1. Open a new Chrome tab and go to `chrome://net-export/`
-2. Click **Start Logging to Disk**, choose a save location
-3. Open your application in another tab and perform the journey
-4. Return to `chrome://net-export/` and click **Stop Logging**
-5. Upload the resulting `.json` file (select Chrome NetLog format in the Recorder)
+1. On the Recorder page (or the home page banner), download **cdp-recorder.zip**
+2. Right-click the ZIP → **Extract All…**, then double-click `cdp-recorder.exe` (don't run it from inside the ZIP)
+3. Use your application only in the orange-bordered **recording window**
+4. On the toolbar: **Start Recording** → name a transaction → **Start Transaction** → do the steps → **End Transaction**; repeat
+5. **Stop Recording** — the `.har` is saved next to `cdp-recorder.exe`; drop it into the Recorder
+
+Full guide: `Docs/user/CDP-RECORDER-USER-GUIDE.html`.
+
+> Chrome NetLog files (`chrome://net-export/`) can still be uploaded, but they do not contain
+> POST bodies, so they are no longer recommended — use the CDP Recorder.
 
 ---
 
@@ -121,7 +128,7 @@ If you skip this step, the toolkit auto-generates transaction names based on req
 | Filtered | Reason |
 |---|---|
 | 3xx redirects | VuGen follows them automatically |
-| Static assets (images, CSS, JS bundles, fonts) | Handled by resource-level settings, not script |
+| Static assets (images, CSS, JS bundles, fonts) | Excluded by default. If you untick **Static Assets**, they are downloaded as part of their page step (not as separate requests) — files in the page's HTML automatically, others listed under `EXTRARES` / `resources[]` |
 | Browser pre-fetch requests | Not relevant to the user journey |
 | OPTIONS preflight requests | Not part of the actual API flow |
 | WebSocket frames | Not supported by Web HTTP/HTML protocol |

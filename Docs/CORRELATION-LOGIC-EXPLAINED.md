@@ -371,6 +371,11 @@ Use **Paste & Detect** (button in Advisor header) when:
 
 ### Request Filters — Smart Defaults
 
-The resource type filter now defaults to **Fetch/XHR + Document only**. Static resources (CSS, JS, fonts, images, media) are excluded by default as they are never relevant to load test scripts. Click **All** to include them.
+The resource type filter now defaults to **Fetch/XHR + Document only**. Static resources (CSS, JS, fonts, images, media) are excluded by default as they are never relevant to load test scripts. Click **All** (or select Img / CSS / JS / Font) to include them — before BUG-056 this had no effect, because `applyFilters()` dropped static files before checking the selection.
+
+**When static resources are included:**
+- The Correlation Advisor also scans them (their response bodies and URLs), like any other included request.
+- In the generated script they are attached to their page step (`shared/page-resources.js`): not scripted when the page HTML references them, otherwise listed under VuGen `EXTRARES` / DevWeb `resources: [...]`.
+- **Exception:** a resource that is a correlation **source** or **usage** (any index in the generator's `corrSources` / `corrUsages` maps) stays a standalone request. Otherwise its `web_reg_save_param*` / DevWeb extractor, or the `{name}` substitution in its URL/headers, would be lost with the absorbed request.
 
 This reduces noise in the request list and makes the correlation advisor scan faster and more accurate.

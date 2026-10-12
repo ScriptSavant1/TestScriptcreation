@@ -1153,7 +1153,8 @@ function genCollectionDataCsv() {
 // autoFollowSet: Set<idx> of redirect/challenge entries excluded from the generated script.
 // excludeSet:    Set<idx> of entries that must remain sequential (DPoP proofs, extractor captures).
 // Returns Map<idx, {size, pos}> — only entries in groups of size >= 2 are present.
-function buildConcurrentGroups(entries, autoFollowSet, excludeSet) {
+// skipSet: entries not scripted at all (page resources) — ignored, never break a group.
+function buildConcurrentGroups(entries, autoFollowSet, excludeSet, skipSet) {
   const groupMap = new Map();
   let buf = [];
   let maxEnd = 0;
@@ -1167,6 +1168,7 @@ function buildConcurrentGroups(entries, autoFollowSet, excludeSet) {
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
+    if (skipSet && skipSet.has(i)) continue;
     if (e.isMarker || e.filtered || autoFollowSet.has(i) || (excludeSet && excludeSet.has(i))) {
       flush(); continue;
     }
@@ -1518,7 +1520,10 @@ function genMainJS(entries, correlations) {
     if (_hasSrc) _mjExclude.add(_i);
     if (S.hasDpop && (_e.reqHdrs || []).some((h) => /^dpop(-pf)?$/i.test(h.name))) _mjExclude.add(_i);
   }
-  const mjGroupMap = buildConcurrentGroups(entries, mjAutoFollowSet, _mjExclude);
+  // Static resources (CSS/JS/images…) belong to their page request, not separate requests
+  const mjPageRes = PageResources.groupPageResources(entries, mjAutoFollowSet, (x) => shouldIncludeEntry(x, S.bgDecisions),
+    new Set([...corrSources.keys(), ...corrUsages.keys()])); // correlation sources/usages stay standalone requests
+  const mjGroupMap = buildConcurrentGroups(entries, mjAutoFollowSet, _mjExclude, mjPageRes.absorbed);
 
   let currentTxn = null; // {name, tsNum}
 
@@ -1544,6 +1549,7 @@ function genMainJS(entries, correlations) {
 
     if (e.filtered) continue;
     if (!shouldIncludeEntry(e, S.bgDecisions)) continue;
+    if (mjPageRes.absorbed.has(idx)) continue; // downloaded as part of its page request
 
     // Skip auto-follow redirect entries (300-303/307) and 401 challenge entries — VuGen handles these automatically.
     // Correlation extractors have been re-anchored to the triggering entry above.
@@ -2014,6 +2020,12 @@ function genMainJS(entries, correlations) {
       o += `${ind}// Then use: body: formData  (remove the body property below and replace)\n`;
     }
     o += `${ind}// ${rn}\n`;
+    const _pr = mjPageRes.byPage.get(idx);
+    if (_pr) {
+      if (!_pr.htmlKnown) o += `${ind}// Page HTML was not recorded: its ${_pr.extra.length} resource(s) are listed in resources[]\n`;
+      else o += `${ind}// Page resources: ${_pr.inHtml.length} in the page HTML download automatically (downloadHtmlStaticResources)` +
+        (_pr.extra.length ? `; ${_pr.extra.length} loaded by script/CSS ${_pr.extra.length===1?"is":"are"} listed in resources[]` : "") + `\n`;
+    }
 
     // DPoP proof generation — fresh proof per request (DPoP entries are always sequential)
     if (S.hasDpop) {
@@ -2421,6 +2433,11 @@ function genMainJS(entries, correlations) {
       });
       o += `${pi}extractors: [${extractorRefs.join(", ")}],\n`;
     }
+    if (_pr && _pr.extra.length) {
+      o += `${pi}resources: [\n`;
+      for (const ri of _pr.extra) o += `${si}${subHdrValMj(entries[ri].url, mjHostVarMap)},\n`;
+      o += `${pi}],\n`;
+    }
     // Request closing — concurrent: .send(), + optional Promise.all close; sequential: .send();\n\n
     if (_inGrp) {
       o += `${ind}}).send(),\n`;
@@ -2508,6 +2525,9 @@ function genActionC(entries, correlations) {
   // responses including the final destination body.
   const { autoFollowSet: acAutoFollowSet, anchorOf: acAnchorOf } =
     buildAutoFollowMap(entries);
+  // Static resources (CSS/JS/images…) belong to their page step, as in HTML mode — not separate steps
+  const acPageRes = PageResources.groupPageResources(entries, acAutoFollowSet, (x) => shouldIncludeEntry(x, S.bgDecisions),
+    new Set([...corrSources.keys(), ...corrUsages.keys()])); // correlation sources/usages stay standalone requests
   // corrSourcesRemap: anchorIdx → [corr]  (extractors from skipped entries moved to anchor)
   const corrSourcesRemap = new Map();
   for (const [idx, corrs] of corrSources) {
@@ -2578,7 +2598,7 @@ function genActionC(entries, correlations) {
   }
   // Count header name+value occurrences across scripted entries (non-filtered, non-marker, non-redirect)
   const visEntries = entries.filter(
-    (e, i) => !e.filtered && !e.isMarker && !acAutoFollowSet.has(i),
+    (e, i) => !e.filtered && !e.isMarker && !acAutoFollowSet.has(i) && !acPageRes.absorbed.has(i),
   );
   const hdrFreq = {}; // k → Map<value, count-of-entries-with-that-value>
   const hdrKeyFreq = {}; // k → count-of-entries-that-have-this-header (any value)
@@ -2661,6 +2681,27 @@ function genActionC(entries, correlations) {
     entries,
     S.serverHost ? S.serverHost.host : "",
   );
+
+  // Page step's resources: the ones in its HTML download automatically (Mode=HTML);
+  // the rest (loaded by JavaScript/CSS) are listed under EXTRARES on the same step.
+  function pageResComment(idx) {
+    const g = acPageRes.byPage.get(idx);
+    if (!g) return "";
+    if (!g.htmlKnown) return `\t// Page HTML was not recorded: its ${g.extra.length} resource(s) are listed under EXTRARES\n`;
+    return `\t// Page resources: ${g.inHtml.length} in the page HTML download automatically (Mode=HTML)` +
+      (g.extra.length ? `; ${g.extra.length} loaded by script/CSS ${g.extra.length===1?"is":"are"} listed under EXTRARES` : "") + `\n`;
+  }
+  function extraResC(idx) {
+    const g = acPageRes.byPage.get(idx);
+    if (!g || !g.extra.length) return "";
+    let s = "\t\tEXTRARES,\n";
+    for (const ri of g.extra) {
+      const r = entries[ri];
+      const rRef = r.hdrsMap["referer"] || "";
+      s += `\t\t"Url=${subHdrValC(r.url, acHostVarMap)}",` + (rRef ? ` "Referer=${subHdrValC(rRef, acHostVarMap)}",` : "") + ` ENDITEM,\n`;
+    }
+    return s;
+  }
 
   let _dpopPfUsedAC = false;
   // Pre-scan: collect DPoP proof specs per transaction group for batch generation
@@ -2854,6 +2895,7 @@ function genActionC(entries, correlations) {
 
     if (e.filtered) continue;
     if (!shouldIncludeEntry(e, S.bgDecisions)) continue;
+    if (acPageRes.absorbed.has(idx)) continue; // downloaded as part of its page step
 
     // Skip auto-follow redirect entries (300-303/307) and 401 challenge entries — VuGen handles these automatically.
     // web_reg_save_param extractors have been re-anchored to the triggering entry.
@@ -2873,6 +2915,7 @@ function genActionC(entries, correlations) {
       if (_fc > 0)
         o += `\t// Note: VuGen auto-follows ${_fc} request(s) — web_reg_save_param scans all responses in chain (IgnoreRedirections=No default)\n`;
     }
+    o += pageResComment(idx);
 
     const n = name(e.url);
     const ct = e.ct || "text/html";
@@ -3110,7 +3153,7 @@ function genActionC(entries, correlations) {
       o += hdrOut; // flush headers immediately before web_url
       o += `\tweb_url("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Resource=0",\n`;
       o += `\t\t"RecContentType=${ct}",\n\t\t"Referer=${ref}",\n`;
-      o += `\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n\t\tLAST);\n\n`;
+      o += `\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n` + extraResC(idx) + `\t\tLAST);\n\n`;
     } else {
       let encType = "application/x-www-form-urlencoded";
       let rawBodyText = "";
@@ -3430,7 +3473,7 @@ function genActionC(entries, correlations) {
         o += `\t\tITEMDATA,\n`;
         for (const { k, v } of subFields)
           o += `\t\t"Name=${k}","Value=${v}",ENDITEM,\n`;
-        o += `\t\tLAST);\n\n`;
+        o += extraResC(idx) + `\t\tLAST);\n\n`;
       } else {
         // ── web_custom_request (JSON, XML, multipart, PUT, DELETE, PATCH) ───
         // Always use BodyBinary= to match VuGen native recording behavior.
@@ -3640,7 +3683,7 @@ function genActionC(entries, correlations) {
             }
           }
         }
-        o += `\t\tLAST);\n\n`;
+        o += extraResC(idx) + `\t\tLAST);\n\n`;
       }
     }
   }

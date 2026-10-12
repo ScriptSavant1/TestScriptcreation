@@ -663,7 +663,7 @@ The Studio is a self-contained browser application for analyzing HAR/NetLog reco
 
 ```
 1. Parse uploaded HAR/NetLog file → entries1 (+ entries2 if two-HAR)
-2. Apply filters (remove static resources)
+2. Apply filters (remove static resources unless their resource type is selected; analytics hosts, OPTIONS)
 3. Detect transaction markers
 4. Run correlation:
    a. twoHarCorrelate(entries1, entries2)  OR  singleHarCorrelate(entries1)

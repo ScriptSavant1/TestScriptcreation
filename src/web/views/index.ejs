@@ -2691,7 +2691,7 @@ code {
               <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">Bruno Collection</td><td style="padding:8px 12px"><code>.json</code> / <code>.yml</code> / <code>.bru</code> / folder (zipped)</td></tr>
               <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">JMeter Test Plan</td><td style="padding:8px 12px"><code>.jmx</code> – with optional CSV data files and certificates</td></tr>
               <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;font-weight:600">HAR file</td><td style="padding:8px 12px"><code>.har</code> – any browser → F12 → Network → Export HAR</td></tr>
-              <tr><td style="padding:8px 12px;font-weight:600">Chrome NetLog</td><td style="padding:8px 12px"><code>.json</code> – chrome://net-export/ (captures all tabs including popups)</td></tr>
+              <tr><td style="padding:8px 12px;font-weight:600">Chrome NetLog</td><td style="padding:8px 12px"><code>.json</code> – chrome://net-export/ (no POST bodies — for pop-ups and new tabs, prefer the CDP Recorder)</td></tr>
             </tbody>
           </table>
         </div>
@@ -3681,7 +3681,7 @@ function resetResult() { hideResults(); }
           </tr>
           <tr>
             <td>Multi-tab / popup apps</td>
-            <td class="cmp-no">Needs chrome://net-export/</td>
+            <td class="cmp-no">Not captured — use the CDP Recorder</td>
             <td class="cmp-yes">Works automatically</td>
           </tr>
           <tr>

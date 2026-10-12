@@ -147,7 +147,7 @@ If your two recordings use the same username/password, most values won't differ 
 If the browser reuses an existing session, the recording may not capture the authentication flow. Always start from a logged-out state.
 
 **Check filter settings**  
-Script Studio automatically filters out static assets (images, CSS, fonts). If you notice a request missing, check the domain filter.
+By default Script Studio includes only Fetch/XHR and Document requests, and filters out static assets (images, CSS, JS, fonts). To include them, select their types (or **All**) under **Resource Type** — they are then downloaded as part of their page step, not as separate requests. Known analytics/ads domains are always filtered out. If you notice a request missing, check the resource type and domain filters.
 
 ---
 

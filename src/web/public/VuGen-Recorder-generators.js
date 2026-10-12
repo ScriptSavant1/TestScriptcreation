@@ -84,6 +84,8 @@ function genActionC(){
 
   // Pre-compute auto-follow set so redirect entries can be excluded from header analysis
   const acAutoFollowSet=buildAutoFollowMap(S.entries);
+  // Static resources (CSS/JS/images…) belong to their page step, as in HTML mode — not separate steps
+  const acPageRes=PageResources.groupPageResources(S.entries, acAutoFollowSet);
 
   // -- Header analysis: determine universal (auto) vs per-request headers ----
   // Headers handled by VuGen attributes or managed internally  -  never emit via web_add_header
@@ -117,7 +119,7 @@ function genActionC(){
   // Convert "accept-language" -> "Accept-Language"  -  split on hyphen, capitalise first char, rejoin
   function hdrTitleCase(n){ return n.split('-').map(w=>w?w[0].toUpperCase()+w.slice(1):w).join('-'); }
   // Count header name+value occurrences across scripted entries (non-filtered, non-marker, non-redirect)
-  const visEntries=S.entries.filter((e,i)=>!e.filtered&&!e.isMarker&&!acAutoFollowSet.has(i));
+  const visEntries=S.entries.filter((e,i)=>!e.filtered&&!e.isMarker&&!acAutoFollowSet.has(i)&&!acPageRes.absorbed.has(i));
   const hdrFreq={};    // k → Map<value, count-of-entries-with-that-value>
   const hdrKeyFreq={}; // k → count-of-entries-that-have-this-header (any value)
   for(const ev of visEntries){
@@ -164,6 +166,26 @@ function genActionC(){
 
   // Build host variable map for header value substitution
   const acHostVarMap=buildHdrHostMap(S.entries,_sh?_sh.host:'');
+
+  // Page step's resources: the ones in its HTML download automatically (Mode=HTML);
+  // the rest (loaded by JavaScript/CSS) are listed under EXTRARES on the same step.
+  function pageResComment(idx){
+    const g=acPageRes.byPage.get(idx);
+    if(!g) return '';
+    if(!g.htmlKnown) return `\t// Page HTML was not recorded: its ${g.extra.length} resource(s) are listed under EXTRARES\n`;
+    return `\t// Page resources: ${g.inHtml.length} in the page HTML download automatically (Mode=HTML)`+
+      (g.extra.length?`; ${g.extra.length} loaded by script/CSS ${g.extra.length===1?"is":"are"} listed under EXTRARES`:'')+`\n`;
+  }
+  function extraResC(idx){
+    const g=acPageRes.byPage.get(idx);
+    if(!g||!g.extra.length) return '';
+    let s='\t\tEXTRARES,\n';
+    for(const ri of g.extra){
+      const r=S.entries[ri];
+      s+=`\t\t"Url=${subHdrValC(r.url,acHostVarMap)}",`+(r.referer?` "Referer=${subHdrValC(r.referer,acHostVarMap)}",`:'')+` ENDITEM,\n`;
+    }
+    return s;
+  }
 
   let _dpopPfUsedAC=false;
   let o='Action()\n{\n\n\tweb_set_sockets_option("SSL_VERSION", "AUTO");\n\n';
@@ -218,6 +240,7 @@ function genActionC(){
       continue;
     }
     if(e.filtered) continue;
+    if(acPageRes.absorbed.has(idx)) continue; // downloaded as part of its page step
 
     // Skip auto-follow redirect (300-303/307) and 401 challenge entries — VuGen handles automatically
     if(acAutoFollowSet.has(idx)){
@@ -226,6 +249,7 @@ function genActionC(){
     }
     // Count auto-follows triggered by this entry
     {let _j=idx+1,_fc=0; while(_j<S.entries.length&&acAutoFollowSet.has(_j)){_fc++;_j++;} if(_fc>0) o+=`\t// Note: VuGen auto-follows ${_fc} redirect(s) after this request\n`;}
+    o+=pageResComment(idx);
 
     const n=name(e.url);
     const ct=e.ct||'text/html';
@@ -261,7 +285,7 @@ function genActionC(){
     if(e.method==='GET'||e.method==='HEAD'){
       o+=`\tweb_url("${n}",\n\t\t"URL=${subHdrValC(e.url,acHostVarMap)}",\n\t\t"Resource=0",\n`;
       o+=`\t\t"RecContentType=${ct}",\n\t\t"Referer=${subHdrValC(ref,acHostVarMap)}",\n`;
-      o+=`\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n\t\tLAST);\n\n`;
+      o+=`\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n`+extraResC(idx)+`\t\tLAST);\n\n`;
     } else {
       let encType='application/x-www-form-urlencoded';
       let rawBodyText='';
@@ -303,7 +327,7 @@ function genActionC(){
         o+=`\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n\t\tITEMDATA,\n`;
         for(const {k,v} of parseFormUrlEncoded(rawBodyText))
           o+=`\t\t"Name=${escJs(k)}","Value=${escJs(subHdrValC(v,acHostVarMap))}",ENDITEM,\n`;
-        o+=`\t\tLAST);\n\n`;
+        o+=extraResC(idx)+`\t\tLAST);\n\n`;
         continue;
       }
       o+=`\tweb_custom_request("${n}",\n\t\t"URL=${subHdrValC(e.url,acHostVarMap)}",\n\t\t"Method=${e.method}",\n`;
@@ -338,7 +362,7 @@ function genActionC(){
           }
         }
       }
-      o+=`\t\tLAST);\n\n`;
+      o+=extraResC(idx)+`\t\tLAST);\n\n`;
     }
   }
   o+='\treturn 0;\n}\n';
@@ -351,8 +375,9 @@ function genActionC(){
 // Groups HAR entries that fired concurrently (time-interval overlap) into Promise.all blocks.
 // autoFollowSet: Set<idx> of redirect/challenge entries already excluded from generated script.
 // excludeSet:    Set<idx> of entries that must remain sequential regardless (DPoP, extractors).
+// skipSet:       Set<idx> of entries not scripted at all (page resources) — ignored, never break a group.
 // Returns Map<idx, {size, pos}> — only entries in groups of size >= 2 are present.
-function buildConcurrentGroups(entries, autoFollowSet, excludeSet) {
+function buildConcurrentGroups(entries, autoFollowSet, excludeSet, skipSet) {
   const groupMap = new Map();
   let buf = [];   // current group candidate: array of entry indices
   let maxEnd = 0;
@@ -366,6 +391,7 @@ function buildConcurrentGroups(entries, autoFollowSet, excludeSet) {
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
+    if (skipSet && skipSet.has(i)) continue;
     // Markers, filtered, auto-follow, and explicitly excluded entries break groups
     if (e.isMarker || e.filtered || autoFollowSet.has(i) || (excludeSet && excludeSet.has(i))) {
       flush(); continue;
@@ -424,7 +450,9 @@ function genMainJS(){
   const _mjDpopExclude=new Set();
   if(S.hasDpop) S.entries.forEach((e,i)=>{ if((e.reqHdrs||[]).some(h=>/^dpop(-pf)?$/i.test(h.name))) _mjDpopExclude.add(i); });
   // Build concurrent group map from HAR timing overlap (DevWeb only — Web HTTP is always sequential)
-  const mjGroupMap=buildConcurrentGroups(S.entries, mjAutoFollowSet, _mjDpopExclude);
+  // Static resources (CSS/JS/images…) belong to their page request, not separate requests
+  const mjPageRes=PageResources.groupPageResources(S.entries, mjAutoFollowSet);
+  const mjGroupMap=buildConcurrentGroups(S.entries, mjAutoFollowSet, _mjDpopExclude, mjPageRes.absorbed);
   // Extract default headers from first scripted (non-redirect) request
   const firstE=S.entries.find((e,i)=>!e.isMarker&&!e.filtered&&!mjAutoFollowSet.has(i));
   const defHdrs=firstE?filtHdrs(firstE):{'accept-language':'en-US,en;q=0.9'};
@@ -523,6 +551,7 @@ function genMainJS(){
       continue;
     }
     if(e.filtered) continue;
+    if(mjPageRes.absorbed.has(idx)) continue; // downloaded as part of its page request
 
     // Skip auto-follow redirect (300-303/307) and 401 challenge entries — VuGen handles automatically
     if(mjAutoFollowSet.has(idx)){
@@ -569,6 +598,12 @@ function genMainJS(){
       o+=`${ind}// formData.append('field', value); // or readFile() for binary\n`;
     }
     o+=`${ind}// ${rn}\n`;
+    const _pr=mjPageRes.byPage.get(idx);
+    if(_pr){
+      if(!_pr.htmlKnown) o+=`${ind}// Page HTML was not recorded: its ${_pr.extra.length} resource(s) are listed in resources[]\n`;
+      else o+=`${ind}// Page resources: ${_pr.inHtml.length} in the page HTML download automatically (downloadHtmlStaticResources)`+
+        (_pr.extra.length?`; ${_pr.extra.length} loaded by script/CSS ${_pr.extra.length===1?"is":"are"} listed in resources[]`:'')+`\n`;
+    }
 
     // DPoP proof generation — fresh proof per request (DPoP entries are always sequential)
     if(S.hasDpop){
@@ -657,6 +692,11 @@ function genMainJS(){
       }
     } else if(e._fromNetLog && e.method!=='GET' && e.method!=='HEAD'){
       o+=`${pi}// TODO: POST body not available in NetLog - add body property with your recorded request body\n`;
+    }
+    if(_pr&&_pr.extra.length){
+      o+=`${pi}resources: [\n`;
+      for(const ri of _pr.extra) o+=`${si}${subHdrValMj(S.entries[ri].url,mjHostVarMap)},\n`;
+      o+=`${pi}],\n`;
     }
     // Request closing — concurrent: .send(), with optional Promise.all closer; sequential: .send();\n\n
     if(_inGrp){

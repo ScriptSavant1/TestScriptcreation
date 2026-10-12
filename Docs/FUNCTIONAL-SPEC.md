@@ -160,9 +160,24 @@ Automatically filtered out (can be re-enabled via toolbar):
 - OPTIONS preflight requests (can be toggled)
 - Analytics domains (can be toggled)
 
+When static assets or analytics are re-enabled they are **not** scripted as separate
+requests — see "Page resources" under Script generation rules.
+
 ### Script generation rules
 
-- Each included request becomes one HTTP call
+- Each included page or API request becomes one HTTP call (HTML-mode style)
+- **Page resources** (CSS, JS, images, fonts, media, analytics beacons — when included)
+  are attached to the page step that loaded them (`shared/page-resources.js`, BUG-056):
+  - referenced in the page HTML → not scripted; downloaded automatically on replay
+    (VuGen `"Mode=HTML"`, DevWeb `downloadHtmlStaticResources = true`)
+  - not in the HTML (loaded by JavaScript/CSS) → listed on the page step: VuGen
+    `EXTRARES` items, DevWeb `resources: [...]`
+  - page HTML not recorded → all its resources are listed explicitly
+  - never attached across a transaction boundary; a redirected page's resources attach
+    to the step that triggered the redirect; XHR/fetch calls always stay separate
+- **HTML form POSTs** (`application/x-www-form-urlencoded`) → VuGen `web_submit_data` +
+  `ITEMDATA`, as VuGen records them in HTML mode (BUG-055); JSON/XML/multipart and
+  PUT/PATCH/DELETE → `web_custom_request`
 - Request headers from HAR are included (excluding browser-specific headers: `sec-*`, `origin`, `accept-encoding`)
 - Request bodies are included verbatim
 - Correlation: basic pattern-based extraction only (Recorder does not perform deep correlation — use Script Studio for that)
@@ -185,6 +200,16 @@ Generate deeply correlated VuGen scripts from 1 or 2 HAR files. The primary tool
 |-------|----------|-------|
 | HAR file 1 | Yes | First recording of the user journey |
 | HAR file 2 | No | Second recording (same journey, different data) |
+
+### Request filters
+
+- **Resource type** — default Fetch/XHR + Document. Static files (CSS, JS, images, fonts,
+  media) are dropped unless their type is selected; **All** includes everything. Included
+  static files are scripted as page resources, the same rules as the Recorder (section 3),
+  except that a resource used by a correlation (source or usage) stays its own request so
+  its extractor/substitution still applies.
+- **Domains** — uncheck any host to drop its requests.
+- Always dropped: OPTIONS preflights, known analytics/ads hosts, CSP reports, WebSocket URLs.
 
 ### Mode selection (automatic)
 
@@ -273,6 +298,9 @@ One ZIP file per format chosen (DevWeb or Web HTTP/HTML). Contains complete scri
    - Transaction `.start()` → HTTP request(s) → Transaction `.stop()`
    - Extractors declared before requests via `.addExtractor()`
 5. `finalize()` function — runs once after all iterations
+6. HAR tools (Recorder, Script Studio): `load.WebRequest.defaults.downloadHtmlStaticResources = true`;
+   page resources not referenced in the page HTML are listed on the page request as
+   `resources: ["https://...", ...]` — never as separate `WebRequest`s
 
 ### Variable usage in main.js
 
@@ -310,6 +338,9 @@ Generated as `await load.thinkTime(N)` after each transaction `.stop()`.
 - `web_add_header()` applies to next request only — not global
 - Bodies > 500 chars use `BodyFilePath=` (supports `{param}` substitution)
 - `"Snapshot=t%d.inf"` before `"Mode=HTML"` in every request call (counter starts at 1)
+- HAR tools (Recorder, Script Studio): page resources not referenced in the page HTML go
+  after `"Mode=HTML"` as `EXTRARES, "Url=...", "Referer=...", ENDITEM, ... LAST);`
+- HAR tools: urlencoded form POSTs use `web_submit_data` with `ITEMDATA` (`"Name=","Value=",ENDITEM`)
 - Transaction calls: `lr_start_transaction("T01_Name")` and `lr_end_transaction("T01_Name", LR_AUTO)`
 
 ### ParameterFile.prm format
