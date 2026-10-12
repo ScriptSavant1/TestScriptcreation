@@ -5,6 +5,17 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Added — "Should I include static assets?" guidance in the Recorder, Script Studio and Help
+
+- Recorder: tooltips on the Static Assets / Analytics filters and an ⓘ button that opens the
+  guidance under the toolbar. Script Studio: a collapsible hint under Resource Type.
+  Help → Recorder: new "Static assets — should I include them?" section; Help → Script Studio
+  filter text corrected (static files are not "never relevant").
+- Rule: leave static assets out for server/API load; include them for realistic page load and
+  for JavaScript-based apps — `downloadHtmlStaticResources` (DevWeb) and `Mode=HTML` (VuGen)
+  only download files named in the page HTML; they do not run JavaScript.
+- Recorder and Studio user guides, FUNCTIONAL-SPEC and FEATURE-CATALOG updated.
+
 ### Fixed — Static resources belong to their page, not separate requests (BUG-056)
 
 - When static assets or analytics are included (Recorder, Script Studio), CSS, JS, images,
