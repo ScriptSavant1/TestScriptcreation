@@ -192,9 +192,16 @@ the HTML cannot reveal. VuGen also requires the run-time setting "Download non-H
     the HAR is decoded first
   - never attached across a transaction boundary; a redirected page's resources attach
     to the step that triggered the redirect; XHR/fetch calls always stay separate
-  - **not scripted at all** (absorbed, counted in the comment as "cached, failed or repeated"):
-    resources the browser served from its cache (`_fromCache`), failed/cancelled loads
-    (status 0), and a second request for the same URL on the same page
+  - a transaction with **no page load** (single-page-app screens that only call APIs):
+    resources attach to the API step in progress — or to the transaction's first step when
+    they load before it — all listed (VuGen `EXTRARES` on `web_url`/`web_custom_request`,
+    DevWeb `resources[]`), as VuGen records them within the current step (BUG-058)
+  - resources that load before a transaction's first step attach to that first step
+  - **not scripted at all** (absorbed, counted in the comment as "failed or repeated"):
+    failed/cancelled loads (status 0) and a second request for the same URL on the same page
+  - files the browser served from its own cache (DevTools `_fromCache`) **are listed** on every
+    page step that uses them, as VuGen records them; replay's cache simulation (VuGen
+    "Simulate browser cache") decides whether to fetch them again (BUG-058)
   - only **GET** requests can become page resources — `EXTRARES` / `resources[]` replay as GET,
     so POST beacons (`navigator.sendBeacon`, analytics pings) stay their own request
   - **iframes / frames** (`sec-fetch-dest: iframe|frame`): a frame the page HTML names

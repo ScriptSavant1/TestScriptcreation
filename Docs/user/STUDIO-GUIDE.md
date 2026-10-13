@@ -157,8 +157,8 @@ By default Script Studio includes only Fetch/XHR and Document requests, and filt
   downloaded from the page HTML on their own — they are only downloaded if they are in the
   script. Included files are listed on their page step (`EXTRARES` / `resources: [...]`) and
   never downloaded twice. See the Recorder Guide, "Static Assets — Should I Include Them?",
-  for the full explanation, including what is never scripted (browser-cache hits, failed or
-  repeated loads, `data:` URLs) and how POST beacons and iframes are handled.
+  for the full explanation, including what is never scripted (failed or repeated loads,
+  `data:` URLs) and how POST beacons and iframes are handled.
 
 ---
 

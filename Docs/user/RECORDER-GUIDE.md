@@ -159,11 +159,15 @@ comment above each page step, for example:
 
 If many are listed, the app is JavaScript-heavy — keep static assets included.
 
-**Never scripted, even when included:** files the browser served from its own cache, loads
-that failed or were cancelled, a second request for the same file on the same page (the
-comment counts these as "cached, failed or repeated"), and `data:` / `blob:` / extension URLs.
+**Never scripted, even when included:** loads that failed or were cancelled, a second request
+for the same file on the same page (the comment counts these as "failed or repeated"), and
+`data:` / `blob:` / extension URLs. Files the browser took from its own cache on a later page
+**are** listed on that page too — as VuGen records them — and VuGen's "Simulate browser cache"
+run-time setting decides on replay whether to download them again.
 Analytics beacons sent with POST stay as their own request. Iframes that the page HTML names
-download automatically with the page.
+download automatically with the page. In a transaction with no page load (later screens of a
+single-page app that only call APIs), the resources are listed on the API request in progress
+— the comment reads "Resources loaded during this step".
 
 **VuGen:** the run-time setting **Download non-HTML resources** must be on (it is on by default).
 

@@ -45,7 +45,6 @@ function parseHar(har) {
       respCt: ct,
       respBody,
       respEncoding: (resp.content && resp.content.encoding) || "", // "base64" when the HAR stored the body encoded
-      fromCache: e._fromCache || "", // DevTools HAR: served from memory/disk cache, never sent
       respHdrsMap,
       respCookies: resp.cookies || [],
       _resourceType:    e._resourceType || "", // Chrome HAR extension

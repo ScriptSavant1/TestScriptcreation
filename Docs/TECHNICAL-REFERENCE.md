@@ -437,9 +437,11 @@ When static assets are included they are grouped under their page step by
 `src/web/public/shared/page-resources.js` (`groupPageResources()`), shared by the Recorder
 and Script Studio: images/stylesheets named in real page-HTML tags (`htmlAutoResources()`) are left to `"Mode=HTML"` /
 `downloadHtmlStaticResources`, the rest become VuGen `EXTRARES` / DevWeb `resources[]`.
-`groupPageResources()` also absorbs without listing (`skipped`): browser-cache hits
-(`_fromCache`, kept by both parsers as `fromCache`), failed/cancelled loads (status 0) and
-repeated URLs on the same page; only GET requests are absorbed (POST beacons stay requests);
+`groupPageResources()` also absorbs without listing (`skipped`): failed/cancelled loads
+(status 0) and repeated URLs on the same page — browser-cache hits (`_fromCache`) are listed
+like any other resource (BUG-058); in a transaction with no page load, resources attach to the
+API step in progress (`isPage: false` groups — comment "Resources loaded during this step"),
+and resources seen before a transaction's first step attach to that step (`pending`); only GET requests are absorbed (POST beacons stay requests);
 iframe/frame documents (`sec-fetch-dest`) join the parent page, auto-downloaded when the parent
 HTML names them (their own HTML resources then count as auto too). Base64-encoded page HTML is
 decoded (`respEncoding`). Both `applyFilters()` drop non-http(s) URLs (`data:`, `blob:`, …).
