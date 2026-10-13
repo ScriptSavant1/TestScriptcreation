@@ -375,7 +375,7 @@ The resource type filter now defaults to **Fetch/XHR + Document only**. Static r
 
 **When static resources are included:**
 - The Correlation Advisor also scans them (their response bodies and URLs), like any other included request.
-- In the generated script they are attached to their page step (`shared/page-resources.js`): not scripted when the page HTML references them, otherwise listed under VuGen `EXTRARES` / DevWeb `resources: [...]`.
+- In the generated script they are attached to their page step (`shared/page-resources.js`): not scripted when real page-HTML tags name them as images/stylesheets (`<img>`, `<link rel=stylesheet>`, `background=`); script files and CSS/JS-loaded files are listed under VuGen `EXTRARES` / DevWeb `resources: [...]`.
 - **Exception:** a resource that is a correlation **source** or **usage** (any index in the generator's `corrSources` / `corrUsages` maps) stays a standalone request. Otherwise its `web_reg_save_param*` / DevWeb extractor, or the `{name}` substitution in its URL/headers, would be lost with the absorbed request.
 
 This reduces noise in the request list and makes the correlation advisor scan faster and more accurate.

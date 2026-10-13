@@ -435,8 +435,14 @@ All unique domains from the HAR are extracted and displayed as checkboxes. The u
 Static asset filtering (images, CSS, fonts, JS bundles) is also available via toolbar toggle.
 When static assets are included they are grouped under their page step by
 `src/web/public/shared/page-resources.js` (`groupPageResources()`), shared by the Recorder
-and Script Studio: HTML-referenced resources are left to `"Mode=HTML"` /
+and Script Studio: images/stylesheets named in real page-HTML tags (`htmlAutoResources()`) are left to `"Mode=HTML"` /
 `downloadHtmlStaticResources`, the rest become VuGen `EXTRARES` / DevWeb `resources[]`.
+`groupPageResources()` also absorbs without listing (`skipped`): browser-cache hits
+(`_fromCache`, kept by both parsers as `fromCache`), failed/cancelled loads (status 0) and
+repeated URLs on the same page; only GET requests are absorbed (POST beacons stay requests);
+iframe/frame documents (`sec-fetch-dest`) join the parent page, auto-downloaded when the parent
+HTML names them (their own HTML resources then count as auto too). Base64-encoded page HTML is
+decoded (`respEncoding`). Both `applyFilters()` drop non-http(s) URLs (`data:`, `blob:`, …).
 
 ### Transaction marking
 

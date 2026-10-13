@@ -153,11 +153,12 @@ By default Script Studio includes only Fetch/XHR and Document requests, and filt
 - **Leave them out** (default) for server / API load. On replay only the files written in the
   page HTML are downloaded (VuGen `Mode=HTML`, DevWeb `downloadHtmlStaticResources`).
 - **Select them (or All)** for realistic page load, and always for **JavaScript-based apps**
-  (React, Angular, Vue…). Files that JavaScript or CSS requests are never in the page HTML,
-  so the HTML-based download cannot find them — they are only downloaded if they are in the
+  (React, Angular, Vue…). Script files, and files that JavaScript or CSS requests, are not
+  downloaded from the page HTML on their own — they are only downloaded if they are in the
   script. Included files are listed on their page step (`EXTRARES` / `resources: [...]`) and
   never downloaded twice. See the Recorder Guide, "Static Assets — Should I Include Them?",
-  for the full explanation.
+  for the full explanation, including what is never scripted (browser-cache hits, failed or
+  repeated loads, `data:` URLs) and how POST beacons and iframes are handled.
 
 ---
 

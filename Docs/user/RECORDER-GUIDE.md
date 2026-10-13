@@ -141,8 +141,8 @@ Click the **ⓘ** button next to the filters for this guidance inside the tool.
 
 | You want | Do this | On replay |
 |---|---|---|
-| Server / API load | Leave **Static Assets** ticked (default) | Only the files written in the page HTML are downloaded. Files that JavaScript or CSS requests (fonts, lazy-loaded code, images on later screens, analytics) are **not**. |
-| Realistic page load, or a **JavaScript-based app** (React, Angular, Vue…) | Untick **Static Assets** (and **Analytics/Ads** if wanted) | Files in the HTML still download automatically; files loaded by JavaScript/CSS are listed on their page step. Nothing is downloaded twice. |
+| Server / API load | Leave **Static Assets** ticked (default) | Only the images and stylesheets named in the page HTML are downloaded. Script files, and files that JavaScript or CSS requests (fonts, lazy-loaded code, images on later screens, analytics), are **not**. |
+| Realistic page load, or a **JavaScript-based app** (React, Angular, Vue…) | Untick **Static Assets** (and **Analytics/Ads** if wanted) | Images and stylesheets in the HTML still download automatically; script files and files loaded by JavaScript/CSS are listed on their page step. Nothing is downloaded twice. |
 
 **Why:** DevWeb's `downloadHtmlStaticResources` and VuGen's `Mode=HTML` read the page's HTML
 text and download the files it names — they do not run the page's JavaScript. On a modern
@@ -154,10 +154,16 @@ every script (the generated scripts already do).
 comment above each page step, for example:
 
 ```
-// Page resources: 15 in the page HTML download automatically (Mode=HTML); 2 loaded by script/CSS are listed under EXTRARES
+// Page resources: 15 images/stylesheets in the page HTML download automatically (Mode=HTML); 2 other (scripts, CSS/JS-loaded files) are listed under EXTRARES
 ```
 
 If many are listed, the app is JavaScript-heavy — keep static assets included.
+
+**Never scripted, even when included:** files the browser served from its own cache, loads
+that failed or were cancelled, a second request for the same file on the same page (the
+comment counts these as "cached, failed or repeated"), and `data:` / `blob:` / extension URLs.
+Analytics beacons sent with POST stay as their own request. Iframes that the page HTML names
+download automatically with the page.
 
 **VuGen:** the run-time setting **Download non-HTML resources** must be on (it is on by default).
 

@@ -167,8 +167,8 @@ requests — see "Page resources" under Script generation rules.
 
 | Goal | Setting | Replay behaviour |
 |---|---|---|
-| Server / API load | Static assets excluded (default) | Only files named in the page HTML are downloaded (`Mode=HTML` / `downloadHtmlStaticResources`); JS/CSS-requested files are not |
-| Realistic page load, JavaScript-based apps | Static assets included | HTML-named files still auto-download; JS/CSS-requested files listed on the page step (`EXTRARES` / `resources[]`) |
+| Server / API load | Static assets excluded (default) | Only images/stylesheets named in the page HTML (`<img>`, `<link rel=stylesheet>`, `background=`) are downloaded (`Mode=HTML` / `downloadHtmlStaticResources`); script files and JS/CSS-requested files are not |
+| Realistic page load, JavaScript-based apps | Static assets included | HTML-named images/stylesheets still auto-download; script files and JS/CSS-requested files listed on the page step (`EXTRARES` / `resources[]`) |
 
 `downloadHtmlStaticResources` / `Mode=HTML` parse the HTML text only — they do not execute
 JavaScript — so they stay on in every generated script; including static assets adds only what
@@ -179,13 +179,28 @@ the HTML cannot reveal. VuGen also requires the run-time setting "Download non-H
 - Each included page or API request becomes one HTTP call (HTML-mode style)
 - **Page resources** (CSS, JS, images, fonts, media, analytics beacons — when included)
   are attached to the page step that loaded them (`shared/page-resources.js`, BUG-056):
-  - referenced in the page HTML → not scripted; downloaded automatically on replay
-    (VuGen `"Mode=HTML"`, DevWeb `downloadHtmlStaticResources = true`)
-  - not in the HTML (loaded by JavaScript/CSS) → listed on the page step: VuGen
-    `EXTRARES` items, DevWeb `resources: [...]`
-  - page HTML not recorded → all its resources are listed explicitly
+  - images / stylesheets named in real page-HTML tags (`<img src>`, `<link rel="stylesheet">`,
+    `background=`, `<input type="image">`, honouring `<base href>`) → not scripted; downloaded
+    automatically on replay (VuGen `"Mode=HTML"`, DevWeb `downloadHtmlStaticResources = true`)
+  - everything else → listed on the page step: VuGen `EXTRARES` items, DevWeb `resources: [...]`.
+    This includes `<script src>` files — VuGen's own HTML-mode recording lists them under
+    `EXTRARES` (BUG-057) — and files requested by CSS or JavaScript. Text that only *mentions*
+    a file (inline JavaScript, comments) does not count.
+  - VuGen `EXTRARES` items carry `"Referer="` only when it differs from the page URL (e.g. an
+    image requested by a CSS file), as VuGen records them
+  - page HTML not recorded → all its resources are listed explicitly; HTML stored base64 in
+    the HAR is decoded first
   - never attached across a transaction boundary; a redirected page's resources attach
     to the step that triggered the redirect; XHR/fetch calls always stay separate
+  - **not scripted at all** (absorbed, counted in the comment as "cached, failed or repeated"):
+    resources the browser served from its cache (`_fromCache`), failed/cancelled loads
+    (status 0), and a second request for the same URL on the same page
+  - only **GET** requests can become page resources — `EXTRARES` / `resources[]` replay as GET,
+    so POST beacons (`navigator.sendBeacon`, analytics pings) stay their own request
+  - **iframes / frames** (`sec-fetch-dest: iframe|frame`): a frame the page HTML names
+    (`<iframe src>` / `<frame src>`) is downloaded automatically with its own HTML images and
+    stylesheets; a frame added by JavaScript is listed — neither becomes a separate page step
+- `data:`, `blob:`, `chrome-extension:`, `about:` … URLs are always filtered out (never replayable)
 - **HTML form POSTs** (`application/x-www-form-urlencoded`) → VuGen `web_submit_data` +
   `ITEMDATA`, as VuGen records them in HTML mode (BUG-055); JSON/XML/multipart and
   PUT/PATCH/DELETE → `web_custom_request`
@@ -312,7 +327,7 @@ One ZIP file per format chosen (DevWeb or Web HTTP/HTML). Contains complete scri
    - Extractors declared before requests via `.addExtractor()`
 5. `finalize()` function — runs once after all iterations
 6. HAR tools (Recorder, Script Studio): `load.WebRequest.defaults.downloadHtmlStaticResources = true`;
-   page resources not referenced in the page HTML are listed on the page request as
+   page resources not auto-downloaded from the page HTML (scripts, CSS/JS-loaded files) are listed on the page request as
    `resources: ["https://...", ...]` — never as separate `WebRequest`s
 
 ### Variable usage in main.js
@@ -351,8 +366,9 @@ Generated as `await load.thinkTime(N)` after each transaction `.stop()`.
 - `web_add_header()` applies to next request only — not global
 - Bodies > 500 chars use `BodyFilePath=` (supports `{param}` substitution)
 - `"Snapshot=t%d.inf"` before `"Mode=HTML"` in every request call (counter starts at 1)
-- HAR tools (Recorder, Script Studio): page resources not referenced in the page HTML go
-  after `"Mode=HTML"` as `EXTRARES, "Url=...", "Referer=...", ENDITEM, ... LAST);`
+- HAR tools (Recorder, Script Studio): page resources not auto-downloaded from the page HTML
+  (scripts, CSS/JS-loaded files) go after `"Mode=HTML"` as `EXTRARES, "Url=...", ENDITEM, ... LAST);`
+  (`"Referer=..."` added only when it differs from the page URL)
 - HAR tools: urlencoded form POSTs use `web_submit_data` with `ITEMDATA` (`"Name=","Value=",ENDITEM`)
 - Transaction calls: `lr_start_transaction("T01_Name")` and `lr_end_transaction("T01_Name", LR_AUTO)`
 

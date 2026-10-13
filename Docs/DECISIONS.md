@@ -17,8 +17,9 @@ decision, the context/drivers, the alternatives considered, and the outcome.
 both HAR tools attach them to the page step that loaded them instead of scripting each one.
 The grouping lives in one UMD module, `src/web/public/shared/page-resources.js`
 (`groupPageResources()`), loaded by both the Recorder and Script Studio and used by all
-four HAR generators (Recorder + Studio × VuGen + DevWeb). Resources referenced in the page
-HTML are not scripted; the rest are listed on the page step (VuGen `EXTRARES`, DevWeb
+four HAR generators (Recorder + Studio × VuGen + DevWeb). Images/stylesheets named in real
+page-HTML tags are not scripted; `<script src>` files and CSS/JS-loaded files are listed —
+the split VuGen's own HTML-mode recording makes (BUG-057); the rest are listed on the page step (VuGen `EXTRARES`, DevWeb
 `resources: [...]`). Resources involved in a Studio correlation stay standalone.
 
 **Context:** BUG-056. Scripting each resource separately is URL-mode structure, inflates

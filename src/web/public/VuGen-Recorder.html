@@ -121,7 +121,7 @@
   <!-- TOOLBAR -->
   <div class="tbar">
     <span style="font-size:12px;font-weight:700">Filters:</span>
-    <label class="chk-lbl" title="Ticked = images, CSS, JS and fonts are left out of the script (only files in the page HTML download on replay). Untick for JavaScript-based apps or realistic page load."><input type="checkbox" id="f-static" checked onchange="refresh()"> Static Assets</label>
+    <label class="chk-lbl" title="Ticked = images, CSS, JS and fonts are left out of the script (only images and stylesheets named in the page HTML download on replay). Untick for JavaScript-based apps or realistic page load."><input type="checkbox" id="f-static" checked onchange="refresh()"> Static Assets</label>
     <label class="chk-lbl" title="Ticked = analytics and ad requests are left out of the script."><input type="checkbox" id="f-noise"  checked onchange="refresh()"> Analytics/Ads</label>
     <button type="button" class="btn btn-muted btn-sm" id="btn-res-help" title="Should I include static assets?" aria-expanded="false" aria-controls="res-help" onclick="var h=document.getElementById('res-help');h.hidden=!h.hidden;this.setAttribute('aria-expanded',String(!h.hidden))">&#x24D8;</button>
     <label class="chk-lbl"><input type="checkbox" id="f-opts"   checked onchange="refresh()"> OPTIONS</label>
@@ -156,8 +156,8 @@
   <div id="res-help" hidden style="background:var(--primary-light);border-bottom:1px solid var(--border);padding:10px 16px;font-size:12px;line-height:1.6;color:var(--text);flex-shrink:0">
     <strong>Static assets (images, CSS, JS, fonts) &#x2014; should I include them?</strong>
     <ul style="margin:4px 0 4px 18px;padding:0">
-      <li><strong>Leave them excluded</strong> (default) for server / API load. On replay only the files written in the page HTML are downloaded (VuGen <code>Mode=HTML</code>, DevWeb <code>downloadHtmlStaticResources</code>).</li>
-      <li><strong>Include them</strong> (untick <em>Static Assets</em>) for realistic page load, and always for <strong>JavaScript-based apps</strong> (React, Angular, Vue&hellip;): files that JavaScript or CSS requests &#x2014; lazy-loaded code, fonts, images on later screens, analytics &#x2014; are never in the HTML, so they are only downloaded if they are in the script.</li>
+      <li><strong>Leave them excluded</strong> (default) for server / API load. On replay only the images and stylesheets named in the page HTML are downloaded (VuGen <code>Mode=HTML</code>, DevWeb <code>downloadHtmlStaticResources</code>).</li>
+      <li><strong>Include them</strong> (untick <em>Static Assets</em>) for realistic page load, and always for <strong>JavaScript-based apps</strong> (React, Angular, Vue&hellip;): script files, and files that JavaScript or CSS requests &#x2014; lazy-loaded code, fonts, images on later screens, analytics &#x2014; are not downloaded from the HTML, so they are only downloaded if they are in the script.</li>
     </ul>
     Included files are added to the page step that loaded them, not as separate requests, and are never downloaded twice &#x2014; safe for any site. Each page step&#x2019;s comment shows how many were in the HTML and how many are listed (<code>EXTRARES</code> / <code>resources[]</code>): if many are listed, the app is JavaScript-heavy and should keep them included.
     VuGen also needs the run-time setting <strong>Download non-HTML resources</strong> switched on (on by default).
@@ -559,6 +559,8 @@ function applyFilters(){
     // Filter WebSocket upgrade requests  -  wss:// and ws:// cannot be replayed by VuGen
     // Web HTTP/HTML protocol; including them causes 400 Bad Request errors
     if(/^wss?:\/\//i.test(e.url)){e.filtered=true;continue;}
+    // data:, blob:, chrome-extension:, about: … — never a network request, cannot be replayed
+    if(!/^https?:\/\//i.test(e.url)){e.filtered=true;continue;}
     // Domain filter (unchecked domains are excluded)
     try{
       const host=new URL(e.url).hostname;
