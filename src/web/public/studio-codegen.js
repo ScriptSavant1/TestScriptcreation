@@ -2023,8 +2023,9 @@ function genMainJS(entries, correlations) {
     const _pr = mjPageRes.byPage.get(idx);
     if (_pr) {
       if (!_pr.htmlKnown) o += `${ind}// Page HTML was not recorded: its ${_pr.extra.length} resource(s) are listed in resources[]\n`;
-      else o += `${ind}// Page resources: ${_pr.inHtml.length} in the page HTML download automatically (downloadHtmlStaticResources)` +
-        (_pr.extra.length ? `; ${_pr.extra.length} loaded by script/CSS ${_pr.extra.length===1?"is":"are"} listed in resources[]` : "") + `\n`;
+      else o += `${ind}// Page resources: ${_pr.inHtml.length} images/stylesheets in the page HTML download automatically (downloadHtmlStaticResources)` +
+        (_pr.extra.length ? `; ${_pr.extra.length} other (scripts, CSS/JS-loaded files) ${_pr.extra.length===1?"is":"are"} listed in resources[]` : "") +
+        (_pr.skipped.length ? `; ${_pr.skipped.length} cached, failed or repeated not scripted` : "") + `\n`;
     }
 
     // DPoP proof generation — fresh proof per request (DPoP entries are always sequential)
@@ -2683,13 +2684,15 @@ function genActionC(entries, correlations) {
   );
 
   // Page step's resources: the ones in its HTML download automatically (Mode=HTML);
-  // the rest (loaded by JavaScript/CSS) are listed under EXTRARES on the same step.
+  // the rest (script files, files loaded by CSS/JavaScript) are listed under EXTRARES on the same step,
+  // exactly as VuGen's own HTML-mode recording does.
   function pageResComment(idx) {
     const g = acPageRes.byPage.get(idx);
     if (!g) return "";
     if (!g.htmlKnown) return `\t// Page HTML was not recorded: its ${g.extra.length} resource(s) are listed under EXTRARES\n`;
-    return `\t// Page resources: ${g.inHtml.length} in the page HTML download automatically (Mode=HTML)` +
-      (g.extra.length ? `; ${g.extra.length} loaded by script/CSS ${g.extra.length===1?"is":"are"} listed under EXTRARES` : "") + `\n`;
+    return `\t// Page resources: ${g.inHtml.length} images/stylesheets in the page HTML download automatically (Mode=HTML)` +
+      (g.extra.length ? `; ${g.extra.length} other (scripts, CSS/JS-loaded files) ${g.extra.length===1?"is":"are"} listed under EXTRARES` : "") +
+      (g.skipped.length ? `; ${g.skipped.length} cached, failed or repeated not scripted` : "") + `\n`;
   }
   function extraResC(idx) {
     const g = acPageRes.byPage.get(idx);
@@ -2698,7 +2701,7 @@ function genActionC(entries, correlations) {
     for (const ri of g.extra) {
       const r = entries[ri];
       const rRef = r.hdrsMap["referer"] || "";
-      s += `\t\t"Url=${subHdrValC(r.url, acHostVarMap)}",` + (rRef ? ` "Referer=${subHdrValC(rRef, acHostVarMap)}",` : "") + ` ENDITEM,\n`;
+      s += `\t\t"Url=${subHdrValC(r.url, acHostVarMap)}",` + (rRef && rRef !== g.pageUrl ? ` "Referer=${subHdrValC(rRef, acHostVarMap)}",` : "") + ` ENDITEM,\n`;
     }
     return s;
   }

@@ -53,6 +53,19 @@ describe('Script Studio applyFilters — static files follow the resource-type s
     expect(run(new Set(['fetch', 'document', 'image']))).toEqual(['/', '/img/logo.gif', '/api/items']);
   });
 
+  test('data:, blob: and chrome-extension: URLs are always dropped, even with "All"', () => {
+    const { S, applyFilters } = loadStudio();
+    S.filterResourceTypes = null;
+    const entries = [
+      entry('data:image/png;base64,AAAA', 'image/png', 'image'),
+      entry('blob:https://shop.example.com/1234', 'image/png', 'image'),
+      entry('chrome-extension://abc/inject.js', 'application/javascript', 'script'),
+      entry('https://shop.example.com/', 'text/html', 'document'),
+    ];
+    applyFilters(entries);
+    expect(entries.map((e) => e.filtered)).toEqual([true, true, true, false]);
+  });
+
   test('an empty selection behaves as before (no type filter, static dropped)', () => {
     expect(run(new Set())).toEqual(['/', '/api/items']);
   });

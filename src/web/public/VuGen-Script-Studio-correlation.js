@@ -44,6 +44,8 @@ function parseHar(har) {
       body: e.request.postData || null,
       respCt: ct,
       respBody,
+      respEncoding: (resp.content && resp.content.encoding) || "", // "base64" when the HAR stored the body encoded
+      fromCache: e._fromCache || "", // DevTools HAR: served from memory/disk cache, never sent
       respHdrsMap,
       respCookies: resp.cookies || [],
       _resourceType:    e._resourceType || "", // Chrome HAR extension
@@ -311,6 +313,11 @@ function applyFilters(entries) {
     // Filter WebSocket upgrade requests — wss:// and ws:// cannot be replayed by VuGen
     // Web HTTP/HTML protocol; including them causes 400 Bad Request errors
     if (/^wss?:\/\//i.test(e.url)) {
+      e.filtered = true;
+      continue;
+    }
+    // data:, blob:, chrome-extension:, about: … — never a network request, cannot be replayed
+    if (!/^https?:\/\//i.test(e.url)) {
       e.filtered = true;
       continue;
     }

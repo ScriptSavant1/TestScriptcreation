@@ -113,8 +113,9 @@ describe('Recorder genActionC — included static resources belong to their page
 
     expect((out.match(/web_url\(/g) || []).length).toBe(1);
     expect(out).not.toContain('logo.gif');
-    expect(out).toContain('// Page resources: 1 in the page HTML download automatically (Mode=HTML); 1 loaded by script/CSS is listed under EXTRARES');
-    expect(out).toContain('"Mode=HTML",\n\t\tEXTRARES,\n\t\t"Url=https://www.google-analytics.com/collect?v=1", "Referer=https://shop.example.com/", ENDITEM,\n\t\tLAST);');
+    expect(out).toContain('// Page resources: 1 images/stylesheets in the page HTML download automatically (Mode=HTML); 1 other (scripts, CSS/JS-loaded files) is listed under EXTRARES');
+    // Referer equals the page URL, so it is omitted (as VuGen records it)
+    expect(out).toContain('"Mode=HTML",\n\t\tEXTRARES,\n\t\t"Url=https://www.google-analytics.com/collect?v=1", ENDITEM,\n\t\tLAST);');
   });
 });
 

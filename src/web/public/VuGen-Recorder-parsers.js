@@ -209,6 +209,7 @@ function processHAR(har){
         if(t&&c.encoding==='base64'){ try{ t=decodeURIComponent(escape(atob(t))); }catch{ try{ t=atob(t); }catch{ t=''; } } }
         return t;
       })(),
+      fromCache: e._fromCache||'', // DevTools HAR: served from memory/disk cache, never sent
       pageref: e.pageref||null,
       isMarker:false, markerType:null, txnName:null,
       txn:null, filtered:false

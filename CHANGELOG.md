@@ -5,6 +5,22 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — Page resources now match VuGen's own HTML-mode recording (BUG-057)
+
+- Script files (`<script src>`) and files requested by CSS or JavaScript are now listed on the
+  page step (VuGen `EXTRARES`, DevWeb `resources: [...]`), as VuGen's own recording lists them.
+  Only images and stylesheets named in real page-HTML tags are left to automatic download.
+- A file name that merely appears in the page text (inline JavaScript, comments) no longer
+  counts as "in the HTML".
+- VuGen `EXTRARES` items include `Referer=` only when it differs from the page (e.g. an image
+  requested by a CSS file), as VuGen writes them.
+- Tool hints, Help and user guides reworded accordingly. Default output is unchanged.
+- Also fixed: POST analytics beacons stay their own request (resource lists replay as GET);
+  browser-cache hits, failed/cancelled loads and repeated files are no longer scripted (the
+  page comment counts them); `data:`/`blob:`/extension URLs are filtered out; iframes named in
+  the page HTML download automatically with the page instead of becoming separate steps;
+  base64-encoded page HTML is decoded in Script Studio.
+
 ### Added — "Should I include static assets?" guidance in the Recorder, Script Studio and Help
 
 - Recorder: tooltips on the Static Assets / Analytics filters and an ⓘ button that opens the
