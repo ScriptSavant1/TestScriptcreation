@@ -173,10 +173,12 @@ function genActionC(){
   function pageResComment(idx){
     const g=acPageRes.byPage.get(idx);
     if(!g) return '';
-    if(!g.htmlKnown) return `\t// Page HTML was not recorded: its ${g.extra.length} resource(s) are listed under EXTRARES\n`;
+    const skip=g.skipped.length?`; ${g.skipped.length} failed or repeated not scripted`:'';
+    if(!g.isPage) return `\t// Resources loaded during this step (no page load in this transaction): ${g.extra.length} listed under EXTRARES${skip}\n`;
+    if(!g.htmlKnown) return `\t// Page HTML was not recorded: its ${g.extra.length} resource(s) are listed under EXTRARES${skip}\n`;
     return `\t// Page resources: ${g.inHtml.length} images/stylesheets in the page HTML download automatically (Mode=HTML)`+
       (g.extra.length?`; ${g.extra.length} other (scripts, CSS/JS-loaded files) ${g.extra.length===1?"is":"are"} listed under EXTRARES`:'')+
-      (g.skipped.length?`; ${g.skipped.length} cached, failed or repeated not scripted`:'')+`\n`;
+      (g.skipped.length?`; ${g.skipped.length} failed or repeated not scripted`:'')+`\n`;
   }
   function extraResC(idx){
     const g=acPageRes.byPage.get(idx);
@@ -602,10 +604,12 @@ function genMainJS(){
     o+=`${ind}// ${rn}\n`;
     const _pr=mjPageRes.byPage.get(idx);
     if(_pr){
-      if(!_pr.htmlKnown) o+=`${ind}// Page HTML was not recorded: its ${_pr.extra.length} resource(s) are listed in resources[]\n`;
+      const _skip=_pr.skipped.length?`; ${_pr.skipped.length} failed or repeated not scripted`:'';
+      if(!_pr.isPage) o+=`${ind}// Resources loaded during this step (no page load in this transaction): ${_pr.extra.length} listed in resources[]${_skip}\n`;
+      else if(!_pr.htmlKnown) o+=`${ind}// Page HTML was not recorded: its ${_pr.extra.length} resource(s) are listed in resources[]${_skip}\n`;
       else o+=`${ind}// Page resources: ${_pr.inHtml.length} images/stylesheets in the page HTML download automatically (downloadHtmlStaticResources)`+
         (_pr.extra.length?`; ${_pr.extra.length} other (scripts, CSS/JS-loaded files) ${_pr.extra.length===1?"is":"are"} listed in resources[]`:'')+
-        (_pr.skipped.length?`; ${_pr.skipped.length} cached, failed or repeated not scripted`:'')+`\n`;
+        (_pr.skipped.length?`; ${_pr.skipped.length} failed or repeated not scripted`:'')+`\n`;
     }
 
     // DPoP proof generation — fresh proof per request (DPoP entries are always sequential)

@@ -5,6 +5,17 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — Resources missing from every page after the first (BUG-058)
+
+- Files the browser reused from its cache on later pages are listed on those pages again
+  (VuGen `EXTRARES`, DevWeb `resources: [...]`), as VuGen records them; VuGen's "Simulate
+  browser cache" decides on replay whether to download them. This reverses the "browser-cache
+  hits are no longer scripted" rule from the entry below, which left page 2 onwards empty.
+  Failed/cancelled loads and repeats on the same page are still skipped.
+- Single-page apps: in a transaction with no page load, resources are now listed on the API
+  request in progress instead of becoming separate requests; resources that load before a
+  transaction's first request attach to it.
+
 ### Fixed — Page resources now match VuGen's own HTML-mode recording (BUG-057)
 
 - Script files (`<script src>`) and files requested by CSS or JavaScript are now listed on the

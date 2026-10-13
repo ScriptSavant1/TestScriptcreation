@@ -100,7 +100,7 @@ describe('groupPageResources', () => {
     ];
     const { absorbed, byPage } = PR.groupPageResources(entries, new Set());
     expect([...absorbed].sort()).toEqual([1, 2, 3, 5, 6]);
-    expect(byPage.get(0)).toEqual({ inHtml: [1, 2], extra: [3, 5, 6], skipped: [], htmlKnown: true, pageUrl: HOST + '/' });
+    expect(byPage.get(0)).toEqual({ inHtml: [1, 2], extra: [3, 5, 6], skipped: [], htmlKnown: true, pageUrl: HOST + '/', isPage: true });
     expect(absorbed.has(4)).toBe(false);
   });
 
@@ -123,7 +123,7 @@ describe('groupPageResources', () => {
     ];
     const { absorbed, byPage } = PR.groupPageResources(entries, new Set([1]));
     expect([...absorbed]).toEqual([2, 3]);
-    expect(byPage.get(0)).toEqual({ inHtml: [2], extra: [3], skipped: [], htmlKnown: true, pageUrl: HOST + '/home' });
+    expect(byPage.get(0)).toEqual({ inHtml: [2], extra: [3], skipped: [], htmlKnown: true, pageUrl: HOST + '/home', isPage: true });
     expect(byPage.has(1)).toBe(false);
   });
 
@@ -136,15 +136,45 @@ describe('groupPageResources', () => {
     expect(absorbed.size).toBe(0);
   });
 
-  test('a resource before any page stays a standalone request', () => {
-    const { absorbed } = PR.groupPageResources([res('/css/site.css', 'stylesheet', 'text/css'), page('/', HTML)], new Set());
-    expect(absorbed.size).toBe(0);
+  test('a resource before the first step of a transaction attaches to that step', () => {
+    const { absorbed, byPage } = PR.groupPageResources([res('/css/site.css', 'stylesheet', 'text/css'), page('/', HTML)], new Set());
+    expect([...absorbed]).toEqual([0]);
+    expect(byPage.get(1).inHtml).toEqual([0]);
+  });
+
+  test('a resource at the very end of a transaction with no steps stays a standalone request', () => {
+    const entries = [marker('start', 'T01'), res('/css/site.css', 'stylesheet', 'text/css'), marker('end', 'T01')];
+    expect(PR.groupPageResources(entries, new Set()).absorbed.size).toBe(0);
+  });
+
+  test('single-page-app transaction with no page load: resources attach to the API step in progress', () => {
+    const entries = [
+      marker('start', 'T01'), page('/', HTML), marker('end', 'T01'),
+      marker('start', 'T02'),                                              // 3
+      res('/js/chunk-search.js', 'script', 'application/javascript'),      // 4 before the first API call
+      xhr('/api/search'),                                                  // 5 API step
+      res('/images/result.png', 'image', 'image/png'),                     // 6
+      xhr('/api/details'),                                                 // 7 next API step
+      res('/images/detail.png', 'image', 'image/png'),                     // 8
+      marker('end', 'T02'),
+    ];
+    const { absorbed, byPage } = PR.groupPageResources(entries, new Set());
+    expect([...absorbed].sort()).toEqual([4, 6, 8]);
+    expect(byPage.get(5)).toEqual({ inHtml: [], extra: [4, 6], skipped: [], htmlKnown: false, pageUrl: HOST + '/api/search', isPage: false });
+    expect(byPage.get(7).extra).toEqual([8]);
+  });
+
+  test('when the transaction has a page, later API calls do not take its resources', () => {
+    const entries = [page('/', HTML), xhr('/api/cart'), res('/images/sprite.png', 'image', 'image/png')];
+    const { byPage } = PR.groupPageResources(entries, new Set());
+    expect(byPage.get(0).extra).toEqual([2]);
+    expect(byPage.has(1)).toBe(false);
   });
 
   test('page HTML not recorded: every resource is listed explicitly', () => {
     const entries = [page('/', ''), res('/css/site.css', 'stylesheet', 'text/css'), res('/images/logo.gif', 'image', 'image/gif')];
     const { byPage } = PR.groupPageResources(entries, new Set());
-    expect(byPage.get(0)).toEqual({ inHtml: [], extra: [1, 2], skipped: [], htmlKnown: false, pageUrl: HOST + '/' });
+    expect(byPage.get(0)).toEqual({ inHtml: [], extra: [1, 2], skipped: [], htmlKnown: false, pageUrl: HOST + '/', isPage: true });
   });
 
   test('filtered entries, and entries the include() check rejects, are ignored', () => {
@@ -163,23 +193,38 @@ describe('groupPageResources', () => {
     const entries = [page('/', HTML), res('/js/config.js', 'script', 'application/javascript'), res('/css/site.css', 'stylesheet', 'text/css')];
     const { absorbed, byPage } = PR.groupPageResources(entries, new Set(), null, new Set([1]));
     expect([...absorbed]).toEqual([2]);
-    expect(byPage.get(0)).toEqual({ inHtml: [2], extra: [], skipped: [], htmlKnown: true, pageUrl: HOST + '/' });
+    expect(byPage.get(0)).toEqual({ inHtml: [2], extra: [], skipped: [], htmlKnown: true, pageUrl: HOST + '/', isPage: true });
   });
 
-  test('browser-cache hits, failed loads and repeats are absorbed but not listed', () => {
+  test('failed loads, repeats and data: URLs are absorbed but not listed', () => {
     const entries = [
       page('/', HTML),                                                             // 0
       res('/js/app.js?v=3', 'script', 'application/javascript'),                   // 1 listed
       res('/js/app.js?v=3', 'script', 'application/javascript'),                   // 2 repeat
-      res('/js/cached.js', 'script', 'application/javascript', { _fromCache: 'memory' }), // 3 cache (DevTools field)
-      res('/js/cached2.js', 'script', 'application/javascript', { fromCache: 'disk' }),   // 4 cache (parser field)
-      res('/images/broken.gif', 'image', 'image/gif', { status: 0 }),              // 5 failed / cancelled
-      res('data:image/png;base64,AAAA', 'image', 'image/png'),                    // 6 not http(s)
+      res('/images/broken.gif', 'image', 'image/gif', { status: 0 }),              // 3 failed / cancelled
+      res('data:image/png;base64,AAAA', 'image', 'image/png'),                    // 4 not http(s)
     ];
     const { absorbed, byPage } = PR.groupPageResources(entries, new Set());
-    expect([...absorbed].sort()).toEqual([1, 2, 3, 4, 5, 6]);
+    expect([...absorbed].sort()).toEqual([1, 2, 3, 4]);
     expect(byPage.get(0).extra).toEqual([1]);
-    expect(byPage.get(0).skipped).toEqual([2, 3, 4, 5, 6]);
+    expect(byPage.get(0).skipped).toEqual([2, 3, 4]);
+  });
+
+  test('page 2 reusing page 1 files from the browser cache still lists them (as VuGen does)', () => {
+    // User report: resources were added to the 1st page step only. On page 2 the browser served
+    // the same scripts from its cache (DevTools HAR _fromCache) and they were wrongly skipped.
+    const entries = [
+      page('/page1', HTML),                                                                    // 0
+      res('/js/app.js?v=3', 'script', 'application/javascript'),                               // 1
+      page('/page2', HTML),                                                                    // 2
+      res('/js/app.js?v=3', 'script', 'application/javascript', { _fromCache: 'memory' }),     // 3
+      res('/css/site.css', 'stylesheet', 'text/css', { _fromCache: 'disk' }),                  // 4 in HTML
+    ];
+    const { byPage } = PR.groupPageResources(entries, new Set());
+    expect(byPage.get(0).extra).toEqual([1]);
+    expect(byPage.get(2).extra).toEqual([3]);
+    expect(byPage.get(2).inHtml).toEqual([4]);
+    expect(byPage.get(2).skipped).toEqual([]);
   });
 
   test('a POST beacon stays its own request (EXTRARES / resources[] replay as GET)', () => {
@@ -199,7 +244,7 @@ describe('groupPageResources', () => {
     ];
     const { absorbed, byPage } = PR.groupPageResources(entries, new Set());
     expect([...absorbed].sort()).toEqual([1, 2, 3]);
-    expect(byPage.get(0)).toEqual({ inHtml: [1, 2], extra: [3], skipped: [], htmlKnown: true, pageUrl: HOST + '/' });
+    expect(byPage.get(0)).toEqual({ inHtml: [1, 2], extra: [3], skipped: [], htmlKnown: true, pageUrl: HOST + '/', isPage: true });
   });
 
   test('an iframe the HTML does not name (added by JavaScript) is listed, not a new page step', () => {

@@ -13,8 +13,8 @@
  *   extra  — everything else (script files, files requested by CSS or
  *            JavaScript): listed on the page step (VuGen EXTRARES, DevWeb
  *            resources[]) — the same split VuGen's own HTML-mode recording makes
- * Resources the browser never fetched from the network (served from its cache,
- * failed/cancelled) and repeats of the same URL are absorbed but not listed.
+ * Failed/cancelled loads (status 0) and repeats of the same URL on one page are
+ * absorbed but not listed. Browser-cache hits ARE listed (VuGen lists them too).
  * When the page's HTML was not recorded, every resource is listed as extra.
  */
 (function (exports) {
@@ -58,12 +58,17 @@
   function isHttpUrl(u) { return /^https?:\/\//i.test(String(u || "")); }
 
   /**
-   * The browser did not fetch this from the network, so replay must not either:
-   * served from the browser cache (DevTools HAR "_fromCache") or failed/cancelled
-   * (status 0 — net::ERR_ABORTED, blocked by client, …).
+   * Failed or cancelled in the browser (status 0 — net::ERR_ABORTED, blocked by
+   * client, …): there is no response to replay.
+   *
+   * Files the browser served from its own cache (DevTools HAR "_fromCache") are
+   * NOT skipped: VuGen's recording lists them on every page step that uses them,
+   * and on replay VuGen's "Simulate browser cache" run-time setting decides
+   * whether to fetch them again. Skipping them left every page after the first
+   * with no resources at all.
    */
   function notFetched(e) {
-    return !!(e._fromCache || e.fromCache) || !e.status;
+    return !e.status;
   }
 
   /** An iframe / frame document (fetch metadata says so) — part of its parent page. */
@@ -172,30 +177,84 @@
    * @returns {{ absorbed: Set<number>, byPage: Map<number, {inHtml:number[], extra:number[], skipped:number[], htmlKnown:boolean, pageUrl:string}> }}
    *   absorbed — indices that must not be scripted as their own request
    *   byPage   — for each emitted page step: inHtml (auto-downloaded), extra (to list),
-   *              skipped (cached / failed / repeated — not listed); pageUrl is the URL
+   *              skipped (failed / repeated — not listed); pageUrl is the URL
    *              whose HTML was loaded (the redirect target's, when redirected)
    */
   function groupPageResources(entries, autoFollowSet, include, keep) {
     var absorbed = new Set();
     var byPage = new Map();
-    var page = null;       // index of the page step resources currently attach to
+    var page = null;       // index of the step resources currently attach to
+    var pageIsHtml = false;// that step loaded an HTML page (false = an API/XHR step)
     var auto = new Set();  // URLs replay downloads from that page's HTML (and its frames) by itself
-    var seen = new Set();  // URLs already accounted for on that page
+    var seen = new Set();  // URLs already accounted for on that step
     var lastEmitted = null;
+    var pending = [];      // resources seen before the transaction's first step
+
+    function group(idx, e) {
+      var g = byPage.get(idx);
+      if (!g) { g = { inHtml: [], extra: [], skipped: [], htmlKnown: false, pageUrl: e.url, isPage: false }; byPage.set(idx, g); }
+      return g;
+    }
 
     function startPage(idx, e, keepExisting) {
       page = idx;
+      pageIsHtml = true;
       auto = htmlAutoResources(pageHtml(e), e.url);
       seen = new Set();
-      var g = keepExisting && byPage.get(idx);
-      if (!g) { g = { inHtml: [], extra: [], skipped: [], htmlKnown: false, pageUrl: e.url }; byPage.set(idx, g); }
+      if (!keepExisting) byPage.delete(idx);
+      var g = group(idx, e);
+      g.isPage = true;
       g.htmlKnown = !!pageHtml(e);
       g.pageUrl = e.url;
     }
 
+    /**
+     * A transaction with no page load (a single-page app screen that only calls
+     * APIs): its resources attach to the step in progress, as VuGen records them
+     * within the current step (EXTRARES on web_custom_request, resources[] on any
+     * DevWeb request). Nothing is in an HTML page here, so everything is listed.
+     */
+    function startApiStep(idx, e) {
+      page = idx;
+      pageIsHtml = false;
+      auto = new Set();
+      seen = new Set();
+      group(idx, e).pageUrl = e.url;
+    }
+
+    function attach(i) {
+      var e = entries[i];
+      var g = byPage.get(page);
+      absorbed.add(i);
+      var u = stripFragment(e.url);
+      if (isFrameEntry(e)) {
+        if (seen.has(u) || notFetched(e)) { g.skipped.push(i); return; }
+        seen.add(u);
+        if (auto.has(u)) {
+          g.inHtml.push(i);
+          // replay fetches the frame, and the images/stylesheets in the frame's own HTML
+          htmlAutoResources(pageHtml(e), e.url).forEach(function (x) { auto.add(x); });
+        } else {
+          g.extra.push(i);
+        }
+        return;
+      }
+      if (!isHttpUrl(u) || notFetched(e) || seen.has(u)) { g.skipped.push(i); return; }
+      seen.add(u);
+      (auto.has(u) ? g.inHtml : g.extra).push(i);
+    }
+
+    function flushPending() {
+      var p = pending; pending = [];
+      for (var k = 0; k < p.length; k++) attach(p[k]);
+    }
+
     for (var i = 0; i < entries.length; i++) {
       var e = entries[i];
-      if (e.isMarker) { page = null; auto = new Set(); seen = new Set(); lastEmitted = null; continue; } // never cross a transaction boundary
+      if (e.isMarker) { // never cross a transaction boundary
+        page = null; pageIsHtml = false; auto = new Set(); seen = new Set(); lastEmitted = null; pending = [];
+        continue;
+      }
       if (e.filtered || (include && !include(e))) continue;
       if (autoFollowSet && autoFollowSet.has(i)) {
         // Redirect target: not scripted, but its HTML is what the anchor step ends up loading
@@ -203,32 +262,16 @@
         continue;
       }
       var kept = keep && keep.has(i);
-      // An iframe/frame the page HTML names is fetched (with its own HTML resources) by replay
-      if (page !== null && !kept && isFrameEntry(e)) {
-        var fg = byPage.get(page);
-        absorbed.add(i);
-        var fu = stripFragment(e.url);
-        if (seen.has(fu) || notFetched(e)) { fg.skipped.push(i); continue; }
-        seen.add(fu);
-        if (auto.has(fu)) {
-          fg.inHtml.push(i);
-          htmlAutoResources(pageHtml(e), e.url).forEach(function (x) { auto.add(x); });
-        } else {
-          fg.extra.push(i);
-        }
-        continue;
-      }
-      if (isResourceEntry(e) && page !== null && !kept) {
-        var g = byPage.get(page);
-        absorbed.add(i);
-        var u = stripFragment(e.url);
-        if (!isHttpUrl(u) || notFetched(e) || seen.has(u)) { g.skipped.push(i); continue; }
-        seen.add(u);
-        (auto.has(u) ? g.inHtml : g.extra).push(i);
+      var isRes = !kept && (isResourceEntry(e) || (page !== null && isFrameEntry(e)));
+      if (isRes) {
+        if (page !== null) attach(i);
+        else pending.push(i);
         continue;
       }
       lastEmitted = i;
       if (isPageEntry(e)) startPage(i, e, false);
+      else if (!pageIsHtml) startApiStep(i, e); // keep attaching to the page when there is one
+      flushPending();
     }
     // Pages that ended up with no resources need no annotation
     byPage.forEach(function (g, k) { if (!g.inHtml.length && !g.extra.length && !g.skipped.length) byPage.delete(k); });
