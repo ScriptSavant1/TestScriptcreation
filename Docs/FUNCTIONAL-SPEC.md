@@ -18,6 +18,7 @@
 9. [Parameterization rules](#9-parameterization-rules)
 10. [Per-request dynamic variable generation](#10-per-request-dynamic-variable-generation)
 11. [Proxy detection](#11-proxy-detection)
+12. [Results Analyser — LRE raw results](#12-results-analyser--lre-raw-results)
 
 ---
 
@@ -550,3 +551,20 @@ ProxyHTTPPassWord=pass
 ```
 
 When no proxy is detected: proxy section remains disabled (no change from default template).
+
+
+---
+
+## 12. Results Analyser — LRE raw results
+
+Separate module `lre-results-analyser/` (see its README and `docs/IMPLEMENTATION-PLAN.md`).
+Portal menu **Results** → `/results-analyser` (iframe). Files are processed in the browser; nothing is uploaded.
+
+- **Input:** raw-results folder or ZIP (ZIP64; read in place). Required: `RawData.eve`, `res*.lrr`, `RunInfo.ini`, `_t_rep.eve`, `RawData.map`. Optional: `*.usp/*.cfg/*.usr`, `SqliteDb.db`, `sum_data/`, `SLAConfiguration.xml`, `collate.txt`.
+- **Transaction summary** (full run and analysis window): count, pass/fail (sum_data, calibrated), min/avg/max/std dev, P50/80/85/90/95/99, TPS, SLA result, Apdex.
+- **Analysis window:** default = detected steady state (last VUser running → first exit); user-adjustable; everything recomputes.
+- **SLA:** default threshold and per-transaction thresholds on P50/P90/P95/P99 (default applies to transactions in RawData.map); remembered per test in the browser.
+- **Insights:** pacing / Little's Law, trend (Mann-Kendall + Sen), sustained level changes, spikes (median/MAD, with error correlation), LG bias, LG CPU/memory, errors, failures, SLA/Apdex, throughput stability, clock skew; overall verdict.
+- **Exports:** Excel (9 sheets), Word (editable, with charts), PDF (print-ready report), HTML, JSON (full or redacted).
+- **CLI:** `node lre-results-analyser/cli/analyse.js <folder|zip> [--xlsx] [--docx] [--html] [--out] [--sla] [--sla-pct] [--window] [--redact]`.
+- **Self-checks** (Validation tab / Method sheet) confirm the RawData.eve layout and file consistency.

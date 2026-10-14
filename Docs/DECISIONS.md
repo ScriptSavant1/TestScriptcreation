@@ -9,6 +9,31 @@ decision, the context/drivers, the alternatives considered, and the outcome.
 
 ---
 
+## ADR-009 — LRE Results Analyser runs in the user's browser; separate module
+**Date:** 2026-10-14
+**Status:** Decided
+
+**Decision:** LRE raw results are analysed entirely client-side (a Web Worker reads the picked
+folder or ZIP straight from disk) by a separate module, `lre-results-analyser/`. The server only
+serves its static files. The same UMD engine also runs as a Node CLI for very large runs.
+Percentiles are nearest-rank — exact (every sample kept) up to 20 M samples, mergeable 1 % log
+histograms above that; the method used is printed in every output.
+
+**Context:** Results contain client data and can reach 500 GB. Uploading them would put client
+data on the server, hit the IIS request limit (100 MB) and load the shared server. Keeping the
+module separate means the existing tools are untouched apart from one portal menu entry.
+
+**Alternatives considered:** server-side processing (rejected: storage, privacy, IIS limits,
+server load); unzip-then-read in the browser (rejected: memory — the ZIP is read in place,
+entry by entry, with `DecompressionStream`); interpolated percentiles like LRE Analysis
+(rejected: nearest-rank always reports a real sample; differences are explained in the Method
+sheet).
+
+**Outcome:** Phases 0–5 built (engine, Excel, dashboard and menu, insights, Word/PDF). Phase 0
+sign-off (counts compared with LRE Analysis on a real run) is still open.
+
+---
+
 ## ADR-008 — Page resources are grouped by one shared module, scripted the HTML-mode way
 **Date:** 2026-10-12
 **Status:** Decided

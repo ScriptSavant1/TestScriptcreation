@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Results Analyser — PerfX Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Cpath fill=%22none%22 stroke=%22%233b82f6%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 d=%22M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4%22/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="ra/app.css">
+</head>
+<body>
+  <header class="ra-header">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4"/></svg>
+      <span class="brand-title">Results Analyser</span>
+      <span class="badge">LRE raw results</span>
+    </div>
+    <div class="header-right">
+      <span class="privacy" title="Your results are read by this page on your PC. No file is sent to the server.">🔒 Runs in your browser — nothing is uploaded</span>
+      <button class="icon-btn" id="btn-theme" title="Light / dark">◐</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ── START ─────────────────────────────────────────────────────────── -->
+    <section id="view-start" class="view active">
+      <div class="hero">
+        <h1>Analyse a LoadRunner Enterprise run</h1>
+        <p>Pick the run's <b>raw results</b> folder or ZIP. Transaction statistics, steady state, workload, errors and
+          insights are computed from <code>RawData.eve</code> and the scenario files — independently of LRE Analysis — and can be
+          exported to Excel, Word and PDF.</p>
+      </div>
+      <div class="pick-grid">
+        <label class="pick-card" id="pick-folder">
+          <input type="file" id="in-folder" webkitdirectory directory multiple hidden>
+          <div class="pick-icon">📁</div>
+          <div class="pick-title">Choose results folder</div>
+          <div class="pick-sub">Fastest. Best for very large runs — nothing is unzipped.</div>
+        </label>
+        <label class="pick-card" id="pick-zip">
+          <input type="file" id="in-zip" accept=".zip,application/zip" hidden>
+          <div class="pick-icon">🗜️</div>
+          <div class="pick-title">Choose results ZIP</div>
+          <div class="pick-sub">The ZIP downloaded from LRE. Read in place (ZIP64 supported).</div>
+        </label>
+      </div>
+      <div class="drop" id="drop">or drop the folder / ZIP here</div>
+      <div class="start-error" id="start-error" hidden></div>
+      <div class="info-grid">
+        <div class="info">
+          <h3>What is read</h3>
+          <ul>
+            <li><code>RawData.eve</code> — every transaction sample (required)</li>
+            <li><code>res*.lrr</code>, <code>RunInfo.ini</code>, <code>_t_rep.eve</code>, <code>RawData.map</code> — run, schedule, VUsers (required)</li>
+            <li><code>*.usp</code> / <code>*.cfg</code> / <code>*.usr</code> — pacing, think time, transactions per script</li>
+            <li><code>SqliteDb.db</code> — errors · <code>sum_data/</code> — LG CPU, HTTP codes, pass/fail</li>
+          </ul>
+        </div>
+        <div class="info">
+          <h3>Very large runs</h3>
+          <p>Any size works here — the file is streamed. For runs of hundreds of GB the command line is faster and can run on a server or LG with the files:</p>
+          <pre>node lre-results-analyser/cli/analyse.js "D:\Results\Run_59" --xlsx run59.xlsx --html run59.html</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PROGRESS ──────────────────────────────────────────────────────── -->
+    <section id="view-progress" class="view">
+      <div class="progress-card">
+        <div class="progress-stage" id="prog-stage">Starting…</div>
+        <div class="bar"><div class="bar-fill" id="prog-fill"></div></div>
+        <div class="progress-meta" id="prog-meta"></div>
+        <button class="btn" id="btn-cancel">Cancel</button>
+      </div>
+    </section>
+
+    <!-- ── RESULTS ───────────────────────────────────────────────────────── -->
+    <section id="view-results" class="view">
+      <div class="toolbar">
+        <div class="run-title">
+          <div class="run-name" id="run-name">-</div>
+          <div class="run-sub" id="run-sub">-</div>
+        </div>
+        <div class="verdict" id="verdict">-</div>
+        <div class="toolbar-actions">
+          <button class="btn primary" data-export="xlsx">⬇ Excel</button>
+          <button class="btn" data-export="docx">⬇ Word</button>
+          <button class="btn" data-export="pdf">🖨 PDF</button>
+          <div class="menu">
+            <button class="btn" id="btn-more">More ▾</button>
+            <div class="menu-list" id="menu-more" hidden>
+              <button data-export="html">HTML report</button>
+              <button data-export="json">Result data (JSON)</button>
+              <button data-export="json-redacted">Result data — redacted (safe to share)</button>
+            </div>
+          </div>
+          <button class="btn ghost" id="btn-new">New analysis</button>
+        </div>
+      </div>
+
+      <div class="settings-bar">
+        <div class="setting">
+          <span class="setting-label">Analysis window</span>
+          <span class="t">t+</span><input id="win-start" class="in-time" placeholder="hh:mm:ss">
+          <span>→</span>
+          <span class="t">t+</span><input id="win-end" class="in-time" placeholder="hh:mm:ss">
+          <span class="win-local" id="win-local"></span>
+          <button class="btn sm" id="win-apply">Apply</button>
+          <button class="btn sm ghost" id="win-reset" title="Back to the detected steady state">Detected</button>
+        </div>
+        <div class="setting">
+          <span class="setting-label">SLA</span>
+          <select id="sla-pct"><option value="90">P90</option><option value="95">P95</option><option value="99">P99</option><option value="50">P50</option></select>
+          <span>≤</span><input id="sla-default" class="in-num" placeholder="default s">
+          <button class="btn sm" id="sla-apply">Apply</button>
+          <span class="hint">per transaction in the Transactions tab</span>
+        </div>
+      </div>
+
+      <nav class="tabs" id="tabs">
+        <button data-tab="overview" class="active">Overview</button>
+        <button data-tab="transactions">Transactions</button>
+        <button data-tab="charts">Charts</button>
+        <button data-tab="errors">Errors</button>
+        <button data-tab="workload">Workload</button>
+        <button data-tab="insights">Insights <span class="count" id="ins-count"></span></button>
+        <button data-tab="validation">Validation</button>
+      </nav>
+
+      <div class="panel active" id="tab-overview"></div>
+      <div class="panel" id="tab-transactions"></div>
+      <div class="panel" id="tab-charts"></div>
+      <div class="panel" id="tab-errors"></div>
+      <div class="panel" id="tab-workload"></div>
+      <div class="panel" id="tab-insights"></div>
+      <div class="panel" id="tab-validation"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="ra/vendor/echarts.min.js"></script>
+  <script src="ra/report/format.js"></script>
+  <script src="ra/report/charts.js"></script>
+  <script src="ra/app.js"></script>
+</body>
+</html>
