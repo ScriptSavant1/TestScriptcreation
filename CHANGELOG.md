@@ -5,6 +5,23 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Added — Results Analyser (LRE raw results), new portal menu "Results"
+
+- New separate module `lre-results-analyser/`: analyses a LoadRunner Enterprise run from its raw
+  results folder or ZIP, independently of LRE Analysis. Runs in the browser — results are never
+  uploaded or stored on the server; any size is streamed (ZIP64 read in place).
+- Transaction summary for the full run and the steady state (exact nearest-rank percentiles,
+  TPS, pass/fail, SLA, Apdex), adjustable analysis window, workload model (pacing, think time,
+  iterations planned vs achieved), errors from `SqliteDb.db`, load-generator health from sum_data.
+- Dashboard with 12 charts (load, response time, TPS, latency and VUser heatmaps, TPS vs RT,
+  errors, HTTP codes, throughput, LG CPU, RT per LG, distribution).
+- Insights: pacing / Little's Law, degradation trend, level changes, spikes, LG bias, LG CPU,
+  errors, SLA/Apdex; overall verdict.
+- Exports: Excel (9 sheets), Word, PDF/HTML report, JSON (optionally redacted).
+- Command line for very large runs: `node lre-results-analyser/cli/analyse.js`.
+- Server: serves the module's static files at `/ra` and the page at `/results-analyser`
+  (both also under `/converter`). Help: new "Results Analyser" section.
+
 ### Fixed — Resources missing from every page after the first (BUG-058)
 
 - Files the browser reused from its cache on later pages are listed on those pages again

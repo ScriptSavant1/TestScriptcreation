@@ -219,6 +219,14 @@ class WebServer {
     // Serve static files under /converter/ too — Recorder and Studio iframes
     // resolve asset paths relative to /converter/ under IIS virtual directory.
     this.app.use("/converter", express.static(path.join(__dirname, "public")));
+    // LRE Results Analyser (separate module): static page assets only — results are processed in
+    // the user's browser and never reach the server. The page loads them as relative "ra/…" URLs.
+    const RA_DIR = path.join(__dirname, "..", "..", "lre-results-analyser");
+    for (const base of ["/ra", "/converter/ra"]) {
+      this.app.use(base + "/engine", express.static(path.join(RA_DIR, "engine")));
+      this.app.use(base + "/report", express.static(path.join(RA_DIR, "report")));
+      this.app.use(base, express.static(path.join(RA_DIR, "web"), { index: false }));
+    }
     this.app.set("view engine", "ejs");
     this.app.set("views", path.join(__dirname, "views"));
   }
@@ -271,6 +279,9 @@ class WebServer {
     });
     this.app.get(["/studio", "/converter/studio"], (req, res) => {
       res.sendFile(path.join(__dirname, "public", "VuGen-Script-Studio.html"));
+    });
+    this.app.get(["/results-analyser", "/converter/results-analyser"], (req, res) => {
+      res.sendFile(path.join(__dirname, "..", "..", "lre-results-analyser", "web", "index.html"));
     });
     this.app.get("/tools/recorder", (req, res) => {
       res.sendFile(path.join(__dirname, "public", "VuGen-Recorder.html"));

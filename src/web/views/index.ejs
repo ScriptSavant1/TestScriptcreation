@@ -1589,6 +1589,9 @@ code {
       <button class="ptab" id="ptab-studio" onclick="switchPortalTab('studio')">
         🧪&nbsp;<span class="ptab-label"><span>Script Studio</span><span class="ptab-sub">Correlation</span></span>
       </button>
+      <button class="ptab" id="ptab-analyser" onclick="switchPortalTab('analyser')">
+        📊&nbsp;<span class="ptab-label"><span>Results</span><span class="ptab-sub">LRE Analysis</span></span>
+      </button>
       <button class="ptab" id="ptab-help" onclick="switchPortalTab('help')">
         📖&nbsp;<span class="ptab-label"><span>Help</span><span class="ptab-sub">Documentation</span></span>
       </button>
@@ -1719,6 +1722,26 @@ code {
       </ul>
       <div class="tc-cta">
         <span class="tc-cta-text">Open Script Studio</span>
+        <span class="tc-cta-arrow">→</span>
+      </div>
+    </div>
+
+    <!-- Card 5: Results Analyser (full width) -->
+    <div class="tool-card tc-blue" id="tc-analyser" role="button" tabindex="0" style="grid-column:1/-1"
+         onclick="switchPortalTab('analyser')"
+         onkeydown="if(event.key==='Enter'||event.key===' ')switchPortalTab('analyser')">
+      <div class="tc-icon tc-icon-blue">📊</div>
+      <span class="tc-tag tc-tag-blue">LRE raw results → Excel · Word · PDF</span>
+      <div class="tc-title">Results Analyser</div>
+      <div class="tc-desc">Analyse a LoadRunner Enterprise run straight from its raw results folder or ZIP — independently of LRE Analysis. Transaction summary for the full run and steady state, workload model, errors, load-generator health and automatic insights. Everything runs in your browser: results are never uploaded or stored on the server.</div>
+      <ul class="tc-features">
+        <li>Exact percentiles (P50–P99), TPS, pass/fail, SLA and Apdex</li>
+        <li>Detected steady state — adjustable analysis window</li>
+        <li>Insights: degradation trend, change points, spikes, LG bias, pacing check</li>
+        <li>Any size (streamed) — Excel, Word and PDF reports</li>
+      </ul>
+      <div class="tc-cta">
+        <span class="tc-cta-text">Open Results Analyser</span>
         <span class="tc-cta-arrow">→</span>
       </div>
     </div>
@@ -2232,6 +2255,18 @@ code {
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- PORTAL: RESULTS ANALYSER PANEL (iframe, lazy-loaded)                   -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="portal-analyser" class="portal-iframe-panel">
+  <div class="iframe-chrome">
+    <button class="iframe-back-btn" onclick="switchPortalTab('home')">← Back to Portal</button>
+    <span class="iframe-tool-title">📊 Results Analyser</span>
+    <span class="iframe-tool-badge">LRE raw results — processed in your browser</span>
+  </div>
+  <iframe id="iframe-analyser" src="" title="LRE Results Analyser"></iframe>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
 <!-- PORTAL: HELP PANEL                                                      -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div id="portal-help" style="display:none" class="portal-content-panel">
@@ -2268,6 +2303,7 @@ code {
               <button class="htoc-link" onclick="haccJump('hacc-jmeter')"><span class="htoc-link-icon">♨</span>JMeter</button>
               <button class="htoc-link" onclick="haccJump('hacc-recorder')"><span class="htoc-link-icon">🎙</span>Recorder</button>
               <button class="htoc-link" onclick="haccJump('hacc-studio')"><span class="htoc-link-icon">🧪</span>Script Studio</button>
+              <button class="htoc-link" onclick="haccJump('hacc-analyser')"><span class="htoc-link-icon">📊</span>Results Analyser</button>
             </div>
           </div>
           <div class="htoc-group">
@@ -2657,6 +2693,44 @@ code {
     </div>
   </div>
 
+  <!-- 7b. Results Analyser -->
+  <div id="hacc-analyser" class="help-acc-item">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-analyser')">
+      <div class="help-acc-hdr-left">
+        <div class="help-acc-icon hacc-purple">📊</div>
+        <div>
+          <div class="help-acc-title">Results Analyser</div>
+          <div class="help-acc-sub">LRE raw results → transaction summary, steady state, insights · Excel / Word / PDF</div>
+        </div>
+      </div>
+      <svg class="help-acc-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
+    </button>
+    <div class="help-acc-body">
+      <div class="help-acc-inner">
+        <div class="help-tool-badge help-badge-purple">📊 Results Analyser</div>
+        <p class="help-p">Analyses a LoadRunner Enterprise run from its <strong>raw results</strong>, independently of LRE Analysis. The files are read by your browser on your PC — <strong>nothing is uploaded or stored on the server</strong>, whatever the size of the run.</p>
+        <h3 class="help-h3">How to use it</h3>
+        <ol class="help-steps-list">
+          <li>In LRE, download the run's <strong>raw results</strong> (the ZIP that contains <code>RawData.eve</code>, <code>_t_rep.eve</code> and <code>res*.lrr</code>).</li>
+          <li>Open <strong>Results</strong> in the menu and choose the ZIP — or, faster for very large runs, unzip it and choose the folder.</li>
+          <li>Review the tabs: <strong>Overview</strong>, <strong>Transactions</strong> (full run and steady state), <strong>Charts</strong>, <strong>Errors</strong>, <strong>Workload</strong>, <strong>Insights</strong> and <strong>Validation</strong>.</li>
+          <li>Optional: change the <strong>analysis window</strong> (default = detected steady state) and enter <strong>SLA</strong> thresholds — all figures and insights update.</li>
+          <li>Export <strong>Excel</strong> (9 sheets), <strong>Word</strong> (editable report) or <strong>PDF</strong> (print dialog → Save as PDF).</li>
+        </ol>
+        <h3 class="help-h3">How the numbers are computed</h3>
+        <ul class="help-list">
+          <li><strong>Response times</strong> come from every transaction sample in <code>RawData.eve</code>. Percentiles are exact (nearest-rank) for runs up to 20 million samples, and within 0.5 % above that.</li>
+          <li><strong>Steady state</strong> = from the moment the last VUser starts running to the moment the first VUser exits (from <code>_t_rep.eve</code>).</li>
+          <li><strong>Pass / fail</strong> counts come from LRE's own sum_data graphs, used only when they reproduce the RawData.eve counts.</li>
+          <li><strong>Insights</strong> are offline statistical checks: pacing and Little's Law, trend (Mann-Kendall), change points, spikes (median/MAD), load-generator comparison, LG CPU and memory, errors, SLA and Apdex.</li>
+          <li>The <strong>Validation</strong> tab lists every self-check. Transaction counts should match LRE Analysis exactly; percentiles may differ slightly because LRE interpolates.</li>
+        </ul>
+        <h3 class="help-h3">Very large runs</h3>
+        <p class="help-p">Any size works in the browser because files are streamed. For runs of hundreds of GB, the same engine runs from the command line on a machine that has the files: <code>node lre-results-analyser/cli/analyse.js "D:ResultsRun_59" --xlsx run59.xlsx --html run59.html</code>. Add <code>--redact</code> to remove host names and IP addresses before sharing the output.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- 8. Capabilities -->
   <div id="hacc-capabilities" class="help-acc-item">
     <button class="help-acc-hdr" onclick="haccToggle('hacc-capabilities')">
@@ -3010,7 +3084,7 @@ function toggleTheme() {
   html.setAttribute('data-theme', next);
   localStorage.setItem('lr-theme', next);
   // Sync theme to any loaded iframe tools
-  ['recorder','studio'].forEach(function(t) {
+  ['recorder','studio','analyser'].forEach(function(t) {
     const f = document.getElementById('iframe-' + t);
     if (f && f.contentWindow && f.contentWindow.lreSetTheme) {
       f.contentWindow.lreSetTheme(next);
@@ -3044,9 +3118,10 @@ const PORTAL_CONFIG = {
     converter: { enabled: true  },
     recorder:  { enabled: true  },
     studio:    { enabled: true  },
+    analyser:  { enabled: true  },
     help:      { enabled: true  }
   },
-  iframes: { recorder: BASE_PATH + '/recorder', studio: BASE_PATH + '/studio' }
+  iframes: { recorder: BASE_PATH + '/recorder', studio: BASE_PATH + '/studio', analyser: BASE_PATH + '/results-analyser' }
 };
 
 /* ── Portal tab switching ───────────────────────────────────────────────── */
