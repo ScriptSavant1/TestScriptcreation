@@ -15,7 +15,7 @@
 importScripts(
   "engine/text.js", "engine/ini.js", "engine/files.js", "engine/scenario.js", "engine/trep.js", "engine/runlogic.js",
   "engine/rawmap.js", "engine/sla.js", "engine/collate.js", "engine/eve.js", "engine/stats.js", "engine/errors.js",
-  "engine/hist.js", "engine/collector.js", "engine/dat.js", "engine/insights.js", "engine/analyse.js", "zip.js"
+  "engine/hist.js", "engine/collector.js", "engine/dat.js", "engine/insights.js", "engine/txnames.js", "engine/analyse.js", "zip.js"
 );
 
 const L = self.LreRA;

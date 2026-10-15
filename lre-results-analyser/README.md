@@ -70,12 +70,14 @@ transaction, and high LG CPU.
 
 | Figure | Method |
 |---|---|
-| Response time | Every transaction sample in `RawData.eve` (sub-type 762, milliseconds → seconds) |
+| Transactions | `RawData.eve` transaction records — sub-types 12586944 / 12586945 / 12619721 (failed); one record per completed transaction. Sub-type 762 records are per-request data points (HTTP codes etc.), counted separately |
+| Response time | End time − start time of each transaction record (seconds). Statistics use passed transactions; failed ones are counted (as LRE does) |
+| Transaction names | RawData.eve uses internal ids, not RawData.map ids. Names are matched to LRE's per-transaction response-time graph in `sum_data` (count, mean and max must agree). **Keep `sum_data/` in the ZIP** — without it the names cannot be confirmed |
 | Percentiles | Nearest-rank: P = sorted[⌈p/100·n⌉]. Exact when ≤ 20 M samples are kept; otherwise 1 % log histograms (≤ 0.5 % error). The method used is printed in every output |
 | Std deviation | Population (÷ n), Welford |
 | Steady state | Last VUser running → first VUser exit (`_t_rep.eve`); adjustable |
 | TPS | Count ÷ window seconds |
-| Pass / fail | LRE's sum_data pass/fail graphs. Used only when the pass graph reproduces the RawData.eve counts within 2 %; otherwise left empty |
+| Pass / fail | From the transaction records; cross-checked with sum_data pass/fail graphs |
 | Negative RT | Clamped to 0 and counted (clock skew) |
 | Time | `.lrr` times are UTC. The local zone comes from `Time_Zone`/`Daylight_Bias` and is confirmed against `RunDate` |
 
@@ -140,6 +142,6 @@ Never add real results to the repo: they contain internal host names.
   histograms are used automatically.
 - `SqliteDb.db` is loaded into memory in the browser (sql.js). Very large error logs are slow;
   use the CLI for those.
-- Transaction status is not decoded from `RawData.eve` itself (see the `eve-f40`/`eve-f60` checks).
-  Pass/fail comes from sum_data.
+- The RawData.eve layout follows `docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md` (LRE 2026, run 59). Other LRE versions are
+  checked by the self-checks (`eve-tx`, `eve-tx-layout`, `tx-names`).
 - Word export from the CLI has no charts; the browser export embeds them.

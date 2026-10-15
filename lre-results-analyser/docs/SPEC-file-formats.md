@@ -373,6 +373,11 @@ This means each VUser waits 60 seconds after completing an iteration before star
 
 ## PART 3 — RAWDATA.EVE BINARY FORMAT (COMPLETE DECODE)
 
+> **SUPERSEDED (2026-10-15):** the transaction layout in this part is wrong — sub-type 762 is a per-request
+> data point, not a transaction. The authoritative layout is `SPEC-RawData-eve-REVERSE-ENGINEERED.md`
+> (transactions = sub-types 12586944 / 12586945 / 12619721; RT = endTs − startTs in seconds; internal
+> transaction ids). Kept for history.
+
 ### 3.1 File Overview
 
 - Size: 34,436,952 bytes (34 MB)

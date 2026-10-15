@@ -4,7 +4,7 @@ const eve = require("../engine/eve");
 const stats = require("../engine/stats");
 const errors = require("../engine/errors");
 const { analyse, redact } = require("../engine/analyse");
-const { txRecord, otherRecord, header, feedRandom, sampleRun, memorySource, START } = require("./helpers");
+const { txRecord, dataPoint, otherRecord, header, feedRandom, sampleRun, memorySource, START } = require("./helpers");
 
 describe("stats.summarise", () => {
   test("nearest-rank percentiles and population std-dev", () => {
@@ -19,73 +19,83 @@ describe("stats.summarise", () => {
   });
 });
 
-describe("eve.createDecoder", () => {
+describe("eve.createDecoder (layout per SPEC-RawData-eve-REVERSE-ENGINEERED)", () => {
   const recs = [header()];
   for (let i = 0; i < 40; i++) {
-    recs.push(txRecord({ ts: START + i, iter: Math.floor(i / 4), rtMs: 100 + i, vuser: 1 + (i % 2), txId: 1 + (i % 2), f60: i === 3 ? 1 : 0 }));
-    if (i % 5 === 0) recs.push(otherRecord(72, 766), otherRecord(84, 0xc00101));
+    recs.push(txRecord({ ts: START + 100 + i, iter: Math.floor(i / 4), rtMs: 100 + i, vuser: 1 + (i % 2), txId: 10 + (i % 2), sub: i === 3 ? 12586945 : i === 5 ? 12619721 : 12586944 }));
+    recs.push(dataPoint({ ts: START + 100 + i, vuser: 1, dpId: 5 }));
+    if (i % 5 === 0) recs.push(otherRecord(72, 766), otherRecord(132, 63));
   }
   const buf = Buffer.concat(recs);
 
-  // collects (id, rt) via onSample so tests can compare what the statistics layer receives
   const decodeAll = (b, feed, opts) => {
     const got = [];
-    const d = eve.createDecoder(Object.assign({ onSample: (ts, it, rt, vu, id) => got.push([id, rt, ts]) }, opts));
+    const d = eve.createDecoder(Object.assign({ onTransaction: (end, it, rt, vu, id, failed, start, sub) => got.push([id, +rt.toFixed(6), end, failed, sub]) }, opts));
     feed(d, b);
     return Object.assign(d.end(), { got });
   };
   const whole = decodeAll(buf, (d, b) => d.push(new Uint8Array(b)));
 
-  test("decodes every record; result is independent of chunk boundaries", () => {
-    expect(whole.records).toBe(1 + 40 + 16);
+  test("transactions come from the 12586944 family; response time = end − start in seconds", () => {
     expect(whole.tx.records).toBe(40);
-    expect(whole.trailingBytes).toBe(0);
-    expect(whole.stopped).toBeNull();
+    expect(whole.tx.bySubType).toEqual({ 12586944: 38, 12586945: 1, 12619721: 1 });
+    expect(whole.tx.failed).toBe(1);
+    expect(whole.got[0]).toEqual([10, 0.1, START + 100, false, 12586944]);
+    expect(whole.got[5]).toEqual([11, 0.105, START + 105, true, 12619721]);
+    expect(whole.got[3][4]).toBe(12586945); // variant record decoded with the same offsets
+  });
+
+  test("subType 762 is a data point, never a transaction", () => {
+    expect(whole.dataPoints).toEqual([{ id: 5, count: 40, sum: 40 }]);
+    expect(whole.subTypes).toEqual({ 762: 40, 766: 8, 63: 8, 12586944: 38, 12586945: 1, 12619721: 1 });
+    expect(whole.transactions.map((t) => t.id)).toEqual([10, 11]);
+  });
+
+  test("result is independent of chunk boundaries", () => {
     for (const seed of [1, 2, 3, 99]) {
       const r = decodeAll(buf, (d, b) => feedRandom(d, b, seed));
       expect(r.records).toBe(whole.records);
-      expect(r.transactions.map((t) => [t.id, t.count])).toEqual(whole.transactions.map((t) => [t.id, t.count]));
       expect(r.got).toEqual(whole.got);
     }
-    // single-byte chunks
     const r1 = decodeAll(buf, (d, b) => { for (let i = 0; i < b.length; i++) d.push(new Uint8Array(b.subarray(i, i + 1))); });
     expect(r1.tx.records).toBe(40);
   });
 
-  test("signature tally, sub-types and field tallies", () => {
-    expect(whole.subTypes).toEqual({ 762: 40, 766: 8, [0xc00101]: 8 });
-    expect(whole.signatures[0]).toMatchObject({ signature: "len=64 type=3 +8=1 +16=1 +24=762", count: 40 });
-    expect(whole.signatures.find((s) => s.signature === "len=24 type=7")).toBeTruthy();
-    expect(whole.signatures[0].examples).toHaveLength(3);
-    expect(whole.tx.f40).toEqual({ 0: 40 });
-    expect(whole.tx.f60).toEqual({ 0: 39, 1: 1 });
-    expect(whole.tx.recLenVariants).toEqual({ 64: 40 });
+  test("per-transaction tallies: vuser-iterations, failed, sub-types; +44 cross-check", () => {
+    const t10 = whole.transactions.find((t) => t.id === 10);
+    expect(t10.count).toBe(20);
+    expect(t10.maxPerVuserIteration).toBe(2);
+    const t11 = whole.transactions.find((t) => t.id === 11);
+    expect(t11.failed).toBe(1);
+    expect(whole.tx.vuserIds).toEqual([1, 2]);
+    expect(whole.tx.iterMax).toBe(9);
+    expect(whole.tx.f44Agrees).toBe(40); // the helper writes round(rt ms) at +44
   });
 
-  test("samples per (vuser, iteration)", () => {
-    const r = decodeAll(buf, (d, b) => d.push(new Uint8Array(b)));
-    const t1 = r.transactions.find((t) => t.id === 1);
-    expect(t1.count).toBe(20);
-    expect(t1.maxPerVuserIteration).toBe(2); // vuser 1 runs tx 1 at i and i+2 within one 4-sample iteration
-    expect(r.got).toHaveLength(40);
-    expect(r.tx.vuserIds).toEqual([1, 2]);
-    expect(r.tx.iterMax).toBe(9);
-  });
-
-  test("negative RT clamped and counted; unknown IDs reported", () => {
-    const b = Buffer.concat([header(), txRecord({ ts: START, iter: 0, rtMs: -6, vuser: 1, txId: 21 }), txRecord({ ts: START, iter: 0, rtMs: 10, vuser: 1, txId: 1 })]);
-    const r = decodeAll(b, (d, x) => d.push(new Uint8Array(x)), { knownTxIds: new Set([1]) });
+  test("negative durations clamped and counted; implausible records skipped and reported", () => {
+    const bad = txRecord({ ts: START, iter: 0, rtMs: 10, vuser: 1, txId: 10 });
+    bad.writeDoubleBE(12345, 28); // start time not a unix timestamp
+    const b = Buffer.concat([header(), txRecord({ ts: START, iter: 0, rtMs: -6, vuser: 1, txId: 10 }), bad]);
+    const r = decodeAll(b, (d, x) => d.push(new Uint8Array(x)));
     expect(r.tx.negativeRt).toBe(1);
-    expect(r.got.find((g) => g[0] === 21)[1]).toBe(0);
-    expect(r.tx.unknownTxIds).toEqual({ 21: 1 });
+    expect(r.got).toEqual([[10, 0, START, false, 12586944]]);
+    expect(r.tx.implausible).toEqual({ 12586944: 1 });
+  });
+
+  test("other sub-types with two timestamps are reported as look-alikes, not counted", () => {
+    const look = Buffer.alloc(72);
+    look.writeUInt32BE(72, 0); look.writeUInt32BE(3, 4); look.writeUInt32BE(766, 24);
+    look.writeDoubleBE(START, 28); look.writeDoubleBE(START + 1, 36);
+    const r = decodeAll(Buffer.concat([header(), look]), (d, x) => d.push(new Uint8Array(x)));
+    expect(r.lookalikes).toEqual({ 766: 1 });
+    expect(r.tx.records).toBe(0);
   });
 
   test("lost sync stops with the offset; incomplete tail reported", () => {
-    const bad = Buffer.concat([header(), txRecord({ ts: START, iter: 0, rtMs: 1, vuser: 1, txId: 1 }), Buffer.from([0, 0, 0, 2, 0, 0, 0, 3])]);
+    const bad = Buffer.concat([header(), txRecord({ ts: START, iter: 0, rtMs: 1, vuser: 1, txId: 10 }), Buffer.from([0, 0, 0, 2, 0, 0, 0, 3])]);
     const r = decodeAll(bad, (d, x) => d.push(new Uint8Array(x)));
-    expect(r.stopped).toMatchObject({ offset: 88, recLen: 2 });
+    expect(r.stopped).toMatchObject({ offset: 100, recLen: 2 });
     const cut = decodeAll(buf.subarray(0, buf.length - 10), (d, x) => d.push(new Uint8Array(x)));
-    expect(cut.trailingBytes).toBe(buf.subarray(0, buf.length - 10).length - (cut.bytesRead - cut.trailingBytes));
     expect(cut.trailingBytes).toBeGreaterThan(0);
   });
 });
@@ -128,29 +138,51 @@ describe("analyse (end to end, synthetic run)", () => {
     expect(result.workload[0].thinkTime.text).toBe("As recorded (limit 3 s)");
   });
 
-  test("transaction summary (seconds) full and steady", () => {
+  test("internal ids are named from sum_data (not by RawData.map id)", () => {
+    expect(result.transactions.map((t) => [t.id, t.name, t.inMap])).toEqual([[10, "T01_LOGIN", true], [11, "T02_SUBMIT", true]]);
+    expect(result.txNameResolution.unresolved).toEqual([]);
+    expect(result.txNameResolution.method).toMatch(/per-transaction graph/);
+  });
+
+  test("transaction summary: passed timed, failed counted", () => {
     const login = result.transactions.find((t) => t.name === "T01_LOGIN");
     expect(login.full.count).toBe(6);
-    expect(login.full.min).toBeCloseTo(1.001, 9);
-    expect(login.full.max).toBeCloseTo(1.202, 9);
-    expect(login.steady.count).toBe(6); // all samples between t+21 and t+307
+    expect(login).toMatchObject({ pass: 6, fail: 1, negativeRtClamped: 1 });
+    expect(login.failPct).toBeCloseTo(100 / 7, 9);
+    expect(login.full.min).toBeCloseTo(1.001, 6); // end − start of unix timestamps: ~0.2 µs resolution
+    expect(login.full.avg).toBeCloseTo(1.1015, 6);
+    expect(login.full.max).toBeCloseTo(1.202, 6);
+    expect(login.steady.count).toBe(6);
+    expect(login.steady.fail).toBe(1);
     expect(login.scripts).toEqual(["Script_A_1"]);
     expect(login.inSla).toBe(true);
     expect(login.maxPerVuserIteration).toBe(1);
-    const unknown = result.transactions.find((t) => t.id === 21);
-    expect(unknown).toMatchObject({ name: "TX_21", inMap: false, negativeRtClamped: 1 });
+    expect(result.transactions.find((t) => t.name === "T02_SUBMIT").recordTypes).toEqual({ 12586944: 5, 12586945: 1 });
+    expect(result.dataPoints).toEqual([{ id: 2, name: "HTTP_200", count: 6, sum: 6 }]);
+    expect(result.totals).toMatchObject({ samples: 12, pass: 12, fail: 1 });
   });
 
-  test("self-checks flag what Phase 0 must confirm", () => {
+  test("self-checks", () => {
     const byId = (id) => result.selfCheck.filter((c) => c.id === id);
     expect(byId("timezone")[0].status).toBe("ok");
     expect(byId("eve-sync")[0].status).toBe("ok");
-    expect(byId("eve-f40")[0].status).toBe("ok");
-    expect(byId("eve-tx-ids").map((c) => c.text)).toEqual(expect.arrayContaining([expect.stringMatching(/not in RawData.map/), expect.stringMatching(/SLAConfiguration/)]));
+    expect(byId("eve-tx")[0].text).toMatch(/13 transaction records \(12 passed, 1 failed\)/);
+    expect(byId("eve-tx-layout")[0].status).toBe("ok");
+    expect(byId("tx-names")[0].status).toBe("ok");
+    expect(byId("eve-datapoints")[0].data).toEqual({ HTTP_200: 6 });
     expect(byId("eve-vusers")[0].status).toBe("ok");
     expect(byId("negative-rt")).toHaveLength(1);
     expect(result.selfCheck.some((c) => c.status === "fail")).toBe(false);
     expect(result.errors.total).toBe(1);
+  });
+
+  test("without sum_data the internal ids stay unnamed and the self-check fails", async () => {
+    const run = sampleRun();
+    delete run["Res9/sum_data/sum_dat.ini"];
+    delete run["Res9/sum_data/graph_4.dat"];
+    const r = await analyse(memorySource(run));
+    expect(r.transactions.map((t) => t.name)).toEqual(["TX_10", "TX_11"]);
+    expect(r.selfCheck.find((c) => c.id === "tx-names").status).toBe("fail");
   });
 
   test("redact removes host names, script paths, error text and ASCII in hex examples", () => {

@@ -100,7 +100,7 @@ describe("charts, HTML (PDF) and Word reports", () => {
       const ch = echarts.init(null, null, { renderer: "svg", ssr: true, width: 800, height: 300 });
       try { ch.setOption(c.option); expect(ch.renderToSVGString()).toMatch(/^<svg/); } finally { ch.dispose(); }
     }
-    expect(charts.distribution(m, 1, { static: true }).series[0].data.reduce((a, b) => a + b, 0)).toBe(6);
+    expect(charts.distribution(m, 10, { static: true }).series[0].data.reduce((a, b) => a + b, 0)).toBe(6);
     expect(charts.errorsOverTime(m, {})).toBeNull(); // no SqliteDb.db in the sample
   });
 

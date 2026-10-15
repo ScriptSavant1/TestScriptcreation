@@ -87,6 +87,7 @@
         t = {
           id, w: welford(), h: hist.create(0.01),
           rt: exact ? grow(Float64Array) : null, t: exact ? grow(Float32Array) : null,
+          fails: 0, bf: new Uint32Array(nb),
           b: { n: new Uint32Array(nb), mean: new Float64Array(nb), m2: new Float64Array(nb),
                min: new Float64Array(nb).fill(Infinity), max: new Float64Array(nb).fill(-Infinity), h: new Array(nb) },
           lg: new Map(),
@@ -101,6 +102,7 @@
       const nn = Math.max(bi + 1, Math.ceil(nb * 1.5));
       const ext = (a, Ctor, fill) => { const b = new Ctor(nn); if (fill !== undefined) b.fill(fill); b.set(a); return b; };
       for (const t of txs.values()) {
+        t.bf = ext(t.bf, Uint32Array);
         t.b.n = ext(t.b.n, Uint32Array); t.b.mean = ext(t.b.mean, Float64Array); t.b.m2 = ext(t.b.m2, Float64Array);
         t.b.min = ext(t.b.min, Float64Array, Infinity); t.b.max = ext(t.b.max, Float64Array, -Infinity);
         t.b.h.length = nn;
@@ -114,11 +116,13 @@
       for (const t of txs.values()) { t.rt = null; t.t = null; }
     }
 
-    function add(ts, iter, rt, vuser, id) {
+    /** One transaction instance. ts = end time (unix s), rt in ms. Failed ones are counted, not timed (as LRE does). */
+    function add(ts, iter, rt, vuser, id, failed) {
       const rel = ts - startUtc;
       const bi = Math.max(0, Math.floor(rel / bucketSec));
       ensureBuckets(bi);
       const t = tx(id);
+      if (failed) { t.fails++; t.bf[bi]++; return; }
       if (rel < minRel) minRel = rel;
       if (rel > maxRel) maxRel = rel;
 
@@ -237,7 +241,7 @@
           const q = t.b.h[b].quantiles([50, 90, 95, 99]);
           p50.push(q[0] / 1000); p90.push(q[1] / 1000); p95.push(q[2] / 1000); p99.push(q[3] / 1000);
         }
-        out[id] = { count, avg, min, max, p50, p90, p95, p99 };
+        out[id] = { count, fail: Array.from(t.bf.subarray(0, nb)), avg, min, max, p50, p90, p95, p99 };
       }
       return { bucketSec, buckets: nb, tx: out };
     }
@@ -331,6 +335,14 @@
       firstRelSec: Number.isFinite(s.minRel) ? s.minRel : null, lastRelSec: Number.isFinite(s.maxRel) ? s.maxRel : null,
       txIds: () => [...txs.keys()].sort((a, b) => a - b),
       count: (id) => (txs.get(id) ? txs.get(id).w.n : 0),
+      failCount: (id, win) => {
+        const t = txs.get(id);
+        if (!t) return 0;
+        if (!win) return t.fails;
+        let n = 0;
+        for (let b = bOf(win.start); b <= Math.min(nb - 1, bOf(win.end)); b++) n += t.bf[b];
+        return n;
+      },
       summary, apdexCounts, timeline, perLg, vuserList, vuserHeat, latencyHeat, distribution, countIn,
     };
   }

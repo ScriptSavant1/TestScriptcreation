@@ -5,6 +5,20 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — Results Analyser transaction figures (BUG-059)
+
+- RawData.eve transactions are now read from the transaction records (sub-types 12586944,
+  12586945, 12619721), not from sub-type 762 (per-request data points). Response time is the
+  record's end minus start time, in seconds. Counts, response times, percentiles, TPS, SLA,
+  Apdex and insights were all wrong before this fix.
+- Transaction names: RawData.eve uses internal ids that differ from RawData.map. Names are now
+  matched against LRE's per-transaction response-time graph in sum_data (count, mean, max);
+  unmatched ids are reported in the self-checks instead of being guessed.
+- Pass / fail come from the transaction records (failed records counted, not timed, as LRE does);
+  sum_data pass/fail graphs are used as a cross-check.
+- sum_data: the "Name,measurementId" measurement format is now read.
+- Validation tab: transaction-name matching table and data-point (HTTP code) counts.
+
 ### Added — Results Analyser (LRE raw results), new portal menu "Results"
 
 - New separate module `lre-results-analyser/`: analyses a LoadRunner Enterprise run from its raw

@@ -133,6 +133,7 @@
     children.push(H1("Appendix — method and validation"));
     children.push(table(["Item", "Method"], [
       ["Source", "RawData.eve transaction records; scenario files (.lrr, RunInfo.ini, _t_rep.eve, .usp, .cfg, .usr); SqliteDb.db; sum_data"],
+        ["Transactions", m.method.transactionSource || "-"], ["Response time", m.method.responseTimeUnit], ["Transaction names", m.method.transactionNames || "-"],
       ["Percentiles", m.method.percentile], ["Standard deviation", m.method.stdDev], ["Steady state", m.method.steadyState],
       ["TPS", m.method.tps], ["Pass / fail", m.method.passFail], ["Negative response times", m.method.negativeResponseTimes],
       ["Time zone", `${fmt.zone(off)} — ${m.meta.localOffsetSource}`],
