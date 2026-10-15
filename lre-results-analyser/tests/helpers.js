@@ -4,23 +4,31 @@
  */
 "use strict";
 
-/** One sub-type 762 transaction record (64 bytes, big-endian) per SPEC §3.4. */
-function txRecord({ ts, iter, rtMs, vuser, txId, f40 = 0, f60 = 0 }) {
+const TX_LEN = { 12586944: 76, 12586945: 84, 12619721: 108 };
+
+/**
+ * One transaction record (docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md §4): ts = end time (unix s),
+ * start = ts − rt. sub 12586944 = completed, 12586945 = variant, 12619721 = failed.
+ */
+function txRecord({ ts, iter, rtMs, vuser, txId, sub = 12586944 }) {
+  const len = TX_LEN[sub] || 76;
+  const b = Buffer.alloc(len);
+  b.writeUInt32BE(len, 0); b.writeUInt32BE(3, 4); b.writeUInt32BE(0, 8); b.writeUInt32BE(len - 12, 12);
+  b.writeUInt32BE(0, 16); b.writeUInt32BE(len - 20, 20); b.writeUInt32BE(sub, 24);
+  b.writeDoubleBE(ts - rtMs / 1000, 28);
+  b.writeDoubleBE(ts, 36);
+  b.writeUInt32BE(Math.max(0, Math.round(rtMs)), 44);
+  b.writeUInt32BE(txId, 52); b.writeUInt32BE(vuser, 56); b.writeUInt32BE(12, 60); b.writeUInt32BE(1, 64); b.writeUInt32BE(iter, 68);
+  if (sub === 12619721) b.writeUInt32BE(0xffffffff, 76);
+  return b;
+}
+
+/** One data-point record (sub-type 762, 64 bytes): +28 ts · +36 seq · +44 value · +52 vuser · +56 data-point id. */
+function dataPoint({ ts, vuser, dpId, value = 1, seq = 0 }) {
   const b = Buffer.alloc(64);
-  b.writeUInt32BE(64, 0);
-  b.writeUInt32BE(3, 4);
-  b.writeUInt32BE(1, 8);
-  b.writeUInt32BE(52, 12);
-  b.writeUInt32BE(1, 16);
-  b.writeUInt32BE(44, 20);
-  b.writeUInt32BE(762, 24);
-  b.writeDoubleBE(ts, 28);
-  b.writeUInt32BE(iter, 36);
-  b.writeUInt32BE(f40, 40);
-  b.writeDoubleBE(rtMs, 44);
-  b.writeUInt32BE(vuser, 52);
-  b.writeUInt32BE(txId, 56);
-  b.writeUInt32BE(f60, 60);
+  b.writeUInt32BE(64, 0); b.writeUInt32BE(3, 4); b.writeUInt32BE(1, 8); b.writeUInt32BE(52, 12); b.writeUInt32BE(1, 16); b.writeUInt32BE(44, 20);
+  b.writeUInt32BE(762, 24); b.writeDoubleBE(ts, 28); b.writeUInt32BE(seq, 36); b.writeDoubleBE(value, 44);
+  b.writeUInt32BE(vuser, 52); b.writeUInt32BE(dpId, 56);
   return b;
 }
 
@@ -58,19 +66,25 @@ function feedRandom(decoder, buf, seed = 7) {
 
 const START = 1700000000;
 
+/** LRE's per-transaction response-time graph (name, measurement id) — the bridge to the internal ids. */
+const SUM_DAT_INI_BASE = ["[General]", `ScenarioStartTime=${START}`, "[graph_4]", "GraphType=es_tr_response_time", "Measurement_0=T01_LOGIN,51", "Measurement_1=T02_SUBMIT,52"].join("\r\n");
+const GRAPH_4_DAT = `51 ${START + 120} 1.1015 6 1.001 1.202 0.07\n52 ${START + 125} 2.01 6 2.0 2.02 0.008\n`;
+
 /** A small, complete results folder as {path: Buffer|string}. 2 VUsers, 2 LGs, 3 iterations, 2 transactions. */
 function sampleRun() {
   const recs = [header()];
+  // internal ids 10 / 11 (≠ RawData.map ids 1 / 2 — names come from sum_data graph_4, as in real runs)
   // VUser 1 runs at t+10, VUser 2 at t+15 → steady t+15 … first exit t+400
   for (let it = 0; it < 3; it++) {
     for (const v of [1, 2]) {
       const base = START + 20 + it * 100 + v;
-      recs.push(txRecord({ ts: base, iter: it, rtMs: 1000 + it * 100 + v, vuser: v, txId: 1 }));
-      recs.push(txRecord({ ts: base + 5, iter: it, rtMs: 2000 + it * 10, vuser: v, txId: 2 }));
+      recs.push(txRecord({ ts: base, iter: it, rtMs: 1000 + it * 100 + v, vuser: v, txId: 10 }));
+      recs.push(txRecord({ ts: base + 5, iter: it, rtMs: 2000 + it * 10, vuser: v, txId: 11, sub: it === 0 && v === 1 ? 12586945 : 12586944 }));
+      recs.push(dataPoint({ ts: base + 1, vuser: v, dpId: 2, seq: it }));
     }
-    recs.push(otherRecord(72, 766, 0x41)); // monitoring record with ASCII payload ("AAAA…")
+    recs.push(otherRecord(72, 766, 0x41)); // record with ASCII payload ("AAAA…")
   }
-  recs.push(txRecord({ ts: START + 30, iter: 0, rtMs: -5, vuser: 1, txId: 21 })); // unknown id, negative RT
+  recs.push(txRecord({ ts: START + 30, iter: 3, rtMs: -5, vuser: 1, txId: 10, sub: 12619721 })); // failed, negative RT
   const eve = Buffer.concat(recs);
 
   const trep = [
@@ -102,6 +116,8 @@ function sampleRun() {
     "Res9/RawData.map": '[DATA_POINT]\r\n1="tcp_connect"\r\n2="HTTP_200"\r\n[END_TRANSACTION]\r\n2="T02_SUBMIT"\r\n1="T01_LOGIN"\r\n',
     "Res9/SLAConfiguration.xml": '\ufeff<?xml version="1.0"?><SLA Version="1.0"><TxList><Tx>T01_LOGIN</Tx><Tx>Main_Transaction</Tx></TxList><SLARules><TrackingPeriodType>Default</TrackingPeriodType><TrackingPeriodValue></TrackingPeriodValue></SLARules></SLA>',
     "Res9/collate.txt": "[Collate Recovery]\r\nCompleted=1\r\n[Hosts]\r\nlg1.example.test=D:\\x\\lg1.eve\r\nlg2.example.test=D:\\x\\lg2.eve\r\n",
+    "Res9/sum_data/sum_dat.ini": SUM_DAT_INI_BASE,
+    "Res9/sum_data/graph_4.dat": GRAPH_4_DAT,
     "Res9/script_a_1.usp": "[RunLogicRunRoot]\r\nRunLogicPaceType=Const\r\nRunLogicPaceConstTime=100\r\nRunLogicNumOfIterations=1\r\n",
     "Res9/script_a_1.cfg": '[DevWebYaml]\r\nyaml="{"thinkTime":{"type":"asRecorded","limit":3}}"\r\n',
     "Res9/script_a_1.cfg.bak": "[ThinkTime]\r\nOptions=NOTHINK\r\n",
@@ -124,4 +140,4 @@ function memorySource(filesMap, { chunk = 50, sqliteRows = null } = {}) {
   };
 }
 
-module.exports = { txRecord, otherRecord, header, feedRandom, sampleRun, memorySource, START };
+module.exports = { txRecord, dataPoint, SUM_DAT_INI_BASE, otherRecord, header, feedRandom, sampleRun, memorySource, START };

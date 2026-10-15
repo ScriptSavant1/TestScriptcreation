@@ -241,7 +241,7 @@
     title(ws, "Method & Validation", "How every figure is computed, and the self-checks run on the raw files");
     let r = kv(ws, 4, [
       ["Engine", `LRE Results Analyser ${m.engineVersion}`],
-      ["Response-time source", "RawData.eve, transaction records (sub-type 762); " + m.method.responseTimeUnit],
+      ["Transactions", m.method.transactionSource || "-"], ["Response time", m.method.responseTimeUnit], ["Transaction names", m.method.transactionNames || "-"],
       ["Percentiles", m.method.percentile], ["Standard deviation", m.method.stdDev],
       ["Steady state", m.method.steadyState], ["Analysis window used", m.window ? `t+${fmt.hms(m.window.start)} → t+${fmt.hms(m.window.end)}${m.window.detected ? " (detected)" : " (user-set)"}` : "-"],
       ["Sample time", m.method.sampleTime], ["Negative response times", m.method.negativeResponseTimes],

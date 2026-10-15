@@ -2,10 +2,11 @@
  * dat.js — sum_data/sum_dat.ini + graph_N.dat (LRE's online graphs).
  *
  * graph_N.dat lines: <measurementId> <unixTs> <avg> <count> <min> <max> <stddev>
- * sum_dat.ini: [graph_N] GraphType=…, plus measurement entries. The key layout for measurement
- * names is not documented, so it is read tolerantly: any key containing "Measurement" whose value
- * holds a number and/or a name (e.g. "48", "48,SC01_LOGIN", "SC01_LOGIN") is collected by index;
- * IDs seen in the .dat but not named are shown as "id N".
+ * sum_dat.ini: [graph_N] GraphType=…, plus measurement entries. The key layout is read tolerantly:
+ * any key containing "Measurement" whose value holds a name and/or an id — "SC01_LOGIN,48" (LRE
+ * 2026, name first), "48,SC01_LOGIN", "48" or "SC01_LOGIN" — is collected by index. The graph
+ * type is taken from a GraphType-like key, or from any value in the section (or a "graph_N=" key
+ * elsewhere) that is a known type. IDs seen in the .dat but not named are shown as "id N".
  *
  * Series are resampled onto the run's time buckets: mean of avg, max of max, and Σ avg·count.
  */
@@ -37,26 +38,35 @@
     throughput: "throughput",
   };
 
+  const isType = (v) => Object.prototype.hasOwnProperty.call(ROLES, String(v || "").trim().toLowerCase());
+
   function parseIni(input) {
     const p = ini.parse(input || "");
     const graphs = [];
+    const listed = new Map(); // "graph_N=<type>" listed in some other section
+    for (const sec of Object.values(p.sections)) {
+      for (const [k, v] of sec.entries) { const g = /^graph_?(\d+)$/i.exec(k); if (g && isType(v)) listed.set(+g[1], v.trim()); }
+    }
     for (const name of Object.keys(p.sections)) {
       const m = /^graph_(\d+)$/i.exec(name);
       if (!m) continue;
       const sec = p.sections[name];
-      const type = sec.values.GraphType || sec.values.graphtype || Object.entries(sec.values).find(([k]) => /graphtype/i.test(k))?.[1] || "";
+      const typeKey = Object.entries(sec.values).find(([k]) => /graph_?type|^type$/i.test(k));
+      const type = String((typeKey && typeKey[1]) || Object.values(sec.values).find(isType) || listed.get(+m[1]) || "").trim();
       const byIdx = new Map();
       for (const [k, v] of sec.entries) {
         if (!/measurement/i.test(k)) continue;
         const idx = (/(\d+)\s*$/.exec(k) || [])[1] || k;
         const e = byIdx.get(idx) || {};
-        const mm = /^\s*(\d+)\s*[,;:=\s]\s*(.+)$/.exec(v);
-        if (mm) { e.id = +mm[1]; e.name = mm[2].trim(); }
+        const nameFirst = /^\s*(.+?)\s*[,;]\s*(\d+)\s*$/.exec(v);
+        const idFirst = /^\s*(\d+)\s*[,;:=\s]\s*(.+?)\s*$/.exec(v);
+        if (nameFirst && !/^\d+$/.test(nameFirst[1])) { e.name = nameFirst[1]; e.id = +nameFirst[2]; }
+        else if (idFirst) { e.id = +idFirst[1]; e.name = idFirst[2]; }
         else if (/^\s*\d+\s*$/.test(v)) { if (/id/i.test(k) || e.id == null) e.id = +v; else e.name = v; }
         else e.name = v;
         byIdx.set(idx, e);
       }
-      graphs.push({ n: +m[1], type, role: ROLES[String(type).toLowerCase()] || null, measurements: [...byIdx.values()].filter((e) => e.id != null || e.name) });
+      graphs.push({ n: +m[1], type, role: ROLES[type.toLowerCase()] || null, measurements: [...byIdx.values()].filter((e) => e.id != null || e.name) });
     }
     graphs.sort((a, b) => a.n - b.n);
     return {
@@ -79,7 +89,7 @@
       if (!Number.isFinite(id) || !Number.isFinite(ts) || !Number.isFinite(avg)) continue;
       let m = out.get(id);
       if (!m) {
-        m = { id, rows: 0, cumulativeRows: 0, sumAvg: 0, sumAvgCount: 0, max: -Infinity, sAvg: new Float64Array(buckets), nAvg: new Uint32Array(buckets),
+        m = { id, rows: 0, cumulativeRows: 0, sumAvg: 0, sumAvgCount: 0, sumCount: 0, maxCol: -Infinity, max: -Infinity, sAvg: new Float64Array(buckets), nAvg: new Uint32Array(buckets),
               bMax: new Float64Array(buckets).fill(NaN), bSum: new Float64Array(buckets), prevTs: null, deltas: [] };
         out.set(id, m);
       }
@@ -89,6 +99,8 @@
       if (cnt === -1) m.cumulativeRows++;
       m.sumAvg += avg;
       m.sumAvgCount += cnt > 0 ? avg * cnt : avg;
+      if (cnt > 0) m.sumCount += cnt;
+      if (Number.isFinite(mx) && mx > m.maxCol) m.maxCol = mx;
       const peak = Number.isFinite(mx) ? Math.max(mx, avg) : avg; // some graphs leave min/max at 0
       if (peak > m.max) m.max = peak;
       const b = Math.floor((ts - startUtc) / bucketSec);
@@ -102,6 +114,9 @@
       m.maxSeries = Array.from(m.bMax, (v) => (Number.isNaN(v) ? null : v));
       m.sumSeries = Array.from(m.bSum);
       m.mean = m.rows ? m.sumAvg / m.rows : null;
+      // per-sample totals for response-time graphs (avg and sample count per interval)
+      m.weightedMean = m.sumCount ? m.sumAvgCount / m.sumCount : null;
+      if (m.maxCol === -Infinity) m.maxCol = null;
       if (m.max === -Infinity) m.max = null;
       const d = m.deltas.sort((a, b) => a - b);
       m.step = d.length ? d[(d.length - 1) >> 1] : null; // typical sampling interval (s)

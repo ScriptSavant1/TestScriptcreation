@@ -17,17 +17,17 @@
   if (typeof module === "object" && module.exports) {
     module.exports = factory(require("./files"), require("./scenario"), require("./trep"), require("./runlogic"),
       require("./rawmap"), require("./sla"), require("./collate"), require("./eve"), require("./stats"), require("./errors"),
-      require("./collector"), require("./dat"), require("./insights"));
+      require("./collector"), require("./dat"), require("./insights"), require("./txnames"));
   } else {
     const L = root.LreRA;
     L.analyse = factory(L.files, L.scenario, L.trep, L.runlogic, L.rawmap, L.sla, L.collate, L.eve, L.stats, L.errors,
-      L.collector, L.dat, L.insights);
+      L.collector, L.dat, L.insights, L.txnames);
   }
 })(typeof self !== "undefined" ? self : this, function (files, scenario, trep, runlogic, rawmap, sla, collate, eve, stats, errors,
-  collector, dat, insights) {
+  collector, dat, insights, txnames) {
   "use strict";
 
-  const ENGINE_VERSION = "1.0.0";
+  const ENGINE_VERSION = "1.1.0";
 
   async function readOpt(source, path) {
     return path ? source.readBytes(path) : null;
@@ -73,8 +73,8 @@
     let decoded = null;
     if (f.rawDataEve) {
       const dec = eve.createDecoder({
-        knownTxIds: map.transactions.size ? new Set(map.transactions.keys()) : null,
-        onSample: (ts, iter, rt, vuser, id) => col.add(ts, iter, rt, vuser, id),
+        // transaction records: response time = end − start (seconds); the collector works in ms
+        onTransaction: (endTs, iter, rtSec, vuser, id, failed) => col.add(endTs, iter, rtSec * 1000, vuser, id, failed),
       });
       const total = source.size ? await source.size(f.rawDataEve) : null;
       let done = 0;
@@ -107,26 +107,28 @@
       scriptOfTx.get(t).push(s.key);
     }
     const evTx = new Map(((decoded && decoded.transactions) || []).map((t) => [t.id, t]));
-    const txNames = new Map(store.txIds().map((id) => [id, map.txName(id)]));
-    const passFail = calibratePassFail(sum, txNames, store, check);
+    // internal ids (+52) → names: matched against LRE's per-transaction graph, never looked up blindly
+    const resolution = resolveNames(store, map, sum);
+    const txNames = new Map(store.txIds().map((id) => [id, resolution.names.get(id) || `TX_${id}`]));
+    const passFail = crossCheckSumData(sum, txNames, store, resolution, check);
 
     const transactions = store.txIds().map((id) => {
       const name = txNames.get(id);
       const e = evTx.get(id) || {};
-      const pf = passFail.get(id) || {};
+      const pass = store.count(id), fail = store.failCount(id);
       return {
-        id, name, inMap: map.transactions.has(id), scripts: scriptOfTx.get(name) || [],
+        id, name, inMap: resolution.names.has(id), scripts: scriptOfTx.get(name) || [],
         inSla: slaInfo ? slaInfo.transactions.includes(name) : null,
         full: Object.assign(store.summary(id, null), { tps: durationSec ? store.count(id) / durationSec : null }),
         steady: null, // filled by applySettings
-        pass: pf.pass != null ? pf.pass : null, fail: pf.fail != null ? pf.fail : null,
-        failPct: pf.pass != null && pf.fail != null && pf.pass + pf.fail ? (pf.fail / (pf.pass + pf.fail)) * 100 : null,
+        pass, fail, failPct: pass + fail ? (fail / (pass + fail)) * 100 : null,
+        sumDataPass: (passFail.get(id) || {}).pass != null ? passFail.get(id).pass : null,
         perLg: store.perLg(id),
         distribution: store.distribution(id, 60),
         negativeRtClamped: e.negativeRt || 0,
         vuserIterations: e.vuserIterations || 0, maxPerVuserIteration: e.maxPerVuserIteration || 0,
         firstRelSec: e.tsMin != null && startUtc ? e.tsMin - startUtc : null, lastRelSec: e.tsMax != null && startUtc ? e.tsMax - startUtc : null,
-        f40f60: e.f40f60 || {},
+        recordTypes: e.bySubType || {},
       };
     });
 
@@ -169,15 +171,17 @@
         percentile: store.method === "exact" ? "nearest-rank on every sample (exact)" : "nearest-rank on log histograms (≤ 0.5 % relative error)",
         percentileMethod: store.method,
         stdDev: "population (÷ n)",
-        responseTimeUnit: "seconds (RawData.eve stores milliseconds)",
+        responseTimeUnit: "seconds — end minus start timestamp of each transaction record",
+        transactionSource: `RawData.eve transaction records (sub-types ${eve.TX_FAMILY.join(", ")}); failed = ${eve.FAILED_SUBTYPES.join(", ")}; response-time statistics use passed transactions, as LRE does`,
+        transactionNames: resolution.method,
         steadyState: "last VUser running → first VUser exit (from _t_rep.eve); can be adjusted",
-        sampleTime: "record timestamp at +28 (unix s)",
+        sampleTime: "transaction end time (unix s)",
         negativeResponseTimes: "clamped to 0 and counted",
         tps: "count ÷ window length in seconds",
         bucketSec: bs,
         exactLimit: store.exactLimit,
         totalSamples: store.totalSamples,
-        passFail: passFail.source,
+        passFail: "RawData.eve (failed-transaction records)" + (passFail.source ? "; " + passFail.source : ""),
       },
       files: { root: found.root, used: f, cfgs: found.cfgs, usps: found.usps, usrs: found.usrs, sumDataGraphs: found.graphs.length },
       meta,
@@ -200,16 +204,18 @@
       latencyHeat: store.latencyHeat(store.txIds().filter((id) => !isWrapper(txNames.get(id), transactions)), 240, 40),
       errors: errs && { total: errs.total, summary: errs.summary, rows: errs.rows.slice(0, 20000), rowsTruncated: errs.rows.length > 20000 },
       sumData: sum ? { graphs: sum.graphs } : null,
+      txNameResolution: { method: resolution.method, assumed: !!resolution.assumed, unresolved: resolution.unresolved, matches: resolution.matches },
+      dataPoints: decoded ? decoded.dataPoints.map((d) => ({ id: d.id, name: map.dataPoints.get(d.id) || `id ${d.id}`, count: d.count, sum: d.sum })) : [],
       eve: decoded && {
         bytesRead: decoded.bytesRead, records: decoded.records, trailingBytes: decoded.trailingBytes, stopped: decoded.stopped,
-        subTypes: decoded.subTypes, signatures: decoded.signatures, tx: decoded.tx,
+        subTypes: decoded.subTypes, signatures: decoded.signatures, tx: decoded.tx, lookalikes: decoded.lookalikes,
       },
       selfCheck: checks,
       settings: null, window: null, insights: null,
     };
     Object.defineProperty(model, "store", { value: store, enumerable: false, writable: true });
 
-    selfChecks(check, { meta, life, map, slaInfo, decoded, transactions, scripts, steadyRel, store });
+    selfChecks(check, { meta, life, map, slaInfo, decoded, transactions, scripts, steadyRel, store, resolution });
     applySettings(model, opts.settings || {});
     return model;
   }
@@ -237,6 +243,7 @@
     for (const t of model.transactions) {
       t.steady = store && win ? store.summary(t.id, win) : { count: 0, min: null, avg: null, max: null, stdDev: null, p: {} };
       t.steady.tps = winSec ? t.steady.count / winSec : null;
+      t.steady.fail = store && win ? store.failCount(t.id, win) : null;
       const useDefault = slaS.defaultSec != null && slaS.defaultSec !== "" && (t.inMap || !anyNamed);
       const thr = slaS.perTx[t.name] != null && slaS.perTx[t.name] !== "" ? Number(slaS.perTx[t.name]) : useDefault ? Number(slaS.defaultSec) : null;
       if (thr != null && Number.isFinite(thr) && t.steady.count) {
@@ -308,7 +315,7 @@
     let info;
     try { info = dat.parseIni(await source.readBytes(found.files.sumDatIni)); }
     catch (e) { check("warn", "sum-data", `Could not read sum_dat.ini: ${e.message || e}`); return null; }
-    const wanted = new Set(["lgHealth", "txPass", "txFail", "httpCodes", "bytesReceived", "bytesSent", "connections", "connectionsPerSec", "hits", "throughput", "errors", "vuserErrors"]);
+    const wanted = new Set(["lgHealth", "txPass", "txFail", "txResponse", "httpCodes", "bytesReceived", "bytesSent", "connections", "connectionsPerSec", "hits", "throughput", "errors", "vuserErrors"]);
     const byN = new Map(found.graphs.map((p) => [parseInt(/graph_(\d+)\.dat$/i.exec(p)[1], 10), p]));
     const series = [];
     for (const g of info.graphs) {
@@ -321,7 +328,8 @@
       let k = 0;
       const ms = [...parsed.values()].sort((a, b) => a.id - b.id).map((m) => ({
         id: m.id, name: names.get(m.id) || byIdx[k++] || `id ${m.id}`, rows: m.rows, cumulativeRows: m.cumulativeRows, step: m.step,
-        sumAvg: m.sumAvg, sumAvgCount: m.sumAvgCount, mean: m.mean, max: m.max, avg: m.avg, maxSeries: m.maxSeries,
+        sumAvg: m.sumAvg, sumAvgCount: m.sumAvgCount, sumCount: m.sumCount, weightedMean: m.weightedMean, maxCol: m.maxCol,
+        mean: m.mean, max: m.max, avg: m.avg, maxSeries: m.maxSeries,
       }));
       series.push({ n: g.n, type: g.type, role: g.role, measurements: ms });
     }
@@ -340,55 +348,57 @@
     return { graphs: info.graphs.map((g) => ({ n: g.n, type: g.type, role: g.role, measurements: g.measurements.length })), series, lgHealth: [...hosts.values()] };
   }
 
+  /** Internal transaction ids → names (txnames.js), using LRE's per-transaction response-time graph. */
+  function resolveNames(store, map, sum) {
+    const ids = store.txIds().map((id) => {
+      const s = store.summary(id, null);
+      return { id, count: s.count, mean: s.avg, max: s.max };
+    });
+    let graph = [];
+    const g = sum && sum.series.find((x) => x.role === "txResponse");
+    if (g) graph = g.measurements.filter((m) => m.sumCount > 0 && m.name && !/^id \d+$/.test(m.name))
+      .map((m) => ({ name: m.name.replace(/^.*:/, ""), count: m.sumCount, mean: m.weightedMean, max: m.maxCol }));
+    return txnames.resolve({ ids, graph, mapNames: map.transactions });
+  }
+
   /**
-   * Pass/fail counts per transaction from sum_data (tprange_pass / tprange_fail). LRE's graph values
-   * are rates, so the conversion to counts is calibrated: the formula that best reproduces the
-   * RawData.eve counts on the PASS graph (within 2 %) is then applied to the FAIL graph.
+   * Cross-check against LRE's own sum_data counts: pass graph (tprange_pass) totals per name and
+   * failed transactions (tprange_fail). Counts are reported as-is; the graph values are rates, so
+   * the conversion that reproduces the RawData.eve pass counts best is used and its error shown.
    */
-  function calibratePassFail(sum, txNames, store, check) {
+  function crossCheckSumData(sum, txNames, store, resolution, check) {
     const out = new Map();
-    out.source = "not available (no sum_data pass/fail graphs)";
+    out.source = null;
     if (!sum) return out;
     const passG = sum.series.find((s) => s.role === "txPass");
     const failG = sum.series.find((s) => s.role === "txFail");
-    if (!passG) return out;
-    const names = [...txNames.entries()];
-    const match = (mName) => {
+    const byName = new Map([...txNames.entries()].filter(([id]) => resolution.names.has(id)).map(([id, n]) => [n.toLowerCase(), id]));
+    const idOf = (mName) => {
       const n = String(mName || "").toLowerCase();
-      const hit = names.find(([, t]) => t.toLowerCase() === n) || names.find(([, t]) => n.endsWith(":" + t.toLowerCase()) || n.endsWith(t.toLowerCase())) ||
-        names.find(([, t]) => n.includes(t.toLowerCase()));
-      return hit ? hit[0] : null;
+      return byName.get(n) != null ? byName.get(n) : byName.get(n.replace(/^.*:/, ""));
     };
-    const formulas = {
-      "Σ avg×count": (m) => m.sumAvgCount,
-      "Σ avg": (m) => m.sumAvg,
-      "Σ avg×interval": (m) => m.sumAvg * (m.step || 1),
-    };
-    let best = null;
-    for (const [fname, fn] of Object.entries(formulas)) {
-      let err = 0, tot = 0, n = 0;
-      for (const m of passG.measurements) {
-        const id = match(m.name);
-        if (id == null) continue;
-        const c = store.count(id);
-        err += Math.abs(fn(m) - c); tot += c; n++;
+    if (passG && byName.size) {
+      const formulas = { "Σ avg×count": (m) => m.sumAvgCount, "Σ avg": (m) => m.sumAvg, "Σ avg×interval": (m) => m.sumAvg * (m.step || 1) };
+      let best = null;
+      for (const [fname, fn] of Object.entries(formulas)) {
+        let err = 0, tot = 0, n = 0;
+        for (const m of passG.measurements) { const id = idOf(m.name); if (id == null) continue; const c = store.count(id); err += Math.abs(fn(m) - c); tot += c; n++; }
+        if (n && tot && (!best || err / tot < best.err)) best = { fname, fn, err: err / tot, n };
       }
-      if (n && tot && (!best || err / tot < best.err)) best = { fname, fn, err: err / tot, n };
+      if (best) {
+        for (const m of passG.measurements) { const id = idOf(m.name); if (id != null) out.set(id, { pass: Math.round(best.fn(m)) }); }
+        out.source = `sum_data pass graph agrees within ${(best.err * 100).toFixed(2)} % ("${best.fname}")`;
+        check(best.err <= 0.02 ? "ok" : "warn", "sumdata-pass", `Pass counts vs LRE's pass graph: ${(best.err * 100).toFixed(2)} % apart (${best.n} transactions)`);
+      }
     }
-    if (!best || best.err > 0.02) {
-      check("info", "pass-fail", `sum_data pass graph does not reproduce RawData.eve counts (best: ${best ? best.fname + " off by " + (best.err * 100).toFixed(1) + " %" : "no matching names"}) — pass/fail columns left empty`);
-      return out;
+    if (failG) {
+      const lreFails = {};
+      for (const m of failG.measurements) lreFails[m.name] = Math.round(m.sumAvgCount);
+      const ours = {};
+      for (const [id, n] of txNames) { const f = store.failCount(id); if (f) ours[n] = f; }
+      const same = Object.keys(lreFails).every((k) => (ours[k.replace(/^.*:/, "")] || 0) === lreFails[k]) && Object.keys(ours).every((k) => Object.keys(lreFails).some((l) => l.replace(/^.*:/, "") === k));
+      check(same ? "ok" : "warn", "sumdata-fail", `Failed transactions — RawData.eve ${JSON.stringify(ours)} vs LRE's fail graph ${JSON.stringify(lreFails)}`);
     }
-    for (const m of passG.measurements) { const id = match(m.name); if (id != null) out.set(id, { pass: Math.round(best.fn(m)), fail: 0 }); }
-    if (failG) for (const m of failG.measurements) {
-      const id = match(m.name);
-      if (id == null) continue;
-      const e = out.get(id) || { pass: null };
-      e.fail = Math.round(best.fn(m));
-      out.set(id, e);
-    }
-    out.source = `sum_data tprange graphs, formula "${best.fname}" (reproduces RawData.eve counts within ${(best.err * 100).toFixed(2)} %)`;
-    check("ok", "pass-fail", `Pass/fail from sum_data: ${out.source}`);
     return out;
   }
 
@@ -470,26 +480,26 @@
       `${decoded.records} records read, ${decoded.bytesRead} bytes` + (decoded.trailingBytes ? `; ${decoded.trailingBytes} bytes of an incomplete last record` : "; file ends on a record boundary"));
 
     const t = decoded.tx;
-    check(t.records ? "ok" : "fail", "eve-tx", `${t.records} transaction samples (sub-type ${eve.TX_SUBTYPE})`);
+    check(t.records ? "ok" : "fail", "eve-tx", t.records
+      ? `${t.records} transaction records (${t.records - t.failed} passed, ${t.failed} failed) — by sub-type ${JSON.stringify(t.bySubType)}`
+      : `No transaction records (sub-types ${eve.TX_FAMILY.join(", ")}) found — the layout may differ in this LRE version; see the record types in the Validation tab`);
+    if (Object.keys(t.implausible).length) check("warn", "eve-tx-layout", "Transaction records skipped: timestamps, duration or VUser out of range — layout may differ for these sub-types", t.implausible);
+    else if (t.records) check("ok", "eve-tx-layout", "Every transaction record has plausible start/end times and VUser");
+    if (Object.keys(decoded.lookalikes).length) check("info", "eve-lookalikes", "Other sub-types that also carry two timestamps at +28/+36 (not counted as transactions)", decoded.lookalikes);
+    if (t.f44Checked) check("info", "eve-f44", `Field +44 equals round(response time in ms) in ${((t.f44Agrees / t.f44Checked) * 100).toFixed(1)} % of records (not used for response time)`);
+    if (decoded.dataPoints.length) check("info", "eve-datapoints", `${decoded.dataPoints.reduce((a, d) => a + d.count, 0)} data-point records (sub-type ${eve.DATA_POINT_SUBTYPE}) — counted per data point, not as transactions`,
+      Object.fromEntries(decoded.dataPoints.map((d) => [map.dataPoints.get(d.id) || "id " + d.id, d.count])));
     if (!t.records) return;
-    const lens = Object.keys(t.recLenVariants);
-    check(lens.length === 1 && lens[0] === "64" ? "ok" : "warn", "eve-tx-len", `Transaction record lengths: ${lens.join(", ")}`, t.recLenVariants);
 
-    for (const [k, tally] of [["f40", t.f40], ["f60", t.f60]]) {
-      const vals = Object.keys(tally);
-      check(vals.length === 1 && vals[0] === "0" ? "ok" : "warn", "eve-" + k,
-        vals.length === 1 && vals[0] === "0" ? `Field +${k.slice(1)} is always 0 (no status there)`
-          : `Field +${k.slice(1)} varies — candidate status/record-kind field; compare with LRE pass/fail counts`, tally);
-    }
-
-    if (Object.keys(t.unknownTxIds).length) {
-      check("warn", "eve-tx-ids", "Transaction IDs not in RawData.map [END_TRANSACTION] (shown as TX_<id>)", t.unknownTxIds);
-      const unmapped = slaInfo ? slaInfo.transactions.filter((n) => ![...map.transactions.values()].includes(n)) : [];
-      if (unmapped.length) check("info", "eve-tx-ids", "Names in SLAConfiguration.xml but not in RawData.map (possible match for the unknown IDs)", unmapped);
-    }
-    const seen = new Set(transactions.map((x) => x.id));
-    const silent = [...map.transactions.entries()].filter(([id]) => !seen.has(id)).map(([, n]) => n);
-    if (silent.length) check("warn", "eve-tx-ids", "Transactions in RawData.map with no samples", silent);
+    // transaction names
+    const res = c.resolution;
+    if (res.unresolved.length) check(res.names.size ? "warn" : "fail", "tx-names",
+      `${res.unresolved.length} transaction id(s) could not be named (${res.method}) — shown as TX_<id>`, res.unresolved.slice(0, 50));
+    else check(res.assumed ? "warn" : "ok", "tx-names", `All ${res.names.size} transaction ids named — ${res.method}`);
+    const mapNames = [...map.transactions.values()];
+    const named = new Set(transactions.filter((x) => x.inMap).map((x) => x.name));
+    const missing = mapNames.filter((n) => !named.has(n));
+    if (res.names.size && missing.length) check("warn", "tx-names", "Transactions in RawData.map with no records", missing);
 
     const multi = transactions.filter((x) => x.maxPerVuserIteration > 1).map((x) => `${x.name} (max ${x.maxPerVuserIteration})`);
     check(multi.length ? "info" : "ok", "tx-per-iteration", multi.length
@@ -503,10 +513,9 @@
         ? `${extra.length} VUser ID(s) in RawData.eve not in _t_rep.eve` : `All ${t.vuserIds.length} VUser IDs in RawData.eve match _t_rep.eve`, extra.length ? extra.slice(0, 50) : undefined);
     }
     if (t.negativeRt) check("info", "negative-rt", `${t.negativeRt} negative response times clamped to 0 (clock skew)`);
-    if (t.nonFiniteRt) check("warn", "rt", `${t.nonFiniteRt} samples with a non-numeric response time skipped`);
     if (meta.startUtc && meta.stopUtc) {
       const inside = t.tsMin >= meta.startUtc - 60 && t.tsMax <= meta.stopUtc + 60;
-      check(inside ? "ok" : "warn", "eve-time", `Sample times t+${(t.tsMin - meta.startUtc).toFixed(1)} s … t+${(t.tsMax - meta.startUtc).toFixed(1)} s` + (inside ? " (inside the run)" : " — outside the run start/stop"));
+      check(inside ? "ok" : "warn", "eve-time", `Transaction end times t+${(t.tsMin - meta.startUtc).toFixed(1)} s … t+${(t.tsMax - meta.startUtc).toFixed(1)} s` + (inside ? " (inside the run)" : " — outside the run start/stop"));
     }
     if (scripts.length > 1) {
       const unassigned = transactions.filter((x) => !x.scripts.length).map((x) => x.name);

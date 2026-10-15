@@ -107,7 +107,7 @@ All share global state object `S` (defined in `studio-app.js`).
 |------|---------|
 | `lre-results-analyser/README.md` | How to use (portal + CLI), methods, layout, validation steps |
 | `lre-results-analyser/docs/IMPLEMENTATION-PLAN.md` | Phases 0–6, outputs, architecture (browser-side, nothing uploaded) |
-| `lre-results-analyser/engine/*.js` | UMD engine (`LreRA.*`): parsers, eve decoder, collector/hist (stats store), dat (sum_data), insights, analyse (`analyse()`, `applySettings()`, `redact()`) |
+| `lre-results-analyser/engine/*.js` | UMD engine (`LreRA.*`): parsers, eve decoder (transactions = sub-types 12586944/12586945/12619721, RT = end−start s; 762 = data points), txnames (internal id → name via sum_data graph), collector/hist, dat, insights, analyse (`analyse()`, `applySettings()`, `redact()`) |
 | `lre-results-analyser/report/*.js` | Shared by page + CLI: format, charts (ECharts options), xlsx, docx, html |
 | `lre-results-analyser/web/` | Page (`index.html`, `app.js`, `app.css`), `worker.js`, `zip.js` (ZIP64 streaming), `vendor/` |
 | `lre-results-analyser/cli/analyse.js` | CLI: `<folder|zip> [--xlsx] [--docx] [--html] [--out] [--sla] [--window] [--redact]` |

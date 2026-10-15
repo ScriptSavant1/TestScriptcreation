@@ -362,7 +362,7 @@
           const t = r.t, s = t[which];
           const sla = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td>
             <td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "PASS" : "FAIL"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
-          return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(t.name) + (t.inMap ? "" : ' <span class="pill info" title="ID not in RawData.map">TX_' + t.id + "</span>") : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
+          return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' + t.id + ' could not be matched to a name — see Validation">unnamed</span>') : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
         }).join("")}
       </tbody></table></div></div>
       <div id="tx-detail"></div>`;
@@ -552,6 +552,12 @@
       <table class="t"><thead><tr><th>Status</th><th>Check</th><th>Result</th></tr></thead><tbody>
       ${m.selfCheck.map((c) => `<tr><td><span class="pill ${c.status === "ok" ? "ok" : c.status === "fail" ? "fail" : c.status === "warn" ? "warn" : "info"}">${c.status.toUpperCase()}</span></td><td>${esc(c.id)}</td><td>${esc(c.text)}${c.data !== undefined ? `<div class="ev" style="font-family:var(--mono);font-size:11px;color:var(--text-3)">${esc(JSON.stringify(c.data)).slice(0, 600)}</div>` : ""}</td></tr>`).join("")}
       </tbody></table></div>
+      ${m.txNameResolution && m.txNameResolution.matches.length ? `<div class="card"><h3>Transaction names</h3><div class="sub">${esc(m.txNameResolution.method)}</div><div class="table-wrap"><table class="t"><thead><tr><th class="num">Internal id</th><th>Name</th><th class="num">Count</th><th class="num">LRE graph count</th><th class="num">Mean (s)</th><th class="num">LRE graph mean</th><th>Accepted</th></tr></thead><tbody>
+      ${m.txNameResolution.matches.map((x) => `<tr><td class="num">${x.id}</td><td>${esc(x.name)}</td><td class="num">${fmt.int(x.count)}</td><td class="num">${fmt.int(x.graphCount)}</td><td class="num">${n3(x.mean)}</td><td class="num">${n3(x.graphMean)}</td><td>${x.accepted ? '<span class="pill ok">yes</span>' : '<span class="pill fail">no</span>'}</td></tr>`).join("")}
+      </tbody></table></div></div>` : ""}
+      ${m.dataPoints && m.dataPoints.length ? `<div class="card"><h3>Data points (RawData.eve sub-type 762)</h3><div class="sub">Per-request counters such as HTTP status codes — compare HTTP_200 / HTTP_500 with LRE's HTTP Responses summary.</div><table class="t"><thead><tr><th>Data point</th><th class="num">Records</th><th class="num">Sum of values</th></tr></thead><tbody>
+      ${m.dataPoints.map((d) => `<tr><td>${esc(d.name)}</td><td class="num">${fmt.int(d.count)}</td><td class="num">${fmt.int(Math.round(d.sum))}</td></tr>`).join("")}
+      </tbody></table></div>` : ""}
       ${m.eve ? `<div class="card"><h3>RawData.eve record types</h3><div class="table-wrap"><table class="t"><thead><tr><th class="num">Count</th><th>Signature</th><th>First bytes (hex)</th></tr></thead><tbody>
       ${m.eve.signatures.slice(0, 30).map((s) => `<tr><td class="num">${fmt.int(s.count)}</td><td><code>${esc(s.signature)}</code></td><td><code style="font-size:10.5px">${esc(s.examples[0] || "")}</code></td></tr>`).join("")}
       </tbody></table></div></div>` : ""}`;

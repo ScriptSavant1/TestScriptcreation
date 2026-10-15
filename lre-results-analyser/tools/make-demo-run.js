@@ -24,11 +24,25 @@ const TX = [
 ];
 const LGS = ["lg-demo-01.example.test", "lg-demo-02.example.test"];
 
-function txRecord(ts, iter, rtMs, vuser, txId) {
+// Record layouts: docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md
+const INTERNAL_ID_BASE = 30; // internal transaction ids differ from RawData.map ids, as in real runs
+
+/** Transaction record: 12586944 (completed, 76 bytes) or 12619721 (failed, 108 bytes). end = unix s. */
+function txRecord(end, iter, rtMs, vuser, txId, failed) {
+  const sub = failed ? 12619721 : 12586944, len = failed ? 108 : 76;
+  const b = Buffer.alloc(len);
+  b.writeUInt32BE(len, 0); b.writeUInt32BE(3, 4); b.writeUInt32BE(len - 12, 12); b.writeUInt32BE(len - 20, 20); b.writeUInt32BE(sub, 24);
+  b.writeDoubleBE(end - rtMs / 1000, 28); b.writeDoubleBE(end, 36); b.writeUInt32BE(Math.max(0, Math.round(rtMs)), 44);
+  b.writeUInt32BE(txId, 52); b.writeUInt32BE(vuser, 56); b.writeUInt32BE(12, 60); b.writeUInt32BE(1, 64); b.writeUInt32BE(iter, 68);
+  if (failed) b.writeUInt32BE(0xffffffff, 76);
+  return b;
+}
+
+/** Data-point record (sub-type 762): one per HTTP response. */
+function dataPoint(ts, vuser, dpId) {
   const b = Buffer.alloc(64);
   b.writeUInt32BE(64, 0); b.writeUInt32BE(3, 4); b.writeUInt32BE(1, 8); b.writeUInt32BE(52, 12); b.writeUInt32BE(1, 16); b.writeUInt32BE(44, 20);
-  b.writeUInt32BE(762, 24); b.writeDoubleBE(ts, 28); b.writeUInt32BE(iter, 36); b.writeUInt32BE(0, 40); b.writeDoubleBE(rtMs, 44);
-  b.writeUInt32BE(vuser, 52); b.writeUInt32BE(txId, 56); b.writeUInt32BE(0, 60);
+  b.writeUInt32BE(762, 24); b.writeDoubleBE(ts, 28); b.writeDoubleBE(1, 44); b.writeUInt32BE(vuser, 52); b.writeUInt32BE(dpId, 56);
   return b;
 }
 
@@ -56,8 +70,14 @@ async function main() {
   const fd = fs.openSync(path.join(dir, "RawData.eve"), "w");
   const hdr = Buffer.alloc(24); hdr.writeUInt32BE(24, 0); hdr.writeUInt32BE(7, 4);
   fs.writeSync(fd, hdr);
-  const main_ = TX.length + 9; // a wrapper transaction id that is NOT in RawData.map (like LRE's Main_Transaction)
   const errors = [];
+  const rtGraph = new Map(); // LRE's per-transaction response-time graph (sum_data graph_4): per name × 60 s
+  const addGraph = (k, endTs, sec) => {
+    const key = k + "|" + Math.floor((endTs - START) / 60);
+    const e = rtGraph.get(key) || { k, ts: START + Math.floor((endTs - START) / 60) * 60, n: 0, sum: 0, min: Infinity, max: 0 };
+    e.n++; e.sum += sec; e.min = Math.min(e.min, sec); e.max = Math.max(e.max, sec);
+    rtGraph.set(key, e);
+  };
   const pass = new Map(), fail = new Map();
   let buf = [];
   const flush = () => { if (buf.length) { fs.writeSync(fd, Buffer.concat(buf)); buf = []; } };
@@ -66,7 +86,6 @@ async function main() {
   for (const u of vus) {
     for (let it = 0, t0 = u.run; t0 < u.exit - 30; it++, t0 += pace) {
       let t = t0;
-      let iterRt = 0;
       for (let k = 0; k < TX.length; k++) {
         const [name, med] = TX[k];
         let m = med;
@@ -83,11 +102,11 @@ async function main() {
           errors.push({ t: t + Math.max(0, rt) / 1000, code: -26612, msg: `HTTP Status-Code=500 (Internal Server Error) for "https://app.example.test/api/items/${Math.floor(r() * 9999)}"`, v: u.v, lg: u.lg, it });
         } else pass.set(name, (pass.get(name) || 0) + 1);
         t += Math.max(0, rt) / 1000;
-        buf.push(txRecord(t, it, rt, u.v, k + 1));
-        iterRt += Math.max(0, rt);
+        buf.push(txRecord(t, it, rt, u.v, INTERNAL_ID_BASE + k, failed));
+        buf.push(dataPoint(t, u.v, failed ? 2 : 1));
+        if (!failed) addGraph(k, t, Math.max(0, rt) / 1000);
         t += 1 + r() * 2; // think time
       }
-      buf.push(txRecord(t, it, iterRt, u.v, main_));
       if (buf.length > 20000) flush();
     }
   }
@@ -125,10 +144,13 @@ async function main() {
     g1.push(`${10 + i * 2} ${t} ${cpu.toFixed(4)} 1 ${cpu.toFixed(4)} ${cpu.toFixed(4)} 0`, `${11 + i * 2} ${t} ${(35 + i * 10 + (t - START) / runSec * 8).toFixed(4)} 1 0 0 0`);
   });
   g(1, g1);
-  sumIni.push("[graph_2]\nGraphType=es_tr_tprange_pass\n" + TX.map(([n], i) => `Measurement_${i}=${100 + i},${n}`).join("\n"));
+  sumIni.push("[graph_2]\nGraphType=es_tr_tprange_pass\n" + TX.map(([n], i) => `Measurement_${i}=${n},${100 + i}`).join("\n"));
   g(2, TX.map(([n], i) => `${100 + i} ${START + 60} ${pass.get(n) || 0} 1 0 0 0`));
-  sumIni.push("[graph_14]\nGraphType=es_tr_tprange_fail\n" + TX.map(([n], i) => `Measurement_${i}=${200 + i},${n}`).join("\n"));
+  sumIni.push("[graph_14]\nGraphType=es_tr_tprange_fail\n" + TX.map(([n], i) => `Measurement_${i}=${n},${200 + i}`).join("\n"));
   g(14, TX.filter(([n]) => fail.get(n)).map(([n]) => `${200 + TX.findIndex((x) => x[0] === n)} ${spikeAt} ${fail.get(n)} -1 0 0 0`));
+  // per-transaction response-time graph: name,measurementId (LRE 2026 format) — the bridge to the internal ids
+  sumIni.push("[graph_4]\nGraphType=es_tr_response_time\n" + TX.map(([n], i) => `Measurement_${i}=${n},${500 + i}`).join("\n"));
+  g(4, [...rtGraph.values()].sort((a, b) => a.ts - b.ts || a.k - b.k).map((e) => `${500 + e.k} ${e.ts} ${(e.sum / e.n).toFixed(6)} ${e.n} ${e.min.toFixed(6)} ${e.max.toFixed(6)} 0`));
   sumIni.push("[graph_10]\nGraphType=HTTP_RC\nMeasurement_0=300,HTTP_200\nMeasurement_1=301,HTTP_500");
   const g10 = [];
   for (let t = START + 5; t < end; t += 5) {
