@@ -182,12 +182,12 @@ function report(r) {
     out.push(`== ${label} (seconds) ==`);
     out.push(`Calculated: ${r.method.summaryBasis}`);
     const cols = [
-      { h: "Transaction", f: (t) => t.name, left: true },
-      { h: "Count", f: (t) => t[key].count },
+      { h: "Transaction", f: (t) => t.label || t.name, left: true },
+      { h: "Count", f: (t) => (key === "full" ? t.count : t[key].count + (t[key].fail || 0)) },
       { h: "Min", f: (t) => fmt(t[key].min) },
       { h: "Avg", f: (t) => fmt(t[key].avg) },
       { h: "Max", f: (t) => fmt(t[key].max) },
-      { h: "StdDev", f: (t) => fmt(t[key].stddev) },
+      { h: "StdDev", f: (t) => fmt(t[key].stdDev) },
       { h: "P50", f: (t) => fmt(t[key].p.p50) },
       { h: "P90", f: (t) => fmt(t[key].p.p90) },
       { h: "P95", f: (t) => fmt(t[key].p.p95) },
@@ -203,10 +203,10 @@ function report(r) {
     out.push("");
     out.push(`== Transaction summary — LRE Analysis style (means of ${g} s × load-generator buckets; count/avg are exact) ==`);
     out.push(table(r.transactions.filter((t) => t.lre), [
-      { h: "Transaction", f: (t) => t.name, left: true },
+      { h: "Transaction", f: (t) => t.label || t.name, left: true },
       { h: "Pass", f: (t) => t.pass }, { h: "Fail", f: (t) => t.fail },
       { h: "Min", f: (t) => fmt(t.lre.min) }, { h: "Avg", f: (t) => fmt(t.lre.avg) }, { h: "Max", f: (t) => fmt(t.lre.max) },
-      { h: "StdDev", f: (t) => fmt(t.lre.stddev) }, { h: "P90", f: (t) => fmt(t.lre.p.p90) },
+      { h: "StdDev", f: (t) => fmt(t.lre.stdDev) }, { h: "P90", f: (t) => fmt(t.lre.p.p90) },
     ]));
   }
   if (r.web) {

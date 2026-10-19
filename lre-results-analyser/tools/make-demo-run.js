@@ -207,7 +207,7 @@ async function main() {
   errors.forEach((e, i) => {
     const local = new Date((e.t + 3600) * 1000).toISOString().replace("T", " ").slice(0, 19); // run local time = UTC+1
     db.run("INSERT INTO Main (Row_ID, Error_Code, Time, Type, Line, Area, Iteration, Action_ID, Message_ID, Injector_ID, Script_ID, Vuser_ID) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-      [i + 1, e.code, local, 1, 42, 0, e.it, id("Actions", "Action_Name", "Main"), id("ErrorMessages", "Message_String", e.msg), id("Injectors", "Injector_Name", e.lg), id("Scripts", "Script_Name", "Demo_Script_1"), id("VusersID", "Vuser_ID_Name", String(e.v))]);
+      [i + 1, e.code, local, 2, 42, 0, e.it, id("Actions", "Action_Name", "Main"), id("ErrorMessages", "Message_String", e.msg), id("Injectors", "Injector_Name", e.lg), id("Scripts", "Script_Name", "Demo_Script_1"), id("VusersID", "Vuser_ID_Name", String(e.v))]);
   });
   fs.writeFileSync(path.join(dir, "SqliteDb.db"), Buffer.from(db.export()));
   db.close();

@@ -74,8 +74,9 @@ describe("Excel workbook", () => {
     const rows = [];
     ws.eachRow((r, i) => { if (i > 4) rows.push(r.values.slice(1)); });
     const login = rows.find((r) => r[1] === "T01_LOGIN");
-    expect(login[2]).toBe(6);
-    expect(login[18]).toBe("PASS");
+    expect(login[2]).toBe(7); // Count = pass + fail
+    expect(login[3]).toBe(6); // Pass
+    expect(login[19]).toBe("PASS"); // SLA result (after P98)
     expect(rows.some((r) => r[1] === "Subtotal")).toBe(true);
     const ov = wb.getWorksheet("Test Overview");
     let found = false;

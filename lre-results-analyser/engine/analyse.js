@@ -64,8 +64,24 @@
     // ── RawData.eve ─────────────────────────────────────────────────────────
     const steadyAbs = life && life.phases.steady ? life.phases.steady : null;
     const steadyRel = steadyAbs && startUtc ? { start: steadyAbs.start - startUtc, end: steadyAbs.end - startUtc } : null;
+    // ── script of every VUser → statistics per script × transaction ─────────
+    // A transaction used by several scripts (e.g. Login/Logout) gets one row per script, as LRE's
+    // per-group figures do (Event_meter grouped by Group Name + Event Name). Rows are keyed by a
+    // sequential row id; row → {txId (RawData.map id), script}.
+    const scriptKeyOf = scriptResolver(scripts);
+    const trepScript = new Map();
+    if (life) for (const v of life.vusers) trepScript.set(`${String(v.group).toLowerCase()}|${v.vuser}`, v.script);
     const vuserInfo = new Map();
-    if (life) for (const v of life.vusers) if (!vuserInfo.has(v.vuser)) vuserInfo.set(v.vuser, { lg: v.lg, group: v.group, script: v.script });
+    if (life) for (const v of life.vusers) if (!vuserInfo.has(v.vuser)) vuserInfo.set(v.vuser, { lg: v.lg, group: v.group, script: v.script, scriptKey: scriptKeyOf(v.script) });
+    const rows = new Map(), rowOf = new Map();
+    const rowId = (vuser, txId) => {
+      const info = vuserInfo.get(vuser);
+      const script = (info && info.scriptKey) || scriptKeyOf(null);
+      const k = script + "\u0000" + txId;
+      let r = rowOf.get(k);
+      if (r === undefined) { r = rows.size + 1; rowOf.set(k, r); rows.set(r, { txId, script }); }
+      return r;
+    };
     const col = collector.createCollector({
       startUtc: startUtc || 0, durationSec, bucketSec: opts.bucketSec, vuserInfo, steady: steadyRel,
       exactLimit: opts.exactLimit, lreGranularitySec: opts.lreGranularitySec,
@@ -78,10 +94,14 @@
       const dec = eve.createDecoder({
         // VUser descriptors carry the id space every RawData.eve record uses (the numbers in
         // _t_rep.eve can be per group): they decide the load generator / group of each instance
-        onVuser: (v) => vuserInfo.set(v.vuser, { lg: fullLg(v.host), group: v.group, script: v.script, local: v.local }),
+        // the group-local number + group name find the VUser's script in _t_rep.eve
+        onVuser: (v) => {
+          const script = trepScript.get(`${String(v.group).toLowerCase()}|${parseInt(v.local, 10)}`) || v.script;
+          vuserInfo.set(v.vuser, { lg: fullLg(v.host), group: v.group, script, local: v.local, scriptKey: scriptKeyOf(script) });
+        },
         // transaction records: id = RawData.map [END_TRANSACTION] id; response time = end - start -
-        // wasted - think (seconds, as LRE reports it); the collector works in ms
-        onTransaction: (endTs, iter, rtSec, vuser, id, failed) => col.add(endTs, iter, rtSec * 1000, vuser, id, failed),
+        // wasted - think (seconds, as LRE reports it); the collector works in ms, keyed by row
+        onTransaction: (endTs, iter, rtSec, vuser, id, failed) => col.add(endTs, iter, rtSec * 1000, vuser, rowId(vuser, id), failed),
         onDataPoint: web.add,
       });
       const total = source.size ? await source.size(f.rawDataEve) : null;
@@ -100,7 +120,11 @@
     progress(0, null, "Reading errors");
     let errs = null;
     if (f.sqlite && source.sqlite) {
-      try { errs = errors.summarise(await source.sqlite(f.sqlite, errors.QUERY), meta.localOffsetSec, startUtc); }
+      try {
+        errs = errors.summarise(await source.sqlite(f.sqlite, errors.QUERY), meta.localOffsetSec, startUtc);
+        const other = Object.values(errs.otherByType).reduce((a, c) => a + c, 0);
+        check("info", "errors", `${errs.total} error(s) counted — ${errs.typeFilter}` + (other ? `; ${other} other message(s) by Type ${JSON.stringify(errs.otherByType)} not counted` : ""));
+      }
       catch (e) { check("warn", "errors", `Could not read SqliteDb.db: ${e.message || e}`); }
     } else if (f.sqlite) check("info", "errors", "SqliteDb.db present but no SQLite reader available — errors skipped");
 
@@ -109,30 +133,33 @@
     const sum = await readSumData(source, found, startUtc, bs, nb, check);
 
     // ── model ───────────────────────────────────────────────────────────────
-    const scriptOfTx = new Map();
-    for (const s of scripts) for (const t of s.transactions) {
-      if (!scriptOfTx.has(t)) scriptOfTx.set(t, []);
-      scriptOfTx.get(t).push(s.key);
-    }
     const evTx = new Map(((decoded && decoded.transactions) || []).map((t) => [t.id, t]));
     // ids are already RawData.map [END_TRANSACTION] ids: the decoder resolves each record's
     // per-VUser internal id through the registration records in RawData.eve itself.
-    const resolution = resolveNames(store, map, decoded);
-    const txNames = new Map(store.txIds().map((id) => [id, resolution.names.get(id) || `TX_${id}`]));
-    const passFail = crossCheckSumData(sum, txNames, store, resolution, check);
+    const txIds = [...new Set([...rows.values()].map((r) => r.txId))].sort((a, b) => a - b);
+    const resolution = resolveNames(txIds, map, decoded);
+    const txNames = new Map(txIds.map((id) => [id, resolution.names.get(id) || `TX_${id}`]));
+    const rowsOfTx = new Map(txIds.map((id) => [id, store.txIds().filter((r) => rows.get(r).txId === id)]));
+    const passFail = crossCheckSumData(sum, txNames, rowsOfTx, store, resolution, check);
     const webStats = web.finish(durationSec, store.buckets);
 
+    // one row per script × transaction (store ids are row ids)
     const transactions = store.txIds().map((id) => {
-      const name = txNames.get(id);
-      const e = evTx.get(id) || {};
+      const row = rows.get(id);
+      const name = txNames.get(row.txId);
+      const e = evTx.get(row.txId) || {};
       const pass = store.count(id), fail = store.failCount(id);
       return {
-        id, name, inMap: resolution.names.has(id), scripts: scriptOfTx.get(name) || [],
+        id, txId: row.txId, name, script: row.script,
+        // a transaction run by several scripts is labelled with its script in charts and findings
+        label: rowsOfTx.get(row.txId).length > 1 ? `${name} (${row.script})` : name,
+        inMap: resolution.names.has(row.txId), scripts: [row.script],
         inSla: slaInfo ? slaInfo.transactions.includes(name) : null,
         full: Object.assign(store.summary(id, null), { tps: durationSec ? store.count(id) / durationSec : null }),
         steady: null, // filled by applySettings
-        pass, fail, failPct: pass + fail ? (fail / (pass + fail)) * 100 : null,
-        sumDataPass: (passFail.get(id) || {}).pass != null ? passFail.get(id).pass : null,
+        // count = pass + fail (all completed instances, as LRE's Transaction_Count); timing uses passed only
+        count: pass + fail, pass, fail, failPct: pass + fail ? (fail / (pass + fail)) * 100 : null,
+        sumDataPass: (passFail.get(row.txId) || {}).pass != null ? passFail.get(row.txId).pass : null,
         perLg: store.perLg(id),
         distribution: store.distribution(id, 60),
         lre: store.lreSummary ? store.lreSummary(id) : null,
@@ -222,8 +249,8 @@
       timeline,
       vusers,
       vuserHeat: store.vuserHeat(240),
-      latencyHeat: store.latencyHeat(store.txIds().filter((id) => !isWrapper(txNames.get(id), transactions)), 240, 40),
-      errors: errs && { total: errs.total, summary: errs.summary, rows: errs.rows.slice(0, 20000), rowsTruncated: errs.rows.length > 20000 },
+      latencyHeat: store.latencyHeat(transactions.filter((t) => !isWrapper(t.name, transactions)).map((t) => t.id), 240, 40),
+      errors: errs && { total: errs.total, summary: errs.summary, rows: errs.rows.slice(0, 20000), rowsTruncated: errs.rows.length > 20000, typeFilter: errs.typeFilter, otherByType: errs.otherByType },
       sumData: sum ? { graphs: sum.graphs } : null,
       txNameResolution: { method: resolution.method, assumed: !!resolution.assumed, unresolved: resolution.unresolved, matches: resolution.matches },
       dataPoints: decoded ? decoded.dataPoints.map((d) => ({ id: d.id, name: map.dataPoints.get(d.id) || `id ${d.id}`, count: d.count, sum: d.sum })) : [],
@@ -246,6 +273,20 @@
     selfChecks(check, { meta, life, map, slaInfo, decoded, transactions, scripts, steadyRel, store, resolution });
     applySettings(model, opts.settings || {});
     return model;
+  }
+
+  /**
+   * Script name (from _t_rep.eve or a VUser descriptor) → the workload script key (res*.lrr
+   * [Scripts]), case-insensitively; with one script, everything belongs to it.
+   */
+  function scriptResolver(scripts) {
+    const keys = new Map();
+    for (const s of scripts) { keys.set(String(s.key).toLowerCase(), s.key); if (s.scriptName) keys.set(String(s.scriptName).toLowerCase(), s.key); }
+    const only = scripts.length === 1 ? scripts[0].key : null;
+    return (name) => {
+      if (name != null && keys.has(String(name).toLowerCase())) return keys.get(String(name).toLowerCase());
+      return only || (name != null && name !== "" ? String(name) : "(unknown script)");
+    };
   }
 
   /** A transaction that wraps all others (e.g. Main_Transaction / the action) — excluded from the latency heatmap. */
@@ -454,10 +495,10 @@
    * Transaction ids → names. The decoder already emits RawData.map [END_TRANSACTION] ids (resolved
    * through the per-VUser registration records in RawData.eve), so this is a direct lookup.
    */
-  function resolveNames(store, map, decoded) {
+  function resolveNames(txIds, map, decoded) {
     const names = new Map();
     const unresolved = [];
-    for (const id of store.txIds()) {
+    for (const id of txIds) {
       if (map.transactions.has(id)) names.set(id, map.transactions.get(id));
       else unresolved.push(id);
     }
@@ -521,7 +562,10 @@
    * failed transactions (tprange_fail). Counts are reported as-is; the graph values are rates, so
    * the conversion that reproduces the RawData.eve pass counts best is used and its error shown.
    */
-  function crossCheckSumData(sum, txNames, store, resolution, check) {
+  function crossCheckSumData(sum, txNames, rowsOfTx, store, resolution, check) {
+    // per transaction name, summed over its script rows (LRE's graphs are per name)
+    const passOf = (txId) => (rowsOfTx.get(txId) || []).reduce((a, r) => a + store.count(r), 0);
+    const failOf = (txId) => (rowsOfTx.get(txId) || []).reduce((a, r) => a + store.failCount(r), 0);
     const out = new Map();
     out.source = null;
     if (!sum) return out;
@@ -537,7 +581,7 @@
       let best = null;
       for (const [fname, fn] of Object.entries(formulas)) {
         let err = 0, tot = 0, n = 0;
-        for (const m of passG.measurements) { const id = idOf(m.name); if (id == null) continue; const c = store.count(id); err += Math.abs(fn(m) - c); tot += c; n++; }
+        for (const m of passG.measurements) { const id = idOf(m.name); if (id == null) continue; const c = passOf(id); err += Math.abs(fn(m) - c); tot += c; n++; }
         if (n && tot && (!best || err / tot < best.err)) best = { fname, fn, err: err / tot, n };
       }
       if (best) {
@@ -550,7 +594,7 @@
       const lreFails = {};
       for (const m of failG.measurements) lreFails[m.name] = Math.round(m.sumAvgCount);
       const ours = {};
-      for (const [id, n] of txNames) { const f = store.failCount(id); if (f) ours[n] = f; }
+      for (const [id, n] of txNames) { const f = failOf(id); if (f) ours[n] = f; }
       const same = Object.keys(lreFails).every((k) => (ours[k.replace(/^.*:/, "")] || 0) === lreFails[k]) && Object.keys(ours).every((k) => Object.keys(lreFails).some((l) => l.replace(/^.*:/, "") === k));
       check(same ? "ok" : "warn", "sumdata-fail", `Failed transactions — RawData.eve ${JSON.stringify(ours)} vs LRE's fail graph ${JSON.stringify(lreFails)}`);
     }
@@ -684,8 +728,14 @@
       check(inside ? "ok" : "warn", "eve-time", `Transaction end times t+${(t.tsMin - meta.startUtc).toFixed(1)} s … t+${(t.tsMax - meta.startUtc).toFixed(1)} s` + (inside ? " (inside the run)" : " — outside the run start/stop"));
     }
     if (scripts.length > 1) {
-      const unassigned = transactions.filter((x) => !x.scripts.length).map((x) => x.name);
-      if (unassigned.length) check("info", "tx-script", "Transactions not listed in any .usr", unassigned);
+      // each row's script comes from the VUser that ran it; flag rows the script's .usr does not list
+      const byKey = new Map(scripts.map((s) => [s.key, s]));
+      const unknown = transactions.filter((x) => !byKey.has(x.script)).map((x) => x.label);
+      if (unknown.length) check("warn", "tx-script", "Transactions whose VUser could not be tied to a script", unknown.slice(0, 50));
+      const unlisted = transactions.filter((x) => byKey.has(x.script) && byKey.get(x.script).transactions.length && !byKey.get(x.script).transactions.includes(x.name)).map((x) => x.label);
+      if (unlisted.length) check("info", "tx-script", "Transactions not listed in their script's .usr", unlisted.slice(0, 50));
+      const shared = new Set(transactions.filter((x) => x.label !== x.name).map((x) => x.name));
+      if (shared.size) check("info", "tx-script", `${shared.size} transaction name(s) used by several scripts — reported per script`, [...shared].slice(0, 50));
     }
   }
 

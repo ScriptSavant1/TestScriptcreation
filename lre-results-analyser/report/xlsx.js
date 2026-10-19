@@ -182,7 +182,7 @@
   const TX_COLS = [
     ["Script", 32], ["Transaction", 46], ["Count", 10, INT], ["Pass", 10, INT], ["Fail", 8, INT], ["Fail %", 8, PCT],
     ["Min (s)", 9, SEC], ["Avg (s)", 9, SEC], ["Max (s)", 9, SEC], ["Std Dev (s)", 10, SEC],
-    ["P50 (s)", 9, SEC], ["P80 (s)", 9, SEC], ["P85 (s)", 9, SEC], ["P90 (s)", 9, SEC], ["P95 (s)", 9, SEC], ["P99 (s)", 9, SEC],
+    ["P50 (s)", 9, SEC], ["P80 (s)", 9, SEC], ["P85 (s)", 9, SEC], ["P90 (s)", 9, SEC], ["P95 (s)", 9, SEC], ["P98 (s)", 9, SEC], ["P99 (s)", 9, SEC],
     ["TPS", 9, RATE], ["SLA (s)", 9, SEC], ["SLA result", 10], ["Apdex", 8, "0.00"],
   ];
 
@@ -212,19 +212,19 @@
       g.rows.forEach((t, i) => {
         const s = t[which];
         const slaRes = which === "steady" && t.sla ? (t.sla.pass ? "PASS" : "FAIL") : "";
-        ws.getRow(r).values = [g.script, t.name, s.count, t.pass, t.fail, t.failPct != null ? t.failPct / 100 : null,
-          s.min, s.avg, s.max, s.stdDev, sAt(s, "p50"), sAt(s, "p80"), sAt(s, "p85"), sAt(s, "p90"), sAt(s, "p95"), sAt(s, "p99"),
+        ws.getRow(r).values = [g.script, t.name, which === "full" ? t.count : s.count + (s.fail || 0), t.pass, t.fail, t.failPct != null ? t.failPct / 100 : null,
+          s.min, s.avg, s.max, s.stdDev, sAt(s, "p50"), sAt(s, "p80"), sAt(s, "p85"), sAt(s, "p90"), sAt(s, "p95"), sAt(s, "p98"), sAt(s, "p99"),
           s.tps, which === "steady" && t.sla ? t.sla.threshold : null, slaRes, which === "steady" && t.sla ? t.sla.apdex : null];
         fmtRow(r, i % 2 ? ZEBRA : WHITE, false);
-        if (slaRes) { const c = ws.getCell(r, 19); c.fill = solid(slaRes === "PASS" ? GREEN_FILL : RED_FILL); c.alignment = { horizontal: "center" }; c.font = { name: FONT, size: 10, bold: true, color: { argb: slaRes === "PASS" ? "FF15803D" : "FFB91C1C" } }; }
+        if (slaRes) { const c = ws.getCell(r, 20); /* "SLA result" */ c.fill = solid(slaRes === "PASS" ? GREEN_FILL : RED_FILL); c.alignment = { horizontal: "center" }; c.font = { name: FONT, size: 10, bold: true, color: { argb: slaRes === "PASS" ? "FF15803D" : "FFB91C1C" } }; }
         if (t.fail) ws.getCell(r, 5).font = { name: FONT, size: 10, bold: true, color: { argb: "FFB91C1C" } };
         if (t.failPct != null && t.failPct > 1) ws.getCell(r, 6).fill = solid(t.failPct > 5 ? RED_FILL : AMBER_FILL);
         r++;
       });
       const sub = ws.getRow(r);
       sub.values = [g.script, "Subtotal", { formula: `SUM(C${first}:C${r - 1})` }, g.rows.some((t) => t.pass != null) ? { formula: `SUM(D${first}:D${r - 1})` } : null,
-        g.rows.some((t) => t.fail != null) ? { formula: `SUM(E${first}:E${r - 1})` } : null, null, null, null, null, null, null, null, null, null, null, null,
-        { formula: `SUM(Q${first}:Q${r - 1})` }];
+        g.rows.some((t) => t.fail != null) ? { formula: `SUM(E${first}:E${r - 1})` } : null, null, null, null, null, null, null, null, null, null, null, null, null,
+        { formula: `SUM(R${first}:R${r - 1})` }]; // R = TPS
       fmtRow(r, SUB_FILL, true);
       for (let c = 2; c <= N; c++) ws.getCell(r, c).border = { top: thin("FFC4B5FD"), bottom: thin("FFC4B5FD") };
       // the script name: one merged, vertically centred cell for the whole group (incl. subtotal)
@@ -297,7 +297,7 @@
     for (const g of tl.graphs || []) if (["hits", "bytesReceived", "bytesSent", "httpCodes", "connections", "connectionsPerSec", "throughput"].includes(g.role))
       for (const ms of g.measurements) graphCols.push({ label: `${g.type}: ${ms.name}`, data: ms.avg });
     const cols = ["Time (local)", "t+", "Running VUsers", "Total TPS", "Errors"]
-      .concat(txs.flatMap((t) => [`${t.name} count`, `${t.name} avg`, `${t.name} P90`, `${t.name} P95`]))
+      .concat(txs.flatMap((t) => [`${t.label || t.name} count`, `${t.label || t.name} avg`, `${t.label || t.name} P90`, `${t.label || t.name} P95`]))
       .concat(graphCols.map((g) => g.label));
     header(ws, 4, cols);
     for (let b = 0; b < tl.buckets; b++) {

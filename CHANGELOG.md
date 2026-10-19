@@ -5,6 +5,18 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed — Results Analyser: shared transactions reported per script (BUG-060)
+
+- A transaction used by several scripts (e.g. Login, Logout) now has one row per script with
+  that script's own figures; previously the all-scripts total was repeated under every script
+  and inflated each script's subtotal and TPS.
+- "Count" is now passed + failed instances (as LRE's Transaction_Count); response-time
+  statistics still use passed instances only.
+- P98 added to the transaction summary.
+- Error summary counts SqliteDb.db rows with Type 2 (errors); other message types are reported
+  separately in the self-checks.
+- CLI console: the Std Dev column was always "-"; fixed.
+
 ### Fixed — Results Analyser transaction figures (BUG-059)
 
 - RawData.eve transactions are now read from the transaction records (sub-types 12586944,

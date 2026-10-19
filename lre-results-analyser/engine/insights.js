@@ -232,18 +232,18 @@
         const clean = ds.values.map((v, i) => (transient.some(([a, b]) => i >= a && i < b) ? null : v));
         if (linearBeatsStep(clean, cps[0].index)) cps = [];
       }
-      for (const cp of cps) levelChanges.push({ tx: t.name, rel: cp.index * stepSec, before: cp.before, after: cp.after, r: cp.after / cp.before - 1, stepSec });
+      for (const cp of cps) levelChanges.push({ tx: t.label || t.name, rel: cp.index * stepSec, before: cp.before, after: cp.after, r: cp.after / cp.before - 1, stepSec });
       const step = cps.find((cp) => cp.after > cp.before);
-      trendRows.push({ name: t.name, p: mk.p, change });
+      trendRows.push({ name: t.label || t.name, p: mk.p, change });
       const pTxt = mk.p < 0.001 ? "p < 0.001" : `p = ${mk.p.toFixed(3)}`;
       if (mk.p < 0.01 && change >= 0.10) {
-        add(change >= 0.25 ? "high" : "medium", "trend", `${t.name} slows down over time`,
+        add(change >= 0.25 ? "high" : "medium", "trend", `${t.label || t.name} slows down over time`,
           step
             ? `P90 rose by about ${pct(change)} across the steady state, mostly in a step at ${at(step.index * stepSec)} (${sec(step.before)} → ${sec(step.after)}) rather than gradually (Mann-Kendall ${pTxt}). Look at what changed at that time.`
             : `P90 rose gradually by about ${pct(change)} across the steady state (Mann-Kendall ${pTxt}, Sen slope ${sec(slope / stepSec * 3600)} per hour). Typical of a resource leak or growing data — check memory, connection pools and table growth.`,
-          { transaction: t.name, mkZ: mk.z, p: mk.p, relChange: change, medianP90: med }, "rtOverTime");
+          { transaction: t.label || t.name, mkZ: mk.z, p: mk.p, relChange: change, medianP90: med }, "rtOverTime");
       } else if (mk.p < 0.01 && change <= -0.10) {
-        add("info", "trend", `${t.name} gets faster over time`, `P90 fell by about ${pct(-change)} across the steady state (warm-up or caching).`, { transaction: t.name, p: mk.p, relChange: change }, "rtOverTime");
+        add("info", "trend", `${t.label || t.name} gets faster over time`, `P90 fell by about ${pct(-change)} across the steady state (warm-up or caching).`, { transaction: t.label || t.name, p: mk.p, relChange: change }, "rtOverTime");
       }
     }
     // group level changes that happen at about the same time on several transactions
@@ -286,7 +286,7 @@
       const z = robustZ(agg);
       const med = median(agg);
       agg.forEach((v, k) => {
-        if (z[k] != null && z[k] > 3.5 && v > 1.5 * med && cnt[k] >= 5) spikes.push({ tx: t.name, b: k * f, bEnd: Math.min(series.p90.length - 1, (k + 1) * f - 1), z: z[k], value: v, median: med });
+        if (z[k] != null && z[k] > 3.5 && v > 1.5 * med && cnt[k] >= 5) spikes.push({ tx: t.label || t.name, b: k * f, bEnd: Math.min(series.p90.length - 1, (k + 1) * f - 1), z: z[k], value: v, median: med });
       });
     }
     if (spikes.length) {
@@ -329,7 +329,7 @@
       vals.forEach((x) => lgNames.add(x.lg));
       const hi = vals.reduce((a, c) => (c.v > a.v ? c : a)), lo = vals.reduce((a, c) => (c.v < a.v ? c : a));
       compared++;
-      if (lo.v && hi.v / lo.v >= 1.25) { slowCount.set(hi.lg, (slowCount.get(hi.lg) || 0) + 1); perTxBias.push({ tx: t.name, lg: hi.lg, ratio: hi.v / lo.v, slow: hi.v, fast: lo.v }); }
+      if (lo.v && hi.v / lo.v >= 1.25) { slowCount.set(hi.lg, (slowCount.get(hi.lg) || 0) + 1); perTxBias.push({ tx: t.label || t.name, lg: hi.lg, ratio: hi.v / lo.v, slow: hi.v, fast: lo.v }); }
     }
     if (compared) {
       const worst = [...slowCount.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -365,7 +365,7 @@
     } else if (m.errors) add("good", "errors", "No errors logged", "SqliteDb.db holds no error records for this run.", null, "errors");
 
     // 8. Failed transactions (sum_data)
-    const failing = txs.filter((t) => t.fail != null && t.fail > 0).map((t) => ({ name: t.name, fail: t.fail, rate: t.fail / Math.max(1, (t.pass || 0) + t.fail) }));
+    const failing = txs.filter((t) => t.fail != null && t.fail > 0).map((t) => ({ name: t.label || t.name, fail: t.fail, rate: t.fail / Math.max(1, (t.pass || 0) + t.fail) }));
     for (const f of failing.sort((a, b) => b.rate - a.rate).slice(0, 5))
       add(f.rate >= 0.01 ? "high" : "low", "errors", `${f.name}: ${f.fail} failed`, `${(f.rate * 100).toFixed(2)} % of its transactions failed.`, f, "errors");
 
@@ -374,11 +374,11 @@
     if (slaRows.length) {
       const failed = slaRows.filter((t) => t.sla.pass === false);
       if (failed.length) add("high", "sla", `${failed.length} of ${slaRows.length} transactions miss their SLA`,
-        failed.slice(0, 6).map((t) => `${t.name}: P${t.sla.percentile} ${sec(t.sla.value)} > ${sec(t.sla.threshold)}`).join("; ") + (failed.length > 6 ? "; …" : "") + ".",
+        failed.slice(0, 6).map((t) => `${t.label || t.name}: P${t.sla.percentile} ${sec(t.sla.value)} > ${sec(t.sla.threshold)}`).join("; ") + (failed.length > 6 ? "; …" : "") + ".",
         { failed: failed.map((t) => t.name) }, "slaChart");
       else add("good", "sla", "All SLAs met", `All ${slaRows.length} transactions with a threshold are within it (steady state).`, null, "slaChart");
       const poor = slaRows.filter((t) => t.sla.apdex != null && t.sla.apdex < 0.85);
-      if (poor.length) add("medium", "sla", "Low Apdex", poor.slice(0, 6).map((t) => `${t.name} ${t.sla.apdex.toFixed(2)}`).join(", ") + " (below 0.85 = users would notice).", { transactions: poor.map((t) => t.name) }, "slaChart");
+      if (poor.length) add("medium", "sla", "Low Apdex", poor.slice(0, 6).map((t) => `${t.label || t.name} ${t.sla.apdex.toFixed(2)}`).join(", ") + " (below 0.85 = users would notice).", { transactions: poor.map((t) => t.name) }, "slaChart");
     }
 
     // 10. Throughput stability (steady)

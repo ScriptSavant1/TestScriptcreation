@@ -330,14 +330,14 @@
 
   // ── Transactions ────────────────────────────────────────────────────────────
   const TX_COLS = [
-    { k: "name", h: "Transaction" }, { k: "count", h: "Count", num: 1, f: (t, s) => fmt.int(s.count), v: (t, s) => s.count },
+    { k: "name", h: "Transaction" }, { k: "count", h: "Count", num: 1, f: (t, s) => fmt.int(s === t.full ? t.count : s.count + (s.fail || 0)), v: (t, s) => (s === t.full ? t.count : s.count + (s.fail || 0)) },
     { k: "pass", h: "Pass", num: 1, f: (t) => (t.pass == null ? "-" : fmt.int(t.pass)), v: (t) => t.pass },
     { k: "fail", h: "Fail", num: 1, f: (t) => (t.fail == null ? "-" : fmt.int(t.fail)), v: (t) => t.fail },
     { k: "failPct", h: "Fail %", num: 1, f: (t) => (t.failPct == null ? "-" : t.failPct.toFixed(2)), v: (t) => t.failPct },
     { k: "min", h: "Min", num: 1, f: (t, s) => n3(s.min), v: (t, s) => s.min }, { k: "avg", h: "Avg", num: 1, f: (t, s) => n3(s.avg), v: (t, s) => s.avg },
     { k: "max", h: "Max", num: 1, f: (t, s) => n3(s.max), v: (t, s) => s.max }, { k: "sd", h: "Std dev", num: 1, f: (t, s) => n3(s.stdDev), v: (t, s) => s.stdDev },
     { k: "p50", h: "P50", num: 1, f: (t, s) => n3(s.p.p50), v: (t, s) => s.p.p50 }, { k: "p90", h: "P90", num: 1, f: (t, s) => n3(s.p.p90), v: (t, s) => s.p.p90 },
-    { k: "p95", h: "P95", num: 1, f: (t, s) => n3(s.p.p95), v: (t, s) => s.p.p95 }, { k: "p99", h: "P99", num: 1, f: (t, s) => n3(s.p.p99), v: (t, s) => s.p.p99 },
+    { k: "p95", h: "P95", num: 1, f: (t, s) => n3(s.p.p95), v: (t, s) => s.p.p95 }, { k: "p98", h: "P98", num: 1, f: (t, s) => n3(s.p.p98), v: (t, s) => s.p.p98 }, { k: "p99", h: "P99", num: 1, f: (t, s) => n3(s.p.p99), v: (t, s) => s.p.p99 },
     { k: "tps", h: "TPS", num: 1, f: (t, s) => fmt.num(s.tps, 4), v: (t, s) => s.tps },
   ];
   function transactions(p) {
@@ -372,7 +372,7 @@
           if (r.group) return `<tr class="group"><td colspan="${TX_COLS.length + (slaCols ? 4 : 1)}">${esc(r.group)}</td></tr>`;
           const t = r.t, s = t[which];
           const sla = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td><td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "PASS" : "FAIL"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
-          return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' +
+          return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(state.sort ? t.label || t.name : t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' +
             t.id + ' could not be matched to a name — see Validation">unnamed</span>') : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
         }).join("")}
       </tbody></table></div></div>
@@ -405,7 +405,7 @@
     const t = m.transactions.find((x) => x.id === id);
     if (!t) return;
     const lgRows = (t.perLg || []).map((l) => `<tr><td>${esc(l.lg)}</td><td class="num">${fmt.int(l.full.count)}</td><td class="num">${n3(l.full.avg)}</td><td class="num">${n3(l.full.p.p90)}</td><td class="num">${n3(l.full.p.p95)}</td><td class="num">${fmt.int(l.steady.count)}</td><td class="num">${n3(l.steady.avg)}</td><td class="num">${n3(l.steady.p.p90)}</td><td class="num">${n3(l.steady.p.p95)}</td></tr>`).join("");
-    el.innerHTML = `<div class="detail"><h3 style="margin:0 0 8px">${esc(t.name)}</h3>
+    el.innerHTML = `<div class="detail"><h3 style="margin:0 0 8px">${esc(t.label || t.name)}</h3>
       <div class="sub" style="color:var(--text-2);font-size:12px;margin-bottom:8px">ID ${t.id} · scripts: ${esc(t.scripts.join(", ") || "-")} · first t+${fmt.hms(t.firstRelSec)} · last t+${fmt.hms(t.lastRelSec)} · ${t.vuserIterations} VUser-iterations${
         t.negativeRtClamped ? ` · ${t.negativeRtClamped} negative RT clamped` : ""}</div>
       <div class="grid-2" id="txd-charts"></div>
@@ -447,7 +447,7 @@
     p.innerHTML = `<div class="chart-layout">
       <aside class="tx-picker">
         <div class="actions"><button class="btn sm" data-sel="slow">5 slowest</button><button class="btn sm" data-sel="busy">5 busiest</button><button class="btn sm" data-sel="all">All</button><button class="btn sm ghost" data-sel="none">None</button></div>
-        ${txs.map((t) => `<label><input type="checkbox" value="${t.id}" ${state.selected.has(t.id) ? "checked" : ""}> ${esc(t.name)}</label>`).join("")}
+        ${txs.map((t) => `<label><input type="checkbox" value="${t.id}" ${state.selected.has(t.id) ? "checked" : ""}> ${esc(t.label || t.name)}</label>`).join("")}
       </aside>
       <div>
         <div class="chart-controls"><span class="setting-label">Response-time metric</span>

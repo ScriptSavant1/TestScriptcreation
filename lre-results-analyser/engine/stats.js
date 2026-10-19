@@ -11,7 +11,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const PERCENTILES = [50, 80, 85, 90, 95, 99];
+  const PERCENTILES = [50, 80, 85, 90, 95, 98, 99];
   const METHOD = { percentile: "nearest-rank", stdDev: "population" };
 
   function percentile(sorted, p) {

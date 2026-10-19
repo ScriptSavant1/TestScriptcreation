@@ -13,6 +13,8 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
+  const ERROR_TYPE = 2;
+
   const QUERY = `
     SELECT m.Row_ID AS rowId, m.Error_Code AS code, m.Time AS time, m.Type AS type, m.Line AS line,
            m.Area AS area, m.Iteration AS iteration,
@@ -51,6 +53,14 @@
    * @param {number|null} startUtc   scenario start (unix s) for relative times
    */
   function summarise(rows, localOffsetSec, startUtc) {
+    // Main.Type 2 = error (other types are warnings / notifications), as in the LRE .mdb queries.
+    // Only when no row carries Type 2 are all rows kept (older files without a usable Type).
+    const otherByType = {};
+    const hasErrorType = rows.some((r) => Number(r.type) === ERROR_TYPE);
+    if (hasErrorType) {
+      for (const r of rows) if (Number(r.type) !== ERROR_TYPE) otherByType[r.type] = (otherByType[r.type] || 0) + 1;
+      rows = rows.filter((r) => Number(r.type) === ERROR_TYPE);
+    }
     const groups = new Map();
     const out = rows.map((r) => {
       const wall = parseLocal(r.time);
@@ -77,8 +87,8 @@
     const summary = [...groups.values()].sort((a, b) => b.count - a.count).map((g) => Object.assign(g, {
       vusers: [...g.vusers].sort(), injectors: [...g.injectors].sort(), actions: [...g.actions].sort(),
     }));
-    return { total: out.length, rows: out, summary };
+    return { total: out.length, rows: out, summary, typeFilter: hasErrorType ? "Main.Type = 2 (errors)" : "all rows (no Type 2 rows found)", otherByType };
   }
 
-  return { QUERY, summarise, pattern, parseLocal };
+  return { QUERY, summarise, pattern, parseLocal, ERROR_TYPE };
 });

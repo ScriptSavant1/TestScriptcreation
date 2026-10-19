@@ -7,7 +7,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const PCT_KEYS = ["p50", "p80", "p85", "p90", "p95", "p99"];
+  const PCT_KEYS = ["p50", "p80", "p85", "p90", "p95", "p98", "p99"];
 
   function hms(s) {
     if (s == null || !Number.isFinite(s)) return "-";

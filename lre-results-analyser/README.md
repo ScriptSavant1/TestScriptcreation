@@ -167,3 +167,12 @@ Never add real results to the repo: they contain internal host names.
   checked by the self-checks (`eve-tx`, `eve-tx-layout`, `eve-tx-identity`, `tx-names`).
 - The web UI's HTTP-code and throughput *charts* still read `sum_data`; the totals come from RawData.eve.
 - Word export from the CLI has no charts; the browser export embeds them.
+
+### Per-script rows, Count and errors
+
+- Every row is **script × transaction**: a transaction used by several scripts (Login, Logout…) gets one row per
+  script with that script's own figures, so script subtotals add up (as LRE's per-group figures).
+  Each instance's script comes from the VUser that ran it. Charts and findings label such rows "name (script)".
+- **Count** = passed + failed instances; Min/Avg/Max/Std Dev/percentiles use passed instances only.
+- Percentiles: P50, P80, P85, P90, P95, **P98**, P99 (nearest-rank).
+- Errors: rows of `SqliteDb.db` `Main` with **Type = 2**; other message types are listed in the self-checks.

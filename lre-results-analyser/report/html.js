@@ -40,7 +40,7 @@
       for (const t of g.rows) {
         const s = t[which];
         const sla = which === "steady" && t.sla ? { html: t.sla.pass ? `<span class="ok">✔ ${n3(t.sla.threshold)}</span>` : `<span class="bad">✘ ${n3(t.sla.threshold)}</span>` } : "-";
-        rows.push([t.name, fmt.int(s.count), t.failPct != null ? t.failPct.toFixed(2) + " %" : "-", n3(s.min), n3(s.avg), n3(s.p.p90), n3(s.p.p95), n3(s.p.p99), n3(s.max), fmt.num(s.tps, 3), sla]);
+        rows.push([t.name, fmt.int(which === "full" ? t.count : s.count + (s.fail || 0)), t.failPct != null ? t.failPct.toFixed(2) + " %" : "-", n3(s.min), n3(s.avg), n3(s.p.p90), n3(s.p.p95), n3(s.p.p99), n3(s.max), fmt.num(s.tps, 3), sla]);
       }
     }
     return table(["Transaction", "Count", "Fail %", "Min", "Avg", "P90", "P95", "P99", "Max", "TPS", "SLA"], rows, "tx");
@@ -84,7 +84,7 @@
       ${issues.length ? `<ul class="findings">${issues.slice(0, 8).map((f) => `<li><span class="sev" style="background:${fmt.SEVERITY[f.severity].color}">${fmt.SEVERITY[f.severity].label}</span> <b>${esc(f.title)}.</b> ${esc(f.text)}</li>`).join("")}</ul>` : "<p>No significant issues were found.</p>"}
       ${good.length ? `<p class="muted">Also checked and fine: ${good.map((f) => esc(f.title)).join(" · ")}.</p>` : ""}
       <h3>Slowest transactions (steady state, P90)</h3>
-      ${table(["Transaction", "P90", "P95", "Avg", "Count"], slowest.map((t) => [t.name, fmt.sec(t.steady.p.p90), fmt.sec(t.steady.p.p95), fmt.sec(t.steady.avg), fmt.int(t.steady.count)]))}
+      ${table(["Transaction", "P90", "P95", "Avg", "Count"], slowest.map((t) => [t.label || t.name, fmt.sec(t.steady.p.p90), fmt.sec(t.steady.p.p95), fmt.sec(t.steady.avg), fmt.int(t.steady.count)]))}
     </section>`);
 
     // 2 Test & workload

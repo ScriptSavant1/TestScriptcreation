@@ -11,7 +11,7 @@ describe("stats.summarise", () => {
     const s = stats.summarise([5, 1, 4, 2, 3, 6, 7, 8, 9, 10]);
     expect(s).toMatchObject({ count: 10, min: 1, max: 10, avg: 5.5 });
     expect(s.stdDev).toBeCloseTo(Math.sqrt(8.25), 10);
-    expect(s.p).toEqual({ p50: 5, p80: 8, p85: 9, p90: 9, p95: 10, p99: 10 });
+    expect(s.p).toEqual({ p50: 5, p80: 8, p85: 9, p90: 9, p95: 10, p98: 10, p99: 10 });
   });
   test("scale and empty input", () => {
     expect(stats.summarise([1000, 3000], 0.001)).toMatchObject({ min: 1, max: 3, avg: 2 });

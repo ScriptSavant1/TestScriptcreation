@@ -88,7 +88,7 @@
   function rtOverTime(m, ids, metric, o) {
     o = o || {};
     if (!m.timeline || !ids.length) return null;
-    const names = new Map(m.transactions.map((t) => [t.id, t.name]));
+    const names = new Map(m.transactions.map((t) => [t.id, t.label || t.name]));
     const opt = base(m, o, `Response time over time — ${metric === "avg" ? "average" : metric.toUpperCase()}`);
     opt.yAxis = [yAxis(o, "seconds")];
     opt.tooltip.valueFormatter = (v) => (v == null ? "-" : `${Number(v).toFixed(3)} s`);
@@ -103,7 +103,7 @@
     o = o || {};
     if (!m.timeline || !ids.length) return null;
     const bs = m.timeline.bucketSec;
-    const names = new Map(m.transactions.map((t) => [t.id, t.name]));
+    const names = new Map(m.transactions.map((t) => [t.id, t.label || t.name]));
     const opt = base(m, o, "Transactions per second");
     opt.yAxis = [yAxis(o, "TPS")];
     opt.tooltip.valueFormatter = (v) => (v == null ? "-" : Number(v).toFixed(3));
@@ -152,7 +152,7 @@
     return {
       backgroundColor: th.bg, animation: !o.static, color: PALETTE,
       textStyle: { color: th.text, fontFamily: "Inter, Segoe UI, system-ui, sans-serif" },
-      title: o.noTitle ? undefined : { text: `Response-time distribution — ${t.name}`, left: 8, top: 4, textStyle: { fontSize: 13, fontWeight: 600, color: th.text } },
+      title: o.noTitle ? undefined : { text: `Response-time distribution — ${t.label || t.name}`, left: 8, top: 4, textStyle: { fontSize: 13, fontWeight: 600, color: th.text } },
       tooltip: { trigger: "axis", backgroundColor: th.tooltipBg, textStyle: { color: th.text } },
       legend: { top: o.noTitle ? 2 : 26, left: 8, right: 70, textStyle: { color: th.sub } },
       grid: { left: 60, right: 60, top: 56, bottom: 50 },
@@ -263,7 +263,7 @@
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, backgroundColor: th.tooltipBg, textStyle: { color: th.text }, valueFormatter: (v) => (v == null ? "-" : `${Number(v).toFixed(3)} s`) },
       legend: { top: o.noTitle ? 2 : 26, left: 8, right: 70, textStyle: { color: th.sub } },
       grid: { left: 60, right: 20, top: 56, bottom: 110 },
-      xAxis: { type: "category", data: txs.map((t) => t.name), axisLabel: { color: th.sub, rotate: 35, fontSize: 10 } },
+      xAxis: { type: "category", data: txs.map((t) => t.label || t.name), axisLabel: { color: th.sub, rotate: 35, fontSize: 10 } },
       yAxis: yAxis(o, "seconds"),
       series: lgs.map((lg) => ({ name: lg, type: "bar", data: txs.map((t) => { const r = t.perLg.find((x) => x.lg === lg); return r ? ((r.steady.count ? r.steady : r.full).p[metric] ?? null) : null; }) })),
     };
@@ -315,7 +315,7 @@
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, backgroundColor: th.tooltipBg, textStyle: { color: th.text }, valueFormatter: (v) => (v == null ? "-" : `${Number(v).toFixed(3)} s`) },
       legend: { top: o.noTitle ? 2 : 26, left: 8, right: 70, textStyle: { color: th.sub } },
       grid: { left: 60, right: 20, top: 56, bottom: 110 },
-      xAxis: { type: "category", data: txs.map((t) => t.name), axisLabel: { color: th.sub, rotate: 35, fontSize: 10 } },
+      xAxis: { type: "category", data: txs.map((t) => t.label || t.name), axisLabel: { color: th.sub, rotate: 35, fontSize: 10 } },
       yAxis: yAxis(o, "seconds"),
       series,
     };
