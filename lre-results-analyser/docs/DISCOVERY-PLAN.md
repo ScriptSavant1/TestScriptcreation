@@ -1,5 +1,9 @@
 # LRE Results Analyser — Discovery, Feasibility & Development Plan
 
+> **Historical (superseded 2026-10-16).** The tool is built and validated. Current design:
+> `TECHNICAL-DESIGN.md`; RawData.eve layout: `SPEC-RawData-eve-REVERSE-ENGINEERED.md`. The record
+> layout assumed below (sub-type 762 = transaction) is wrong.
+
 > **Status**: Pre-development — Analysis & Planning
 > **Author**: RAM
 > **Date**: 2025

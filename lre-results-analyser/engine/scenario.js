@@ -68,6 +68,7 @@
     return s.token;
   }
 
+  
   /**
    * @param {string|Uint8Array} runInfoBytes
    * @param {string|Uint8Array} lrrBytes
@@ -109,6 +110,14 @@
       scheduleMode: lrr.get("Scenario_summary", "Mode") || null,
       loadBehavior: lrr.get("Scenario_summary", "Load Behavior") || null,
       scheduleText: lrr.get("Scenario_summary", "Scenario Duration") || null,
+      goalProfile: lrr.get("Scenario_summary", "Goal Profile Name") || null,
+      scenarioPath: lrr.get("Scenario", "Path") || null,
+      resultFile: lrr.get("Scenario", "Result_file") || null,
+      // LRE result path: …\Results\<DOMAIN_PROJECT_TEST>_<id>\Run_<runId>\res<runId>\res<runId>.lrr
+      runId: (/[\\/]Run_(\d+)[\\/]/i.exec(lrr.get("Scenario", "Result_file") || "") || /(\d+)$/.exec(lrr.get("Scenario", "ResultName") || "") || [])[1] || null,
+      lreResultFolder: (/[\\/]Results[\\/]([^\\/]+)[\\/]Run_/i.exec(lrr.get("Scenario", "Result_file") || "") || [])[1] || null,
+      userNotes: ri.get("Report", "UserNotes") || null,
+      testDescription: ri.get("Report", "TestDescription") || null,
       schedule: Object.assign(schedule, { described: schedule.steps.map(describeStep) }),
       groups,
     };

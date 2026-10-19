@@ -1,5 +1,9 @@
 # LRE Results Analyser — Complete Technical Specification
 
+> **Partly superseded (2026-10-16).** Parts 1, 2 and 4 (folder layout, text files, sum_data) are still
+> valid. **Part 3 and the RawData.eve constants in Parts 14–16 are wrong** — see
+> `SPEC-RawData-eve-REVERSE-ENGINEERED.md`. How figures are calculated: `TECHNICAL-DESIGN.md`.
+
 > **Status**: Ready to Build
 > **Last Updated**: 2025
 > **Purpose**: Complete reference — no re-analysis needed. Everything decoded and documented here.
@@ -373,10 +377,10 @@ This means each VUser waits 60 seconds after completing an iteration before star
 
 ## PART 3 — RAWDATA.EVE BINARY FORMAT (COMPLETE DECODE)
 
-> **SUPERSEDED (2026-10-15):** the transaction layout in this part is wrong — sub-type 762 is a per-request
-> data point, not a transaction. The authoritative layout is `SPEC-RawData-eve-REVERSE-ENGINEERED.md`
-> (transactions = sub-types 12586944 / 12586945 / 12619721; RT = endTs − startTs in seconds; internal
-> transaction ids). Kept for history.
+> **SUPERSEDED:** the transaction layout in this part is wrong — sub-type 762 is a per-request data
+> point, not a transaction. The authoritative layout is `SPEC-RawData-eve-REVERSE-ENGINEERED.md`:
+> transactions = sub-type `0x00C00FC0 + flags`, per-VUser internal ids named by registration records,
+> RT = end − start − wasted − think. Kept for history.
 
 ### 3.1 File Overview
 

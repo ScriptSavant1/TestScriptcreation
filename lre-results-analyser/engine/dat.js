@@ -58,12 +58,21 @@
         if (!/measurement/i.test(k)) continue;
         const idx = (/(\d+)\s*$/.exec(k) || [])[1] || k;
         const e = byIdx.get(idx) || {};
-        const nameFirst = /^\s*(.+?)\s*[,;]\s*(\d+)\s*$/.exec(v);
-        const idFirst = /^\s*(\d+)\s*[,;:=\s]\s*(.+?)\s*$/.exec(v);
+        // Measurement value forms seen in sum_dat.ini:
+        //   "Connections,24"                       name, id
+        //   "HTTP_200,23"                          name, id
+        //   "SC01_04_TESTS_AND_SCRIPTS,26#0#0#0#0" name, id, then '#'-separated extra stats
+        //                                          (es_tr_response_time / tprange_pass/fail)
+        //   "mic_conn,22" / "24"                   name,id / bare id
+        // Strip any '#...'-suffixed extra fields BEFORE parsing so the id is not lost and the raw
+        // "#0.000000…" trailer never leaks into the transaction name.
+        const vClean = String(v).split("#")[0].trim();
+        const nameFirst = /^\s*(.+?)\s*[,;]\s*(\d+)\s*$/.exec(vClean);
+        const idFirst = /^\s*(\d+)\s*[,;:=\s]\s*(.+?)\s*$/.exec(vClean);
         if (nameFirst && !/^\d+$/.test(nameFirst[1])) { e.name = nameFirst[1]; e.id = +nameFirst[2]; }
         else if (idFirst) { e.id = +idFirst[1]; e.name = idFirst[2]; }
-        else if (/^\s*\d+\s*$/.test(v)) { if (/id/i.test(k) || e.id == null) e.id = +v; else e.name = v; }
-        else e.name = v;
+        else if (/^\s*\d+\s*$/.test(vClean)) { if (/id/i.test(k) || e.id == null) e.id = +vClean; else e.name = vClean; }
+        else e.name = vClean;
         byIdx.set(idx, e);
       }
       graphs.push({ n: +m[1], type, role: ROLES[type.toLowerCase()] || null, measurements: [...byIdx.values()].filter((e) => e.id != null || e.name) });

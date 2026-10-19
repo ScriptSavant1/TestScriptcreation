@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results (LRE Analysis) — User Guide</title>
+<style>
+  :root { --p: #5b21b6; --p2: #4c1d95; --pl: #ede9fe; --pll: #f5f3ff; --t: #1e293b; --m: #64748b; --line: #e2e8f0;
+          --ok: #15803d; --okb: #dcfce7; --warn: #b45309; --warnb: #fef3c7; --bad: #b91c1c; --badb: #fee2e2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--t); background: #fafafa; }
+  header { background: linear-gradient(120deg, var(--p2), var(--p)); color: #fff; padding: 28px 40px; }
+  header h1 { margin: 0 0 4px; font-size: 26px; }
+  header p { margin: 0; opacity: .85; }
+  .wrap { display: grid; grid-template-columns: 260px 1fr; max-width: 1280px; margin: 0 auto; }
+  nav { position: sticky; top: 0; align-self: start; height: 100vh; overflow: auto; padding: 24px 16px; border-right: 1px solid var(--line); background: #fff; }
+  nav a { display: block; color: var(--t); text-decoration: none; padding: 4px 10px; border-radius: 6px; font-size: 14px; }
+  nav a:hover { background: var(--pll); color: var(--p); }
+  nav a.sub { padding-left: 24px; font-size: 13px; color: var(--m); }
+  main { padding: 24px 48px 80px; background: #fff; min-width: 0; }
+  h2 { color: var(--p2); border-bottom: 2px solid var(--pl); padding-bottom: 6px; margin-top: 44px; }
+  h3 { color: var(--p); margin-top: 28px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 18px; font-size: 14px; }
+  th { background: var(--p); color: #fff; text-align: left; padding: 8px 10px; font-weight: 600; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:nth-child(even) td { background: #faf9fe; }
+  code { background: var(--pll); color: var(--p2); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  pre { background: #1e1b4b; color: #e0e7ff; padding: 14px 16px; border-radius: 8px; overflow: auto; font-size: 13px; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .note, .tip, .key { border-left: 4px solid var(--p); background: var(--pll); padding: 12px 16px; border-radius: 6px; margin: 14px 0; }
+  .tip { border-color: var(--ok); background: var(--okb); }
+  .key { border-color: var(--warn); background: var(--warnb); }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .high { background: var(--badb); color: var(--bad); } .med { background: var(--warnb); color: var(--warn); }
+  .low { background: #dbeafe; color: #1d4ed8; } .good { background: var(--okb); color: var(--ok); }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps li { counter-increment: s; position: relative; padding: 6px 0 6px 40px; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 6px; width: 26px; height: 26px; border-radius: 50%;
+                      background: var(--p); color: #fff; text-align: center; font-weight: 700; line-height: 26px; font-size: 13px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .tabs span { background: var(--p); color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 13px; }
+  .bar { display: inline-block; height: 12px; background: var(--p); border-radius: 3px; vertical-align: middle; }
+  footer { color: var(--m); font-size: 13px; margin-top: 60px; border-top: 1px solid var(--line); padding-top: 12px; }
+  @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } nav { position: static; height: auto; border-right: 0; } main { padding: 16px; } }
+  @media print { nav { display: none; } .wrap { display: block; } header { background: var(--p2) !important; -webkit-print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Results (LRE Analysis) — User Guide</h1>
+  <p>For testers, admins, managers and anyone reading a performance-test report. Sections 1–9 need no technical background; section 10 is for the admin team.</p>
+</header>
+<div class="wrap">
+<nav>
+  <a href="#s1">1. What this tool does</a>
+  <a href="#s2">2. Getting started</a>
+  <a href="#s3">3. Words you will see</a>
+  <a class="sub" href="#s3b">The statistics columns</a>
+  <a href="#s4">4. Top bar and settings</a>
+  <a href="#s5">5. The tabs</a>
+  <a class="sub" href="#t-overview">Overview</a>
+  <a class="sub" href="#t-transactions">Transactions</a>
+  <a class="sub" href="#t-charts">Charts</a>
+  <a class="sub" href="#t-errors">Errors</a>
+  <a class="sub" href="#t-workload">Workload</a>
+  <a class="sub" href="#t-insights">Insights</a>
+  <a class="sub" href="#t-validation">Validation</a>
+  <a href="#s6">6. Exports</a>
+  <a class="sub" href="#s6b">Excel sheets</a>
+  <a href="#s7">7. Why numbers differ from LRE</a>
+  <a class="sub" href="#s7g">Granularity</a>
+  <a href="#s8">8. Read a report in 5 minutes</a>
+  <a href="#s9">9. Questions and answers</a>
+  <a href="#s10">10. For the admin team</a>
+</nav>
+<main>
+
+<h2 id="s1">1. What this tool does</h2>
+<p>After a LoadRunner Enterprise (LRE) test finishes, LRE keeps the <b>raw results</b>: a folder (or ZIP) full of files that record every single thing the virtual users did. The Results page reads those raw files and turns them into:</p>
+<ul>
+  <li>a <b>dashboard</b> in the browser, with these tabs:
+    <div class="tabs"><span>Overview</span><span>Transactions</span><span>Charts</span><span>Errors</span><span>Workload</span><span>Insights</span><span>Validation</span></div></li>
+  <li>downloadable reports: <b>Excel</b>, <b>Word</b>, <b>PDF</b>, <b>HTML</b> and <b>JSON</b>.</li>
+</ul>
+<div class="tip"><b>Your data stays on your computer.</b> The browser reads the files directly from your disk; nothing is uploaded to or stored on the server.</div>
+
+<h2 id="s2">2. Getting started</h2>
+<ol class="steps">
+  <li>Open <b>Results</b> in the PerfX menu.</li>
+  <li>Choose the run's raw-results <b>ZIP</b> (for example <code>RawResults_2144.zip</code>) or its unzipped folder.</li>
+  <li>Wait for the progress bar (a 1 GB run takes about a minute).</li>
+  <li>The dashboard opens on the <b>Overview</b> tab.</li>
+</ol>
+<table>
+  <tr><th>File in the results</th><th>What it gives the report</th></tr>
+  <tr><td><code>RawData.eve</code> (required)</td><td>Every transaction and every HTTP request, with exact times</td></tr>
+  <tr><td><code>_t_rep.eve</code></td><td>When each virtual user started and stopped</td></tr>
+  <tr><td><code>res*.lrr</code>, <code>RunInfo.ini</code></td><td>Test name, project, start/end time, schedule</td></tr>
+  <tr><td><code>RawData.map</code></td><td>Transaction and data-point names</td></tr>
+  <tr><td><code>SqliteDb.db</code></td><td>Error messages</td></tr>
+  <tr><td><code>*.usp</code>, <code>*.cfg</code>, <code>*.usr</code></td><td>Pacing, think time and the transactions of each script</td></tr>
+  <tr><td><code>sum_data/</code> (optional)</td><td>Load-generator CPU/memory and some charts</td></tr>
+</table>
+
+<h2 id="s3">3. Words you will see</h2>
+<table>
+  <tr><th style="width:24%">Word</th><th>Plain meaning</th></tr>
+  <tr><td><b>VUser</b> (virtual user)</td><td>A simulated person using the application. 941 VUsers = 941 people at once.</td></tr>
+  <tr><td><b>Script</b></td><td>The list of steps a VUser repeats (log in, search, open an alert, log out…).</td></tr>
+  <tr><td><b>Transaction</b></td><td>One timed step inside a script, e.g. <code>00_000_Login</code>.</td></tr>
+  <tr><td><b>Iteration</b></td><td>One pass through the whole script. A VUser repeats its script many times.</td></tr>
+  <tr><td><b>Instance</b></td><td>One single execution of a transaction (one login by one VUser at one moment).</td></tr>
+  <tr><td><b>Response time</b></td><td>How long one transaction instance took, in <b>seconds</b>.</td></tr>
+  <tr><td><b>Load generator (LG)</b></td><td>A machine that runs the VUsers.</td></tr>
+  <tr><td><b>Steady state</b></td><td>The period when all VUsers were running together — the "real" test window.</td></tr>
+  <tr><td><b>Ramp-up / ramp-down</b></td><td>VUsers being started / stopped at the beginning / end.</td></tr>
+  <tr><td><b>Pass / Fail</b></td><td>A transaction instance that completed OK / reported an error.</td></tr>
+  <tr><td><b>Error</b></td><td>A message logged by a VUser (e.g. HTTP 500). One failure can log several errors.</td></tr>
+  <tr><td><b>TPS</b></td><td>Transactions per second.</td></tr>
+  <tr><td><b>Hits</b></td><td>HTTP requests sent to the application.</td></tr>
+  <tr><td><b>Throughput</b></td><td>Bytes received from the application.</td></tr>
+  <tr><td><b>Think time</b></td><td>Deliberate pauses that imitate a person reading. <b>Not</b> included in response times.</td></tr>
+  <tr><td><b>Pacing</b></td><td>How often each VUser starts a new iteration.</td></tr>
+  <tr><td><b>SLA</b></td><td>The response-time target you agreed (e.g. "P90 under 3 s").</td></tr>
+  <tr><td><b>Apdex</b></td><td>A 0–1 user-satisfaction score: 1 = everyone happy, below 0.85 = users notice slowness.</td></tr>
+</table>
+
+<h3 id="s3b">The statistics columns</h3>
+<p>Imagine a transaction ran 10 times with these times (seconds): <b>1, 1, 1, 1, 1, 1, 1, 1, 2, 10</b>.</p>
+<table>
+  <tr><th>Column</th><th>Meaning</th><th>In the example</th></tr>
+  <tr><td><b>Count</b></td><td>How many times it ran (passed instances)</td><td>10</td></tr>
+  <tr><td><b>Min</b></td><td>The fastest single run</td><td>1</td></tr>
+  <tr><td><b>Avg</b></td><td>Total time ÷ count</td><td>2.0</td></tr>
+  <tr><td><b>Max</b></td><td>The slowest single run</td><td>10</td></tr>
+  <tr><td><b>Std Dev</b></td><td>How spread out the times are (0 = all identical)</td><td>2.7</td></tr>
+  <tr><td><b>P50</b> (median)</td><td>Half the runs were faster than this</td><td>1</td></tr>
+  <tr><td><b>P90</b></td><td>90 % of runs were this fast or faster</td><td>2</td></tr>
+  <tr><td><b>P95 / P99</b></td><td>95 % / 99 % of runs were this fast or faster</td><td>10</td></tr>
+</table>
+<div class="tip"><b>Tip:</b> the average can hide problems. P90/P95 describe what most users experienced, and Max shows the worst single case.</div>
+
+<h2 id="s4">4. The top bar and settings</h2>
+<ul>
+  <li><b>Run name and verdict</b> — the test name and an overall result: <i>No significant issues</i>, <i>Review findings</i> or <i>SLA not met</i>.</li>
+  <li><b>Export buttons</b> — Excel, Word, PDF and <i>More</i> (HTML, JSON, redacted JSON).</li>
+  <li><b>Analysis window</b> — by default the detected steady state. Type a start and end (<code>hh:mm:ss</code> from the test start) and press <b>Apply</b>; <b>Detected</b> resets it. Every tab and export follows this window.</li>
+  <li><b>SLA</b> — choose the percentile (P90 by default) and a default threshold in seconds, then <b>Apply</b>. You can also type an SLA per transaction in the Transactions tab. SLAs are remembered for this test in your browser.</li>
+  <li><b>Chart granularity</b> — the size of the time slots the <b>charts</b> and the Excel <b>Time Series</b> sheet use. <i>Auto</i> (the default) gives at most 1,500 points over the whole test (for example 30 s for an 8-hour test, 120 s for a 27-hour test). You can choose a coarser size (for example 5 min or 10 min) for smoother charts; the change is instant. It <b>never</b> changes the results table — see <a href="#s7g">section 7</a>.</li>
+</ul>
+
+<h2 id="s5">5. The tabs</h2>
+
+<h3 id="t-overview">Overview</h3>
+<ul>
+  <li><b>Key figures (tiles):</b> duration, peak VUsers, steady-state length, transaction instances, TPS, failed transactions (and %), errors, hits per second.</li>
+  <li><b>Test:</b> scenario name, project, controller version, start/end time (local and UTC), schedule, scripts.</li>
+  <li><b>Schedule — planned vs actual:</b> what the test was set up to do next to what really happened. Big differences mean the test did not run as planned.</li>
+  <li><b>Load generators:</b> which machines ran how many VUsers.</li>
+  <li><b>Key findings:</b> the most important automatic findings (see Insights).</li>
+  <li><b>Charts:</b> load and throughput over time; response time per transaction.</li>
+</ul>
+
+<h3 id="t-transactions">Transactions</h3>
+<p>The main results table, one row per transaction, grouped by script.</p>
+<ul>
+  <li><b>Steady state / Full run</b> switch: <i>Steady state</i> uses only the analysis window (best for judging performance); <i>Full run</i> includes ramp-up and ramp-down.</li>
+  <li><b>Columns:</b> Transaction, Count, Pass, Fail, Fail %, Min, Avg, Max, Std dev, P50, P90, P95, P99, TPS; in steady state also SLA (s), Result (PASS/FAIL) and Apdex; plus a small <b>P90 trend</b> line.</li>
+  <li><b>Sort</b> by clicking a column header; <b>filter</b> by typing part of a name.</li>
+  <li><b>Click a row</b> for details: distribution of response times, behaviour over time (avg, P90, P95, max), a latency heatmap and the figures per load generator.</li>
+</ul>
+<div class="note">Pass and Fail are always whole-run counts, also in the steady-state view.</div>
+<p>Above the table a note says <b>how the figures were calculated</b>, for example <i>"Exact: every transaction instance, no granularity (2,817,862 passed instances)"</i>. For extremely large tests (more than 20 million transaction instances) it turns orange and says <i>"Histogram…"</i>: Count, Min, Avg, Max and Std dev are still exact, and the percentiles are within 0.5 %.</p>
+
+<h3 id="t-charts">Charts</h3>
+<p>Pick transactions on the left (<i>5 slowest</i>, <i>5 busiest</i>, <i>All</i>, <i>None</i>) and the metric (Avg, P50, P90, P95, P99, Max). The shaded band is the analysis window. Drag the slider or scroll to zoom.</p>
+<p>The line above the charts shows the <b>granularity</b> in use (e.g. <i>Granularity 120 s (auto)</i>); change it with <i>Chart granularity</i> in the settings bar. Each point is one time slot: its Avg is the average of the transactions in that slot, its Max the slowest one in that slot.</p>
+<table>
+  <tr><th style="width:30%">Chart</th><th>What to look for</th></tr>
+  <tr><td>Load and throughput</td><td>VUsers and TPS over time. TPS should be flat during steady state.</td></tr>
+  <tr><td>Response time over time</td><td>Lines should be flat. A rising line = slowing down; a jump = something changed.</td></tr>
+  <tr><td>Transactions per second</td><td>Per-transaction throughput; dips usually mean slow responses or errors.</td></tr>
+  <tr><td>Latency heatmap</td><td>Dots per time × response-time band. Two bands = two behaviours (e.g. cache hit/miss); a dark top band = slow tail.</td></tr>
+  <tr><td>Throughput vs response time</td><td>Each dot is a time slot. A curve that bends upward at high TPS marks the capacity limit.</td></tr>
+  <tr><td>Errors over time</td><td>When errors happened — compare with response-time spikes.</td></tr>
+  <tr><td>HTTP responses per second</td><td>Count per HTTP status code (200 = OK, 4xx/5xx = problems).</td></tr>
+  <tr><td>Throughput (bytes received)</td><td>Data downloaded per second.</td></tr>
+  <tr><td>Load-generator CPU and memory</td><td>Should stay below about 85 %. Above that, the load generator itself may slow results down.</td></tr>
+  <tr><td>P90 per load generator</td><td>Lines should overlap. One LG consistently higher = LG/network issue, not the application.</td></tr>
+  <tr><td>Response time per VUser</td><td>One row per VUser. A single bright row = one problem user or data record.</td></tr>
+</table>
+
+<h3 id="t-errors">Errors</h3>
+<ul>
+  <li><b>Grouped errors:</b> similar messages are merged (numbers and IDs become <code>&lt;n&gt;</code>), with count, code, script, VUsers affected, load generators, first and last time.</li>
+  <li><b>Errors over time</b> chart.</li>
+  <li><b>Error log:</b> every error, searchable by message, code, VUser or load generator.</li>
+</ul>
+
+<h3 id="t-workload">Workload</h3>
+<ul>
+  <li><b>Scripts:</b> protocol, VUsers, load generators, pacing, think time, iterations planned vs achieved (95 % or more is green).</li>
+  <li><b>Load generators and hosts:</b> VUsers per machine, CPU and memory peaks.</li>
+  <li><b>VUsers:</b> every virtual user with its group, script, machine, when it ran, iterations and average response time.</li>
+</ul>
+
+<h3 id="t-insights">Insights</h3>
+<p>Automatic checks, each with a short explanation and the numbers behind it.</p>
+<table>
+  <tr><th>Severity</th><th>Meaning</th></tr>
+  <tr><td><span class="pill high">High</span></td><td>Likely affects the test result — act on it.</td></tr>
+  <tr><td><span class="pill med">Medium</span></td><td>Worth investigating.</td></tr>
+  <tr><td><span class="pill low">Low / Info</span></td><td>For information.</td></tr>
+  <tr><td><span class="pill good">Good</span></td><td>A check that passed.</td></tr>
+</table>
+<p>Checks include: VUsers and steady state as planned; pacing achieved; transactions getting slower over time (trend) or changing level at one moment (step); spikes, and whether errors happened at the same time; a slower load generator; LG CPU and memory; errors and failed transactions; SLA and Apdex; stable throughput; clock-skew samples.</p>
+
+<h3 id="t-validation">Validation</h3>
+<ul>
+  <li><b>Method:</b> how each figure is calculated.</li>
+  <li><b>Files used:</b> which raw files were found.</li>
+  <li><b>Self-checks:</b> <span class="pill good">OK</span> <span class="pill low">INFO</span> <span class="pill med">WARN</span> <span class="pill high">FAIL</span>. FAIL means the results cannot be trusted (e.g. <code>RawData.eve</code> missing); WARN means something unusual that is explained in the text.</li>
+</ul>
+
+<h2 id="s6">6. Exports</h2>
+<table>
+  <tr><th style="width:24%">Export</th><th>Use it for</th></tr>
+  <tr><td><b>Excel</b></td><td>Sharing and further analysis — see below.</td></tr>
+  <tr><td><b>Word</b></td><td>An editable report with charts, for sign-off documents.</td></tr>
+  <tr><td><b>PDF</b></td><td>Opens a print-ready report; choose <i>Save as PDF</i>.</td></tr>
+  <tr><td><b>HTML</b></td><td>The same report as a single web page.</td></tr>
+  <tr><td><b>JSON</b></td><td>All result data, for tools and automation.</td></tr>
+  <tr><td><b>JSON — redacted</b></td><td>Safe to share outside the client: host names become LG1, LG2…; IP addresses, script paths and error texts are removed.</td></tr>
+</table>
+
+<h3 id="s6b">Excel sheets</h3>
+<table>
+  <tr><th style="width:24%">Sheet</th><th>Contents</th></tr>
+  <tr><td><b>Test Overview</b></td><td>Cards: <i>Test Metadata</i> (project, test name, LRE result folder, Run ID, workload type), <i>Execution Time</i> (start, end, duration, time zone, run status), <i>Run Details</i> (scenario, goal profile, load behaviour, schedule), <i>High-Level Metrics</i> (passed, failed, failure rate, errors, steady state, <b>Results calculated</b> — "Every instance — exact, no granularity"), <i>Performance</i> (TPS, hits/s, total hits, throughput, peak VUsers), <i>VUsers per LG Count</i>, <i>HTTP Response Codes</i>, <i>Schedule — planned vs actual</i>.</td></tr>
+  <tr><td><b>Transactions – Full Run</b></td><td>One merged script cell per group, a row per transaction and a <b>Subtotal</b> row. Columns as in the Transactions tab.</td></tr>
+  <tr><td><b>Transactions – Steady State</b></td><td>The same for the analysis window, with SLA result and Apdex.</td></tr>
+  <tr><td><b>Workload Model</b></td><td>Scripts, load generators and every VUser.</td></tr>
+  <tr><td><b>Errors</b></td><td>Grouped errors and the error log.</td></tr>
+  <tr><td><b>Time Series</b></td><td>One row per time slot at the chosen chart granularity (stated in the sheet title): VUsers, TPS, errors, and per transaction count / avg / P90 / P95.</td></tr>
+  <tr><td><b>LG Health</b></td><td>CPU, memory and disk per load generator.</td></tr>
+  <tr><td><b>Insights</b></td><td>All findings with evidence.</td></tr>
+  <tr><td><b>Method &amp; Validation</b></td><td>Method, self-checks and files used.</td></tr>
+</table>
+<div class="note">Some LRE fields (Test ID, Timeslot ID, "Executed by") are not stored in the raw results, so they cannot appear in the report.</div>
+
+<h2 id="s7">7. Why some numbers differ from the LRE HTML report</h2>
+<div class="key"><b>Short answer:</b> this tool reports what each transaction really took. LRE's summary table <b>smooths</b> the numbers before it shows Minimum, Maximum, Std. Deviation and 90 Percent. Count, Pass, Fail and Average are not affected by smoothing, so they always match.</div>
+<p><b>What smoothing means.</b> LRE first puts the transactions into small time slots and takes the <b>average of each slot</b>. It then shows the fastest slot average as "Minimum", the slowest slot average as "Maximum", and so on.</p>
+<p><b>Example</b> — three logins in the same slot took <b>1 s, 1 s and 10 s</b>:</p>
+<table>
+  <tr><th></th><th>This tool</th><th>LRE summary table</th></tr>
+  <tr><td>What is used</td><td>1, 1, 10</td><td>the slot average: 4</td></tr>
+  <tr><td>Max</td><td><b>10</b> (the real worst case) <span class="bar" style="width:100px"></span></td><td><b>4</b> <span class="bar" style="width:40px"></span></td></tr>
+  <tr><td>Min</td><td><b>1</b></td><td><b>4</b></td></tr>
+  <tr><td>Average</td><td>4</td><td>4 — the same</td></tr>
+</table>
+<p>So LRE's Maximum is lower, its Minimum is higher, its Std. Deviation is smaller, and the Average is identical. Transactions that run rarely (one per slot) are not changed by smoothing — that is why <i>some</i> rows match exactly and others do not.</p>
+<p><b>Proof from a real run (2144).</b> LRE's own raw summary file (<code>sum_data/graph_4.dat</code>) records a single <code>14_03_Search_ClickResultLink</code> that took <b>41.66 s</b> and one <code>14_04_Back_to_MyItems</code> that took <b>2.04 s</b>. This tool shows those values (and the 45.80 s instance next to them). The LRE summary table shows maxima of 7.421 s and 0.363 s.</p>
+<p><b>Is it the "(do not Include Think Time)" filter?</b> No. This tool also removes think time. If it were the cause, the averages would differ too — and they match for every transaction.</p>
+<div class="tip"><b>Which numbers should I use?</b> Use this tool's numbers to find real slow transactions and to judge SLAs. Use LRE's table only when a figure must be quoted exactly as LRE shows it.</div>
+
+<h3 id="s7g">Granularity — what it is and where it is used</h3>
+<p><i>Granularity</i> is the length of the time slots used to group transactions (5 s, 2 min, 10 min…).</p>
+<table>
+  <tr><th>Where</th><th>Granularity?</th></tr>
+  <tr><td>Results table (Transactions tab, Excel transaction sheets, reports)</td><td><b>No</b> — calculated over every single transaction, whatever the size of the test</td></tr>
+  <tr><td>Charts and the Excel Time Series sheet</td><td><b>Yes</b> — Auto, or a coarser size you choose</td></tr>
+</table>
+<div class="key"><b>Why can I not choose a granularity for the results table?</b> Because grouping hides the truth: with 5-minute slots, a 45-second transaction that sits in a slot with nine 4-second ones would show as about 8 seconds. That is exactly why LRE's table looks different. Large tests do not need it either — the tool reads the file in a stream and keeps the statistics compactly, so even hundreds of GB are handled without grouping.</div>
+
+<h2 id="s8">8. How to read a report in five minutes</h2>
+<ol class="steps">
+  <li><b>Overview — verdict and tiles.</b> Did the test run as planned (VUsers, steady-state length)?</li>
+  <li><b>Insights — High and Medium findings.</b> Read these first.</li>
+  <li><b>Transactions (steady state).</b> Sort by P90. Compare with the SLAs. Look at Fail %.</li>
+  <li><b>Charts — Response time over time.</b> Flat lines are good; rising lines or spikes need explaining.</li>
+  <li><b>Errors.</b> What failed, how often, and when.</li>
+</ol>
+
+<h2 id="s9">9. Questions and answers</h2>
+<table>
+  <tr><th style="width:38%">Question</th><th>Answer</th></tr>
+  <tr><td>A transaction shows 0.000 s Min.</td><td>One instance really had identical start and end times in the raw data. It is shown as it is.</td></tr>
+  <tr><td>Pass is the same in Steady state and Full run.</td><td>Pass/Fail are always whole-run counts.</td></tr>
+  <tr><td>Hits/s, HTTP codes or LG Health show "not available".</td><td>The matching file was not in the ZIP (e.g. <code>sum_data/</code> for the LG monitor).</td></tr>
+  <tr><td>Errors show "needs SqliteDb.db".</td><td>Include <code>SqliteDb.db</code> in the ZIP.</td></tr>
+  <tr><td>The run is very large and the browser is slow.</td><td>Use the command line (section 10). Reading takes roughly one minute per GB.</td></tr>
+  <tr><td>An orange note says "Large run … histograms".</td><td>The test has more than 20 million transaction instances. Count, Min, Avg, Max and Std dev are exact; percentiles are within 0.5 %. For exact percentiles ask an admin to run the command line with <code>--exact-limit</code>.</td></tr>
+  <tr><td>The charts look too spiky / too flat.</td><td>Change <i>Chart granularity</i> in the settings bar. Coarser = smoother. The results table does not change.</td></tr>
+  <tr><td>Can I choose the granularity of the results table?</td><td>No, on purpose — see <a href="#s7g">section 7</a>.</td></tr>
+  <tr><td>Can I share the report outside the client?</td><td>Use <b>JSON — redacted</b>, or check the report for host names first.</td></tr>
+</table>
+
+<h2 id="s10">10. For the admin team</h2>
+<ul>
+  <li><b>Where it lives:</b> <code>lre-results-analyser/</code> in the PerfX repository. The page is served at <code>/results-analyser</code> (also under <code>/converter</code>); static files at <code>/ra</code>, <code>/ra/engine</code>, <code>/ra/report</code>.</li>
+  <li><b>Privacy:</b> processing happens in the user's browser (Web Worker). The server only serves the page; it never receives result files.</li>
+  <li><b>Command line</b> (large runs, automation):</li>
+</ul>
+<pre><code>node lre-results-analyser/cli/analyse.js "D:\Results\RawResults_2144.zip" --xlsx run.xlsx --html run.html</code></pre>
+<p>Options: <code>--xlsx</code>, <code>--docx</code>, <code>--html</code>, <code>--out result.json</code>, <code>--sla 3</code>, <code>--sla-pct 95</code>, <code>--window 600-28800</code> (seconds from start), <code>--granularity 600</code> (charts / Time Series only), <code>--exact-limit 100000000</code> (exact percentiles for very large runs; ~12 bytes per instance), <code>--redact</code>, <code>--quiet</code>. Exit code 0 = OK, 1 = a self-check failed, 2 = usage or read error.</p>
+<ul>
+  <li><b>Very large runs (hundreds of GB):</b> run the CLI on a machine close to the files, with more memory for Node, e.g. <code>node --max-old-space-size=16000 lre-results-analyser/cli/analyse.js … --exact-limit 500000000</code>. Without <code>--exact-limit</code> the tool still works and switches to histogram percentiles above 20 M instances.</li>
+  <li><b>Diagnostic:</b> <code>--lre-granularity 2</code> also prints LRE-style smoothed figures to the console, to compare with LRE's HTML table. They are never put into the reports.</li>
+</ul>
+<ul>
+  <li><b>Tests:</b> <code>npx jest lre-results-analyser</code> (synthetic data only — never commit real results).</li>
+  <li><b>How it works:</b> <code>README.md</code> (method table) and <code>docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md</code> (byte layout of <code>RawData.eve</code>, validation against LRE on runs 59 and 2144).</li>
+  <li><b>Validated:</b> names, counts, pass, fail, averages, hits, HTTP codes and throughput match LRE exactly on runs 59 (14 transactions) and 2144 (516 transactions).</li>
+</ul>
+
+<footer>LRE Results Analyser · user guide · Markdown version: <code>docs/USER-GUIDE.md</code></footer>
+</main>
+</div>
+</body>
+</html>

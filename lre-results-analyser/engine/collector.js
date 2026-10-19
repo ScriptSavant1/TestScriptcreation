@@ -61,9 +61,9 @@
 
   /**
    * @param {object} o
-   * @param {number} o.startUtc      scenario start (unix s)
-   * @param {number} [o.durationSec] run length (sizes the bucket array; grows if exceeded)
-   * @param {number} [o.bucketSec]   default: chosen from durationSec
+   * @param {number} o.startUtc        scenario start (unix s)
+   * @param {number} [o.durationSec]   run length (sizes the bucket array; grows if exceeded)
+   * @param {number} [o.bucketSec]     default: chosen from durationSec
    * @param {Map<number,{lg:string}>} [o.vuserInfo]   VUser id → load generator
    * @param {{start:number,end:number}} [o.steady]    detected steady window (relative s) for per-LG figures
    * @param {number} [o.exactLimit=2e7]
@@ -74,6 +74,13 @@
     const exactLimit = o.exactLimit == null ? 2e7 : o.exactLimit;
     const vuserInfo = o.vuserInfo || new Map();
     const steady = o.steady || null;
+    // LRE Analysis-style aggregation (diagnostic only, OFF by default): mean RT per (bucket of end
+    // time × load generator). It keeps one entry per bucket × LG × transaction, which is wasted
+    // memory on multi-day runs and is not used by any report. Enable with lreGranularitySec > 0
+    // (CLI --lre-granularity 2) to compare with LRE's HTML summary.
+    const lreG = o.lreGranularitySec > 0 ? o.lreGranularitySec : 0;
+    const lgIndex = new Map();
+    const lgIdx = (name) => { let i = lgIndex.get(name); if (i === undefined) { i = lgIndex.size; lgIndex.set(name, i); } return i; };
     let exact = exactLimit > 0;
     let total = 0;
     let nb = Math.max(1, Math.ceil(((o.durationSec || 3600) + 60) / bucketSec));
@@ -91,6 +98,7 @@
           b: { n: new Uint32Array(nb), mean: new Float64Array(nb), m2: new Float64Array(nb),
                min: new Float64Array(nb).fill(Infinity), max: new Float64Array(nb).fill(-Infinity), h: new Array(nb) },
           lg: new Map(),
+          agg: lreG > 0 ? new Map() : null,
         };
         txs.set(id, t);
       }
@@ -149,6 +157,11 @@
       if (!L) { L = { full: welford(), fh: hist.create(0.01), steady: welford(), sh: hist.create(0.01) }; t.lg.set(lgName, L); }
       wAdd(L.full, rt); L.fh.add(rt);
       if (steady && rel >= steady.start && rel <= steady.end) { wAdd(L.steady, rt); L.sh.add(rt); }
+      if (t.agg) {
+        const k = Math.floor(rel / lreG) * 4096 + lgIdx(lgName);
+        const a = t.agg.get(k);
+        if (a) { a[0] += rt; a[1]++; } else t.agg.set(k, [rt, 1]);
+      }
 
       // VUser
       let v = vusers.get(vuser);
@@ -169,7 +182,7 @@
     function finish() {
       const nUsed = Number.isFinite(maxRel) ? Math.floor(Math.max(0, maxRel) / bucketSec) + 1 : 0;
       return createStore({ txs, vusers, bucketSec, nb: Math.min(nb, Math.max(nUsed, Math.ceil(((o.durationSec || 0) + 1) / bucketSec))),
-                           exact, exactLimit, total: [...txs.values()].reduce((a, t) => a + t.w.n, 0), minRel, maxRel, steady });
+                           exact, exactLimit, total: [...txs.values()].reduce((a, t) => a + t.w.n, 0), minRel, maxRel, steady, lreG });
     }
 
     return { add, finish, bucketSec };
@@ -202,6 +215,25 @@
       return block(w, h.quantiles(PCTS), "histogram (time-bucket resolution)");
     }
 
+    /**
+     * LRE Analysis-style figures (whole run): every (granularity bucket × load generator) cell is
+     * one point = mean RT of the instances in it, weighted by their count; min / max / std-dev /
+     * p90 are taken over those points. Average and count equal the exact figures.
+     */
+    function lreSummary(id) {
+      const t = txs.get(id);
+      if (!t || !t.agg || !t.agg.size) return null;
+      const pts = [...t.agg.values()].map(([sum, n]) => [sum / n, n]).sort((a, b) => a[0] - b[0]);
+      let W = 0, S = 0, S2 = 0;
+      for (const [v, w] of pts) { W += w; S += v * w; S2 += v * v * w; }
+      const avg = S / W;
+      const pOf = (q) => { const need = (q / 100) * W; let c = 0; for (const [v, w] of pts) { c += w; if (c >= need - 1e-9) return v / 1000; } return pts[pts.length - 1][0] / 1000; };
+      const p = {};
+      for (const q of PCTS) p["p" + q] = pOf(q);
+      return { count: W, min: pts[0][0] / 1000, avg: avg / 1000, max: pts[pts.length - 1][0] / 1000,
+               stdDev: Math.sqrt(Math.max(0, S2 / W - avg * avg)) / 1000, p, points: pts.length, granularitySec: s.lreG, method: "lre-buckets" };
+    }
+
     function exactQuantiles(values) {
       if (!values.length) return PCTS.map(() => null);
       const sorted = Float64Array.from(values).sort();
@@ -228,22 +260,36 @@
       return { n: h.count, satisfied: sat, tolerating: h.countAtMost(F) - sat };
     }
 
-    /** Per-bucket series per transaction (seconds). */
-    function timeline() {
+    /**
+     * Per-bucket series per transaction (seconds). factor > 1 merges every `factor` base buckets
+     * into one (coarser chart granularity): counts add, mean/min/max/M2 merge exactly, bucket
+     * percentiles come from the merged 2 % histograms — no file re-read needed.
+     */
+    function timeline(factor) {
+      const k = Math.max(1, Math.floor(factor || 1));
+      const nOut = Math.ceil(nb / k);
       const out = {};
       for (const [id, t] of txs) {
-        const count = [], avg = [], min = [], max = [], p50 = [], p90 = [], p95 = [], p99 = [];
-        for (let b = 0; b < nb; b++) {
-          const n = t.b.n[b];
-          count.push(n);
-          if (!n) { avg.push(null); min.push(null); max.push(null); p50.push(null); p90.push(null); p95.push(null); p99.push(null); continue; }
-          avg.push(t.b.mean[b] / 1000); min.push(t.b.min[b] / 1000); max.push(t.b.max[b] / 1000);
-          const q = t.b.h[b].quantiles([50, 90, 95, 99]);
+        const count = [], fail = [], avg = [], min = [], max = [], p50 = [], p90 = [], p95 = [], p99 = [];
+        for (let g = 0; g < nOut; g++) {
+          const w = welford();
+          let f = 0, h = null;
+          for (let b = g * k; b < Math.min(nb, (g + 1) * k); b++) {
+            f += t.bf[b];
+            if (!t.b.n[b]) continue;
+            wMerge(w, { n: t.b.n[b], mean: t.b.mean[b], m2: t.b.m2[b], min: t.b.min[b], max: t.b.max[b] });
+            if (k === 1) h = t.b.h[b];
+            else { if (!h) h = hist.create(0.02); h.merge(t.b.h[b]); }
+          }
+          count.push(w.n); fail.push(f);
+          if (!w.n) { avg.push(null); min.push(null); max.push(null); p50.push(null); p90.push(null); p95.push(null); p99.push(null); continue; }
+          avg.push(w.mean / 1000); min.push(w.min / 1000); max.push(w.max / 1000);
+          const q = h.quantiles([50, 90, 95, 99]);
           p50.push(q[0] / 1000); p90.push(q[1] / 1000); p95.push(q[2] / 1000); p99.push(q[3] / 1000);
         }
-        out[id] = { count, fail: Array.from(t.bf.subarray(0, nb)), avg, min, max, p50, p90, p95, p99 };
+        out[id] = { count, fail, avg, min, max, p50, p90, p95, p99 };
       }
-      return { bucketSec, buckets: nb, tx: out };
+      return { bucketSec: bucketSec * k, buckets: nOut, tx: out };
     }
 
     function perLg(id) {
@@ -256,8 +302,8 @@
 
     function vuserList() {
       return [...vusers.values()].sort((a, b) => a.vuser - b.vuser).map((v) => ({
-        vuser: v.vuser, samples: v.n, avgRt: v.n ? v.sum / v.n / 1000 : null,
-        iterations: v.iters.size, iterMin: v.iterMin, iterMax: v.iterMax, firstRelSec: v.first, lastRelSec: v.last,
+        vuser: v.vuser, samples: v.n, avgRt: v.n ? v.sum / v.n / 1000 : null, firstRelSec: v.first, lastRelSec: v.last,
+        iterations: v.iters.size, iterMin: v.iterMin, iterMax: v.iterMax,
       }));
     }
 
@@ -343,7 +389,7 @@
         for (let b = bOf(win.start); b <= Math.min(nb - 1, bOf(win.end)); b++) n += t.bf[b];
         return n;
       },
-      summary, apdexCounts, timeline, perLg, vuserList, vuserHeat, latencyHeat, distribution, countIn,
+      summary, lreSummary, apdexCounts, timeline, perLg, vuserList, vuserHeat, latencyHeat, distribution, countIn,
     };
   }
 

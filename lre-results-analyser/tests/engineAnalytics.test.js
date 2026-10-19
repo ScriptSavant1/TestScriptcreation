@@ -247,37 +247,3 @@ describe("insights.run on a degrading soak", () => {
     expect(res.verdict.status).toBe("warn");
   });
 });
-
-describe("txnames.resolve (internal id → name)", () => {
-  const txnames = require("../engine/txnames");
-  test("hungarian finds the optimal one-to-one assignment", () => {
-    expect(txnames.hungarian([[4, 1, 3], [2, 0, 5], [3, 2, 2]])).toEqual([1, 0, 2]);
-    expect(txnames.hungarian([[1, 9], [9, 1], [5, 5]]).slice(0, 2)).toEqual([0, 1]); // more rows than columns
-  });
-  test("equal counts are told apart by mean and max (run 59: five transactions × 2,992)", () => {
-    const graph = [
-      { name: "SC01_06", count: 2992, mean: 0.234, max: 2.1 }, { name: "SC01_08", count: 2992, mean: 0.056, max: 0.9 },
-      { name: "SC01_09", count: 2992, mean: 0.209, max: 1.8 }, { name: "SC01_10", count: 2992, mean: 0.240, max: 3.0 },
-      { name: "SC01_11", count: 2992, mean: 0.082, max: 1.1 }, { name: "SC01_04", count: 3022, mean: 1.063, max: 8.362 },
-    ];
-    const ids = [
-      { id: 15, count: 2992, mean: 0.2341, max: 2.1 }, { id: 16, count: 2992, mean: 0.0561, max: 0.9 }, { id: 17, count: 2992, mean: 0.2089, max: 1.8 },
-      { id: 18, count: 2992, mean: 0.2401, max: 3.0 }, { id: 19, count: 2992, mean: 0.0819, max: 1.1 }, { id: 10, count: 3022, mean: 1.064, max: 8.362 },
-    ];
-    // RawData.map uses ids 1–14: ids 10–14 overlap but must NOT be used for lookup
-    const mapNames = new Map(Array.from({ length: 14 }, (_, i) => [i + 1, "MAP_" + (i + 1)]));
-    const r = txnames.resolve({ ids, graph, mapNames });
-    expect(Object.fromEntries(r.names)).toEqual({ 10: "SC01_04", 15: "SC01_06", 16: "SC01_08", 17: "SC01_09", 18: "SC01_10", 19: "SC01_11" });
-    expect(r.unresolved).toEqual([]);
-  });
-  test("a match outside tolerance is rejected; exact id-set equality is used only without a graph", () => {
-    const r = txnames.resolve({ ids: [{ id: 3, count: 100, mean: 1 }], graph: [{ name: "X", count: 500, mean: 1 }] });
-    expect(r.names.size).toBe(0);
-    expect(r.unresolved).toEqual([3]);
-    const r2 = txnames.resolve({ ids: [{ id: 1, count: 5, mean: 1 }, { id: 2, count: 5, mean: 2 }], mapNames: new Map([[1, "A"], [2, "B"]]) });
-    expect(r2.assumed).toBe(true);
-    expect(r2.names.get(2)).toBe("B");
-    const r3 = txnames.resolve({ ids: [{ id: 10, count: 5, mean: 1 }], mapNames: new Map([[1, "A"], [10, "J"]]) });
-    expect(r3.names.size).toBe(0); // id sets differ → no guessing
-  });
-});

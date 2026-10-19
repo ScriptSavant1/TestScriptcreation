@@ -10,7 +10,7 @@
   const fmt = L.format, C = L.charts;
   const $ = (s, el) => (el || document).querySelector(s);
   const $$ = (s, el) => [...(el || document).querySelectorAll(s)];
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const n3 = (v) => fmt.num(v, 3);
 
   const state = {
@@ -18,7 +18,7 @@
     selected: new Set(), metric: "p90", detailTx: null, charts: new Map(), started: 0, lastSettings: {},
   };
 
-  // ── theme (also driven by the portal when embedded) ───────────────────
+  // ── theme (also driven by the portal when embedded) ─────────────────────────
   function setTheme(t) {
     state.dark = t !== "light";
     document.documentElement.setAttribute("data-theme", state.dark ? "dark" : "light");
@@ -38,7 +38,7 @@
   }
   function show(view) { $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view)); }
 
-  // ── worker ────────────────────────────────────────────────────────────
+  // ── worker ──────────────────────────────────────────────────────────────────
   function worker() {
     if (state.worker) return state.worker;
     const w = new Worker("ra/worker.js");
@@ -60,7 +60,7 @@
     else toast(msg, true);
   }
 
-  // ── picking files ─────────────────────────────────────────────────────
+  // ── picking files ───────────────────────────────────────────────────────────
   $("#in-folder").onchange = (e) => {
     const files = [...e.target.files].map((f) => ({ path: f.webkitRelativePath || f.name, file: f }));
     e.target.value = "";
@@ -136,7 +136,7 @@
     } else fill.classList.add("indeterminate");
   }
 
-  // ── result ────────────────────────────────────────────────────────────
+  // ── result ──────────────────────────────────────────────────────────────────
   function slaKey(m) { return "lre-ra-sla::" + (m.meta.sessionName || "run"); }
   function loadSla(m) { try { return JSON.parse(localStorage.getItem(slaKey(m)) || "null"); } catch (_) { return null; } }
   function saveSla(m, sla) { try { localStorage.setItem(slaKey(m), JSON.stringify(sla)); } catch (_) { /* storage blocked */ } }
@@ -163,7 +163,7 @@
   }
   function setBusy(b) { $$("#view-results .btn").forEach((x) => { if (!x.dataset.export) x.disabled = b; }); document.body.style.cursor = b ? "progress" : ""; }
 
-  // ── settings bar ──────────────────────────────────────────────────────
+  // ── settings bar ────────────────────────────────────────────────────────────
   function parseClock(s) {
     s = String(s || "").trim();
     if (!s) return null;
@@ -176,11 +176,20 @@
     const m = state.model;
     $("#win-start").value = m.window ? fmt.hms(m.window.start) : "";
     $("#win-end").value = m.window ? fmt.hms(m.window.end) : "";
-    $("#win-local").textContent = m.window ? `${fmt.relLocal(m, m.window.start).slice(11)} → ${fmt.relLocal(m, m.window.end).slice(11)} local · ${m.window.detected ? "detected steady state" : "user-set"}` : "no steady state detected";
+    $("#win-local").textContent = m.window ? `${fmt.relLocal(m, m.window.start).slice(11)} – ${fmt.relLocal(m, m.window.end).slice(11)} local · ${m.window.detected ? "detected steady state" : "user-set"}` : "no steady state detected";
     const s = m.settings && m.settings.sla;
     $("#sla-pct").value = String((s && s.percentile) || 90);
     $("#sla-default").value = s && s.defaultSec != null ? s.defaultSec : "";
+    const g = m.granularity;
+    const sel = $("#gran");
+    if (g) {
+      const label = (sec) => (sec % 3600 === 0 ? `${sec / 3600} h` : sec % 60 === 0 ? `${sec / 60} min` : `${sec} s`);
+      sel.innerHTML = g.options.map((o) => `<option value="${o === g.baseSec ? "auto" : o}">${o === g.baseSec ? `Auto (${label(o)})` : label(o)}</option>`).join("");
+      sel.value = g.auto ? "auto" : String(g.sec);
+      $("#gran-hint").textContent = `${g.buckets.toLocaleString("en-GB")} points · charts & Time Series only · summary uses every instance`;
+    }
   }
+  $("#gran").onchange = () => { const v = $("#gran").value; applySettings({ granularitySec: v === "auto" ? null : Number(v) }); };
   $("#win-apply").onclick = () => {
     const a = parseClock($("#win-start").value), b = parseClock($("#win-end").value);
     if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return toast("Enter a start and end as hh:mm:ss from the scenario start (end after start)", true);
@@ -196,7 +205,7 @@
     applySettings({ sla });
   };
 
-  // ── tabs ──────────────────────────────────────────────────────────────
+  // ── tabs ────────────────────────────────────────────────────────────────────
   $$("#tabs button").forEach((b) => { b.onclick = () => openTab(b.dataset.tab); });
   function openTab(tab) {
     state.tab = tab;
@@ -208,7 +217,7 @@
   function renderAll() {
     const m = state.model;
     $("#run-name").textContent = m.meta.sessionName || "LRE run";
-    $("#run-sub").textContent = `${fmt.localTime(m.meta.startUtc, m.meta.localOffsetSec)} → ${fmt.localTime(m.meta.stopUtc, m.meta.localOffsetSec)} (${fmt.zone(m.meta.localOffsetSec)}) · ${fmt.hms(m.meta.durationSec)} · ${m.meta.project || ""}`;
+    $("#run-sub").textContent = `${fmt.localTime(m.meta.startUtc, m.meta.localOffsetSec)} – ${fmt.localTime(m.meta.stopUtc, m.meta.localOffsetSec)} (${fmt.zone(m.meta.localOffsetSec)}) · ${fmt.hms(m.meta.durationSec)} · ${m.meta.project || ""}`;
     const v = $("#verdict");
     v.textContent = m.insights.verdict.text; v.className = "verdict " + m.insights.verdict.status;
     const n = m.insights.findings.filter((f) => f.severity === "high").length;
@@ -225,7 +234,7 @@
     ({ overview, transactions, charts: chartsTab, errors, workload, insights, validation })[tab](panel);
   }
 
-  // ── charts helpers ────────────────────────────────────────────────────
+  // ── charts helpers ──────────────────────────────────────────────────────────
   function mount(el, option, key) {
     if (!option) { el.innerHTML = `<div class="na">Not available for this run${key && NA[key] ? " — " + NA[key] : ""}.</div>`; el.style.height = "auto"; return null; }
     const ch = echarts.init(el, state.dark ? "dark" : null, { renderer: "canvas" });
@@ -278,16 +287,17 @@
     return out;
   }
 
-  // ── Overview ──────────────────────────────────────────────────────────
+  // ── Overview ────────────────────────────────────────────────────────────────
   function overview(p) {
     const m = state.model, t = m.totals, off = m.meta.localOffsetSec;
     const kpi = (l, v, s) => `<div class="kpi"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div>${s ? `<div class="s">${esc(s)}</div>` : ""}</div>`;
     const issues = m.insights.findings.filter((f) => f.severity === "high" || f.severity === "medium");
     p.innerHTML = `
+      ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>Large run:</b> ${esc(m.method.summaryBasis)}. For exact percentiles use the command line with a higher <code>--exact-limit</code> on a machine with more memory.</div>`}
       <div class="kpis">
         ${kpi("Duration", fmt.hms(m.meta.durationSec), m.meta.stopReason ? "stopped: " + m.meta.stopReason : "")}
         ${kpi("Peak VUsers", fmt.int(t.peakVusers), m.lifecycle ? `${m.lifecycle.vusers} in total` : "")}
-        ${kpi(m.window && !m.window.detected ? "Analysis window" : "Steady state", m.window ? fmt.hms(m.window.durationSec) : "-", m.window ? `t+${fmt.hms(m.window.start)} → t+${fmt.hms(m.window.end)}` : "")}
+        ${kpi(m.window && !m.window.detected ? "Analysis window" : "Steady state", m.window ? fmt.hms(m.window.durationSec) : "-", m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)}` : "")}
         ${kpi("Transactions", fmt.int(t.samples), `${m.transactions.length} names`)}
         ${kpi("TPS (window)", fmt.num(t.tpsSteady, 2), `full run ${fmt.num(t.tpsFull, 2)}`)}
         ${kpi("Failed", t.fail != null ? fmt.int(t.fail) : "n/a", t.fail != null && t.pass != null ? `${((t.fail / Math.max(1, t.pass + t.fail)) * 100).toFixed(2)} %` : "needs sum_data")}
@@ -297,9 +307,9 @@
       <div class="grid-2">
         <div class="card"><h3>Test</h3><table class="t kv"><tbody>
           ${[["Scenario", m.meta.sessionName], ["Project", m.meta.project], ["Controller", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
-             ["Start (local)", fmt.localTime(m.meta.startUtc, off) + " " + fmt.zone(off)], ["End (local)", fmt.localTime(m.meta.stopUtc, off)], ["Start (UTC)", fmt.utcTime(m.meta.startUtc)],
-             ["Schedule", m.meta.scheduleText || m.meta.schedule.raw], ["Load behaviour", m.meta.loadBehavior], ["Scripts", m.workload.map((s) => `${s.key} (${s.vusers})`).join(", ")],
-             ["Percentiles", m.method.percentile]].map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v == null ? "-" : v)}</td></tr>`).join("")}
+            ["Start (local)", fmt.localTime(m.meta.startUtc, off) + " " + fmt.zone(off)], ["End (local)", fmt.localTime(m.meta.stopUtc, off)], ["Start (UTC)", fmt.utcTime(m.meta.startUtc)],
+            ["Schedule", m.meta.scheduleText || m.meta.schedule.raw], ["Load behaviour", m.meta.loadBehavior], ["Scripts", m.workload.map((s) => `${s.key} (${s.vusers})`).join(", ")],
+            ["Percentiles", m.method.percentile]].map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v == null ? "-" : v)}</td></tr>`).join("")}
         </tbody></table></div>
         <div class="card"><h3>Schedule — planned vs actual</h3><table class="t"><thead><tr><th>Phase</th><th>Planned</th><th>Actual</th></tr></thead><tbody>
           ${fmt.scheduleRows(m).map((r) => `<tr><td>${esc(r.phase)}</td><td>${esc(r.planned)}</td><td>${esc(r.actual)}</td></tr>`).join("")}
@@ -318,7 +328,7 @@
     bindFindingLinks(p);
   }
 
-  // ── Transactions ──────────────────────────────────────────────────────
+  // ── Transactions ────────────────────────────────────────────────────────────
   const TX_COLS = [
     { k: "name", h: "Transaction" }, { k: "count", h: "Count", num: 1, f: (t, s) => fmt.int(s.count), v: (t, s) => s.count },
     { k: "pass", h: "Pass", num: 1, f: (t) => (t.pass == null ? "-" : fmt.int(t.pass)), v: (t) => t.pass },
@@ -351,18 +361,19 @@
       <div class="tx-controls">
         <div class="seg"><button data-v="steady" class="${which === "steady" ? "on" : ""}">${m.window && !m.window.detected ? "Analysis window" : "Steady state"}</button><button data-v="full" class="${which === "full" ? "on" : ""}">Full run</button></div>
         <input id="tx-filter" placeholder="Filter transactions" value="${esc(state.filter)}">
-        <span class="hint">${which === "steady" && m.window ? `t+${fmt.hms(m.window.start)} → t+${fmt.hms(m.window.end)} · ` : ""}seconds · percentiles ${esc(m.method.percentileMethod)} · click a row for detail${slaCols ? " · type an SLA (s) per transaction" : ""}</span>
+        <span class="hint">${which === "steady" && m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)} · ` : ""}seconds · click a row for detail${slaCols ? " · type an SLA (s) per transaction" : ""}</span>
       </div>
+      <div class="method-note ${m.method.percentileMethod === "exact" ? "" : "warn"}"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. Min/Max/Std dev/percentiles are not averaged into time slots (LRE's summary table does that, so busy transactions can differ from it). P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>
       <div class="card"><div class="table-wrap"><table class="t" id="tx-table"><thead><tr>
-        ${TX_COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" ${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? 'title="Whole-run count from sum_data"' : ""}>${c.h}${which === "steady" && ["pass", "fail"].includes(c.k) ? " (run)" : ""}</th>`).join("")}
+        ${TX_COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" ${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? 'title="Whole-run count from sum_data"' : ""}>${c.h}${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? " (run)" : ""}</th>`).join("")}
         ${slaCols ? `<th class="num">SLA (s)</th><th>Result</th><th class="num">Apdex</th>` : ""}<th>P90 trend</th>
       </tr></thead><tbody>
         ${rows.map((r) => {
           if (r.group) return `<tr class="group"><td colspan="${TX_COLS.length + (slaCols ? 4 : 1)}">${esc(r.group)}</td></tr>`;
           const t = r.t, s = t[which];
-          const sla = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td>
-            <td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "PASS" : "FAIL"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
-          return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' + t.id + ' could not be matched to a name — see Validation">unnamed</span>') : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
+          const sla = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td><td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "PASS" : "FAIL"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
+          return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' +
+            t.id + ' could not be matched to a name — see Validation">unnamed</span>') : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
         }).join("")}
       </tbody></table></div></div>
       <div id="tx-detail"></div>`;
@@ -393,10 +404,10 @@
     const m = state.model;
     const t = m.transactions.find((x) => x.id === id);
     if (!t) return;
-    const lgRows = (t.perLg || []).map((l) => `<tr><td>${esc(l.lg)}</td><td class="num">${fmt.int(l.full.count)}</td><td class="num">${n3(l.full.avg)}</td><td class="num">${n3(l.full.p.p90)}</td><td class="num">${n3(l.full.p.p95)}</td>
-      <td class="num">${fmt.int(l.steady.count)}</td><td class="num">${n3(l.steady.avg)}</td><td class="num">${n3(l.steady.p.p90)}</td><td class="num">${n3(l.steady.p.p95)}</td></tr>`).join("");
+    const lgRows = (t.perLg || []).map((l) => `<tr><td>${esc(l.lg)}</td><td class="num">${fmt.int(l.full.count)}</td><td class="num">${n3(l.full.avg)}</td><td class="num">${n3(l.full.p.p90)}</td><td class="num">${n3(l.full.p.p95)}</td><td class="num">${fmt.int(l.steady.count)}</td><td class="num">${n3(l.steady.avg)}</td><td class="num">${n3(l.steady.p.p90)}</td><td class="num">${n3(l.steady.p.p95)}</td></tr>`).join("");
     el.innerHTML = `<div class="detail"><h3 style="margin:0 0 8px">${esc(t.name)}</h3>
-      <div class="sub" style="color:var(--text-2);font-size:12px;margin-bottom:8px">ID ${t.id} · scripts: ${esc(t.scripts.join(", ") || "-")} · first t+${fmt.hms(t.firstRelSec)} · last t+${fmt.hms(t.lastRelSec)} · ${t.vuserIterations} VUser-iterations${t.negativeRtClamped ? ` · ${t.negativeRtClamped} negative RT clamped` : ""}</div>
+      <div class="sub" style="color:var(--text-2);font-size:12px;margin-bottom:8px">ID ${t.id} · scripts: ${esc(t.scripts.join(", ") || "-")} · first t+${fmt.hms(t.firstRelSec)} · last t+${fmt.hms(t.lastRelSec)} · ${t.vuserIterations} VUser-iterations${
+        t.negativeRtClamped ? ` · ${t.negativeRtClamped} negative RT clamped` : ""}</div>
       <div class="grid-2" id="txd-charts"></div>
       <div class="card"><h3>Per load generator (histogram percentiles)</h3><div class="table-wrap"><table class="t"><thead><tr><th>Load generator</th><th class="num">Count</th><th class="num">Avg</th><th class="num">P90</th><th class="num">P95</th><th class="num">Steady count</th><th class="num">Steady avg</th><th class="num">Steady P90</th><th class="num">Steady P95</th></tr></thead><tbody>${lgRows}</tbody></table></div></div></div>`;
     const g = $("#txd-charts", el);
@@ -429,7 +440,7 @@
     mount(el, el._build({ dark: state.dark, noTitle: true }), "latencyHeat");
   }
 
-  // ── Charts ────────────────────────────────────────────────────────────
+  // ── Charts ──────────────────────────────────────────────────────────────────
   function chartsTab(p) {
     const m = state.model;
     const txs = m.transactions.filter((t) => t.full.count);
@@ -441,7 +452,7 @@
       <div>
         <div class="chart-controls"><span class="setting-label">Response-time metric</span>
           <div class="seg" id="metric">${["avg", "p50", "p90", "p95", "p99", "max"].map((k) => `<button data-m="${k}" class="${state.metric === k ? "on" : ""}">${k === "avg" ? "Avg" : k.toUpperCase()}</button>`).join("")}</div>
-          <span class="hint">Drag the slider or scroll inside a chart to zoom · the shaded band is the analysis window</span></div>
+          <span class="hint">Granularity ${esc(m.granularity ? `${m.granularity.sec} s${m.granularity.auto ? " (auto)" : ""}` : m.timeline.bucketSec + " s")} — change it in the settings bar · drag the slider or scroll inside a chart to zoom · the shaded band is the analysis window</span></div>
         <div id="chart-grid"></div>
       </div></div>`;
     $$(".tx-picker input", p).forEach((cb) => { cb.onchange = () => { if (cb.checked) state.selected.add(+cb.value); else state.selected.delete(+cb.value); rerender(p); }; });
@@ -474,7 +485,7 @@
     if (state.scrollTo) { const el = $(`[data-chart="${state.scrollTo}"]`, p); state.scrollTo = null; if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }
   }
 
-  // ── Errors ────────────────────────────────────────────────────────────
+  // ── Errors ──────────────────────────────────────────────────────────────────
   function errors(p) {
     const m = state.model;
     if (!m.errors) { p.innerHTML = `<div class="card"><div class="na">No error data — SqliteDb.db was not found in the results.</div></div>`; return; }
@@ -498,7 +509,7 @@
     draw();
   }
 
-  // ── Workload ──────────────────────────────────────────────────────────
+  // ── Workload ────────────────────────────────────────────────────────────────
   function workload(p) {
     const m = state.model;
     p.innerHTML = `<div class="card"><h3>Scripts</h3><div class="table-wrap"><table class="t"><thead><tr><th>Script</th><th>Protocol</th><th class="num">VUsers</th><th>Load generators</th><th>Pacing</th><th>Think time</th><th class="num">Iterations</th><th class="num">Planned</th><th class="num">Achieved</th><th class="num">Transactions</th></tr></thead><tbody>
@@ -514,9 +525,9 @@
       </tbody></table></div></div>`;
   }
 
-  // ── Insights ──────────────────────────────────────────────────────────
+  // ── Insights ────────────────────────────────────────────────────────────────
   function findingHtml(f) {
-    const show = (v) => (typeof v === "number" ? String(+v.toFixed(4)) : Array.isArray(v) ? (v.every((x) => typeof x !== "object") ? v.slice(0, 8).join(", ") + (v.length > 8 ? "…" : "") : null) : v && typeof v === "object" ? null : String(v));
+    const show = (v) => (typeof v === "number" ? String(+v.toFixed(4)) : Array.isArray(v) ? (v.every((x) => typeof x !== "object") ? v.slice(0, 8).join(", ") + (v.length > 8 ? " …" : "") : null) : v && typeof v === "object" ? null : String(v));
     const ev = f.evidence ? Object.entries(f.evidence).map(([k, v]) => [k, show(v)]).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}: ${v}`).join(" · ").slice(0, 400) : "";
     return `<div class="finding ${f.severity}"><div class="ft"><span class="pill ${f.severity}">${fmt.SEVERITY[f.severity].label}</span> ${esc(f.title)}</div>
       <div class="fx">${esc(f.text)}</div>${ev ? `<div class="ev">${esc(ev)}</div>` : ""}${f.chart ? `<button class="go" data-chart="${esc(f.chart)}">Show chart →</button>` : ""}</div>`;
@@ -541,7 +552,7 @@
     bindFindingLinks(p);
   }
 
-  // ── Validation ────────────────────────────────────────────────────────
+  // ── Validation ──────────────────────────────────────────────────────────────
   function validation(p) {
     const m = state.model;
     p.innerHTML = `<div class="grid-2">
@@ -550,20 +561,20 @@
         <tr><td>sum_data graphs</td><td>${m.files.sumDataGraphs}</td></tr></tbody></table></div></div>
       <div class="card"><h3>Self-checks</h3><div class="sub">These confirm the binary layout of RawData.eve and the consistency of the scenario files. Compare the transaction counts with LRE Analysis — they must match exactly.</div>
       <table class="t"><thead><tr><th>Status</th><th>Check</th><th>Result</th></tr></thead><tbody>
-      ${m.selfCheck.map((c) => `<tr><td><span class="pill ${c.status === "ok" ? "ok" : c.status === "fail" ? "fail" : c.status === "warn" ? "warn" : "info"}">${c.status.toUpperCase()}</span></td><td>${esc(c.id)}</td><td>${esc(c.text)}${c.data !== undefined ? `<div class="ev" style="font-family:var(--mono);font-size:11px;color:var(--text-3)">${esc(JSON.stringify(c.data)).slice(0, 600)}</div>` : ""}</td></tr>`).join("")}
+      ${m.selfCheck.map((c) => `<tr><td><span class="pill ${c.status === "fail" ? "fail" : c.status === "ok" ? "ok" : c.status === "warn" ? "warn" : "info"}">${c.status.toUpperCase()}</span></td><td>${esc(c.id)}</td><td>${esc(c.text)}${c.data !== undefined ? `<div class="ev" style="font-family:var(--mono);font-size:11px;color:var(--text-3)">${esc(JSON.stringify(c.data).slice(0, 600))}</div>` : ""}</td></tr>`).join("")}
       </tbody></table></div>
-      ${m.txNameResolution && m.txNameResolution.matches.length ? `<div class="card"><h3>Transaction names</h3><div class="sub">${esc(m.txNameResolution.method)}</div><div class="table-wrap"><table class="t"><thead><tr><th class="num">Internal id</th><th>Name</th><th class="num">Count</th><th class="num">LRE graph count</th><th class="num">Mean (s)</th><th class="num">LRE graph mean</th><th>Accepted</th></tr></thead><tbody>
-      ${m.txNameResolution.matches.map((x) => `<tr><td class="num">${x.id}</td><td>${esc(x.name)}</td><td class="num">${fmt.int(x.count)}</td><td class="num">${fmt.int(x.graphCount)}</td><td class="num">${n3(x.mean)}</td><td class="num">${n3(x.graphMean)}</td><td>${x.accepted ? '<span class="pill ok">yes</span>' : '<span class="pill fail">no</span>'}</td></tr>`).join("")}
+      ${m.txNameResolution && m.txNameResolution.matches && m.txNameResolution.matches.length ? `<div class="card"><h3>Transaction names</h3><div class="sub">${esc(m.txNameResolution.method)}</div><div class="table-wrap"><table class="t"><thead><tr><th class="num">Internal id</th><th>Name</th><th class="num">Count</th><th class="num">LRE graph count</th><th class="num">Mean (s)</th><th class="num">LRE graph mean</th><th>Accepted</th></tr></thead><tbody>
+        ${m.txNameResolution.matches.map((x) => `<tr><td class="num">${x.id}</td><td>${esc(x.name)}</td><td class="num">${fmt.int(x.count)}</td><td class="num">${fmt.int(x.graphCount)}</td><td class="num">${n3(x.mean)}</td><td class="num">${n3(x.graphMean)}</td><td>${x.accepted ? '<span class="pill ok">yes</span>' : '<span class="pill fail">no</span>'}</td></tr>`).join("")}
       </tbody></table></div></div>` : ""}
       ${m.dataPoints && m.dataPoints.length ? `<div class="card"><h3>Data points (RawData.eve sub-type 762)</h3><div class="sub">Per-request counters such as HTTP status codes — compare HTTP_200 / HTTP_500 with LRE's HTTP Responses summary.</div><table class="t"><thead><tr><th>Data point</th><th class="num">Records</th><th class="num">Sum of values</th></tr></thead><tbody>
-      ${m.dataPoints.map((d) => `<tr><td>${esc(d.name)}</td><td class="num">${fmt.int(d.count)}</td><td class="num">${fmt.int(Math.round(d.sum))}</td></tr>`).join("")}
+        ${m.dataPoints.map((d) => `<tr><td>${esc(d.name)}</td><td class="num">${fmt.int(d.count)}</td><td class="num">${fmt.int(Math.round(d.sum))}</td></tr>`).join("")}
       </tbody></table></div>` : ""}
       ${m.eve ? `<div class="card"><h3>RawData.eve record types</h3><div class="table-wrap"><table class="t"><thead><tr><th class="num">Count</th><th>Signature</th><th>First bytes (hex)</th></tr></thead><tbody>
-      ${m.eve.signatures.slice(0, 30).map((s) => `<tr><td class="num">${fmt.int(s.count)}</td><td><code>${esc(s.signature)}</code></td><td><code style="font-size:10.5px">${esc(s.examples[0] || "")}</code></td></tr>`).join("")}
+        ${m.eve.signatures.slice(0, 30).map((s) => `<tr><td class="num">${fmt.int(s.count)}</td><td><code>${esc(s.signature)}</code></td><td><code style="font-size:10.5px">${esc(s.examples[0] || "")}</code></td></tr>`).join("")}
       </tbody></table></div></div>` : ""}`;
   }
 
-  // ── exports ───────────────────────────────────────────────────────────
+  // ── exports ─────────────────────────────────────────────────────────────────
   const loaded = new Map();
   function loadScript(src) {
     if (!loaded.has(src)) loaded.set(src, new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("Could not load " + src)); document.head.appendChild(s); }));

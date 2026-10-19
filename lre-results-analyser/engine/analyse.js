@@ -2,11 +2,11 @@
  * analyse.js — orchestration: one pass over an LRE results folder → a single result model.
  *
  * The file source is injected so the same code runs in Node (CLI) and in the browser (worker):
- *   source.list()                 → Promise<string[]>   every file path (relative)
- *   source.readBytes(path)        → Promise<Uint8Array>  small text files
- *   source.stream(path, onChunk)  → Promise<void>        RawData.eve in chunks
- *   source.size?(path)            → Promise<number>      optional, for progress
- *   source.sqlite?(path, sql)     → Promise<object[]>    optional; errors skipped when absent
+ *   source.list()                → Promise<string[]>    every file path (relative)
+ *   source.readBytes(path)       → Promise<Uint8Array>  small text files
+ *   source.stream(path, onChunk) → Promise<void>        RawData.eve in chunks
+ *   source.size?(path)           → Promise<number>      optional, for progress
+ *   source.sqlite?(path, sql)    → Promise<object[]>    optional; errors skipped when absent
  *
  * analyse() returns the MODEL (plain, JSON-serialisable). The heavy statistics store (samples,
  * histograms) is attached as a non-enumerable `store` property: applySettings(model, settings)
@@ -17,14 +17,14 @@
   if (typeof module === "object" && module.exports) {
     module.exports = factory(require("./files"), require("./scenario"), require("./trep"), require("./runlogic"),
       require("./rawmap"), require("./sla"), require("./collate"), require("./eve"), require("./stats"), require("./errors"),
-      require("./collector"), require("./dat"), require("./insights"), require("./txnames"));
+      require("./collector"), require("./dat"), require("./insights"));
   } else {
     const L = root.LreRA;
     L.analyse = factory(L.files, L.scenario, L.trep, L.runlogic, L.rawmap, L.sla, L.collate, L.eve, L.stats, L.errors,
-      L.collector, L.dat, L.insights, L.txnames);
+      L.collector, L.dat, L.insights);
   }
 })(typeof self !== "undefined" ? self : this, function (files, scenario, trep, runlogic, rawmap, sla, collate, eve, stats, errors,
-  collector, dat, insights, txnames) {
+  collector, dat, insights) {
   "use strict";
 
   const ENGINE_VERSION = "1.1.0";
@@ -47,9 +47,9 @@
 
     for (const name of found.requiredMissing) check("fail", "file-missing", `Required file not found: ${name}`);
     for (const m of found.missing.filter((x) => !x.required)) check("info", "file-missing", `Optional file not found: ${m.name}`);
-    if (found.lrrCandidates.length > 1) check("warn", "lrr-multiple", `More than one .lrr file; used ${files.base(found.files.lrr)}`, found.lrrCandidates.map(files.base));
+    if (found.lrrCandidates.length > 1) check("warn", "lrr-multiple", `More than one .lrr file: used ${files.base(found.files.lrr)}`, found.lrrCandidates.map(files.base));
 
-    // ── text files ────────────────────────────────────────────────────────
+    // ── text files ──────────────────────────────────────────────────────────
     progress(0, null, "Reading scenario files");
     const meta = scenario.parse(await readOpt(source, f.runInfo), await readOpt(source, f.lrr));
     const life = f.trep ? trep.parse(await source.readBytes(f.trep)) : null;
@@ -61,20 +61,28 @@
 
     const scripts = await readScripts(source, found, meta, life, check);
 
-    // ── RawData.eve ───────────────────────────────────────────────────────
+    // ── RawData.eve ─────────────────────────────────────────────────────────
     const steadyAbs = life && life.phases.steady ? life.phases.steady : null;
     const steadyRel = steadyAbs && startUtc ? { start: steadyAbs.start - startUtc, end: steadyAbs.end - startUtc } : null;
     const vuserInfo = new Map();
     if (life) for (const v of life.vusers) if (!vuserInfo.has(v.vuser)) vuserInfo.set(v.vuser, { lg: v.lg, group: v.group, script: v.script });
     const col = collector.createCollector({
       startUtc: startUtc || 0, durationSec, bucketSec: opts.bucketSec, vuserInfo, steady: steadyRel,
-      exactLimit: opts.exactLimit,
+      exactLimit: opts.exactLimit, lreGranularitySec: opts.lreGranularitySec,
     });
     let decoded = null;
+    const web = webCollector(map, startUtc || 0, col.bucketSec);
     if (f.rawDataEve) {
+      const lgNames = life ? life.loadGenerators.map((l) => l.name) : [];
+      const fullLg = (host) => lgNames.find((n) => n.toLowerCase() === String(host).toLowerCase() || n.toLowerCase().startsWith(String(host).toLowerCase() + ".")) || host;
       const dec = eve.createDecoder({
-        // transaction records: response time = end − start (seconds); the collector works in ms
+        // VUser descriptors carry the id space every RawData.eve record uses (the numbers in
+        // _t_rep.eve can be per group): they decide the load generator / group of each instance
+        onVuser: (v) => vuserInfo.set(v.vuser, { lg: fullLg(v.host), group: v.group, script: v.script, local: v.local }),
+        // transaction records: id = RawData.map [END_TRANSACTION] id; response time = end - start -
+        // wasted - think (seconds, as LRE reports it); the collector works in ms
         onTransaction: (endTs, iter, rtSec, vuser, id, failed) => col.add(endTs, iter, rtSec * 1000, vuser, id, failed),
+        onDataPoint: web.add,
       });
       const total = source.size ? await source.size(f.rawDataEve) : null;
       let done = 0;
@@ -88,7 +96,7 @@
     const store = col.finish();
     const bs = store.bucketSec, nb = store.buckets;
 
-    // ── errors (SqliteDb.db) ────────────────────────────────────────────
+    // ── errors (SqliteDb.db) ────────────────────────────────────────────────
     progress(0, null, "Reading errors");
     let errs = null;
     if (f.sqlite && source.sqlite) {
@@ -96,21 +104,23 @@
       catch (e) { check("warn", "errors", `Could not read SqliteDb.db: ${e.message || e}`); }
     } else if (f.sqlite) check("info", "errors", "SqliteDb.db present but no SQLite reader available — errors skipped");
 
-    // ── sum_data graphs ──────────────────────────────────────────────────
+    // ── sum_data graphs ─────────────────────────────────────────────────────
     progress(0, null, "Reading sum_data graphs");
     const sum = await readSumData(source, found, startUtc, bs, nb, check);
 
-    // ── model ────────────────────────────────────────────────────────────
+    // ── model ───────────────────────────────────────────────────────────────
     const scriptOfTx = new Map();
     for (const s of scripts) for (const t of s.transactions) {
       if (!scriptOfTx.has(t)) scriptOfTx.set(t, []);
       scriptOfTx.get(t).push(s.key);
     }
     const evTx = new Map(((decoded && decoded.transactions) || []).map((t) => [t.id, t]));
-    // internal ids (+52) → names: matched against LRE's per-transaction graph, never looked up blindly
-    const resolution = resolveNames(store, map, sum);
+    // ids are already RawData.map [END_TRANSACTION] ids: the decoder resolves each record's
+    // per-VUser internal id through the registration records in RawData.eve itself.
+    const resolution = resolveNames(store, map, decoded);
     const txNames = new Map(store.txIds().map((id) => [id, resolution.names.get(id) || `TX_${id}`]));
     const passFail = crossCheckSumData(sum, txNames, store, resolution, check);
+    const webStats = web.finish(durationSec, store.buckets);
 
     const transactions = store.txIds().map((id) => {
       const name = txNames.get(id);
@@ -125,7 +135,9 @@
         sumDataPass: (passFail.get(id) || {}).pass != null ? passFail.get(id).pass : null,
         perLg: store.perLg(id),
         distribution: store.distribution(id, 60),
+        lre: store.lreSummary ? store.lreSummary(id) : null,
         negativeRtClamped: e.negativeRt || 0,
+        thinkSec: e.thinkSec || 0, wastedSec: e.wastedSec || 0, nested: e.nested || 0,
         vuserIterations: e.vuserIterations || 0, maxPerVuserIteration: e.maxPerVuserIteration || 0,
         firstRelSec: e.tsMin != null && startUtc ? e.tsMin - startUtc : null, lastRelSec: e.tsMax != null && startUtc ? e.tsMax - startUtc : null,
         recordTypes: e.bySubType || {},
@@ -139,6 +151,8 @@
       vusers: life && startUtc ? runningPerBucket(life.vusers, startUtc, bs, nb) : null,
       totalTps: new Array(nb).fill(0).map((_, b) => { let n = 0; for (const id in tl.tx) n += tl.tx[id].count[b]; return n / bs; }),
       errors: errs ? errorsPerBucket(errs.rows, bs, nb) : null,
+      hitsPerSec: webStats.hitsPerSec, throughputBytesPerSec: webStats.throughputPerSec,
+      httpCodesPerSec: webStats.httpPerSec,
       graphs: sum ? sum.series : [],
     };
 
@@ -171,14 +185,21 @@
         percentile: store.method === "exact" ? "nearest-rank on every sample (exact)" : "nearest-rank on log histograms (≤ 0.5 % relative error)",
         percentileMethod: store.method,
         stdDev: "population (÷ n)",
-        responseTimeUnit: "seconds — end minus start timestamp of each transaction record",
-        transactionSource: `RawData.eve transaction records (sub-types ${eve.TX_FAMILY.join(", ")}); failed = ${eve.FAILED_SUBTYPES.join(", ")}; response-time statistics use passed transactions, as LRE does`,
+        responseTimeUnit: "seconds — end − start − wasted time − think time of each transaction record (LRE: \"do not include think time\")",
+        transactionSource: "RawData.eve transaction records (sub-type 0x00C00FC0 + flags; flag 0x8000 = failed); response-time statistics use passed transactions, as LRE does",
+        summaryBasis: store.method === "exact"
+          ? `Exact: every transaction instance, no granularity (${store.totalSamples.toLocaleString("en-GB")} passed instances)`
+          : `Histogram: every transaction instance, no granularity (${store.totalSamples.toLocaleString("en-GB")} passed instances — more than the ${store.exactLimit.toLocaleString("en-GB")} kept exactly). Count, Min, Avg, Max and Std Dev are exact; percentiles within 0.5 %; analysis-window figures use whole ${bs} s buckets at the window edges`,
+        lreCompatible: opts.lreGranularitySec > 0
+          ? `t.lre: LRE Analysis-style figures (diagnostic) — min/max/std-dev/p90 over the means of ${opts.lreGranularitySec} s × load-generator buckets; not shown in reports`
+          : "off (enable with lreGranularitySec / CLI --lre-granularity to compare with LRE's HTML summary)",
         transactionNames: resolution.method,
         steadyState: "last VUser running → first VUser exit (from _t_rep.eve); can be adjusted",
         sampleTime: "transaction end time (unix s)",
         negativeResponseTimes: "clamped to 0 and counted",
         tps: "count ÷ window length in seconds",
         bucketSec: bs,
+        chartGranularity: `charts and Time Series only: auto ${bs} s (≤ 1,500 points over the run); can be set coarser — never used for the transaction summary`,
         exactLimit: store.exactLimit,
         totalSamples: store.totalSamples,
         passFail: "RawData.eve (failed-transaction records)" + (passFail.source ? "; " + passFail.source : ""),
@@ -206,14 +227,21 @@
       sumData: sum ? { graphs: sum.graphs } : null,
       txNameResolution: { method: resolution.method, assumed: !!resolution.assumed, unresolved: resolution.unresolved, matches: resolution.matches },
       dataPoints: decoded ? decoded.dataPoints.map((d) => ({ id: d.id, name: map.dataPoints.get(d.id) || `id ${d.id}`, count: d.count, sum: d.sum })) : [],
+      web: decoded ? webStats.summary : null,
       eve: decoded && {
         bytesRead: decoded.bytesRead, records: decoded.records, trailingBytes: decoded.trailingBytes, stopped: decoded.stopped,
-        subTypes: decoded.subTypes, signatures: decoded.signatures, tx: decoded.tx, lookalikes: decoded.lookalikes,
+        subTypes: decoded.subTypes, signatures: decoded.signatures, tx: decoded.tx, dp: decoded.dp, lookalikes: decoded.lookalikes,
       },
       selfCheck: checks,
       settings: null, window: null, insights: null,
     };
     Object.defineProperty(model, "store", { value: store, enumerable: false, writable: true });
+    // base-granularity timeline and LG-health series: charts can be re-bucketed coarser from these
+    // (applySettings → granularitySec) without re-reading the files; insights always use the base
+    Object.defineProperty(model, "_base", {
+      value: { timeline, lgSeries: (model.lgHealth || []).map((h) => Object.fromEntries(["cpu", "memory", "disk"].map((k) => [k, h[k] ? h[k].series : null]))) },
+      enumerable: false, writable: true,
+    });
 
     selfChecks(check, { meta, life, map, slaInfo, decoded, transactions, scripts, steadyRel, store, resolution });
     applySettings(model, opts.settings || {});
@@ -223,7 +251,7 @@
   /** A transaction that wraps all others (e.g. Main_Transaction / the action) — excluded from the latency heatmap. */
   function isWrapper(name, transactions) {
     return /^(main_transaction|action_transaction|vuser_(init|end)_transaction)$/i.test(name || "") ||
-      (transactions && transactions.find((t) => t.name === name && !t.inMap && /main/i.test(name || "")) != null);
+      (transactions && transactions.find((t) => t.name === name && !t.inMap && /main/i.test(name || ""))) != null;
   }
 
   /**
@@ -264,16 +292,90 @@
       pass: model.transactions.some((t) => t.pass != null) ? model.transactions.reduce((a, t) => a + (t.pass || 0), 0) : null,
       fail: model.transactions.some((t) => t.fail != null) ? model.transactions.reduce((a, t) => a + (t.fail || 0), 0) : null,
       peakVusers: model.lifecycle ? model.lifecycle.maxRunning : null,
-      hitsPerSec: graphStat(model, "hits"), throughputBytesPerSec: graphStat(model, "bytesReceived"),
+      hitsPerSec: model.web ? model.web.hitsPerSec : graphStat(model, "hits"),
+      throughputBytesPerSec: model.web ? model.web.throughputBytesPerSec : graphStat(model, "bytesReceived"),
+      hits: model.web ? model.web.hits : null, throughputBytes: model.web ? model.web.throughputBytes : null,
     };
     model.window = win ? { start: win.start, end: win.end, durationSec: winSec, detected: !settings.window || !(settings.window.end > settings.window.start) } : null;
-    model.settings = { window: settings.window || null, sla: slaS };
-    model.insights = insights.run(model);
+    const gSec = applyGranularity(model, settings.granularitySec);
+    model.settings = { window: settings.window || null, sla: slaS, granularitySec: gSec };
+    // insights always run on the base (finest) timeline, so findings do not change with the chart view
+    model.insights = insights.run(model._base ? Object.assign({}, model, { timeline: model._base.timeline }) : model);
     return model;
   }
 
+  /**
+   * Chart granularity choices: the automatic (base) bucket and coarser multiples of it. Finer than
+   * the base would need the file to be read again, so it is not offered.
+   */
+  function granularityOptions(baseSec, durationSec) {
+    const mult = [1, 2, 3, 4, 5, 6, 10, 15, 20, 30, 60];
+    const nice = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
+    const set = new Set(mult.map((k) => baseSec * k));
+    for (const c of nice) if (c >= baseSec && c % baseSec === 0) set.add(c);
+    const maxSec = Math.max(baseSec, (durationSec || 0) / 10); // keep at least ~10 points on a chart
+    return [...set].filter((s) => s === baseSec || s <= maxSec).sort((a, b) => a - b);
+  }
+
+  /**
+   * Set model.timeline (charts, Time Series sheet, LG-health series) to the requested granularity.
+   * requested: null / "auto" → base. Returns the applied value (null = auto).
+   */
+  function applyGranularity(model, requested) {
+    const base = model._base;
+    if (!base) return null;
+    const bt = base.timeline;
+    const options = granularityOptions(bt.bucketSec, model.meta && model.meta.durationSec);
+    let sec = requested == null || requested === "auto" || requested === "" ? bt.bucketSec : Number(requested);
+    if (!Number.isFinite(sec) || sec <= bt.bucketSec) sec = bt.bucketSec;
+    if (!options.includes(sec)) sec = options.find((o) => o >= sec) || options[options.length - 1];
+    const k = Math.round(sec / bt.bucketSec);
+    model.granularity = { sec, baseSec: bt.bucketSec, auto: k === 1, options, buckets: Math.ceil(bt.buckets / k) };
+    model.method.chartGranularity = `charts and Time Series only: ${sec} s${k === 1 ? " (auto: ≤ 1,500 points over the run)" : ` (user-selected; auto is ${bt.bucketSec} s)`} — never used for the transaction summary`;
+    (model.lgHealth || []).forEach((h, i) => {
+      for (const key of ["cpu", "memory", "disk"]) if (h[key] && base.lgSeries[i] && base.lgSeries[i][key]) h[key].series = k === 1 ? base.lgSeries[i][key] : mergeSeries(base.lgSeries[i][key], k, "mean");
+    });
+    if (k === 1) { model.timeline = bt; return requested == null || requested === "auto" || requested === "" ? null : sec; }
+    const tl = model.store.timeline(k);
+    const nb = tl.buckets;
+    model.timeline = {
+      bucketSec: sec, buckets: nb, startUtc: bt.startUtc,
+      tx: tl.tx,
+      vusers: bt.vusers ? mergeSeries(bt.vusers, k, "max") : null,
+      totalTps: new Array(nb).fill(0).map((_, b) => { let n = 0; for (const id in tl.tx) n += tl.tx[id].count[b]; return n / sec; }),
+      errors: bt.errors ? mergeSeries(bt.errors, k, "sum") : null,
+      hitsPerSec: bt.hitsPerSec ? mergeSeries(bt.hitsPerSec, k, "mean") : null,
+      throughputBytesPerSec: bt.throughputBytesPerSec ? mergeSeries(bt.throughputBytesPerSec, k, "mean") : null,
+      httpCodesPerSec: bt.httpCodesPerSec ? Object.fromEntries(Object.entries(bt.httpCodesPerSec).map(([n, a]) => [n, mergeSeries(a, k, "mean")])) : null,
+      graphs: (bt.graphs || []).map((g) => Object.assign({}, g, {
+        measurements: g.measurements.map((ms) => {
+          const o = Object.assign({}, ms);
+          for (const key of Object.keys(ms)) if (Array.isArray(ms[key]) && ms[key].length === bt.buckets) o[key] = mergeSeries(ms[key], k, /max/i.test(key) ? "max" : "mean");
+          return o;
+        }),
+      })),
+    };
+    return sec;
+  }
+
+  /** Merge every k values of a per-bucket series: "sum" (counts), "mean" (rates, %), "max" (peaks). Nulls are skipped. */
+  function mergeSeries(arr, k, how) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += k) {
+      let acc = null, n = 0;
+      for (let j = i; j < Math.min(arr.length, i + k); j++) {
+        const v = arr[j];
+        if (v == null || !Number.isFinite(v)) continue;
+        n++;
+        acc = acc == null ? v : how === "max" ? Math.max(acc, v) : acc + v;
+      }
+      out.push(acc == null ? null : how === "mean" ? acc / n : acc);
+    }
+    return out;
+  }
+
   function graphStat(model, role) {
-    const g = (model.timeline.graphs || []).find((x) => x.role === role);
+    const g = ((model._base ? model._base.timeline : model.timeline).graphs || []).find((x) => x.role === role);
     if (!g) return null;
     const vals = [];
     for (const m of g.measurements) m.avg.forEach((v, i) => { if (v != null) vals[i] = (vals[i] || 0) + v; });
@@ -348,17 +450,70 @@
     return { graphs: info.graphs.map((g) => ({ n: g.n, type: g.type, role: g.role, measurements: g.measurements.length })), series, lgHealth: [...hosts.values()] };
   }
 
-  /** Internal transaction ids → names (txnames.js), using LRE's per-transaction response-time graph. */
-  function resolveNames(store, map, sum) {
-    const ids = store.txIds().map((id) => {
-      const s = store.summary(id, null);
-      return { id, count: s.count, mean: s.avg, max: s.max };
-    });
-    let graph = [];
-    const g = sum && sum.series.find((x) => x.role === "txResponse");
-    if (g) graph = g.measurements.filter((m) => m.sumCount > 0 && m.name && !/^id \d+$/.test(m.name))
-      .map((m) => ({ name: m.name.replace(/^.*:/, ""), count: m.sumCount, mean: m.weightedMean, max: m.maxCol }));
-    return txnames.resolve({ ids, graph, mapNames: map.transactions });
+  /**
+   * Transaction ids → names. The decoder already emits RawData.map [END_TRANSACTION] ids (resolved
+   * through the per-VUser registration records in RawData.eve), so this is a direct lookup.
+   */
+  function resolveNames(store, map, decoded) {
+    const names = new Map();
+    const unresolved = [];
+    for (const id of store.txIds()) {
+      if (map.transactions.has(id)) names.set(id, map.transactions.get(id));
+      else unresolved.push(id);
+    }
+    const t = decoded && decoded.tx;
+    return {
+      names, unresolved, assumed: false, matches: null,
+      unregisteredRecords: t ? t.unresolved : 0, conflicts: t ? t.conflicts : 0, dictionary: t ? t.dictionary : 0,
+      method: "RawData.eve registration records: (VUser, internal id) → RawData.map [END_TRANSACTION] id",
+    };
+  }
+
+  /**
+   * Web figures from RawData.eve data points (762/766): HTTP status codes (value = count), hits
+   * (= Σ HTTP_xxx), throughput (mic_recv bytes), bytes sent (mic_sent), per time bucket.
+   */
+  function webCollector(map, startUtc, bucketSec) {
+    const kind = new Map();
+    for (const [id, name] of map.dataPoints) {
+      const n = String(name);
+      kind.set(id, /^HTTP_\d+$/i.test(n) ? "http" : n === "mic_recv" ? "recv" : n === "mic_sent" ? "sent" : "other");
+    }
+    const per = { http: new Map(), recv: [], sent: [], hits: [] };
+    let hits = 0, recv = 0, sent = 0;
+    const inc = (arr, b, v) => { while (arr.length <= b) arr.push(0); arr[b] += v; };
+    function add(ts, id, value, vuser) { // eslint-disable-line no-unused-vars
+      const k = kind.get(id);
+      if (!k || k === "other" || !Number.isFinite(value)) return;
+      const b = Math.max(0, Math.floor((ts - startUtc) / bucketSec));
+      if (k === "http") {
+        hits += value; inc(per.hits, b, value);
+        if (!per.http.has(id)) per.http.set(id, []);
+        inc(per.http.get(id), b, value);
+      } else if (k === "recv") { recv += value; inc(per.recv, b, value); }
+      else { sent += value; inc(per.sent, b, value); }
+    }
+    function finish(runSec, nb) {
+      // LRE divides totals by (stop − start + 1) s — verified on runs 59 and 2144 (HTTP codes per second, average throughput)
+      const durationSec = runSec ? runSec + 1 : null;
+      const rate = (arr) => { const out = new Array(nb).fill(0); for (let b = 0; b < Math.min(nb, arr.length); b++) out[b] = arr[b] / bucketSec; return out; };
+      const peak = (arr) => (arr.length ? Math.max(...arr) / bucketSec : null);
+      const httpCodes = [...per.http.entries()].map(([id, arr]) => { const count = arr.reduce((a, c) => a + c, 0); return { id, name: map.dataPoints.get(id), count, perSec: durationSec ? count / durationSec : null }; })
+        .sort((a, b) => (a.name < b.name ? -1 : 1));
+      const any = hits || recv || sent;
+      return {
+        hitsPerSec: any ? rate(per.hits) : null,
+        throughputPerSec: any ? rate(per.recv) : null,
+        httpPerSec: any ? Object.fromEntries([...per.http.entries()].map(([id, arr]) => [map.dataPoints.get(id), rate(arr)])) : null,
+        summary: any ? {
+          hits, throughputBytes: recv, sentBytes: sent, httpCodes,
+          hitsPerSec: { avg: durationSec ? hits / durationSec : null, peak: peak(per.hits) },
+          throughputBytesPerSec: { avg: durationSec ? recv / durationSec : null, peak: peak(per.recv) },
+          source: "RawData.eve data points (HTTP_xxx, mic_recv, mic_sent)",
+        } : null,
+      };
+    }
+    return { add, finish };
   }
 
   /**
@@ -458,7 +613,7 @@
     const { meta, life, map, slaInfo, decoded, transactions, scripts, steadyRel, store } = c;
 
     check(meta.localOffsetConfirmed ? "ok" : "warn", "timezone",
-      `Local time = UTC ${meta.localOffsetSec >= 0 ? "+" : "-"}${Math.abs(meta.localOffsetSec / 3600)} h (${meta.localOffsetSource})`);
+      `Local time = UTC ${meta.localOffsetSec >= 0 ? "+" : "−"}${Math.abs(meta.localOffsetSec / 3600)} h (${meta.localOffsetSource})`);
     if (meta.schedule.unparsed.length) check("warn", "schedule", "Schedule tokens not understood (shown raw)", meta.schedule.unparsed);
 
     if (life) {
@@ -472,7 +627,8 @@
       check("info", "vuser-id-scope", `VUser numbers in _t_rep.eve: ${life.vuserIdScope}`);
       if (life.neverExited.length) check("info", "vusers", `${life.neverExited.length} VUser(s) have no exit event`);
     }
-    check("info", "method", `Percentiles: ${store.method === "exact" ? "exact (every sample kept)" : `histogram (more than ${store.exactLimit} samples)`}; time bucket ${store.bucketSec} s`);
+    if (store.method === "exact") check("info", "method", `Transaction summary: exact over every instance (${store.totalSamples} passed instances, no granularity); chart granularity ${store.bucketSec} s (auto)`);
+    else check("warn", "method", `Large run: ${store.totalSamples} passed instances — more than the ${store.exactLimit} kept exactly, so percentiles come from 1 % histograms (within 0.5 %). Count, Min, Avg, Max and Std Dev stay exact; analysis-window figures use whole ${store.bucketSec} s buckets at the window edges. For exact percentiles run the CLI with a higher --exact-limit on a machine with more memory (≈ 12 bytes per instance)`);
 
     if (!decoded) return;
     if (decoded.stopped) check("fail", "eve-sync", `Decoding stopped at byte ${decoded.stopped.offset}: ${decoded.stopped.reason} (recLen=${decoded.stopped.recLen})`);
@@ -482,13 +638,17 @@
     const t = decoded.tx;
     check(t.records ? "ok" : "fail", "eve-tx", t.records
       ? `${t.records} transaction records (${t.records - t.failed} passed, ${t.failed} failed) — by sub-type ${JSON.stringify(t.bySubType)}`
-      : `No transaction records (sub-types ${eve.TX_FAMILY.join(", ")}) found — the layout may differ in this LRE version; see the record types in the Validation tab`);
-    if (Object.keys(t.implausible).length) check("warn", "eve-tx-layout", "Transaction records skipped: timestamps, duration or VUser out of range — layout may differ for these sub-types", t.implausible);
-    else if (t.records) check("ok", "eve-tx-layout", "Every transaction record has plausible start/end times and VUser");
+      : "No transaction records (sub-type 0x00C00FC0 + flags) found — the layout may differ in this LRE version; see the record types in the Validation tab");
+    if (Object.keys(t.implausible).length) check("warn", "eve-tx-layout", "Transaction records skipped: unknown flags, or timestamps, duration or VUser out of range — layout may differ for these sub-types", t.implausible);
+    else if (t.records) check("ok", "eve-tx-layout", "Every transaction record decoded (flag-based layout) with plausible start/end times and VUser");
+    check(t.unresolved || t.conflicts ? "warn" : "ok", "eve-tx-identity", t.unresolved || t.conflicts
+      ? `${t.unresolved} transaction record(s) without a registration record and ${t.conflicts} conflicting registration(s) — not counted`
+      : `Every transaction record resolved through ${t.dictionary} (VUser, internal id) registrations`, t.unresolved ? t.unresolvedKeys : undefined);
+    if (t.nested) check("info", "eve-nested", `${t.nested} transaction instances are nested inside another transaction`);
     if (Object.keys(decoded.lookalikes).length) check("info", "eve-lookalikes", "Other sub-types that also carry two timestamps at +28/+36 (not counted as transactions)", decoded.lookalikes);
-    if (t.f44Checked) check("info", "eve-f44", `Field +44 equals round(response time in ms) in ${((t.f44Agrees / t.f44Checked) * 100).toFixed(1)} % of records (not used for response time)`);
-    if (decoded.dataPoints.length) check("info", "eve-datapoints", `${decoded.dataPoints.reduce((a, d) => a + d.count, 0)} data-point records (sub-type ${eve.DATA_POINT_SUBTYPE}) — counted per data point, not as transactions`,
-      Object.fromEntries(decoded.dataPoints.map((d) => [map.dataPoints.get(d.id) || "id " + d.id, d.count])));
+    if (decoded.dataPoints.length) check(decoded.dp.unresolved ? "warn" : "info", "eve-datapoints", `${decoded.dataPoints.reduce((a, d) => a + d.count, 0)} data-point records (sub-types 762/766)` +
+      (decoded.dp.unresolved ? `; ${decoded.dp.unresolved} without a registration (not counted)` : " — all resolved") + "; values summed per data point",
+      Object.fromEntries(decoded.dataPoints.map((d) => [map.dataPoints.get(d.id) || "id " + d.id, d.sum])));
     if (!t.records) return;
 
     // transaction names
@@ -506,7 +666,13 @@
       ? "Some transactions occur more than once in the same VUser iteration" : `Every transaction occurs at most once per VUser iteration (${t.vuserIterations} VUser-iterations seen)`, multi.length ? multi : undefined);
     if (t.pairsTruncated) check("info", "tx-per-iteration", "Too many VUser-iterations to track — check partial");
 
-    if (life) {
+    if (decoded.vusers && decoded.vusers.length) {
+      const ids = new Set(decoded.vusers.map((v) => v.vuser));
+      const extra = t.vuserIds.filter((id) => !ids.has(id));
+      check(extra.length ? "warn" : "ok", "eve-vusers", extra.length
+        ? `${extra.length} VUser ID(s) with transactions but no VUser descriptor (sub-type 63) — their load generator is taken from _t_rep.eve`
+        : `All ${t.vuserIds.length} VUser IDs have a descriptor in RawData.eve (${decoded.vusers.length} descriptors; group and load generator taken from them)`, extra.length ? extra.slice(0, 50) : undefined);
+    } else if (life) {
       const trepIds = new Set(life.vusers.map((v) => v.vuser));
       const extra = t.vuserIds.filter((id) => !trepIds.has(id));
       check(extra.length ? "warn" : "ok", "eve-vusers", extra.length

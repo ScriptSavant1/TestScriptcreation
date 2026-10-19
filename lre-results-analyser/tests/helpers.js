@@ -4,32 +4,56 @@
  */
 "use strict";
 
-const TX_LEN = { 12586944: 76, 12586945: 84, 12619721: 108 };
+const TX_BASE = 0x00c00fc0;
 
-/**
- * One transaction record (docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md §4): ts = end time (unix s),
- * start = ts − rt. sub 12586944 = completed, 12586945 = variant, 12619721 = failed.
- */
-function txRecord({ ts, iter, rtMs, vuser, txId, sub = 12586944 }) {
-  const len = TX_LEN[sub] || 76;
+function envelope(body, sub) {
+  const len = 28 + body.length;
   const b = Buffer.alloc(len);
   b.writeUInt32BE(len, 0); b.writeUInt32BE(3, 4); b.writeUInt32BE(0, 8); b.writeUInt32BE(len - 12, 12);
   b.writeUInt32BE(0, 16); b.writeUInt32BE(len - 20, 20); b.writeUInt32BE(sub, 24);
-  b.writeDoubleBE(ts - rtMs / 1000, 28);
-  b.writeDoubleBE(ts, 36);
-  b.writeUInt32BE(Math.max(0, Math.round(rtMs)), 44);
-  b.writeUInt32BE(txId, 52); b.writeUInt32BE(vuser, 56); b.writeUInt32BE(12, 60); b.writeUInt32BE(1, 64); b.writeUInt32BE(iter, 68);
-  if (sub === 12619721) b.writeUInt32BE(0xffffffff, 76);
+  body.copy(b, 28);
+  return b;
+}
+function textField(s) {
+  const n = Buffer.byteLength(s, "latin1");
+  const b = Buffer.alloc(4 + Math.ceil(n / 4) * 4);
+  b.writeUInt32BE(n, 0); b.write(s, 4, "latin1");
   return b;
 }
 
-/** One data-point record (sub-type 762, 64 bytes): +28 ts · +36 seq · +44 value · +52 vuser · +56 data-point id. */
-function dataPoint({ ts, vuser, dpId, value = 1, seq = 0 }) {
-  const b = Buffer.alloc(64);
-  b.writeUInt32BE(64, 0); b.writeUInt32BE(3, 4); b.writeUInt32BE(1, 8); b.writeUInt32BE(52, 12); b.writeUInt32BE(1, 16); b.writeUInt32BE(44, 20);
-  b.writeUInt32BE(762, 24); b.writeDoubleBE(ts, 28); b.writeUInt32BE(seq, 36); b.writeDoubleBE(value, 44);
-  b.writeUInt32BE(vuser, 52); b.writeUInt32BE(dpId, 56);
-  return b;
+/**
+ * One transaction record (docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md): subType = 0x00C00FC0 + flags.
+ * ts = end time (unix s); start = ts − rt − wasted − think, so the LRE response time is rtMs.
+ * `register` (flag 0x01) carries the RawData.map id as text and registers (vuser, internalId).
+ * failed → flag 0x8000 plus some error text.
+ */
+function txRecord({ ts, iter, rtMs, vuser, internalId, mapId = null, failed = false, wasted = 0, think = 0, parent = 0, seq = 1 }) {
+  let flags = 0;
+  const parts = [];
+  if (mapId != null) { flags |= 0x01; parts.push(textField(String(mapId))); }
+  if (wasted) { flags |= 0x10; const w = Buffer.alloc(8); w.writeDoubleBE(wasted, 0); parts.push(w); }
+  if (think) { flags |= 0x20; const t = Buffer.alloc(8); t.writeDoubleBE(think, 0); parts.push(t); }
+  if (failed) flags |= 0x8000;
+  const f = Buffer.alloc(48);
+  f.writeDoubleBE(ts - rtMs / 1000 - wasted - think, 0);
+  f.writeDoubleBE(ts, 8);
+  f.writeUInt32BE(seq, 16); f.writeUInt32BE(parent, 20); f.writeUInt32BE(internalId, 24); f.writeUInt32BE(vuser, 28);
+  f.writeUInt32BE(failed ? 20 : 12, 32); f.writeUInt32BE(failed ? 7 : 1, 36); f.writeUInt32BE(iter, 40);
+  parts.push(f);
+  if (failed) parts.push(textField("Error -26612: HTTP 500"));
+  return envelope(Buffer.concat(parts), TX_BASE + flags);
+}
+
+/**
+ * Data-point record. With mapId → sub-type 766 (registration + sample), otherwise 762 (sample):
+ *   762: +28 ts · +36 seq · +40 0 · +44 f64 value · +52 vuser · +56 internal id · +60 0
+ */
+function dataPoint({ ts, vuser, internalId, mapId = null, value = 1, seq = 0 }) {
+  const tail = Buffer.alloc(28);
+  tail.writeUInt32BE(seq, 0); tail.writeDoubleBE(value, 8); tail.writeUInt32BE(vuser, 16); tail.writeUInt32BE(internalId, 20);
+  const t = Buffer.alloc(8); t.writeDoubleBE(ts, 0);
+  if (mapId != null) return envelope(Buffer.concat([t, textField(String(mapId)), tail]), 766);
+  return envelope(Buffer.concat([t, tail]), 762);
 }
 
 /** A non-transaction record of any length / sub-type (e.g. 766 monitoring, 72 bytes). */
@@ -73,18 +97,21 @@ const GRAPH_4_DAT = `51 ${START + 120} 1.1015 6 1.001 1.202 0.07\n52 ${START + 1
 /** A small, complete results folder as {path: Buffer|string}. 2 VUsers, 2 LGs, 3 iterations, 2 transactions. */
 function sampleRun() {
   const recs = [header()];
-  // internal ids 10 / 11 (≠ RawData.map ids 1 / 2 — names come from sum_data graph_4, as in real runs)
+  // Internal ids are per VUser: VUser 1 registers 1 → T01_LOGIN (map 1), 2 → T02_SUBMIT (map 2);
+  // VUser 2 registers them the other way round (1 → map 2, 2 → map 1), as happens in real runs.
   // VUser 1 runs at t+10, VUser 2 at t+15 → steady t+15 … first exit t+400
+  const internalOf = { 1: { 1: 1, 2: 2 }, 2: { 1: 2, 2: 1 } }; // vuser → map id → internal id
   for (let it = 0; it < 3; it++) {
     for (const v of [1, 2]) {
       const base = START + 20 + it * 100 + v;
-      recs.push(txRecord({ ts: base, iter: it, rtMs: 1000 + it * 100 + v, vuser: v, txId: 10 }));
-      recs.push(txRecord({ ts: base + 5, iter: it, rtMs: 2000 + it * 10, vuser: v, txId: 11, sub: it === 0 && v === 1 ? 12586945 : 12586944 }));
-      recs.push(dataPoint({ ts: base + 1, vuser: v, dpId: 2, seq: it }));
+      const first = it === 0;
+      recs.push(txRecord({ ts: base, iter: it, rtMs: 1000 + it * 100 + v, vuser: v, internalId: internalOf[v][1], mapId: first ? 1 : null, think: v === 1 && it === 1 ? 0.5 : 0 }));
+      recs.push(txRecord({ ts: base + 5, iter: it, rtMs: 2000 + it * 10, vuser: v, internalId: internalOf[v][2], mapId: first ? 2 : null, wasted: it === 2 ? 0.25 : 0 }));
+      recs.push(dataPoint({ ts: base + 1, vuser: v, internalId: 7, mapId: first ? 2 : null, seq: it, value: 3 }));
     }
-    recs.push(otherRecord(72, 766, 0x41)); // record with ASCII payload ("AAAA…")
+    recs.push(otherRecord(72, 63, 0x41)); // record with ASCII payload ("AAAA…")
   }
-  recs.push(txRecord({ ts: START + 30, iter: 3, rtMs: -5, vuser: 1, txId: 10, sub: 12619721 })); // failed, negative RT
+  recs.push(txRecord({ ts: START + 30, iter: 3, rtMs: -5, vuser: 1, internalId: 1, failed: true })); // failed, negative RT
   const eve = Buffer.concat(recs);
 
   const trep = [

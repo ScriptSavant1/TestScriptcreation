@@ -23,7 +23,7 @@
     const H1 = (t) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_1, pageBreakBefore: true });
     const H2 = (t) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_2 });
     const cell = (t, o) => new TableCell({
-      children: [new Paragraph({ alignment: o && o.right ? AlignmentType.RIGHT : AlignmentType.LEFT, children: [new TextRun({ text: String(t == null ? "-" : t), bold: !!(o && o.bold), color: o && o.color, size: 16 })] })],
+      children: [new Paragraph({ alignment: o && o.right ? AlignmentType.RIGHT : AlignmentType.LEFT, children: [new TextRun({ text: String(t == null ? "-" : t), bold: !!(o && o.bold), color: o && o.color, size: 18 })] })],
       shading: o && o.fill ? { type: ShadingType.CLEAR, color: "auto", fill: o.fill } : undefined,
       margins: { top: 40, bottom: 40, left: 60, right: 60 },
     });
@@ -83,7 +83,7 @@
     children.push(H1("2. Test and workload"));
     children.push(table(["Item", "Value"], [
       ["Scenario", m.meta.sessionName], ["Project", m.meta.project], ["Controller", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
-      ["Start / end (local)", `${fmt.localTime(m.meta.startUtc, off)} → ${fmt.localTime(m.meta.stopUtc, off)} (${fmt.zone(off)})`],
+      ["Start / end (local)", `${fmt.localTime(m.meta.startUtc, off)} – ${fmt.localTime(m.meta.stopUtc, off)} (${fmt.zone(off)})`],
       ["Stop reason", m.meta.stopReason], ["Schedule", m.meta.scheduleText || m.meta.schedule.raw], ["Load behaviour", m.meta.loadBehavior],
     ]));
     children.push(H2("Schedule — planned vs actual"));
@@ -98,7 +98,7 @@
 
     // 3 / 4 results
     children.push(H1("3. Results — steady state"));
-    children.push(P(w ? `${w.detected ? "Detected steady state" : "User-set analysis window"}: t+${fmt.hms(w.start)} → t+${fmt.hms(w.end)} (${fmt.relLocal(m, w.start)} → ${fmt.relLocal(m, w.end)}). Response times in seconds.` : "No steady-state window.", { run: { size: 18, color: "475569" } }));
+    children.push(P(w ? `${w.detected ? "Detected steady state" : "User-set analysis window"}: t+${fmt.hms(w.start)} – t+${fmt.hms(w.end)} (${fmt.relLocal(m, w.start)} – ${fmt.relLocal(m, w.end)}). Response times in seconds. ${m.method.summaryBasis || ""}.` : "No steady-state window.", { run: { size: 18, color: "475569" } }));
     children.push(txRows("steady"));
     children.push(...img("txBars"));
     children.push(H1("4. Results — full run"));
@@ -132,8 +132,9 @@
     // Appendix
     children.push(H1("Appendix — method and validation"));
     children.push(table(["Item", "Method"], [
-      ["Source", "RawData.eve transaction records; scenario files (.lrr, RunInfo.ini, _t_rep.eve, .usp, .cfg, .usr); SqliteDb.db; sum_data"],
-        ["Transactions", m.method.transactionSource || "-"], ["Response time", m.method.responseTimeUnit], ["Transaction names", m.method.transactionNames || "-"],
+      ["Source", "RawData.eve (transactions, HTTP codes, hits, throughput); scenario files (.lrr, RunInfo.ini, _t_rep.eve, .usp, .cfg, .usr); SqliteDb.db (errors); sum_data only for LG health"],
+      ["Transactions", m.method.transactionSource || "-"], ["Response time", m.method.responseTimeUnit], ["Transaction names", m.method.transactionNames || "-"],
+      ["Transaction summary basis", m.method.summaryBasis || "-"], ["Chart granularity", m.method.chartGranularity || "-"],
       ["Percentiles", m.method.percentile], ["Standard deviation", m.method.stdDev], ["Steady state", m.method.steadyState],
       ["TPS", m.method.tps], ["Pass / fail", m.method.passFail], ["Negative response times", m.method.negativeResponseTimes],
       ["Time zone", `${fmt.zone(off)} — ${m.meta.localOffsetSource}`],

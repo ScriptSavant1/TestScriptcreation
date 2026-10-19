@@ -40,7 +40,7 @@
         </label>
         <label class="pick-card" id="pick-zip">
           <input type="file" id="in-zip" accept=".zip,application/zip" hidden>
-          <div class="pick-icon">🗜️</div>
+          <div class="pick-icon">🗜</div>
           <div class="pick-title">Choose results ZIP</div>
           <div class="pick-sub">The ZIP downloaded from LRE. Read in place (ZIP64 supported).</div>
         </label>
@@ -84,9 +84,9 @@
         </div>
         <div class="verdict" id="verdict">-</div>
         <div class="toolbar-actions">
-          <button class="btn primary" data-export="xlsx">⬇ Excel</button>
-          <button class="btn" data-export="docx">⬇ Word</button>
-          <button class="btn" data-export="pdf">🖨 PDF</button>
+          <button class="btn primary" data-export="xlsx">⤓ Excel</button>
+          <button class="btn" data-export="docx">⤓ Word</button>
+          <button class="btn" data-export="pdf">⎙ PDF</button>
           <div class="menu">
             <button class="btn" id="btn-more">More ▾</button>
             <div class="menu-list" id="menu-more" hidden>
@@ -103,7 +103,7 @@
         <div class="setting">
           <span class="setting-label">Analysis window</span>
           <span class="t">t+</span><input id="win-start" class="in-time" placeholder="hh:mm:ss">
-          <span>→</span>
+          <span>–</span>
           <span class="t">t+</span><input id="win-end" class="in-time" placeholder="hh:mm:ss">
           <span class="win-local" id="win-local"></span>
           <button class="btn sm" id="win-apply">Apply</button>
@@ -115,6 +115,11 @@
           <span>≤</span><input id="sla-default" class="in-num" placeholder="default s">
           <button class="btn sm" id="sla-apply">Apply</button>
           <span class="hint">per transaction in the Transactions tab</span>
+        </div>
+        <div class="setting">
+          <span class="setting-label" title="Size of the time slots used by the charts and the Time Series sheet. The transaction summary never uses a granularity — it is calculated over every transaction instance.">Chart granularity</span>
+          <select id="gran"></select>
+          <span class="hint" id="gran-hint">charts only · summary uses every instance</span>
         </div>
       </div>
 

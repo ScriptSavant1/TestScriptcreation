@@ -79,8 +79,14 @@ describe("Excel workbook", () => {
     expect(rows.some((r) => r[1] === "Subtotal")).toBe(true);
     const ov = wb.getWorksheet("Test Overview");
     let found = false;
-    ov.eachRow((r) => { if (r.getCell(1).value === "Scenario" && r.getCell(2).value === "Unit_Run") found = true; });
+    ov.eachRow((r) => { if (r.getCell(2).value === "Test Name" && r.getCell(3).value === "Unit_Run") found = true; });
     expect(found).toBe(true);
+    const cards = [];
+    ov.eachRow((r) => r.eachCell((c) => { if (c.isMerged && c.master === c && c.fill && c.fill.fgColor && c.fill.fgColor.argb === "FF5B21B6") cards.push(c.value); }));
+    expect(cards).toEqual(expect.arrayContaining(["Test Metadata", "Execution Time", "Run Details", "High-Level Metrics", "Performance", "VUsers per LG Count"]));
+    // the script column is one merged cell per group
+    expect(ws.getCell("A5").isMerged).toBe(true);
+    expect(ws.getCell("A6").master.address).toBe("A5");
   });
 });
 
@@ -100,7 +106,7 @@ describe("charts, HTML (PDF) and Word reports", () => {
       const ch = echarts.init(null, null, { renderer: "svg", ssr: true, width: 800, height: 300 });
       try { ch.setOption(c.option); expect(ch.renderToSVGString()).toMatch(/^<svg/); } finally { ch.dispose(); }
     }
-    expect(charts.distribution(m, 10, { static: true }).series[0].data.reduce((a, b) => a + b, 0)).toBe(6);
+    expect(charts.distribution(m, 1, { static: true }).series[0].data.reduce((a, b) => a + b, 0)).toBe(6);
     expect(charts.errorsOverTime(m, {})).toBeNull(); // no SqliteDb.db in the sample
   });
 

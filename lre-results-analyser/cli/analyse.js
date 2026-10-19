@@ -3,15 +3,21 @@
  * LRE Results Analyser — command line (same engine as the browser page).
  *
  *   node lre-results-analyser/cli/analyse.js <results-folder | results.zip> [options]
- *     --xlsx report.xlsx   Excel workbook (9 sheets)
- *     --docx report.docx   Word report (tables and findings; the browser version also embeds charts)
- *     --html report.html   print-ready HTML report with charts (open it and "Save as PDF")
- *     --out result.json    full result model
- *     --sla 2.5            SLA threshold in seconds for every transaction
- *     --sla-pct 90         percentile the SLA applies to (default 90)
- *     --window 600-28800   analysis window in seconds from scenario start (default: detected steady state)
- *     --redact             host names → LG1, LG2…; IPs, script paths and error text removed (safe to share)
- *     --quiet              no console summary
+ *     --xlsx report.xlsx    Excel workbook (9 sheets)
+ *     --docx report.docx    Word report (tables and findings; the browser version also embeds charts)
+ *     --html report.html    print-ready HTML report with charts (open it and "Save as PDF")
+ *     --out result.json     full result model
+ *     --sla 2.5             SLA threshold in seconds for every transaction
+ *     --sla-pct 90          percentile the SLA applies to (default 90)
+ *     --window 600-28800    analysis window in seconds from scenario start (default: detected steady state)
+ *     --granularity 300     chart / Time Series granularity in seconds (default auto; coarser than auto only).
+ *                           The transaction summary never uses a granularity.
+ *     --exact-limit 1e8     keep up to this many samples for exact percentiles (default 20,000,000 ≈ 240 MB;
+ *                           about 12 bytes each). Above it percentiles come from histograms (within 0.5 %)
+ *     --lre-granularity 2   diagnostic: also compute LRE Analysis-style min/max/std-dev/p90 over the means of
+ *                           N-second × load-generator buckets, printed to the console only (default off)
+ *     --redact              host names → LG1, LG2…; IPs, script paths and error text removed (safe to share)
+ *     --quiet               no console summary
  *
  * Reads an LRE raw-results folder (the one holding RawData.eve) or its ZIP. Nothing is uploaded
  * anywhere — this is also the path for very large runs (hundreds of GB).
@@ -38,6 +44,12 @@ function parseArgs(argv) {
       const m = /^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(argv[++i] || "");
       if (!m) throw new Error("--window expects start-end in seconds, e.g. 600-28800");
       a.window = { start: +m[1], end: +m[2] };
+    }
+    else if (x === "--lre-granularity") a.lreGranularity = Number(argv[++i]);
+    else if (x === "--granularity") a.granularity = argv[++i];
+    else if (x === "--exact-limit") {
+      a.exactLimit = Number(argv[++i]);
+      if (!(a.exactLimit >= 0)) throw new Error("--exact-limit expects a number of samples, e.g. 100000000");
     }
     else if (x === "--redact") a.redact = true;
     else if (x === "--quiet") a.quiet = true;
@@ -126,7 +138,7 @@ function renderSvgCharts(model) {
   return out;
 }
 
-// ── console report ──────────────────────────────────────────────────────
+// ── console report ──────────────────────────────────────────────────────────
 const fmt = (v, d = 3) => (v == null ? "-" : Number(v).toFixed(d));
 const hms = (s) => {
   if (s == null) return "-";
@@ -149,29 +161,33 @@ function report(r) {
   out.push("== Test overview ==");
   out.push(`Session      : ${m.sessionName || "-"}   Project: ${m.project || "-"}`);
   out.push(`Start (local): ${localTime(m.startUtc, m.localOffsetSec)}   End: ${localTime(m.stopUtc, m.localOffsetSec)}   Duration: ${hms(m.durationSec)}`);
-  out.push(`LRE          : ${m.product || "-"} ${m.version || ""}   Stop reason: ${m.stopReason || "-"}`);
+  out.push(`LRE          : ${m.product || "-"} ${m.version || "-"}   Stop reason: ${m.stopReason || "-"}`);
   out.push(`Schedule     : ${m.schedule.described.join("; ") || m.schedule.raw || "-"}`);
   if (r.lifecycle) out.push(`VUsers       : ${r.lifecycle.vusers} (max running ${r.lifecycle.maxRunning}) on ${r.lifecycle.loadGenerators.map((l) => `${l.name} (${l.vusers})`).join(", ")}`);
   if (r.phases) {
     const p = r.phases;
-    out.push(`Phases       : ramp-up ends t+${hms(p.rampUpEndRelSec)}; steady ${p.steady ? `t+${hms(p.steady.startRelSec)} → t+${hms(p.steady.endRelSec)} (${hms(p.steady.durationSec)})` : "-"}; last exit t+${hms(p.lastExitRelSec)}`);
+    out.push(`Phases       : ramp-up ends t+${hms(p.rampUpEndRelSec)}; steady ${p.steady ? `t+${hms(p.steady.startRelSec)} – t+${hms(p.steady.endRelSec)} (${hms(p.steady.durationSec)})` : "-"}; last exit t+${hms(p.lastExitRelSec)}`);
   }
-  if (r.window && !r.window.detected) out.push(`Window       : user-set t+${hms(r.window.start)} → t+${hms(r.window.end)}`);
+  if (r.window && !r.window.detected) out.push(`Window       : user-set t+${hms(r.window.start)} – t+${hms(r.window.end)}`);
+  out.push(`Summary      : ${r.method.summaryBasis}`);
+  out.push(`Granularity  : ${r.method.chartGranularity}`);
   out.push("");
   out.push("== Workload ==");
   for (const s of r.workload) {
-    out.push(`${s.key} [${s.protocol || "?"}] — ${s.vusers} VUsers; pacing: ${s.pacing ? s.pacing.text : "-"}; think time: ${s.thinkTime ? s.thinkTime.text : "-"}; ${s.transactions.length} transactions; iterations ${s.iterationsAchieved}${s.iterationsExpected != null ? ` of ~${s.iterationsExpected} planned` : ""}`);
+    out.push(`${s.key} [${s.protocol || "?"}] — ${s.vusers} VUsers; pacing: ${s.pacing ? s.pacing.text : "-"}; think time: ${s.thinkTime ? s.thinkTime.text : "-"}; ${s.transactions.length} transactions; iterations ${s.iterationsAchieved}${s.
+      iterationsExpected != null ? ` of ~${s.iterationsExpected} planned` : ""}`);
   }
   for (const [label, key] of [["Transaction summary — full run", "full"], ["Transaction summary — steady state", "steady"]]) {
     out.push("");
-    out.push(`== ${label} (seconds; percentiles ${r.method.percentileMethod === "exact" ? "nearest-rank, exact" : "from histograms"}) ==`);
+    out.push(`== ${label} (seconds) ==`);
+    out.push(`Calculated: ${r.method.summaryBasis}`);
     const cols = [
       { h: "Transaction", f: (t) => t.name, left: true },
       { h: "Count", f: (t) => t[key].count },
       { h: "Min", f: (t) => fmt(t[key].min) },
       { h: "Avg", f: (t) => fmt(t[key].avg) },
       { h: "Max", f: (t) => fmt(t[key].max) },
-      { h: "StdDev", f: (t) => fmt(t[key].stdDev) },
+      { h: "StdDev", f: (t) => fmt(t[key].stddev) },
       { h: "P50", f: (t) => fmt(t[key].p.p50) },
       { h: "P90", f: (t) => fmt(t[key].p.p90) },
       { h: "P95", f: (t) => fmt(t[key].p.p95) },
@@ -182,25 +198,42 @@ function report(r) {
     if (key === "steady" && r.transactions.some((t) => t.sla)) cols.push({ h: "SLA", f: (t) => (t.sla ? `${t.sla.pass ? "PASS" : "FAIL"} ${fmt(t.sla.threshold, 2)}` : "-") });
     out.push(table(r.transactions, cols));
   }
+  if (r.transactions.some((t) => t.lre)) {
+    const g = (r.transactions.find((t) => t.lre) || {}).lre.granularitySec;
+    out.push("");
+    out.push(`== Transaction summary — LRE Analysis style (means of ${g} s × load-generator buckets; count/avg are exact) ==`);
+    out.push(table(r.transactions.filter((t) => t.lre), [
+      { h: "Transaction", f: (t) => t.name, left: true },
+      { h: "Pass", f: (t) => t.pass }, { h: "Fail", f: (t) => t.fail },
+      { h: "Min", f: (t) => fmt(t.lre.min) }, { h: "Avg", f: (t) => fmt(t.lre.avg) }, { h: "Max", f: (t) => fmt(t.lre.max) },
+      { h: "StdDev", f: (t) => fmt(t.lre.stddev) }, { h: "P90", f: (t) => fmt(t.lre.p.p90) },
+    ]));
+  }
+  if (r.web) {
+    out.push("");
+    out.push("== Web (from RawData.eve data points) ==");
+    out.push(`Total hits: ${r.web.hits}   avg hits/s: ${fmt(r.web.hitsPerSec.avg, 2)}   total throughput: ${r.web.throughputBytes} bytes   avg bytes/s: ${fmt(r.web.throughputBytesPerSec.avg, 0)}`);
+    out.push("HTTP codes: " + r.web.httpCodes.map((c) => `${c.name}=${c.count}`).join("  "));
+  }
   if (r.errors) {
     out.push("");
     out.push(`== Errors (${r.errors.total}) ==`);
-    for (const g of r.errors.summary.slice(0, 20)) out.push(`${String(g.count).padStart(6)}  code ${g.code}  ${g.pattern.slice(0, 140)}`);
+    for (const g of r.errors.summary.slice(0, 20)) out.push(`${String(g.count).padStart(8)}  code ${g.code}  ${g.pattern.slice(0, 140)}`);
   }
   if (r.insights) {
     out.push("");
     out.push(`== Insights — ${r.insights.verdict.text} ==`);
-    for (const f of r.insights.findings) out.push(`[${f.severity.toUpperCase().padEnd(6)}] ${f.title}: ${f.text}`);
+    for (const f of r.insights.findings) out.push(`${f.severity.toUpperCase().padEnd(8)} ${f.title}: ${f.text}`);
   }
   if (r.eve) {
     out.push("");
     out.push("== RawData.eve record signatures ==");
-    for (const s of r.eve.signatures.slice(0, 20)) out.push(`${String(s.count).padStart(10)}  ${s.signature}`);
+    for (const s of r.eve.signatures.slice(0, 20)) out.push(`${String(s.count).padStart(12)}  ${s.signature}`);
   }
   out.push("");
   out.push("== Self-check ==");
   for (const c of r.selfCheck) {
-    out.push(`[${c.status.toUpperCase().padEnd(4)}] ${c.id}: ${c.text}`);
+    out.push(`${c.status.toUpperCase().padEnd(4)} ${c.id}: ${c.text}`);
     if (c.data !== undefined) out.push("       " + JSON.stringify(c.data));
   }
   return out.join("\n");
@@ -210,7 +243,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.folder) {
     console.log("Usage: node lre-results-analyser/cli/analyse.js <results-folder | results.zip> [--xlsx f.xlsx] [--docx f.docx] [--html f.html] [--out f.json]\n" +
-      "       [--sla seconds] [--sla-pct 90] [--window start-end] [--redact] [--quiet]");
+      "       [--sla seconds] [--sla-pct 90] [--window start-end] [--granularity s] [--exact-limit n] [--lre-granularity s] [--redact] [--quiet]");
     process.exit(args.help ? 0 : 2);
   }
   const input = path.resolve(args.folder);
@@ -221,9 +254,12 @@ async function main() {
 
   const t0 = Date.now();
   let lastPct = -1;
-  const settings = { window: args.window, sla: { percentile: args.slaPct, defaultSec: Number.isFinite(args.sla) ? args.sla : null, perTx: {} } };
+  const settings = { window: args.window, sla: { percentile: args.slaPct, defaultSec: Number.isFinite(args.sla) ? args.sla : null, perTx: {} },
+    granularitySec: args.granularity && args.granularity !== "auto" ? Number(args.granularity) : null };
   let result = await analyse(isZip ? await zipSource(input) : folderSource(input), {
     settings,
+    lreGranularitySec: Number.isFinite(args.lreGranularity) ? args.lreGranularity : undefined,
+    exactLimit: Number.isFinite(args.exactLimit) ? args.exactLimit : undefined,
     onProgress: (done, total) => {
       if (args.quiet || !total || !process.stderr.isTTY) return;
       const pct = Math.floor((done / total) * 100);

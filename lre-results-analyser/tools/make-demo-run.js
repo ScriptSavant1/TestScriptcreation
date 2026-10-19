@@ -25,25 +25,43 @@ const TX = [
 const LGS = ["lg-demo-01.example.test", "lg-demo-02.example.test"];
 
 // Record layouts: docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md
-const INTERNAL_ID_BASE = 30; // internal transaction ids differ from RawData.map ids, as in real runs
+// Internal ids are per VUser; the first record of each (VUser, internal id) registers its RawData.map id.
+const INTERNAL_ID_BASE = 30;
 
-/** Transaction record: 12586944 (completed, 76 bytes) or 12619721 (failed, 108 bytes). end = unix s. */
-function txRecord(end, iter, rtMs, vuser, txId, failed) {
-  const sub = failed ? 12619721 : 12586944, len = failed ? 108 : 76;
-  const b = Buffer.alloc(len);
+function envelope(body, sub) {
+  const len = 28 + body.length, b = Buffer.alloc(len);
   b.writeUInt32BE(len, 0); b.writeUInt32BE(3, 4); b.writeUInt32BE(len - 12, 12); b.writeUInt32BE(len - 20, 20); b.writeUInt32BE(sub, 24);
-  b.writeDoubleBE(end - rtMs / 1000, 28); b.writeDoubleBE(end, 36); b.writeUInt32BE(Math.max(0, Math.round(rtMs)), 44);
-  b.writeUInt32BE(txId, 52); b.writeUInt32BE(vuser, 56); b.writeUInt32BE(12, 60); b.writeUInt32BE(1, 64); b.writeUInt32BE(iter, 68);
-  if (failed) b.writeUInt32BE(0xffffffff, 76);
+  body.copy(b, 28);
   return b;
 }
+function text(s) { const b = Buffer.alloc(4 + Math.ceil(s.length / 4) * 4); b.writeUInt32BE(s.length, 0); b.write(s, 4, "latin1"); return b; }
 
-/** Data-point record (sub-type 762): one per HTTP response. */
-function dataPoint(ts, vuser, dpId) {
-  const b = Buffer.alloc(64);
-  b.writeUInt32BE(64, 0); b.writeUInt32BE(3, 4); b.writeUInt32BE(1, 8); b.writeUInt32BE(52, 12); b.writeUInt32BE(1, 16); b.writeUInt32BE(44, 20);
-  b.writeUInt32BE(762, 24); b.writeDoubleBE(ts, 28); b.writeDoubleBE(1, 44); b.writeUInt32BE(vuser, 52); b.writeUInt32BE(dpId, 56);
-  return b;
+/** Transaction record: sub-type 0x00C00FC0 + flags (0x01 registration, 0x20 think time, 0x8000 failed). end = unix s. */
+function txRecord(end, iter, rtMs, vuser, internalId, failed, mapId, thinkSec) {
+  let flags = failed ? 0x8000 : 0;
+  const parts = [];
+  if (mapId != null) { flags |= 0x01; parts.push(text(String(mapId))); }
+  if (thinkSec) { flags |= 0x20; const t = Buffer.alloc(8); t.writeDoubleBE(thinkSec, 0); parts.push(t); }
+  const f = Buffer.alloc(48);
+  f.writeDoubleBE(end - rtMs / 1000 - (thinkSec || 0), 0); f.writeDoubleBE(end, 8);
+  f.writeUInt32BE(iter + 1, 16); f.writeUInt32BE(internalId, 24); f.writeUInt32BE(vuser, 28);
+  f.writeUInt32BE(failed ? 20 : 12, 32); f.writeUInt32BE(failed ? 7 : 1, 36); f.writeUInt32BE(iter, 40);
+  parts.push(f);
+  if (failed) parts.push(text("Error -26612: HTTP Status-Code=500"));
+  return envelope(Buffer.concat(parts), 0x00c00fc0 + flags);
+}
+
+/** Data-point record: 766 (registration + sample) or 762 (sample); value 1 = one HTTP response. */
+function dataPoint(ts, vuser, internalId, mapId) {
+  const t = Buffer.alloc(8); t.writeDoubleBE(ts, 0);
+  const tail = Buffer.alloc(28); tail.writeDoubleBE(1, 8); tail.writeUInt32BE(vuser, 16); tail.writeUInt32BE(internalId, 20);
+  return mapId != null ? envelope(Buffer.concat([t, text(String(mapId)), tail]), 766) : envelope(Buffer.concat([t, tail]), 762);
+}
+
+/** VUser descriptor (sub-type 63): vuser, local number, group, script, ?, LG host. */
+function vuserRecord(vuser, group, lg) {
+  const v = Buffer.alloc(4); v.writeUInt32BE(vuser, 0);
+  return envelope(Buffer.concat([v, text(String(vuser)), text(group), text(group.toLowerCase()), text("1"), text(lg.split(".")[0])]), 63);
 }
 
 async function main() {
@@ -84,26 +102,32 @@ async function main() {
   const spikeAt = START + Math.round(runSec * 0.55);
   const shiftAt = START + Math.round(runSec * 0.4);
   for (const u of vus) {
+    buf.push(vuserRecord(u.v, "Demo_Script_1", u.lg));
+    const registered = new Set();
+    // per-VUser internal ids: shuffled per VUser so they never equal the RawData.map ids
+    const internal = TX.map((_, k) => INTERNAL_ID_BASE + ((k + u.v) % TX.length));
     for (let it = 0, t0 = u.run; t0 < u.exit - 30; it++, t0 += pace) {
       let t = t0;
       for (let k = 0; k < TX.length; k++) {
         const [name, med] = TX[k];
         let m = med;
         const rel = (t - START) / runSec;
-        if (name === "DEMO_08_REPORTS") m *= 1 + 0.6 * rel;              // degrades over the soak
-        if (name === "DEMO_04_SEARCH" && t > shiftAt) m *= 1.7;           // level shift
-        if (u.lg === LGS[1] && name === "DEMO_03_DASHBOARD") m *= 1.4;     // slower LG
-        if (Math.abs(t - spikeAt) < 90) m *= 4;                            // spike window
+        if (name === "DEMO_08_REPORTS") m *= 1 + 0.6 * rel;            // degrades over the soak
+        if (name === "DEMO_04_SEARCH" && t > shiftAt) m *= 1.7;        // level shift
+        if (u.lg === LGS[1] && name === "DEMO_03_DASHBOARD") m *= 1.4; // slower LG
+        if (Math.abs(t - spikeAt) < 90) m *= 4;                         // spike window
         let rt = lognormal(r, m, 0.35) * 1000;
-        if (r() < 0.0005) rt = -5 - r() * 2;                               // clock skew
+        if (r() < 0.0005) rt = -5 - r() * 2;                             // clock skew
         const failed = Math.abs(t - spikeAt) < 90 && name === "DEMO_07_SAVE_ITEM" && r() < 0.5;
         if (failed) {
           fail.set(name, (fail.get(name) || 0) + 1);
           errors.push({ t: t + Math.max(0, rt) / 1000, code: -26612, msg: `HTTP Status-Code=500 (Internal Server Error) for "https://app.example.test/api/items/${Math.floor(r() * 9999)}"`, v: u.v, lg: u.lg, it });
         } else pass.set(name, (pass.get(name) || 0) + 1);
         t += Math.max(0, rt) / 1000;
-        buf.push(txRecord(t, it, rt, u.v, INTERNAL_ID_BASE + k, failed));
-        buf.push(dataPoint(t, u.v, failed ? 2 : 1));
+        const first = !registered.has(k); registered.add(k);
+        buf.push(txRecord(t, it, rt, u.v, internal[k], failed, first ? k + 1 : null));
+        const dp = failed ? 2 : 1, dpFirst = !registered.has("dp" + dp); registered.add("dp" + dp);
+        buf.push(dataPoint(t, u.v, dp, dpFirst ? dp : null));
         if (!failed) addGraph(k, t, Math.max(0, rt) / 1000);
         t += 1 + r() * 2; // think time
       }

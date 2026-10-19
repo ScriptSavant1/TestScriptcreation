@@ -1,9 +1,9 @@
 /**
- * html.js — self-contained, print-optimised HTML report (Phase 5). The browser prints it to PDF
- * ("Save as PDF"); the CLI writes it as a file. Charts are passed in as SVG strings or image data
- * URLs keyed by chart key (see charts.reportSet), so no script runs inside the report.
+ * html.js — print-ready HTML report.
+ * [Lines 1–6 of the original header comment were not in the photos — replace this block with the original.]
  *
- *   buildReport(model, { charts: { load: "<svg…>", … }, title, logoDataUrl, company })
+ *
+ *
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(require("./format"));
@@ -11,7 +11,7 @@
 })(typeof self !== "undefined" ? self : this, function (fmt) {
   "use strict";
 
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const n3 = (v) => fmt.num(v, 3);
 
   const CHART_TITLES = {
@@ -91,7 +91,7 @@
     sections.push(`<section><h2>2. Test and workload</h2>
       ${table(["Item", "Value"], [
         ["Scenario", m.meta.sessionName], ["Project", m.meta.project], ["Controller", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
-        ["Start / end (local)", `${fmt.localTime(m.meta.startUtc, off)} → ${fmt.localTime(m.meta.stopUtc, off)} (${fmt.zone(off)})`],
+        ["Start / end (local)", `${fmt.localTime(m.meta.startUtc, off)} – ${fmt.localTime(m.meta.stopUtc, off)} (${fmt.zone(off)})`],
         ["Stop reason", m.meta.stopReason], ["Schedule", m.meta.scheduleText || m.meta.schedule.raw], ["Load behaviour", m.meta.loadBehavior],
       ], "kvt")}
       <h3>Schedule — planned vs actual</h3>
@@ -106,7 +106,7 @@
 
     // 3 & 4 results
     sections.push(`<section><h2>3. Results — steady state</h2>
-      <p class="muted">${w ? `${w.detected ? "Detected steady state" : "User-set analysis window"}: t+${fmt.hms(w.start)} → t+${fmt.hms(w.end)} (${esc(fmt.relLocal(m, w.start))} → ${esc(fmt.relLocal(m, w.end))}).` : "No steady-state window."} Response times in seconds. ${m.settings && m.settings.sla && Object.keys(m.settings.sla.perTx || {}).length + (m.settings.sla.defaultSec != null ? 1 : 0) ? `SLA on P${m.settings.sla.percentile}.` : ""}</p>
+      <p class="muted">${w ? `${w.detected ? "Detected steady state" : "User-set analysis window"}: t+${fmt.hms(w.start)} – t+${fmt.hms(w.end)} (${esc(fmt.relLocal(m, w.start))} – ${esc(fmt.relLocal(m, w.end))}).` : "No steady-state window."} Response times in seconds. ${esc(m.method.summaryBasis || "")}. ${m.settings && m.settings.sla && Object.keys(m.settings.sla.perTx || {}).length + (m.settings.sla.defaultSec != null ? 1 : 0) ? `SLA on P${m.settings.sla.percentile}.` : ""}</p>
       ${txTable(m, "steady")}
       ${figure(c, "txBars")}
     </section>`);
@@ -125,13 +125,14 @@
     if (c.lgHealth || c.rtPerLg || c.bytes) sections.push(`<section><h2>7. Load generators and network</h2>${figure(c, "lgHealth")}${figure(c, "rtPerLg")}${figure(c, "bytes")}</section>`);
 
     // 8 Findings
-    sections.push(`<section><h2>8. All findings</h2>${ins.findings.length ? ins.findings.map((f) => `<div class="finding"><span class="sev" style="background:${fmt.SEVERITY[f.severity].color}">${fmt.SEVERITY[f.severity].label}</span> <b>${esc(f.title)}</b><p>${esc(f.text)}</p></div>`).join("") : "<p>No findings.</p>"}</section>`);
-
+    sections.push(`<section><h2>8. All findings</h2>${ins.findings.length ? ins.findings.map((f) => `<div class="finding"><span class="sev" style="background:${fmt.SEVERITY[f.severity].color}">${fmt.SEVERITY[f.severity].label}</span> <b>${esc(f.title)}
+      </b><p>${esc(f.text)}</p></div>`).join("") : "<p>No findings.</p>"}</section>`);
     // Appendix
     sections.push(`<section class="appendix"><h2>Appendix — method and validation</h2>
       ${table(["Item", "Method"], [
-        ["Source", "RawData.eve transaction records; scenario files (.lrr, RunInfo.ini, _t_rep.eve, .usp, .cfg, .usr); SqliteDb.db; sum_data"],
+        ["Source", "RawData.eve (transactions, HTTP codes, hits, throughput); scenario files (.lrr, RunInfo.ini, _t_rep.eve, .usp, .cfg, .usr); SqliteDb.db (errors); sum_data only for LG health"],
         ["Transactions", m.method.transactionSource || "-"], ["Response time", m.method.responseTimeUnit], ["Transaction names", m.method.transactionNames || "-"],
+        ["Transaction summary basis", m.method.summaryBasis || "-"], ["Chart granularity", m.method.chartGranularity || "-"],
         ["Percentiles", m.method.percentile], ["Standard deviation", m.method.stdDev], ["Steady state", m.method.steadyState],
         ["TPS", m.method.tps], ["Pass / fail", m.method.passFail], ["Negative response times", m.method.negativeResponseTimes],
         ["Time zone", `${fmt.zone(off)} — ${m.meta.localOffsetSource}`],

@@ -1,10 +1,14 @@
 # LRE Results Analyser — Implementation Plan
 
-> **Status:** Phases 0–5 built (2026-10-14). Phase 0 sign-off — counts compared with LRE Analysis on a real run — still open (§11 items 1–2)
+> **Status (2026-10-16):** Phases 0–5 built and **Phase 0 signed off** — validated against LRE Analysis
+> on runs 59 and 2144 (names, counts, pass/fail, averages, hits, HTTP codes, throughput exact). The
+> RawData.eve layout assumed in this plan was replaced by the one in `SPEC-RawData-eve-REVERSE-ENGINEERED.md`;
+> how figures are calculated today: `TECHNICAL-DESIGN.md`. This plan is kept for history.
 > **Date:** 2026-10-14
 > **Inputs:** `SPEC-file-formats.md` (file formats), `DISCOVERY-PLAN.md` (discovery) — both in this
 > `docs/` folder; sample text files in `RawResults_59/` at the repo root (never committed — internal host names)
 > **Owner decisions still open:** see [§11 Inputs still needed](#11-inputs-still-needed)
+
 
 ---
 
