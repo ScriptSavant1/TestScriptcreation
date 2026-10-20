@@ -1,7 +1,7 @@
 /**
  * cdp-capture.ts
  *
- * Standalone rewrite of perfx-recorder-extension/background/cdp-capture.js
+ * Standalone rewrite of the retired PerfX browser extension's cdp-capture.js
  * against `chrome-remote-interface` instead of the `chrome.debugger` MV3
  * API. This is the actual fix for Problem 2 in
  * ../../CDP-RECORDER-IMPLEMENTATION-PLAN.md §1: the extension attaches to

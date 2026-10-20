@@ -448,7 +448,7 @@ function detectMarkers(){
     }
   }
 
-  // Extension pageref-based transactions: if no bookmarklet markers found
+  // CDP Recorder pageref-based transactions: if no bookmarklet markers found
   // and the HAR has pages, inject synthetic start/end markers so generators
   // emit lr_start_transaction / lr_end_transaction with the correct names.
   if(S.txns.length===0 && S.harPages && S.harPages.size>0){

@@ -5,6 +5,15 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Removed — PerfX Recorder browser extension; Docs/ made local-only
+- `perfx-recorder-extension/` deleted (replaced by the CDP Recorder) and purged from the GitHub history of
+  every branch. Home page: hidden extension banner, install modal and its CSS/JS removed; tool card,
+  decision guide and Recorder help now list two recording options (CDP Recorder, Classic bookmarklet).
+  Server: `GET /downloads/recorder-extension` removed (`archiver` stays — the CDP Recorder download uses it).
+- `tests/unit/harBuilder.test.js` now tests `cdp-recorder/recorder/src/har-builder.js` (the same code).
+- `Docs/` is local-only: added to `.gitignore` and purged from the GitHub history of every branch.
+  The bug tracker moved to `BUGS.md` at the repo root.
+
 ### Added — Results Analyser: Granularity (exact or LoadRunner-style averaged figures)
 
 - New **Granularity** setting (page, Excel/Word/PDF, CLI `--granularity`). Default **Exact**: every

@@ -3,7 +3,7 @@
  *
  * Session orchestrator — owns the browser process + CDP connection and
  * drives start/stop/transaction lifecycle. This is the standalone
- * replacement for perfx-recorder-extension/background/service-worker.js's
+ * replacement for the retired PerfX browser extension's service-worker.js
  * message handler (START_RECORDING / STOP_RECORDING / START_TRANSACTION /
  * END_TRANSACTION), minus the chrome.storage.session / side-panel-port
  * plumbing a CLI doesn't need.

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Script Studio: pageref-based transactions from CDP-Recorder / extension HARs.
+ * Script Studio: pageref-based transactions from CDP-Recorder HARs.
  *
  * Real-world report: a user's recording showed a "Launch" transaction in
  * Studio with start/end markers but no requests inside it. Root cause of the

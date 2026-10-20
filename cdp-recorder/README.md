@@ -2,7 +2,7 @@
 
 **This entire folder is self-contained and safe to delete.** Nothing outside
 `cdp-recorder/` depends on anything in here, and nothing in here touches the
-existing `perfx-recorder-extension/`, `src/web/`, or any other part of this
+existing `src/web/` or any other part of this
 repo. If Phase 0 (below) shows raw CDP access is blocked in your corporate
 environment, delete this folder and nothing else needs to change — see
 `../CDP-RECORDER-IMPLEMENTATION-PLAN.md` for what to do instead (§2's

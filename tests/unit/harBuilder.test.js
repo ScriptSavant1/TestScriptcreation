@@ -22,7 +22,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const EXT_DIR = path.resolve(__dirname, '../../perfx-recorder-extension/background');
+const EXT_DIR = path.resolve(__dirname, '../../cdp-recorder/recorder/src');
 
 function loadHarBuilder() {
   let code = fs.readFileSync(path.join(EXT_DIR, 'har-builder.js'), 'utf-8');

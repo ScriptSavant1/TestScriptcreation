@@ -4,8 +4,7 @@ The real recorder, built on the mechanism the Phase 0 probe (`../probe/`)
 proved viable — including on the actual corporate-managed machine (see
 `../../CDP-RECORDER-IMPLEMENTATION-PLAN.md` §2). Produces a standard HAR 1.2
 file compatible with the existing `VuGen-Recorder-parsers.js` / VuGen Script
-Studio pipeline, same as `perfx-recorder-extension` does today — no changes
-needed on that side.
+Studio pipeline — no changes needed on that side.
 
 ## Before you run this against anything real
 
@@ -26,8 +25,8 @@ This launches two separate browser processes:
    actually browse your target application in.
 2. A **floating control toolbar** — a small, chrome-less window (no address
    bar or tabs, via Edge/Chrome's `--app=` mode) with Start/Stop Recording
-   and Start/End Transaction buttons, modeled on
-   `perfx-recorder-extension/sidepanel/sidepanel.html`'s layout. The closest
+   and Start/End Transaction buttons, modeled on the retired PerfX browser
+   extension's side panel layout. The closest
    equivalent to VuGen's own recording toolbar: a separate floating window,
    not something living inside the browser being recorded.
 
@@ -73,7 +72,7 @@ Same three modes as the probe, same reasoning:
   confirmed on your machine (SSO survives the relaunch) — untested as of
   this writing.
 
-## What changed vs. the extension (`perfx-recorder-extension`)
+## What changed vs. the retired PerfX browser extension
 
 `bg-detector.js`, `har-builder.js`, and `url-normalizer.js` are ported
 **unchanged** — zero `chrome.*` dependency, confirmed at planning time (plan

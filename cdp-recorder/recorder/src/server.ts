@@ -4,7 +4,7 @@
  * Replaces the CLI REPL (cli.ts) with a tiny HTTP server (plain Node `http`,
  * no framework) serving a single self-contained page with Start/Stop/
  * Transaction buttons, visually modeled on
- * perfx-recorder-extension/sidepanel/sidepanel.html's button states and
+ * the retired PerfX browser extension's side panel button states and
  * design tokens. The page is opened in the user's NORMAL browser (whatever
  * `start <url>` resolves to on Windows), not inside the dedicated recording
  * browser instance this tool launches — opening it there would add the

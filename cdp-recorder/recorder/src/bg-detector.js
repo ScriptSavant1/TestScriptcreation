@@ -1,10 +1,9 @@
 /**
  * bg-detector.js
  *
- * PORTED UNCHANGED from perfx-recorder-extension/background/bg-detector.js
- * (zero chrome.* dependency — confirmed at Phase 0 planning time, see
- * ../../../CDP-RECORDER-IMPLEMENTATION-PLAN.md §3). If the extension's copy
- * changes, re-sync this one; `diff` against the original to check.
+ * Originally ported unchanged from the retired PerfX browser extension
+ * (zero chrome.* dependency — see ../../../CDP-RECORDER-IMPLEMENTATION-PLAN.md §3).
+ * This is now the only copy.
  *
  * Real-time background request classifier.
  *

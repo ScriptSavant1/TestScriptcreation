@@ -17,7 +17,7 @@ the Definition of Done checklist. They apply in addition to everything below
 
 ## Session Startup Protocol (MANDATORY)
 1. Read `C:/Users/karrir/.claude/projects/c--Workspace-bruno-devweb-converter/memory/state.md` → current feature status
-2. Read `Docs/BUGS.md` → active bugs
+2. Read `BUGS.md` (repo root) → active bugs
 3. Proceed with task
 4. At end of session → update state.md, BUGS.md, any affected Docs/
 
@@ -79,28 +79,19 @@ All share global state object `S` (defined in `studio-app.js`).
 | `src/web/public/VuGen-Recorder-parsers.js` | HAR parsing for Recorder; handles extension HARs (pageref markers, null-response guard); keeps `respBody` for HTML pages only (page-resource grouping) |
 | `src/web/public/VuGen-Recorder-generators.js` | Script generation for Recorder tool — HTML-mode: form POSTs → `web_submit_data` (BUG-055), page resources via `shared/page-resources.js` (BUG-056) |
 
-### PerfX Recorder Chrome/Edge Extension
+### CDP Recorder (browser recording — replaces the retired PerfX extension)
 | File | Purpose |
 |------|---------|
-| `perfx-recorder-extension/manifest.json` | MV3 manifest — permissions: debugger, tabs, storage, sidePanel; host_permissions: `<all_urls>`; minimum_chrome_version: 114 |
-| `perfx-recorder-extension/background/service-worker.js` | Session lifecycle, port management, SETTLED fallback timer |
-| `perfx-recorder-extension/background/cdp-capture.js` | CDP capture, active/background count separation, stale watchdog |
-| `perfx-recorder-extension/background/har-builder.js` | HAR 1.2 assembler with `_perfx_*` fields, pendingBodyFetches |
-| `perfx-recorder-extension/background/bg-detector.js` | BackgroundDetector: CoV frequency analysis (stdDev/mean < 0.30, ≥3 calls, ≤30s mean) + known path-pattern pre-classification (27 fragments: /ping, /heartbeat, /analytics/event, etc.) + 200ms burst grouping |
-| `perfx-recorder-extension/background/url-normalizer.js` | normalize() strips 20 known cache-buster params, replaces UUIDs and numeric path segments (4+ digits) with `{id}`, drops fragment. Note: uses `new URL()` safely — CDP URLs are fully resolved, not `{{variable}}` templates |
-| `perfx-recorder-extension/content/gesture-detector.js` | USER_GESTURE messages on click/submit/Enter |
-| `perfx-recorder-extension/sidepanel/sidepanel.html` | Side panel HTML |
-| `perfx-recorder-extension/sidepanel/sidepanel.js` | 7-state UI machine (IDLE→RECORDING_LOADING→RECORDING_READY→NAMING→TX_LOADING→TX_READY→STOPPED) |
-| `perfx-recorder-extension/sidepanel/sidepanel.css` | Side panel styles |
+| `cdp-recorder/recorder/src/recorder.ts` | Session orchestrator — browser process + CDP connection, start/stop/transactions |
+| `cdp-recorder/recorder/src/cdp-capture.ts` | CDP Network capture via `Target.setAutoAttach` (new tabs/popups paused before they run) |
+| `cdp-recorder/recorder/src/har-builder.js` | HAR 1.2 assembler with `_perfx_*` fields, pendingBodyFetches (unit-tested by `tests/unit/harBuilder.test.js`) |
+| `cdp-recorder/recorder/src/bg-detector.js` | Background-traffic classifier (CoV frequency analysis + known path patterns + burst grouping) |
+| `cdp-recorder/recorder/src/url-normalizer.js` | URL normalisation for bg-detector (cache-busters, UUIDs, numeric ids) |
+| `cdp-recorder/recorder/src/server.ts` | Local floating control toolbar (Start/Stop/Transaction) |
 
-**Extension distribution**: Users download via `GET /downloads/recorder-extension` (server.js route — ZIPs the folder on demand via `archiver`). Accessed from the home page banner. **Load unpacked is blocked by enterprise Group Policy at corporate clients (e.g. NatWest/RBS) — the only route there is IT allowlisting via Chrome Web Store publishing.**
-
-**Key extension architecture rules:**
-- `startSettledTimer()` in cdp-capture.js only fires when a request FINISHES. If recording starts on an idle page, a 600ms fallback in service-worker.js `START_RECORDING` broadcasts SETTLED directly (BUG-EXT-012).
-- PERSISTENT_TYPES (WebSocket, EventSource) are excluded from ACTIVE_REQUESTS — they never fire loadingFinished.
-- 8s stale watchdog per request as universal fallback for stuck connections.
-- `harBuilder.pendingBodyFetches` (Set of Promises) — STOP_RECORDING awaits them before flush().
-- HAR pages[]/pageref → synthetic isMarker entries injected by `_injectPagerefMarkers` in both Studio and Recorder detectMarkers().
+**Distribution**: `GET /downloads/cdp-recorder` (server.js) serves the pre-built `dist/cdp-recorder.zip`/`.exe`; home page banner "Get CDP Recorder".
+HAR pages[]/pageref → synthetic isMarker entries injected by `_injectPagerefMarkers` in both Studio and Recorder detectMarkers().
+The PerfX Chrome/Edge extension (`perfx-recorder-extension/`) was removed from the repo and its history — do not recreate it.
 
 ### LRE Results Analyser (separate module — phases 0–5 built)
 | File | Purpose |
@@ -255,7 +246,7 @@ lre-utils.js lre-utils.dat` should always be empty.
 - [ ] Impact analysis was done for any non-trivial change (see playbook)
 - [ ] `node --check` on all modified .js files
 - [ ] Unit tests written/updated for new or changed functions
-- [ ] Update `Docs/BUGS.md` (mark fixed, add discovered)
+- [ ] Update `BUGS.md` at the repo root (mark fixed, add discovered)
 - [ ] Update `C:/Users/karrir/.claude/projects/c--Workspace-bruno-devweb-converter/memory/state.md`
 - [ ] Update `Docs/CORRELATION-LOGIC-EXPLAINED.md` if correlation logic changed
 - [ ] `git add` + `git commit` with descriptive message
@@ -272,17 +263,16 @@ Dark mode: `.dark` class on `<body>`.
 ---
 
 ## Auto-maintenance Conventions
-- **After bug fix**: Add entry to `Docs/BUGS.md` as FIXED; add to `CHANGELOG.md`
+- **`Docs/` is local-only** (in `.gitignore`, removed from GitHub history) — never `git add -f` it.
+- **After bug fix**: Add entry to `BUGS.md` (repo root) as FIXED; add to `CHANGELOG.md`
 - **After new feature**: Add one-liner to relevant section in `Docs/FUNCTIONAL-SPEC.md`; add to `CHANGELOG.md`
 - **After correlation change**: Update `Docs/CORRELATION-LOGIC-EXPLAINED.md`
-- **After extension change**: Update `Docs/EXTENSION-RECORDER-PLAN.md` phase status table
 - **Always**: Update `memory/state.md` with current feature status
 - **CHANGELOG.md**: Append-only, lives at project root. Never rewrite or summarize away old entries. When it exceeds ~1 year of entries, move older entries to `CHANGELOG-ARCHIVE.md`.
-- **BUGS.md archiving**: When fixed-bugs list grows very long, move old FIXED entries to `Docs/BUGS-ARCHIVE.md` — keep them findable but out of the active file.
+- **BUGS.md archiving**: When fixed-bugs list grows very long, move old FIXED entries to `BUGS-ARCHIVE.md` (repo root) — keep them findable but out of the active file.
 
 ## Known Governance Gaps (track, don't ignore)
 - **`processField()` untested** — inner closure of `genParamSuggestions()` in `studio-codegen.js`; not directly accessible. Requires refactoring to export or testing via `genParamSuggestions()`. Lowest-priority remaining gap.
-- **`fetchBodyAndFinish()` untested** — `perfx-recorder-extension/background/cdp-capture.js`; depends on live Chrome `chrome.debugger` API. Requires a Chrome mock or integration test. Not yet implemented.
 - **`/regression-tests/` has no test cases yet** — folder + README + `run-all.sh` skeleton exist; no input fixtures or expected outputs captured. See `regression-tests/README.md` for the prioritised list.
 - **No route-registration tests for `server.js`** — BUG-EXT-013 (POST /convert, /convert-jmx, GET /recorder, /studio missing their bare-root registration) shipped and reached a user before being caught, because nothing exercises Express route matching. Needs a `supertest`-based harness that boots the app and asserts each route responds at both `/` and `/converter`. Not yet implemented.
 

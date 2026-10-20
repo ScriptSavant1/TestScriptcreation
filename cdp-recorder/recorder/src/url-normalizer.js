@@ -1,10 +1,9 @@
 /**
  * url-normalizer.js
  *
- * PORTED UNCHANGED from perfx-recorder-extension/background/url-normalizer.js
- * (zero chrome.* dependency — confirmed at Phase 0 planning time, see
- * ../../../CDP-RECORDER-IMPLEMENTATION-PLAN.md §3). If the extension's copy
- * changes, re-sync this one; `diff` against the original to check.
+ * Originally ported unchanged from the retired PerfX browser extension
+ * (zero chrome.* dependency — see ../../../CDP-RECORDER-IMPLEMENTATION-PLAN.md §3).
+ * This is now the only copy.
  *
  * Strips the parts of a URL that change between calls but don't alter the
  * semantic identity of the endpoint. Used by bg-detector.js to group repeated

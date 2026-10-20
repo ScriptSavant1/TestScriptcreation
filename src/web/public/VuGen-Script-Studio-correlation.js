@@ -48,7 +48,7 @@ function parseHar(har) {
       respHdrsMap,
       respCookies: resp.cookies || [],
       _resourceType:    e._resourceType || "", // Chrome HAR extension
-      // PerfX Studio Recorder fields (present only when HAR came from the extension)
+      // PerfX Studio Recorder fields (present only when HAR came from the CDP Recorder)
       pageref:          e.pageref || null,
       _perfx_class:     e._perfx_class     || null,
       _perfx_interval:  e._perfx_interval  || null,
@@ -393,8 +393,8 @@ function detectMarkers(entries) {
     }
   }
 
-  // Extension pageref-based transactions: if no bookmarklet markers found
-  // and the HAR has pages (recorded by PerfX extension), inject synthetic
+  // CDP Recorder pageref-based transactions: if no bookmarklet markers found
+  // and the HAR has pages (recorded by the CDP Recorder), inject synthetic
   // start/end marker entries so generators emit lr_start/end_transaction.
   if (S.txns.length === 0 && S.harPages && S.harPages.size > 0) {
     _injectPagerefMarkers(entries, S.harPages);

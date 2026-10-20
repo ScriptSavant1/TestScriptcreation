@@ -1,7 +1,7 @@
 'use strict';
 /**
  * harParser.js  —  Server-side utility for classified HAR files produced by
- * the PerfX Studio Recorder extension.
+ * the CDP Recorder.
  *
  * Used by the /api/upload-har endpoint (Phase 4A direct-POST path).
  * Client-side equivalent logic lives in studio-app.js (_buildPeriodicSummary).
