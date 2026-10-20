@@ -84,7 +84,7 @@
     };
     const col = collector.createCollector({
       startUtc: startUtc || 0, durationSec, bucketSec: opts.bucketSec, vuserInfo, steady: steadyRel,
-      exactLimit: opts.exactLimit, lreGranularitySec: opts.lreGranularitySec,
+      exactLimit: opts.exactLimit, aggregationSec: opts.aggregationSec,
     });
     let decoded = null;
     const web = webCollector(map, startUtc || 0, col.bucketSec);
@@ -155,14 +155,15 @@
         label: rowsOfTx.get(row.txId).length > 1 ? `${name} (${row.script})` : name,
         inMap: resolution.names.has(row.txId), scripts: [row.script],
         inSla: slaInfo ? slaInfo.transactions.includes(name) : null,
-        full: Object.assign(store.summary(id, null), { tps: durationSec ? store.count(id) / durationSec : null }),
+        // exact figures over every instance; `full` is this or the aggregated view (applySettings)
+        fullExact: Object.assign(store.summary(id, null), { tps: durationSec ? store.count(id) / durationSec : null }),
+        full: null,
         steady: null, // filled by applySettings
         // count = pass + fail (all completed instances, as LRE's Transaction_Count); timing uses passed only
         count: pass + fail, pass, fail, failPct: pass + fail ? (fail / (pass + fail)) * 100 : null,
         sumDataPass: (passFail.get(row.txId) || {}).pass != null ? passFail.get(row.txId).pass : null,
         perLg: store.perLg(id),
         distribution: store.distribution(id, 60),
-        lre: store.lreSummary ? store.lreSummary(id) : null,
         negativeRtClamped: e.negativeRt || 0,
         thinkSec: e.thinkSec || 0, wastedSec: e.wastedSec || 0, nested: e.nested || 0,
         vuserIterations: e.vuserIterations || 0, maxPerVuserIteration: e.maxPerVuserIteration || 0,
@@ -171,6 +172,7 @@
       };
     });
 
+    for (const t of transactions) t.full = t.fullExact; // exact until applySettings chooses the view
     const tl = store.timeline();
     const timeline = {
       bucketSec: bs, buckets: nb, startUtc,
@@ -214,12 +216,7 @@
         stdDev: "population (÷ n)",
         responseTimeUnit: "seconds — end − start − wasted time − think time of each transaction record (LRE: \"do not include think time\")",
         transactionSource: "RawData.eve transaction records (sub-type 0x00C00FC0 + flags; flag 0x8000 = failed); response-time statistics use passed transactions, as LRE does",
-        summaryBasis: store.method === "exact"
-          ? `Exact: every transaction instance, no granularity (${store.totalSamples.toLocaleString("en-GB")} passed instances)`
-          : `Histogram: every transaction instance, no granularity (${store.totalSamples.toLocaleString("en-GB")} passed instances — more than the ${store.exactLimit.toLocaleString("en-GB")} kept exactly). Count, Min, Avg, Max and Std Dev are exact; percentiles within 0.5 %; analysis-window figures use whole ${bs} s buckets at the window edges`,
-        lreCompatible: opts.lreGranularitySec > 0
-          ? `t.lre: LRE Analysis-style figures (diagnostic) — min/max/std-dev/p90 over the means of ${opts.lreGranularitySec} s × load-generator buckets; not shown in reports`
-          : "off (enable with lreGranularitySec / CLI --lre-granularity to compare with LRE's HTML summary)",
+        summaryBasis: null, // set by applySettings (exact or aggregated)
         transactionNames: resolution.method,
         steadyState: "last VUser running → first VUser exit (from _t_rep.eve); can be adjusted",
         sampleTime: "transaction end time (unix s)",
@@ -309,8 +306,16 @@
     const slaS = Object.assign({ percentile: 90, defaultSec: null, perTx: {} }, settings.sla || {});
     // the default threshold applies to named transactions only (not to wrappers missing from RawData.map)
     const anyNamed = model.transactions.some((t) => t.inMap);
+    // granularity: null = exact (every instance); N s = LRE-style aggregated figures (see collector.aggSummary)
+    const agg = normaliseAggregation(settings.aggregation);
+    let aggMissing = 0;
     for (const t of model.transactions) {
-      t.steady = store && win ? store.summary(t.id, win) : { count: 0, min: null, avg: null, max: null, stdDev: null, p: {} };
+      const fullAgg = agg.sec && store ? store.aggSummary(t.id, null, agg.sec, agg.byVuser) : null;
+      if (agg.sec && !fullAgg) aggMissing++;
+      t.full = fullAgg ? Object.assign(fullAgg, { tps: t.fullExact.tps }) : t.fullExact;
+      const steadyAgg = agg.sec && store && win ? store.aggSummary(t.id, win, agg.sec, agg.byVuser) : null;
+      if (agg.sec && win && !steadyAgg) aggMissing++;
+      t.steady = steadyAgg || (store && win ? store.summary(t.id, win) : { count: 0, min: null, avg: null, max: null, stdDev: null, p: {} });
       t.steady.tps = winSec ? t.steady.count / winSec : null;
       t.steady.fail = store && win ? store.failCount(t.id, win) : null;
       const useDefault = slaS.defaultSec != null && slaS.defaultSec !== "" && (t.inMap || !anyNamed);
@@ -338,11 +343,54 @@
       hits: model.web ? model.web.hits : null, throughputBytes: model.web ? model.web.throughputBytes : null,
     };
     model.window = win ? { start: win.start, end: win.end, durationSec: winSec, detected: !settings.window || !(settings.window.end > settings.window.start) } : null;
-    const gSec = applyGranularity(model, settings.granularitySec);
-    model.settings = { window: settings.window || null, sla: slaS, granularitySec: gSec };
+    // the charts use the same time slots as the aggregation (rounded up to an available chart granularity)
+    const gSec = applyGranularity(model, agg.sec || settings.granularitySec);
+    model.aggregation = describeAggregation(model, agg, aggMissing);
+    model.method.summaryBasis = model.aggregation.basis;
+    if (agg.sec && model.granularity) {
+      model.method.chartGranularity = `charts and Time Series: ${model.granularity.sec} s — follows the ${agg.sec} s granularity` +
+        (model.granularity.sec !== agg.sec ? " (nearest chart size available for this run)" : "");
+    }
+    model.settings = { window: settings.window || null, sla: slaS, granularitySec: agg.sec ? null : gSec, aggregation: agg };
     // insights always run on the base (finest) timeline, so findings do not change with the chart view
     model.insights = insights.run(model._base ? Object.assign({}, model, { timeline: model._base.timeline }) : model);
     return model;
+  }
+
+  /** Granularities offered for the LRE-style view (seconds). */
+  const AGGREGATION_OPTIONS = [5, 10, 15, 20, 30, 60, 100, 200, 300, 500, 600, 900, 1800, 3600];
+
+  function normaliseAggregation(a) {
+    const sec = a && Number(a.sec) > 0 ? Number(a.sec) : null;
+    return { sec, byVuser: !a || a.byVuser !== false };
+  }
+
+  /** Plain-English description of the figures being shown — used by the page, Excel, Word and PDF. */
+  function describeAggregation(model, agg, missing) {
+    const store = model.store;
+    const exact = !store || store.method === "exact";
+    const n = store ? store.totalSamples.toLocaleString("en-GB") : "?";
+    const options = AGGREGATION_OPTIONS.map((sec) => ({ sec, available: !store || store.aggAvailable(sec) }));
+    if (!agg.sec) {
+      return {
+        active: false, sec: null, byVuser: agg.byVuser, options, builtSec: store ? store.aggSec : null, exactStore: exact,
+        title: "Exact — every transaction",
+        basis: exact
+          ? `Exact: every transaction instance on its own, no granularity (${n} passed instances)`
+          : `Every transaction instance, no granularity (${n} passed instances — more than can be kept one by one, so percentiles come from histograms, within 0.5 %; Count, Min, Avg, Max and Std Dev are exact)`,
+        note: "Every transaction your users made is counted on its own. Max is the slowest real response; percentiles are of real responses. Recommended for SLAs.",
+      };
+    }
+    const who = agg.byVuser ? "per VUser" : "across all VUsers";
+    return {
+      active: true, sec: agg.sec, byVuser: agg.byVuser, options, builtSec: store ? store.aggSec : null, exactStore: exact,
+      partial: missing > 0,
+      title: `Aggregated — ${agg.sec} s ${who} (LRE-compatible)`,
+      basis: `Aggregated (LRE Analysis "Data Aggregation" style): response times averaged in ${agg.sec}-second slots ${who}; Min, Max, Std Dev and percentiles are of those averages, weighted by count; Count, Pass, Fail and Average are exact` +
+        (exact ? "" : `; very large run: averages were built while reading (percentiles within 0.5 %) and the steady-state figures use whole ${agg.sec}-second slots`) +
+        (missing ? " — not available for some figures (very large run or user-set window): those show exact values" : ""),
+      note: `First, the response times of each ${agg.byVuser ? "VUser" : "transaction"} inside every ${agg.sec}-second slot are averaged into one value. Min, Max, Std Dev and percentiles are then taken over those averages. Count and Average do not change. This is what LoadRunner Analysis shows when Data Aggregation is switched on with the same granularity. Averaging hides individual slow responses: one 40 s response averaged with ten 1 s responses in the same slot shows as about 4.5 s.`,
+    };
   }
 
   /**
@@ -671,6 +719,7 @@
       check("info", "vuser-id-scope", `VUser numbers in _t_rep.eve: ${life.vuserIdScope}`);
       if (life.neverExited.length) check("info", "vusers", `${life.neverExited.length} VUser(s) have no exit event`);
     }
+    if (store.method !== "exact" && store.aggLate) check("info", "aggregation", `${store.aggLate} instance(s) arrived out of time order for the ${store.aggSec} s aggregation and were kept as separate points`);
     if (store.method === "exact") check("info", "method", `Transaction summary: exact over every instance (${store.totalSamples} passed instances, no granularity); chart granularity ${store.bucketSec} s (auto)`);
     else check("warn", "method", `Large run: ${store.totalSamples} passed instances — more than the ${store.exactLimit} kept exactly, so percentiles come from 1 % histograms (within 0.5 %). Count, Min, Avg, Max and Std Dev stay exact; analysis-window figures use whole ${store.bucketSec} s buckets at the window edges. For exact percentiles run the CLI with a higher --exact-limit on a machine with more memory (≈ 12 bytes per instance)`);
 
@@ -783,5 +832,5 @@
     return JSON.parse(json);
   }
 
-  return { analyse, applySettings, redact, ENGINE_VERSION };
+  return { analyse, applySettings, redact, ENGINE_VERSION, AGGREGATION_OPTIONS };
 });

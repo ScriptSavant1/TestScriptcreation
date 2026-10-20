@@ -117,11 +117,50 @@
           <span class="hint">per transaction in the Transactions tab</span>
         </div>
         <div class="setting">
-          <span class="setting-label" title="Size of the time slots used by the charts and the Time Series sheet. The transaction summary never uses a granularity — it is calculated over every transaction instance.">Chart granularity</span>
-          <select id="gran"></select>
-          <span class="hint" id="gran-hint">charts only · summary uses every instance</span>
+          <span class="setting-label" title="Exact = every transaction counted on its own (recommended). A time value = LoadRunner Analysis-style averaged figures, for comparing with an LRE report that has Data Aggregation switched on.">Granularity</span>
+          <select id="agg" aria-label="Granularity"></select>
+          <label class="chk" title="Average each VUser separately inside every time slot — LoadRunner Analysis 'VuserID' aggregation option (recommended when comparing with LRE)"><input type="checkbox" id="agg-vuser" checked> per VUser</label>
+          <button class="btn sm ghost" id="agg-help-btn" aria-expanded="false" aria-controls="agg-help">ⓘ What is this?</button>
+          <span class="hint" id="agg-hint"></span>
         </div>
       </div>
+
+      <div class="agg-help" id="agg-help" hidden>
+        <h3>What does “Granularity” change?</h3>
+        <div class="agg-help-grid">
+          <div>
+            <h4>Exact — every transaction <span class="pill ok">recommended</span></h4>
+            <p>Every transaction your users made is counted on its own. <b>Max</b> is the slowest real response, and the
+              <b>percentiles</b> (P90, P95…) are of real responses. Use this for SLAs, sign-off and finding slow requests.</p>
+          </div>
+          <div>
+            <h4>5 s … 1 h — LoadRunner-style (averaged)</h4>
+            <p>The run is cut into time slots of the chosen size. Inside each slot, the response times are first
+              <b>averaged</b> — separately for each VUser when “per VUser” is ticked. <b>Min, Max, Std Dev and percentiles</b> are then
+              calculated from those averages. <b>Count, Pass, Fail and Average do not change.</b> The charts use the same slot size.</p>
+          </div>
+          <div>
+            <h4>When should I use it?</h4>
+            <p>When your numbers must match a <b>LoadRunner Analysis report</b> that has Data Aggregation switched on
+              (Analysis → Tools → Options → Result Collection → Data Aggregation → Aggregation Configuration).
+              Choose the <b>same granularity</b> here, and tick “per VUser” if “VuserID” is ticked there.</p>
+          </div>
+          <div>
+            <h4>What to watch out for</h4>
+            <p>Averaging hides slow responses. Example: in one 200-second slot a VUser has ten 1-second responses and one
+              40-second response. The slot counts as <b>4.5 s</b>, so the 40-second response no longer shows as the Max.
+              That is why the exact view is the default.</p>
+          </div>
+          <div>
+            <h4>Very large runs</h4>
+            <p>Runs with more than 20 million transactions are summarised while they are read. For those, <b>200 s</b> is
+              prepared automatically; other sizes need the command line (<code>--granularity 300</code>).
+              Granularity does not make reading faster — reading the file is the slow part.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="agg-banner" id="agg-banner" hidden></div>
 
       <nav class="tabs" id="tabs">
         <button data-tab="overview" class="active">Overview</button>

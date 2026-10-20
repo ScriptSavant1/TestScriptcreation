@@ -199,29 +199,60 @@ describe("analyse (end to end, synthetic run)", () => {
     expect(result.web.httpCodes).toEqual([{ id: 2, name: "HTTP_200", count: 18, perSec: 18 / 411 }]);
   });
 
-  test("LRE Analysis-style figures are off by default (no memory spent) and available on request", async () => {
-    expect(result.transactions.every((t) => t.lre === null)).toBe(true);
-    expect(result.method.lreCompatible).toMatch(/^off/);
-    const r = await analyse(memorySource(sampleRun()), { lreGranularitySec: 2 });
-    const login = r.transactions.find((t) => t.name === "T01_LOGIN");
-    // every instance falls in its own bucket here, so the bucketed figures equal the exact ones
-    expect(login.lre).toMatchObject({ count: 6, points: 6, granularitySec: 2 });
-    expect(login.lre.min).toBeCloseTo(1.001, 6);
-    expect(login.lre.max).toBeCloseTo(1.202, 6);
-    expect(login.lre.avg).toBeCloseTo(login.full.avg, 9);
+  test("granularity: exact by default; LRE-style aggregation on request, then back to exact", async () => {
+    const r = await analyse(memorySource(sampleRun()));
+    expect(r.aggregation).toMatchObject({ active: false, sec: null });
+    const exact = r.transactions.find((t) => t.name === "T01_LOGIN").full;
+    // T01_LOGIN ends at t+21/22 (1.001/1.002 s), t+121/122 (1.101/1.102 s), t+221/222 (1.201/1.202 s)
+    // 200 s slots, all VUsers together: slot 0 → mean 1.0515 (×4), slot 1 → mean 1.2015 (×2)
+    applySettings(r, { aggregation: { sec: 200, byVuser: false } });
+    const a = r.transactions.find((t) => t.name === "T01_LOGIN").full;
+    expect(a).toMatchObject({ count: 6, points: 2, granularitySec: 200, byVuser: false });
+    expect(a.min).toBeCloseTo(1.0515, 6);
+    expect(a.max).toBeCloseTo(1.2015, 6);
+    expect(a.avg).toBeCloseTo(exact.avg, 9); // average unchanged
+    expect(a.stdDev).toBeCloseTo(Math.sqrt(0.005), 6); // weighted: (4·0.05² + 2·0.1²) / 6
+    expect(a.p.p50).toBeCloseTo(1.0515, 6); // running count 4 ≥ 3
+    expect(a.p.p90).toBeCloseTo(1.2015, 6); // running count 6 ≥ 5.4
+    expect(r.aggregation).toMatchObject({ active: true, sec: 200, byVuser: false });
+    expect(r.method.summaryBasis).toMatch(/^Aggregated .*200-second slots across all VUsers/);
+    // charts follow the granularity (capped at the coarsest chart option for this 7-minute run)
+    expect(r.timeline.bucketSec).toBe(Math.min(200, Math.max(...r.granularity.options)));
+    // per VUser (LRE "VuserID"): VUser 1 → slot 0 mean(1.001, 1.101) = 1.051 (×2), slot 1 → 1.201;
+    // VUser 2 → 1.052 (×2), 1.202
+    applySettings(r, { aggregation: { sec: 200, byVuser: true } });
+    const v = r.transactions.find((t) => t.name === "T01_LOGIN").full;
+    expect(v.points).toBe(4);
+    expect(v.min).toBeCloseTo(1.051, 6);
+    expect(v.max).toBeCloseTo(1.202, 6);
+    expect(v.avg).toBeCloseTo(exact.avg, 9);
+    applySettings(r, { aggregation: { sec: null } });
+    expect(r.transactions.find((t) => t.name === "T01_LOGIN").full).toBe(r.transactions.find((t) => t.name === "T01_LOGIN").fullExact);
+    expect(r.aggregation.active).toBe(false);
   });
 
   test("the summary basis is stated: exact over every instance, no granularity", () => {
     expect(result.method.percentileMethod).toBe("exact");
-    expect(result.method.summaryBasis).toMatch(/^Exact: every transaction instance, no granularity \(12 passed instances\)/);
-    expect(result.method.chartGranularity).toMatch(/never used for the transaction summary/);
+    expect(result.method.summaryBasis).toMatch(/^Exact: every transaction instance on its own, no granularity \(12 passed instances\)/);
+    expect(result.aggregation.note).toMatch(/counted on its own/);
     expect(result.selfCheck.find((c) => c.id === "method").status).toBe("info");
   });
 
   test("histogram mode above the exact limit is flagged; Count/Min/Avg/Max stay exact", async () => {
     const r = await analyse(memorySource(sampleRun()), { exactLimit: 4 });
     expect(r.method.percentileMethod).toBe("histogram");
-    expect(r.method.summaryBasis).toMatch(/^Histogram: every transaction instance, no granularity/);
+    expect(r.method.summaryBasis).toMatch(/^Every transaction instance, no granularity/);
+    // the 200 s view is built while reading; other granularities are not available for such runs
+    expect(r.aggregation.options.find((o) => o.sec === 200).available).toBe(true);
+    expect(r.aggregation.options.find((o) => o.sec === 100).available).toBe(false);
+    applySettings(r, { aggregation: { sec: 200, byVuser: false } });
+    const h = r.transactions.find((t) => t.name === "T01_LOGIN").full;
+    expect([h.count, h.points]).toEqual([6, 2]);
+    expect(h.min).toBeCloseTo(1.0515, 6);
+    expect(h.max).toBeCloseTo(1.2015, 6);
+    applySettings(r, { aggregation: { sec: 100, byVuser: false } });
+    expect(r.aggregation.partial).toBe(true); // falls back to exact values, and says so
+    applySettings(r, { aggregation: { sec: null } });
     expect(r.selfCheck.find((c) => c.id === "method").status).toBe("warn");
     const a = r.transactions.find((t) => t.name === "T01_LOGIN").full, b = result.transactions.find((t) => t.name === "T01_LOGIN").full;
     expect([a.count, a.min, a.avg, a.max]).toEqual([b.count, b.min, b.avg, b.max]);

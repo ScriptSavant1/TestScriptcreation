@@ -105,12 +105,15 @@
     </section>`);
 
     // 3 & 4 results
+    const aggNote = m.aggregation && m.aggregation.active
+      ? `<div class="aggnote"><b>${esc(m.aggregation.title)}.</b> ${esc(m.aggregation.note)}</div>` : "";
     sections.push(`<section><h2>3. Results — steady state</h2>
+      ${aggNote}
       <p class="muted">${w ? `${w.detected ? "Detected steady state" : "User-set analysis window"}: t+${fmt.hms(w.start)} – t+${fmt.hms(w.end)} (${esc(fmt.relLocal(m, w.start))} – ${esc(fmt.relLocal(m, w.end))}).` : "No steady-state window."} Response times in seconds. ${esc(m.method.summaryBasis || "")}. ${m.settings && m.settings.sla && Object.keys(m.settings.sla.perTx || {}).length + (m.settings.sla.defaultSec != null ? 1 : 0) ? `SLA on P${m.settings.sla.percentile}.` : ""}</p>
       ${txTable(m, "steady")}
       ${figure(c, "txBars")}
     </section>`);
-    sections.push(`<section><h2>4. Results — full run</h2>${txTable(m, "full")}</section>`);
+    sections.push(`<section><h2>4. Results — full run</h2>${aggNote}${txTable(m, "full")}</section>`);
 
     // 5 Trends
     sections.push(`<section><h2>5. Behaviour over time</h2>${["rtOverTime", "throughput", "latencyHeat", "tpsVsRt", "vuserHeat"].map((k) => figure(c, k)).join("")}</section>`);
@@ -159,6 +162,7 @@
   .verdict { display: inline-block; border: 2px solid; border-radius: 6px; padding: 3mm 6mm; font-size: 16pt; font-weight: 700; margin: 8mm 0; align-self: flex-start; }
   .logo { max-height: 18mm; max-width: 60mm; align-self: flex-start; margin-bottom: 10mm; }
   .muted { color: var(--muted); font-size: 9pt; }
+  .aggnote { background: #fef3c7; border-left: 3px solid #d97706; padding: 2mm 3mm; font-size: 9pt; margin: 0 0 3mm; }
   .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 2mm 0 4mm; }
   .kpi { border: 1px solid var(--line); border-radius: 6px; padding: 3mm; }
   .kv { font-size: 16pt; font-weight: 700; color: var(--accent); }

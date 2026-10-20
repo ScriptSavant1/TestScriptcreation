@@ -98,6 +98,7 @@
 
     // 3 / 4 results
     children.push(H1("3. Results — steady state"));
+    if (m.aggregation && m.aggregation.active) children.push(P(`${m.aggregation.title}. ${m.aggregation.note}`, { run: { size: 18, color: "B45309" } }));
     children.push(P(w ? `${w.detected ? "Detected steady state" : "User-set analysis window"}: t+${fmt.hms(w.start)} – t+${fmt.hms(w.end)} (${fmt.relLocal(m, w.start)} – ${fmt.relLocal(m, w.end)}). Response times in seconds. ${m.method.summaryBasis || ""}.` : "No steady-state window.", { run: { size: 18, color: "475569" } }));
     children.push(txRows("steady"));
     children.push(...img("txBars"));

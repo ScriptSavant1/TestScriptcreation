@@ -10,12 +10,14 @@
  *     --sla 2.5             SLA threshold in seconds for every transaction
  *     --sla-pct 90          percentile the SLA applies to (default 90)
  *     --window 600-28800    analysis window in seconds from scenario start (default: detected steady state)
- *     --granularity 300     chart / Time Series granularity in seconds (default auto; coarser than auto only).
- *                           The transaction summary never uses a granularity.
+ *     --granularity 200     LRE-style figures: Min/Max/Std Dev/percentiles over 200-second averages per VUser
+ *                           (as LoadRunner Analysis with Data Aggregation on); Count and Average stay exact.
+ *                           Default "exact" (every transaction on its own). Charts follow the same granularity.
+ *                           For very large runs this is the granularity prepared while reading (default 200).
+ *     --all-vusers          with --granularity: average all VUsers together instead of per VUser
+ *     --chart-granularity 300  charts / Time Series only (default auto)
  *     --exact-limit 1e8     keep up to this many samples for exact percentiles (default 20,000,000 ≈ 240 MB;
  *                           about 12 bytes each). Above it percentiles come from histograms (within 0.5 %)
- *     --lre-granularity 2   diagnostic: also compute LRE Analysis-style min/max/std-dev/p90 over the means of
- *                           N-second × load-generator buckets, printed to the console only (default off)
  *     --redact              host names → LG1, LG2…; IPs, script paths and error text removed (safe to share)
  *     --quiet               no console summary
  *
@@ -45,8 +47,9 @@ function parseArgs(argv) {
       if (!m) throw new Error("--window expects start-end in seconds, e.g. 600-28800");
       a.window = { start: +m[1], end: +m[2] };
     }
-    else if (x === "--lre-granularity") a.lreGranularity = Number(argv[++i]);
-    else if (x === "--granularity") a.granularity = argv[++i];
+    else if (x === "--granularity" || x === "--lre-granularity") a.granularity = argv[++i];
+    else if (x === "--all-vusers") a.allVusers = true;
+    else if (x === "--chart-granularity") a.chartGranularity = argv[++i];
     else if (x === "--exact-limit") {
       a.exactLimit = Number(argv[++i]);
       if (!(a.exactLimit >= 0)) throw new Error("--exact-limit expects a number of samples, e.g. 100000000");
@@ -170,7 +173,8 @@ function report(r) {
   }
   if (r.window && !r.window.detected) out.push(`Window       : user-set t+${hms(r.window.start)} – t+${hms(r.window.end)}`);
   out.push(`Summary      : ${r.method.summaryBasis}`);
-  out.push(`Granularity  : ${r.method.chartGranularity}`);
+  out.push(`Granularity  : ${r.aggregation ? r.aggregation.title : "Exact — every transaction"}`);
+  out.push(`Charts       : ${r.method.chartGranularity}`);
   out.push("");
   out.push("== Workload ==");
   for (const s of r.workload) {
@@ -197,17 +201,6 @@ function report(r) {
     if (key === "full" && r.transactions.some((t) => t.fail != null)) cols.splice(2, 0, { h: "Pass", f: (t) => (t.pass == null ? "-" : t.pass) }, { h: "Fail", f: (t) => (t.fail == null ? "-" : t.fail) });
     if (key === "steady" && r.transactions.some((t) => t.sla)) cols.push({ h: "SLA", f: (t) => (t.sla ? `${t.sla.pass ? "PASS" : "FAIL"} ${fmt(t.sla.threshold, 2)}` : "-") });
     out.push(table(r.transactions, cols));
-  }
-  if (r.transactions.some((t) => t.lre)) {
-    const g = (r.transactions.find((t) => t.lre) || {}).lre.granularitySec;
-    out.push("");
-    out.push(`== Transaction summary — LRE Analysis style (means of ${g} s × load-generator buckets; count/avg are exact) ==`);
-    out.push(table(r.transactions.filter((t) => t.lre), [
-      { h: "Transaction", f: (t) => t.label || t.name, left: true },
-      { h: "Pass", f: (t) => t.pass }, { h: "Fail", f: (t) => t.fail },
-      { h: "Min", f: (t) => fmt(t.lre.min) }, { h: "Avg", f: (t) => fmt(t.lre.avg) }, { h: "Max", f: (t) => fmt(t.lre.max) },
-      { h: "StdDev", f: (t) => fmt(t.lre.stdDev) }, { h: "P90", f: (t) => fmt(t.lre.p.p90) },
-    ]));
   }
   if (r.web) {
     out.push("");
@@ -243,7 +236,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.folder) {
     console.log("Usage: node lre-results-analyser/cli/analyse.js <results-folder | results.zip> [--xlsx f.xlsx] [--docx f.docx] [--html f.html] [--out f.json]\n" +
-      "       [--sla seconds] [--sla-pct 90] [--window start-end] [--granularity s] [--exact-limit n] [--lre-granularity s] [--redact] [--quiet]");
+      "       [--sla seconds] [--sla-pct 90] [--window start-end] [--granularity exact|s] [--all-vusers] [--chart-granularity s] [--exact-limit n] [--redact] [--quiet]");
     process.exit(args.help ? 0 : 2);
   }
   const input = path.resolve(args.folder);
@@ -254,11 +247,14 @@ async function main() {
 
   const t0 = Date.now();
   let lastPct = -1;
+  const aggSec = args.granularity && !/^(exact|none|0)$/i.test(args.granularity) ? Number(args.granularity) : null;
+  if (args.granularity && aggSec !== null && !(aggSec > 0)) throw new Error("--granularity expects a number of seconds or 'exact'");
   const settings = { window: args.window, sla: { percentile: args.slaPct, defaultSec: Number.isFinite(args.sla) ? args.sla : null, perTx: {} },
-    granularitySec: args.granularity && args.granularity !== "auto" ? Number(args.granularity) : null };
+    granularitySec: args.chartGranularity && args.chartGranularity !== "auto" ? Number(args.chartGranularity) : null,
+    aggregation: { sec: aggSec, byVuser: !args.allVusers } };
   let result = await analyse(isZip ? await zipSource(input) : folderSource(input), {
     settings,
-    lreGranularitySec: Number.isFinite(args.lreGranularity) ? args.lreGranularity : undefined,
+    aggregationSec: aggSec || undefined, // very large runs: the granularity prepared while reading
     exactLimit: Number.isFinite(args.exactLimit) ? args.exactLimit : undefined,
     onProgress: (done, total) => {
       if (args.quiet || !total || !process.stderr.isTTY) return;

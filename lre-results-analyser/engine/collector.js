@@ -11,6 +11,14 @@
  *   - per load generator (full run and detected steady window)
  * Per VUser: samples, iterations, first/last time, RT per time bucket (VUser heatmap).
  *
+ * LRE-style AGGREGATED figures (granularity, as LRE Analysis "Data Aggregation"): the response
+ * times of each VUser × transaction inside one N-second slot (from scenario start) are averaged
+ * into one point; Min / Max / Std Dev / percentiles are then taken over those points, weighted by
+ * their instance count (the formula of LRE's Event_meter queries: running Acount ≥ p × total).
+ * Count and Average equal the exact figures. In exact mode any granularity is computed on demand
+ * from the kept instances; above the exact limit one granularity (aggregationSec, default 200 s)
+ * is built while reading, for the full run and the detected steady state.
+ *
  * All times inside the store are seconds relative to the scenario start.
  */
 (function (root, factory) {
@@ -51,6 +59,10 @@
     return a;
   }
 
+  /** Accumulator of weighted points (slot means): Σw, Σw·x, Σw·x², min, max + a 1 % histogram for percentiles. */
+  function aggAcc() { return { W: 0, S: 0, S2: 0, min: Infinity, max: -Infinity, points: 0, h: hist.create(0.01) }; }
+  function aggPoint(a, x, w) { a.W += w; a.S += x * w; a.S2 += x * x * w; a.points++; if (x < a.min) a.min = x; if (x > a.max) a.max = x; a.h.add(x, w); }
+
   /** stats block (seconds) from a Welford + a quantile function over ms */
   function block(w, qs, method) {
     if (!w.n) return { count: 0, min: null, avg: null, max: null, stdDev: null, p: {}, method };
@@ -74,13 +86,12 @@
     const exactLimit = o.exactLimit == null ? 2e7 : o.exactLimit;
     const vuserInfo = o.vuserInfo || new Map();
     const steady = o.steady || null;
-    // LRE Analysis-style aggregation (diagnostic only, OFF by default): mean RT per (bucket of end
-    // time × load generator). It keeps one entry per bucket × LG × transaction, which is wasted
-    // memory on multi-day runs and is not used by any report. Enable with lreGranularitySec > 0
-    // (CLI --lre-granularity 2) to compare with LRE's HTML summary.
-    const lreG = o.lreGranularitySec > 0 ? o.lreGranularitySec : 0;
-    const lgIndex = new Map();
-    const lgIdx = (name) => { let i = lgIndex.get(name); if (i === undefined) { i = lgIndex.size; lgIndex.set(name, i); } return i; };
+    // VUser → small index (kept per instance so any granularity can be grouped per VUser later)
+    const vuIndex = new Map();
+    const vuIdx = (v) => { let i = vuIndex.get(v); if (i === undefined) { i = vuIndex.size; vuIndex.set(v, i); } return i; };
+    // streaming LRE-style aggregation at one granularity (used when the instances cannot all be kept)
+    const aggSec = o.aggregationSec > 0 ? o.aggregationSec : 200;
+    let aggLate = 0;
     let exact = exactLimit > 0;
     let total = 0;
     let nb = Math.max(1, Math.ceil(((o.durationSec || 3600) + 60) / bucketSec));
@@ -93,12 +104,13 @@
       if (!t) {
         t = {
           id, w: welford(), h: hist.create(0.01),
-          rt: exact ? grow(Float64Array) : null, t: exact ? grow(Float32Array) : null,
+          rt: exact ? grow(Float64Array) : null, t: exact ? grow(Float32Array) : null, vu: exact ? grow(Uint32Array) : null,
+          // streaming aggregation: open slot per VUser (and one for all VUsers) + accumulated points
+          sa: { open: new Map(), openAll: null, full: aggAcc(), steady: aggAcc(), fullAll: aggAcc(), steadyAll: aggAcc() },
           fails: 0, bf: new Uint32Array(nb),
           b: { n: new Uint32Array(nb), mean: new Float64Array(nb), m2: new Float64Array(nb),
                min: new Float64Array(nb).fill(Infinity), max: new Float64Array(nb).fill(-Infinity), h: new Array(nb) },
           lg: new Map(),
-          agg: lreG > 0 ? new Map() : null,
         };
         txs.set(id, t);
       }
@@ -121,7 +133,7 @@
 
     function dropExact() {
       exact = false;
-      for (const t of txs.values()) { t.rt = null; t.t = null; }
+      for (const t of txs.values()) { t.rt = null; t.t = null; t.vu = null; }
     }
 
     /** One transaction instance. ts = end time (unix s), rt in ms. Failed ones are counted, not timed (as LRE does). */
@@ -138,7 +150,19 @@
       t.h.add(rt);
       if (exact) {
         if (++total > exactLimit) dropExact();
-        else { t.rt.push(rt); t.t.push(rel); }
+        else { t.rt.push(rt); t.t.push(rel); t.vu.push(vuIdx(vuser)); }
+      }
+      // streaming LRE-style aggregation (one slot per VUser, and one slot for all VUsers)
+      {
+        const slot = Math.floor(Math.max(0, rel) / aggSec);
+        let c = t.sa.open.get(vuser);
+        if (c && c.b !== slot) { if (slot < c.b) aggLate++; flushCell(t, c, false); c = null; }
+        if (!c) { c = { b: slot, sum: 0, n: 0 }; t.sa.open.set(vuser, c); }
+        c.sum += rt; c.n++;
+        let a = t.sa.openAll;
+        if (a && a.b !== slot) { flushCell(t, a, true); a = null; }
+        if (!a) { a = { b: slot, sum: 0, n: 0 }; t.sa.openAll = a; }
+        a.sum += rt; a.n++;
       }
       // time bucket
       const B = t.b;
@@ -157,11 +181,6 @@
       if (!L) { L = { full: welford(), fh: hist.create(0.01), steady: welford(), sh: hist.create(0.01) }; t.lg.set(lgName, L); }
       wAdd(L.full, rt); L.fh.add(rt);
       if (steady && rel >= steady.start && rel <= steady.end) { wAdd(L.steady, rt); L.sh.add(rt); }
-      if (t.agg) {
-        const k = Math.floor(rel / lreG) * 4096 + lgIdx(lgName);
-        const a = t.agg.get(k);
-        if (a) { a[0] += rt; a[1]++; } else t.agg.set(k, [rt, 1]);
-      }
 
       // VUser
       let v = vusers.get(vuser);
@@ -179,10 +198,24 @@
       if (v.hn) { v.hn[bi]++; v.hs[bi] += rt; }
     }
 
+    /** One closed slot → a point (mean, weight n) for the full run and, when inside it, the steady state. */
+    function flushCell(t, c, all) {
+      if (!c.n) return;
+      const mean = c.sum / c.n;
+      aggPoint(all ? t.sa.fullAll : t.sa.full, mean, c.n);
+      if (steady && c.b * aggSec >= steady.start && (c.b + 1) * aggSec <= steady.end + aggSec) aggPoint(all ? t.sa.steadyAll : t.sa.steady, mean, c.n);
+    }
+
     function finish() {
+      for (const t of txs.values()) {
+        for (const c of t.sa.open.values()) flushCell(t, c, false);
+        t.sa.open.clear();
+        if (t.sa.openAll) flushCell(t, t.sa.openAll, true);
+        t.sa.openAll = null;
+      }
       const nUsed = Number.isFinite(maxRel) ? Math.floor(Math.max(0, maxRel) / bucketSec) + 1 : 0;
       return createStore({ txs, vusers, bucketSec, nb: Math.min(nb, Math.max(nUsed, Math.ceil(((o.durationSec || 0) + 1) / bucketSec))),
-                           exact, exactLimit, total: [...txs.values()].reduce((a, t) => a + t.w.n, 0), minRel, maxRel, steady, lreG });
+                           exact, exactLimit, total: [...txs.values()].reduce((a, t) => a + t.w.n, 0), minRel, maxRel, steady, aggSec, aggLate });
     }
 
     return { add, finish, bucketSec };
@@ -216,22 +249,49 @@
     }
 
     /**
-     * LRE Analysis-style figures (whole run): every (granularity bucket × load generator) cell is
-     * one point = mean RT of the instances in it, weighted by their count; min / max / std-dev /
-     * p90 are taken over those points. Average and count equal the exact figures.
+     * LRE-style aggregated figures for one transaction row (seconds).
+     * @param {number} g  granularity in seconds  @param {boolean} byVuser  one slot per VUser (LRE "VuserID")
+     * @returns block + {points, granularitySec, byVuser} — or null when not available (very large run
+     *          with a granularity other than the one built while reading, or a user-set window)
      */
-    function lreSummary(id) {
+    function aggSummary(id, win, g, byVuser) {
       const t = txs.get(id);
-      if (!t || !t.agg || !t.agg.size) return null;
-      const pts = [...t.agg.values()].map(([sum, n]) => [sum / n, n]).sort((a, b) => a[0] - b[0]);
-      let W = 0, S = 0, S2 = 0;
-      for (const [v, w] of pts) { W += w; S += v * w; S2 += v * v * w; }
-      const avg = S / W;
-      const pOf = (q) => { const need = (q / 100) * W; let c = 0; for (const [v, w] of pts) { c += w; if (c >= need - 1e-9) return v / 1000; } return pts[pts.length - 1][0] / 1000; };
+      if (!t || !(g > 0)) return null;
+      const meta = { granularitySec: g, byVuser: !!byVuser };
+      if (s.exact) {
+        const rt = t.rt.values(), ts = t.t.values(), vu = t.vu.values();
+        const cells = new Map();
+        for (let i = 0; i < rt.length; i++) {
+          if (win && (ts[i] < win.start || ts[i] > win.end)) continue;
+          const b = Math.floor(Math.max(0, ts[i]) / g);
+          const k = byVuser ? vu[i] * 4294967296 + b : b;
+          const c = cells.get(k);
+          if (c) { c[0] += rt[i]; c[1]++; } else cells.set(k, [rt[i], 1]);
+        }
+        if (!cells.size) return Object.assign(block(welford(), [], "aggregated"), meta, { points: 0 });
+        const pts = [...cells.values()].map(([sum, n]) => [sum / n, n]).sort((a, b) => a[0] - b[0]);
+        let W = 0, S = 0, S2 = 0;
+        for (const [x, w] of pts) { W += w; S += x * w; S2 += x * x * w; }
+        // percentile as in LRE's queries: the first point whose running count reaches p × total
+        const pOf = (q) => { const need = W * (q / 100); let run = 0; for (const [x, w] of pts) { run += w; if (run >= need) return x; } return pts[pts.length - 1][0]; };
+        const avg = S / W;
+        const p = {};
+        for (const q of PCTS) p["p" + q] = pOf(q) / 1000;
+        return Object.assign({ count: W, min: pts[0][0] / 1000, avg: avg / 1000, max: pts[pts.length - 1][0] / 1000,
+          stdDev: Math.sqrt(Math.max(0, S2 / W - avg * avg)) / 1000, p, method: "aggregated" }, meta, { points: pts.length });
+      }
+      // very large run: only the granularity built while reading, for the full run or the detected steady state
+      if (g !== s.aggSec) return null;
+      const isSteady = win && s.steady && Math.abs(win.start - s.steady.start) < 1e-6 && Math.abs(win.end - s.steady.end) < 1e-6;
+      if (win && !isSteady) return null;
+      const a = win ? (byVuser ? t.sa.steady : t.sa.steadyAll) : (byVuser ? t.sa.full : t.sa.fullAll);
+      if (!a.W) return Object.assign(block(welford(), [], "aggregated"), meta, { points: 0 });
+      const avg = a.S / a.W;
+      const qs = a.h.quantiles(PCTS);
       const p = {};
-      for (const q of PCTS) p["p" + q] = pOf(q);
-      return { count: W, min: pts[0][0] / 1000, avg: avg / 1000, max: pts[pts.length - 1][0] / 1000,
-               stdDev: Math.sqrt(Math.max(0, S2 / W - avg * avg)) / 1000, p, points: pts.length, granularitySec: s.lreG, method: "lre-buckets" };
+      PCTS.forEach((q, i) => { p["p" + q] = qs[i] / 1000; });
+      return Object.assign({ count: a.W, min: a.min / 1000, avg: avg / 1000, max: a.max / 1000,
+        stdDev: Math.sqrt(Math.max(0, a.S2 / a.W - avg * avg)) / 1000, p, method: "aggregated (histogram, ≤ 0.5 %)" }, meta, { points: a.points });
     }
 
     function exactQuantiles(values) {
@@ -389,7 +449,10 @@
         for (let b = bOf(win.start); b <= Math.min(nb - 1, bOf(win.end)); b++) n += t.bf[b];
         return n;
       },
-      summary, lreSummary, apdexCounts, timeline, perLg, vuserList, vuserHeat, latencyHeat, distribution, countIn,
+      aggSec: s.aggSec, aggLate: s.aggLate,
+      /** granularities available for aggSummary: any in exact mode, else only the one built while reading */
+      aggAvailable: (g) => s.exact || g === s.aggSec,
+      summary, aggSummary, apdexCounts, timeline, perLg, vuserList, vuserHeat, latencyHeat, distribution, countIn,
     };
   }
 

@@ -5,6 +5,20 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Added — Results Analyser: Granularity (exact or LoadRunner-style averaged figures)
+
+- New **Granularity** setting (page, Excel/Word/PDF, CLI `--granularity`). Default **Exact**: every
+  transaction counted on its own (unchanged). Choosing 5 s … 1 h shows the figures LoadRunner
+  Analysis shows with Data Aggregation on: response times are averaged per time slot (per VUser by
+  default, as LRE's "VuserID" option), and Min, Max, Std Dev and percentiles are taken over those
+  averages, weighted by count. Count, Pass, Fail and Average do not change. Charts use the same slots.
+- Plain-English help on the page ("What is this?"), a banner whenever averaged figures are shown,
+  and the same explanation in the reports' method sections. The choice is remembered per test.
+- Very large runs (over 20 M transactions): 200 s per VUser is prepared while the file is read;
+  other sizes via the CLI (`--granularity 300`, `--all-vusers`).
+- Replaces the charts-only "Chart granularity" control (CLI: `--chart-granularity`) and the hidden
+  load-generator-based `--lre-granularity` diagnostic.
+
 ### Fixed — Results Analyser: shared transactions reported per script (BUG-060)
 
 - A transaction used by several scripts (e.g. Login, Logout) now has one row per script with

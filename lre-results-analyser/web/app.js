@@ -151,6 +151,9 @@
       state.detailTx = null;
       const saved = loadSla(model);
       if (saved && (saved.defaultSec != null || Object.keys(saved.perTx || {}).length)) { applySettings({ sla: saved }); toast("SLA thresholds restored from your last session for this test"); }
+      let agg = null;
+      try { agg = JSON.parse(localStorage.getItem(aggKey(model)) || "null"); } catch (_) { /* storage blocked */ }
+      if (agg && agg.sec) { applySettings({ aggregation: agg }); toast(`Granularity ${agg.sec} s restored from your last session for this test — choose “Exact” to see every transaction`); }
     }
     show("results");
     renderAll();
@@ -180,16 +183,40 @@
     const s = m.settings && m.settings.sla;
     $("#sla-pct").value = String((s && s.percentile) || 90);
     $("#sla-default").value = s && s.defaultSec != null ? s.defaultSec : "";
-    const g = m.granularity;
-    const sel = $("#gran");
-    if (g) {
+    // granularity: exact (default) or LRE-style aggregated figures
+    const a = m.aggregation;
+    if (a) {
       const label = (sec) => (sec % 3600 === 0 ? `${sec / 3600} h` : sec % 60 === 0 ? `${sec / 60} min` : `${sec} s`);
-      sel.innerHTML = g.options.map((o) => `<option value="${o === g.baseSec ? "auto" : o}">${o === g.baseSec ? `Auto (${label(o)})` : label(o)}</option>`).join("");
-      sel.value = g.auto ? "auto" : String(g.sec);
-      $("#gran-hint").textContent = `${g.buckets.toLocaleString("en-GB")} points · charts & Time Series only · summary uses every instance`;
+      $("#agg").innerHTML = `<option value="">Exact — every transaction (recommended)</option>` +
+        a.options.map((o) => `<option value="${o.sec}" ${o.available ? "" : "disabled"}>${label(o.sec)} — LRE-style${o.available ? "" : " (very large run: use the CLI)"}</option>`).join("");
+      $("#agg").value = a.sec ? String(a.sec) : "";
+      $("#agg-vuser").checked = a.byVuser !== false;
+      $("#agg-vuser").disabled = !a.active;
+      $("#agg-hint").textContent = a.active
+        ? `averaged figures · charts ${m.granularity ? (m.granularity.sec % 60 ? m.granularity.sec + " s" : m.granularity.sec / 60 + " min") : ""}`
+        : `exact figures · charts ${m.granularity ? (m.granularity.sec % 60 ? m.granularity.sec + " s" : m.granularity.sec / 60 + " min") : ""} (auto)`;
+      const b = $("#agg-banner");
+      b.hidden = !a.active;
+      b.innerHTML = a.active ? `<b>⚠ ${esc(a.title)}.</b> Min, Max, Std Dev and percentiles are of ${a.sec}-second averages${a.byVuser ? " per VUser" : ""}; Count, Pass, Fail and Average are exact.` +
+        (a.partial ? " Some figures could not be averaged at this size (very large run or user-set window) and show exact values." : "") +
+        ` <button class="btn sm" id="agg-exact">Show exact values</button>` : "";
+      const ex = $("#agg-exact");
+      if (ex) ex.onclick = () => setAggregation(null, $("#agg-vuser").checked);
     }
   }
-  $("#gran").onchange = () => { const v = $("#gran").value; applySettings({ granularitySec: v === "auto" ? null : Number(v) }); };
+  function aggKey(m) { return "lre-ra-agg::" + (m.meta.sessionName || "run"); }
+  function setAggregation(sec, byVuser) {
+    const agg = { sec: sec ? Number(sec) : null, byVuser: !!byVuser };
+    try { localStorage.setItem(aggKey(state.model), JSON.stringify(agg)); } catch (_) { /* storage blocked */ }
+    applySettings({ aggregation: agg });
+  }
+  $("#agg").onchange = () => setAggregation($("#agg").value, $("#agg-vuser").checked);
+  $("#agg-vuser").onchange = () => setAggregation($("#agg").value, $("#agg-vuser").checked);
+  $("#agg-help-btn").onclick = () => {
+    const h = $("#agg-help");
+    h.hidden = !h.hidden;
+    $("#agg-help-btn").setAttribute("aria-expanded", String(!h.hidden));
+  };
   $("#win-apply").onclick = () => {
     const a = parseClock($("#win-start").value), b = parseClock($("#win-end").value);
     if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return toast("Enter a start and end as hh:mm:ss from the scenario start (end after start)", true);
@@ -363,7 +390,7 @@
         <input id="tx-filter" placeholder="Filter transactions" value="${esc(state.filter)}">
         <span class="hint">${which === "steady" && m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)} · ` : ""}seconds · click a row for detail${slaCols ? " · type an SLA (s) per transaction" : ""}</span>
       </div>
-      <div class="method-note ${m.method.percentileMethod === "exact" ? "" : "warn"}"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. Min/Max/Std dev/percentiles are not averaged into time slots (LRE's summary table does that, so busy transactions can differ from it). P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>
+      <div class="method-note ${m.method.percentileMethod === "exact" ? "" : "warn"}"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. ${m.aggregation && m.aggregation.active ? "Choose “Exact” in Granularity to see every transaction on its own." : "Min/Max/Std dev/percentiles are not averaged into time slots — LRE Analysis does that when Data Aggregation is on; choose the same Granularity above to match such a report."} P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>
       <div class="card"><div class="table-wrap"><table class="t" id="tx-table"><thead><tr>
         ${TX_COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" ${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? 'title="Whole-run count from sum_data"' : ""}>${c.h}${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? " (run)" : ""}</th>`).join("")}
         ${slaCols ? `<th class="num">SLA (s)</th><th>Result</th><th class="num">Apdex</th>` : ""}<th>P90 trend</th>
