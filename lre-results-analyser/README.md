@@ -29,7 +29,6 @@ Open **Results** in the PerfX menu (or go to `/results-analyser`), then choose t
 | Errors | Errors grouped by code and message pattern, plus a searchable error log |
 | Workload | Scripts (pacing, think time, iterations planned vs achieved), load generators, VUsers |
 | Insights | Automatic findings with evidence, and an overall verdict |
-| Validation | Method, files used, self-checks, RawData.eve record types |
 
 The **analysis window** defaults to the detected steady state and can be changed. **SLA**
 thresholds can be set as a default or per transaction; they are remembered per test in this
@@ -37,6 +36,12 @@ browser. Every figure, chart and insight updates when either changes.
 
 Exports: **Excel** (9 sheets), **Word** (editable, with charts), **PDF** (print-ready report:
 choose "Save as PDF"), **HTML**, **JSON** (full or redacted).
+
+### Explanations on every panel
+
+Each chart and table has a one-line explanation and an expandable "How to read it", written for non-technical readers.
+The text lives in `web/notes.js` (edit the wording there). Column titles and overview tiles show help on hover.
+"? Hide explanations" turns them off (remembered per browser).
 
 ## Command line
 
@@ -170,14 +175,17 @@ Never add real results to the repo: they contain internal host names.
 
 ### Granularity — exact or LoadRunner-style figures
 
+> **Hidden in the page for now** (`FEATURES.granularity = false` in `web/app.js`): the page shows the exact figures.
+> The engine and the CLI `--granularity` option still support the averaged view; set the switch to `true` to show the control again.
+
 | Setting | What you see | Use it for |
 |---|---|---|
 | **Exact — every transaction** (default) | Every transaction counted on its own: Max is the slowest real response, percentiles are of real responses | SLAs, sign-off, finding slow requests |
-| **5 s … 1 h — LoadRunner-style** | Response times averaged inside each time slot (per VUser when "per VUser" is ticked); Min, Max, Std Dev and percentiles are of those averages, weighted by count. **Count, Pass, Fail and Average do not change.** Charts use the same slots | Matching a LoadRunner Analysis report that has Data Aggregation on — choose the same granularity (Analysis → Tools → Options → Result Collection → Data Aggregation → Aggregation Configuration) and tick "per VUser" if "VuserID" is ticked there |
+| **5 s … 1 h — LoadRunner-style** | Response times averaged inside each time slot — all VUsers together when "combine VUsers" is ticked (default), otherwise each VUser separately; Min, Max, Std Dev and percentiles are of those averages, weighted by count. **Count, Pass, Fail and Average do not change.** Charts use the same slots | Matching a LoadRunner Analysis report that has Data Aggregation on — choose the same granularity (Analysis → Tools → Options → Result Collection → Data Aggregation → Aggregation Configuration). If **VuserID** is ticked there ("graph properties to aggregate"), keep "combine VUsers" ticked — in LoadRunner that tick merges the VUsers |
 
 Averaging hides slow responses: ten 1 s responses and one 40 s response in the same 200 s slot show as 4.5 s.
 That is why Exact is the default. Runs above 20 M transactions get 200 s per VUser prepared while reading;
-other sizes need the CLI: `--granularity 300` (add `--all-vusers` to average all VUsers together).
+other sizes need the CLI: `--granularity 300` (add `--per-vuser` to average each VUser separately).
 Granularity does not make reading faster — reading the file is the slow part.
 
 ### Per-script rows, Count and errors

@@ -362,7 +362,9 @@
 
   function normaliseAggregation(a) {
     const sec = a && Number(a.sec) > 0 ? Number(a.sec) : null;
-    return { sec, byVuser: !a || a.byVuser !== false };
+    // default: all VUsers together per slot — LoadRunner Analysis with "VuserID" ticked under
+    // "graph properties to aggregate" (that tick merges the VUsers; unticked keeps them apart)
+    return { sec, byVuser: !!(a && a.byVuser === true) };
   }
 
   /** Plain-English description of the figures being shown — used by the page, Excel, Word and PDF. */

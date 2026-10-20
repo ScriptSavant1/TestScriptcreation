@@ -15,6 +15,32 @@
   The bug tracker moved to `BUGS.md` at the repo root.
 - `devweb-prompts/` is local-only: added to `.gitignore` and purged from the GitHub history of every branch.
 
+### Fixed — Results Analyser: chart-library console error
+- "Cannot read properties of null (reading 0)" in the browser console (inside ECharts) when charts were
+  redrawn quickly, for example on a tab switch followed by a theme change. ECharts draws large charts over
+  several frames and dispose() did not cancel the frame already queued. All chart disposal now goes through
+  `killChart()` in `web/app.js`, which invalidates the queued frame first. No effect on figures or exports.
+
+### Changed — Results Analyser: granularity matches LRE's "VuserID" setting; modern results page
+
+- Granularity: LoadRunner's "VuserID" tick under "graph properties to aggregate" MERGES the VUsers.
+  The averaged view therefore combines all VUsers per time slot by default ("combine VUsers"),
+  which reproduces LRE's aggregated Std Dev / Max / percentiles; untick it (CLI `--per-vuser`) to
+  average each VUser separately. Saved settings from the previous version are not reused.
+- Results page: compact sticky header with a one-line settings summary ("⚙ Change" opens the
+  editor); every panel collapsible with "Collapse all / Expand all", remembered between visits;
+  transaction details open in a side drawer (Esc to close) instead of below the table.
+- New Overview: verdict card with the top issues, six key figures, one load/throughput/errors chart,
+  slowest transactions (P90 bars) and compact findings; test details in a collapsed panel.
+- Validation tab removed from the page (technical self-checks remain in the Excel "Method &
+  Validation" sheet and the JSON export).
+- Every panel now explains itself in plain English: a one-line "what this shows" and an expandable
+  "How to read it" (text in `web/notes.js`); column titles and overview tiles have hover help;
+  "? Hide / Show explanations" turns them off for experienced users (remembered). Icons on panels,
+  tabs and tiles; finding evidence moved behind an "Evidence" toggle.
+- The Granularity control is hidden for now (`FEATURES.granularity = false` in `web/app.js`): the
+  page shows the exact figures only. The engine and the CLI `--granularity` option are unchanged.
+
 ### Added — Results Analyser: Granularity (exact or LoadRunner-style averaged figures)
 
 - New **Granularity** setting (page, Excel/Word/PDF, CLI `--granularity`). Default **Exact**: every

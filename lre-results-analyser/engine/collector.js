@@ -12,8 +12,9 @@
  * Per VUser: samples, iterations, first/last time, RT per time bucket (VUser heatmap).
  *
  * LRE-style AGGREGATED figures (granularity, as LRE Analysis "Data Aggregation"): the response
- * times of each VUser × transaction inside one N-second slot (from scenario start) are averaged
- * into one point; Min / Max / Std Dev / percentiles are then taken over those points, weighted by
+ * times of each transaction inside one N-second slot (from scenario start) are averaged into one
+ * point — all VUsers together (LRE "VuserID" ticked = VUsers merged, the default) or each VUser
+ * separately; Min / Max / Std Dev / percentiles are then taken over those points, weighted by
  * their instance count (the formula of LRE's Event_meter queries: running Acount ≥ p × total).
  * Count and Average equal the exact figures. In exact mode any granularity is computed on demand
  * from the kept instances; above the exact limit one granularity (aggregationSec, default 200 s)
@@ -250,7 +251,8 @@
 
     /**
      * LRE-style aggregated figures for one transaction row (seconds).
-     * @param {number} g  granularity in seconds  @param {boolean} byVuser  one slot per VUser (LRE "VuserID")
+     * @param {number} g  granularity in seconds
+     * @param {boolean} byVuser  one point per VUser per slot (LRE "VuserID" NOT ticked); false = all VUsers merged
      * @returns block + {points, granularitySec, byVuser} — or null when not available (very large run
      *          with a granularity other than the one built while reading, or a user-set window)
      */

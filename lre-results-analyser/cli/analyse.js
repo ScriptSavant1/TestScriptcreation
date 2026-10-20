@@ -10,11 +10,12 @@
  *     --sla 2.5             SLA threshold in seconds for every transaction
  *     --sla-pct 90          percentile the SLA applies to (default 90)
  *     --window 600-28800    analysis window in seconds from scenario start (default: detected steady state)
- *     --granularity 200     LRE-style figures: Min/Max/Std Dev/percentiles over 200-second averages per VUser
- *                           (as LoadRunner Analysis with Data Aggregation on); Count and Average stay exact.
+ *     --granularity 200     LRE-style figures: Min/Max/Std Dev/percentiles over 200-second averages, all VUsers
+ *                           together (as LoadRunner Analysis with Data Aggregation on and "VuserID" ticked);
+ *                           Count and Average stay exact.
  *                           Default "exact" (every transaction on its own). Charts follow the same granularity.
  *                           For very large runs this is the granularity prepared while reading (default 200).
- *     --all-vusers          with --granularity: average all VUsers together instead of per VUser
+ *     --per-vuser           with --granularity: average each VUser separately (LRE "VuserID" not ticked)
  *     --chart-granularity 300  charts / Time Series only (default auto)
  *     --exact-limit 1e8     keep up to this many samples for exact percentiles (default 20,000,000 ≈ 240 MB;
  *                           about 12 bytes each). Above it percentiles come from histograms (within 0.5 %)
@@ -48,7 +49,8 @@ function parseArgs(argv) {
       a.window = { start: +m[1], end: +m[2] };
     }
     else if (x === "--granularity" || x === "--lre-granularity") a.granularity = argv[++i];
-    else if (x === "--all-vusers") a.allVusers = true;
+    else if (x === "--per-vuser") a.perVuser = true;
+    else if (x === "--all-vusers") a.perVuser = false; // the default; kept for older command lines
     else if (x === "--chart-granularity") a.chartGranularity = argv[++i];
     else if (x === "--exact-limit") {
       a.exactLimit = Number(argv[++i]);
@@ -236,7 +238,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.folder) {
     console.log("Usage: node lre-results-analyser/cli/analyse.js <results-folder | results.zip> [--xlsx f.xlsx] [--docx f.docx] [--html f.html] [--out f.json]\n" +
-      "       [--sla seconds] [--sla-pct 90] [--window start-end] [--granularity exact|s] [--all-vusers] [--chart-granularity s] [--exact-limit n] [--redact] [--quiet]");
+      "       [--sla seconds] [--sla-pct 90] [--window start-end] [--granularity exact|s] [--per-vuser] [--chart-granularity s] [--exact-limit n] [--redact] [--quiet]");
     process.exit(args.help ? 0 : 2);
   }
   const input = path.resolve(args.folder);
@@ -251,7 +253,7 @@ async function main() {
   if (args.granularity && aggSec !== null && !(aggSec > 0)) throw new Error("--granularity expects a number of seconds or 'exact'");
   const settings = { window: args.window, sla: { percentile: args.slaPct, defaultSec: Number.isFinite(args.sla) ? args.sla : null, perTx: {} },
     granularitySec: args.chartGranularity && args.chartGranularity !== "auto" ? Number(args.chartGranularity) : null,
-    aggregation: { sec: aggSec, byVuser: !args.allVusers } };
+    aggregation: { sec: aggSec, byVuser: !!args.perVuser } };
   let result = await analyse(isZip ? await zipSource(input) : folderSource(input), {
     settings,
     aggregationSec: aggSec || undefined, // very large runs: the granularity prepared while reading

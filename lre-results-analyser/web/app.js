@@ -12,6 +12,10 @@
   const $$ = (s, el) => [...(el || document).querySelectorAll(s)];
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const n3 = (v) => fmt.num(v, 3);
+  const NT = L.notes;
+  // Feature switches. Granularity (LRE-style averaged figures) is built and tested but hidden for
+  // now: the page shows the exact figures only. Set to true to bring the control back.
+  const FEATURES = { granularity: false };
 
   const state = {
     model: null, worker: null, dark: true, tab: "overview", txView: "steady", sort: null, filter: "",
@@ -153,7 +157,7 @@
       if (saved && (saved.defaultSec != null || Object.keys(saved.perTx || {}).length)) { applySettings({ sla: saved }); toast("SLA thresholds restored from your last session for this test"); }
       let agg = null;
       try { agg = JSON.parse(localStorage.getItem(aggKey(model)) || "null"); } catch (_) { /* storage blocked */ }
-      if (agg && agg.sec) { applySettings({ aggregation: agg }); toast(`Granularity ${agg.sec} s restored from your last session for this test — choose “Exact” to see every transaction`); }
+      if (FEATURES.granularity && agg && agg.sec) { applySettings({ aggregation: agg }); toast(`Granularity ${agg.sec} s restored from your last session for this test — choose “Exact” to see every transaction`); }
     }
     show("results");
     renderAll();
@@ -183,15 +187,17 @@
     const s = m.settings && m.settings.sla;
     $("#sla-pct").value = String((s && s.percentile) || 90);
     $("#sla-default").value = s && s.defaultSec != null ? s.defaultSec : "";
-    // granularity: exact (default) or LRE-style aggregated figures
-    const a = m.aggregation;
+    // granularity: exact (default) or LRE-style aggregated figures — hidden while FEATURES.granularity is off
+    const a = FEATURES.granularity ? m.aggregation : null;
+    $("#agg-setting").hidden = !FEATURES.granularity;
+    if (!FEATURES.granularity) { $("#agg-help").hidden = true; $("#agg-banner").hidden = true; }
     if (a) {
       const label = (sec) => (sec % 3600 === 0 ? `${sec / 3600} h` : sec % 60 === 0 ? `${sec / 60} min` : `${sec} s`);
       $("#agg").innerHTML = `<option value="">Exact — every transaction (recommended)</option>` +
         a.options.map((o) => `<option value="${o.sec}" ${o.available ? "" : "disabled"}>${label(o.sec)} — LRE-style${o.available ? "" : " (very large run: use the CLI)"}</option>`).join("");
       $("#agg").value = a.sec ? String(a.sec) : "";
-      $("#agg-vuser").checked = a.byVuser !== false;
-      $("#agg-vuser").disabled = !a.active;
+      $("#agg-combine").checked = !a.byVuser;
+      $("#agg-combine").disabled = !a.active;
       $("#agg-hint").textContent = a.active
         ? `averaged figures · charts ${m.granularity ? (m.granularity.sec % 60 ? m.granularity.sec + " s" : m.granularity.sec / 60 + " min") : ""}`
         : `exact figures · charts ${m.granularity ? (m.granularity.sec % 60 ? m.granularity.sec + " s" : m.granularity.sec / 60 + " min") : ""} (auto)`;
@@ -201,17 +207,30 @@
         (a.partial ? " Some figures could not be averaged at this size (very large run or user-set window) and show exact values." : "") +
         ` <button class="btn sm" id="agg-exact">Show exact values</button>` : "";
       const ex = $("#agg-exact");
-      if (ex) ex.onclick = () => setAggregation(null, $("#agg-vuser").checked);
+      if (ex) ex.onclick = () => setAggregation(null, !$("#agg-combine").checked);
     }
+    // one-line summary of the current settings (the editor opens with "Change")
+    const chips = [];
+    chips.push(m.window ? `<span class="chip">${m.window.detected ? "Steady state" : "Window"} <b>t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)}</b></span>` : `<span class="chip">No steady state</span>`);
+    chips.push(s && s.defaultSec != null ? `<span class="chip">SLA <b>P${s.percentile} ≤ ${s.defaultSec} s</b></span>` : `<span class="chip">SLA <b>${s && Object.keys(s.perTx || {}).length ? "per transaction" : "not set"}</b></span>`);
+    if (FEATURES.granularity) chips.push(a && a.active ? `<span class="chip warn">Granularity <b>${a.sec} s${a.byVuser ? " per VUser" : ""}</b> (LRE-style)</span>` : `<span class="chip">Granularity <b>Exact</b></span>`);
+    $("#settings-chips").innerHTML = chips.join("");
   }
-  function aggKey(m) { return "lre-ra-agg::" + (m.meta.sessionName || "run"); }
+  function aggKey(m) { return "lre-ra-agg2::" + (m.meta.sessionName || "run"); }
   function setAggregation(sec, byVuser) {
     const agg = { sec: sec ? Number(sec) : null, byVuser: !!byVuser };
     try { localStorage.setItem(aggKey(state.model), JSON.stringify(agg)); } catch (_) { /* storage blocked */ }
     applySettings({ aggregation: agg });
   }
-  $("#agg").onchange = () => setAggregation($("#agg").value, $("#agg-vuser").checked);
-  $("#agg-vuser").onchange = () => setAggregation($("#agg").value, $("#agg-vuser").checked);
+  $("#agg").onchange = () => setAggregation($("#agg").value, !$("#agg-combine").checked);
+  $("#agg-combine").onchange = () => setAggregation($("#agg").value, !$("#agg-combine").checked);
+  $("#btn-settings").onclick = () => {
+    const bar = $("#settings-bar");
+    bar.hidden = !bar.hidden;
+    $("#btn-settings").setAttribute("aria-expanded", String(!bar.hidden));
+    $("#btn-settings").textContent = bar.hidden ? "⚙ Change" : "✓ Done";
+    if (bar.hidden) $("#agg-help").hidden = true;
+  };
   $("#agg-help-btn").onclick = () => {
     const h = $("#agg-help");
     h.hidden = !h.hidden;
@@ -231,6 +250,19 @@
     saveSla(m, sla);
     applySettings({ sla });
   };
+
+  // ── explanations on/off (remembered per browser) ──────────────────────────
+  function setExplain(on) {
+    document.body.classList.toggle("no-explain", !on);
+    $("#btn-explain").setAttribute("aria-pressed", String(on));
+    $("#btn-explain").textContent = on ? "? Hide explanations" : "? Show explanations";
+    try { localStorage.setItem("lre-ra-explain", on ? "1" : "0"); } catch (_) { /* storage blocked */ }
+  }
+  { let on = true; try { on = localStorage.getItem("lre-ra-explain") !== "0"; } catch (_) { /* default on */ } setExplain(on); }
+  $("#btn-explain").onclick = () => setExplain(document.body.classList.contains("no-explain"));
+  // tab icons
+  { const TAB_ICONS = { overview: "gauge", transactions: "table", charts: "line", errors: "alert", workload: "users", insights: "bulb" };
+    $$("#tabs button").forEach((b) => b.insertAdjacentHTML("afterbegin", NT.icon(TAB_ICONS[b.dataset.tab] || "info"))); }
 
   // ── tabs ────────────────────────────────────────────────────────────────────
   $$("#tabs button").forEach((b) => { b.onclick = () => openTab(b.dataset.tab); });
@@ -258,8 +290,66 @@
     const panel = $("#tab-" + tab);
     if (panel.dataset.rendered === "1") { resizeCharts(panel); return; }
     panel.dataset.rendered = "1";
-    ({ overview, transactions, charts: chartsTab, errors, workload, insights, validation })[tab](panel);
+    ({ overview, transactions, charts: chartsTab, errors, workload, insights })[tab](panel);
+    if ($$(".card > h3", panel).length > 1) {
+      panel.insertAdjacentHTML("afterbegin", `<div class="panel-tools"><button class="btn sm ghost" data-ca="collapse">Collapse all</button><button class="btn sm ghost" data-ca="expand">Expand all</button></div>`);
+      $$(".panel-tools [data-ca]", panel).forEach((b) => { b.onclick = () => setAllCards(panel, b.dataset.ca === "collapse"); });
+    }
+    enhanceCards(panel, tab);
   }
+
+  // ── collapsible cards (state remembered per tab + card title) ───────────────
+  const COLLAPSE_KEY = "lre-ra-collapsed";
+  function collapsedSet() { try { return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "[]")); } catch (_) { return new Set(); } }
+  function saveCollapsed(set) { try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set].slice(-300))); } catch (_) { /* storage blocked */ } }
+  function enhanceCards(scope, tab) {
+    const saved = collapsedSet();
+    for (const card of $$(".card", scope)) {
+      if (card.dataset.enh) continue;
+      const h = card.querySelector(":scope > h3");
+      if (!h) continue;
+      card.dataset.enh = "1";
+      const body = document.createElement("div");
+      body.className = "card-body";
+      while (h.nextSibling) body.appendChild(h.nextSibling);
+      card.appendChild(body);
+      const key = tab + "::" + (card.dataset.ckey || h.textContent.trim());
+      card.dataset.key = key;
+      const note = NT.NOTES[card.dataset.ckey];
+      if (note) {
+        h.insertAdjacentHTML("afterbegin", `<span class="card-ico">${NT.icon(note.icon)}</span>`);
+        body.insertAdjacentHTML("afterbegin", explainHtml(card.dataset.ckey));
+      }
+      h.classList.add("card-head");
+      h.tabIndex = 0;
+      h.setAttribute("role", "button");
+      h.insertAdjacentHTML("beforeend", '<span class="chev" aria-hidden="true"></span>');
+      setCard(card, saved.has(key) ? true : saved.has("!" + key) ? false : card.dataset.collapsed === "1", false);
+      const toggle = () => setCard(card, !card.classList.contains("collapsed"), true);
+      h.onclick = (e) => { if (!e.target.closest("button:not(.chev), input, select, a")) toggle(); };
+      h.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } };
+    }
+  }
+  function setCard(card, collapsed, remember) {
+    card.classList.toggle("collapsed", collapsed);
+    const h = card.querySelector(":scope > h3");
+    if (h) h.setAttribute("aria-expanded", String(!collapsed));
+    if (remember) {
+      const set = collapsedSet();
+      set.delete(card.dataset.key); set.delete("!" + card.dataset.key);
+      set.add(collapsed ? card.dataset.key : "!" + card.dataset.key);
+      saveCollapsed(set);
+    }
+    if (!collapsed) setTimeout(() => resizeCharts(card), 0);
+  }
+  /** "What this shows" line + expandable "How to read it" tips (web/notes.js). */
+  function explainHtml(key) {
+    const n = NT.NOTES[key];
+    if (!n) return "";
+    return `<div class="explain"><span class="explain-ico">${NT.icon("info")}</span><div class="explain-text"><span>${esc(n.what)}</span>
+      ${n.read && n.read.length ? `<details><summary>How to read it</summary><ul>${n.read.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></details>` : ""}</div></div>`;
+  }
+  function setAllCards(panel, collapsed) { for (const c of $$(".card[data-enh]", panel)) setCard(c, collapsed, true); }
 
   // ── charts helpers ──────────────────────────────────────────────────────────
   function mount(el, option, key) {
@@ -280,7 +370,8 @@
     const card = document.createElement("div");
     card.className = "card";
     card.dataset.chart = key || "";
-    card.innerHTML = `<h3>${esc(title)}</h3>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}<div class="chart ${cls || ""}"></div>`;
+    if (key) card.dataset.ckey = key;
+    card.innerHTML = `<h3>${esc(title)}</h3>${sub && !(key && NT.NOTES[key]) ? `<div class="sub">${esc(sub)}</div>` : ""}<div class="chart ${cls || ""}"></div>`;
     parent.appendChild(card);
     const el = $(".chart", card);
     el._build = build;
@@ -290,12 +381,24 @@
   function redrawCharts() {
     for (const [el, c] of [...state.charts]) { // snapshot: mount() re-adds entries
       if (el._ro) el._ro.disconnect();
-      c.chart.dispose();
+      killChart(c.chart);
       state.charts.delete(el);
       if (c.build) mount(el, c.build({ dark: state.dark, noTitle: true }), c.key);
     }
   }
-  function disposeCharts() { for (const [el, c] of state.charts) { if (el._ro) el._ro.disconnect(); c.chart.dispose(); } state.charts.clear(); }
+  /**
+   * Dispose a chart safely. ECharts paints large charts over several animation frames and dispose()
+   * does not cancel the frame already queued, which then throws inside ECharts ("Cannot read
+   * properties of null (reading 0)"). The queued frame only paints if the redraw id still matches,
+   * so invalidate it first.
+   */
+  function killChart(ch) {
+    if (!ch || ch.isDisposed()) return;
+    const zr = ch.getZr && ch.getZr();
+    if (zr && zr.painter && "_redrawId" in zr.painter) zr.painter._redrawId = -1;
+    ch.dispose();
+  }
+  function disposeCharts() { for (const [el, c] of state.charts) { if (el._ro) el._ro.disconnect(); killChart(c.chart); } state.charts.clear(); }
   function resizeCharts(scope) { for (const [el, c] of state.charts) if (!scope || scope.contains(el)) c.chart.resize(); }
   window.addEventListener("resize", () => { clearTimeout(resizeCharts._h); resizeCharts._h = setTimeout(() => resizeCharts(), 150); });
 
@@ -316,42 +419,78 @@
 
   // ── Overview ────────────────────────────────────────────────────────────────
   function overview(p) {
-    const m = state.model, t = m.totals, off = m.meta.localOffsetSec;
-    const kpi = (l, v, s) => `<div class="kpi"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div>${s ? `<div class="s">${esc(s)}</div>` : ""}</div>`;
-    const issues = m.insights.findings.filter((f) => f.severity === "high" || f.severity === "medium");
+    const m = state.model, t = m.totals, ins = m.insights, off = m.meta.localOffsetSec;
+    const kpi = (l, v, sub, cls, key, ico) => `<div class="kpi ${cls ? "kpi-" + cls : ""}" title="${esc(NT.KPIS[key] || "")}"><div class="kpi-top"><span class="kpi-ico">${NT.icon(ico || "info")}</span><span class="l">${esc(l)}</span></div><div class="v ${cls || ""}">${esc(v)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ""}</div>`;
+    const issues = ins.findings.filter((f) => f.severity === "high" || f.severity === "medium");
+    const failPct = t.pass != null && t.fail != null ? (t.fail / Math.max(1, t.pass + t.fail)) * 100 : null;
+    const slaRows = m.transactions.filter((x) => x.sla);
+    const slaFail = slaRows.filter((x) => x.sla.pass === false);
+    const which = m.window ? "steady" : "full";
+    const named = m.transactions.filter((x) => x[which] && x[which].count && (x.inMap || !m.transactions.some((y) => y.inMap)));
+    const slow = named.slice().sort((a, b) => (b[which].p.p90 || 0) - (a[which].p.p90 || 0)).slice(0, 8);
+    const maxP90 = slow.length ? slow[0][which].p.p90 || 1 : 1;
+    const top = slow[0];
+    const line = [
+      t.peakVusers != null ? `${fmt.int(t.peakVusers)} VUsers` : null,
+      m.window ? `steady state ${fmt.hms(m.window.durationSec)}` : null,
+      t.tpsSteady != null ? `${fmt.num(t.tpsSteady, 2)} transactions/s` : null,
+      failPct != null ? `${failPct.toFixed(2)} % failed` : null,
+      t.errors != null ? `${fmt.int(t.errors)} errors` : null,
+    ].filter(Boolean).join(" · ");
     p.innerHTML = `
-      ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>Large run:</b> ${esc(m.method.summaryBasis)}. For exact percentiles use the command line with a higher <code>--exact-limit</code> on a machine with more memory.</div>`}
-      <div class="kpis">
-        ${kpi("Duration", fmt.hms(m.meta.durationSec), m.meta.stopReason ? "stopped: " + m.meta.stopReason : "")}
-        ${kpi("Peak VUsers", fmt.int(t.peakVusers), m.lifecycle ? `${m.lifecycle.vusers} in total` : "")}
-        ${kpi(m.window && !m.window.detected ? "Analysis window" : "Steady state", m.window ? fmt.hms(m.window.durationSec) : "-", m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)}` : "")}
-        ${kpi("Transactions", fmt.int(t.samples), `${m.transactions.length} names`)}
-        ${kpi("TPS (window)", fmt.num(t.tpsSteady, 2), `full run ${fmt.num(t.tpsFull, 2)}`)}
-        ${kpi("Failed", t.fail != null ? fmt.int(t.fail) : "n/a", t.fail != null && t.pass != null ? `${((t.fail / Math.max(1, t.pass + t.fail)) * 100).toFixed(2)} %` : "needs sum_data")}
-        ${kpi("Errors", t.errors != null ? fmt.int(t.errors) : "n/a", t.errors == null ? "needs SqliteDb.db" : "")}
-        ${kpi("Hits/s", t.hitsPerSec ? fmt.num(t.hitsPerSec.avg, 1) : "n/a", t.hitsPerSec ? "peak " + fmt.num(t.hitsPerSec.peak, 1) : "")}
+      ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>Large run:</b> ${esc(m.method.summaryBasis)}.</div>`}
+      <div class="ov-top">
+        <div class="hero-card ${ins.verdict.status}">
+          <div class="hero-status">${ins.verdict.status === "pass" ? "✓" : ins.verdict.status === "fail" ? "✕" : "!"} ${esc(ins.verdict.text)}</div>
+          <div class="hero-line">${esc(line)}</div>
+          ${issues.length ? `<ul class="hero-issues">${issues.slice(0, 4).map((f) => `<li><span class="pill ${f.severity}">${fmt.SEVERITY[f.severity].label}</span><span>${esc(f.title)}</span></li>`).join("")}</ul>`
+            : `<div class="hero-line">No significant issues were found.</div>`}
+          <div class="hero-actions"><button class="btn sm" data-goto="insights">All findings (${ins.findings.length}) →</button><button class="btn sm ghost" data-goto="transactions">Transactions →</button></div>
+        </div>
+        <div class="ov-kpis">
+          ${kpi("Peak VUsers", fmt.int(t.peakVusers), m.lifecycle ? `${m.lifecycle.vusers} in total` : "", "", "vusers", "users")}
+          ${kpi(m.window && !m.window.detected ? "Analysis window" : "Steady state", m.window ? fmt.hms(m.window.durationSec) : "-", m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)}` : "", "", "steady", "clock")}
+          ${kpi("Throughput", t.tpsSteady != null ? `${fmt.num(t.tpsSteady, 2)}/s` : "-", `transactions per second · full run ${fmt.num(t.tpsFull, 2)}`, "", "throughput", "gauge")}
+          ${kpi("Transactions passed", fmt.int(t.pass != null ? t.pass : t.samples), t.fail != null ? `${fmt.int(t.fail)} failed (${failPct.toFixed(2)} %)` : "", t.fail ? "" : "ok", "passed", "check")}
+          ${kpi("Errors", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors && m.errors.summary[0] ? `most: code ${m.errors.summary[0].code} ×${fmt.int(m.errors.summary[0].count)}` : "", t.errors ? "bad" : "", "errors", "alert")}
+          ${slaRows.length ? kpi("SLA", `${slaRows.length - slaFail.length} / ${slaRows.length} met`, slaFail.length ? `${slaFail.length} missed` : "all within threshold", slaFail.length ? "bad" : "ok", "sla", "check")
+            : kpi("Slowest (P90)", top ? fmt.sec(top[which].p.p90) : "-", top ? top.label || top.name : "", "", "slowest", "bar")}
+        </div>
       </div>
+      <div class="card" data-ckey="load"><h3>Load, throughput and errors over time</h3><div class="chart" id="ov-load"></div></div>
       <div class="grid-2">
-        <div class="card"><h3>Test</h3><table class="t kv"><tbody>
-          ${[["Scenario", m.meta.sessionName], ["Project", m.meta.project], ["Controller", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
-            ["Start (local)", fmt.localTime(m.meta.startUtc, off) + " " + fmt.zone(off)], ["End (local)", fmt.localTime(m.meta.stopUtc, off)], ["Start (UTC)", fmt.utcTime(m.meta.startUtc)],
-            ["Schedule", m.meta.scheduleText || m.meta.schedule.raw], ["Load behaviour", m.meta.loadBehavior], ["Scripts", m.workload.map((s) => `${s.key} (${s.vusers})`).join(", ")],
-            ["Percentiles", m.method.percentile]].map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v == null ? "-" : v)}</td></tr>`).join("")}
-        </tbody></table></div>
-        <div class="card"><h3>Schedule — planned vs actual</h3><table class="t"><thead><tr><th>Phase</th><th>Planned</th><th>Actual</th></tr></thead><tbody>
-          ${fmt.scheduleRows(m).map((r) => `<tr><td>${esc(r.phase)}</td><td>${esc(r.planned)}</td><td>${esc(r.actual)}</td></tr>`).join("")}
-        </tbody></table>
-        <h3 style="margin-top:14px">Load generators</h3><div class="table-wrap"><table class="t"><thead><tr><th>Host</th><th>IP</th><th class="num">VUsers</th><th class="num">CPU peak</th><th class="num">Mem peak</th></tr></thead><tbody>
-          ${m.lgs.map((l) => `<tr title="${esc(l.role)}"><td>${esc(l.name)}${l.vusers ? "" : ` <span class="pill info">${l.role.startsWith("monitored") ? "no VUsers" : ""}</span>`}</td><td>${esc(l.ip || "-")}</td><td class="num">${l.vusers}</td><td class="num">${l.cpuPeak != null ? l.cpuPeak.toFixed(0) + " %" : "-"}</td><td class="num">${l.memPeak != null ? l.memPeak.toFixed(0) + " %" : "-"}</td></tr>`).join("")}
-        </tbody></table></div></div>
+        <div class="card" data-ckey="slowest"><h3>Slowest transactions — P90 (${which === "steady" ? (m.window.detected ? "steady state" : "analysis window") : "full run"})</h3>
+          <div class="table-wrap"><table class="t"><thead><tr><th>Transaction</th><th>P90</th><th class="num">Avg</th><th class="num">Count</th>${slaRows.length ? "<th>SLA</th>" : ""}</tr></thead><tbody>
+          ${slow.map((x) => `<tr class="click" data-id="${x.id}"><td>${esc(x.label || x.name)}</td>
+            <td><div class="bar-cell"><span class="num" style="min-width:52px">${n3(x[which].p.p90)}</span><span class="bar-track"><span class="bar-fill ${x.sla && x.sla.pass === false ? "bad" : ""}" style="width:${Math.max(2, ((x[which].p.p90 || 0) / maxP90) * 100).toFixed(1)}%"></span></span></div></td>
+            <td class="num">${n3(x[which].avg)}</td><td class="num">${fmt.int(x.count)}</td>${slaRows.length ? `<td>${x.sla ? `<span class="pill ${x.sla.pass ? "pass" : "fail"}">${x.sla.pass ? "PASS" : "FAIL"}</span>` : ""}</td>` : ""}</tr>`).join("")}
+          </tbody></table></div>
+          <div class="hint" style="margin-top:6px">Seconds · click a transaction for its details</div></div>
+        <div class="card" data-ckey="findings"><h3>Findings</h3>
+          ${issues.length ? issues.slice(0, 5).map((f) => findingHtml(f, true)).join("") : `<div class="na">No significant issues — see Insights for every check.</div>`}
+        </div>
       </div>
-      <div class="card"><h3>Key findings</h3>
-        ${issues.length ? issues.slice(0, 6).map(findingHtml).join("") : `<div class="na">No significant issues — see the Insights tab for every check.</div>`}
-      </div>
-      <div class="grid-2" id="ov-charts"></div>`;
-    const g = $("#ov-charts", p);
-    chartCard(g, "Load and throughput", (o) => C.load(state.model, o), "load");
-    chartCard(g, "Response time per transaction (analysis window)", (o) => C.txBars(state.model, o, "steady"), "txBars");
+      <div class="card" data-ckey="details" data-collapsed="1"><h3>Test details — scenario, schedule, load generators</h3>
+        <div class="facts-grid">
+          <div><h4>Test</h4><table class="t kv"><tbody>
+            ${[["Scenario", m.meta.sessionName], ["Project", m.meta.project], ["Controller", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
+              ["Start (local)", fmt.localTime(m.meta.startUtc, off) + " " + fmt.zone(off)], ["End (local)", fmt.localTime(m.meta.stopUtc, off)], ["Duration", fmt.hms(m.meta.durationSec)],
+              ["Stop reason", m.meta.stopReason], ["Load behaviour", m.meta.loadBehavior], ["Scripts", m.workload.map((x) => `${x.key} (${x.vusers})`).join(", ")]]
+              .map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v == null ? "-" : v)}</td></tr>`).join("")}
+          </tbody></table></div>
+          <div><h4>Schedule — planned vs actual</h4><table class="t"><thead><tr><th>Phase</th><th>Planned</th><th>Actual</th></tr></thead><tbody>
+            ${fmt.scheduleRows(m).map((r) => `<tr><td>${esc(r.phase)}</td><td>${esc(r.planned)}</td><td>${esc(r.actual)}</td></tr>`).join("")}
+          </tbody></table>
+          <h4 style="margin-top:12px">Load generators</h4><div class="table-wrap"><table class="t"><thead><tr><th>Host</th><th class="num">VUsers</th><th class="num">CPU peak</th><th class="num">Mem peak</th></tr></thead><tbody>
+            ${m.lgs.map((l) => `<tr title="${esc(l.role)}"><td>${esc(l.name)}${l.vusers ? "" : ' <span class="pill info">no VUsers</span>'}</td><td class="num">${l.vusers}</td><td class="num">${l.cpuPeak != null ? l.cpuPeak.toFixed(0) + " %" : "-"}</td><td class="num">${l.memPeak != null ? l.memPeak.toFixed(0) + " %" : "-"}</td></tr>`).join("")}
+          </tbody></table></div></div>
+        </div>
+      </div>`;
+    const el = $("#ov-load", p);
+    el._build = (o) => C.load(state.model, o);
+    mount(el, el._build({ dark: state.dark, noTitle: true }), "load");
+    $$("[data-goto]", p).forEach((b) => { b.onclick = () => openTab(b.dataset.goto); });
+    $$("tr.click", p).forEach((tr) => { tr.onclick = () => openDrawer(+tr.dataset.id); });
     bindFindingLinks(p);
   }
 
@@ -390,25 +529,24 @@
         <input id="tx-filter" placeholder="Filter transactions" value="${esc(state.filter)}">
         <span class="hint">${which === "steady" && m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)} · ` : ""}seconds · click a row for detail${slaCols ? " · type an SLA (s) per transaction" : ""}</span>
       </div>
-      <div class="method-note ${m.method.percentileMethod === "exact" ? "" : "warn"}"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. ${m.aggregation && m.aggregation.active ? "Choose “Exact” in Granularity to see every transaction on its own." : "Min/Max/Std dev/percentiles are not averaged into time slots — LRE Analysis does that when Data Aggregation is on; choose the same Granularity above to match such a report."} P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>
-      <div class="card"><div class="table-wrap"><table class="t" id="tx-table"><thead><tr>
-        ${TX_COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" ${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? 'title="Whole-run count from sum_data"' : ""}>${c.h}${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? " (run)" : ""}</th>`).join("")}
-        ${slaCols ? `<th class="num">SLA (s)</th><th>Result</th><th class="num">Apdex</th>` : ""}<th>P90 trend</th>
+      ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. ${FEATURES.granularity && m.aggregation && m.aggregation.active ? "Choose “Exact” in Granularity to see every transaction on its own." : "Every figure is calculated from the individual transactions — nothing is averaged into time slots first."} P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>`}
+      <div class="card" data-ckey="txTable"><h3>Transaction summary — ${which === "steady" ? (m.window && !m.window.detected ? "analysis window" : "steady state") : "full run"}</h3><div class="table-wrap"><table class="t" id="tx-table"><thead><tr>
+        ${TX_COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" title="${esc((NT.COLUMNS[c.k] || "") + (which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? " — whole run" : ""))}">${c.h}${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? " (run)" : ""}</th>`).join("")}
+        ${slaCols ? `<th class="num" title="${esc(NT.COLUMNS.sla)}">SLA (s)</th><th title="${esc(NT.COLUMNS.result)}">Result</th><th class="num" title="${esc(NT.COLUMNS.apdex)}">Apdex</th>` : ""}<th title="${esc(NT.COLUMNS.trend)}">P90 trend</th>
       </tr></thead><tbody>
         ${rows.map((r) => {
           if (r.group) return `<tr class="group"><td colspan="${TX_COLS.length + (slaCols ? 4 : 1)}">${esc(r.group)}</td></tr>`;
           const t = r.t, s = t[which];
           const sla = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td><td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "PASS" : "FAIL"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
           return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(state.sort ? t.label || t.name : t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' +
-            t.id + ' could not be matched to a name — see Validation">unnamed</span>') : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
+            t.id + ' could not be matched to a name">unnamed</span>') : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
         }).join("")}
-      </tbody></table></div></div>
-      <div id="tx-detail"></div>`;
+      </tbody></table></div></div>`;
     $$(".seg button", p).forEach((b) => { b.onclick = () => { state.txView = b.dataset.v; rerender(p); }; });
     const fi = $("#tx-filter", p);
     fi.oninput = () => { state.filter = fi.value; clearTimeout(fi._h); fi._h = setTimeout(() => { rerender(p); const n = $("#tx-filter", p); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
     $$("th.sortable", p).forEach((th) => { th.onclick = () => { const k = th.dataset.k; state.sort = state.sort && state.sort.k === k ? (state.sort.asc ? null : { k, asc: true }) : { k, asc: false }; rerender(p); }; });
-    $$("tr.click", p).forEach((tr) => { tr.onclick = (e) => { if (e.target.tagName === "INPUT") return; state.detailTx = state.detailTx === +tr.dataset.id ? null : +tr.dataset.id; rerender(p); }; });
+    $$("tr.click", p).forEach((tr) => { tr.onclick = (e) => { if (e.target.tagName === "INPUT") return; openDrawer(+tr.dataset.id); }; });
     $$(".in-sla", p).forEach((inp) => {
       inp.onchange = () => {
         const v = inp.value.trim();
@@ -419,44 +557,71 @@
         applySettings({ sla });
       };
     });
-    if (state.detailTx != null) txDetail($("#tx-detail", p), state.detailTx);
   }
   function rerender(panel) {
-    for (const [el, c] of [...state.charts]) if (panel.contains(el)) { if (el._ro) el._ro.disconnect(); c.chart.dispose(); state.charts.delete(el); }
+    for (const [el, c] of [...state.charts]) if (panel.contains(el)) { if (el._ro) el._ro.disconnect(); killChart(c.chart); state.charts.delete(el); }
     panel.dataset.rendered = "";
     renderTab(panel.id.slice(4));
   }
 
-  function txDetail(el, id) {
+  // ── transaction details drawer ──────────────────────────────────────────────
+  function openDrawer(id) {
     const m = state.model;
     const t = m.transactions.find((x) => x.id === id);
     if (!t) return;
-    const lgRows = (t.perLg || []).map((l) => `<tr><td>${esc(l.lg)}</td><td class="num">${fmt.int(l.full.count)}</td><td class="num">${n3(l.full.avg)}</td><td class="num">${n3(l.full.p.p90)}</td><td class="num">${n3(l.full.p.p95)}</td><td class="num">${fmt.int(l.steady.count)}</td><td class="num">${n3(l.steady.avg)}</td><td class="num">${n3(l.steady.p.p90)}</td><td class="num">${n3(l.steady.p.p95)}</td></tr>`).join("");
-    el.innerHTML = `<div class="detail"><h3 style="margin:0 0 8px">${esc(t.label || t.name)}</h3>
-      <div class="sub" style="color:var(--text-2);font-size:12px;margin-bottom:8px">ID ${t.id} · scripts: ${esc(t.scripts.join(", ") || "-")} · first t+${fmt.hms(t.firstRelSec)} · last t+${fmt.hms(t.lastRelSec)} · ${t.vuserIterations} VUser-iterations${
-        t.negativeRtClamped ? ` · ${t.negativeRtClamped} negative RT clamped` : ""}</div>
-      <div class="grid-2" id="txd-charts"></div>
-      <div class="card"><h3>Per load generator (histogram percentiles)</h3><div class="table-wrap"><table class="t"><thead><tr><th>Load generator</th><th class="num">Count</th><th class="num">Avg</th><th class="num">P90</th><th class="num">P95</th><th class="num">Steady count</th><th class="num">Steady avg</th><th class="num">Steady P90</th><th class="num">Steady P95</th></tr></thead><tbody>${lgRows}</tbody></table></div></div></div>`;
-    const g = $("#txd-charts", el);
-    chartCard(g, "Distribution (full run)", (o) => C.distribution(state.model, id, o), "dist");
-    chartCard(g, "Over time — avg / P90 / P95 / max", (o) => {
+    closeDrawer(true);
+    state.detailTx = id;
+    $$("tr.click").forEach((tr) => tr.classList.toggle("selected", +tr.dataset.id === id));
+    const w = m.window ? t.steady : t.full;
+    $("#drawer-title").textContent = t.label || t.name;
+    $("#drawer-sub").textContent = `${t.script} · first t+${fmt.hms(t.firstRelSec)} · last t+${fmt.hms(t.lastRelSec)}${m.aggregation && m.aggregation.active ? " · figures: " + m.aggregation.title : ""}`;
+    const kpi = (l, v) => `<div class="kpi"><div class="v" style="font-size:17px">${esc(v)}</div><div class="l">${esc(l)}</div></div>`;
+    const lgRows = (t.perLg || []).map((l) => `<tr><td>${esc(l.lg)}</td><td class="num">${fmt.int(l.full.count)}</td><td class="num">${n3(l.full.avg)}</td><td class="num">${n3(l.full.p.p90)}</td><td class="num">${n3(l.full.p.p95)}</td><td class="num">${fmt.int(l.steady.count)}</td><td class="num">${n3(l.steady.avg)}</td><td class="num">${n3(l.steady.p.p90)}</td></tr>`).join("");
+    const body = $("#drawer-body");
+    body.innerHTML = `<div class="drawer-kpis">
+        ${kpi("Count", fmt.int(t.count))}${kpi("Failed", fmt.int(t.fail))}${kpi("Avg", fmt.sec(w.avg))}${kpi("P90", fmt.sec(w.p.p90))}${kpi("P95", fmt.sec(w.p.p95))}${kpi("Max", fmt.sec(w.max))}
+      </div>
+      <div id="txd-charts"></div>
+      <div class="card" data-ckey="lg"><h3>Per load generator</h3><div class="table-wrap"><table class="t"><thead><tr><th>Load generator</th><th class="num">Count</th><th class="num">Avg</th><th class="num">P90</th><th class="num">P95</th><th class="num">Window count</th><th class="num">Window avg</th><th class="num">Window P90</th></tr></thead><tbody>${lgRows}</tbody></table></div></div>`;
+    const g = $("#txd-charts", body);
+    chartCard(g, "Over time — average, P90, P95, max", (o) => {
       const mm = state.model;
       const opt = C.rtOverTime(mm, [id], "p90", o);
       if (!opt) return null;
-      const s = mm.timeline.tx[id], bs = mm.timeline.bucketSec;
+      const sr = mm.timeline.tx[id], bs = mm.timeline.bucketSec;
       const xy = (a) => a.map((v, b) => [b * bs, v]);
       opt.series = [
-        { name: "Average", type: "line", showSymbol: false, data: xy(s.avg), markArea: opt.series[0].markArea },
-        { name: "P90", type: "line", showSymbol: false, data: xy(s.p90) }, { name: "P95", type: "line", showSymbol: false, data: xy(s.p95) },
-        { name: "Max", type: "line", showSymbol: false, lineStyle: { width: 1, type: "dotted" }, data: xy(s.max) },
+        { name: "Average", type: "line", showSymbol: false, data: xy(sr.avg), markArea: opt.series[0].markArea },
+        { name: "P90", type: "line", showSymbol: false, data: xy(sr.p90) }, { name: "P95", type: "line", showSymbol: false, data: xy(sr.p95) },
+        { name: "Max", type: "line", showSymbol: false, lineStyle: { width: 1, type: "dotted" }, data: xy(sr.max) },
       ];
       return opt;
     }, "txTime");
+    chartCard(g, "Distribution of response times (every transaction)", (o) => C.distribution(state.model, id, o), "dist");
     const heatCard = chartCard(g, "Latency heatmap", () => null, "latencyHeat", "tall");
+    heatCard.dataset.collapsed = "1";
     $(".chart", heatCard).innerHTML = `<div class="na">Loading…</div>`;
     worker().postMessage({ type: "latency", ids: [id], cols: 240, rows: 40, target: "detail" });
     state.pendingHeat = $(".chart", heatCard);
+    enhanceCards(body, "drawer");
+    $("#drawer").hidden = false;
+    $("#drawer-backdrop").hidden = false;
+    $("#drawer-close").focus();
   }
+  function closeDrawer(keepOpen) {
+    const body = $("#drawer-body");
+    for (const [el, c] of [...state.charts]) if (body.contains(el)) { if (el._ro) el._ro.disconnect(); killChart(c.chart); state.charts.delete(el); }
+    body.innerHTML = "";
+    if (keepOpen) return;
+    $("#drawer").hidden = true;
+    $("#drawer-backdrop").hidden = true;
+    state.detailTx = null;
+    $$("tr.click.selected").forEach((tr) => tr.classList.remove("selected"));
+  }
+  $("#drawer-close").onclick = () => closeDrawer();
+  $("#drawer-backdrop").onclick = () => closeDrawer();
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#drawer").hidden) closeDrawer(); });
+
   function onLatency(msg) {
     const el = state.pendingHeat;
     state.pendingHeat = null;
@@ -479,7 +644,7 @@
       <div>
         <div class="chart-controls"><span class="setting-label">Response-time metric</span>
           <div class="seg" id="metric">${["avg", "p50", "p90", "p95", "p99", "max"].map((k) => `<button data-m="${k}" class="${state.metric === k ? "on" : ""}">${k === "avg" ? "Avg" : k.toUpperCase()}</button>`).join("")}</div>
-          <span class="hint">Granularity ${esc(m.granularity ? `${m.granularity.sec} s${m.granularity.auto ? " (auto)" : ""}` : m.timeline.bucketSec + " s")} — change it in the settings bar · drag the slider or scroll inside a chart to zoom · the shaded band is the analysis window</span></div>
+          <span class="hint">Each point = ${esc(m.granularity ? `${m.granularity.sec}` : String(m.timeline.bucketSec))} s of the test · drag the slider or scroll inside a chart to zoom · the shaded band is the analysis window</span></div>
         <div id="chart-grid"></div>
       </div></div>`;
     $$(".tx-picker input", p).forEach((cb) => { cb.onchange = () => { if (cb.checked) state.selected.add(+cb.value); else state.selected.delete(+cb.value); rerender(p); }; });
@@ -509,7 +674,7 @@
     chartCard(g, "Load-generator CPU and memory", (o) => C.lgHealth(state.model, o), "lgHealth");
     chartCard(g, "P90 per load generator", (o) => C.rtPerLg(state.model, o), "rtPerLg", "", "A load generator that is slower on most transactions points to the LG, not the application.");
     chartCard(g, "Response time per VUser", (o) => C.vuserHeat(state.model, o), "vuserHeat", "tall");
-    if (state.scrollTo) { const el = $(`[data-chart="${state.scrollTo}"]`, p); state.scrollTo = null; if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }
+    if (state.scrollTo) { const el = $(`[data-chart="${state.scrollTo}"]`, p); state.scrollTo = null; if (el) setTimeout(() => { if (el.classList.contains("collapsed")) setCard(el, false, true); el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); }
   }
 
   // ── Errors ──────────────────────────────────────────────────────────────────
@@ -517,13 +682,13 @@
     const m = state.model;
     if (!m.errors) { p.innerHTML = `<div class="card"><div class="na">No error data — SqliteDb.db was not found in the results.</div></div>`; return; }
     const off = m.meta.localOffsetSec;
-    p.innerHTML = `<div class="card"><h3>${fmt.int(m.errors.total)} error(s), grouped</h3><div class="sub">Numbers, GUIDs and hex IDs in messages are replaced so similar errors group together. Times are local.</div>
+    p.innerHTML = `<div class="card" data-ckey="errGroups"><h3>${fmt.int(m.errors.total)} error(s), grouped</h3><div class="sub" hidden>Numbers, GUIDs and hex IDs in messages are replaced so similar errors group together. Times are local.</div>
       <div class="table-wrap"><table class="t"><thead><tr><th class="num">Count</th><th>Code</th><th>Message</th><th>Script</th><th class="num">VUsers</th><th>Injectors</th><th>First</th><th>Last</th></tr></thead><tbody>
       ${m.errors.summary.map((g) => `<tr><td class="num">${fmt.int(g.count)}</td><td>${esc(g.code)}</td><td title="${esc(g.example)}">${esc(g.pattern)}</td><td>${esc(g.script || "-")}</td><td class="num">${g.vusers.length}</td><td>${esc(g.injectors.join(", "))}</td>
         <td>${g.firstUtc != null ? esc(fmt.localTime(g.firstUtc, off).slice(11)) : "-"}</td><td>${g.lastUtc != null ? esc(fmt.localTime(g.lastUtc, off).slice(11)) : "-"}</td></tr>`).join("") || `<tr><td colspan="8" class="na">No errors were logged.</td></tr>`}
       </tbody></table></div></div>
       <div id="err-chart"></div>
-      <div class="card"><h3>Error log</h3><div class="tx-controls"><input id="err-q" placeholder="Search message, code, VUser, injector…" style="min-width:320px"><span class="hint" id="err-n"></span></div>
+      <div class="card" data-ckey="errLog"><h3>Error log</h3><div class="tx-controls"><input id="err-q" placeholder="Search message, code, VUser, injector…" style="min-width:320px"><span class="hint" id="err-n"></span></div>
       <div class="table-wrap" style="max-height:520px;overflow:auto"><table class="t"><thead><tr><th>Time (local)</th><th>t+</th><th>Code</th><th>Message</th><th>Script</th><th>VUser</th><th>Injector</th><th class="num">Iteration</th></tr></thead><tbody id="err-rows"></tbody></table></div></div>`;
     chartCard($("#err-chart", p), "Errors over time", (o) => C.errorsOverTime(state.model, o), "errors");
     const draw = () => {
@@ -539,25 +704,25 @@
   // ── Workload ────────────────────────────────────────────────────────────────
   function workload(p) {
     const m = state.model;
-    p.innerHTML = `<div class="card"><h3>Scripts</h3><div class="table-wrap"><table class="t"><thead><tr><th>Script</th><th>Protocol</th><th class="num">VUsers</th><th>Load generators</th><th>Pacing</th><th>Think time</th><th class="num">Iterations</th><th class="num">Planned</th><th class="num">Achieved</th><th class="num">Transactions</th></tr></thead><tbody>
+    p.innerHTML = `<div class="card" data-ckey="wlScripts"><h3>Scripts</h3><div class="table-wrap"><table class="t"><thead><tr><th>Script</th><th>Protocol</th><th class="num">VUsers</th><th>Load generators</th><th>Pacing</th><th>Think time</th><th class="num">Iterations</th><th class="num">Planned</th><th class="num">Achieved</th><th class="num">Transactions</th></tr></thead><tbody>
       ${m.workload.map((s) => `<tr><td>${esc(s.key)}<div class="hint">${esc(s.groups.join(", "))}</div></td><td>${esc(s.protocol || "-")}</td><td class="num">${s.vusers}</td><td>${esc(s.loadGenerators.map((l) => `${l.name} (${l.vusers})`).join(", "))}</td>
         <td>${esc(s.pacing ? s.pacing.text : "-")}</td><td>${esc(s.thinkTime ? s.thinkTime.text : "-")}</td><td class="num">${fmt.int(s.iterationsAchieved)}</td><td class="num">${s.iterationsExpected != null ? fmt.int(s.iterationsExpected) : "-"}</td>
         <td class="num">${s.iterationsExpected ? `<span class="pill ${s.iterationsAchieved / s.iterationsExpected >= 0.95 ? "ok" : "warn"}">${((s.iterationsAchieved / s.iterationsExpected) * 100).toFixed(0)} %</span>` : "-"}</td><td class="num">${s.transactions.length}</td></tr>`).join("")}
       </tbody></table></div></div>
-      <div class="card"><h3>Load generators and hosts</h3><div class="table-wrap"><table class="t"><thead><tr><th>Host</th><th>IP</th><th>Role</th><th class="num">VUsers</th><th>Scripts</th><th class="num">CPU peak</th><th class="num">Memory peak</th></tr></thead><tbody>
+      <div class="card" data-ckey="wlLgs"><h3>Load generators and hosts</h3><div class="table-wrap"><table class="t"><thead><tr><th>Host</th><th>IP</th><th>Role</th><th class="num">VUsers</th><th>Scripts</th><th class="num">CPU peak</th><th class="num">Memory peak</th></tr></thead><tbody>
       ${m.lgs.map((l) => `<tr><td>${esc(l.name)}</td><td>${esc(l.ip || "-")}</td><td>${esc(l.role)}</td><td class="num">${l.vusers}</td><td>${esc(l.scripts.join("; ") || "-")}</td><td class="num">${l.cpuPeak != null ? l.cpuPeak.toFixed(0) + " %" : "-"}</td><td class="num">${l.memPeak != null ? l.memPeak.toFixed(0) + " %" : "-"}</td></tr>`).join("")}
       </tbody></table></div></div>
-      <div class="card"><h3>VUsers</h3><div class="table-wrap" style="max-height:480px;overflow:auto"><table class="t"><thead><tr><th>Group</th><th class="num">VUser</th><th>Script</th><th>Load generator</th><th>Running from</th><th>Exited</th><th class="num">Iterations</th><th class="num">Samples</th><th class="num">Avg RT</th></tr></thead><tbody>
+      <div class="card" data-ckey="wlVusers"><h3>VUsers</h3><div class="table-wrap" style="max-height:480px;overflow:auto"><table class="t"><thead><tr><th>Group</th><th class="num">VUser</th><th>Script</th><th>Load generator</th><th>Running from</th><th>Exited</th><th class="num">Iterations</th><th class="num">Samples</th><th class="num">Avg RT</th></tr></thead><tbody>
       ${m.vusers.map((v) => `<tr><td>${esc(v.group)}</td><td class="num">${v.vuser}</td><td>${esc(v.script)}</td><td>${esc(v.lg)}</td><td>t+${fmt.hms(v.runRelSec)}</td><td>t+${fmt.hms(v.exitRelSec)}</td><td class="num">${fmt.int(v.iterations)}</td><td class="num">${fmt.int(v.samples)}</td><td class="num">${n3(v.avgRt)}</td></tr>`).join("")}
       </tbody></table></div></div>`;
   }
 
   // ── Insights ────────────────────────────────────────────────────────────────
-  function findingHtml(f) {
+  function findingHtml(f, compact) {
     const show = (v) => (typeof v === "number" ? String(+v.toFixed(4)) : Array.isArray(v) ? (v.every((x) => typeof x !== "object") ? v.slice(0, 8).join(", ") + (v.length > 8 ? " …" : "") : null) : v && typeof v === "object" ? null : String(v));
     const ev = f.evidence ? Object.entries(f.evidence).map(([k, v]) => [k, show(v)]).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}: ${v}`).join(" · ").slice(0, 400) : "";
     return `<div class="finding ${f.severity}"><div class="ft"><span class="pill ${f.severity}">${fmt.SEVERITY[f.severity].label}</span> ${esc(f.title)}</div>
-      <div class="fx">${esc(f.text)}</div>${ev ? `<div class="ev">${esc(ev)}</div>` : ""}${f.chart ? `<button class="go" data-chart="${esc(f.chart)}">Show chart →</button>` : ""}</div>`;
+      <div class="fx${compact ? " clamp" : ""}">${esc(f.text)}</div>${ev && !compact ? `<details class="ev-wrap"><summary>Evidence (numbers behind this finding)</summary><div class="ev">${esc(ev)}</div></details>` : ""}${f.chart ? `<button class="go" data-chart="${esc(f.chart)}">Show chart →</button>` : ""}</div>`;
   }
   function bindFindingLinks(p) {
     $$(".finding .go", p).forEach((b) => {
@@ -574,31 +739,9 @@
     const ins = state.model.insights;
     const groups = ["high", "medium", "low", "info", "good"];
     p.innerHTML = `<div class="verdict-banner ${ins.verdict.status}">${esc(ins.verdict.text)}</div>
-      <div class="sub" style="color:var(--text-2);margin-bottom:12px">Every check runs offline on the raw results: Little's Law and pacing, Mann-Kendall trend test with Sen's slope, change-point detection, robust (median/MAD) spike detection, load-generator comparison, LG CPU/memory, errors, SLA and Apdex. Change the analysis window or SLAs to re-run them.</div>
+      ${explainHtml("insights")}
       ${groups.map((s) => ins.findings.filter((f) => f.severity === s).map(findingHtml).join("")).join("") || '<div class="na">No findings.</div>'}`;
     bindFindingLinks(p);
-  }
-
-  // ── Validation ──────────────────────────────────────────────────────────────
-  function validation(p) {
-    const m = state.model;
-    p.innerHTML = `<div class="grid-2">
-      <div class="card"><h3>Method</h3><table class="t kv"><tbody>${Object.entries(m.method).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table></div>
-      <div class="card"><h3>Files used</h3><table class="t kv"><tbody>${Object.entries(m.files.used).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v ? esc(v) : '<span class="pill warn">missing</span>'}</td></tr>`).join("")}
-        <tr><td>sum_data graphs</td><td>${m.files.sumDataGraphs}</td></tr></tbody></table></div></div>
-      <div class="card"><h3>Self-checks</h3><div class="sub">These confirm the binary layout of RawData.eve and the consistency of the scenario files. Compare the transaction counts with LRE Analysis — they must match exactly.</div>
-      <table class="t"><thead><tr><th>Status</th><th>Check</th><th>Result</th></tr></thead><tbody>
-      ${m.selfCheck.map((c) => `<tr><td><span class="pill ${c.status === "fail" ? "fail" : c.status === "ok" ? "ok" : c.status === "warn" ? "warn" : "info"}">${c.status.toUpperCase()}</span></td><td>${esc(c.id)}</td><td>${esc(c.text)}${c.data !== undefined ? `<div class="ev" style="font-family:var(--mono);font-size:11px;color:var(--text-3)">${esc(JSON.stringify(c.data).slice(0, 600))}</div>` : ""}</td></tr>`).join("")}
-      </tbody></table></div>
-      ${m.txNameResolution && m.txNameResolution.matches && m.txNameResolution.matches.length ? `<div class="card"><h3>Transaction names</h3><div class="sub">${esc(m.txNameResolution.method)}</div><div class="table-wrap"><table class="t"><thead><tr><th class="num">Internal id</th><th>Name</th><th class="num">Count</th><th class="num">LRE graph count</th><th class="num">Mean (s)</th><th class="num">LRE graph mean</th><th>Accepted</th></tr></thead><tbody>
-        ${m.txNameResolution.matches.map((x) => `<tr><td class="num">${x.id}</td><td>${esc(x.name)}</td><td class="num">${fmt.int(x.count)}</td><td class="num">${fmt.int(x.graphCount)}</td><td class="num">${n3(x.mean)}</td><td class="num">${n3(x.graphMean)}</td><td>${x.accepted ? '<span class="pill ok">yes</span>' : '<span class="pill fail">no</span>'}</td></tr>`).join("")}
-      </tbody></table></div></div>` : ""}
-      ${m.dataPoints && m.dataPoints.length ? `<div class="card"><h3>Data points (RawData.eve sub-type 762)</h3><div class="sub">Per-request counters such as HTTP status codes — compare HTTP_200 / HTTP_500 with LRE's HTTP Responses summary.</div><table class="t"><thead><tr><th>Data point</th><th class="num">Records</th><th class="num">Sum of values</th></tr></thead><tbody>
-        ${m.dataPoints.map((d) => `<tr><td>${esc(d.name)}</td><td class="num">${fmt.int(d.count)}</td><td class="num">${fmt.int(Math.round(d.sum))}</td></tr>`).join("")}
-      </tbody></table></div>` : ""}
-      ${m.eve ? `<div class="card"><h3>RawData.eve record types</h3><div class="table-wrap"><table class="t"><thead><tr><th class="num">Count</th><th>Signature</th><th>First bytes (hex)</th></tr></thead><tbody>
-        ${m.eve.signatures.slice(0, 30).map((s) => `<tr><td class="num">${fmt.int(s.count)}</td><td><code>${esc(s.signature)}</code></td><td><code style="font-size:10.5px">${esc(s.examples[0] || "")}</code></td></tr>`).join("")}
-      </tbody></table></div></div>` : ""}`;
   }
 
   // ── exports ─────────────────────────────────────────────────────────────────
@@ -634,7 +777,7 @@
         const ch = echarts.init(host, null, { renderer: "canvas", width: 1000, height: h, devicePixelRatio: 2 });
         ch.setOption(c.option);
         const url = ch.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#ffffff" });
-        ch.dispose();
+        killChart(ch);
         const bin = atob(url.split(",")[1]);
         const data = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i);

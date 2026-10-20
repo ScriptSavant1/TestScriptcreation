@@ -77,6 +77,7 @@
 
     <!-- ── RESULTS ───────────────────────────────────────────────────────── -->
     <section id="view-results" class="view">
+      <div class="results-head">
       <div class="toolbar">
         <div class="run-title">
           <div class="run-name" id="run-name">-</div>
@@ -95,11 +96,17 @@
               <button data-export="json-redacted">Result data — redacted (safe to share)</button>
             </div>
           </div>
+          <button class="btn ghost" id="btn-explain" aria-pressed="true" title="Show or hide the explanations under every chart and table">? Explanations</button>
           <button class="btn ghost" id="btn-new">New analysis</button>
         </div>
       </div>
 
-      <div class="settings-bar">
+      <div class="settings-summary" id="settings-summary">
+        <span class="chips" id="settings-chips"></span>
+        <button class="btn sm ghost" id="btn-settings" aria-expanded="false" aria-controls="settings-bar">⚙ Change</button>
+      </div>
+
+      <div class="settings-bar" id="settings-bar" hidden>
         <div class="setting">
           <span class="setting-label">Analysis window</span>
           <span class="t">t+</span><input id="win-start" class="in-time" placeholder="hh:mm:ss">
@@ -116,10 +123,10 @@
           <button class="btn sm" id="sla-apply">Apply</button>
           <span class="hint">per transaction in the Transactions tab</span>
         </div>
-        <div class="setting">
+        <div class="setting" id="agg-setting">
           <span class="setting-label" title="Exact = every transaction counted on its own (recommended). A time value = LoadRunner Analysis-style averaged figures, for comparing with an LRE report that has Data Aggregation switched on.">Granularity</span>
           <select id="agg" aria-label="Granularity"></select>
-          <label class="chk" title="Average each VUser separately inside every time slot — LoadRunner Analysis 'VuserID' aggregation option (recommended when comparing with LRE)"><input type="checkbox" id="agg-vuser" checked> per VUser</label>
+          <label class="chk" title="Average all VUsers together inside every time slot — LoadRunner Analysis with 'VuserID' ticked under 'graph properties to aggregate' (ticking it there merges the VUsers). Untick to average each VUser separately."><input type="checkbox" id="agg-combine" checked> combine VUsers</label>
           <button class="btn sm ghost" id="agg-help-btn" aria-expanded="false" aria-controls="agg-help">ⓘ What is this?</button>
           <span class="hint" id="agg-hint"></span>
         </div>
@@ -136,14 +143,15 @@
           <div>
             <h4>5 s … 1 h — LoadRunner-style (averaged)</h4>
             <p>The run is cut into time slots of the chosen size. Inside each slot, the response times are first
-              <b>averaged</b> — separately for each VUser when “per VUser” is ticked. <b>Min, Max, Std Dev and percentiles</b> are then
+              <b>averaged</b> — all VUsers together when “combine VUsers” is ticked, otherwise each VUser separately. <b>Min, Max, Std Dev and percentiles</b> are then
               calculated from those averages. <b>Count, Pass, Fail and Average do not change.</b> The charts use the same slot size.</p>
           </div>
           <div>
             <h4>When should I use it?</h4>
             <p>When your numbers must match a <b>LoadRunner Analysis report</b> that has Data Aggregation switched on
               (Analysis → Tools → Options → Result Collection → Data Aggregation → Aggregation Configuration).
-              Choose the <b>same granularity</b> here, and tick “per VUser” if “VuserID” is ticked there.</p>
+              Choose the <b>same granularity</b> here. If <b>VuserID</b> is ticked there (under “graph properties to aggregate”),
+              keep “combine VUsers” ticked here — in LoadRunner that tick means the VUsers are merged.</p>
           </div>
           <div>
             <h4>What to watch out for</h4>
@@ -169,8 +177,8 @@
         <button data-tab="errors">Errors</button>
         <button data-tab="workload">Workload</button>
         <button data-tab="insights">Insights <span class="count" id="ins-count"></span></button>
-        <button data-tab="validation">Validation</button>
       </nav>
+      </div>
 
       <div class="panel active" id="tab-overview"></div>
       <div class="panel" id="tab-transactions"></div>
@@ -178,15 +186,22 @@
       <div class="panel" id="tab-errors"></div>
       <div class="panel" id="tab-workload"></div>
       <div class="panel" id="tab-insights"></div>
-      <div class="panel" id="tab-validation"></div>
     </section>
   </main>
+
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-labelledby="drawer-title" role="dialog">
+    <div class="drawer-head"><div><div class="drawer-title" id="drawer-title"></div><div class="drawer-sub" id="drawer-sub"></div></div>
+      <button class="icon-btn" id="drawer-close" title="Close (Esc)">✕</button></div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
 
   <div class="toast" id="toast" hidden></div>
 
   <script src="ra/vendor/echarts.min.js"></script>
   <script src="ra/report/format.js"></script>
   <script src="ra/report/charts.js"></script>
+  <script src="ra/notes.js"></script>
   <script src="ra/app.js"></script>
 </body>
 </html>

@@ -39,9 +39,9 @@
       color: PALETTE,
       textStyle: { color: t.text, fontFamily: "Inter, Segoe UI, system-ui, sans-serif" },
       title: o.noTitle ? undefined : { text: title, left: 8, top: 4, textStyle: { fontSize: 13, fontWeight: 600, color: t.text } },
-      grid: { left: 60, right: 60, top: o.noTitle ? 36 : 52, bottom: o.static ? 40 : 64, containLabel: false },
+      grid: { left: 60, right: 60, top: o.noTitle ? 50 : 60, bottom: o.static ? 40 : 64, containLabel: false },
       tooltip: { trigger: "axis", backgroundColor: t.tooltipBg, borderColor: t.grid, textStyle: { color: t.text, fontSize: 12 } },
-      legend: { type: "scroll", top: o.noTitle ? 4 : 26, left: 8, right: 8, textStyle: { color: t.sub, fontSize: 11 } },
+      legend: { type: "scroll", top: o.noTitle ? 2 : 26, left: 8, right: 90, textStyle: { color: t.sub, fontSize: 11 } },
       xAxis: {
         type: "value", min: 0, max: m.timeline ? m.timeline.buckets * m.timeline.bucketSec : undefined,
         axisLabel: { color: t.sub, formatter: (v) => clock(v) }, axisLine: { lineStyle: { color: t.grid } }, splitLine: { show: false },
