@@ -47,3 +47,6 @@ DevWebSdk.d.ts
 
 # Local-only documentation — removed from GitHub history; never commit
 Docs/
+
+# Local-only prompts — removed from GitHub history; never commit
+devweb-prompts/

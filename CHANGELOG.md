@@ -13,6 +13,7 @@
 - `tests/unit/harBuilder.test.js` now tests `cdp-recorder/recorder/src/har-builder.js` (the same code).
 - `Docs/` is local-only: added to `.gitignore` and purged from the GitHub history of every branch.
   The bug tracker moved to `BUGS.md` at the repo root.
+- `devweb-prompts/` is local-only: added to `.gitignore` and purged from the GitHub history of every branch.
 
 ### Added — Results Analyser: Granularity (exact or LoadRunner-style averaged figures)
 
