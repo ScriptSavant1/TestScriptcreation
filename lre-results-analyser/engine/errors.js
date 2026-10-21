@@ -37,13 +37,23 @@
     return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000 + (m[7] ? parseFloat(m[7]) : 0);
   }
 
-  /** Message pattern for grouping: numbers, GUIDs, hex ids and quoted values replaced. */
+  /**
+   * Message pattern for grouping: GUIDs, hex ids and numbers replaced so the same problem groups
+   * together — except the script location ("Action.c(230)") and the error code ("Error -26377"),
+   * which say where and what failed and are kept.
+   */
   function pattern(msg) {
+    const keep = [];
+    // placeholder: NUL + a private-use character for the index (no digits, so "<n>" leaves it alone)
+    const hold = (m) => { keep.push(m); return "\u0000" + String.fromCharCode(0xe000 + keep.length - 1); };
     return String(msg || "")
+      .replace(/[\w.-]+\.(c|h|js|ts|java|cs)\(\d+\)/gi, hold)
+      .replace(/\b(Error|Warning)\s+-?\d+/gi, hold)
       .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<guid>")
       .replace(/\b0x[0-9a-f]+\b/gi, "<hex>")
       .replace(/\b\d+(\.\d+)?\b/g, "<n>")
       .replace(/\s+/g, " ")
+      .replace(/\u0000([-])/g, (_, c) => keep[c.charCodeAt(0) - 0xe000])
       .trim();
   }
 

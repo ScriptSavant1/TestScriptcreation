@@ -89,6 +89,12 @@ describe("per-script statistics for shared transactions", () => {
     expect(m.selfCheck.find((c) => c.id === "tx-script" && /several scripts/.test(c.text)).data).toEqual(["T01_LOGIN"]);
   });
 
+  test("VUsers numbered per group get their own iterations (not another group's VUser with the same number)", () => {
+    // both groups call their VUser "1"; RawData.eve ids 101 (script A) and 102 (script B)
+    expect(m.vusers.map((v) => [v.script, v.iterations, v.samples])).toEqual([["Script_A_1", 3, 6], ["Script_B_1", 3, 6]]);
+    expect(m.workload.map((s) => [s.key, s.iterationsAchieved])).toEqual([["Script_A_1", 3], ["Script_B_1", 3]]);
+  });
+
   test("P98 is reported", () => {
     expect(Object.keys(m.transactions[0].full.p)).toEqual(["p50", "p80", "p85", "p90", "p95", "p98", "p99"]);
   });

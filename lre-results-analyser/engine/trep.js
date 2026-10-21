@@ -20,7 +20,8 @@
 
   const num = (s) => { const n = Number(s); return s !== "" && Number.isFinite(n) ? n : null; };
 
-  function parse(input) {
+  /** opts.rampDownGapSec: largest gap between exits still counted as one ramp-down (≥ 60 s). */
+  function parse(input, opts) {
     const vusers = new Map(); // key "group|vuser#"
     const lgs = new Map();    // name → {name, connectedEvents, vusers}
     const unknown = {};
@@ -62,14 +63,24 @@
     const list = [...vusers.values()].sort((a, b) => (a.group < b.group ? -1 : a.group > b.group ? 1 : a.vuser - b.vuser));
     for (const v of list) if (v.lg) lg(v.lg).vusers++;
 
-    // Actual phases: ramp-up ends when the last VUser starts running; steady state ends at the first exit.
+    // Actual phases: ramp-up ends when the last VUser starts running; the ramp-down is the final
+    // burst of exits (exits less than `gap` s apart, counted back from the last one). VUsers that
+    // leave earlier (stopped on error, aborted) do not end the steady state — in a long soak a few
+    // always drop out, and ending the steady state at the first of them would cut it to minutes.
     const runs = list.map((v) => v.runTs).filter((t) => t != null);
-    const exits = list.map((v) => v.exitTs).filter((t) => t != null);
+    const exits = list.map((v) => v.exitTs).filter((t) => t != null).sort((a, b) => a - b);
     const rampUpEnd = runs.length ? Math.max(...runs) : null;
-    const firstExit = exits.length ? Math.min(...exits) : null;
-    const lastExit = exits.length ? Math.max(...exits) : null;
-    const steady = rampUpEnd != null && firstExit != null && firstExit > rampUpEnd
-      ? { start: rampUpEnd, end: firstExit, durationSec: firstExit - rampUpEnd } : null;
+    const lastExit = exits.length ? exits[exits.length - 1] : null;
+    const gap = Math.max(60, Number(opts && opts.rampDownGapSec) || 0);
+    let i = exits.length - 1;
+    while (i > 0 && exits[i] - exits[i - 1] <= gap) i--;
+    const rampDownStart = exits.length ? exits[i] : null;
+    const steadyEnd = rampDownStart != null ? rampDownStart : scenarioEnd;
+    const steady = rampUpEnd != null && steadyEnd != null && steadyEnd > rampUpEnd
+      ? { start: rampUpEnd, end: steadyEnd, durationSec: steadyEnd - rampUpEnd } : null;
+    // VUsers that stopped before the ramp-down (after they had started running)
+    const earlyExits = rampDownStart == null ? [] : list.filter((v) => v.runTs != null && v.exitTs != null && v.exitTs < rampDownStart)
+      .map((v) => ({ group: v.group, vuser: v.vuser, script: v.script, lg: v.lg, exitTs: v.exitTs, duringRampUp: rampUpEnd != null && v.exitTs < rampUpEnd }));
 
     // VUser-ID scope: are numbers reused across groups? (decides how RawData.eve vuser_id is keyed)
     const idGroups = new Map();
@@ -94,7 +105,8 @@
       loadGenerators: [...lgs.values()],
       groups,
       maxRunning,
-      phases: { scenarioStart, rampUpEnd, steady, rampDownStart: firstExit, lastExit, scenarioEnd },
+      phases: { scenarioStart, rampUpEnd, steady, rampDownStart, lastExit, scenarioEnd },
+      earlyExits,
       vuserIdScope: groups.length < 2 ? "single group (cannot tell)" : sharedIds.length ? "per group (numbers reused across groups)" : "global (unique across groups)",
       sharedVuserIds: sharedIds,
       neverRan: list.filter((v) => v.runTs == null).map((v) => v.group + "#" + v.vuser),

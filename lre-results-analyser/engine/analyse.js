@@ -52,7 +52,9 @@
     // ── text files ──────────────────────────────────────────────────────────
     progress(0, null, "Reading scenario files");
     const meta = scenario.parse(await readOpt(source, f.runInfo), await readOpt(source, f.lrr));
-    const life = f.trep ? trep.parse(await source.readBytes(f.trep)) : null;
+    // ramp-down = the final burst of exits; the planned stop rate sets how far apart they may be
+    const stopStep = meta.schedule.steps.find((x) => x.kind === "stop");
+    const life = f.trep ? trep.parse(await source.readBytes(f.trep), { rampDownGapSec: stopStep ? stopStep.everySec * 3 : null }) : null;
     const map = rawmap.parse(await readOpt(source, f.rawDataMap));
     const slaInfo = f.sla ? sla.parse(await source.readBytes(f.sla)) : null;
     const lgInfo = collate.parse(await readOpt(source, f.collate), await readOpt(source, f.remoteResults));
@@ -186,8 +188,13 @@
     };
 
     const vuserStats = new Map(store.vuserList().map((v) => [v.vuser, v]));
+    // _t_rep.eve numbers VUsers per group when the groups reuse numbers; RawData.eve uses run-wide
+    // ids. The descriptors (group + group-local number) link the two.
+    const globalId = new Map();
+    for (const [id, info] of vuserInfo) if (info.local != null && info.group != null) globalId.set(`${String(info.group).toLowerCase()}|${parseInt(info.local, 10)}`, id);
+    const statsOf = (v) => vuserStats.get(globalId.has(`${String(v.group).toLowerCase()}|${v.vuser}`) ? globalId.get(`${String(v.group).toLowerCase()}|${v.vuser}`) : v.vuser) || {};
     const vusers = life ? life.vusers.map((v) => {
-      const st = vuserStats.get(v.vuser) || {};
+      const st = statsOf(v);
       return {
         group: v.group, vuser: v.vuser, script: v.script, lg: v.lg,
         runRelSec: v.runTs != null && startUtc ? v.runTs - startUtc : null, exitRelSec: v.exitTs != null && startUtc ? v.exitTs - startUtc : null,
@@ -206,6 +213,9 @@
     }
 
     const lgs = buildLgs(life, lgInfo, sum, scripts);
+    // the Controller: the one monitored host that ran no VUsers
+    const idle = lgs.filter((l) => !l.vusers);
+    if (idle.length === 1 && lgs.some((l) => l.vusers)) idle[0].role = "controller";
 
     const model = {
       engineVersion: ENGINE_VERSION,
@@ -218,7 +228,7 @@
         transactionSource: "RawData.eve transaction records (sub-type 0x00C00FC0 + flags; flag 0x8000 = failed); response-time statistics use passed transactions, as LRE does",
         summaryBasis: null, // set by applySettings (exact or aggregated)
         transactionNames: resolution.method,
-        steadyState: "last VUser running → first VUser exit (from _t_rep.eve); can be adjusted",
+        steadyState: "last VUser running → start of the final ramp-down (from _t_rep.eve; VUsers that stop earlier are reported, not used); can be adjusted",
         sampleTime: "transaction end time (unix s)",
         negativeResponseTimes: "clamped to 0 and counted",
         tps: "count ÷ window length in seconds",
@@ -232,6 +242,7 @@
       meta,
       lifecycle: life && {
         vusers: life.vusers.length, maxRunning: life.maxRunning, groups: life.groups,
+        earlyExits: life.earlyExits.map((v) => ({ group: v.group, vuser: v.vuser, script: v.script, lg: v.lg, exitRelSec: v.exitTs - (startUtc || 0), duringRampUp: v.duringRampUp })),
         loadGenerators: life.loadGenerators, vuserIdScope: life.vuserIdScope,
         neverRan: life.neverRan, neverExited: life.neverExited, unknownEvents: life.unknown,
       },
@@ -688,7 +699,7 @@
       const e = get(key);
       e.ip = h.ip; e.cpuPeak = h.cpu ? h.cpu.max : null; e.memPeak = h.memory ? h.memory.max : null;
     }
-    for (const e of m.values()) if (!e.vusers && life) e.role = "monitored host with no VUsers (probably the Controller)";
+    for (const e of m.values()) if (!e.vusers && life) e.role = "monitored host (no VUsers)";
     return [...m.values()];
   }
 
@@ -715,7 +726,7 @@
       if (planned) check(planned === life.vusers.length ? "ok" : "warn", "vusers",
         `Schedule starts ${planned} VUsers; _t_rep.eve shows ${life.vusers.length} (max running together: ${life.maxRunning})`);
       check(steadyRel ? "ok" : "warn", "steady-state", steadyRel
-        ? `Steady state ${life.phases.steady.durationSec} s (last VUser running → first VUser exit)`
+        ? `Steady state ${life.phases.steady.durationSec} s (last VUser running → start of the final ramp-down)` + (life.earlyExits.length ? `; ${life.earlyExits.length} VUser(s) stopped before the ramp-down` : "")
         : "No steady-state window (VUsers never all running together)");
       if (Object.keys(life.unknown).length) check("info", "trep-events", "_t_rep.eve events not used", life.unknown);
       check("info", "vuser-id-scope", `VUser numbers in _t_rep.eve: ${life.vuserIdScope}`);

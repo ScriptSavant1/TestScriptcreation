@@ -251,3 +251,22 @@ table.t th[title] { cursor: help; text-decoration: underline dotted color-mix(in
 .setting[hidden] { display: none; }
 .ev-wrap summary { cursor: pointer; font-size: 11.5px; color: var(--text-3); margin: 2px 0; }
 .ev-wrap[open] summary { color: var(--text-2); }
+
+/* ── overview: 8 tiles, whole-test statistics ── */
+.ov-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1250px) { .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ov-kpis .kpi .v { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-kpis .kpi .s { line-height: 1.35; }
+.kpi.kpi-warn { border-left-color: var(--warn); } .kpi .v.warn { color: var(--warn); }
+.kpi.kpi-warn .kpi-ico { background: rgba(245,158,11,.15); color: var(--warn); }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.stat { background: var(--surface-2, var(--surface)); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.stat-l { font-size: 11.5px; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
+.stat-v { font-size: 18px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat-s { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.bad-txt { color: var(--bad); font-weight: 600; }
+details.mini summary { cursor: pointer; color: var(--primary); font-size: 12.5px; }
+details.mini .hint { margin-top: 4px; max-width: 520px; white-space: normal; }
+table.t tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--primary-dim); }
+
+.in-dt { font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); color-scheme: light dark; }

@@ -141,10 +141,15 @@
   // ── formatting ─────────────────────────────────────────────────────────
   const pct = (r) => `${(r * 100).toFixed(r < 0.1 ? 1 : 0)} %`;
   const sec = (s) => (s == null ? "-" : s < 1 ? `${(s * 1000).toFixed(0)} ms` : `${s.toFixed(s < 10 ? 2 : 1)} s`);
+  /** Duration in words: "1 day 3 h 36 min", "1 h 52 min", "4 min 10 s". */
   function clock(rel) {
     if (rel == null) return "-";
     const t = Math.max(0, Math.round(rel));
-    return `${String(Math.floor(t / 3600)).padStart(2, "0")}:${String(Math.floor((t % 3600) / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+    const d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), mi = Math.floor((t % 3600) / 60), se = t % 60;
+    if (d) return `${d} day${d > 1 ? "s" : ""}${h ? ` ${h} h` : ""}${mi ? ` ${mi} min` : ""}`;
+    if (h) return `${h} h${mi ? ` ${mi} min` : ""}`;
+    if (mi) return `${mi} min${se ? ` ${se} s` : ""}`;
+    return `${se} s`;
   }
 
   // ── checks ─────────────────────────────────────────────────────────────
@@ -164,7 +169,7 @@
     // wrapper transactions not in RawData.map (e.g. the action / Main_Transaction) repeat what the
     // named transactions show — keep them out of the trend, spike and LG checks
     const focus = txs.some((t) => t.inMap) ? txs.filter((t) => t.inMap !== false) : txs;
-    const at = (rel) => `t+${clock(rel)}` + (m.meta && m.meta.startUtc != null ? ` (${localClock(m, rel)})` : "");
+    const at = (rel) => (m.meta && m.meta.startUtc != null ? localClock(m, rel) : `${clock(rel)} into the test`);
 
     // 1. Test validity
     const sched = (m.meta && m.meta.schedule && m.meta.schedule.steps) || [];
@@ -178,6 +183,19 @@
         `Planned run ${clock(runStep.durationSec)}, actual steady state ${clock(m.phases.steady.durationSec)} (${pct(ratio)}). Stop reason: ${m.meta.stopReason || "unknown"}.`,
         { plannedSec: runStep.durationSec, steadySec: m.phases.steady.durationSec }, "vusers");
       else add("good", "validity", "Full steady state achieved", `All VUsers ran together for ${clock(m.phases.steady.durationSec)} (planned ${clock(runStep.durationSec)}).`, null, "vusers");
+    }
+
+    // 1b. VUsers that stopped before the ramp-down (stopped on error / aborted)
+    const early = (m.lifecycle && m.lifecycle.earlyExits) || [];
+    if (early.length && m.lifecycle.vusers) {
+      const share = early.length / m.lifecycle.vusers;
+      const byScript = {};
+      for (const v of early) byScript[v.script || "(unknown)"] = (byScript[v.script || "(unknown)"] || 0) + 1;
+      const top = Object.entries(byScript).sort((a, b) => b[1] - a[1]);
+      add(share >= 0.05 ? "high" : share >= 0.01 ? "medium" : "low", "validity", `${early.length} VUser${early.length > 1 ? "s" : ""} stopped before the end of the test`,
+        `${early.length} of ${m.lifecycle.vusers} VUsers (${pct(share)}) stopped while the test was still running, so the load was lower than planned for part of the test. ` +
+        `This usually means the script stops a VUser when it hits an error. Most affected: ${top.slice(0, 3).map(([k, n]) => `${k} (${n})`).join(", ")}. Check the Errors tab for the errors just before these exits.`,
+        { stoppedEarly: early.length, of: m.lifecycle.vusers, byScript }, "vusers");
     }
 
     // 2. Pacing achieved / Little's Law (per script with fixed or random interval pacing)
@@ -405,9 +423,11 @@
     return { verdict, findings: F };
   }
 
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  /** "08 Oct 14:05" in the run's local time. */
   function localClock(m, rel) {
     const d = new Date((m.meta.startUtc + rel + (m.meta.localOffsetSec || 0)) * 1000);
-    return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} local`;
+    return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
   }
 
   return { run, mannKendall, senSlope, changePoints, robustZ, median, mad, downsample, normCdf };

@@ -63,14 +63,14 @@
     // Cover
     children.push(P(opts.company || m.meta.project || "", { run: { color: "475569", size: 20, allCaps: true } }));
     children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: opts.title || `Performance test report — ${m.meta.sessionName || "LRE run"}`, color: ACCENT })] }));
-    children.push(P(`${fmt.localTime(m.meta.startUtc, off)} – ${fmt.localTime(m.meta.stopUtc, off)} (${fmt.zone(off)}) · ${fmt.hms(m.meta.durationSec)}`, { run: { color: "475569" } }));
+    children.push(P(`${fmt.when(m.meta.startUtc, off)} → ${fmt.when(m.meta.stopUtc, off)} (${fmt.zone(off)}) · ${fmt.dur(m.meta.durationSec)}`, { run: { color: "475569" } }));
     children.push(new Paragraph({ spacing: { before: 400, after: 400 }, children: [new TextRun({ text: ins.verdict.text, bold: true, size: 36, color: fmt.VERDICT[ins.verdict.status].color.slice(1) })] }));
     children.push(P(`Computed from the LRE raw results by LRE Results Analyser ${m.engineVersion} on ${m.generatedAt.slice(0, 10)}. Independent of LRE Analysis.`, { run: { size: 16, color: "475569" } }));
 
     // 1 Executive summary
     children.push(H1("1. Executive summary"));
     children.push(table(["Peak VUsers", "Steady state", "Transactions", "TPS (steady)", "Failed", "Errors"], [[
-      fmt.int(m.totals.peakVusers), w ? fmt.hms(w.durationSec) : "-", fmt.int(m.totals.samples), fmt.num(m.totals.tpsSteady, 2),
+      fmt.int(m.totals.peakVusers), w ? fmt.dur(w.durationSec) : "-", fmt.int(m.totals.samples), fmt.num(m.totals.tpsSteady, 2),
       m.totals.fail != null ? fmt.int(m.totals.fail) : "n/a", m.totals.errors != null ? fmt.int(m.totals.errors) : "n/a"]]));
     children.push(H2("Key findings"));
     const issues = ins.findings.filter((f) => ["high", "medium"].includes(f.severity));
@@ -99,7 +99,7 @@
     // 3 / 4 results
     children.push(H1("3. Results — steady state"));
     if (m.aggregation && m.aggregation.active) children.push(P(`${m.aggregation.title}. ${m.aggregation.note}`, { run: { size: 18, color: "B45309" } }));
-    children.push(P(w ? `${w.detected ? "Detected steady state" : "User-set analysis window"}: t+${fmt.hms(w.start)} – t+${fmt.hms(w.end)} (${fmt.relLocal(m, w.start)} – ${fmt.relLocal(m, w.end)}). Response times in seconds. ${m.method.summaryBasis || ""}.` : "No steady-state window.", { run: { size: 18, color: "475569" } }));
+    children.push(P(w ? `${w.detected ? "Steady state" : "User-set analysis window"}: ${fmt.relRange(m, w.start, w.end)} (${fmt.dur(w.durationSec)}). Response times in seconds. ${m.method.summaryBasis || ""}.` : "No steady-state window.", { run: { size: 18, color: "475569" } }));
     children.push(txRows("steady"));
     children.push(...img("txBars"));
     children.push(H1("4. Results — full run"));

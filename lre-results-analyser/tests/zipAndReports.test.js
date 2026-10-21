@@ -69,7 +69,7 @@ describe("Excel workbook", () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
     expect(wb.worksheets.map((w) => w.name)).toEqual(["Test Overview", "Transactions – Full Run", "Transactions – Steady State",
-      "Workload Model", "Errors", "Time Series", "LG Health", "Insights", "Method & Validation"]);
+      "Workload Model", "Errors", "Time Series", "LG Health", "Insights", "About this report"]);
     const ws = wb.getWorksheet("Transactions – Steady State");
     const rows = [];
     ws.eachRow((r, i) => { if (i > 4) rows.push(r.values.slice(1)); });

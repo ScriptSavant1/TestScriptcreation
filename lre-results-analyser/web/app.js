@@ -171,19 +171,24 @@
   function setBusy(b) { $$("#view-results .btn").forEach((x) => { if (!x.dataset.export) x.disabled = b; }); document.body.style.cursor = b ? "progress" : ""; }
 
   // ── settings bar ────────────────────────────────────────────────────────────
-  function parseClock(s) {
-    s = String(s || "").trim();
-    if (!s) return null;
-    if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
-    const p = s.split(":").map(Number);
-    if (p.some((x) => !Number.isFinite(x))) return NaN;
-    return p.reduce((a, x) => a * 60 + x, 0);
+  /** Seconds from the scenario start ↔ a datetime-local value in the run's local time. */
+  function relToInput(m, rel) {
+    if (rel == null || m.meta.startUtc == null) return "";
+    return new Date((m.meta.startUtc + rel + (m.meta.localOffsetSec || 0)) * 1000).toISOString().slice(0, 19);
+  }
+  function inputToRel(m, v) {
+    const x = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(v || ""));
+    if (!x || m.meta.startUtc == null) return NaN;
+    const wall = Date.UTC(+x[1], +x[2] - 1, +x[3], +x[4], +x[5], +(x[6] || 0)) / 1000;
+    return wall - (m.meta.localOffsetSec || 0) - m.meta.startUtc;
   }
   function syncSettingsBar() {
     const m = state.model;
-    $("#win-start").value = m.window ? fmt.hms(m.window.start) : "";
-    $("#win-end").value = m.window ? fmt.hms(m.window.end) : "";
-    $("#win-local").textContent = m.window ? `${fmt.relLocal(m, m.window.start).slice(11)} – ${fmt.relLocal(m, m.window.end).slice(11)} local · ${m.window.detected ? "detected steady state" : "user-set"}` : "no steady state detected";
+    $("#win-start").value = m.window ? relToInput(m, m.window.start) : "";
+    $("#win-end").value = m.window ? relToInput(m, m.window.end) : "";
+    $("#win-start").min = $("#win-end").min = relToInput(m, 0);
+    $("#win-start").max = $("#win-end").max = relToInput(m, m.meta.durationSec);
+    $("#win-local").textContent = m.window ? `${fmt.relRange(m, m.window.start, m.window.end)} · ${fmt.dur(m.window.durationSec)} · ${m.window.detected ? "detected steady state" : "user-set"}` : "no steady state detected";
     const s = m.settings && m.settings.sla;
     $("#sla-pct").value = String((s && s.percentile) || 90);
     $("#sla-default").value = s && s.defaultSec != null ? s.defaultSec : "";
@@ -211,7 +216,7 @@
     }
     // one-line summary of the current settings (the editor opens with "Change")
     const chips = [];
-    chips.push(m.window ? `<span class="chip">${m.window.detected ? "Steady state" : "Window"} <b>t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)}</b></span>` : `<span class="chip">No steady state</span>`);
+    chips.push(m.window ? `<span class="chip" title="${esc(fmt.relRange(m, m.window.start, m.window.end))}">${m.window.detected ? "Steady state" : "Analysis window"} <b>${esc(fmt.relWhen(m, m.window.start, true))} → ${esc(fmt.relWhen(m, m.window.end, true))}</b> · ${esc(fmt.dur(m.window.durationSec))}</span>` : `<span class="chip">No steady state</span>`);
     chips.push(s && s.defaultSec != null ? `<span class="chip">SLA <b>P${s.percentile} ≤ ${s.defaultSec} s</b></span>` : `<span class="chip">SLA <b>${s && Object.keys(s.perTx || {}).length ? "per transaction" : "not set"}</b></span>`);
     if (FEATURES.granularity) chips.push(a && a.active ? `<span class="chip warn">Granularity <b>${a.sec} s${a.byVuser ? " per VUser" : ""}</b> (LRE-style)</span>` : `<span class="chip">Granularity <b>Exact</b></span>`);
     $("#settings-chips").innerHTML = chips.join("");
@@ -237,8 +242,9 @@
     $("#agg-help-btn").setAttribute("aria-expanded", String(!h.hidden));
   };
   $("#win-apply").onclick = () => {
-    const a = parseClock($("#win-start").value), b = parseClock($("#win-end").value);
-    if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return toast("Enter a start and end as hh:mm:ss from the scenario start (end after start)", true);
+    const m = state.model;
+    const a = inputToRel(m, $("#win-start").value), b = inputToRel(m, $("#win-end").value);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return toast("Choose a start and an end date/time within the test (end after start)", true);
     applySettings({ window: { start: a, end: b } });
   };
   $("#win-reset").onclick = () => applySettings({ window: null });
@@ -276,7 +282,7 @@
   function renderAll() {
     const m = state.model;
     $("#run-name").textContent = m.meta.sessionName || "LRE run";
-    $("#run-sub").textContent = `${fmt.localTime(m.meta.startUtc, m.meta.localOffsetSec)} – ${fmt.localTime(m.meta.stopUtc, m.meta.localOffsetSec)} (${fmt.zone(m.meta.localOffsetSec)}) · ${fmt.hms(m.meta.durationSec)} · ${m.meta.project || ""}`;
+    $("#run-sub").textContent = `${fmt.when(m.meta.startUtc, m.meta.localOffsetSec)} → ${fmt.when(m.meta.stopUtc, m.meta.localOffsetSec)} (${fmt.zone(m.meta.localOffsetSec)}) · ${fmt.dur(m.meta.durationSec)}${m.meta.project ? " · " + m.meta.project : ""}`;
     const v = $("#verdict");
     v.textContent = m.insights.verdict.text; v.className = "verdict " + m.insights.verdict.status;
     const n = m.insights.findings.filter((f) => f.severity === "high").length;
@@ -422,7 +428,8 @@
     const m = state.model, t = m.totals, ins = m.insights, off = m.meta.localOffsetSec;
     const kpi = (l, v, sub, cls, key, ico) => `<div class="kpi ${cls ? "kpi-" + cls : ""}" title="${esc(NT.KPIS[key] || "")}"><div class="kpi-top"><span class="kpi-ico">${NT.icon(ico || "info")}</span><span class="l">${esc(l)}</span></div><div class="v ${cls || ""}">${esc(v)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ""}</div>`;
     const issues = ins.findings.filter((f) => f.severity === "high" || f.severity === "medium");
-    const failPct = t.pass != null && t.fail != null ? (t.fail / Math.max(1, t.pass + t.fail)) * 100 : null;
+    const total = t.pass != null && t.fail != null ? t.pass + t.fail : null;
+    const failPct = total ? (t.fail / total) * 100 : null;
     const slaRows = m.transactions.filter((x) => x.sla);
     const slaFail = slaRows.filter((x) => x.sla.pass === false);
     const which = m.window ? "steady" : "full";
@@ -430,13 +437,42 @@
     const slow = named.slice().sort((a, b) => (b[which].p.p90 || 0) - (a[which].p.p90 || 0)).slice(0, 8);
     const maxP90 = slow.length ? slow[0][which].p.p90 || 1 : 1;
     const top = slow[0];
+    const early = m.lifecycle && m.lifecycle.earlyExits ? m.lifecycle.earlyExits.length : 0;
+    const winName = m.window && !m.window.detected ? "Analysis window" : "Steady state";
     const line = [
       t.peakVusers != null ? `${fmt.int(t.peakVusers)} VUsers` : null,
-      m.window ? `steady state ${fmt.hms(m.window.durationSec)}` : null,
+      m.window ? `${winName.toLowerCase()} ${fmt.dur(m.window.durationSec)}` : null,
       t.tpsSteady != null ? `${fmt.num(t.tpsSteady, 2)} transactions/s` : null,
       failPct != null ? `${failPct.toFixed(2)} % failed` : null,
       t.errors != null ? `${fmt.int(t.errors)} errors` : null,
     ].filter(Boolean).join(" · ");
+    const pct = (a, b) => (a != null && b ? `${((a / b) * 100).toFixed(2)} %` : "-");
+    // whole-test statistics, as on LoadRunner Analysis' summary page
+    const web = m.web;
+    const hits = web && web.hits ? web.hits : null, bytes = web && web.throughputBytes ? web.throughputBytes : null; // 0 = not recorded in this run
+    const stat = (l, v, sub) => `<div class="stat"><div class="stat-l">${esc(l)}</div><div class="stat-v">${esc(v)}</div>${sub ? `<div class="stat-s">${esc(sub)}</div>` : ""}</div>`;
+    const stats = [
+      stat("Maximum running VUsers", fmt.int(t.peakVusers), m.lifecycle ? `${fmt.int(m.lifecycle.vusers)} started${early ? ` · ${fmt.int(early)} stopped early` : ""}` : ""),
+      stat("Transactions", total != null ? fmt.int(total) : fmt.int(t.samples), total != null ? `${fmt.int(t.pass)} passed · ${fmt.int(t.fail)} failed` : ""),
+      stat("Passed transactions ratio", total ? pct(t.pass, total) : "-", "passed ÷ (passed + failed)"),
+      stat("Transactions per second", fmt.num(t.tpsFull, 2), `whole test · ${fmt.num(t.tpsSteady, 2)} in the ${winName.toLowerCase()}`),
+      stat("Total hits", hits != null ? fmt.int(hits) : "-", hits != null ? "HTTP requests sent" : "not recorded in this run"),
+      stat("Average hits per second", web ? fmt.num(web.hitsPerSec.avg, 2) : t.hitsPerSec ? fmt.num(t.hitsPerSec.avg, 2) : "-", web && web.hitsPerSec.peak != null ? `peak ${fmt.num(web.hitsPerSec.peak, 1)}` : ""),
+      stat("Total throughput", bytes != null ? fmt.bytes(bytes) : "-", bytes != null ? `${fmt.int(Math.round(bytes))} bytes received` : "not recorded in this run"),
+      stat("Average throughput", bytes != null ? `${fmt.bytes(web.throughputBytesPerSec.avg)}/s` : t.throughputBytesPerSec ? `${fmt.bytes(t.throughputBytesPerSec.avg)}/s` : "-", bytes != null ? `${fmt.int(Math.round(web.throughputBytesPerSec.avg))} bytes/s` : ""),
+      stat("Errors logged", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors ? `${fmt.int(m.errors.summary.length)} different error${m.errors.summary.length === 1 ? "" : "s"}` : ""),
+    ].join("");
+    const controller = m.lgs.find((l) => l.role === "controller");
+    const lgsUsed = m.lgs.filter((l) => l.vusers);
+    const facts = [
+      ["Scenario", m.meta.sessionName], ["Project", m.meta.project],
+      ["Run", [m.meta.runId != null ? `Run ${m.meta.runId}` : null, m.meta.resultName].filter(Boolean).join(" · ") || null],
+      ["Start", fmt.when(m.meta.startUtc, off) + " (" + fmt.zone(off) + ")"], ["End", fmt.when(m.meta.stopUtc, off)], ["Duration", fmt.dur(m.meta.durationSec)],
+      ["How it ended", m.meta.stopReason], ["Scripts", `${m.workload.length} script${m.workload.length === 1 ? "" : "s"} · ${fmt.int(m.lifecycle ? m.lifecycle.vusers : m.workload.reduce((a, x) => a + x.vusers, 0))} VUsers — details in Workload`],
+      ["Load generators", `${lgsUsed.length} machine${lgsUsed.length === 1 ? "" : "s"} ran the VUsers`],
+      ["Controller", controller ? controller.name : null], ["LoadRunner version", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
+      ["Load behaviour", m.meta.loadBehavior],
+    ].filter(([, v]) => v != null && v !== "");
     p.innerHTML = `
       ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>Large run:</b> ${esc(m.method.summaryBasis)}.</div>`}
       <div class="ov-top">
@@ -448,18 +484,21 @@
           <div class="hero-actions"><button class="btn sm" data-goto="insights">All findings (${ins.findings.length}) →</button><button class="btn sm ghost" data-goto="transactions">Transactions →</button></div>
         </div>
         <div class="ov-kpis">
-          ${kpi("Peak VUsers", fmt.int(t.peakVusers), m.lifecycle ? `${m.lifecycle.vusers} in total` : "", "", "vusers", "users")}
-          ${kpi(m.window && !m.window.detected ? "Analysis window" : "Steady state", m.window ? fmt.hms(m.window.durationSec) : "-", m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)}` : "", "", "steady", "clock")}
-          ${kpi("Throughput", t.tpsSteady != null ? `${fmt.num(t.tpsSteady, 2)}/s` : "-", `transactions per second · full run ${fmt.num(t.tpsFull, 2)}`, "", "throughput", "gauge")}
-          ${kpi("Transactions passed", fmt.int(t.pass != null ? t.pass : t.samples), t.fail != null ? `${fmt.int(t.fail)} failed (${failPct.toFixed(2)} %)` : "", t.fail ? "" : "ok", "passed", "check")}
-          ${kpi("Errors", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors && m.errors.summary[0] ? `most: code ${m.errors.summary[0].code} ×${fmt.int(m.errors.summary[0].count)}` : "", t.errors ? "bad" : "", "errors", "alert")}
+          ${kpi("Peak VUsers", fmt.int(t.peakVusers), m.lifecycle ? (early ? `${fmt.int(early)} of ${fmt.int(m.lifecycle.vusers)} stopped early` : `all ${fmt.int(m.lifecycle.vusers)} ran to the end`) : "", early ? "warn" : "", "vusers", "users")}
+          ${kpi("Test duration", fmt.dur(m.meta.durationSec), `${fmt.when(m.meta.startUtc, off, true)} → ${fmt.when(m.meta.stopUtc, off, true)}`, "", "duration", "clock")}
+          ${kpi(winName, m.window ? fmt.dur(m.window.durationSec) : "-", m.window ? `${fmt.relWhen(m, m.window.start, true)} → ${fmt.relWhen(m, m.window.end, true)}` : "not detected", "", "steady", "clock")}
+          ${kpi("Transactions per second", t.tpsSteady != null ? fmt.num(t.tpsSteady, 2) : "-", `TPS in the ${winName.toLowerCase()} · whole test ${fmt.num(t.tpsFull, 2)}`, "", "throughput", "gauge")}
+          ${kpi("Transactions passed", fmt.int(t.pass != null ? t.pass : t.samples), total ? `${pct(t.pass, total)} of ${fmt.int(total)}` : "", "ok", "passed", "check")}
+          ${kpi("Transactions failed", t.fail != null ? fmt.int(t.fail) : "n/a", total ? `${pct(t.fail, total)} of all transactions` : "", t.fail ? (failPct >= 1 ? "bad" : "warn") : "ok", "failed", "alert")}
+          ${kpi("Errors logged", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors && m.errors.summary[0] ? `most common: ${m.errors.summary[0].code} (${fmt.int(m.errors.summary[0].count)}×)` : "", t.errors ? "bad" : "ok", "errors", "alert")}
           ${slaRows.length ? kpi("SLA", `${slaRows.length - slaFail.length} / ${slaRows.length} met`, slaFail.length ? `${slaFail.length} missed` : "all within threshold", slaFail.length ? "bad" : "ok", "sla", "check")
             : kpi("Slowest (P90)", top ? fmt.sec(top[which].p.p90) : "-", top ? top.label || top.name : "", "", "slowest", "bar")}
         </div>
       </div>
+      <div class="card" data-ckey="stats"><h3>Test statistics — whole test</h3><div class="stats-grid">${stats}</div></div>
       <div class="card" data-ckey="load"><h3>Load, throughput and errors over time</h3><div class="chart" id="ov-load"></div></div>
       <div class="grid-2">
-        <div class="card" data-ckey="slowest"><h3>Slowest transactions — P90 (${which === "steady" ? (m.window.detected ? "steady state" : "analysis window") : "full run"})</h3>
+        <div class="card" data-ckey="slowest"><h3>Slowest transactions — P90 (${which === "steady" ? winName.toLowerCase() : "whole test"})</h3>
           <div class="table-wrap"><table class="t"><thead><tr><th>Transaction</th><th>P90</th><th class="num">Avg</th><th class="num">Count</th>${slaRows.length ? "<th>SLA</th>" : ""}</tr></thead><tbody>
           ${slow.map((x) => `<tr class="click" data-id="${x.id}"><td>${esc(x.label || x.name)}</td>
             <td><div class="bar-cell"><span class="num" style="min-width:52px">${n3(x[which].p.p90)}</span><span class="bar-track"><span class="bar-fill ${x.sla && x.sla.pass === false ? "bad" : ""}" style="width:${Math.max(2, ((x[which].p.p90 || 0) / maxP90) * 100).toFixed(1)}%"></span></span></div></td>
@@ -470,19 +509,16 @@
           ${issues.length ? issues.slice(0, 5).map((f) => findingHtml(f, true)).join("") : `<div class="na">No significant issues — see Insights for every check.</div>`}
         </div>
       </div>
-      <div class="card" data-ckey="details" data-collapsed="1"><h3>Test details — scenario, schedule, load generators</h3>
+      <div class="card" data-ckey="details" data-collapsed="1"><h3>Test details — scenario, schedule, machines</h3>
         <div class="facts-grid">
           <div><h4>Test</h4><table class="t kv"><tbody>
-            ${[["Scenario", m.meta.sessionName], ["Project", m.meta.project], ["Controller", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
-              ["Start (local)", fmt.localTime(m.meta.startUtc, off) + " " + fmt.zone(off)], ["End (local)", fmt.localTime(m.meta.stopUtc, off)], ["Duration", fmt.hms(m.meta.durationSec)],
-              ["Stop reason", m.meta.stopReason], ["Load behaviour", m.meta.loadBehavior], ["Scripts", m.workload.map((x) => `${x.key} (${x.vusers})`).join(", ")]]
-              .map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v == null ? "-" : v)}</td></tr>`).join("")}
+            ${facts.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}
           </tbody></table></div>
           <div><h4>Schedule — planned vs actual</h4><table class="t"><thead><tr><th>Phase</th><th>Planned</th><th>Actual</th></tr></thead><tbody>
             ${fmt.scheduleRows(m).map((r) => `<tr><td>${esc(r.phase)}</td><td>${esc(r.planned)}</td><td>${esc(r.actual)}</td></tr>`).join("")}
           </tbody></table>
-          <h4 style="margin-top:12px">Load generators</h4><div class="table-wrap"><table class="t"><thead><tr><th>Host</th><th class="num">VUsers</th><th class="num">CPU peak</th><th class="num">Mem peak</th></tr></thead><tbody>
-            ${m.lgs.map((l) => `<tr title="${esc(l.role)}"><td>${esc(l.name)}${l.vusers ? "" : ' <span class="pill info">no VUsers</span>'}</td><td class="num">${l.vusers}</td><td class="num">${l.cpuPeak != null ? l.cpuPeak.toFixed(0) + " %" : "-"}</td><td class="num">${l.memPeak != null ? l.memPeak.toFixed(0) + " %" : "-"}</td></tr>`).join("")}
+          <h4 style="margin-top:12px">Machines</h4><div class="table-wrap"><table class="t"><thead><tr><th>Host</th><th class="num">VUsers</th><th class="num">CPU peak</th><th class="num">Mem peak</th></tr></thead><tbody>
+            ${m.lgs.map((l) => `<tr><td>${esc(l.name)} ${l.role === "controller" ? '<span class="pill info">Controller</span>' : l.vusers ? "" : '<span class="pill info">no VUsers</span>'}</td><td class="num">${l.vusers}</td><td class="num">${pctCell(l.cpuPeak)}</td><td class="num">${pctCell(l.memPeak)}</td></tr>`).join("")}
           </tbody></table></div></div>
         </div>
       </div>`;
@@ -493,6 +529,8 @@
     $$("tr.click", p).forEach((tr) => { tr.onclick = () => openDrawer(+tr.dataset.id); });
     bindFindingLinks(p);
   }
+  /** CPU / memory peak cell: red from 85 % (the usual warning level). */
+  function pctCell(v) { return v == null ? "-" : `<span class="${v >= 85 ? "bad-txt" : ""}">${v.toFixed(0)} %</span>`; }
 
   // ── Transactions ────────────────────────────────────────────────────────────
   const TX_COLS = [
@@ -527,7 +565,7 @@
       <div class="tx-controls">
         <div class="seg"><button data-v="steady" class="${which === "steady" ? "on" : ""}">${m.window && !m.window.detected ? "Analysis window" : "Steady state"}</button><button data-v="full" class="${which === "full" ? "on" : ""}">Full run</button></div>
         <input id="tx-filter" placeholder="Filter transactions" value="${esc(state.filter)}">
-        <span class="hint">${which === "steady" && m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)} · ` : ""}seconds · click a row for detail${slaCols ? " · type an SLA (s) per transaction" : ""}</span>
+        <span class="hint">${which === "steady" && m.window ? `${esc(fmt.relRange(m, m.window.start, m.window.end))} · ` : ""}seconds · click a row for detail${slaCols ? " · type an SLA (s) per transaction" : ""}</span>
       </div>
       ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. ${FEATURES.granularity && m.aggregation && m.aggregation.active ? "Choose “Exact” in Granularity to see every transaction on its own." : "Every figure is calculated from the individual transactions — nothing is averaged into time slots first."} P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>`}
       <div class="card" data-ckey="txTable"><h3>Transaction summary — ${which === "steady" ? (m.window && !m.window.detected ? "analysis window" : "steady state") : "full run"}</h3><div class="table-wrap"><table class="t" id="tx-table"><thead><tr>
@@ -574,7 +612,7 @@
     $$("tr.click").forEach((tr) => tr.classList.toggle("selected", +tr.dataset.id === id));
     const w = m.window ? t.steady : t.full;
     $("#drawer-title").textContent = t.label || t.name;
-    $("#drawer-sub").textContent = `${t.script} · first t+${fmt.hms(t.firstRelSec)} · last t+${fmt.hms(t.lastRelSec)}${m.aggregation && m.aggregation.active ? " · figures: " + m.aggregation.title : ""}`;
+    $("#drawer-sub").textContent = `${t.script} · first ${fmt.relWhen(m, t.firstRelSec, true)} · last ${fmt.relWhen(m, t.lastRelSec, true)}${m.aggregation && m.aggregation.active ? " · figures: " + m.aggregation.title : ""}`;
     const kpi = (l, v) => `<div class="kpi"><div class="v" style="font-size:17px">${esc(v)}</div><div class="l">${esc(l)}</div></div>`;
     const lgRows = (t.perLg || []).map((l) => `<tr><td>${esc(l.lg)}</td><td class="num">${fmt.int(l.full.count)}</td><td class="num">${n3(l.full.avg)}</td><td class="num">${n3(l.full.p.p90)}</td><td class="num">${n3(l.full.p.p95)}</td><td class="num">${fmt.int(l.steady.count)}</td><td class="num">${n3(l.steady.avg)}</td><td class="num">${n3(l.steady.p.p90)}</td></tr>`).join("");
     const body = $("#drawer-body");
@@ -683,19 +721,19 @@
     if (!m.errors) { p.innerHTML = `<div class="card"><div class="na">No error data — SqliteDb.db was not found in the results.</div></div>`; return; }
     const off = m.meta.localOffsetSec;
     p.innerHTML = `<div class="card" data-ckey="errGroups"><h3>${fmt.int(m.errors.total)} error(s), grouped</h3><div class="sub" hidden>Numbers, GUIDs and hex IDs in messages are replaced so similar errors group together. Times are local.</div>
-      <div class="table-wrap"><table class="t"><thead><tr><th class="num">Count</th><th>Code</th><th>Message</th><th>Script</th><th class="num">VUsers</th><th>Injectors</th><th>First</th><th>Last</th></tr></thead><tbody>
-      ${m.errors.summary.map((g) => `<tr><td class="num">${fmt.int(g.count)}</td><td>${esc(g.code)}</td><td title="${esc(g.example)}">${esc(g.pattern)}</td><td>${esc(g.script || "-")}</td><td class="num">${g.vusers.length}</td><td>${esc(g.injectors.join(", "))}</td>
-        <td>${g.firstUtc != null ? esc(fmt.localTime(g.firstUtc, off).slice(11)) : "-"}</td><td>${g.lastUtc != null ? esc(fmt.localTime(g.lastUtc, off).slice(11)) : "-"}</td></tr>`).join("") || `<tr><td colspan="8" class="na">No errors were logged.</td></tr>`}
+      <div class="table-wrap"><table class="t"><thead><tr><th class="num">Count</th><th>Code</th><th>Message</th><th>Script</th><th class="num">VUsers</th><th>Load generator</th><th>First</th><th>Last</th></tr></thead><tbody>
+      ${m.errors.summary.map((g) => `<tr><td class="num">${fmt.int(g.count)}</td><td>${esc(g.code)}</td><td title="${esc("General form: " + g.pattern)}">${esc(g.example)}</td><td>${esc(g.script || "-")}</td><td class="num">${g.vusers.length}</td><td title="${esc(g.injectors.join(", "))}">${g.injectors.length === 1 ? esc(g.injectors[0]) : g.injectors.length + " machines"}</td>
+        <td>${g.firstUtc != null ? esc(fmt.when(g.firstUtc, off, true)) : "-"}</td><td>${g.lastUtc != null ? esc(fmt.when(g.lastUtc, off, true)) : "-"}</td></tr>`).join("") || `<tr><td colspan="8" class="na">No errors were logged.</td></tr>`}
       </tbody></table></div></div>
       <div id="err-chart"></div>
-      <div class="card" data-ckey="errLog"><h3>Error log</h3><div class="tx-controls"><input id="err-q" placeholder="Search message, code, VUser, injector…" style="min-width:320px"><span class="hint" id="err-n"></span></div>
-      <div class="table-wrap" style="max-height:520px;overflow:auto"><table class="t"><thead><tr><th>Time (local)</th><th>t+</th><th>Code</th><th>Message</th><th>Script</th><th>VUser</th><th>Injector</th><th class="num">Iteration</th></tr></thead><tbody id="err-rows"></tbody></table></div></div>`;
+      <div class="card" data-ckey="errLog"><h3>Error log</h3><div class="tx-controls"><input id="err-q" placeholder="Search message, code, script, VUser, load generator…" style="min-width:320px"><span class="hint" id="err-n"></span></div>
+      <div class="table-wrap" style="max-height:520px;overflow:auto"><table class="t"><thead><tr><th>Time (local)</th><th>Code</th><th>Message</th><th>Script</th><th>VUser</th><th>Injector</th><th class="num">Iteration</th></tr></thead><tbody id="err-rows"></tbody></table></div></div>`;
     chartCard($("#err-chart", p), "Errors over time", (o) => C.errorsOverTime(state.model, o), "errors");
     const draw = () => {
       const q = $("#err-q", p).value.toLowerCase();
       const rows = m.errors.rows.filter((e) => !q || [e.message, e.code, e.vuser, e.injector, e.script, e.action].join(" ").toLowerCase().includes(q));
       $("#err-n", p).textContent = `${fmt.int(rows.length)} row(s)${rows.length > 1000 ? " — first 1,000 shown" : ""}${m.errors.rowsTruncated ? " · log truncated to 20,000 rows (all rows are in the Excel export)" : ""}`;
-      $("#err-rows", p).innerHTML = rows.slice(0, 1000).map((e) => `<tr><td>${esc(e.utc != null ? fmt.localTime(e.utc, off) : e.time)}</td><td>${fmt.hms(e.relSec)}</td><td>${esc(e.code)}</td><td>${esc(e.message)}</td><td>${esc(e.script)}</td><td>${esc(e.vuser)}</td><td>${esc(e.injector)}</td><td class="num">${esc(e.iteration)}</td></tr>`).join("");
+      $("#err-rows", p).innerHTML = rows.slice(0, 1000).map((e) => `<tr><td style="white-space:nowrap">${esc(e.utc != null ? fmt.when(e.utc, off, true) + ":" + fmt.localTime(e.utc, off).slice(17) : e.time)}</td><td>${esc(e.code)}</td><td>${esc(e.message)}</td><td>${esc(e.script)}</td><td>${esc(e.vuser)}</td><td>${esc(e.injector)}</td><td class="num">${esc(e.iteration)}</td></tr>`).join("");
     };
     $("#err-q", p).oninput = () => { clearTimeout(draw._h); draw._h = setTimeout(draw, 200); };
     draw();
@@ -704,16 +742,31 @@
   // ── Workload ────────────────────────────────────────────────────────────────
   function workload(p) {
     const m = state.model;
-    p.innerHTML = `<div class="card" data-ckey="wlScripts"><h3>Scripts</h3><div class="table-wrap"><table class="t"><thead><tr><th>Script</th><th>Protocol</th><th class="num">VUsers</th><th>Load generators</th><th>Pacing</th><th>Think time</th><th class="num">Iterations</th><th class="num">Planned</th><th class="num">Achieved</th><th class="num">Transactions</th></tr></thead><tbody>
-      ${m.workload.map((s) => `<tr><td>${esc(s.key)}<div class="hint">${esc(s.groups.join(", "))}</div></td><td>${esc(s.protocol || "-")}</td><td class="num">${s.vusers}</td><td>${esc(s.loadGenerators.map((l) => `${l.name} (${l.vusers})`).join(", "))}</td>
-        <td>${esc(s.pacing ? s.pacing.text : "-")}</td><td>${esc(s.thinkTime ? s.thinkTime.text : "-")}</td><td class="num">${fmt.int(s.iterationsAchieved)}</td><td class="num">${s.iterationsExpected != null ? fmt.int(s.iterationsExpected) : "-"}</td>
-        <td class="num">${s.iterationsExpected ? `<span class="pill ${s.iterationsAchieved / s.iterationsExpected >= 0.95 ? "ok" : "warn"}">${((s.iterationsAchieved / s.iterationsExpected) * 100).toFixed(0)} %</span>` : "-"}</td><td class="num">${s.transactions.length}</td></tr>`).join("")}
+    const short = (h) => String(h || "").split(".")[0];
+    const early = new Set(((m.lifecycle && m.lifecycle.earlyExits) || []).map((v) => `${v.group}|${v.vuser}`));
+    const earlyBy = {};
+    for (const v of (m.lifecycle && m.lifecycle.earlyExits) || []) earlyBy[String(v.script).toLowerCase()] = (earlyBy[String(v.script).toLowerCase()] || 0) + 1;
+    const anyEarly = early.size > 0;
+    const sum = (f) => m.workload.reduce((a, s) => a + (f(s) || 0), 0);
+    const planned = sum((s) => s.iterationsExpected), achieved = sum((s) => s.iterationsAchieved);
+    const achievedPill = (a, e) => (e ? `<span class="pill ${a / e >= 0.95 && a / e <= 1.05 ? "ok" : "warn"}">${((a / e) * 100).toFixed(0)} %</span>` : "-");
+    const hasIp = m.lgs.some((l) => l.ip);
+    const role = (l) => (l.role === "controller" ? "Controller" : l.vusers ? "Load generator" : "Monitored host");
+    p.innerHTML = `<div class="card" data-ckey="wlScripts"><h3>Workload design — scripts, VUsers, pacing and iterations</h3><div class="table-wrap"><table class="t"><thead><tr><th>Script</th><th>Protocol</th><th class="num">VUsers</th><th>Load generators</th><th>Pacing</th><th>Think time</th><th class="num">Iterations planned</th><th class="num">Achieved</th><th class="num">Achieved %</th><th class="num">Transactions</th>${anyEarly ? '<th class="num">Stopped early</th>' : ""}</tr></thead><tbody>
+      ${m.workload.map((s) => `<tr><td>${esc(s.key)}${s.groups.length && s.groups.join() !== s.key ? `<div class="hint">${esc(s.groups.join(", "))}</div>` : ""}</td><td>${esc(s.protocol || "-")}</td><td class="num">${s.vusers}</td>
+        <td title="${esc(s.loadGenerators.map((l) => `${l.name} (${l.vusers})`).join(", "))}">${esc(s.loadGenerators.map((l) => `${short(l.name)} (${l.vusers})`).join(", ") || "-")}</td>
+        <td>${esc(s.pacing ? s.pacing.text : "-")}</td><td>${esc(s.thinkTime ? s.thinkTime.text : "-")}</td><td class="num">${s.iterationsExpected != null ? fmt.int(s.iterationsExpected) : "-"}</td><td class="num">${fmt.int(s.iterationsAchieved)}</td>
+        <td class="num">${achievedPill(s.iterationsAchieved, s.iterationsExpected)}</td><td class="num">${s.transactions.length}</td>${anyEarly ? `<td class="num">${earlyBy[String(s.key).toLowerCase()] ? `<span class="pill warn">${earlyBy[String(s.key).toLowerCase()]}</span>` : ""}</td>` : ""}</tr>`).join("")}
+      </tbody><tfoot><tr><td>Total — ${m.workload.length} script${m.workload.length === 1 ? "" : "s"}</td><td></td><td class="num">${fmt.int(sum((s) => s.vusers))}</td><td></td><td></td><td></td><td class="num">${planned ? fmt.int(planned) : "-"}</td><td class="num">${fmt.int(achieved)}</td><td class="num">${achievedPill(achieved, planned)}</td><td></td>${anyEarly ? `<td class="num">${early.size}</td>` : ""}</tr></tfoot></table></div></div>
+      <div class="card" data-ckey="wlLgs"><h3>Load generators — VUsers and resource usage</h3><div class="table-wrap"><table class="t"><thead><tr><th>Host</th>${hasIp ? "<th>IP</th>" : ""}<th>Role</th><th class="num">VUsers</th><th>Scripts</th><th class="num">CPU peak</th><th class="num">Memory peak</th></tr></thead><tbody>
+      ${m.lgs.map((l) => `<tr><td>${esc(l.name)}</td>${hasIp ? `<td>${esc(l.ip || "-")}</td>` : ""}<td>${role(l)}</td><td class="num">${fmt.int(l.vusers)}</td>
+        <td>${l.scripts.length ? `<details class="mini"><summary>${l.scripts.length} script${l.scripts.length === 1 ? "" : "s"}</summary><div class="hint">${esc(l.scripts.join(" · "))}</div></details>` : "-"}</td>
+        <td class="num">${pctCell(l.cpuPeak)}</td><td class="num">${pctCell(l.memPeak)}</td></tr>`).join("")}
       </tbody></table></div></div>
-      <div class="card" data-ckey="wlLgs"><h3>Load generators and hosts</h3><div class="table-wrap"><table class="t"><thead><tr><th>Host</th><th>IP</th><th>Role</th><th class="num">VUsers</th><th>Scripts</th><th class="num">CPU peak</th><th class="num">Memory peak</th></tr></thead><tbody>
-      ${m.lgs.map((l) => `<tr><td>${esc(l.name)}</td><td>${esc(l.ip || "-")}</td><td>${esc(l.role)}</td><td class="num">${l.vusers}</td><td>${esc(l.scripts.join("; ") || "-")}</td><td class="num">${l.cpuPeak != null ? l.cpuPeak.toFixed(0) + " %" : "-"}</td><td class="num">${l.memPeak != null ? l.memPeak.toFixed(0) + " %" : "-"}</td></tr>`).join("")}
-      </tbody></table></div></div>
-      <div class="card" data-ckey="wlVusers"><h3>VUsers</h3><div class="table-wrap" style="max-height:480px;overflow:auto"><table class="t"><thead><tr><th>Group</th><th class="num">VUser</th><th>Script</th><th>Load generator</th><th>Running from</th><th>Exited</th><th class="num">Iterations</th><th class="num">Samples</th><th class="num">Avg RT</th></tr></thead><tbody>
-      ${m.vusers.map((v) => `<tr><td>${esc(v.group)}</td><td class="num">${v.vuser}</td><td>${esc(v.script)}</td><td>${esc(v.lg)}</td><td>t+${fmt.hms(v.runRelSec)}</td><td>t+${fmt.hms(v.exitRelSec)}</td><td class="num">${fmt.int(v.iterations)}</td><td class="num">${fmt.int(v.samples)}</td><td class="num">${n3(v.avgRt)}</td></tr>`).join("")}
+      <div class="card" data-ckey="wlVusers"><h3>VUsers — when each one ran, and what it completed</h3><div class="table-wrap" style="max-height:480px;overflow:auto"><table class="t"><thead><tr><th class="num">VUser</th><th>Script</th><th>Load generator</th><th>Started</th><th>Stopped</th><th class="num">Ran for</th><th class="num">Iterations</th><th class="num">Transactions</th><th class="num">Avg RT (s)</th></tr></thead><tbody>
+      ${m.vusers.map((v) => `<tr><td class="num">${v.vuser}</td><td>${esc(v.script)}</td><td title="${esc(v.lg)}">${esc(short(v.lg))}</td><td>${esc(fmt.relWhen(m, v.runRelSec, true))}</td>
+        <td>${esc(fmt.relWhen(m, v.exitRelSec, true))}${early.has(`${v.group}|${v.vuser}`) ? ' <span class="pill warn" title="Stopped before the ramp-down">early</span>' : ""}</td>
+        <td class="num">${v.runRelSec != null && v.exitRelSec != null ? esc(fmt.dur(v.exitRelSec - v.runRelSec)) : "-"}</td><td class="num">${fmt.int(v.iterations)}</td><td class="num">${fmt.int(v.samples)}</td><td class="num">${n3(v.avgRt)}</td></tr>`).join("")}
       </tbody></table></div></div>`;
   }
 
@@ -781,7 +834,7 @@
         const bin = atob(url.split(",")[1]);
         const data = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i);
-        out[c.key] = { data, width: 1000, height: h };
+        out[c.key] = { data, url, width: 1000, height: h };
       }
     } finally { host.remove(); }
     return out;
@@ -791,7 +844,7 @@
     async xlsx() {
       await loadScript("ra/vendor/exceljs.min.js");
       await loadScript("ra/report/xlsx.js");
-      const buf = await L.xlsx.buildWorkbook(state.model, window.ExcelJS).xlsx.writeBuffer();
+      const buf = await L.xlsx.buildWorkbook(state.model, window.ExcelJS, { images: await pngCharts() }).xlsx.writeBuffer();
       download(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), fileBase() + ".xlsx");
     },
     async docx() {

@@ -45,7 +45,7 @@
       xAxis: {
         type: "value", min: 0, max: m.timeline ? m.timeline.buckets * m.timeline.bucketSec : undefined,
         axisLabel: { color: t.sub, formatter: (v) => clock(v) }, axisLine: { lineStyle: { color: t.grid } }, splitLine: { show: false },
-        axisPointer: { label: { formatter: (p) => `${clock(p.value, true)}  (t+${fmt.hms(p.value)})` } },
+        axisPointer: { label: { formatter: (p) => `${fmt.relWhen(m, p.value, true)}:${clock(p.value, true).slice(6)}` } },
       },
       dataZoom: o.static ? undefined : [{ type: "inside", xAxisIndex: 0 }, { type: "slider", xAxisIndex: 0, height: 18, bottom: 8, textStyle: { color: t.sub }, labelFormatter: (v) => clock(v) }],
       toolbox: o.static ? undefined : { right: 8, top: 0, feature: { saveAsImage: { title: "PNG", pixelRatio: 2 }, dataZoom: { title: { zoom: "Zoom", back: "Reset" }, yAxisIndex: "none" } }, iconStyle: { borderColor: t.sub } },

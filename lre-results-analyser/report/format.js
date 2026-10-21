@@ -31,6 +31,37 @@
     return model && model.meta && model.meta.startUtc != null ? localTime(model.meta.startUtc + rel, model.meta.localOffsetSec) : hms(rel);
   }
 
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const p2 = (n) => String(n).padStart(2, "0");
+
+  /** Duration in words: "1 day 3 h 36 min 43 s", "1 h 52 min 09 s", "4 min 10 s", "45 s". */
+  function dur(s) {
+    if (s == null || !Number.isFinite(s)) return "-";
+    const t = Math.round(Math.abs(s));
+    const d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
+    const out = d ? `${d} day${d > 1 ? "s" : ""} ${h} h ${p2(m)} min ${p2(x)} s` : h ? `${h} h ${p2(m)} min ${p2(x)} s` : m ? `${m} min ${p2(x)} s` : `${x} s`;
+    return (s < 0 ? "−" : "") + out;
+  }
+  /** "Thu 08 Oct 2026, 07:07:39" (local, from unix s); short: "08 Oct 07:07". */
+  function when(utc, offsetSec, short) {
+    if (utc == null || !Number.isFinite(utc)) return "-";
+    const d = new Date((utc + (offsetSec || 0)) * 1000);
+    const clock = `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}${short ? "" : ":" + p2(d.getUTCSeconds())}`;
+    return short ? `${p2(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${clock}`
+      : `${DAYS[d.getUTCDay()]} ${p2(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${clock}`;
+  }
+  /** Seconds from the scenario start → "Thu 08 Oct 2026, 07:31:24" in the run's local time. */
+  function relWhen(model, rel, short) {
+    return model && model.meta && model.meta.startUtc != null && rel != null ? when(model.meta.startUtc + rel, model.meta.localOffsetSec, short) : hms(rel);
+  }
+  /** "Thu 08 Oct 2026, 07:31:24 → 09:23:33" (end date shown only when it differs). */
+  function relRange(model, a, b) {
+    const x = relWhen(model, a), y = relWhen(model, b);
+    const day = (v) => v.split(", ")[0];
+    return `${x} → ${y.includes(", ") && day(x) === day(y) ? y.split(", ")[1] : y}`;
+  }
+
   const num = (v, d) => (v == null || !Number.isFinite(v) ? "-" : Number(v).toFixed(d == null ? 3 : d));
   const int = (v) => (v == null ? "-" : Number(v).toLocaleString("en-GB"));
   const sec = (s) => (s == null ? "-" : s < 1 ? `${(s * 1000).toFixed(0)} ms` : `${s.toFixed(s < 10 ? 2 : 1)} s`);
@@ -68,17 +99,19 @@
     const rampPlanned = start ? Math.max(0, Math.ceil(start.vusers / start.batch) - 1) * start.everySec : null;
     const downPlanned = stop ? Math.max(0, Math.ceil(stop.vusers / stop.batch) - 1) * stop.everySec : null;
     const rows = [
-      { phase: "Initialise / ramp-up", planned: start ? `${start.vusers} VUsers, ${start.batch} every ${start.everySec} s (${hms(rampPlanned)})` : "-",
-        actual: p.rampUpEndRelSec != null ? `t+00:00:00 → t+${hms(p.rampUpEndRelSec)} (${hms(p.rampUpEndRelSec)})` : "-" },
-      { phase: "Steady state", planned: run ? `Run for ${hms(run.durationSec)}` : "-",
-        actual: p.steady ? `t+${hms(p.steady.startRelSec)} → t+${hms(p.steady.endRelSec)} (${hms(p.steady.durationSec)})` : "-" },
-      { phase: "Ramp-down", planned: stop ? `${stop.vusers} VUsers, ${stop.batch} every ${stop.everySec} s (${hms(downPlanned)})` : "-",
-        actual: p.rampDownStartRelSec != null && p.lastExitRelSec != null ? `t+${hms(p.rampDownStartRelSec)} → t+${hms(p.lastExitRelSec)} (${hms(p.lastExitRelSec - p.rampDownStartRelSec)})` : "-" },
+      { phase: "Initialise / ramp-up", planned: start ? `${start.vusers} VUsers, ${start.batch} every ${start.everySec} s (${dur(rampPlanned)})` : "-",
+        actual: p.rampUpEndRelSec != null ? `${relRange(model, 0, p.rampUpEndRelSec)} (${dur(p.rampUpEndRelSec)})` : "-" },
+      { phase: "Steady state", planned: run ? `Run for ${dur(run.durationSec)}` : "-",
+        actual: p.steady ? `${relRange(model, p.steady.startRelSec, p.steady.endRelSec)} (${dur(p.steady.durationSec)})` : "-" },
+      { phase: "Ramp-down", planned: stop ? `${stop.vusers} VUsers, ${stop.batch} every ${stop.everySec} s (${dur(downPlanned)})` : "-",
+        actual: p.rampDownStartRelSec != null && p.lastExitRelSec != null ? `${relRange(model, p.rampDownStartRelSec, p.lastExitRelSec)} (${dur(p.lastExitRelSec - p.rampDownStartRelSec)})` : "-" },
     ];
-    if (model.window && !model.window.detected) rows.push({ phase: "Analysis window (user-set)", planned: "-", actual: `t+${hms(model.window.start)} → t+${hms(model.window.end)} (${hms(model.window.durationSec)})` });
+    const early = model.lifecycle && model.lifecycle.earlyExits ? model.lifecycle.earlyExits.length : 0;
+    if (early) rows.push({ phase: "Stopped early", planned: "-", actual: `${early} VUser${early > 1 ? "s" : ""} stopped before the ramp-down` });
+    if (model.window && !model.window.detected) rows.push({ phase: "Analysis window (user-set)", planned: "-", actual: `${relRange(model, model.window.start, model.window.end)} (${dur(model.window.durationSec)})` });
     for (const u of (model.meta.schedule && model.meta.schedule.unparsed) || []) rows.push({ phase: "Unparsed schedule step", planned: u, actual: "-" });
     return rows;
   }
 
-  return { hms, localTime, utcTime, zone, relLocal, num, int, sec, bytes, SEVERITY, VERDICT, PCT_KEYS, groupByScript, scheduleRows };
+  return { hms, dur, when, relWhen, relRange, localTime, utcTime, zone, relLocal, num, int, sec, bytes, SEVERITY, VERDICT, PCT_KEYS, groupByScript, scheduleRows };
 });

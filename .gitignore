@@ -46,7 +46,7 @@ DevWeb JavaScript SDK263.pdf
 DevWebSdk.d.ts
 
 # Local-only documentation — removed from GitHub history; never commit
-Docs/
+/Docs/
 
 # Local-only prompts — removed from GitHub history; never commit
-devweb-prompts/
+/devweb-prompts/

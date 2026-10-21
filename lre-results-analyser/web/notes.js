@@ -57,11 +57,21 @@
         "The Insights tab lists every check, including the ones that passed.",
       ],
     },
+    stats: {
+      icon: "gauge",
+      what: "The headline numbers for the whole test, the same figures LoadRunner Analysis shows on its summary page.",
+      read: [
+        "Hits = HTTP requests sent to the application. Throughput = data received from the application (bytes).",
+        "Transactions per second counts business steps (e.g. Login); hits per second counts every request inside them, so it is always higher.",
+        "Passed transactions ratio = passed ÷ (passed + failed).",
+      ],
+    },
     details: {
       icon: "info",
-      what: "How the test was set up: the scenario, how VUsers were started and stopped (planned and what actually happened), and the load generators used.",
+      what: "How the test was set up: the scenario, how VUsers were started and stopped (planned and what actually happened), and the machines used.",
       read: [
         "If “Actual” differs from “Planned” — for example a shorter steady state — the test did not run fully as designed.",
+        "“Stopped early” counts VUsers that stopped before the ramp-down, usually because the script stops a VUser when it hits an error.",
         "Load generators are the machines that run the VUsers. High CPU on them (above about 85 %) can make response times look worse than they really are.",
       ],
     },
@@ -193,11 +203,11 @@
     // ── Errors ──
     errGroups: {
       icon: "alert",
-      what: "All errors logged during the test, grouped by error code and message so that the same problem appears once.",
+      what: "All errors logged during the test, grouped by error code, script line and message so that the same problem appears once.",
       read: [
         "Count = how many times it happened. VUsers = how many virtual users hit it (one VUser repeating it is often a data problem; many VUsers point to the application).",
+        "The message shown is a real example, including the script line (e.g. Action.c(230)). Errors that differ only in IDs or numbers are counted together — hover over a message to see its general form.",
         "First / Last show when it started and stopped (local time).",
-        "Numbers and IDs in the messages are replaced by <n> / <guid> so similar messages group together. Hover over a message to see a real example.",
       ],
     },
     errLog: {
@@ -209,21 +219,25 @@
     // ── Workload ──
     wlScripts: {
       icon: "users",
-      what: "How each script was run: number of VUsers, where they ran, how often each VUser started a new iteration (pacing) and the waits inside the script (think time).",
+      what: "The workload design and how well it was delivered: for each script, its VUsers, where they ran, how often each VUser started a new iteration (pacing), the waits inside the script (think time), and the iterations planned against those achieved.",
       read: [
-        "Iterations planned = what the pacing should have produced; achieved = what really ran.",
-        "Achieved well below planned means iterations took longer than the pacing allows — the intended load was not reached.",
+        "Iterations planned = what the pacing should have produced for the time each VUser ran; achieved = what really ran.",
+        "Achieved well below 100 % means iterations took longer than the pacing allows — the intended load was not reached for that script.",
+        "Achieved well above 100 % usually means the pacing setting differs from what the VUsers really used (check the script's run-time settings).",
       ],
     },
     wlLgs: {
       icon: "server",
-      what: "The machines used for the test: which scripts and how many VUsers each one ran, and how busy they were.",
-      read: ["A machine with no VUsers is usually the Controller or a monitored server."],
+      what: "The machines used for the test: how many VUsers and scripts each one ran, and how busy it was (peak CPU and memory).",
+      read: [
+        "Peak CPU or memory above about 85 % means the machine itself may have slowed the test down — the response times on it are less reliable.",
+        "The Controller runs the test but no VUsers. Open a row's script list to see which scripts ran on that machine.",
+      ],
     },
     wlVusers: {
       icon: "users",
-      what: "Every virtual user: when it started and stopped, how many iterations it completed and its average response time.",
-      read: ["A VUser with far fewer iterations than the others probably hit errors or long waits."],
+      what: "Every virtual user: when it started and stopped (local time), how many iterations it completed and its average response time.",
+      read: ["A VUser that stopped much earlier than the others, or completed far fewer iterations, probably hit errors — check the Errors tab for that VUser."],
     },
 
     // ── Insights tab ──
@@ -264,9 +278,11 @@
   /** Hover help for the overview tiles. */
   const KPIS = {
     vusers: "The highest number of virtual users running at the same time",
-    steady: "The period when all virtual users were running together — the results are based on this period",
-    throughput: "Transactions completed per second during the steady state",
-    passed: "Transaction executions that completed successfully, and how many failed",
+    duration: "How long the test ran, from start to stop",
+    steady: "The period between the end of the ramp-up and the start of the ramp-down — the results are based on this period",
+    throughput: "Transactions per second (TPS): business steps completed per second during the steady state. This is not the data throughput in bytes — that is under Test statistics",
+    passed: "Transaction executions that completed successfully, over the whole test",
+    failed: "Transaction executions that failed (an error stopped them), over the whole test",
     errors: "Errors logged by the virtual users (from the LRE error log)",
     sla: "How many transactions met the SLA you entered",
     slowest: "The transaction with the highest P90 response time",

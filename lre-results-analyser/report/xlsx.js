@@ -5,7 +5,9 @@
  *   const wb = buildWorkbook(model, ExcelJS);  const buf = await wb.xlsx.writeBuffer();
  *
  * Sheets: 1 Test Overview · 2 Transactions – Full Run · 3 Transactions – Steady State ·
- * 4 Workload Model · 5 Errors · 6 Time Series · 7 LG Health · 8 Insights · 9 Method & Validation
+ * 4 Workload Model · 5 Errors · 6 Time Series · 7 LG Health · 8 Insights · 9 About this report
+ * opts.images: { chartKey: { url: "data:image/png;base64,…", width, height } } — charts placed on the
+ * Time Series and LG Health sheets (the page passes them; the CLI has no PNG renderer).
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(require("./format"));
@@ -127,16 +129,18 @@
         ["Result name", m.meta.resultName], ["Workload Type", [m.meta.scenarioType, m.meta.scheduleMode].filter(Boolean).join(" · ")],
       ]],
       ["Execution Time", [
-        ["Start Time", fmt.localTime(m.meta.startUtc, off)], ["End Time", fmt.localTime(m.meta.stopUtc, off)],
-        ["Test Duration", fmt.hms(dur), { bold: true }],
+        ["Start Time", fmt.when(m.meta.startUtc, off)], ["End Time", fmt.when(m.meta.stopUtc, off)],
+        ["Test Duration", fmt.dur(dur), { bold: true }],
         ["Time zone", fmt.zone(off) + (m.meta.localOffsetConfirmed ? " (confirmed)" : "")],
         ["Run Status", `${m.meta.stopReason || "-"}${verdict ? " · Result: " + verdict.text : ""}`, { color: vColor, bold: true }],
-        ["Controller software", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
+        ["Controller", (m.lgs.find((l) => l.role === "controller") || {}).name || "-"],
+        ["LoadRunner version", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
       ]],
       ["Run Details", [
         ["Scenario", m.meta.sessionName], ["Scenario path", m.meta.scenarioPath],
         ["Goal profile", m.meta.goalProfile], ["Load behaviour", m.meta.loadBehavior],
         ["Start reason", m.meta.startReason], ["Schedule", m.meta.scheduleText || m.meta.schedule.raw],
+        ["Scripts", `${m.workload.length} script${m.workload.length === 1 ? "" : "s"} (see Workload Model)`],
       ]],
       ["High-Level Metrics", [
         ["Transactions Passed", t.pass, { numFmt: INT, bold: true, color: "FF15803D" }],
@@ -144,16 +148,20 @@
         ["Failure rate", failPct, { numFmt: "0.000%" }],
         ["Errors", t.errors, { numFmt: INT, bold: true, color: t.errors ? "FFB91C1C" : TEXT }],
         ["Transactions defined", t.transactionsDefined, { numFmt: INT }],
-        ["Steady state", m.phases && m.phases.steady ? fmt.hms(m.phases.steady.durationSec) : "-"],
+        [m.window && !m.window.detected ? "Analysis window (user-set)" : "Steady state", m.window ? `${fmt.dur(m.window.durationSec)} — ${fmt.relRange(m, m.window.start, m.window.end)}` : "-"],
+        ["VUsers stopped early", m.lifecycle && m.lifecycle.earlyExits ? m.lifecycle.earlyExits.length : null, { numFmt: INT, color: m.lifecycle && m.lifecycle.earlyExits && m.lifecycle.earlyExits.length ? "FFB45309" : TEXT }],
         ["Results calculated", m.method.percentileMethod === "exact" ? "Every instance — exact, no granularity" : "Every instance — percentiles from histograms (±0.5 %)",
           { color: m.method.percentileMethod === "exact" ? TEXT : "FFB45309" }],
       ]],
       ["Performance", [
-        ["Transactions/Sec (Passed)", t.tpsFull != null ? t.tpsFull : null, { numFmt: "0.00", bold: true }],
+        ["Transactions per second (whole test)", t.tpsFull != null ? t.tpsFull : null, { numFmt: "0.00", bold: true }],
+        ["Transactions per second (steady state)", t.tpsSteady != null ? t.tpsSteady : null, { numFmt: "0.00" }],
+        ["Passed transactions ratio", t.pass != null && t.fail != null && t.pass + t.fail ? t.pass / (t.pass + t.fail) : null, { numFmt: "0.000%" }],
         ["Hits per Sec (avg)", web ? web.hitsPerSec.avg : t.hitsPerSec ? t.hitsPerSec.avg : null, { numFmt: "#,##0.00", bold: true }],
         ["Total Hits", web ? web.hits : null, { numFmt: INT }],
         ["Throughput (avg bytes/s)", web ? web.throughputBytesPerSec.avg : t.throughputBytesPerSec ? t.throughputBytesPerSec.avg : null, { numFmt: INT, bold: true }],
         ["Total Throughput (bytes)", web ? web.throughputBytes : null, { numFmt: INT }],
+        ["Total Throughput", web ? fmt.bytes(web.throughputBytes) : null],
         ["Peak running VUsers", t.peakVusers, { numFmt: INT }],
       ]],
       ["VUsers per LG Count", lgRows.length ? lgRows : [["(no load generators)", null]]],
@@ -189,9 +197,9 @@
   function txSheet(wb, m, which) {
     const name = which === "full" ? "Transactions – Full Run" : "Transactions – Steady State";
     const ws = wb.addWorksheet(name, { views: [{ state: "frozen", xSplit: 2, ySplit: 4 }] });
-    const win = which === "full" ? `Whole run: ${fmt.hms(m.meta.durationSec)}` :
-      m.window ? `${m.window.detected ? "Steady state (detected)" : "Analysis window (user-set)"}: t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)} (${fmt.relLocal(m, m.window.start)} – ${fmt.relLocal(m, m.window.end)}), ${fmt.hms(m.window.durationSec)}` : "No steady-state window";
-    title(ws, name, `${win} · response times in seconds · ${m.method.summaryBasis || "every passed instance"} · pass/fail: whole-run counts`);
+    const win = which === "full" ? `Whole test: ${fmt.relRange(m, 0, m.meta.durationSec)} (${fmt.dur(m.meta.durationSec)})` :
+      m.window ? `${m.window.detected ? "Steady state" : "Analysis window (user-set)"}: ${fmt.relRange(m, m.window.start, m.window.end)} (${fmt.dur(m.window.durationSec)})` : "No steady-state window";
+    title(ws, name, `${win} · response times in seconds, from every passed transaction · Pass / Fail: whole test`);
     const N = TX_COLS.length;
     header(ws, 4, TX_COLS.map((c) => c[0]));
     ws.autoFilter = { from: { row: 4, column: 2 }, to: { row: 4, column: N } };
@@ -240,84 +248,114 @@
 
   function workload(wb, m) {
     const ws = wb.addWorksheet("Workload Model", { views: [{ state: "frozen", ySplit: 3 }] });
-    title(ws, "Workload Model", "Per script: run-time settings from the .usp / .cfg / .usr files; VUsers and iterations from _t_rep.eve / RawData.eve");
+    title(ws, "Workload Model", "The workload design per script (pacing and think time from the script's run-time settings) and how much of it was delivered");
+    const earlyBy = {};
+    for (const v of (m.lifecycle && m.lifecycle.earlyExits) || []) earlyBy[String(v.script).toLowerCase()] = (earlyBy[String(v.script).toLowerCase()] || 0) + 1;
     header(ws, 3, ["Script", "Script name", "Group(s)", "Protocol", "Language", "VUsers", "Load generators (VUsers)", "Pacing", "Think time",
-      "Iterations planned", "Iterations achieved", "Achieved %", "Transactions in script", "Samples"]);
+      "Iterations planned", "Iterations achieved", "Achieved %", "Transactions in script", "Transactions run", "VUsers stopped early"]);
     let r = 4;
     for (const s of m.workload) {
       ws.getRow(r).values = [s.key, s.scriptName, s.groups.join(", "), s.protocol, s.language, s.vusers,
         s.loadGenerators.map((l) => `${l.name} (${l.vusers})`).join("; "), s.pacing ? s.pacing.text : "-", s.thinkTime ? s.thinkTime.text : "-",
         s.iterationsExpected, s.iterationsAchieved, s.iterationsExpected ? s.iterationsAchieved / s.iterationsExpected : null,
-        s.transactions.length, s.samples];
+        s.transactions.length, s.samples, earlyBy[String(s.key).toLowerCase()] || 0];
       ws.getCell(r, 12).numFmt = PCT;
       r++;
     }
     r += 2;
     ws.getCell(r, 1).value = "Load generators"; ws.getCell(r, 1).font = { bold: true, color: { argb: BLUE } }; r++;
-    header(ws, r++, ["Host", "IP", "Role", "VUsers", "Scripts (VUsers)", "CPU peak %", "Memory peak %"]);
-    for (const l of m.lgs) { ws.getRow(r).values = [l.name, l.ip || "-", l.role, l.vusers, l.scripts.join("; "), l.cpuPeak, l.memPeak]; r++; }
+    header(ws, r++, ["Host", "IP", "Role", "VUsers", "Scripts", "CPU peak %", "Memory peak %", "Scripts (VUsers)"]);
+    for (const l of m.lgs) {
+      ws.getRow(r).values = [l.name, l.ip || "-", l.role === "controller" ? "Controller" : l.vusers ? "Load generator" : "Monitored host", l.vusers, l.scripts.length, l.cpuPeak, l.memPeak, l.scripts.join("; ")];
+      ws.getCell(r, 8).alignment = { wrapText: false };
+      r++;
+    }
     r += 2;
     ws.getCell(r, 1).value = "VUsers"; ws.getCell(r, 1).font = { bold: true, color: { argb: BLUE } }; r++;
-    header(ws, r++, ["Group", "VUser", "Script", "Load generator", "Started running (t+)", "Exited (t+)", "Iterations", "Samples", "Avg RT (s)"]);
+    const early = new Set(((m.lifecycle && m.lifecycle.earlyExits) || []).map((v) => `${v.group}|${v.vuser}`));
+    header(ws, r++, ["Group", "VUser", "Script", "Load generator", "Started (local)", "Stopped (local)", "Ran for", "Stopped early", "Iterations", "Transactions", "Avg RT (s)"]);
     for (const v of m.vusers) {
-      ws.getRow(r).values = [v.group, v.vuser, v.script, v.lg, fmt.hms(v.runRelSec), fmt.hms(v.exitRelSec), v.iterations, v.samples, v.avgRt];
-      ws.getCell(r, 9).numFmt = SEC; r++;
+      ws.getRow(r).values = [v.group, v.vuser, v.script, v.lg, fmt.relWhen(m, v.runRelSec), fmt.relWhen(m, v.exitRelSec),
+        v.runRelSec != null && v.exitRelSec != null ? fmt.dur(v.exitRelSec - v.runRelSec) : "-", early.has(`${v.group}|${v.vuser}`) ? "yes" : "", v.iterations, v.samples, v.avgRt];
+      ws.getCell(r, 11).numFmt = SEC; r++;
     }
-    widths(ws, [30, 28, 24, 12, 12, 8, 40, 30, 26, 12, 12, 11, 12, 12]);
+    widths(ws, [30, 28, 24, 26, 26, 14, 40, 30, 26, 12, 12, 11, 12, 12, 12]);
   }
 
   function errorsSheet(wb, m) {
     const ws = wb.addWorksheet("Errors", { views: [{ state: "frozen", ySplit: 3 }] });
     if (!m.errors) { title(ws, "Errors", "SqliteDb.db not available — no error data"); return; }
-    title(ws, `Errors — ${m.errors.total} logged`, "Grouped by code + message pattern (numbers/IDs replaced) + script. Times are local.");
-    header(ws, 3, ["Script", "Injector(s)", "Error code", "Message (pattern)", "Example", "Count", "VUsers affected", "First seen", "Last seen", "Actions"]);
+    title(ws, `Errors — ${m.errors.total} logged`, "Grouped by error code, script line and message (errors that differ only in IDs or numbers are counted together). Times are local.");
+    header(ws, 3, ["Script", "Load generator(s)", "Error code", "Message (example)", "General form", "Count", "VUsers affected", "First seen", "Last seen", "Actions"]);
     let r = 4;
     for (const g of m.errors.summary) {
-      ws.getRow(r).values = [g.script, g.injectors.join(", "), g.code, g.pattern, g.example, g.count, g.vusers.length,
-        g.firstUtc != null ? fmt.localTime(g.firstUtc, m.meta.localOffsetSec) : "-", g.lastUtc != null ? fmt.localTime(g.lastUtc, m.meta.localOffsetSec) : "-", g.actions.join(", ")];
+      ws.getRow(r).values = [g.script, g.injectors.join(", "), g.code, g.example, g.pattern, g.count, g.vusers.length,
+        g.firstUtc != null ? fmt.when(g.firstUtc, m.meta.localOffsetSec) : "-", g.lastUtc != null ? fmt.when(g.lastUtc, m.meta.localOffsetSec) : "-", g.actions.join(", ")];
       r++;
     }
     ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: 10 } };
     r += 2;
     ws.getCell(r, 1).value = `Error log${m.errors.rowsTruncated ? " (first 20,000 rows)" : ""}`; ws.getCell(r, 1).font = { bold: true, color: { argb: BLUE } }; r++;
-    header(ws, r++, ["Time (local)", "t+", "Code", "Message", "Script", "Action", "Injector", "VUser", "Iteration", "Line"]);
+    header(ws, r++, ["Time (local)", "Code", "Message", "Script", "Action", "Load generator", "VUser", "Iteration", "Line"]);
     for (const e of m.errors.rows) {
-      ws.getRow(r).values = [e.utc != null ? fmt.localTime(e.utc, m.meta.localOffsetSec) : e.time, fmt.hms(e.relSec), e.code, e.message, e.script, e.action, e.injector, e.vuser, e.iteration, e.line];
+      ws.getRow(r).values = [e.utc != null ? fmt.localTime(e.utc, m.meta.localOffsetSec) : e.time, e.code, e.message, e.script, e.action, e.injector, e.vuser, e.iteration, e.line];
       r++;
     }
-    widths(ws, [26, 30, 11, 70, 60, 8, 12, 20, 20, 16]);
+    widths(ws, [26, 30, 11, 90, 60, 8, 12, 24, 24, 16]);
   }
 
-  function timeSeries(wb, m) {
-    const ws = wb.addWorksheet("Time Series", { views: [{ state: "frozen", xSplit: 2, ySplit: 4 }] });
+  /** Place chart images (opts.images) in a grid of two per row from `row`; returns the first row below them. */
+  function placeCharts(wb, ws, row, images, keys) {
+    const list = keys.map((k) => images && images[k]).filter(Boolean);
+    if (!list.length) return row;
+    const W = 620, ROWPX = 20;
+    let r = row;
+    for (let i = 0; i < list.length; i += 2) {
+      let hMax = 0;
+      list.slice(i, i + 2).forEach((img, j) => {
+        const h = Math.round((W * img.height) / img.width);
+        hMax = Math.max(hMax, h);
+        const id = wb.addImage({ base64: img.url, extension: "png" });
+        ws.addImage(id, { tl: { col: j === 0 ? 0 : 7, row: r - 1 }, ext: { width: W, height: h } });
+      });
+      r += Math.ceil(hMax / ROWPX) + 1;
+    }
+    return r + 1;
+  }
+
+  function timeSeries(wb, m, opts) {
+    const ws = wb.addWorksheet("Time Series", { views: [{ showGridLines: true }] });
     const tl = m.timeline;
-    title(ws, "Time Series", `Granularity ${tl.bucketSec} s${m.granularity && !m.granularity.auto ? " (user-selected)" : " (auto)"}: one row per time slot. Response times in seconds (slot percentiles from 2 % histograms). The transaction sheets do not use this granularity.`);
+    title(ws, "Time Series", `One row per ${tl.bucketSec}-second slot. Response times in seconds. The charts show the same data.`);
+    const top = placeCharts(wb, ws, 4, opts.images, ["load", "rtOverTime", "throughput", "errors", "httpCodes", "bytes"]);
+    ws.views = [{ state: "frozen", xSplit: 2, ySplit: top }];
     const txs = m.transactions;
     const graphCols = [];
     for (const g of tl.graphs || []) if (["hits", "bytesReceived", "bytesSent", "httpCodes", "connections", "connectionsPerSec", "throughput"].includes(g.role))
       for (const ms of g.measurements) graphCols.push({ label: `${g.type}: ${ms.name}`, data: ms.avg });
-    const cols = ["Time (local)", "t+", "Running VUsers", "Total TPS", "Errors"]
+    const cols = ["Time (local)", "Elapsed", "Running VUsers", "Total TPS", "Errors"]
       .concat(txs.flatMap((t) => [`${t.label || t.name} count`, `${t.label || t.name} avg`, `${t.label || t.name} P90`, `${t.label || t.name} P95`]))
       .concat(graphCols.map((g) => g.label));
-    header(ws, 4, cols);
+    header(ws, top, cols);
     for (let b = 0; b < tl.buckets; b++) {
       const rel = b * tl.bucketSec;
       const row = [fmt.relLocal(m, rel), fmt.hms(rel), tl.vusers ? tl.vusers[b] : null, tl.totalTps[b], tl.errors ? tl.errors[b] : null];
       for (const t of txs) { const s = tl.tx[t.id]; row.push(s.count[b], s.avg[b], s.p90[b], s.p95[b]); }
       for (const g of graphCols) row.push(g.data[b]);
-      ws.getRow(5 + b).values = row;
+      ws.getRow(top + 1 + b).values = row;
     }
     ws.getColumn(1).width = 20; ws.getColumn(2).width = 10;
     for (let c = 3; c <= cols.length; c++) { ws.getColumn(c).width = 12; ws.getColumn(c).numFmt = "0.000"; }
     ws.getColumn(3).numFmt = INT; ws.getColumn(5).numFmt = INT;
   }
 
-  function lgHealth(wb, m) {
+  function lgHealth(wb, m, opts) {
     const ws = wb.addWorksheet("LG Health");
     if (!m.lgHealth || !m.lgHealth.length) { title(ws, "LG Health", "No load-generator monitoring in sum_data (graph es_tr_lg_monitoring)"); return; }
-    title(ws, "LG Health", "CPU / memory / disk from LRE's load-generator monitor (sum_data). 85 % is the usual warning level.");
-    header(ws, 3, ["Host", "IP", "CPU avg %", "CPU peak %", "Memory avg %", "Memory peak %", "Disk avg", "Disk peak"]);
-    let r = 4;
+    title(ws, "LG Health", "CPU / memory / disk of the test machines (LRE's load-generator monitor). Above 85 % the machine itself may slow the test down.");
+    const top = placeCharts(wb, ws, 4, opts.images, ["lgHealth", "rtPerLg"]);
+    header(ws, top, ["Host", "IP", "CPU avg %", "CPU peak %", "Memory avg %", "Memory peak %", "Disk avg", "Disk peak"]);
+    let r = top + 1;
     for (const h of m.lgHealth) {
       ws.getRow(r).values = [h.host, h.ip || "-", h.cpu && h.cpu.mean, h.cpu && h.cpu.max, h.memory && h.memory.mean, h.memory && h.memory.max, h.disk && h.disk.mean, h.disk && h.disk.max];
       [4, 6].forEach((c) => { const v = ws.getCell(r, c).value; if (v >= 85) ws.getCell(r, c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: RED_FILL } }; });
@@ -325,7 +363,7 @@
     }
     for (let c = 3; c <= 8; c++) ws.getColumn(c).numFmt = "0.0";
     r += 2;
-    const cols = ["Time (local)", "t+"];
+    const cols = ["Time (local)", "Elapsed"];
     const series = [];
     for (const h of m.lgHealth) for (const k of ["cpu", "memory", "disk"]) if (h[k]) { cols.push(`${h.host} ${k}`); series.push(h[k].series); }
     header(ws, r++, cols);
@@ -352,41 +390,30 @@
     widths(ws, [10, 12, 42, 90, 50, 14]);
   }
 
-  function method(wb, m) {
-    const ws = wb.addWorksheet("Method & Validation");
-    title(ws, "Method & Validation", "How every figure is computed, and the self-checks run on the raw files");
-    let r = kv(ws, 4, [
-      ["Engine", `LRE Results Analyser ${m.engineVersion}`],
-      ["Transactions", m.method.transactionSource || "-"], ["Response time", m.method.responseTimeUnit], ["Transaction names", m.method.transactionNames || "-"],
-      ["Percentiles", m.method.percentile], ["Standard deviation", m.method.stdDev],
-      ["Steady state", m.method.steadyState], ["Analysis window used", m.window ? `t+${fmt.hms(m.window.start)} – t+${fmt.hms(m.window.end)}${m.window.detected ? " (detected)" : " (user-set)"}` : "-"],
-      ["Sample time", m.method.sampleTime], ["Negative response times", m.method.negativeResponseTimes],
-      ["Transaction summary basis", m.method.summaryBasis],
-      ["Granularity", m.aggregation ? m.aggregation.title : "Exact"], ["What this means", m.aggregation ? m.aggregation.note : "-"],
-      ["Chart / Time Series granularity", m.method.chartGranularity],
-      ["TPS", m.method.tps], ["Pass / fail counts", m.method.passFail],
-      ["Samples analysed", m.method.totalSamples], ["Exact-percentile limit", m.method.exactLimit],
-      ["Time zone", `${fmt.zone(m.meta.localOffsetSec)} — ${m.meta.localOffsetSource}`],
-      ["SLA", m.settings && m.settings.sla && (m.settings.sla.defaultSec != null || Object.keys(m.settings.sla.perTx || {}).length) ? `P${m.settings.sla.percentile} against user thresholds; Apdex T = threshold` : "No thresholds set"],
-      ["Comparison with LRE Analysis", "Names, counts, pass/fail, averages, hits, HTTP codes and throughput match LRE exactly. Min / Max / Std Dev / percentiles can differ on busy transactions: LRE's summary table averages instances into time slots first; this tool uses every instance"],
-    ], "Method");
-    ws.getCell(r, 1).value = "Self-checks"; ws.getCell(r, 1).font = { bold: true, color: { argb: BLUE } }; r++;
-    header(ws, r++, ["Status", "Check", "Result", "Data"]);
-    const fills = { fail: RED_FILL, warn: AMBER_FILL, ok: GREEN_FILL };
-    for (const c of m.selfCheck) {
-      ws.getRow(r).values = [c.status.toUpperCase(), c.id, c.text, c.data !== undefined ? JSON.stringify(c.data).slice(0, 2000) : ""];
-      if (fills[c.status]) ws.getCell(r, 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: fills[c.status] } };
-      r++;
-    }
-    r += 2;
-    ws.getCell(r, 1).value = "Files used"; ws.getCell(r, 1).font = { bold: true, color: { argb: BLUE } }; r++;
-    for (const [k, v] of Object.entries(m.files.used)) { ws.getRow(r++).values = [k, v || "(missing)"]; }
-    widths(ws, [30, 22, 100, 60]);
+  function about(wb, m) {
+    const ws = wb.addWorksheet("About this report");
+    title(ws, "About this report", "How the figures in this workbook are worked out, in plain words");
+    const sla = m.settings && m.settings.sla && (m.settings.sla.defaultSec != null || Object.keys(m.settings.sla.perTx || {}).length);
+    kv(ws, 4, [
+      ["Where the numbers come from", "The raw results LoadRunner Enterprise saved for this run (RawData.eve and the files next to it). Nothing is estimated: every transaction the VUsers completed is counted."],
+      ["Response time", "Seconds from the start to the end of each transaction, without think time and without wasted time — the same as LoadRunner Analysis."],
+      ["Min, Avg, Max, percentiles", "Worked out from every passed transaction on its own. P90 = 90 % of the transactions were this fast or faster. Failed transactions are counted in Fail but left out of the timings, as LoadRunner does."],
+      ["Steady state", m.window ? `${fmt.relRange(m, m.window.start, m.window.end)} (${fmt.dur(m.window.durationSec)})${m.window.detected ? " — from the end of the ramp-up (the last VUser started) to the start of the ramp-down (the final burst of VUsers stopping). VUsers that stopped earlier are listed, not used to cut the period short." : " — set by the user."}` : "Not detected."],
+      ["Transactions per second", "Count ÷ length of the period in seconds."],
+      ["Hits and throughput", "Hits = HTTP requests; throughput = bytes received from the application; averages are over the whole test, as in LoadRunner Analysis."],
+      ["Errors", "Errors logged by the VUsers (LoadRunner's error log, error type only). Errors with the same code, script line and message are counted together."],
+      ["SLA", sla ? `P${m.settings.sla.percentile} of each transaction against the thresholds entered; Apdex uses the threshold as T.` : "No thresholds were set."],
+      ["Time zone", `All times are local to the test: ${fmt.zone(m.meta.localOffsetSec)}.`],
+      ["Differences from LoadRunner Analysis", "Names, counts, pass/fail, averages, hits, HTTP codes and throughput match LoadRunner Analysis. Min, Max, Std Dev and percentiles can differ on busy transactions when LoadRunner Analysis has data aggregation switched on: it averages transactions into time slots first, while this report uses every transaction."],
+      ["Produced by", `LRE Results Analyser ${m.engineVersion} on ${m.generatedAt.slice(0, 10)}`],
+    ]);
+    widths(ws, [34, 130]);
     ws.getColumn(2).alignment = { wrapText: true, vertical: "top" };
-    ws.getColumn(3).alignment = { wrapText: true, vertical: "top" };
+    ws.getColumn(1).alignment = { vertical: "top" };
   }
 
-  function buildWorkbook(m, ExcelJS) {
+  function buildWorkbook(m, ExcelJS, opts) {
+    opts = opts || {};
     const wb = new ExcelJS.Workbook();
     wb.creator = "LRE Results Analyser";
     wb.created = new Date();
@@ -395,10 +422,10 @@
     txSheet(wb, m, "steady");
     workload(wb, m);
     errorsSheet(wb, m);
-    timeSeries(wb, m);
-    lgHealth(wb, m);
+    timeSeries(wb, m, opts);
+    lgHealth(wb, m, opts);
     insightsSheet(wb, m);
-    method(wb, m);
+    about(wb, m);
     return wb;
   }
 

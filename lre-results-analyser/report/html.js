@@ -65,7 +65,7 @@
       ${opts.logoDataUrl ? `<img class="logo" src="${esc(opts.logoDataUrl)}" alt="logo">` : ""}
       <div class="eyebrow">${esc(opts.company || m.meta.project || "")}</div>
       <h1>${esc(title)}</h1>
-      <p class="lead">${esc(fmt.localTime(m.meta.startUtc, off))} – ${esc(fmt.localTime(m.meta.stopUtc, off))} (${esc(fmt.zone(off))}) · ${esc(fmt.hms(m.meta.durationSec))}</p>
+      <p class="lead">${esc(fmt.when(m.meta.startUtc, off))} → ${esc(fmt.when(m.meta.stopUtc, off))} (${esc(fmt.zone(off))}) · ${esc(fmt.dur(m.meta.durationSec))}</p>
       <div class="verdict" style="border-color:${vcol};color:${vcol}">${esc(ins.verdict.text)}</div>
       <p class="muted">Computed from the LRE raw results by LRE Results Analyser ${esc(m.engineVersion)} on ${esc(m.generatedAt.slice(0, 10))}. Independent of LRE Analysis.</p>
     </section>`);
@@ -74,7 +74,7 @@
     sections.push(`<section><h2>1. Executive summary</h2>
       <div class="kpis">
         ${kpi("Peak VUsers", fmt.int(m.totals.peakVusers))}
-        ${kpi("Steady state", w ? fmt.hms(w.durationSec) : "-", w && !w.detected ? "user-set window" : "")}
+        ${kpi("Steady state", w ? fmt.dur(w.durationSec) : "-", w && !w.detected ? "user-set window" : "")}
         ${kpi("Transactions", fmt.int(m.totals.samples))}
         ${kpi("TPS (steady)", fmt.num(m.totals.tpsSteady, 2))}
         ${kpi("Failed", m.totals.fail != null ? fmt.int(m.totals.fail) : "n/a")}
@@ -109,7 +109,7 @@
       ? `<div class="aggnote"><b>${esc(m.aggregation.title)}.</b> ${esc(m.aggregation.note)}</div>` : "";
     sections.push(`<section><h2>3. Results — steady state</h2>
       ${aggNote}
-      <p class="muted">${w ? `${w.detected ? "Detected steady state" : "User-set analysis window"}: t+${fmt.hms(w.start)} – t+${fmt.hms(w.end)} (${esc(fmt.relLocal(m, w.start))} – ${esc(fmt.relLocal(m, w.end))}).` : "No steady-state window."} Response times in seconds. ${esc(m.method.summaryBasis || "")}. ${m.settings && m.settings.sla && Object.keys(m.settings.sla.perTx || {}).length + (m.settings.sla.defaultSec != null ? 1 : 0) ? `SLA on P${m.settings.sla.percentile}.` : ""}</p>
+      <p class="muted">${w ? `${w.detected ? "Steady state" : "User-set analysis window"}: ${esc(fmt.relRange(m, w.start, w.end))} (${esc(fmt.dur(w.durationSec))}).` : "No steady-state window."} Response times in seconds. ${esc(m.method.summaryBasis || "")}. ${m.settings && m.settings.sla && Object.keys(m.settings.sla.perTx || {}).length + (m.settings.sla.defaultSec != null ? 1 : 0) ? `SLA on P${m.settings.sla.percentile}.` : ""}</p>
       ${txTable(m, "steady")}
       ${figure(c, "txBars")}
     </section>`);

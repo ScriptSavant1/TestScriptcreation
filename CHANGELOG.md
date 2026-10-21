@@ -5,6 +5,22 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed / Changed — Results Analyser: end-user review of every section
+- Steady state in long soaks (BUG-061): ends at the start of the final ramp-down, not at the first VUser
+  that stopped on error; VUsers that stopped early are counted, shown in the schedule and raise a finding.
+- Workload iterations per script (BUG-062), random think time text (BUG-063), error groups keep the
+  script line and show a real message (BUG-064).
+- Times are human-readable everywhere ("Thu 08 Oct 2026, 07:31:24 → 09:23:33", "1 day 3 h 36 min");
+  no more "t+hh:mm:ss". The analysis window is chosen with date/time pickers.
+- Overview: eight tiles (Peak VUsers, Test duration, Steady state, Transactions per second, passed,
+  failed, errors, slowest/SLA) and a "Test statistics" card with LRE's summary figures (hits, throughput
+  in bytes, passed ratio). Test details: script count instead of ~80 names, Controller host, LoadRunner
+  version, readable schedule.
+- Workload: "Workload design" (totals row, stopped-early column), "Load generators — VUsers and resource
+  usage" (script count, expandable list, Controller role), VUsers with local start/stop times.
+- Excel: charts on the Time Series and LG Health sheets (page export), real error messages, readable
+  times, "About this report" instead of "Method & Validation" (self-checks stay in the JSON export).
+
 ### Removed — PerfX Recorder browser extension; Docs/ made local-only
 - `perfx-recorder-extension/` deleted (replaced by the CDP Recorder) and purged from the GitHub history of
   every branch. Home page: hidden extension banner, install modal and its CSS/JS removed; tool card,

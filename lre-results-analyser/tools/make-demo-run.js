@@ -83,6 +83,8 @@ async function main() {
     vus.push({ v, lg: LGS[(v - 1) % 2], init, run: init + 3, exit: START + 5 + (nVu - 1) * ramp + 3 + runSec + (v - 1) * ramp });
   }
   const end = Math.max(...vus.map((x) => x.exit)) + 1;
+  // two VUsers stop on error part-way through (as a script with "stop VUser on error" does in a long soak)
+  if (nVu >= 10) { vus[nVu - 1].exit = vus[nVu - 1].run + Math.round(runSec * 0.4); vus[nVu - 2].exit = vus[nVu - 2].run + Math.round(runSec * 0.65); }
 
   // RawData.eve
   const fd = fs.openSync(path.join(dir, "RawData.eve"), "w");
@@ -160,9 +162,10 @@ async function main() {
   // sum_data
   const g = (n, lines) => fs.writeFileSync(path.join(dir, "sum_data", `graph_${n}.dat`), lines.join("\n") + "\n");
   const sumIni = [`[General]\nVersion=1\nScenarioStartTime=${START}\nScenarioDuration=${end - START}`];
-  sumIni.push("[graph_1]\nGraphType=es_tr_lg_monitoring\n" + LGS.flatMap((l, i) => [`Measurement_${i * 2}=${10 + i * 2},${l.split(".")[0]} [192.0.2.${10 + i}] - CPU Usage (%)`, `Measurement_${i * 2 + 1}=${11 + i * 2},${l.split(".")[0]} [192.0.2.${10 + i}] - Memory Usage (%)`]).join("\n"));
+  const MONITORED = LGS.concat(["ctrl-demo.example.test"]); // the Controller is monitored too, with no VUsers
+  sumIni.push("[graph_1]\nGraphType=es_tr_lg_monitoring\n" + MONITORED.flatMap((l, i) => [`Measurement_${i * 2}=${10 + i * 2},${l.split(".")[0]} [192.0.2.${10 + i}] - CPU Usage (%)`, `Measurement_${i * 2 + 1}=${11 + i * 2},${l.split(".")[0]} [192.0.2.${10 + i}] - Memory Usage (%)`]).join("\n"));
   const g1 = [];
-  for (let t = START; t < end; t += 15) LGS.forEach((l, i) => {
+  for (let t = START; t < end; t += 15) MONITORED.forEach((l, i) => {
     const base = i === 1 ? 62 : 38;
     const cpu = Math.min(99, base + 10 * Math.sin((t - START) / 900) + r() * 8 + (Math.abs(t - spikeAt) < 120 ? 30 : 0));
     g1.push(`${10 + i * 2} ${t} ${cpu.toFixed(4)} 1 ${cpu.toFixed(4)} ${cpu.toFixed(4)} 0`, `${11 + i * 2} ${t} ${(35 + i * 10 + (t - START) / runSec * 8).toFixed(4)} 1 0 0 0`);

@@ -65,10 +65,13 @@
       const limit = n(c.get("ThinkTime", "Limit"));
       const limitOn = c.get("ThinkTime", "LimitFlag") === "1";
       const o = String(opt || "").toUpperCase();
+      // VuGen writes ThinkTimeRandomLow/High; older files RandomLow/High
+      const low = c.get("ThinkTime", "ThinkTimeRandomLow") || c.get("ThinkTime", "RandomLow");
+      const high = c.get("ThinkTime", "ThinkTimeRandomHigh") || c.get("ThinkTime", "RandomHigh");
       const words = o === "NOTHINK" ? "Ignored" :
         o === "RECORDED" ? "As recorded" + (limitOn ? ` (limit ${limit} s)` : "") :
         o === "MULTIPLY" ? `Recorded × ${factor}` + (limitOn ? ` (limit ${limit} s)` : "") :
-        o === "RANDOM" ? `Random ${c.get("ThinkTime", "RandomLow")}–${c.get("ThinkTime", "RandomHigh")}% of recorded` + (limitOn ? ` (limit ${limit} s)` : "") :
+        o === "RANDOM" ? (low != null && high != null ? `Random ${low}–${high} % of recorded` : "Random % of recorded") + (limitOn ? ` (limit ${limit} s)` : "") :
         `"${opt}"`;
       return { source: "cfg [ThinkTime]", type: opt, limit: limitOn ? limit : null, raw: Object.assign({}, s.values), text: words };
     }

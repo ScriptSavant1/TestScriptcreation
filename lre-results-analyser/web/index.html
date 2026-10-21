@@ -109,9 +109,8 @@
       <div class="settings-bar" id="settings-bar" hidden>
         <div class="setting">
           <span class="setting-label">Analysis window</span>
-          <span class="t">t+</span><input id="win-start" class="in-time" placeholder="hh:mm:ss">
-          <span>–</span>
-          <span class="t">t+</span><input id="win-end" class="in-time" placeholder="hh:mm:ss">
+          <span class="t">From</span><input id="win-start" class="in-dt" type="datetime-local" step="1">
+          <span class="t">to</span><input id="win-end" class="in-dt" type="datetime-local" step="1">
           <span class="win-local" id="win-local"></span>
           <button class="btn sm" id="win-apply">Apply</button>
           <button class="btn sm ghost" id="win-reset" title="Back to the detected steady state">Detected</button>
