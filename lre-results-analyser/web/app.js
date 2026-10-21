@@ -459,7 +459,7 @@
       stat("Total hits", hits != null ? fmt.int(hits) : "-", hits != null ? "HTTP requests sent" : "not recorded in this run"),
       stat("Average hits per second", web ? fmt.num(web.hitsPerSec.avg, 2) : t.hitsPerSec ? fmt.num(t.hitsPerSec.avg, 2) : "-", web && web.hitsPerSec.peak != null ? `peak ${fmt.num(web.hitsPerSec.peak, 1)}` : ""),
       stat("Total throughput", bytes != null ? fmt.bytes(bytes) : "-", bytes != null ? `${fmt.int(Math.round(bytes))} bytes received` : "not recorded in this run"),
-      stat("Average throughput", bytes != null ? `${fmt.bytes(web.throughputBytesPerSec.avg)}/s` : t.throughputBytesPerSec ? `${fmt.bytes(t.throughputBytesPerSec.avg)}/s` : "-", bytes != null ? `${fmt.int(Math.round(web.throughputBytesPerSec.avg))} bytes/s` : ""),
+      stat("Average throughput", bytes != null ? `${fmt.bytes(web.throughputBytesPerSec.avg)}/s` : t.throughputBytesPerSec && t.throughputBytesPerSec.avg ? `${fmt.bytes(t.throughputBytesPerSec.avg)}/s` : "-", bytes != null ? `${fmt.int(Math.round(web.throughputBytesPerSec.avg))} bytes/s` : ""),
       stat("Errors logged", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors ? `${fmt.int(m.errors.summary.length)} different error${m.errors.summary.length === 1 ? "" : "s"}` : ""),
     ].join("");
     const controller = m.lgs.find((l) => l.role === "controller");
