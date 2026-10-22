@@ -123,5 +123,61 @@
     return rows;
   }
 
-  return { hms, dur, durShort, when, relWhen, relRange, localTime, utcTime, zone, relLocal, num, int, sec, bytes, SEVERITY, VERDICT, PCT_KEYS, groupByScript, scheduleRows };
+  /** What a machine was used for, in words. */
+  function roleName(l) { return l.role === "controller" ? "Controller" : l.vusers ? "Load generator" : "Monitored host"; }
+
+  /** The test's key facts as [label, value] — the same on the page and in every report. */
+  function testFacts(m) {
+    const off = m.meta.localOffsetSec;
+    const controller = (m.lgs || []).find((l) => l.role === "controller");
+    const used = (m.lgs || []).filter((l) => l.vusers);
+    const vusers = m.lifecycle ? m.lifecycle.vusers : (m.workload || []).reduce((a, x) => a + x.vusers, 0);
+    return [
+      ["Scenario", m.meta.sessionName], ["Project", m.meta.project],
+      ["Run", [m.meta.runId != null ? `Run ${m.meta.runId}` : null, m.meta.resultName].filter(Boolean).join(" · ") || null],
+      ["Start", `${when(m.meta.startUtc, off)} (${zone(off)})`], ["End", when(m.meta.stopUtc, off)], ["Duration", dur(m.meta.durationSec)],
+      ["How it ended", m.meta.stopReason],
+      ["Scripts", `${(m.workload || []).length} script${(m.workload || []).length === 1 ? "" : "s"} · ${int(vusers)} VUsers`],
+      ["Load generators", `${used.length} machine${used.length === 1 ? "" : "s"} ran the VUsers`],
+      ["Controller", controller ? controller.name : null], ["LoadRunner version", [m.meta.product, m.meta.version].filter(Boolean).join(" ")],
+      ["Load behaviour", m.meta.loadBehavior],
+    ].filter(([, v]) => v != null && v !== "");
+  }
+
+  /** "About this report": how the figures are worked out, in plain words — for every report. */
+  function aboutRows(m) {
+    const sla = m.settings && m.settings.sla && (m.settings.sla.defaultSec != null || Object.keys(m.settings.sla.perTx || {}).length);
+    return [
+      ["Where the numbers come from", "The raw results LoadRunner Enterprise saved for this run (RawData.eve and the files next to it). Nothing is estimated: every transaction the VUsers completed is counted."],
+      ["Response time", "Seconds from the start to the end of each transaction, without think time and without wasted time — the same as LoadRunner Analysis."],
+      ["Min, Avg, Max, percentiles", "Worked out from every passed transaction on its own. P90 = 90 % of the transactions were this fast or faster. Failed transactions are counted in Fail but left out of the timings, as LoadRunner does."],
+      ["Steady state", m.window ? `${relRange(m, m.window.start, m.window.end)} (${dur(m.window.durationSec)})${m.window.detected ? " — from the end of the ramp-up (the last VUser started) to the start of the ramp-down (the final burst of VUsers stopping). VUsers that stopped earlier are listed, not used to cut the period short." : " — set by the user."}` : "Not detected."],
+      ["Transactions per second", "Count ÷ length of the period in seconds."],
+      ["Hits and throughput", "Hits = HTTP requests; throughput = bytes received from the application; averages are over the whole test, as in LoadRunner Analysis."],
+      ["Errors", "Errors logged by the VUsers (LoadRunner's error log, error type only). Errors with the same code, script line and message are counted together."],
+      ["SLA", sla ? `P${m.settings.sla.percentile} of each transaction against the thresholds entered; Apdex uses the threshold as T.` : "No thresholds were set."],
+      ["Time zone", `All times are local to the test: ${zone(m.meta.localOffsetSec)}.`],
+      ["Differences from LoadRunner Analysis", "Names, counts, pass/fail, averages, hits, HTTP codes and throughput match LoadRunner Analysis. Min, Max, Std Dev and percentiles can differ on busy transactions when LoadRunner Analysis has data aggregation switched on: it averages transactions into time slots first, while this report uses every transaction."],
+      ["Produced by", `LRE Results Analyser ${m.engineVersion} on ${String(m.generatedAt || "").slice(0, 10)}`],
+    ];
+  }
+
+  /**
+   * Checks that passed, grouped: "Pacing achieved — <script>" × 62 becomes one line
+   * "Pacing achieved — 62 scripts". Returns [{ title, count, items }].
+   */
+  function goodSummary(findings) {
+    const groups = new Map();
+    for (const f of findings || []) {
+      if (f.severity !== "good") continue;
+      const i = f.title.indexOf(" — ");
+      const head = i > 0 ? f.title.slice(0, i) : f.title;
+      if (!groups.has(head)) groups.set(head, []);
+      if (i > 0) groups.get(head).push(f.title.slice(i + 3));
+    }
+    return [...groups.entries()].map(([title, items]) => ({ title, count: items.length, items }));
+  }
+
+  return { hms, dur, durShort, when, relWhen, relRange, localTime, utcTime, zone, relLocal, num, int, sec, bytes, SEVERITY, VERDICT, PCT_KEYS, groupByScript, scheduleRows,
+    roleName, testFacts, aboutRows, goodSummary };
 });

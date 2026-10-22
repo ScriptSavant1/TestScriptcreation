@@ -5,6 +5,16 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Fixed / Changed — Results Analyser reports (BUG-065, BUG-066)
+- Excel: new "Charts" sheet (all report charts, two per row); Time Series and LG Health are plain data
+  sheets again and scroll normally (only the header row is frozen).
+- PDF and Word: landscape A4; Executive summary mirrors the page (eight figures, web traffic, top
+  findings, checked-and-fine summary); test facts with Controller host; full workload design; Count,
+  Pass, Fail per period; every error group with its real message (script line included); readable
+  times; two charts per page; "About this report" replaces the method/self-check appendix (the
+  self-checks stay in the JSON export).
+- HTML report is now its own button next to PDF (was under More).
+
 ### Changed — Results Analyser: no duplicate figures, consistent periods
 - Overview: "Test statistics" became "Web traffic — whole test" (hits, hits/s, throughput, throughput/s
   with peaks); the VUser, transaction and error figures are only in the tiles. Errors tile shows how

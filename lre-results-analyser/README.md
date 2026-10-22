@@ -125,7 +125,7 @@ LRE report shows maxima of 7.421 s and 0.363 s. The analyser's figures are the t
 |---|---|
 | Test Overview | Cards: Test Metadata, Execution Time, Run Details, High-Level Metrics, Performance, VUsers per LG, HTTP codes, schedule planned vs actual |
 | Transactions – Full Run / – Steady State | One merged script cell per group, a row per transaction (count, pass, fail, min/avg/max, std dev, P50–P99, TPS, SLA, Apdex) and a subtotal |
-| Workload Model, Errors, Time Series (with charts), LG Health (with charts), Insights, About this report | as named — charts are added by the page export (the CLI has no PNG renderer) |
+| Charts (page export only — the CLI has no PNG renderer), Workload Model, Errors, Time Series, LG Health, Insights, About this report | as named |
 
 The layout is agreed with the users — keep it.
 

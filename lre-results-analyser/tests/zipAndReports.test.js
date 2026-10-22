@@ -114,7 +114,9 @@ describe("charts, HTML (PDF) and Word reports", () => {
   test("HTML report has every section, escapes text and embeds charts", () => {
     const { buildReport } = require("../report/html");
     const html = buildReport(m, { charts: { load: '<svg width="10"></svg>' }, company: "A<B" });
-    for (const h of ["1. Executive summary", "2. Test and workload", "3. Results — steady state", "4. Results — full run", "8. All findings", "Appendix — method and validation"]) expect(html).toContain(h);
+    for (const h of ["1. Executive summary", "2. Test and workload", "3. Results — steady state", "4. Results — whole test", "6. Errors", "8. All findings", "About this report"]) expect(html).toContain(h);
+    expect(html).toContain("size: A4 landscape"); // wide tables keep every column readable
+    expect(html).not.toContain("Self-checks"); // technical checks stay in the JSON export
     expect(html).toContain("A&lt;B");
     expect(html).toContain('<svg class="chart"');
     expect(html).toContain("T01_LOGIN");
@@ -129,5 +131,7 @@ describe("charts, HTML (PDF) and Word reports", () => {
     const xml = Buffer.from(await z.read("word/document.xml")).toString();
     expect(xml).toContain("Executive summary");
     expect(xml).toContain("T02_SUBMIT");
+    expect(xml).toMatch(/<w:pgSz [^>]*w:orient="landscape"/);
+    expect(xml).toContain("About this report");
   });
 });

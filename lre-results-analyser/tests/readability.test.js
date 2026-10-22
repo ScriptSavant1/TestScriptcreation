@@ -87,3 +87,29 @@ describe("human-readable times", () => {
     expect(fmt.relRange(m, 1425, 90000)).toBe("Thu 08 Oct 2026, 08:31:24 → Fri 09 Oct 2026, 09:07:39");
   });
 });
+
+describe("shared report content", () => {
+  test("passed checks are grouped: one line per kind, with how many", () => {
+    const f = (title, severity = "good") => ({ title, severity });
+    expect(fmt.goodSummary([f("Pacing achieved — A"), f("Pacing achieved — B"), f("Stable throughput"), f("Load generators agree"), f("Slow", "high")])).toEqual([
+      { title: "Pacing achieved", count: 2, items: ["A", "B"] },
+      { title: "Stable throughput", count: 0, items: [] },
+      { title: "Load generators agree", count: 0, items: [] },
+    ]);
+  });
+  test("test facts name the Controller host and count scripts instead of listing them", () => {
+    const m = {
+      meta: { startUtc: T0, stopUtc: T0 + 3600, durationSec: 3600, localOffsetSec: 3600, sessionName: "S", product: "Controller", version: "2025.1" },
+      workload: [{ vusers: 3 }, { vusers: 2 }], lifecycle: { vusers: 5 },
+      lgs: [{ name: "lg1", vusers: 5, role: "load generator" }, { name: "ctrl.example.test", vusers: 0, role: "controller" }],
+    };
+    const facts = Object.fromEntries(fmt.testFacts(m));
+    expect(facts).toMatchObject({ Scripts: "2 scripts · 5 VUsers", Controller: "ctrl.example.test", "LoadRunner version": "Controller 2025.1", "Load generators": "1 machine ran the VUsers" });
+    expect(fmt.roleName(m.lgs[1])).toBe("Controller");
+  });
+  test("About this report is plain words, no self-check jargon", () => {
+    const rows = fmt.aboutRows({ meta: { localOffsetSec: 0 }, window: null, settings: null, engineVersion: "1", generatedAt: "2026-10-22T00:00:00Z" });
+    expect(rows.map((r) => r[0])).toContain("Differences from LoadRunner Analysis");
+    expect(JSON.stringify(rows)).not.toMatch(/sub-type|0x00C00FC0|selfCheck/);
+  });
+});

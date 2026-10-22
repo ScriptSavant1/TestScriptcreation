@@ -306,11 +306,25 @@
     widths(ws, [26, 30, 11, 90, 60, 8, 12, 24, 24, 16]);
   }
 
-  /** Place chart images (opts.images) in a grid of two per row from `row`; returns the first row below them. */
+  /**
+   * "Charts" sheet: every report chart (opts.images, rendered by the page), two per row. Kept on a
+   * sheet of its own so the data sheets scroll normally (freezing rows under a block of pictures
+   * froze the whole screen). Not added when there are no images (CLI).
+   */
+  function chartsSheet(wb, m, opts) {
+    const keys = ["load", "txBars", "rtOverTime", "throughput", "errors", "httpCodes", "bytes", "lgHealth", "rtPerLg", "tpsVsRt", "latencyHeat", "vuserHeat"];
+    if (!keys.some((k) => opts.images && opts.images[k])) return;
+    const ws = wb.addWorksheet("Charts", { views: [{ showGridLines: false }] });
+    for (let c = 1; c <= 20; c++) ws.getColumn(c).width = 10; // ≈ 75 px each: the second chart starts at column J
+    title(ws, "Charts", "The test at a glance — the data behind each chart is on the Time Series, LG Health and transaction sheets.");
+    placeCharts(wb, ws, 4, opts.images, keys);
+  }
+
+  /** Place chart images in a grid of two per row from `row`; returns the first row below them. */
   function placeCharts(wb, ws, row, images, keys) {
     const list = keys.map((k) => images && images[k]).filter(Boolean);
     if (!list.length) return row;
-    const W = 620, ROWPX = 20;
+    const W = 640, ROWPX = 20;
     let r = row;
     for (let i = 0; i < list.length; i += 2) {
       let hMax = 0;
@@ -318,7 +332,7 @@
         const h = Math.round((W * img.height) / img.width);
         hMax = Math.max(hMax, h);
         const id = wb.addImage({ base64: img.url, extension: "png" });
-        ws.addImage(id, { tl: { col: j === 0 ? 0 : 7, row: r - 1 }, ext: { width: W, height: h } });
+        ws.addImage(id, { tl: { col: j === 0 ? 0.2 : 9.2, row: r - 1 }, ext: { width: W, height: h } });
       });
       r += Math.ceil(hMax / ROWPX) + 1;
     }
@@ -326,11 +340,10 @@
   }
 
   function timeSeries(wb, m, opts) {
-    const ws = wb.addWorksheet("Time Series", { views: [{ showGridLines: true }] });
+    const ws = wb.addWorksheet("Time Series", { views: [{ state: "frozen", xSplit: 2, ySplit: 4 }] });
     const tl = m.timeline;
-    title(ws, "Time Series", `One row per ${tl.bucketSec}-second slot. Response times in seconds. The charts show the same data.`);
-    const top = placeCharts(wb, ws, 4, opts.images, ["load", "rtOverTime", "throughput", "errors", "httpCodes", "bytes"]);
-    ws.views = [{ state: "frozen", xSplit: 2, ySplit: top }];
+    title(ws, "Time Series", `One row per ${tl.bucketSec}-second slot. Response times in seconds.${opts.images ? " The Charts sheet shows the same data as charts." : ""}`);
+    const top = 4;
     const txs = m.transactions;
     const graphCols = [];
     for (const g of tl.graphs || []) if (["hits", "bytesReceived", "bytesSent", "httpCodes", "connections", "connectionsPerSec", "throughput"].includes(g.role))
@@ -355,7 +368,7 @@
     const ws = wb.addWorksheet("LG Health");
     if (!m.lgHealth || !m.lgHealth.length) { title(ws, "LG Health", "No load-generator monitoring in sum_data (graph es_tr_lg_monitoring)"); return; }
     title(ws, "LG Health", "CPU / memory / disk of the test machines (LRE's load-generator monitor). Above 85 % the machine itself may slow the test down.");
-    const top = placeCharts(wb, ws, 4, opts.images, ["lgHealth", "rtPerLg"]);
+    const top = 3;
     header(ws, top, ["Host", "IP", "CPU avg %", "CPU peak %", "Memory avg %", "Memory peak %", "Disk avg", "Disk peak"]);
     let r = top + 1;
     for (const h of m.lgHealth) {
@@ -395,20 +408,7 @@
   function about(wb, m) {
     const ws = wb.addWorksheet("About this report");
     title(ws, "About this report", "How the figures in this workbook are worked out, in plain words");
-    const sla = m.settings && m.settings.sla && (m.settings.sla.defaultSec != null || Object.keys(m.settings.sla.perTx || {}).length);
-    kv(ws, 4, [
-      ["Where the numbers come from", "The raw results LoadRunner Enterprise saved for this run (RawData.eve and the files next to it). Nothing is estimated: every transaction the VUsers completed is counted."],
-      ["Response time", "Seconds from the start to the end of each transaction, without think time and without wasted time — the same as LoadRunner Analysis."],
-      ["Min, Avg, Max, percentiles", "Worked out from every passed transaction on its own. P90 = 90 % of the transactions were this fast or faster. Failed transactions are counted in Fail but left out of the timings, as LoadRunner does."],
-      ["Steady state", m.window ? `${fmt.relRange(m, m.window.start, m.window.end)} (${fmt.dur(m.window.durationSec)})${m.window.detected ? " — from the end of the ramp-up (the last VUser started) to the start of the ramp-down (the final burst of VUsers stopping). VUsers that stopped earlier are listed, not used to cut the period short." : " — set by the user."}` : "Not detected."],
-      ["Transactions per second", "Count ÷ length of the period in seconds."],
-      ["Hits and throughput", "Hits = HTTP requests; throughput = bytes received from the application; averages are over the whole test, as in LoadRunner Analysis."],
-      ["Errors", "Errors logged by the VUsers (LoadRunner's error log, error type only). Errors with the same code, script line and message are counted together."],
-      ["SLA", sla ? `P${m.settings.sla.percentile} of each transaction against the thresholds entered; Apdex uses the threshold as T.` : "No thresholds were set."],
-      ["Time zone", `All times are local to the test: ${fmt.zone(m.meta.localOffsetSec)}.`],
-      ["Differences from LoadRunner Analysis", "Names, counts, pass/fail, averages, hits, HTTP codes and throughput match LoadRunner Analysis. Min, Max, Std Dev and percentiles can differ on busy transactions when LoadRunner Analysis has data aggregation switched on: it averages transactions into time slots first, while this report uses every transaction."],
-      ["Produced by", `LRE Results Analyser ${m.engineVersion} on ${m.generatedAt.slice(0, 10)}`],
-    ]);
+    kv(ws, 4, fmt.aboutRows(m));
     widths(ws, [34, 130]);
     ws.getColumn(2).alignment = { wrapText: true, vertical: "top" };
     ws.getColumn(1).alignment = { vertical: "top" };
@@ -420,6 +420,7 @@
     wb.creator = "LRE Results Analyser";
     wb.created = new Date();
     overview(wb, m);
+    chartsSheet(wb, m, opts);
     txSheet(wb, m, "full");
     txSheet(wb, m, "steady");
     workload(wb, m);
