@@ -182,7 +182,8 @@
       if (ratio < 0.95) add("medium", "validity", "Steady state shorter than planned",
         `Planned run ${clock(runStep.durationSec)}, actual steady state ${clock(m.phases.steady.durationSec)} (${pct(ratio)}). Stop reason: ${m.meta.stopReason || "unknown"}.`,
         { plannedSec: runStep.durationSec, steadySec: m.phases.steady.durationSec }, "vusers");
-      else add("good", "validity", "Full steady state achieved", `All VUsers ran together for ${clock(m.phases.steady.durationSec)} (planned ${clock(runStep.durationSec)}).`, null, "vusers");
+      else add("good", "validity", "Full steady state achieved", `The test held its full load for ${clock(m.phases.steady.durationSec)} (planned ${clock(runStep.durationSec)})` +
+        (m.lifecycle && m.lifecycle.earlyExits && m.lifecycle.earlyExits.length ? ` — apart from the ${m.lifecycle.earlyExits.length} VUser(s) that stopped early (see above).` : "."), null, "vusers");
     }
 
     // 1b. VUsers that stopped before the ramp-down (stopped on error / aborted)
@@ -377,7 +378,7 @@
       const top = m.errors.summary[0];
       const iters = (m.vusers || []).reduce((a, v) => a + (v.iterations || 0), 0);
       add(m.errors.total / Math.max(1, iters) > 0.01 ? "high" : "medium", "errors", `${m.errors.total} error(s) logged`,
-        `Most frequent: code ${top.code} ×${top.count} — "${top.pattern.slice(0, 120)}"${top.firstUtc != null ? `, first at ${at(top.firstUtc - m.meta.startUtc)}` : ""}.` +
+        `Most frequent: code ${top.code} ×${top.count} — "${String(top.example || top.pattern).slice(0, 160)}"${top.firstUtc != null ? `, first at ${at(top.firstUtc - m.meta.startUtc)}` : ""}.` +
         (iters ? ` That is ${(m.errors.total / iters * 100).toFixed(2)} errors per 100 iterations.` : ""),
         { total: m.errors.total, top: { code: top.code, count: top.count } }, "errors");
     } else if (m.errors) add("good", "errors", "No errors logged", "SqliteDb.db holds no error records for this run.", null, "errors");

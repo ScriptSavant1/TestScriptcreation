@@ -426,7 +426,8 @@
   // ── Overview ────────────────────────────────────────────────────────────────
   function overview(p) {
     const m = state.model, t = m.totals, ins = m.insights, off = m.meta.localOffsetSec;
-    const kpi = (l, v, sub, cls, key, ico) => `<div class="kpi ${cls ? "kpi-" + cls : ""}" title="${esc(NT.KPIS[key] || "")}"><div class="kpi-top"><span class="kpi-ico">${NT.icon(ico || "info")}</span><span class="l">${esc(l)}</span></div><div class="v ${cls || ""}">${esc(v)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ""}</div>`;
+    // full: the exact value, shown on hover when the tile shows a shortened one
+    const kpi = (l, v, sub, cls, key, ico, full) => `<div class="kpi ${cls ? "kpi-" + cls : ""}" title="${esc((full ? full + " — " : "") + (NT.KPIS[key] || ""))}"><div class="kpi-top"><span class="kpi-ico">${NT.icon(ico || "info")}</span><span class="l">${esc(l)}</span></div><div class="v ${cls || ""}">${esc(v)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ""}</div>`;
     const issues = ins.findings.filter((f) => f.severity === "high" || f.severity === "medium");
     const total = t.pass != null && t.fail != null ? t.pass + t.fail : null;
     const failPct = total ? (t.fail / total) * 100 : null;
@@ -441,26 +442,22 @@
     const winName = m.window && !m.window.detected ? "Analysis window" : "Steady state";
     const line = [
       t.peakVusers != null ? `${fmt.int(t.peakVusers)} VUsers` : null,
-      m.window ? `${winName.toLowerCase()} ${fmt.dur(m.window.durationSec)}` : null,
+      m.window ? `${winName.toLowerCase()} ${fmt.durShort(m.window.durationSec)}` : null,
       t.tpsSteady != null ? `${fmt.num(t.tpsSteady, 2)} transactions/s` : null,
       failPct != null ? `${failPct.toFixed(2)} % failed` : null,
       t.errors != null ? `${fmt.int(t.errors)} errors` : null,
     ].filter(Boolean).join(" · ");
     const pct = (a, b) => (a != null && b ? `${((a / b) * 100).toFixed(2)} %` : "-");
-    // whole-test statistics, as on LoadRunner Analysis' summary page
+    // web traffic over the whole test (hits and data received), as on LoadRunner Analysis' summary
+    // page; the VUser, transaction and error figures are in the tiles above, so they are not repeated
     const web = m.web;
     const hits = web && web.hits ? web.hits : null, bytes = web && web.throughputBytes ? web.throughputBytes : null; // 0 = not recorded in this run
-    const stat = (l, v, sub) => `<div class="stat"><div class="stat-l">${esc(l)}</div><div class="stat-v">${esc(v)}</div>${sub ? `<div class="stat-s">${esc(sub)}</div>` : ""}</div>`;
-    const stats = [
-      stat("Maximum running VUsers", fmt.int(t.peakVusers), m.lifecycle ? `${fmt.int(m.lifecycle.vusers)} started${early ? ` · ${fmt.int(early)} stopped early` : ""}` : ""),
-      stat("Transactions", total != null ? fmt.int(total) : fmt.int(t.samples), total != null ? `${fmt.int(t.pass)} passed · ${fmt.int(t.fail)} failed` : ""),
-      stat("Passed transactions ratio", total ? pct(t.pass, total) : "-", "passed ÷ (passed + failed)"),
-      stat("Transactions per second", fmt.num(t.tpsFull, 2), `whole test · ${fmt.num(t.tpsSteady, 2)} in the ${winName.toLowerCase()}`),
-      stat("Total hits", hits != null ? fmt.int(hits) : "-", hits != null ? "HTTP requests sent" : "not recorded in this run"),
-      stat("Average hits per second", web ? fmt.num(web.hitsPerSec.avg, 2) : t.hitsPerSec ? fmt.num(t.hitsPerSec.avg, 2) : "-", web && web.hitsPerSec.peak != null ? `peak ${fmt.num(web.hitsPerSec.peak, 1)}` : ""),
-      stat("Total throughput", bytes != null ? fmt.bytes(bytes) : "-", bytes != null ? `${fmt.int(Math.round(bytes))} bytes received` : "not recorded in this run"),
-      stat("Average throughput", bytes != null ? `${fmt.bytes(web.throughputBytesPerSec.avg)}/s` : t.throughputBytesPerSec && t.throughputBytesPerSec.avg ? `${fmt.bytes(t.throughputBytesPerSec.avg)}/s` : "-", bytes != null ? `${fmt.int(Math.round(web.throughputBytesPerSec.avg))} bytes/s` : ""),
-      stat("Errors logged", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors ? `${fmt.int(m.errors.summary.length)} different error${m.errors.summary.length === 1 ? "" : "s"}` : ""),
+    const stat = (l, v, sub, ico) => `<div class="stat"><div class="stat-top"><span class="stat-ico">${NT.icon(ico)}</span><span class="stat-l">${esc(l)}</span></div><div class="stat-v">${esc(v)}</div>${sub ? `<div class="stat-s">${esc(sub)}</div>` : ""}</div>`;
+    const traffic = hits == null && bytes == null ? "" : [
+      stat("Total hits", hits != null ? fmt.int(hits) : "-", hits != null ? "HTTP requests sent to the application" : "not recorded in this run", "globe"),
+      stat("Hits per second", hits != null ? fmt.num(web.hitsPerSec.avg, 2) : "-", hits != null && web.hitsPerSec.peak != null ? `average · peak ${fmt.num(web.hitsPerSec.peak, 1)}` : "", "gauge"),
+      stat("Total throughput", bytes != null ? fmt.bytes(bytes) : "-", bytes != null ? `${fmt.int(Math.round(bytes))} bytes received` : "not recorded in this run", "download"),
+      stat("Throughput per second", bytes != null ? `${fmt.bytes(web.throughputBytesPerSec.avg)}/s` : "-", bytes != null ? `average${web.throughputBytesPerSec.peak != null ? ` · peak ${fmt.bytes(web.throughputBytesPerSec.peak)}/s` : ""}` : "", "line"),
     ].join("");
     const controller = m.lgs.find((l) => l.role === "controller");
     const lgsUsed = m.lgs.filter((l) => l.vusers);
@@ -485,17 +482,17 @@
         </div>
         <div class="ov-kpis">
           ${kpi("Peak VUsers", fmt.int(t.peakVusers), m.lifecycle ? (early ? `${fmt.int(early)} of ${fmt.int(m.lifecycle.vusers)} stopped early` : `all ${fmt.int(m.lifecycle.vusers)} ran to the end`) : "", early ? "warn" : "", "vusers", "users")}
-          ${kpi("Test duration", fmt.dur(m.meta.durationSec), `${fmt.when(m.meta.startUtc, off, true)} → ${fmt.when(m.meta.stopUtc, off, true)}`, "", "duration", "clock")}
-          ${kpi(winName, m.window ? fmt.dur(m.window.durationSec) : "-", m.window ? `${fmt.relWhen(m, m.window.start, true)} → ${fmt.relWhen(m, m.window.end, true)}` : "not detected", "", "steady", "clock")}
+          ${kpi("Test duration", fmt.durShort(m.meta.durationSec), `${fmt.when(m.meta.startUtc, off, true)} → ${fmt.when(m.meta.stopUtc, off, true)}`, "", "duration", "clock", fmt.dur(m.meta.durationSec))}
+          ${kpi(winName, m.window ? fmt.durShort(m.window.durationSec) : "-", m.window ? `${fmt.relWhen(m, m.window.start, true)} → ${fmt.relWhen(m, m.window.end, true)}` : "not detected", "", "steady", "clock", m.window ? fmt.dur(m.window.durationSec) : "")}
           ${kpi("Transactions per second", t.tpsSteady != null ? fmt.num(t.tpsSteady, 2) : "-", `TPS in the ${winName.toLowerCase()} · whole test ${fmt.num(t.tpsFull, 2)}`, "", "throughput", "gauge")}
           ${kpi("Transactions passed", fmt.int(t.pass != null ? t.pass : t.samples), total ? `${pct(t.pass, total)} of ${fmt.int(total)}` : "", "ok", "passed", "check")}
           ${kpi("Transactions failed", t.fail != null ? fmt.int(t.fail) : "n/a", total ? `${pct(t.fail, total)} of all transactions` : "", t.fail ? (failPct >= 1 ? "bad" : "warn") : "ok", "failed", "alert")}
-          ${kpi("Errors logged", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors && m.errors.summary[0] ? `most common: ${m.errors.summary[0].code} (${fmt.int(m.errors.summary[0].count)}×)` : "", t.errors ? "bad" : "ok", "errors", "alert")}
+          ${kpi("Errors logged", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors && m.errors.summary[0] ? `${fmt.int(m.errors.summary.length)} different · most common ${m.errors.summary[0].code} (${fmt.int(m.errors.summary[0].count)}×)` : t.errors === 0 ? "no errors logged" : "", t.errors ? "bad" : "ok", "errors", "alert")}
           ${slaRows.length ? kpi("SLA", `${slaRows.length - slaFail.length} / ${slaRows.length} met`, slaFail.length ? `${slaFail.length} missed` : "all within threshold", slaFail.length ? "bad" : "ok", "sla", "check")
             : kpi("Slowest (P90)", top ? fmt.sec(top[which].p.p90) : "-", top ? top.label || top.name : "", "", "slowest", "bar")}
         </div>
       </div>
-      <div class="card" data-ckey="stats"><h3>Test statistics — whole test</h3><div class="stats-grid">${stats}</div></div>
+      ${traffic ? `<div class="card" data-ckey="stats"><h3>Web traffic — whole test</h3><div class="stats-grid">${traffic}</div></div>` : ""}
       <div class="card" data-ckey="load"><h3>Load, throughput and errors over time</h3><div class="chart" id="ov-load"></div></div>
       <div class="grid-2">
         <div class="card" data-ckey="slowest"><h3>Slowest transactions — P90 (${which === "steady" ? winName.toLowerCase() : "whole test"})</h3>
@@ -533,11 +530,16 @@
   function pctCell(v) { return v == null ? "-" : `<span class="${v >= 85 ? "bad-txt" : ""}">${v.toFixed(0)} %</span>`; }
 
   // ── Transactions ────────────────────────────────────────────────────────────
+  // s = the figures shown (t.full or t.steady); the window keeps passed in s.count and failed in s.fail
+  const passOf = (t, s) => (s === t.full ? t.pass : s.count);
+  const failOf = (t, s) => (s === t.full ? t.fail : s.fail || 0);
+  const failPctOf = (t, s) => { const p = passOf(t, s), f = failOf(t, s); return p + f ? (f / (p + f)) * 100 : null; };
   const TX_COLS = [
     { k: "name", h: "Transaction" }, { k: "count", h: "Count", num: 1, f: (t, s) => fmt.int(s === t.full ? t.count : s.count + (s.fail || 0)), v: (t, s) => (s === t.full ? t.count : s.count + (s.fail || 0)) },
-    { k: "pass", h: "Pass", num: 1, f: (t) => (t.pass == null ? "-" : fmt.int(t.pass)), v: (t) => t.pass },
-    { k: "fail", h: "Fail", num: 1, f: (t) => (t.fail == null ? "-" : fmt.int(t.fail)), v: (t) => t.fail },
-    { k: "failPct", h: "Fail %", num: 1, f: (t) => (t.failPct == null ? "-" : t.failPct.toFixed(2)), v: (t) => t.failPct },
+    // pass / fail follow the view (whole test or the analysis window), like every other column
+    { k: "pass", h: "Pass", num: 1, f: (t, s) => fmt.int(passOf(t, s)), v: (t, s) => passOf(t, s) },
+    { k: "fail", h: "Fail", num: 1, f: (t, s) => fmt.int(failOf(t, s)), v: (t, s) => failOf(t, s) },
+    { k: "failPct", h: "Fail %", num: 1, f: (t, s) => (failPctOf(t, s) == null ? "-" : failPctOf(t, s).toFixed(2)), v: (t, s) => failPctOf(t, s) },
     { k: "min", h: "Min", num: 1, f: (t, s) => n3(s.min), v: (t, s) => s.min }, { k: "avg", h: "Avg", num: 1, f: (t, s) => n3(s.avg), v: (t, s) => s.avg },
     { k: "max", h: "Max", num: 1, f: (t, s) => n3(s.max), v: (t, s) => s.max }, { k: "sd", h: "Std dev", num: 1, f: (t, s) => n3(s.stdDev), v: (t, s) => s.stdDev },
     { k: "p50", h: "P50", num: 1, f: (t, s) => n3(s.p.p50), v: (t, s) => s.p.p50 }, { k: "p90", h: "P90", num: 1, f: (t, s) => n3(s.p.p90), v: (t, s) => s.p.p90 },
@@ -569,7 +571,7 @@
       </div>
       ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. ${FEATURES.granularity && m.aggregation && m.aggregation.active ? "Choose “Exact” in Granularity to see every transaction on its own." : "Every figure is calculated from the individual transactions — nothing is averaged into time slots first."} P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>`}
       <div class="card" data-ckey="txTable"><h3>Transaction summary — ${which === "steady" ? (m.window && !m.window.detected ? "analysis window" : "steady state") : "full run"}</h3><div class="table-wrap"><table class="t" id="tx-table"><thead><tr>
-        ${TX_COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" title="${esc((NT.COLUMNS[c.k] || "") + (which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? " — whole run" : ""))}">${c.h}${which === "steady" && ["pass", "fail", "failPct"].includes(c.k) ? " (run)" : ""}</th>`).join("")}
+        ${TX_COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" title="${esc(NT.COLUMNS[c.k] || "")}">${c.h}</th>`).join("")}
         ${slaCols ? `<th class="num" title="${esc(NT.COLUMNS.sla)}">SLA (s)</th><th title="${esc(NT.COLUMNS.result)}">Result</th><th class="num" title="${esc(NT.COLUMNS.apdex)}">Apdex</th>` : ""}<th title="${esc(NT.COLUMNS.trend)}">P90 trend</th>
       </tr></thead><tbody>
         ${rows.map((r) => {
@@ -617,8 +619,9 @@
     const lgRows = (t.perLg || []).map((l) => `<tr><td>${esc(l.lg)}</td><td class="num">${fmt.int(l.full.count)}</td><td class="num">${n3(l.full.avg)}</td><td class="num">${n3(l.full.p.p90)}</td><td class="num">${n3(l.full.p.p95)}</td><td class="num">${fmt.int(l.steady.count)}</td><td class="num">${n3(l.steady.avg)}</td><td class="num">${n3(l.steady.p.p90)}</td></tr>`).join("");
     const body = $("#drawer-body");
     body.innerHTML = `<div class="drawer-kpis">
-        ${kpi("Count", fmt.int(t.count))}${kpi("Failed", fmt.int(t.fail))}${kpi("Avg", fmt.sec(w.avg))}${kpi("P90", fmt.sec(w.p.p90))}${kpi("P95", fmt.sec(w.p.p95))}${kpi("Max", fmt.sec(w.max))}
+        ${kpi("Count", fmt.int(passOf(t, w) + failOf(t, w)))}${kpi("Failed", fmt.int(failOf(t, w)))}${kpi("Avg", fmt.sec(w.avg))}${kpi("P90", fmt.sec(w.p.p90))}${kpi("P95", fmt.sec(w.p.p95))}${kpi("Max", fmt.sec(w.max))}
       </div>
+      <div class="hint" style="margin:-4px 0 10px">${m.window ? `Figures for the ${m.window.detected ? "steady state" : "analysis window"}: ${esc(fmt.relRange(m, m.window.start, m.window.end))}` : "Figures for the whole test"} · seconds</div>
       <div id="txd-charts"></div>
       <div class="card" data-ckey="lg"><h3>Per load generator</h3><div class="table-wrap"><table class="t"><thead><tr><th>Load generator</th><th class="num">Count</th><th class="num">Avg</th><th class="num">P90</th><th class="num">P95</th><th class="num">Window count</th><th class="num">Window avg</th><th class="num">Window P90</th></tr></thead><tbody>${lgRows}</tbody></table></div></div>`;
     const g = $("#txd-charts", body);
@@ -727,7 +730,7 @@
       </tbody></table></div></div>
       <div id="err-chart"></div>
       <div class="card" data-ckey="errLog"><h3>Error log</h3><div class="tx-controls"><input id="err-q" placeholder="Search message, code, script, VUser, load generator…" style="min-width:320px"><span class="hint" id="err-n"></span></div>
-      <div class="table-wrap" style="max-height:520px;overflow:auto"><table class="t"><thead><tr><th>Time (local)</th><th>Code</th><th>Message</th><th>Script</th><th>VUser</th><th>Injector</th><th class="num">Iteration</th></tr></thead><tbody id="err-rows"></tbody></table></div></div>`;
+      <div class="table-wrap" style="max-height:520px;overflow:auto"><table class="t"><thead><tr><th>Time (local)</th><th>Code</th><th>Message</th><th>Script</th><th>VUser</th><th>Load generator</th><th class="num">Iteration</th></tr></thead><tbody id="err-rows"></tbody></table></div></div>`;
     chartCard($("#err-chart", p), "Errors over time", (o) => C.errorsOverTime(state.model, o), "errors");
     const draw = () => {
       const q = $("#err-q", p).value.toLowerCase();
@@ -752,7 +755,7 @@
     const achievedPill = (a, e) => (e ? `<span class="pill ${a / e >= 0.95 && a / e <= 1.05 ? "ok" : "warn"}">${((a / e) * 100).toFixed(0)} %</span>` : "-");
     const hasIp = m.lgs.some((l) => l.ip);
     const role = (l) => (l.role === "controller" ? "Controller" : l.vusers ? "Load generator" : "Monitored host");
-    p.innerHTML = `<div class="card" data-ckey="wlScripts"><h3>Workload design — scripts, VUsers, pacing and iterations</h3><div class="table-wrap"><table class="t"><thead><tr><th>Script</th><th>Protocol</th><th class="num">VUsers</th><th>Load generators</th><th>Pacing</th><th>Think time</th><th class="num">Iterations planned</th><th class="num">Achieved</th><th class="num">Achieved %</th><th class="num">Transactions</th>${anyEarly ? '<th class="num">Stopped early</th>' : ""}</tr></thead><tbody>
+    p.innerHTML = `<div class="card" data-ckey="wlScripts"><h3>Workload design — scripts, VUsers, pacing and iterations</h3><div class="table-wrap"><table class="t"><thead><tr><th>Script</th><th>Protocol</th><th class="num">VUsers</th><th>Load generators</th><th>Pacing</th><th>Think time</th><th class="num">Iterations planned</th><th class="num">Achieved</th><th class="num">Achieved %</th><th class="num" title="Transactions defined in the script">Transactions in script</th>${anyEarly ? '<th class="num">Stopped early</th>' : ""}</tr></thead><tbody>
       ${m.workload.map((s) => `<tr><td>${esc(s.key)}${s.groups.length && s.groups.join() !== s.key ? `<div class="hint">${esc(s.groups.join(", "))}</div>` : ""}</td><td>${esc(s.protocol || "-")}</td><td class="num">${s.vusers}</td>
         <td title="${esc(s.loadGenerators.map((l) => `${l.name} (${l.vusers})`).join(", "))}">${esc(s.loadGenerators.map((l) => `${short(l.name)} (${l.vusers})`).join(", ") || "-")}</td>
         <td>${esc(s.pacing ? s.pacing.text : "-")}</td><td>${esc(s.thinkTime ? s.thinkTime.text : "-")}</td><td class="num">${s.iterationsExpected != null ? fmt.int(s.iterationsExpected) : "-"}</td><td class="num">${fmt.int(s.iterationsAchieved)}</td>
@@ -763,7 +766,7 @@
         <td>${l.scripts.length ? `<details class="mini"><summary>${l.scripts.length} script${l.scripts.length === 1 ? "" : "s"}</summary><div class="hint">${esc(l.scripts.join(" · "))}</div></details>` : "-"}</td>
         <td class="num">${pctCell(l.cpuPeak)}</td><td class="num">${pctCell(l.memPeak)}</td></tr>`).join("")}
       </tbody></table></div></div>
-      <div class="card" data-ckey="wlVusers"><h3>VUsers — when each one ran, and what it completed</h3><div class="table-wrap" style="max-height:480px;overflow:auto"><table class="t"><thead><tr><th class="num">VUser</th><th>Script</th><th>Load generator</th><th>Started</th><th>Stopped</th><th class="num">Ran for</th><th class="num">Iterations</th><th class="num">Transactions</th><th class="num">Avg RT (s)</th></tr></thead><tbody>
+      <div class="card" data-ckey="wlVusers"><h3>VUsers — when each one ran, and what it completed</h3><div class="table-wrap" style="max-height:480px;overflow:auto"><table class="t"><thead><tr><th class="num">VUser</th><th>Script</th><th>Load generator</th><th>Started</th><th>Stopped</th><th class="num">Ran for</th><th class="num">Iterations</th><th class="num" title="Transactions this VUser completed">Transactions run</th><th class="num">Avg RT (s)</th></tr></thead><tbody>
       ${m.vusers.map((v) => `<tr><td class="num">${v.vuser}</td><td>${esc(v.script)}</td><td title="${esc(v.lg)}">${esc(short(v.lg))}</td><td>${esc(fmt.relWhen(m, v.runRelSec, true))}</td>
         <td>${esc(fmt.relWhen(m, v.exitRelSec, true))}${early.has(`${v.group}|${v.vuser}`) ? ' <span class="pill warn" title="Stopped before the ramp-down">early</span>' : ""}</td>
         <td class="num">${v.runRelSec != null && v.exitRelSec != null ? esc(fmt.dur(v.exitRelSec - v.runRelSec)) : "-"}</td><td class="num">${fmt.int(v.iterations)}</td><td class="num">${fmt.int(v.samples)}</td><td class="num">${n3(v.avgRt)}</td></tr>`).join("")}
@@ -791,7 +794,9 @@
   function insights(p) {
     const ins = state.model.insights;
     const groups = ["high", "medium", "low", "info", "good"];
-    p.innerHTML = `<div class="verdict-banner ${ins.verdict.status}">${esc(ins.verdict.text)}</div>
+    const counts = groups.map((s) => [s, ins.findings.filter((f) => f.severity === s).length]).filter(([, n]) => n);
+    p.innerHTML = `<div class="verdict-banner ${ins.verdict.status}"><span>${esc(ins.verdict.text)}</span>
+        <span class="vb-counts">${counts.map(([s, n]) => `<span class="pill ${s}">${n} ${fmt.SEVERITY[s].label.toLowerCase()}</span>`).join("")}</span></div>
       ${explainHtml("insights")}
       ${groups.map((s) => ins.findings.filter((f) => f.severity === s).map(findingHtml).join("")).join("") || '<div class="na">No findings.</div>'}`;
     bindFindingLinks(p);

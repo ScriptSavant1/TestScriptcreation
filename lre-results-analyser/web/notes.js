@@ -24,6 +24,7 @@
     list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     check: '<path d="M4 12l5 5L20 6"/>',
+    download: '<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>',
   };
   const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.info}</svg>`;
 
@@ -59,11 +60,11 @@
     },
     stats: {
       icon: "gauge",
-      what: "The headline numbers for the whole test, the same figures LoadRunner Analysis shows on its summary page.",
+      what: "How much traffic the test sent to the application: HTTP requests (hits) and the data that came back (throughput) — the same figures LoadRunner Analysis shows on its summary page.",
       read: [
-        "Hits = HTTP requests sent to the application. Throughput = data received from the application (bytes).",
-        "Transactions per second counts business steps (e.g. Login); hits per second counts every request inside them, so it is always higher.",
-        "Passed transactions ratio = passed ÷ (passed + failed).",
+        "Hits = HTTP requests, including pages, API calls, images and scripts. One transaction (e.g. Login) usually makes several, so hits per second is higher than transactions per second.",
+        "Throughput = data received from the application. A drop while the number of VUsers stays level usually means the application slowed down or returned errors.",
+        "Peak = the busiest moment of the test.",
       ],
     },
     details: {

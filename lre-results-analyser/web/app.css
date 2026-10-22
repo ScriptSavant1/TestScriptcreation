@@ -270,3 +270,15 @@ details.mini .hint { margin-top: 4px; max-width: 520px; white-space: normal; }
 table.t tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--primary-dim); }
 
 .in-dt { font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); color-scheme: light dark; }
+
+/* ── web traffic card ── */
+.stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 900px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { padding: 12px 14px; }
+.stat-top { display: flex; align-items: center; gap: 8px; }
+.stat-ico { width: 24px; height: 24px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; background: var(--primary-dim); color: var(--primary); flex: none; }
+.stat-ico .ico { width: 14px; height: 14px; }
+.stat-v { font-size: 20px; margin-top: 6px; }
+
+.verdict-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.vb-counts { display: inline-flex; gap: 6px; flex-wrap: wrap; font-size: 12px; font-weight: 600; }

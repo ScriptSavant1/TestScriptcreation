@@ -5,6 +5,17 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Changed — Results Analyser: no duplicate figures, consistent periods
+- Overview: "Test statistics" became "Web traffic — whole test" (hits, hits/s, throughput, throughput/s
+  with peaks); the VUser, transaction and error figures are only in the tiles. Errors tile shows how
+  many different errors; long durations are shortened in tiles ("1 d 3 h 37 min", exact on hover).
+- Transactions (page, Excel, Word, PDF): Pass, Fail and Fail % follow the chosen view, so in the
+  steady-state view every column covers the steady state (was: whole-run pass/fail beside
+  steady-state counts). The details drawer says which period its figures cover.
+- Insights: banner counts findings by severity; the errors finding quotes a real message; the steady-
+  state finding mentions VUsers that stopped early. Clearer column names in Errors and Workload.
+- Demo run (tools/make-demo-run.js) now records bytes received and error messages with script lines.
+
 ### Fixed / Changed — Results Analyser: end-user review of every section
 - Steady state in long soaks (BUG-061): ends at the start of the final ramp-down, not at the first VUser
   that stopped on error; VUsers that stopped early are counted, shown in the schedule and raise a finding.

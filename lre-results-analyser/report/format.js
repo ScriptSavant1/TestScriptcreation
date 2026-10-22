@@ -43,6 +43,16 @@
     const out = d ? `${d} day${d > 1 ? "s" : ""} ${h} h ${p2(m)} min ${p2(x)} s` : h ? `${h} h ${p2(m)} min ${p2(x)} s` : m ? `${m} min ${p2(x)} s` : `${x} s`;
     return (s < 0 ? "−" : "") + out;
   }
+  /** Compact duration for tiles: "1 d 3 h 37 min", "3 h 04 min", "52 min 10 s", "45 s". */
+  function durShort(s) {
+    if (s == null || !Number.isFinite(s)) return "-";
+    const t = Math.round(Math.abs(s));
+    if (t >= 3600) {
+      const m = Math.round(t / 60), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mi = m % 60;
+      return (d ? `${d} d ${h} h` : `${h} h`) + ` ${p2(mi)} min`;
+    }
+    return t >= 60 ? `${Math.floor(t / 60)} min ${p2(t % 60)} s` : `${t} s`;
+  }
   /** "Thu 08 Oct 2026, 07:07:39" (local, from unix s); short: "08 Oct 07:07". */
   function when(utc, offsetSec, short) {
     if (utc == null || !Number.isFinite(utc)) return "-";
@@ -113,5 +123,5 @@
     return rows;
   }
 
-  return { hms, dur, when, relWhen, relRange, localTime, utcTime, zone, relLocal, num, int, sec, bytes, SEVERITY, VERDICT, PCT_KEYS, groupByScript, scheduleRows };
+  return { hms, dur, durShort, when, relWhen, relRange, localTime, utcTime, zone, relLocal, num, int, sec, bytes, SEVERITY, VERDICT, PCT_KEYS, groupByScript, scheduleRows };
 });

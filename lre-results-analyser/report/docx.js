@@ -11,6 +11,11 @@
 })(typeof self !== "undefined" ? self : this, function (fmt, html) {
   "use strict";
 
+  /** Fail % for the figures shown: whole test, or failed ÷ all inside the analysis window. */
+  function failPctText(t, s, which) {
+    const v = which === "full" ? t.failPct : s.count + (s.fail || 0) ? ((s.fail || 0) / (s.count + (s.fail || 0))) * 100 : null;
+    return v == null ? "-" : v.toFixed(2) + " %";
+  }
   function buildDocument(m, D, opts) {
     opts = opts || {};
     const images = opts.images || {};
@@ -51,7 +56,7 @@
         for (const t of g.rows) {
           const s = t[which];
           const sla = which === "steady" && t.sla ? { cell: true, text: `${t.sla.pass ? "PASS" : "FAIL"} (${n3(t.sla.threshold)})`, color: t.sla.pass ? "15803D" : "B91C1C", bold: true } : "-";
-          rows.push([t.name, fmt.int(which === "full" ? t.count : s.count + (s.fail || 0)), t.failPct != null ? t.failPct.toFixed(2) + " %" : "-", n3(s.min), n3(s.avg), n3(s.p.p90), n3(s.p.p95), n3(s.p.p99), n3(s.max), fmt.num(s.tps, 3), sla]);
+          rows.push([t.name, fmt.int(which === "full" ? t.count : s.count + (s.fail || 0)), failPctText(t, s, which), n3(s.min), n3(s.avg), n3(s.p.p90), n3(s.p.p95), n3(s.p.p99), n3(s.max), fmt.num(s.tps, 3), sla]);
         }
       }
       return table(["Transaction", "Count", "Fail %", "Min", "Avg", "P90", "P95", "P99", "Max", "TPS", "SLA"], rows, { rightFrom: 1 });

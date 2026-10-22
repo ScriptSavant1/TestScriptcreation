@@ -51,10 +51,10 @@ function txRecord(end, iter, rtMs, vuser, internalId, failed, mapId, thinkSec) {
   return envelope(Buffer.concat(parts), 0x00c00fc0 + flags);
 }
 
-/** Data-point record: 766 (registration + sample) or 762 (sample); value 1 = one HTTP response. */
-function dataPoint(ts, vuser, internalId, mapId) {
+/** Data-point record: 766 (registration + sample) or 762 (sample); value 1 = one HTTP response, or bytes for mic_recv. */
+function dataPoint(ts, vuser, internalId, mapId, value) {
   const t = Buffer.alloc(8); t.writeDoubleBE(ts, 0);
-  const tail = Buffer.alloc(28); tail.writeDoubleBE(1, 8); tail.writeUInt32BE(vuser, 16); tail.writeUInt32BE(internalId, 20);
+  const tail = Buffer.alloc(28); tail.writeDoubleBE(value == null ? 1 : value, 8); tail.writeUInt32BE(vuser, 16); tail.writeUInt32BE(internalId, 20);
   return mapId != null ? envelope(Buffer.concat([t, text(String(mapId)), tail]), 766) : envelope(Buffer.concat([t, tail]), 762);
 }
 
@@ -123,13 +123,15 @@ async function main() {
         const failed = Math.abs(t - spikeAt) < 90 && name === "DEMO_07_SAVE_ITEM" && r() < 0.5;
         if (failed) {
           fail.set(name, (fail.get(name) || 0) + 1);
-          errors.push({ t: t + Math.max(0, rt) / 1000, code: -26612, msg: `HTTP Status-Code=500 (Internal Server Error) for "https://app.example.test/api/items/${Math.floor(r() * 9999)}"`, v: u.v, lg: u.lg, it });
+          errors.push({ t: t + Math.max(0, rt) / 1000, code: -26612, msg: `Action.c(${k * 12 + 40}): Error -26612: HTTP Status-Code=500 (Internal Server Error) for "https://app.example.test/api/items/${Math.floor(r() * 9999)}"`, v: u.v, lg: u.lg, it });
         } else pass.set(name, (pass.get(name) || 0) + 1);
         t += Math.max(0, rt) / 1000;
         const first = !registered.has(k); registered.add(k);
         buf.push(txRecord(t, it, rt, u.v, internal[k], failed, first ? k + 1 : null));
         const dp = failed ? 2 : 1, dpFirst = !registered.has("dp" + dp); registered.add("dp" + dp);
         buf.push(dataPoint(t, u.v, dp, dpFirst ? dp : null));
+        const rcvFirst = !registered.has("dp3"); registered.add("dp3");
+        buf.push(dataPoint(t, u.v, 3, rcvFirst ? 3 : null, Math.round(30000 + r() * 90000))); // bytes received
         if (!failed) addGraph(k, t, Math.max(0, rt) / 1000);
         t += 1 + r() * 2; // think time
       }
@@ -146,7 +148,7 @@ async function main() {
   const h12 = wall.getUTCHours() % 12 || 12;
   w("RunInfo.ini", `[Report]\nCompanyName=DEMO_PROJECT\nSessionName=Demo_Soak_${nVu}VU_${hours}h\nRunDate=${wall.getUTCDate()}-${MON[wall.getUTCMonth()]}-${wall.getUTCFullYear()} ${String(h12).padStart(2, "0")}:${String(wall.getUTCMinutes()).padStart(2, "0")}:${String(wall.getUTCSeconds()).padStart(2, "0")} ${wall.getUTCHours() < 12 ? "AM" : "PM"}\nDuration=${Math.round((end - START) / 60)}\n`);
   w("res1.lrr", `[Scenario]\nProduct=Demo Performance Controller\nVersion=2026.1\nResultName=res1\nTime_Zone=0\nStart_time=${START}\nDaylight_Bias=-60\nStop_time=${end}\n[Running_mode]\nStart_reason=By command\nStop_reason=Scenario ended\n[Scenario_summary]\nScenario Type=Manual Scenario\nMode=Scenario Scheduling\nScenario Duration=Start all Vusers: 1 every 00:00:05 (HH:MM:SS); Run for ${String(Math.floor(runSec / 3600)).padStart(2, "0")}:${String(Math.floor((runSec % 3600) / 60)).padStart(2, "0")}:00 (HH:MM:SS); Stop all Vusers: 1 every 00:00:05 (HH:MM:SS)\nLoad Behavior=Initialize each Vuser just before it runs\nGlobal Schedule=ST${nVu}_1E5;R${runSec};SP${nVu}_1E5;\n[Scripts]\nDemo_Script_1=D:\\scripts\\Demo_Script\\Demo_Script.usr\n[Scripts_types]\nDemo_Script_1=DevWeb\n`);
-  w("RawData.map", `[DATA_POINT]\n1="HTTP_200"\n2="HTTP_500"\n[END_TRANSACTION]\n${TX.map(([n], i) => `${i + 1}="${n}"`).join("\n")}\n`);
+  w("RawData.map", `[DATA_POINT]\n1="HTTP_200"\n2="HTTP_500"\n3="mic_recv"\n[END_TRANSACTION]\n${TX.map(([n], i) => `${i + 1}="${n}"`).join("\n")}\n`);
   w("SLAConfiguration.xml", `<?xml version="1.0" encoding="UTF-8"?><SLA Version="1.0"><TxList>${TX.map(([n]) => `<Tx>${n}</Tx>`).join("")}<Tx>Main_Transaction</Tx></TxList><SLARules><TrackingPeriodType>Default</TrackingPeriodType></SLARules></SLA>`);
   w("collate.txt", `[Collate Recovery]\nCompleted=1\n[Post Run Actions]\nActions=CollateAnalyze\n[Hosts]\n${LGS.map((l, i) => `${l}=D:\\Temp\\${l}_${i + 1}.eve`).join("\n")}\n`);
   w("demo_script_1.usp", `[RunLogicRunRoot]\nRunLogicNumOfIterations=1\nRunLogicPaceType=Const\nRunLogicPaceConstTime=${pace}\n`);

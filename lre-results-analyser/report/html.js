@@ -33,6 +33,11 @@
     }</tbody></table>`;
   }
 
+  /** Fail % for the figures shown: whole test, or failed ÷ all inside the analysis window. */
+  function failPctText(t, s, which) {
+    const v = which === "full" ? t.failPct : s.count + (s.fail || 0) ? ((s.fail || 0) / (s.count + (s.fail || 0))) * 100 : null;
+    return v == null ? "-" : v.toFixed(2) + " %";
+  }
   function txTable(m, which) {
     const rows = [];
     for (const g of fmt.groupByScript(m)) {
@@ -40,7 +45,7 @@
       for (const t of g.rows) {
         const s = t[which];
         const sla = which === "steady" && t.sla ? { html: t.sla.pass ? `<span class="ok">✔ ${n3(t.sla.threshold)}</span>` : `<span class="bad">✘ ${n3(t.sla.threshold)}</span>` } : "-";
-        rows.push([t.name, fmt.int(which === "full" ? t.count : s.count + (s.fail || 0)), t.failPct != null ? t.failPct.toFixed(2) + " %" : "-", n3(s.min), n3(s.avg), n3(s.p.p90), n3(s.p.p95), n3(s.p.p99), n3(s.max), fmt.num(s.tps, 3), sla]);
+        rows.push([t.name, fmt.int(which === "full" ? t.count : s.count + (s.fail || 0)), failPctText(t, s, which), n3(s.min), n3(s.avg), n3(s.p.p90), n3(s.p.p95), n3(s.p.p99), n3(s.max), fmt.num(s.tps, 3), sla]);
       }
     }
     return table(["Transaction", "Count", "Fail %", "Min", "Avg", "P90", "P95", "P99", "Max", "TPS", "SLA"], rows, "tx");

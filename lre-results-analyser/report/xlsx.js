@@ -156,7 +156,7 @@
       ["Performance", [
         ["Transactions per second (whole test)", t.tpsFull != null ? t.tpsFull : null, { numFmt: "0.00", bold: true }],
         ["Transactions per second (steady state)", t.tpsSteady != null ? t.tpsSteady : null, { numFmt: "0.00" }],
-        ["Passed transactions ratio", t.pass != null && t.fail != null && t.pass + t.fail ? t.pass / (t.pass + t.fail) : null, { numFmt: "0.000%" }],
+        ["Passed transactions ratio (passed ÷ all)", t.pass != null && t.fail != null && t.pass + t.fail ? t.pass / (t.pass + t.fail) : null, { numFmt: "0.000%" }],
         ["Hits per Sec (avg)", web ? web.hitsPerSec.avg : t.hitsPerSec ? t.hitsPerSec.avg : null, { numFmt: "#,##0.00", bold: true }],
         ["Total Hits", web ? web.hits : null, { numFmt: INT }],
         ["Throughput (avg bytes/s)", web ? web.throughputBytesPerSec.avg : t.throughputBytesPerSec ? t.throughputBytesPerSec.avg : null, { numFmt: INT, bold: true }],
@@ -199,7 +199,7 @@
     const ws = wb.addWorksheet(name, { views: [{ state: "frozen", xSplit: 2, ySplit: 4 }] });
     const win = which === "full" ? `Whole test: ${fmt.relRange(m, 0, m.meta.durationSec)} (${fmt.dur(m.meta.durationSec)})` :
       m.window ? `${m.window.detected ? "Steady state" : "Analysis window (user-set)"}: ${fmt.relRange(m, m.window.start, m.window.end)} (${fmt.dur(m.window.durationSec)})` : "No steady-state window";
-    title(ws, name, `${win} · response times in seconds, from every passed transaction · Pass / Fail: whole test`);
+    title(ws, name, `${win} · response times in seconds, from every passed transaction`);
     const N = TX_COLS.length;
     header(ws, 4, TX_COLS.map((c) => c[0]));
     ws.autoFilter = { from: { row: 4, column: 2 }, to: { row: 4, column: N } };
@@ -220,13 +220,15 @@
       g.rows.forEach((t, i) => {
         const s = t[which];
         const slaRes = which === "steady" && t.sla ? (t.sla.pass ? "PASS" : "FAIL") : "";
-        ws.getRow(r).values = [g.script, t.name, which === "full" ? t.count : s.count + (s.fail || 0), t.pass, t.fail, t.failPct != null ? t.failPct / 100 : null,
+        const pass = which === "full" ? t.pass : s.count, fail = which === "full" ? t.fail : s.fail || 0;
+        ws.getRow(r).values = [g.script, t.name, pass + fail, pass, fail, pass + fail ? fail / (pass + fail) : null,
           s.min, s.avg, s.max, s.stdDev, sAt(s, "p50"), sAt(s, "p80"), sAt(s, "p85"), sAt(s, "p90"), sAt(s, "p95"), sAt(s, "p98"), sAt(s, "p99"),
           s.tps, which === "steady" && t.sla ? t.sla.threshold : null, slaRes, which === "steady" && t.sla ? t.sla.apdex : null];
         fmtRow(r, i % 2 ? ZEBRA : WHITE, false);
         if (slaRes) { const c = ws.getCell(r, 20); /* "SLA result" */ c.fill = solid(slaRes === "PASS" ? GREEN_FILL : RED_FILL); c.alignment = { horizontal: "center" }; c.font = { name: FONT, size: 10, bold: true, color: { argb: slaRes === "PASS" ? "FF15803D" : "FFB91C1C" } }; }
-        if (t.fail) ws.getCell(r, 5).font = { name: FONT, size: 10, bold: true, color: { argb: "FFB91C1C" } };
-        if (t.failPct != null && t.failPct > 1) ws.getCell(r, 6).fill = solid(t.failPct > 5 ? RED_FILL : AMBER_FILL);
+        if (fail) ws.getCell(r, 5).font = { name: FONT, size: 10, bold: true, color: { argb: "FFB91C1C" } };
+        const fp = pass + fail ? (fail / (pass + fail)) * 100 : 0;
+        if (fp > 1) ws.getCell(r, 6).fill = solid(fp > 5 ? RED_FILL : AMBER_FILL);
         r++;
       });
       const sub = ws.getRow(r);
