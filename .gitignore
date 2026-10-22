@@ -50,3 +50,6 @@ DevWebSdk.d.ts
 
 # Local-only prompts — removed from GitHub history; never commit
 /devweb-prompts/
+
+# Forum deck — local only (removed from GitHub history)
+/PerfX-Studio-Forum.pptx
