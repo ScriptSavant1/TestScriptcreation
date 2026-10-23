@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-portal-tool="results">
 <head>
   <meta charset="utf-8">
+  <!-- opened on its own in a browser tab → go to the portal (one address for the whole app) -->
+  <script src="portal/frame-guard.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Results Analyser — PerfX Studio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Cpath fill=%22none%22 stroke=%22%233b82f6%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 d=%22M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4%22/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="ra/app.css">
 </head>
 <body>
@@ -34,13 +34,13 @@
       <div class="pick-grid">
         <label class="pick-card" id="pick-folder">
           <input type="file" id="in-folder" webkitdirectory directory multiple hidden>
-          <div class="pick-icon">📁</div>
+          <div class="pick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
           <div class="pick-title">Choose results folder</div>
           <div class="pick-sub">Fastest. Best for very large runs — nothing is unzipped.</div>
         </label>
         <label class="pick-card" id="pick-zip">
           <input type="file" id="in-zip" accept=".zip,application/zip" hidden>
-          <div class="pick-icon">🗜</div>
+          <div class="pick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M10 7h1M10 10h1M10 13h1"/><rect x="9" y="15" width="3" height="3" rx=".5"/></svg></div>
           <div class="pick-title">Choose results ZIP</div>
           <div class="pick-sub">The ZIP downloaded from LRE. Read in place (ZIP64 supported).</div>
         </label>

@@ -57,6 +57,17 @@ Converts HAR recordings, Bruno/Postman collections, and JMX files into:
 load the split files. The monolithic file is **DELETED** (commit `d641ddc`).
 Do NOT recreate it — all its functions exist in the three split files above.
 
+### Portal shell (sidebar + Home) — redesign in progress
+| File | Purpose |
+|------|---------|
+| `src/web/views/partials/shell.ejs` | Collapsible sidebar + top bar markup (included by index.ejs with the icon map `I`) |
+| `src/web/views/partials/home.ejs` | Task-based Home page |
+| `src/web/public/portal/shell.js` | Routing (#/home … #/help/<section>), wraps switchPortalTab / openConverterTab / switchTab, collapse (localStorage `perfx-sidebar`), drawer, rail tooltips, CDP Recorder probe (`window.PerfxRecorder`, event `perfx:recorder`) |
+| `src/web/public/portal/home.js` | Home buttons (`data-go`, `data-help`, `data-scroll`), PORTAL_CONFIG flags (`data-tab`) |
+| `src/web/public/portal/{shell,home}.css` | Styles; tool colours `--c-convert/-jmeter/-record/-studio/-results/-help` |
+
+Rule: the old switchers in index.ejs stay the source of truth; the shell only wraps them. Tool panels (Converter, Recorder, Studio, Analyser, Help) are redesigned one at a time — keep every piece of Help text.
+
 ### Entry Point
 `src/web/public/VuGen-Script-Studio.html` loads scripts in this order
 (confirmed by reading the HTML's `<script>` tags directly, not inferred):
@@ -71,6 +82,52 @@ Do NOT recreate it — all its functions exist in the three split files above.
 9. `analytics-device.js` (deferred)
 
 All share global state object `S` (defined in `studio-app.js`).
+
+### Recorder page (portal v3 redesign) — served at /recorder
+| File | Purpose |
+|------|---------|
+| `src/web/public/Recorder.html` | New Recorder page (start page + workspace). Loads the classic engine files below UNCHANGED, in the same order, then the two files below |
+| `src/web/public/portal/recorder-core.js` | VERBATIM copies of the engine functions the classic page keeps inline (detectMarkers, _recInjectPagerefMarkers, _makeRecMarker, classifyHarEntry, applyFilters, refresh). `tests/unit/recorderCoreParity.test.js` fails if they drift — change both together |
+| `src/web/public/portal/recorder-ui.js` | Replaces the display functions of VuGen-Recorder-ui.js / the inline script with the SAME global names and the same effect on `S` (renderTable, renderStats, showToast, confirmFmt, confirmTxn …). Extras: why-left-out, rename/ungroup + undo, txn replay after format change, hide/show panes (localStorage `perfx-recorder-ui`), Studio hand-off |
+| `src/web/public/portal/recorder.css` | Styles (portal tokens, `.rc-*`) |
+
+Rule: engine behaviour must stay byte-identical to the classic page — check with the golden harness
+(scratchpad `recorder-golden/harness.js` + `compare.js`, baseline from `/recorder-classic`).
+The classic pages (`VuGen-Recorder.html`, `VuGen-Script-Studio.html`) have no route any more (one address for the
+whole app); they stay on disk only as the reference for the parity tests. The address bar must only ever show …/converter/.
+
+### Help & guides (portal v3 redesign)
+| File | Purpose |
+|------|---------|
+| `src/web/views/partials/help.ejs` | Help markup + its inline functions (haccToggle, haccJump, hTocToggle, hTocSetCur, hfaqToggle) — keep every word; 13 sections hacc-* |
+| `src/web/public/portal/help.js` | Search ("/" shortcut), contents list + where-you-are, Expand / Collapse all, jump without accordion animation (BUG-079) |
+| `src/web/public/portal/help.css` | Styles, scoped to `body.has-shell #portal-help` |
+
+Rule: `tests/unit/helpPageParity.test.js` must pass; check text parity with the Help capture
+(scratchpad `help-golden/capture.js` + `diff.js`, word-level diff against the previous Help).
+
+### Converter panels (portal v3 redesign)
+| File | Purpose |
+|------|---------|
+| `src/web/views/partials/converter.ejs` | Postman / Bruno + JMeter panel markup (included by index.ejs). Keeps every id / handler the converter functions in index.ejs use (setProto, doConvert, doConvertJmx …) |
+| `src/web/public/portal/converter.css` | Styles, scoped to `body.has-shell #portal-converter` |
+| `src/web/public/portal/converter.js` | Keyboard on protocol cards (aria-checked), "How it works" fold remembered (localStorage `perfx-cv-how`) |
+
+Rule: `tests/unit/converterPageParity.test.js` must pass; check output parity with the converter golden
+harness (scratchpad `converter-golden/`; the server rate-limits /convert to 60 per 5 min per address — the
+harness sends a different `X-Forwarded-For` per run).
+
+### Script Studio page (portal v3 redesign) — served at /studio
+| File | Purpose |
+|------|---------|
+| `src/web/public/Studio.html` | New Studio page. Loads the classic Studio scripts UNCHANGED, in the same order, and `VuGen-Script-Studio.css` under `portal/studio.css`; keeps every element id the scripts use |
+| `src/web/public/portal/studio.css` | Maps the classic colour tokens onto the portal palette (both themes) and lays out the new page |
+| `src/web/public/portal/studio-page.js` | Layout behaviour only: Review / Script show-hide (localStorage `perfx-studio-ui`), dialog focus (in, trapped, returned; Escape closes), keyboard for script-drawn chips / tabs / headers, drop-zone focus ring |
+| `src/web/public/portal/frame-guard.js` | One address: a tool page (`<html data-portal-tool=record|studio|results>`) opened on its own goes to …/converter/ and the shell opens that tool (sessionStorage `perfx-open`); skipped for automated test browsers (`navigator.webdriver`) |
+
+Rule: `tests/unit/studioPageParity.test.js` must pass; check output parity with the golden harness
+(scratchpad `studio-golden/harness.js` + `compare.js`, baseline from the classic `/studio`).
+The server blocks direct `.html` URLs on purpose — pages are reached through routes only.
 
 ### VuGen Recorder (HAR → script, browser tool)
 | File | Purpose |

@@ -274,21 +274,19 @@ class WebServer {
     // Also dual-registered (bare root + /converter) — the portal's iframe src is
     // built as BASE_PATH + '/recorder' / '/studio', which resolves to the
     // bare-root path when the page itself was loaded at '/' (BUG-EXT-013).
+    // Tool pages load inside the portal (…/converter/). Opened on their own in a browser tab they
+    // send the user to the portal (public/portal/frame-guard.js) — one address for the whole app.
     this.app.get(["/recorder", "/converter/recorder"], (req, res) => {
-      res.sendFile(path.join(__dirname, "public", "VuGen-Recorder.html"));
+      res.sendFile(path.join(__dirname, "public", "Recorder.html"));
     });
     this.app.get(["/studio", "/converter/studio"], (req, res) => {
-      res.sendFile(path.join(__dirname, "public", "VuGen-Script-Studio.html"));
+      res.sendFile(path.join(__dirname, "public", "Studio.html"));
     });
     this.app.get(["/results-analyser", "/converter/results-analyser"], (req, res) => {
       res.sendFile(path.join(__dirname, "..", "..", "lre-results-analyser", "web", "index.html"));
     });
-    this.app.get("/tools/recorder", (req, res) => {
-      res.sendFile(path.join(__dirname, "public", "VuGen-Recorder.html"));
-    });
-    this.app.get("/tools/studio", (req, res) => {
-      res.sendFile(path.join(__dirname, "public", "VuGen-Script-Studio.html"));
-    });
+    // Old /tools/* links: the pages' relative script paths only resolve at /recorder and /studio
+    this.app.get(["/tools/recorder", "/tools/studio"], (req, res) => res.redirect(301, "/converter/"));
 
     // ── CDP Recorder download ────────────────────────────────────────────────
     // Serves the pre-built, self-contained recorder — no Node.js/npm install

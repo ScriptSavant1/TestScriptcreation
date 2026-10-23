@@ -5,6 +5,126 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Added — Portal redesign, step 1: sidebar shell and new Home
+- Collapsible left sidebar replaces the top tab bar: Home · Create scripts (Postman / Bruno, JMeter,
+  Recorder, Script Studio) · Analyse (Results Analyser) · Learn (Help). Collapses to an icon rail with
+  tooltips (remembered, Ctrl+B); slide-in drawer below 900 px. CDP Recorder "Running" badge.
+- Top bar with the page title, "How it works" (opens that tool's Help section), Clear and theme.
+- The address bar never changes: every page stays at …/converter, as before (also under IIS). An old
+  #/record-style link opens its page once and the address is put back. Sidebar items are buttons.
+- Home: a click anywhere on a tool card opens that tool (the card button stays the keyboard target).
+- New Home, task-based for non-technical users: "What would you like to do?" cards (what you need /
+  what you get / what is included), how the tools fit together, CDP Recorder card with live state and
+  setup steps, "Which tool do I need?" (now also covers LRE results), good-to-know facts. All content
+  from the previous Home is kept.
+- Code: src/web/views/partials/{shell,home}.ejs, src/web/public/portal/{shell,home}.{css,js};
+  index.ejs is 246 lines shorter. No build step, no new dependencies, no CDN requests.
+
+### Added — Portal redesign, step 3: new Script Studio page
+- Start page: a short intro, then two cards — 1 HAR recordings (drop zones, "One recording or two?"
+  explains pattern vs diff mode), 2 output format, mode and Analyze; 3 request filters beside them.
+- Results: summary row, then two columns — review (Correlation Advisor, correlation and parameter
+  details) and the script preview with downloads, which stays in view while you scroll. "Review" and
+  "Script" hide either column (one always stays; remembered). While the background-request review is
+  pending only its table shows (no empty stats / "Loading…" preview). Escape closes the dialogs.
+- Inside the portal: no second header or Clear; the portal's theme and Clear apply.
+- Live at /studio (the portal's Script Studio). Downloads sit in their own bar, always visible. Independent
+  validation (99 features, none missing) — its findings fixed: contrast ≥ 4.5:1 on advisor buttons, chips and
+  labels; advisor cards never cut off and a skipped card can be restored; dialogs take focus, keep Tab inside
+  and give it back; filter chips, code tabs and panel headers work with the keyboard; long stats wrap.
+- Studio bugs fixed (BUG-072..075): a file that is not a recording is refused with a clear message and damaged
+  entries are skipped with a warning (was a raw "Cannot read properties of undefined"); a new analysis starts
+  clean, so old scripts can't be downloaded while background-request decisions are pending; the warning colour
+  and "remove recording" no longer keep old results.
+- Same scripts: Studio.html loads the classic scripts unchanged, in the same order, plus the classic
+  stylesheet under portal/studio.css. A golden-output harness (60 runs, 29 steps, 9 edge checks)
+  shows scripts, correlations, advisor, parameters, messages and ZIP contents identical to the
+  classic page. tests/unit/studioPageParity.test.js keeps scripts, ids, handlers and help text in step.
+
+### Changed — Results Analyser matches the portal
+- System fonts like the rest of the portal (no Google Fonts request — works the same on locked-down networks),
+  drawn icons on the start cards instead of emoji, secondary text at ≥ 4.5:1 in both themes. The analysis,
+  exports and CLI are unchanged (92 analyser tests pass).
+
+### Added — Portal redesign, step 5: Help & guides
+- Search: type any word (or press "/") — only the sections and FAQ answers containing every word stay, open,
+  with the words marked; Escape clears. Expand all / Collapse all.
+- Two columns on wide screens: a contents list (Getting Started · Tools · Capabilities · Reference) that
+  shows where you are, beside the sections; the "On this page" menu remains on narrow screens.
+- Every word kept except navigation that described the old top bar (now the sidebar): Quick Start paths A–D,
+  Postman / Bruno and JMeter step 1, Recorder ("Open Recorder in the sidebar and follow the Bookmarks +
+  DevTools instructions"), Script Studio step 1. Checked word by word against the previous Help.
+- Fixed BUG-079 / BUG-080. Markup moved to views/partials/help.ejs; portal/help.{css,js}.
+
+### Added — Portal redesign, step 4: Postman / Bruno and JMeter converters
+- Same steps, new look: each converter opens with one sentence on what you upload and get, then 1 protocol
+  (radio cards with a check, keyboard-selectable), 2 files (drop zones with clear loaded / drag states), 3
+  options (segmented controls), Advanced settings, and one solid convert button in the protocol's colour.
+  Icons replace the emoji; "How it works" can be folded away (remembered); results scroll in below the top
+  bar. Text contrast ≥ 4.5:1 in both themes; works down to phone width.
+- Markup moved out of index.ejs into views/partials/converter.ejs (every id, handler and help text kept);
+  styles portal/converter.css (scoped to the converter), behaviour portal/converter.js.
+- Same output: a golden harness drove 69 conversions (6 Postman / Bruno inputs × protocol × mode, every
+  option and advanced switch, certificates, 3 JMX plans × protocol × mode × Workload Excel, CSV / certs,
+  error cases) — the requests sent, server answers and ZIP contents are identical to before.
+  tests/unit/converterPageParity.test.js keeps ids, handlers and help text in step.
+- Independent validation (nothing missing, no behaviour regressed) — its findings fixed: option buttons wrap
+  instead of spilling out at narrow widths, protocol icons / step numbers / tags / certificate chips reach
+  4.5:1, protocol cards are one radio group (arrow keys), Advanced settings announces open / closed, one focus
+  ring everywhere. Converter bugs fixed: BUG-077 (stale JMeter lists on a Postman result), BUG-078 (cert zone
+  stayed green after Clear).
+
+### Changed — One address for the whole app
+- Only …/converter/ is ever shown. Recorder, Script Studio and Results Analyser pages opened on their own in a
+  browser tab send the user to …/converter/ with that tool open (public/portal/frame-guard.js). The temporary
+  /recorder-next, /recorder-classic, /studio-next and /studio-classic routes are removed; /tools/* go to the portal.
+
+### Changed — Portal polish across tools (visual only)
+- Postman / Bruno and JMeter: inside the portal the converter banner and its own tab bar are hidden (the
+  sidebar and top bar do that job); each form starts with one sentence saying what you upload and get.
+- Script Studio inside the portal: its own header (title, badge, Clear) is hidden — the portal top bar and
+  Clear replace it — and dark mode uses the portal navy. Help: the "On this page" bar sits under the top
+  bar and a jumped-to section is never hidden beneath it. View-transition errors on fast clicks fixed.
+- Checked side by side with the committed version (same clicks and files on both): converter ZIPs for
+  Postman DevWeb, Postman Web HTTP/HTML and JMeter are identical apart from timestamps / temp paths.
+
+### Added — Portal redesign, step 2: new Recorder page
+- The Recorder (HAR / NetLog → VuGen Web HTTP/HTML or DevWeb script) has a new page in the portal
+  design: start page with the 4 steps, a large drop zone and the two ways to record as tabs (all
+  instruction text kept word for word, can be folded away); after loading, a workspace with a summary
+  bar (file, requests in the script, transactions, format, authentication), filters, and three panes
+  (domains · requests grouped by transaction · script preview) above a download bar.
+- Hide / show what you don't need: the domain list, the request list, the script preview (one of the
+  last two always stays), the filter bar (folds to one
+  line), the static-assets help and the recording instructions — remembered per browser. Panes can be
+  resized; the workspace fits the window and works down to phone width.
+- Every faded request says why it is left out (static asset, analytics, OPTIONS, domain or type off,
+  WebSocket, security report); redirects followed automatically and resources added to their page step
+  are marked. The script preview is colour-coded.
+- Transactions: Rename and Ungroup (with Undo); manual transactions survive a format change; invalid
+  names are shown in the dialog. "Correlate in Script Studio →" opens Studio with the same file loaded.
+- Errors (wrong file, unreadable JSON, not a HAR, empty NetLog, damaged entries) are explained on the
+  start page; a progress overlay shows while large files are read. Fixes BUG-067..070.
+- Independent validation of the real page (all 151 features of the old page present) found issues in
+  the first build, now fixed: choosing another file and cancelling no longer changes the open recording
+  (a "still open — back to it" bar replaces the button inside the drop zone); Escape leaves Select mode
+  anywhere; Create refuses a duplicate transaction name, like Rename; requests can be selected with the
+  keyboard; focus returns to where you were after dialogs and domain switches; Undo is cleared by Clear,
+  a new file or a format change; contrast raised to at least 4.5:1 (grey text, green buttons, step
+  numbers). Large recordings: a progress overlay while the script is built or filters change, and the
+  list shows the first 1,500 requests with "Show all" (the script always has every request) — 20,000
+  requests now build in about 3 s instead of a 7 s blank freeze. /tools/recorder and /tools/studio
+  redirect (BUG-071).
+- Same engine: the page loads the classic engine files unchanged and keeps every function name and the
+  shared state. A golden-output harness compared it with the classic page — scripts, ZIP contents,
+  state and messages are byte-identical for 19 recordings × 3 formats plus 14 filter / transaction
+  steps. tests/unit/recorderCoreParity.test.js keeps the copied engine functions identical.
+- Sharper text across the portal, Script Studio and the 404 page: weight 800 has no Segoe UI face, so
+  Windows drew Segoe UI Black (blocky letters) — headings now use the real Bold. Dialogs are solid,
+  with no blur behind them.
+- Code: src/web/public/Recorder.html, portal/recorder{.css,-ui.js,-core.js}. /recorder now serves the
+  new page; the classic page stays at /recorder-classic as a fallback.
+
 ### Added — scripts/merge-analytics-db.js (moving from two IIS servers to one)
 - One-time merge of the second server's analytics database into the main one: backs up the main
   database first, copies every column except the id, skips records already present (safe to run

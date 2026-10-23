@@ -128,6 +128,17 @@ async function analyze() {
   }
   showPhase("ph-proc");
   S._analyzeStart = Date.now();
+  // Start clean: a review table or scripts left from an earlier run must not show (or be
+  // downloadable) while this run waits for its own background-request decisions (BUG-073).
+  {
+    const _bg = document.getElementById("bgReviewPanel");
+    if (_bg) _bg.style.display = "none";
+    S.scripts = {};
+    const _dl = document.getElementById("dl-bar");
+    if (_dl) _dl.innerHTML = "";
+    const _tabs = document.getElementById("code-tabs");
+    if (_tabs) _tabs.innerHTML = "";
+  }
 
   // Use setTimeout to allow UI to update before heavy processing
   await new Promise((r) => setTimeout(r, 50));
@@ -653,9 +664,9 @@ async function _generateAndRenderScripts() {
   corrEl.textContent =
     S.correlations.length +
     (S.candidates.length > 0 ? "+" + S.candidates.length : "");
-  if (S.candidates.length > 0)
-    corrEl.closest(".stat") &&
-      (corrEl.closest(".stat").className = "stat stat-warn");
+  if (corrEl.closest(".stat"))
+    corrEl.closest(".stat").className =
+      S.candidates.length > 0 ? "stat stat-warn" : "stat stat-ok";
   document.getElementById("st-mode").textContent =
     S.mode === "two" ? "Diff" : "Pattern";
   document.getElementById("st-fmt").textContent = {

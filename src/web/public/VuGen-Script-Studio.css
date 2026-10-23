@@ -231,7 +231,7 @@
         background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
         color: #fff;
         font-size: 16px;
-        font-weight: 800;
+        font-weight: 700;
         display: flex; align-items: center; justify-content: center;
         flex-shrink: 0;
         box-shadow: 0 4px 14px rgba(99,102,241,0.5);
@@ -682,7 +682,7 @@
       }
       .stat-val {
         font-size: 24px;
-        font-weight: 800;
+        font-weight: 700;
         color: var(--primary);
         line-height: 1;
       }
@@ -1765,3 +1765,7 @@
       }
 
       .bg-review-apply:hover { background: var(--primary-dark, #2563eb); }
+
+/* Inside the PerfX Studio portal: the portal's top bar replaces this header (its Clear reloads Studio) */
+html.embedded .app-header { display: none; }
+html.embedded .page-body { padding-top: 0; }

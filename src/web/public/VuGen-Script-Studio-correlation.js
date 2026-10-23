@@ -14,7 +14,8 @@ function parseHar(har) {
     if (_p.id && _p.title) S.harPages.set(_p.id, _p.title);
   }
 
-  const raw = (har.log && har.log.entries) || [];
+  // entries without a request (damaged HAR) are skipped; loadFile() has told the user
+  const raw = ((har.log && har.log.entries) || []).filter((e) => e && e.request);
   let id = 0;
   return raw.map((e) => {
     const resp = e.response || {};

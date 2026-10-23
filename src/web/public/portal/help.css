@@ -1,0 +1,72 @@
+/* ══════════════════════════════════════════════════════════════════════════
+ * Help & guides — portal v3. Loaded after index.ejs's own styles; scoped to
+ * Help inside the shell. Two columns on wide screens (contents | sections),
+ * search bar, readable text (contrast ≥ 4.5:1). Tool colour: --c-help.
+ * ══════════════════════════════════════════════════════════════════════════ */
+body.has-shell #portal-help { --c: var(--c-help); --text-3: #8191ab; --hl-card: var(--surface); width: 100%; }
+[data-theme="light"] body.has-shell #portal-help { --text-3: #56677f; }
+body.has-shell #portal-help .help-wrap { max-width: 1200px; margin: 0 auto; width: 100%; }
+body.has-shell #portal-help svg { flex: none; }
+
+/* title: the top bar names the page — keep only a short intro */
+body.has-shell #portal-help .help-page-title { text-align: left; margin: 0 0 14px; padding: 0; }
+body.has-shell #portal-help .help-page-title .home-hero-badge, body.has-shell #portal-help .help-h1 { display: none; }
+body.has-shell #portal-help .help-intro { margin: 0; max-width: none; font-size: 14.5px; color: var(--text-2); }
+
+/* search bar */
+body.has-shell #portal-help .help-search-bar { position: sticky; top: var(--tb-h); z-index: 12; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 -4px 16px; padding: 10px 4px; background: var(--bg); }
+body.has-shell #portal-help .help-search { flex: 1 1 360px; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--glass-border); background: var(--hl-card); cursor: text; }
+body.has-shell #portal-help .help-search:focus-within { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+body.has-shell #portal-help .help-search svg { width: 18px; height: 18px; color: var(--text-2); }
+body.has-shell #portal-help .help-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 14.5px; }
+body.has-shell #portal-help .help-search kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--glass-border); color: var(--text-2); }
+body.has-shell #portal-help .help-search-count { font-size: 13px; color: var(--text-2); }
+body.has-shell #portal-help .help-search-grow { flex: 1 0 0; }
+body.has-shell #portal-help .help-mini { height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--glass-border); background: var(--hl-card); color: var(--text); font: inherit; font-size: 12.8px; font-weight: 600; cursor: pointer; }
+body.has-shell #portal-help .help-mini:hover { background: var(--glass-hover); }
+body.has-shell #portal-help :is(.help-mini, .help-side-link, .help-acc-hdr, .help-faq-btn):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+body.has-shell #portal-help mark.help-hl { background: color-mix(in srgb, #facc15 55%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+[data-theme="light"] body.has-shell #portal-help mark.help-hl { background: #fde68a; }
+
+/* two columns: contents | sections */
+body.has-shell #portal-help .help-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 22px; align-items: start; }
+body.has-shell #portal-help .help-side { position: sticky; top: calc(var(--tb-h) + 76px); max-height: calc(100vh - var(--tb-h) - 96px); overflow: auto; padding: 14px 10px; border-radius: 16px; background: var(--hl-card); border: 1px solid var(--glass-border); }
+body.has-shell #portal-help .help-side-title { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); padding: 0 8px 8px; }
+body.has-shell #portal-help .help-side-group { margin-bottom: 10px; }
+body.has-shell #portal-help .help-side-label { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); padding: 6px 8px 4px; }
+body.has-shell #portal-help .help-side-link { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
+body.has-shell #portal-help .help-side-link:hover { background: var(--glass-hover); color: var(--text); }
+body.has-shell #portal-help .help-side-link.on { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--text); box-shadow: inset 3px 0 0 var(--c); }
+body.has-shell #portal-help .help-side-link.dim { opacity: .45; }
+body.has-shell #portal-help .help-side-ico { width: 20px; text-align: center; }
+/* the dropdown "On this page" menu is for narrow screens only */
+@media (min-width: 1100px) { body.has-shell #portal-help .help-topnav-wrap { display: none; } }
+@media (max-width: 1099px) {
+  body.has-shell #portal-help .help-layout { grid-template-columns: minmax(0, 1fr); }
+  body.has-shell #portal-help .help-side { display: none; }
+  body.has-shell #portal-help .help-topnav-wrap { top: calc(var(--tb-h) + 64px); }
+}
+
+/* sections */
+body.has-shell #portal-help .help-main { display: grid; gap: 12px; min-width: 0; }
+body.has-shell #portal-help .help-acc-item { margin: 0; border-radius: 16px; background: var(--hl-card); border: 1px solid var(--glass-border); box-shadow: none; scroll-margin-top: calc(var(--tb-h) + 80px); }
+body.has-shell #portal-help .help-acc-item[hidden] { display: none; }
+body.has-shell #portal-help .help-acc-item.open { border-color: color-mix(in srgb, var(--primary) 30%, var(--glass-border)); }
+body.has-shell #portal-help .help-acc-hdr { padding: 14px 18px; border-radius: 16px; }
+body.has-shell #portal-help .help-acc-icon { width: 38px; height: 38px; border-radius: 11px; font-size: 17px; }
+body.has-shell #portal-help .help-acc-title { font-size: 15px; letter-spacing: 0; }
+body.has-shell #portal-help .help-acc-sub { font-size: 12.5px; color: var(--text-2); }
+body.has-shell #portal-help .help-acc-inner { padding: 0 22px; }
+body.has-shell #portal-help .help-acc-item.open .help-acc-inner { padding-bottom: 24px; }
+body.has-shell #portal-help :is(.help-p, .help-acc-inner li, .help-acc-inner dd) { color: var(--text-2); line-height: 1.7; }
+body.has-shell #portal-help .help-faq-item[hidden] { display: none; }
+/* while jumping: no accordion animation, so the scroll lands on the final position */
+body.has-shell #portal-help.help-instant :is(.help-acc-body, .help-acc-inner, .help-acc-chevron) { transition: none !important; }
+
+body.has-shell #portal-help .help-noresult { padding: 26px 22px; border-radius: 16px; background: var(--hl-card); border: 1px dashed var(--glass-border); color: var(--text-2); font-size: 14px; }
+body.has-shell #portal-help .help-noresult[hidden] { display: none; }
+body.has-shell #portal-help .help-noresult b { display: block; color: var(--text); margin-bottom: 6px; }
+@media (max-width: 600px) { body.has-shell #portal-help .help-acc-inner { padding: 0 14px; } body.has-shell #portal-help .help-search kbd { display: none; } }
+/* light theme: coloured headings inside the help text reach 4.5:1 */
+[data-theme="light"] body.has-shell #portal-help { --success: #15803d; --vugen: #c2410c; --primary: #2563eb; }
+[data-theme="light"] body.has-shell #portal-help [style*="#b39dfa"] { color: #6d28d9 !important; }

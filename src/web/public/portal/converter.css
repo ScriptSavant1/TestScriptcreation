@@ -1,0 +1,148 @@
+/* ══════════════════════════════════════════════════════════════════════════
+ * Postman / Bruno and JMeter converters — portal v3 design.
+ * Loaded after index.ejs's own styles; everything is scoped to the converter
+ * inside the shell (body.has-shell #portal-converter). Tool colour: --c
+ * (set per panel: --c-convert / --c-jmeter). Text contrast ≥ 4.5:1.
+ * ══════════════════════════════════════════════════════════════════════════ */
+body.has-shell #portal-converter { --text-3: #8191ab; --cv-card: var(--surface); --cv-field: rgba(255,255,255,.035); --btn-dev: #2563eb; --btn-vug: #c2410c; width: 100%; max-width: 1000px; margin: 0 auto; }
+[data-theme="light"] body.has-shell #portal-converter { --text-3: #56677f; --cv-field: #f6f8fc; }
+body.has-shell #portal-converter svg { width: 1em; height: 1em; flex: none; }
+
+/* panels */
+body.has-shell #portal-converter > .card { max-width: none; padding: 26px 28px 28px; border-radius: 18px; background: var(--cv-card); backdrop-filter: none; box-shadow: none; border: 1px solid var(--glass-border); }
+body.has-shell #portal-converter .cv-intro { font-size: 14.5px; color: var(--text-2); margin: 0 0 24px; }
+
+/* numbered steps */
+body.has-shell #portal-converter .section-label { gap: 10px; margin: 26px 0 14px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+body.has-shell #portal-converter .cv-intro + .section-label { margin-top: 0; }
+body.has-shell #portal-converter .section-label::before { display: none; }
+body.has-shell #portal-converter .section-num { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--c); color: #0b1221; font-size: 12px; font-weight: 700; letter-spacing: 0; border: 0; }
+[data-theme="light"] body.has-shell #portal-converter .section-num { color: #fff; background: color-mix(in srgb, var(--c) 80%, #000); }
+
+/* protocol cards — radio-card style with a check */
+body.has-shell #portal-converter .proto-grid { gap: 14px; }
+body.has-shell #portal-converter .proto-card { position: relative; display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: 14px; border: 2px solid var(--glass-border); background: var(--cv-field); box-shadow: none; transform: none; }
+body.has-shell #portal-converter .proto-card:hover { border-color: color-mix(in srgb, var(--primary) 40%, var(--glass-border)); transform: none; }
+body.has-shell #portal-converter .proto-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+body.has-shell #portal-converter .proto-card.active-devweb { border-color: #4f8ef7; background: color-mix(in srgb, #4f8ef7 9%, var(--cv-card)); box-shadow: 0 0 0 4px color-mix(in srgb, #4f8ef7 14%, transparent); }
+body.has-shell #portal-converter .proto-card.active-vugen { border-color: #f0883e; background: color-mix(in srgb, #f0883e 9%, var(--cv-card)); box-shadow: 0 0 0 4px color-mix(in srgb, #f0883e 14%, transparent); }
+body.has-shell #portal-converter .proto-icon { width: 40px; height: 40px; flex: none; border-radius: 11px; display: grid; place-items: center; font-size: 13.5px; font-weight: 800; font-family: var(--mono); background: color-mix(in srgb, #4f8ef7 16%, transparent); color: #4f8ef7; border: 0; }
+body.has-shell #portal-converter #pc-vugen .proto-icon, body.has-shell #portal-converter #jpc-vugen .proto-icon { background: color-mix(in srgb, #f0883e 16%, transparent); color: #f0883e; }
+[data-theme="light"] body.has-shell #portal-converter .proto-icon { color: #1d4ed8; }
+[data-theme="light"] body.has-shell #portal-converter #pc-vugen .proto-icon, [data-theme="light"] body.has-shell #portal-converter #jpc-vugen .proto-icon { color: #c2410c; }
+body.has-shell #portal-converter .proto-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+body.has-shell #portal-converter .proto-desc { font-size: 13px; color: var(--text-2); line-height: 1.55; }
+body.has-shell #portal-converter .proto-tag { margin-top: 8px; font-size: 11.5px; }
+body.has-shell #portal-converter .proto-check { position: absolute; top: 12px; right: 12px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--glass-border); color: transparent; }
+body.has-shell #portal-converter .proto-check svg { width: 12px; height: 12px; stroke-width: 3.5; }
+body.has-shell #portal-converter .active-devweb .proto-check { background: #2563eb; border-color: #2563eb; color: #fff; }
+body.has-shell #portal-converter .active-vugen .proto-check { background: #c2410c; border-color: #c2410c; color: #fff; }
+
+/* drop zones */
+body.has-shell #portal-converter .upload-grid { gap: 14px; margin-bottom: 14px; }
+body.has-shell #portal-converter .cv-support-grid { margin-bottom: 4px; }
+body.has-shell #portal-converter .cv-jmx-grid { display: grid; grid-template-columns: 1fr 1fr; }
+@media (max-width: 700px) { body.has-shell #portal-converter .cv-jmx-grid { grid-template-columns: 1fr; } }
+body.has-shell #portal-converter .drop-zone { border: 2px dashed color-mix(in srgb, var(--c) 40%, var(--glass-border)); border-radius: 14px; padding: 22px 18px; background: var(--cv-field); transition: border-color .15s, background .15s; }
+body.has-shell #portal-converter .drop-zone:hover, body.has-shell #portal-converter .drop-zone.drag-over { border-color: var(--c); background: color-mix(in srgb, var(--c) 8%, var(--cv-card)); }
+body.has-shell #portal-converter .drop-zone:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+body.has-shell #portal-converter .drop-zone.loaded { border-style: solid; border-color: color-mix(in srgb, var(--success) 65%, transparent); background: color-mix(in srgb, var(--success) 8%, var(--cv-card)); }
+body.has-shell #portal-converter .dz-icon-wrap { width: 46px; height: 46px; border-radius: 13px; border: 0; background: color-mix(in srgb, var(--c) 15%, transparent); color: var(--c); font-size: 22px; }
+body.has-shell #portal-converter .drop-zone:hover .dz-icon-wrap { border: 0; background: color-mix(in srgb, var(--c) 22%, transparent); }
+body.has-shell #portal-converter .drop-zone.loaded .dz-icon-wrap { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+body.has-shell #portal-converter .dz-secondary { border-color: var(--glass-border); padding: 16px; }
+body.has-shell #portal-converter .dz-secondary .dz-icon-wrap { width: 36px; height: 36px; font-size: 17px; }
+body.has-shell #portal-converter .dz-label { font-size: 14px; font-weight: 700; }
+body.has-shell #portal-converter .dz-sub { font-size: 12.3px; color: var(--text-2); }
+body.has-shell #portal-converter .dz-or { font-weight: 400; color: var(--text-3); font-size: 12px; }
+body.has-shell #portal-converter .dz-opt { font-size: 12px; color: #b45309; }
+[data-theme="dark"] body.has-shell #portal-converter .dz-opt, :root:not([data-theme="light"]) body.has-shell #portal-converter .dz-opt { color: #f0b429; }
+body.has-shell #portal-converter .dz-name { font-size: 12.5px; }
+[data-theme="light"] body.has-shell #portal-converter .dz-name { color: #15803d; }
+body.has-shell #portal-converter .dz-clear { z-index: 2; border-radius: 8px; width: 28px; height: 28px; display: grid; place-items: center; color: var(--text-2); }
+body.has-shell #portal-converter .cert-zone-wrap { margin: 4px 0 4px; }
+body.has-shell #portal-converter .cert-zone-title { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--text); }
+body.has-shell #portal-converter .cz-ico { color: var(--c); }
+body.has-shell #portal-converter .cert-zone-badge { font-size: 11.5px; color: var(--text-2); }
+body.has-shell #portal-converter .jmx-features { border-radius: 14px; padding: 16px 18px; background: var(--cv-field); border: 1px solid var(--glass-border); }
+body.has-shell #portal-converter .jmx-feat-title { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+body.has-shell #portal-converter .feat-item { font-size: 13px; color: var(--text); }
+body.has-shell #portal-converter .feat-check { width: 18px; height: 18px; border-radius: 5px; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); font-size: 11px; border: 0; }
+[data-theme="light"] body.has-shell #portal-converter .feat-check { color: #15803d; }
+
+/* options */
+body.has-shell #portal-converter .options-grid { gap: 12px; }
+body.has-shell #portal-converter .opt-group { border-radius: 14px; padding: 14px 16px; background: var(--cv-field); border: 1px solid var(--glass-border); }
+body.has-shell #portal-converter .opt-label { font-size: 11.5px; font-weight: 700; letter-spacing: .07em; color: var(--text-2); }
+body.has-shell #portal-converter .seg-btns { gap: 4px; padding: 4px; border-radius: 11px; background: var(--cv-card); border: 1px solid var(--glass-border); }
+body.has-shell #portal-converter .seg-btn { flex: 1; height: 34px; border-radius: 8px; border: 0; background: transparent; color: var(--text-2); font-size: 13px; font-weight: 600; }
+body.has-shell #portal-converter .seg-btn:hover { color: var(--text); border: 0; }
+body.has-shell #portal-converter .seg-btn.active { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--text); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 60%, transparent); }
+
+/* advanced */
+body.has-shell #portal-converter .adv-toggle { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--cv-field); color: var(--text); font-size: 13px; font-weight: 600; }
+body.has-shell #portal-converter .adv-toggle .arrow { display: inline-grid; transition: transform .15s; transform: rotate(-90deg); font-size: 14px; }
+body.has-shell #portal-converter .adv-toggle.open .arrow { transform: none; }
+body.has-shell #portal-converter .adv-hint { font-size: 12px; font-weight: 500; color: var(--text-3); }
+body.has-shell #portal-converter .adv-panel { margin-top: 10px; border-radius: 14px; background: var(--cv-field); border: 1px solid var(--glass-border); }
+body.has-shell #portal-converter .tgl-label { font-size: 13.5px; font-weight: 700; }
+body.has-shell #portal-converter .tgl-sub { font-size: 12.5px; color: var(--text-2); }
+body.has-shell #portal-converter .switch input:focus-visible + .slider { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* convert button: solid, protocol coloured, white text ≥ 4.5:1 */
+body.has-shell #portal-converter .btn-convert { height: 52px; border-radius: 13px; font-size: 15.5px; font-weight: 700; letter-spacing: 0; color: #fff; box-shadow: none; }
+body.has-shell #portal-converter .btn-convert::before { display: none; }
+body.has-shell #portal-converter .btn-convert.devweb { background: var(--btn-dev); box-shadow: 0 10px 26px color-mix(in srgb, var(--btn-dev) 30%, transparent); }
+body.has-shell #portal-converter .btn-convert.vugen { background: var(--btn-vug); box-shadow: 0 10px 26px color-mix(in srgb, var(--btn-vug) 30%, transparent); }
+body.has-shell #portal-converter .btn-convert:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+
+/* results */
+body.has-shell #portal-converter .result-box { max-width: none; border-radius: 18px; padding: 22px 24px; box-shadow: none; backdrop-filter: none; }
+body.has-shell #portal-converter .res-icon { border: 0; border-radius: 13px; font-size: 22px; }
+body.has-shell #portal-converter .res-icon-ok { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+body.has-shell #portal-converter .res-icon-err { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+body.has-shell #portal-converter .res-icon svg { stroke-width: 3; }
+body.has-shell #portal-converter .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+body.has-shell #portal-converter .stat { border-radius: 14px; background: var(--cv-card); border: 1px solid var(--glass-border); box-shadow: none; }
+body.has-shell #portal-converter .stat-lbl { color: var(--text-2); }
+body.has-shell #portal-converter .btn-dl { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 12px; background: #15803d; color: #fff; font-weight: 700; box-shadow: none; }
+body.has-shell #portal-converter .btn-reset { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 12px; }
+body.has-shell #portal-converter :is(.btn-dl, .btn-reset):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* how it works — a section that can be folded away */
+body.has-shell #portal-converter .cv-how { padding: 18px 24px 22px; }
+body.has-shell #portal-converter .cv-how > summary { list-style: none; cursor: pointer; margin: 0; width: max-content; }
+body.has-shell #portal-converter .cv-how > summary::-webkit-details-marker { display: none; }
+body.has-shell #portal-converter .cv-how-chev { display: inline-grid; font-size: 15px; transition: transform .15s; }
+body.has-shell #portal-converter .cv-how:not([open]) .cv-how-chev { transform: rotate(-90deg); }
+body.has-shell #portal-converter .cv-how[open] > summary { margin-bottom: 16px; }
+body.has-shell #portal-converter .step { border-radius: 14px; background: var(--cv-field); box-shadow: none; transform: none; }
+body.has-shell #portal-converter .step-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; margin: 0 auto 10px; font-size: 20px; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); border: 0; }
+body.has-shell #portal-converter .step-txt { color: var(--text-2); }
+body.has-shell #portal-converter .fmt-chip { display: inline-flex; align-items: center; gap: 7px; color: var(--text-2); }
+body.has-shell #portal-converter .fmt-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
+body.has-shell #portal-converter footer { color: var(--text-2); }
+/* results scroll into view below the portal's fixed top bar */
+body.has-shell #portal-converter .result-box { scroll-margin-top: calc(var(--tb-h) + 16px); }
+body.has-shell #portal-converter .proto-card { padding-right: 44px; }
+@media (max-width: 600px) { body.has-shell #portal-converter .adv-hint { display: none; } body.has-shell #portal-converter > .card { padding: 20px 16px; } }
+
+/* ── after the independent validation ── */
+/* option buttons never spill out of their card (N-1) */
+body.has-shell #portal-converter .options-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+body.has-shell #portal-converter .seg-btns { flex-wrap: wrap; }
+body.has-shell #portal-converter .seg-btn { flex: 1 1 auto; min-width: 0; height: auto; min-height: 34px; padding: 6px 10px; white-space: normal; line-height: 1.25; }
+/* contrast ≥ 4.5:1 (N-2, N-3, N-4, P-3, P-4) */
+body.has-shell #portal-converter .proto-icon { color: #7eb3ff; }
+body.has-shell #portal-converter #pc-vugen .proto-icon, body.has-shell #portal-converter #jpc-vugen .proto-icon { color: #f5a467; }
+[data-theme="light"] body.has-shell #portal-converter .proto-icon { color: #1d4ed8; }
+[data-theme="light"] body.has-shell #portal-converter #pc-vugen .proto-icon, [data-theme="light"] body.has-shell #portal-converter #jpc-vugen .proto-icon { color: #9a3412; }
+[data-theme="light"] body.has-shell #portal-converter .section-num { background: color-mix(in srgb, var(--c) 62%, #000); }
+[data-theme="light"] body.has-shell #portal-converter .proto-tag.tag-js { color: #1d4ed8; }
+[data-theme="light"] body.has-shell #portal-converter .proto-tag.tag-c { color: #9a3412; }
+body.has-shell #portal-converter .chip-ext { font-size: 10.5px; color: #93c5fd; }
+[data-theme="light"] body.has-shell #portal-converter .chip-ext { color: #1d4ed8; }
+/* one focus ring everywhere (M-3) */
+body.has-shell #portal-converter :is(.seg-btn, .adv-toggle, .cv-how > summary, .dz-clear, .chip-rm):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* "Client Certificates" header on phones */
+@media (max-width: 600px) { body.has-shell #portal-converter .cert-zone-header { flex-wrap: wrap; gap: 4px 10px; } }

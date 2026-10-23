@@ -81,6 +81,16 @@ function loadFile(file, slot) {
     try {
       const parsed = JSON.parse(ev.target.result);
       const netlog = isNetLog(parsed);
+      if (!netlog && !(parsed && parsed.log && Array.isArray(parsed.log.entries))) {
+        showToast("This file is not a HAR recording (it has no log.entries). Choose the .har file exported from DevTools or saved by the CDP Recorder, or a chrome://net-export/ .json file.", "error", 7000);
+        const _inp = document.getElementById("dz" + slot) && document.getElementById("dz" + slot).querySelector("input[type=file]");
+        if (_inp) _inp.value = "";
+        return;
+      }
+      if (!netlog) {
+        const _bad = parsed.log.entries.filter((e) => !e || !e.request).length;
+        if (_bad) showToast(_bad + " damaged entr" + (_bad === 1 ? "y" : "ies") + " (no request) in " + file.name + " will be skipped. If requests are missing from the script, record the journey again.", "warning", 7000);
+      }
       if (slot === 1) {
         S.har1 = parsed;
         S.isNetLog1 = netlog;
@@ -123,6 +133,8 @@ function clearSlot(slot) {
   if (slot === 1) {
     S.har1 = null;
     S.isNetLog1 = false;
+    S.entries1 = [];
+    S.scripts = {};
     S.filterResourceTypes = null;
     S.filterDomains = {};
     S.domainStats = {};
@@ -164,6 +176,8 @@ function clearAll() {
   S.advisorCandidates = [];
   const advPanel = document.getElementById("adv-panel");
   if (advPanel) advPanel.style.display = "none";
+  const bgPanel = document.getElementById("bgReviewPanel");
+  if (bgPanel) bgPanel.style.display = "none";
   S.scripts = {};
   S.auth = null;
   S.serverHost = null;
@@ -567,6 +581,7 @@ function renderDlBar() {
 
 // Called by parent portal to sync theme
 window.lrePortalInit = function (theme) {
+  document.documentElement.classList.add("embedded");
   document.documentElement.setAttribute("data-theme", theme || "dark");
   localStorage.setItem("ss-theme", theme || "dark");
   var icon = document.getElementById("theme-icon");
@@ -2081,14 +2096,15 @@ function renderBackgroundReview(periodicSummary) {
   }
 
   // Wire toggle buttons via event delegation on the panel
-  panel.addEventListener('click', function _onToggle(e) {
+  if (!panel._bgToggleBound) panel.addEventListener('click', function _onToggle(e) {
     const btn = e.target.closest('.bg-dec');
     if (!btn) return;
     const group = btn.closest('.bg-decision-toggle');
     if (!group) return;
     group.querySelectorAll('.bg-dec').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-  }, { once: false });  // persistent listener (panel persists)
+  }, { once: false });  // persistent listener (panel persists) — bound once
+  panel._bgToggleBound = true;
 
   panel.style.display = '';
 }

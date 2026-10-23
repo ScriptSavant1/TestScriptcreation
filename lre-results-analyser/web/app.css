@@ -1,16 +1,16 @@
 /* Results Analyser — same tokens as the PerfX portal (dark default, blue primary). */
 :root {
-  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --sans: -apple-system, "Segoe UI", system-ui, sans-serif;   /* same as the portal; no web-font request */
+  --mono: "Cascadia Code", Consolas, "JetBrains Mono", "Courier New", monospace;
   --bg: #0f172a; --surface: #1e293b; --surface-2: #172033; --border: #334155;
-  --text: #e2e8f0; --text-2: #94a3b8; --text-3: #64748b;
+  --text: #e2e8f0; --text-2: #94a3b8; --text-3: #8191ab;
   --primary: #3b82f6; --primary-dim: rgba(59,130,246,0.14);
   --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444; --info: #64748b;
   --radius: 10px; --shadow: 0 1px 3px rgba(0,0,0,.3);
 }
 [data-theme="light"] {
   --bg: #f1f5f9; --surface: #ffffff; --surface-2: #f8fafc; --border: #e2e8f0;
-  --text: #0f172a; --text-2: #475569; --text-3: #94a3b8; --primary-dim: rgba(59,130,246,0.10);
+  --text: #0f172a; --text-2: #475569; --text-3: #56677f; --primary-dim: rgba(59,130,246,0.10);
   --shadow: 0 1px 3px rgba(15,23,42,.08);
 }
 * { box-sizing: border-box; }
@@ -282,3 +282,7 @@ table.t tfoot td { font-weight: 700; border-top: 2px solid var(--border); backgr
 
 .verdict-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .vb-counts { display: inline-flex; gap: 6px; flex-wrap: wrap; font-size: 12px; font-weight: 600; }
+
+/* portal look: drawn icons on the start cards (were emoji) */
+.pick-icon { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-size: 22px; }
+.pick-icon svg { width: 1em; height: 1em; }

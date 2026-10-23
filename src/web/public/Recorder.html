@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-portal-tool="record">
+<head>
+<meta charset="UTF-8">
+<script src="portal/frame-guard.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recorder — PerfX Studio</title>
+<link rel="icon" href="data:,">
+<script>
+// Theme before first paint (same key as the classic Recorder); inside the portal the
+// portal's theme is applied by lrePortalInit()
+(function () {
+  var t = 'dark';
+  try { t = localStorage.getItem('vr-theme') || 'dark'; } catch (e) { /* ignore */ }
+  document.documentElement.setAttribute('data-theme', t);
+  if (window.parent !== window) document.documentElement.classList.add('embedded');
+})();
+</script>
+<link rel="stylesheet" href="portal/recorder.css">
+<script>
+(function(){
+  var s=document.createElement('script');
+  var p=window.location.pathname.replace(/\/[^\/]*$/,'');
+  s.src=p+'/jszip.min.js';
+  s.onerror=function(){var s2=document.createElement('script');s2.src='/jszip.min.js';document.head.appendChild(s2);};
+  document.head.appendChild(s);
+})();
+</script>
+</head>
+<body>
+
+<!-- standalone header (hidden inside the portal) -->
+<header class="rc-top">
+  <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span>
+  <b>Recorder</b><span>HAR → VuGen / DevWeb script</span>
+  <span class="grow"></span>
+  <button class="rc-btn ghost sm" type="button" onclick="clearAll()">Clear</button>
+  <button class="rc-btn ghost sm" type="button" onclick="toggleTheme()" title="Light / dark theme" aria-label="Light / dark theme"><span id="theme-icon">☀</span></button>
+</header>
+
+<div class="rc-page">
+<!-- ═══════════════ START PAGE ═══════════════ -->
+<div id="welcome" class="rc">
+  <h2 style="font-size:24px">Turn a browser recording into a LoadRunner script</h2>
+  <p class="lead">Record your user journey in Chrome or Edge, load the recording here, and get a ready-to-run VuGen Web HTTP/HTML or DevWeb script — with your transactions, filters for unwanted traffic, and a preview of every file.</p>
+
+  <div class="rc-steps" aria-label="How it works">
+    <div class="rc-step"><i>1</i><div><b>Record your journey</b><span>With the CDP Recorder or the bookmarks + DevTools (below).</span></div></div>
+    <div class="rc-step"><i>2</i><div><b>Load the recording</b><span>Drop the .har (or NetLog .json) file in the box below.</span></div></div>
+    <div class="rc-step"><i>3</i><div><b>Review and download</b><span>Choose the format, filter, check transactions, download the ZIP.</span></div></div>
+    <div class="rc-step opt" style="--sc:#6d28d9"><i>4</i><div><b>Optional: correlate</b><span>Open the recording in Script Studio to capture dynamic values.</span></div></div>
+  </div>
+
+  <div class="rc-resume" id="resume" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+    <span><b id="resume-name"></b> is still open — load another file below, or go back to it.</span>
+    <button class="rc-btn sm" type="button" id="btn-back-ws">← Back to the recording</button>
+  </div>
+  <div class="rc-drop" id="dz" role="button" tabindex="0" aria-label="Load a recording: drop a .har or NetLog .json file, or press Enter to browse"
+       ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+    <span class="rc-drop-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span>
+    <div>
+      <h3>Drop your .har or NetLog .json file here</h3>
+      <p>or click to browse · <b>HAR</b> (DevTools F12, or saved by the CDP Recorder) or <b>NetLog JSON</b> (chrome://net-export/).
+        Next you choose the script format, then review the requests and transactions.</p>
+    </div>
+    <button class="rc-btn" type="button" tabindex="-1" onclick="event.stopPropagation();document.getElementById('hf').click()">Browse file</button>
+  </div>
+  <input type="file" id="hf" accept=".har,.json" hidden onchange="onFilePick(event)">
+
+  <div class="rc-err" id="start-err" hidden role="alert">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+    <div><b id="start-err-t"></b><p id="start-err-m"></p><p class="h" id="start-err-h"></p></div>
+    <button class="rc-mini x" type="button" id="start-err-x" aria-label="Close this message">✕</button>
+  </div>
+
+  <details class="rc-how" id="how" open>
+    <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><h2>How to record your journey</h2><small class="open">click to hide</small><small class="closed">click to show the instructions</small></summary>
+    <p class="lead">Choose one way to record. Both give you a HAR file to load above. Can't install programs? Use <b>Bookmarks + DevTools</b> — nothing to install.</p>
+    <div class="rc-tabs" role="tablist" aria-label="Recording method">
+      <button class="rc-tab" type="button" role="tab" aria-selected="true" aria-controls="how-cdp" id="tab-cdp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg><span><b>CDP Recorder</b><small>Pop-ups, new tabs, or DevTools / bookmarks blocked</small></span></button>
+      <button class="rc-tab" type="button" role="tab" aria-selected="false" aria-controls="how-classic" id="tab-classic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><span><b>Bookmarks + DevTools</b><small>No install at all</small></span></button>
+    </div>
+
+    <!-- CDP Recorder -->
+    <div class="rc-panel" id="how-cdp" role="tabpanel" aria-labelledby="tab-cdp">
+      <div class="rc-card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Pop-ups, new tabs, or DevTools / bookmarks blocked? Use the CDP Recorder</h3>
+        <p>A small Windows program that records your whole journey — including every new tab and pop-up window (for example a sign-in pop-up) — and names transactions from a floating toolbar. No DevTools, no bookmarks and no browser extension needed.</p>
+        <ol class="rc-ol">
+          <li><span>Download <a id="cdp-dl" href="downloads/cdp-recorder">cdp-recorder.zip</a> (one time only)</span></li>
+          <li><span>Right-click the ZIP → <b>Extract All…</b> → open the extracted folder and double-click <code>cdp-recorder.exe</code></span></li>
+          <li><span>Two windows open: a small <b>toolbar</b> and an orange-bordered <b>RECORDING window</b>. Use your application <b>only in the recording window</b> — your normal browser is not recorded</span></li>
+          <li><span>On the toolbar click <b>Start Recording</b>, type a transaction name (e.g. <code>T01_Login</code>) and click <b>Start Transaction</b></span></li>
+          <li><span>Do the steps for that transaction, then click <b>End Transaction</b>. Repeat for each transaction</span></li>
+          <li><span>Click <b>Stop Recording</b> — the <code>.har</code> file is saved in the same folder as <code>cdp-recorder.exe</code>. Drop it in the area above</span></li>
+        </ol>
+        <div class="rc-call tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg><span>Transactions named on the toolbar are picked up automatically — no START/END bookmarks needed. Don't run <code>cdp-recorder.exe</code> from inside the ZIP: Windows would run it from a temporary folder and your recordings would be saved there.</span></div>
+      </div>
+    </div>
+
+    <!-- Bookmarks + DevTools -->
+    <div class="rc-panel" id="how-classic" role="tabpanel" aria-labelledby="tab-classic" hidden>
+      <div class="rc-grid2">
+        <div class="rc-card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Install the transaction bookmarks <small>(one-time setup)</small></h3>
+          <p>Show the Bookmarks Bar (<b>Ctrl+Shift+B</b>), then <b>drag both buttons below</b> onto it. During recording, click <b class="c-start">▶ START Transaction</b> before each transaction and <b class="c-end">■ END Transaction</b> after. A prompt lets you type the transaction name each time.</p>
+          <div class="rc-bm">
+            <a class="start" title="Drag this button to your Bookmarks Bar — do not click it here."
+               href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('Start transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n){localStorage.setItem('_vugen_txn',n);new Image().src='https://START-'+n+'.invalid/';}}}catch(e){}})();">&#x25B6; START Transaction</a>
+            <a class="end" title="Drag this button to your Bookmarks Bar — do not click it here."
+               href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('End transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n)new Image().src='https://END-'+n+'.invalid/';}}catch(e){}})();">&#x25A0; END Transaction</a>
+          </div>
+          <div class="rc-call tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>How it works:</b> the last used transaction name is remembered automatically — the END prompt pre-fills with the same name you used for START. Both bookmarks fire a request to a <code>.invalid</code> domain which appears in the HAR and is detected as a transaction marker by this tool.</span></div>
+          <div class="rc-call warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>Bookmarklets only work on real websites.</b> They will not respond on the browser's New Tab page or any <code>chrome://</code> page — Chrome blocks them silently. Always navigate to your application URL first, then click the bookmark.</span></div>
+        </div>
+        <div class="rc-card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Record your application</h3>
+          <ol class="rc-ol">
+            <li><span><b>Navigate to your application</b> in the browser (e.g. <code>https://myapp.company.com</code>)</span></li>
+            <li><span>Press <b>F12</b> → click the <b>Network</b> tab → enable <b>Preserve Log</b> and <b>Disable Cache</b> checkboxes → click 🚫 to clear existing entries</span></li>
+            <li><span>Click the <b class="c-start">▶ START Transaction</b> bookmark — type a name (e.g. <code>T01_Login</code>) and click OK</span></li>
+            <li><span>Perform all steps for that transaction (login, fill form, navigate, etc.)</span></li>
+            <li><span>Click the <b class="c-end">■ END Transaction</b> bookmark — the name is pre-filled from START, just click OK</span></li>
+            <li><span>Repeat START / END for each transaction (T02_Home, T03_Search…). Navigate freely between bookmarklet clicks — markers always fire in the current page's context</span></li>
+            <li><span>After all transactions are done: in the Network tab, click the download icon → select <b>"Export HAR (with sensitive data)"</b> — or right-click any row → <b>"Save all as HAR with content"</b></span></li>
+            <li><span>Drop the saved <code>.har</code> file in the area above — you choose the script format next, and the script is generated automatically</span></li>
+          </ol>
+        </div>
+      </div>
+      <div class="rc-grid2">
+        <div class="rc-card warn">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> Required: enable "Allow to generate HAR with Sensitive Data" before recording</h3>
+          <ol class="rc-ol">
+            <li><span>Press <b>F12</b> to open DevTools → click the <b>Settings gear icon</b> (top-right corner) — or press <b>F1</b> / <b>Shift+?</b></span></li>
+            <li><span>Scroll to the <b>Network</b> section</span></li>
+            <li><span>Tick <b>"Allow to generate HAR with Sensitive Data"</b></span></li>
+            <li><span>Close Settings → when downloading, choose <b>"Export HAR (with sensitive data)"</b></span></li>
+          </ol>
+          <div class="rc-call tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>This ensures Authorization headers, cookies and Bearer tokens are included. NFT environments use test data only — safe to enable.</span></div>
+        </div>
+        <div class="rc-card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--primary)"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg> DevTools settings (required before recording)</h3>
+          <ul class="rc-ol">
+            <li><span><b>Preserve Log</b> — keeps all network requests visible across page navigations and redirects. Without this, requests from login redirects are lost.</span></li>
+            <li><span><b>Disable Cache</b> — forces the browser to fetch fresh responses instead of using the local cache. Without this, response bodies may be empty in the HAR, making correlation extraction impossible in Script Studio.</span></li>
+          </ul>
+          <p style="margin:10px 0 0;font-size:13px;color:var(--text-2)">Both checkboxes are in the Network tab toolbar at the top of the DevTools panel.</p>
+          <div class="rc-call tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>Forgot markers?</b> Use <b>Select mode</b> after loading the HAR to manually group requests into transactions.</span></div>
+          <div class="rc-call warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.</span></div>
+        </div>
+      </div>
+    </div>
+  </details>
+</div>
+
+<!-- ═══════════════ WORKSPACE (after a recording is loaded) ═══════════════ -->
+<div id="main" class="rc rc-ws" hidden>
+  <div class="rc-sum">
+    <div class="rc-file"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>
+      <div><b id="file-name">Recording</b><span id="file-meta"></span></div></div>
+    <div class="rc-kpis"><span class="rc-kpi" id="kpi-req"></span><span class="rc-kpi" id="kpi-txn"></span><span id="stats" class="vh"></span></div>
+    <span class="grow"></span>
+    <span class="rc-pill fmt" id="fmt-badge" title="Script format"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span id="fmt-label">Web HTTP/HTML</span></span>
+    <span class="rc-pill auth" id="auth-badge" hidden title="Authentication detected in the recording (Kerberos, NTLM, Negotiate, Basic, Digest, Bearer or SAML)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M17 6l2 2M14 9l2 2"/></svg><span id="auth-label"></span></span>
+    <button class="rc-btn ghost sm" type="button" id="btn-change-fmt">Change format</button>
+    <button class="rc-btn ghost sm" type="button" id="btn-load-other" title="Go back to the start page to load another recording — this one stays until you load a new file">Load another</button>
+  </div>
+
+  <div class="rc-banner" id="netlog-banner" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+    <span><b>NetLog source (chrome://net-export/)</b> — POST request bodies are not available in NetLog files. GET/HEAD requests are fully reproduced. For POST bodies, check the TODO comments in the generated scripts and add them manually.</span></div>
+
+  <div class="rc-filters" id="rc-filters">
+    <button class="rc-mini rc-fold rc-keep" type="button" id="btn-fold" aria-expanded="true" aria-controls="rc-filters" title="Fold the filters to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>Filters</button>
+    <span class="rc-fsum" id="f-sum"></span>
+    <span class="rc-flabel">Leave out</span>
+    <div class="rc-fgroup">
+      <label class="rc-chip tog" title="Ticked = images, CSS, JS and fonts are left out of the script (only images and stylesheets named in the page HTML download on replay). Untick for JavaScript-based apps or realistic page load."><input type="checkbox" id="f-static" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Static assets</label>
+      <button class="rc-chip info" type="button" id="btn-res-help" aria-expanded="false" aria-controls="res-help" title="Should I include static assets?">?</button>
+      <label class="rc-chip tog" title="Ticked = analytics and ad requests are left out of the script."><input type="checkbox" id="f-noise" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Analytics / ads</label>
+      <label class="rc-chip tog" title="Ticked = OPTIONS (pre-flight) requests are left out of the script."><input type="checkbox" id="f-opts" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>OPTIONS</label>
+    </div>
+    <span class="rc-sep"></span>
+    <span class="rc-flabel" title="Turn a type off to leave those requests out of the script. Several types can be on at once; All turns every type back on.">Types in the script</span>
+    <div class="rc-fgroup" id="rec-rt-bar" role="group" aria-label="Request types in the script">
+      <button class="rc-chip" type="button" data-key="__all__" aria-pressed="true" title="All types">All</button>
+      <button class="rc-chip" type="button" data-key="fetch" style="--k:#4f8ef7" aria-pressed="true" title="Fetch/XHR"><i class="dot"></i>Fetch/XHR</button>
+      <button class="rc-chip" type="button" data-key="document" style="--k:#e8a838" aria-pressed="true" title="Document"><i class="dot"></i>Doc</button>
+      <button class="rc-chip" type="button" data-key="stylesheet" style="--k:#9b59b6" aria-pressed="true" title="CSS"><i class="dot"></i>CSS</button>
+      <button class="rc-chip" type="button" data-key="script" style="--k:#f39c12" aria-pressed="true" title="JavaScript"><i class="dot"></i>JS</button>
+      <button class="rc-chip" type="button" data-key="font" style="--k:#16a085" aria-pressed="true" title="Font"><i class="dot"></i>Font</button>
+      <button class="rc-chip" type="button" data-key="image" style="--k:#27ae60" aria-pressed="true" title="Image"><i class="dot"></i>Img</button>
+      <button class="rc-chip" type="button" data-key="media" style="--k:#e74c3c" aria-pressed="true" title="Media"><i class="dot"></i>Media</button>
+      <button class="rc-chip" type="button" data-key="other" style="--k:#7f8c8d" aria-pressed="true" title="Other"><i class="dot"></i>Other</button>
+    </div>
+    <span class="grow rc-keep"></span>
+    <button class="rc-btn ghost sm rc-keep" type="button" id="btn-collapse-all" hidden>Collapse all</button>
+    <button class="rc-btn sm rc-keep" type="button" id="btn-sel" aria-pressed="false" title="Select requests to group them into a new transaction"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>Select mode</button>
+  </div>
+
+  <div class="rc-help" id="res-help" hidden>
+    <button class="rc-mini x" type="button" id="res-help-close" aria-label="Close">✕</button>
+    <b>Static assets (images, CSS, JS, fonts) — should I include them?</b>
+    <ul>
+      <li><b>Leave them excluded</b> (default) for server / API load. On replay only the images and stylesheets named in the page HTML are downloaded (VuGen <code>Mode=HTML</code>, DevWeb <code>downloadHtmlStaticResources</code>).</li>
+      <li><b>Include them</b> (untick <em>Static assets</em>) for realistic page load, and always for <b>JavaScript-based apps</b> (React, Angular, Vue…): script files, and files that JavaScript or CSS requests — lazy-loaded code, fonts, images on later screens, analytics — are not downloaded from the HTML, so they are only downloaded if they are in the script.</li>
+    </ul>
+    Included files are added to the page step that loaded them, not as separate requests, and are never downloaded twice — safe for any site. Each page step's comment shows how many were in the HTML and how many are listed (<code>EXTRARES</code> / <code>resources[]</code>): if many are listed, the app is JavaScript-heavy and should keep them included.
+    VuGen also needs the run-time setting <b>Download non-HTML resources</b> switched on (on by default).
+  </div>
+
+  <div class="rc-split" id="rc-split">
+    <div class="rc-pane dom-pane" id="domain-pane">
+      <div class="rc-pane-h"><span id="dp-title">Domains</span><small id="dp-count"></small><span class="grow"></span>
+        <button class="rc-mini" type="button" id="btn-dom-all" title="Put every domain in the script">All</button><button class="rc-mini" type="button" id="btn-dom-none" title="Leave every domain out">None</button>
+        <button class="rc-mini hide-btn" type="button" data-hide="no-dom" title="Hide the domain list — the request list gets the space" aria-label="Hide the domain list">‹</button></div>
+      <input class="rc-dsearch dp-search" type="search" placeholder="Search domains…" aria-label="Search domains">
+      <div class="rc-dlist" id="dp-list"><div class="rc-empty sm">Load a HAR file</div></div>
+    </div>
+    <div class="rc-rs" data-rs="left" title="Drag to resize"></div>
+    <div class="rc-pane reqp" id="req-pane">
+      <div class="rc-pane-h"><button class="rc-mini rc-show rc-show-dom" type="button" data-hide="no-dom" title="Show the domain list">› Domains</button><span>Requests</span><small>grouped by transaction · faded = left out of the script</small><span class="grow"></span><button class="rc-mini rc-show rc-show-code" type="button" data-hide="no-code" title="Show the script preview">Script preview ‹</button><button class="rc-mini hide-btn" type="button" data-hide="no-req" title="Hide the request list — the script preview gets the space" aria-label="Hide the request list">Hide ‹</button></div>
+      <div class="rc-selbar" id="sel-bar" role="region" aria-label="Selection">
+        <div><b id="sel-cnt">0 selected</b><br><span>Click requests to group them into a transaction (Esc to stop)</span></div>
+        <button class="rc-btn sm" type="button" id="btn-create-txn" disabled>+ Create transaction</button>
+        <button class="rc-btn ghost sm" type="button" id="btn-sel-cancel">Cancel</button>
+      </div>
+      <div class="rc-nomark" id="no-markers" hidden><b>No transactions found in this recording.</b> Forgot markers? Use Select mode to group requests into transactions. <button class="rc-btn sm" type="button" data-selmode>Select mode</button></div>
+      <div class="rc-reqs" tabindex="-1">
+        <table class="rc-table"><thead><tr><th class="w-n">#</th><th>Request</th><th>Status</th><th class="w-ty">Type</th><th class="w-sz" style="text-align:right">Size</th><th class="w-tm" style="text-align:right">Time</th></tr></thead><tbody id="tbody"></tbody></table>
+      </div>
+    </div>
+    <div class="rc-rs" data-rs="right" title="Drag to resize"></div>
+    <div class="rc-pane code-pane" id="code-pane">
+      <div class="rc-pane-h"><button class="rc-mini rc-show rc-show-dom2" type="button" data-hide="no-dom" title="Show the domain list">› Domains</button><button class="rc-mini rc-show rc-show-req" type="button" data-hide="no-req" title="Show the request list">› Requests</button><button class="rc-mini hide-btn" type="button" data-hide="no-code" title="Hide the script preview — the request list gets the space" aria-label="Hide the script preview">›</button><span>Script preview</span><small id="code-panel-title">Action.c</small><span class="grow"></span><button class="rc-mini" type="button" id="btn-copy" title="Copy this file to the clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy</button></div>
+      <div class="rc-ctabs" role="tablist" aria-label="Files">
+        <button class="rc-ctab act" type="button" role="tab" aria-selected="true" data-tab="ac" data-file="Action.c">Action.c</button>
+        <button class="rc-ctab" type="button" role="tab" aria-selected="false" data-tab="mj" data-file="main.js">main.js</button>
+        <button class="rc-ctab" type="button" role="tab" aria-selected="false" data-tab="vi" data-file="vuser_init.c">vuser_init.c</button>
+        <button class="rc-ctab" type="button" role="tab" aria-selected="false" data-tab="ve" data-file="vuser_end.c">vuser_end.c</button>
+        <button class="rc-ctab" type="button" role="tab" aria-selected="false" data-tab="gh" data-file="globals.h">globals.h</button>
+      </div>
+      <pre class="rc-code" id="code-body">// Load a HAR file to see generated scripts</pre>
+    </div>
+  </div>
+
+  <div class="rc-actions">
+    <span class="hint" id="dl-hint"></span>
+    <span class="grow"></span>
+    <button class="rc-btn ghost" type="button" id="btn-studio" title="Open this recording in Script Studio to add correlation">Correlate in Script Studio →</button>
+    <button class="rc-btn" type="button" id="dl-webhttp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Download project ZIP — Web HTTP/HTML</button>
+    <button class="rc-btn" type="button" id="dl-devweb" style="--b:var(--primary)" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Download project ZIP — DevWeb</button>
+  </div>
+</div>
+</div>
+
+<!-- format dialog: shown after a file is chosen, and by "Change format" -->
+<dialog class="rc-dlg" id="fmt-dlg" aria-labelledby="fmt-h">
+  <form method="dialog" onsubmit="return false">
+    <div><h3 id="fmt-h">Choose script format</h3><p id="fmt-sub">Select the protocol your LRE project uses. You can change this later.</p></div>
+    <div class="rc-fmts">
+      <label class="rc-fmt" style="--k:var(--vugen)"><input type="radio" name="fmt" value="webhttp" id="fc-webhttp" checked><span class="t"><i>C</i>Web HTTP/HTML</span><small>C language protocol</small><span class="files"><code>Action.c</code><code>vuser_init.c</code><code>vuser_end.c</code><code>globals.h</code></span></label>
+      <label class="rc-fmt" style="--k:var(--primary)"><input type="radio" name="fmt" value="devweb" id="fc-devweb"><span class="t"><i>JS</i>DevWeb</span><small>JavaScript protocol</small><span class="files"><code>main.js</code></span></label>
+      <label class="rc-fmt" hidden><input type="radio" name="fmt" value="both" id="fc-both"><span class="t">Both formats</span></label>
+    </div>
+    <div class="row"><button class="rc-btn ghost sm" type="button" id="fmt-cancel-btn">Cancel</button><button class="rc-btn sm" type="button" id="fmt-go" autofocus>Continue →</button></div>
+  </form>
+</dialog>
+
+<!-- create / rename transaction -->
+<dialog class="rc-dlg narrow" id="txn-dlg" aria-labelledby="txn-h">
+  <form method="dialog" onsubmit="return false">
+    <div><h3 id="txn-h">Create transaction</h3><p id="txn-sub"></p></div>
+    <label class="rc-field">Transaction name<input id="txn-inp" type="text" autocomplete="off" placeholder="e.g. T01_Login"><small>Use the format T01_Login, T02_Search, T03_Checkout — a letter first, then letters, numbers or underscores.</small><span class="rc-ferr" id="txn-err" role="alert" hidden></span></label>
+    <div class="row"><button class="rc-btn ghost sm" type="button" id="txn-cancel">Cancel</button><button class="rc-btn sm" type="button" id="txn-ok">Create</button></div>
+  </form>
+</dialog>
+
+<!-- confirmation -->
+<dialog class="rc-dlg narrow" id="confirm-dlg" aria-labelledby="confirm-h">
+  <form method="dialog"><div><h3 id="confirm-h"></h3><p id="confirm-t"></p></div>
+    <div class="row"><button class="rc-btn ghost sm" value="cancel">Cancel</button><button class="rc-btn sm danger" value="ok" id="confirm-ok">OK</button></div></form>
+</dialog>
+
+<div class="rc-progress" id="rc-progress" hidden role="status" aria-live="polite">
+  <div class="rc-progress-box"><b id="rc-progress-t">Reading the recording…</b><div class="rc-progress-track"><div class="rc-progress-bar"></div></div><span>Large recordings can take a few seconds.</span></div>
+</div>
+<div id="toast-container" aria-live="polite"></div>
+
+<!-- Engine — the same files, in the same order, as the classic Recorder page -->
+<script src="VuGen-Recorder-state.js"></script>
+<script src="VuGen-Recorder-templates.js"></script>
+<script src="VuGen-Recorder-parsers.js"></script>
+<script src="shared/page-resources.js"></script>
+<script src="VuGen-Recorder-generators.js"></script>
+<script src="VuGen-Recorder-usr-gen.js"></script>
+<script src="VuGen-Recorder-ui.js"></script>
+<script src="portal/recorder-core.js"></script>
+<!-- This page's UI (replaces the classic page's display functions) -->
+<script src="portal/recorder-ui.js"></script>
+</body>
+</html>
