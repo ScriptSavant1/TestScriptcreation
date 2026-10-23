@@ -5,6 +5,12 @@
 
 ## [Unreleased] — branch: best_Practices
 
+### Added — scripts/merge-analytics-db.js (moving from two IIS servers to one)
+- One-time merge of the second server's analytics database into the main one: backs up the main
+  database first, copies every column except the id, skips records already present (safe to run
+  twice), `--dry-run` to preview. Tests: `tests/unit/mergeAnalyticsDb.test.js` (skipped where the
+  native better-sqlite3 module cannot load, e.g. a newer local Node; run with the server's Node 20).
+
 ### Fixed / Changed — Results Analyser reports (BUG-065, BUG-066)
 - Excel: new "Charts" sheet (all report charts, two per row); Time Series and LG Health are plain data
   sheets again and scroll normally (only the header row is frozen).
