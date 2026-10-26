@@ -26,7 +26,7 @@ body.has-shell #portal-converter .proto-card:hover { border-color: color-mix(in 
 body.has-shell #portal-converter .proto-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 body.has-shell #portal-converter .proto-card.active-devweb { border-color: #4f8ef7; background: color-mix(in srgb, #4f8ef7 9%, var(--cv-card)); box-shadow: 0 0 0 4px color-mix(in srgb, #4f8ef7 14%, transparent); }
 body.has-shell #portal-converter .proto-card.active-vugen { border-color: #f0883e; background: color-mix(in srgb, #f0883e 9%, var(--cv-card)); box-shadow: 0 0 0 4px color-mix(in srgb, #f0883e 14%, transparent); }
-body.has-shell #portal-converter .proto-icon { width: 40px; height: 40px; flex: none; border-radius: 11px; display: grid; place-items: center; font-size: 13.5px; font-weight: 800; font-family: var(--mono); background: color-mix(in srgb, #4f8ef7 16%, transparent); color: #4f8ef7; border: 0; }
+body.has-shell #portal-converter .proto-icon { width: 40px; height: 40px; flex: none; border-radius: 11px; display: grid; place-items: center; font-size: 13.5px; font-weight: 700; font-family: var(--mono); background: color-mix(in srgb, #4f8ef7 16%, transparent); color: #4f8ef7; border: 0; }
 body.has-shell #portal-converter #pc-vugen .proto-icon, body.has-shell #portal-converter #jpc-vugen .proto-icon { background: color-mix(in srgb, #f0883e 16%, transparent); color: #f0883e; }
 [data-theme="light"] body.has-shell #portal-converter .proto-icon { color: #1d4ed8; }
 [data-theme="light"] body.has-shell #portal-converter #pc-vugen .proto-icon, [data-theme="light"] body.has-shell #portal-converter #jpc-vugen .proto-icon { color: #c2410c; }
@@ -146,3 +146,11 @@ body.has-shell #portal-converter .chip-ext { font-size: 10.5px; color: #93c5fd; 
 body.has-shell #portal-converter :is(.seg-btn, .adv-toggle, .cv-how > summary, .dz-clear, .chip-rm):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* "Client Certificates" header on phones */
 @media (max-width: 600px) { body.has-shell #portal-converter .cert-zone-header { flex-wrap: wrap; gap: 4px 10px; } }
+/* result numbers: readable in both themes */
+body.has-shell #portal-converter .stat-num { color: #a5b4fc; -webkit-text-fill-color: currentColor; background: none; }
+[data-theme="light"] body.has-shell #portal-converter .stat-num { color: #4338ca; }
+
+/* ── one shape scale across the portal: cards 16px · tiles 12px · buttons 10px (small 9px, large 12px) ── */
+body.has-shell #portal-converter > .card, body.has-shell #portal-converter .result-box { border-radius: 16px; }
+body.has-shell #portal-converter .btn-convert { border-radius: 12px; }
+body.has-shell #portal-converter .stat { border-radius: 12px; }

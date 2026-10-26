@@ -70,3 +70,8 @@ body.has-shell #portal-help .help-noresult b { display: block; color: var(--text
 /* light theme: coloured headings inside the help text reach 4.5:1 */
 [data-theme="light"] body.has-shell #portal-help { --success: #15803d; --vugen: #c2410c; --primary: #2563eb; }
 [data-theme="light"] body.has-shell #portal-help [style*="#b39dfa"] { color: #6d28d9 !important; }
+
+/* ── design audit: light-theme colours in the help text ── */
+[data-theme="light"] body.has-shell #portal-help .help-badge-purple { color: #6d28d9; }
+[data-theme="light"] body.has-shell #portal-help [style*="color:#4ade80"] { color: #15803d !important; }
+[data-theme="light"] body.has-shell #portal-help [style*="color:#fbbf24"] { color: #a16207 !important; }

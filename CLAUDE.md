@@ -62,7 +62,7 @@ Do NOT recreate it — all its functions exist in the three split files above.
 |------|---------|
 | `src/web/views/partials/shell.ejs` | Collapsible sidebar + top bar markup (included by index.ejs with the icon map `I`) |
 | `src/web/views/partials/home.ejs` | Task-based Home page |
-| `src/web/public/portal/shell.js` | Routing (#/home … #/help/<section>), wraps switchPortalTab / openConverterTab / switchTab, collapse (localStorage `perfx-sidebar`), drawer, rail tooltips, CDP Recorder probe (`window.PerfxRecorder`, event `perfx:recorder`) |
+| `src/web/public/portal/shell.js` | Page switching WITHOUT touching the address bar (always …/converter/; old #/x links open once and are cleaned), wraps switchPortalTab / openConverterTab / switchTab, collapse (localStorage `perfx-sidebar`), drawer, rail tooltips, CDP Recorder probe (`window.PerfxRecorder`, event `perfx:recorder`) |
 | `src/web/public/portal/home.js` | Home buttons (`data-go`, `data-help`, `data-scroll`), PORTAL_CONFIG flags (`data-tab`) |
 | `src/web/public/portal/{shell,home}.css` | Styles; tool colours `--c-convert/-jmeter/-record/-studio/-results/-help` |
 
@@ -312,6 +312,13 @@ lre-utils.js lre-utils.dat` should always be empty.
 ---
 
 ## CSS / Design System
+Portal design rules (checked by the design audit — scratchpad `audit/audit.js`, every section, both themes):
+- One text font (system: Segoe UI on Windows) + one code font (Cascadia Code / Consolas); no web-font requests.
+- Font weights 400 / 600 / 700 ONLY. Segoe UI has no 500/650/750/800/850 face — 750+ renders as Segoe UI Black (blocky).
+  `b, strong { font-weight: 700 }` everywhere (the default "bolder" turns bold-in-bold into 900). Controls inherit the font.
+- Text contrast ≥ 4.5:1 in both themes (muted text: dark #8191ab, light #56677f; light-theme blue #2563eb;
+  white text only on deep colours — tool colour mixed ~58% with black).
+- Shapes: cards / panels 16px, tiles 12px, buttons 10px (small 9px, large 12px).
 All design tokens in `:root` in `VuGen-Script-Studio.css`.
 Key token groups: `--bg-*`, `--text-*`, `--accent-*`, `--border-*`, `--radius-*`, `--shadow-*`
 Component naming: `.adv-*` (advisor), `.corr-*` (correlations), `.param-*` (parameters), `.studio-*` (main studio).

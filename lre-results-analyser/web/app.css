@@ -2,15 +2,16 @@
 :root {
   --sans: -apple-system, "Segoe UI", system-ui, sans-serif;   /* same as the portal; no web-font request */
   --mono: "Cascadia Code", Consolas, "JetBrains Mono", "Courier New", monospace;
-  --bg: #0f172a; --surface: #1e293b; --surface-2: #172033; --border: #334155;
+  --bg: #060b15; --surface: #0d1528; --surface-2: #0a1222; --border: #1f2b44;   /* the portal's navy */
   --text: #e2e8f0; --text-2: #94a3b8; --text-3: #8191ab;
   --primary: #3b82f6; --primary-dim: rgba(59,130,246,0.14);
   --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444; --info: #64748b;
-  --radius: 10px; --shadow: 0 1px 3px rgba(0,0,0,.3);
+  --radius: 12px; --shadow: 0 1px 3px rgba(0,0,0,.3);   /* portal tile radius */
 }
 [data-theme="light"] {
   --bg: #f1f5f9; --surface: #ffffff; --surface-2: #f8fafc; --border: #e2e8f0;
   --text: #0f172a; --text-2: #475569; --text-3: #56677f; --primary-dim: rgba(59,130,246,0.10);
+  --primary: #2563eb; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;   /* ≥ 4.5:1 on light surfaces */
   --shadow: 0 1px 3px rgba(15,23,42,.08);
 }
 * { box-sizing: border-box; }
@@ -286,3 +287,13 @@ table.t tfoot td { font-weight: 700; border-top: 2px solid var(--border); backgr
 /* portal look: drawn icons on the start cards (were emoji) */
 .pick-icon { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-size: 22px; }
 .pick-icon svg { width: 1em; height: 1em; }
+
+/* ── design audit: one type scale everywhere ──
+   Segoe UI has real 400 / 600 / 700 faces only; b / strong default to "bolder", which turns bold text
+   inside bold text into 900 (Segoe UI Black). Controls use the page font (buttons default to Arial). */
+b, strong { font-weight: 700; }
+button, input, select, textarea { font-family: inherit; }
+.btn.primary { background: #2563eb; border-color: #2563eb; }
+:root:not([data-theme="light"]) .badge { color: #93c5fd; }
+:root:not([data-theme="light"]) .pill.fail, :root:not([data-theme="light"]) .pill.high { color: #fca5a5; }
+.btn { border-radius: 9px; }

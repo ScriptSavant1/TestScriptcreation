@@ -41,6 +41,13 @@
   shows scripts, correlations, advisor, parameters, messages and ZIP contents identical to the
   classic page. tests/unit/studioPageParity.test.js keeps scripts, ids, handlers and help text in step.
 
+### Changed — Design audit across every section (fonts, colours, shapes)
+- Measured with Playwright on every section and tool, both themes: one text font and one code font everywhere,
+  font weights 400 / 600 / 700 only (750 / 850 / 900 and bold-inside-bold rendered as blocky Segoe UI Black; buttons
+  in Help and Studio fell back to Arial), text contrast ≥ 4.5:1 everywhere (sidebar and top-bar labels, Home buttons
+  and tags, result numbers, Studio inspector, Help badges, Analyser status colours), one dark navy background for
+  every tool, one shape scale (cards 16px, tiles 12px, buttons 10px). No page errors, no external requests.
+
 ### Changed — Results Analyser matches the portal
 - System fonts like the rest of the portal (no Google Fonts request — works the same on locked-down networks),
   drawn icons on the start cards instead of emoji, secondary text at ≥ 4.5:1 in both themes. The analysis,

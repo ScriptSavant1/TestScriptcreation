@@ -366,3 +366,14 @@ html:not(.embedded) #toast-container { top: 70px; }
 .rc-table tr.req[tabindex]:focus-visible td { outline: none; background: color-mix(in srgb, var(--primary) 14%, transparent); box-shadow: inset 0 2px 0 var(--primary), inset 0 -2px 0 var(--primary); }
 .rc-reqs:focus { outline: none; }
 .rc-table tr.more td { padding: 0; }
+
+/* ── design audit: one type scale everywhere ──
+   Segoe UI has real 400 / 600 / 700 faces only; b / strong default to "bolder", which turns bold text
+   inside bold text into 900 (Segoe UI Black). Controls use the page font (buttons default to Arial). */
+b, strong { font-weight: 700; }
+button, input, select, textarea { font-family: inherit; }
+[data-theme="light"] .rc-tag { color: #1d4ed8; }
+[data-theme="light"] .rc-m.m-GET { color: #166534; }
+
+/* ── one shape scale across the portal ── */
+.rc-filters { border-radius: 16px; }

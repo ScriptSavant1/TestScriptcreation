@@ -81,11 +81,11 @@ button.sb-item, button.sb-brand { border: 0; background: transparent; font: inhe
 .sb-ico svg { width: 19px; height: 19px; }
 .sb-item:hover .sb-ico { transform: translateY(-1px); }
 .sb-txt { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
-.sb-label { font-size: 13.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-label { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-sub { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-item[aria-current="page"] { background: var(--sb-active); color: var(--text); }
 .sb-item[aria-current="page"] .sb-ico { background: var(--c); color: #fff; box-shadow: 0 4px 14px color-mix(in srgb, var(--c) 40%, transparent); }
-.sb-item[aria-current="page"] .sb-label { font-weight: 750; }
+.sb-item[aria-current="page"] .sb-label { font-weight: 700; }
 .sb-badge { margin-left: auto; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px; background: color-mix(in srgb, var(--c-record) 18%, transparent); color: var(--c-record); white-space: nowrap; }
 
 /* footer: recorder status, privacy, collapse */
@@ -130,12 +130,12 @@ html.sb-collapsed .sb-note { justify-content: center; padding: 8px 0; }
 .tb-title .sb-ico { width: 34px; height: 34px; }
 .tb-title-text { display: flex; flex-direction: column; min-width: 0; }
 .tb-crumb { font-size: 11px; color: var(--text-3); white-space: nowrap; }
-.tb-name { font-size: 15px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-actions { display: flex; align-items: center; gap: 8px; }
 .tb-btn {
   height: 36px; display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; border-radius: 10px;
   border: 1px solid var(--glass-border); background: var(--glass); color: var(--text-2);
-  font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s, border-color .15s;
 }
 .tb-btn:hover { background: var(--glass-hover); color: var(--text); border-color: color-mix(in srgb, var(--primary) 40%, var(--glass-border)); }
 .tb-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
@@ -181,3 +181,9 @@ body.has-shell #portal-converter > .card { border-radius: var(--r-xl); margin-to
 /* Help: the "On this page" bar sits right under the top bar; a jumped-to section is not hidden under it */
 body.has-shell .help-topnav-wrap { top: var(--tb-h); }
 body.has-shell .help-acc-item { scroll-margin-top: calc(var(--tb-h) + 70px); }
+
+/* ── design audit: one type scale everywhere ──
+   Segoe UI has real 400 / 600 / 700 faces only; b / strong default to "bolder", which turns bold text
+   inside bold text into 900 (Segoe UI Black). Controls use the page font (buttons default to Arial). */
+b, strong { font-weight: 700; }
+button, input, select, textarea { font-family: inherit; }

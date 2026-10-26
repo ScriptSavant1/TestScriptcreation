@@ -236,3 +236,16 @@ html.embedded[data-theme="dark"] { --bg: #060b15; --surface: #0d1528; --surface2
 @media (max-width: 640px) { .bg-decision-toggle { display: flex; flex-direction: column; gap: 4px; } }
 /* visible focus ring everywhere, including controls styled by the classic sheet (P-3) */
 html body :is(button, input, select, textarea, summary, a, [tabindex]):focus-visible { outline: 2px solid var(--primary) !important; outline-offset: 2px; }
+
+/* ── design audit: one type scale everywhere ──
+   Segoe UI has real 400 / 600 / 700 faces only; b / strong default to "bolder", which turns bold text
+   inside bold text into 900 (Segoe UI Black). Controls use the page font (buttons default to Arial). */
+b, strong { font-weight: 700; }
+button, input, select, textarea { font-family: inherit; }
+#ph-res .adv-inspector-hint { color: var(--text-2) !important; opacity: 1 !important; }
+#ph-res .adv-inspector-title { color: var(--text) !important; opacity: 1 !important; }
+[data-theme="light"] .adv-type-hex { color: #0f766e !important; }
+[data-theme="light"] .ss-setup .dz-opt-badge { color: #78350f; }
+
+/* ── one shape scale across the portal ── */
+#ph-res .stat { border-radius: 12px; }
