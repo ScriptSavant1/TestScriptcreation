@@ -1,216 +1,170 @@
 <%#
   Home page — task-based, written for people who are new to performance testing.
   Behaviour in public/portal/home.js, styles in public/portal/home.css. Locals: I (icons), basePath.
-  Every fact from the previous Home is kept here (tool descriptions, formats, auth, outputs,
-  CDP Recorder banner with live detection, "Which tool do I need?").
+  Grouped like the sidebar (Create scripts · Analyse), then how the tools fit together, the CDP Recorder
+  card with live detection, "Which tool do I need?" and the privacy facts.
 %>
 <% const ico = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[name]}</svg>`; %>
-<% const tick = ico('check'); %>
+<%
+  /* order = how people use the tools: record → correlate, then the two converters for existing tests */
+  const tools = [
+    { go: 'record', tab: 'recorder', c: '--c-record', icon: 'record', help: 'hacc-recorder', name: 'Recorder', open: 'Open the Recorder', tag: 'Browser recording → script', task: 'Record a user journey in your browser',
+      desc: 'VuGen recording does not work on many corporate virtual desktops and locked-down machines. Capture the traffic with your browser instead — two methods: the CDP Recorder (a floating toolbar, no browser extension) or the classic bookmarklet with F12 DevTools (no install at all).',
+      need: 'Chrome or Edge and the application’s address. The CDP Recorder is a one-time download; the classic method needs nothing installed.',
+      get: 'Your recording (HAR) turned into a DevWeb or VuGen script, with the steps you marked as named transactions.',
+      list: ['CDP Recorder: floating toolbar, no DevTools required', 'Classic: bookmarklet + F12 DevTools — no install needed', 'Filter domains and mark transaction boundaries visually', 'Output: DevWeb (JavaScript) or Web HTTP/HTML (C)'] },
+    { go: 'studio', tab: 'studio', c: '--c-studio', icon: 'link', help: 'hacc-studio', name: 'Script Studio — automatic correlation', open: 'Open Script Studio', tag: 'HAR → correlated script', task: 'Make a recording replay reliably',
+      desc: 'Upload one or two HAR files to get a correlated VuGen script. Values that change every time — session IDs, tokens, order numbers — are found and captured automatically so the script replays. Two HARs (the same journey recorded twice with different data) enable diff-based analysis, which finds every dynamic value for the most complete correlation possible.',
+      need: 'One HAR recording — or two recordings of the same journey with different data for the deepest result.',
+      get: 'A correlated, parameterised script (DevWeb or VuGen) and a list of every correlation found, to review and accept.',
+      list: ['1 HAR — pattern-based correlation (quick start)', '2 HARs — diff analysis (deepest, most reliable correlation)', 'Correlation Advisor — review and accept the correlations found', 'Paste & Detect — add any extractor manually in one click'] },
+    { go: 'postman', tab: 'converter', c: '--c-convert', icon: 'api', help: 'hacc-converter', name: 'Postman / Bruno Converter', open: 'Open the converter', tag: 'API collection → script', task: 'Turn an API collection into a script',
+      desc: 'Convert Postman or Bruno API collections into VuGen scripts. Upload your collection and an optional environment file — get a fully scripted, ready-to-run VuGen project in seconds.',
+      need: 'A Postman (v2.1) or Bruno collection — .json, .yml, .yaml or .bru. Optional: an environment file and client certificates.',
+      get: 'A ready-to-run project as a ZIP — DevWeb (JavaScript) or VuGen Web HTTP/HTML (C) — to open in VuGen or upload to LRE.',
+      list: ['Postman v2.1 JSON, Bruno JSON / YAML / .bru', 'Output: DevWeb (JavaScript) or Web HTTP/HTML (C)', 'Authentication: OAuth2, JWT, DPoP, PKCE, NTLM, AWS Sig v4', 'Multi-script mode — one script per collection folder'] },
+    { go: 'jmeter', tab: 'converter', c: '--c-jmeter', icon: 'migrate', help: 'hacc-jmeter', name: 'JMeter Converter', open: 'Open the JMeter converter', tag: 'JMeter .jmx → script', task: 'Move a JMeter test to LoadRunner',
+      desc: 'Convert Apache JMeter test plans (.jmx) into VuGen scripts. Upload your .jmx, optional CSV data files and certificates — get a complete VuGen script with the thread group structure preserved.',
+      need: 'A JMeter test plan (.jmx). Optional: the CSV data files and certificates it uses.',
+      get: 'VuGen or DevWeb script(s) with thread groups, extractors and data files, plus a Workload Model Excel.',
+      list: ['JMeter .jmx — all thread group types supported', 'CSV data files and certificate files included in the output', 'Generates a Workload Model Excel (.xlsx) automatically', 'Multi-script mode — one script per thread group'] },
+  ];
+%>
 <div id="portal-home" class="hm">
 
   <!-- Welcome -->
-  <div class="hm-hero">
-    <span class="hm-eyebrow"><%- ico('spark') %> PerfX Studio — LoadRunner script generation and results analysis</span>
-    <h1>Create LoadRunner test scripts, and understand your test results</h1>
-    <p>Start from whatever you already have — an API collection, a JMeter test plan, a recording made in your browser, or the raw results of a LoadRunner Enterprise run.
-      PerfX Studio builds production-ready VuGen scripts with correlation, authentication and parameterisation handled for you, and turns test results into clear reports anyone can read.</p>
-    <div class="hm-chips" aria-label="What PerfX Studio works with">
-      <span class="hm-chip"><i style="--c:var(--c-convert)"></i>Postman · Bruno</span>
-      <span class="hm-chip"><i style="--c:var(--c-jmeter)"></i>JMeter .jmx</span>
-      <span class="hm-chip"><i style="--c:var(--c-record)"></i>HAR recording</span>
-      <span class="hm-chip"><i style="--c:var(--c-results)"></i>LRE raw results</span>
-      <span class="hm-chip"><i style="--c:#3b82f6"></i>DevWeb (JavaScript)</span>
-      <span class="hm-chip"><i style="--c:var(--vugen)"></i>VuGen (C)</span>
-      <span class="hm-chip"><i style="--c:var(--success)"></i>In-memory only — nothing stored</span>
+  <header class="hm-hero">
+    <div class="hm-hero-text">
+      <h1>Create LoadRunner scripts, and understand your test results</h1>
+      <p>Start from what you already have — an API collection, a JMeter test plan, a browser recording or the raw results of a LoadRunner Enterprise run.
+        PerfX Studio builds VuGen scripts with correlation, authentication and parameterisation handled for you, and turns test results into reports anyone can read.</p>
+      <div class="hm-hero-actions">
+        <button class="ds-btn ds-btn-primary" type="button" data-help="hacc-quickstart"><%- ico('book') %> New here? Read the quick start</button>
+        <button class="ds-btn" type="button" data-scroll="hm-which"><%- ico('compass') %> Which tool do I need?</button>
+      </div>
     </div>
-    <div class="hm-hero-actions">
-      <button class="hm-btn" type="button" data-scroll="hm-tasks"><%- ico('arrowDown') %> Choose what to do</button>
-      <button class="hm-btn ghost" type="button" data-help="hacc-quickstart"><%- ico('book') %> New here? Read the quick start</button>
-      <button class="hm-btn ghost" type="button" data-scroll="hm-which"><%- ico('compass') %> Which tool do I need?</button>
-    </div>
-  </div>
+    <dl class="hm-formats" aria-label="What PerfX Studio works with">
+      <div><dt>Input</dt><dd>Browser recording (HAR) · Postman · Bruno · JMeter .jmx · LRE raw results</dd></div>
+      <div><dt>Output</dt><dd>DevWeb (JavaScript) · VuGen Web HTTP/HTML (C) · Excel · Word · PDF · HTML</dd></div>
+      <div><dt>Privacy</dt><dd>In memory only — nothing is stored</dd></div>
+    </dl>
+  </header>
 
-  <!-- What would you like to do? -->
+  <!-- Create scripts -->
   <section id="hm-tasks" aria-labelledby="hm-tasks-h">
-    <h2 id="hm-tasks-h">What would you like to do?</h2>
-    <p class="hm-lead">Pick the task that matches what you have. Each card says what you need to start and what you get at the end.</p>
+    <div class="hm-sec-head"><h2 id="hm-tasks-h">Create scripts</h2><p>Pick the card that matches what you have.</p></div>
     <div class="hm-tasks">
-
-      <article class="hm-task" data-tab="converter">
-        <div class="hm-card" style="--c:var(--c-convert)">
-          <div class="hm-card-head"><span class="hm-ico"><%- ico('api') %></span>
-            <div><div class="hm-tag">API collection → script</div><h3>Turn an API collection into a script</h3><div class="hm-tool">Postman / Bruno Converter</div></div></div>
-          <p class="hm-desc">Convert Postman or Bruno API collections into VuGen scripts. Upload your collection and an optional environment file — get a fully scripted, ready-to-run VuGen project in seconds.</p>
-          <div class="hm-io">
-            <div><b><%- ico('upload') %> You need</b><p>A Postman (v2.1) or Bruno collection — .json, .yml, .yaml or .bru. Optional: an environment file and client certificates.</p></div>
-            <div><b><%- ico('download') %> You get</b><p>A ready-to-run project as a ZIP — DevWeb (JavaScript) or VuGen Web HTTP/HTML (C) — to open in VuGen or upload to LRE.</p></div>
-          </div>
-          <ul class="hm-list">
-            <li><%- tick %>Postman v2.1 JSON, Bruno JSON / YAML / .bru</li>
-            <li><%- tick %>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
-            <li><%- tick %>Authentication: OAuth2, JWT, DPoP, PKCE, NTLM, AWS Sig v4</li>
-            <li><%- tick %>Multi-script mode — one script per collection folder</li>
-          </ul>
-          <div class="hm-card-foot"><button class="hm-btn" type="button" data-go="postman">Open converter <%- ico('arrowRight') %></button><button class="hm-link" type="button" data-help="hacc-converter"><%- ico('help') %> How it works</button></div>
+      <% tools.forEach(t => { %>
+      <article class="hm-task" data-tab="<%= t.tab %>">
+        <div class="hm-card" style="--c:var(<%= t.c %>)">
+          <div class="hm-card-head"><span class="hm-ico"><%- ico(t.icon) %></span>
+            <div><div class="hm-tag"><%= t.tag %></div><h3><%= t.task %></h3><div class="hm-tool"><%= t.name %></div></div></div>
+          <p class="hm-desc"><%= t.desc %></p>
+          <dl class="hm-io">
+            <div><dt><%- ico('upload') %> You need</dt><dd><%= t.need %></dd></div>
+            <div><dt><%- ico('download') %> You get</dt><dd><%= t.get %></dd></div>
+          </dl>
+          <ul class="hm-list"><% t.list.forEach(x => { %><li><%- ico('check') %><span><%= x %></span></li><% }) %></ul>
+          <div class="hm-card-foot"><button class="ds-btn ds-btn-primary hm-btn" type="button" data-go="<%= t.go %>"><%= t.open %> <%- ico('arrowRight') %></button><button class="ds-btn ds-btn-ghost hm-link" type="button" data-help="<%= t.help %>"><%- ico('help') %> How it works</button></div>
         </div>
       </article>
-
-      <article class="hm-task" data-tab="converter">
-        <div class="hm-card" style="--c:var(--c-jmeter)">
-          <div class="hm-card-head"><span class="hm-ico"><%- ico('migrate') %></span>
-            <div><div class="hm-tag">JMeter .jmx → script</div><h3>Move a JMeter test to LoadRunner</h3><div class="hm-tool">JMeter Converter</div></div></div>
-          <p class="hm-desc">Convert Apache JMeter test plans (.jmx) into VuGen scripts. Upload your .jmx, optional CSV data files and certificates — get a complete VuGen script with the thread group structure preserved.</p>
-          <div class="hm-io">
-            <div><b><%- ico('upload') %> You need</b><p>A JMeter test plan (.jmx). Optional: the CSV data files and certificates it uses.</p></div>
-            <div><b><%- ico('download') %> You get</b><p>VuGen or DevWeb script(s) with thread groups, extractors and data files, plus a Workload Model Excel.</p></div>
-          </div>
-          <ul class="hm-list">
-            <li><%- tick %>JMeter .jmx — all thread group types supported</li>
-            <li><%- tick %>CSV data files and certificate files included in the output</li>
-            <li><%- tick %>Generates a Workload Model Excel (.xlsx) automatically</li>
-            <li><%- tick %>Multi-script mode — one script per thread group</li>
-          </ul>
-          <div class="hm-card-foot"><button class="hm-btn" type="button" data-go="jmeter">Open converter <%- ico('arrowRight') %></button><button class="hm-link" type="button" data-help="hacc-jmeter"><%- ico('help') %> How it works</button></div>
-        </div>
-      </article>
-
-      <article class="hm-task" data-tab="recorder">
-        <div class="hm-card" style="--c:var(--c-record)">
-          <div class="hm-card-head"><span class="hm-ico"><%- ico('record') %></span>
-            <div><div class="hm-tag">Browser recording → script</div><h3>Record a user journey in your browser</h3><div class="hm-tool">Recorder</div></div></div>
-          <p class="hm-desc">VuGen recording does not work on many VCSE and corporate machines. Capture the traffic with your browser instead — two methods: the CDP Recorder (a floating toolbar, no browser extension) or the classic bookmarklet with F12 DevTools (no install at all).</p>
-          <div class="hm-io">
-            <div><b><%- ico('upload') %> You need</b><p>Chrome or Edge and the application's address. The CDP Recorder is a one-time download; the classic method needs nothing installed.</p></div>
-            <div><b><%- ico('download') %> You get</b><p>Your recording (HAR) turned into a DevWeb or VuGen script, with the steps you marked as named transactions.</p></div>
-          </div>
-          <ul class="hm-list">
-            <li><%- tick %>CDP Recorder: floating toolbar, no DevTools required</li>
-            <li><%- tick %>Classic: bookmarklet + F12 DevTools — no install needed</li>
-            <li><%- tick %>Filter domains and mark transaction boundaries visually</li>
-            <li><%- tick %>Output: DevWeb (JavaScript) or Web HTTP/HTML (C)</li>
-          </ul>
-          <div class="hm-card-foot"><button class="hm-btn" type="button" data-go="record">Open the Recorder <%- ico('arrowRight') %></button><button class="hm-link" type="button" data-help="hacc-recorder"><%- ico('help') %> How it works</button></div>
-        </div>
-      </article>
-
-      <article class="hm-task wide" data-tab="studio">
-        <div class="hm-card" style="--c:var(--c-studio)">
-          <div class="hm-card-head"><span class="hm-ico"><%- ico('link') %></span>
-            <div><div class="hm-tag">HAR → correlated script</div><h3>Make a recording replay reliably</h3><div class="hm-tool">Script Studio — automatic correlation</div></div></div>
-          <p class="hm-desc">Upload one or two HAR files to get a correlated VuGen script. Values that change every time — session IDs, tokens, order numbers — are found and captured automatically so the script replays. Two HARs (the same journey recorded twice with different data) enable diff-based analysis, which finds every dynamic value for the most complete correlation possible.</p>
-          <div class="hm-io">
-            <div><b><%- ico('upload') %> You need</b><p>One HAR recording — or two recordings of the same journey with different data for the deepest result.</p></div>
-            <div><b><%- ico('download') %> You get</b><p>A correlated, parameterised script (DevWeb or VuGen) and a list of every correlation found, to review and accept.</p></div>
-          </div>
-          <ul class="hm-list">
-            <li><%- tick %>1 HAR — pattern-based correlation (quick start)</li>
-            <li><%- tick %>2 HARs — diff analysis (deepest, most reliable correlation)</li>
-            <li><%- tick %>Correlation Advisor — review and accept the correlations found</li>
-            <li><%- tick %>Paste &amp; Detect — add any extractor manually in one click</li>
-          </ul>
-          <div class="hm-card-foot"><button class="hm-btn" type="button" data-go="studio">Open Script Studio <%- ico('arrowRight') %></button><button class="hm-link" type="button" data-help="hacc-studio"><%- ico('help') %> How it works</button></div>
-        </div>
-      </article>
-
-      <article class="hm-task wide full" data-tab="analyser">
-        <div class="hm-card" style="--c:var(--c-results)">
-          <div class="hm-card-head"><span class="hm-ico"><%- ico('chart') %></span>
-            <div><div class="hm-tag">LRE raw results → Excel · Word · PDF</div><h3>Understand the results of a test run</h3><div class="hm-tool">Results Analyser</div></div></div>
-          <p class="hm-desc">Analyse a LoadRunner Enterprise run straight from its raw results folder or ZIP — independently of LRE Analysis. Transaction summary for the full run and the steady state, workload model, errors, load-generator health and automatic insights, each with a plain-English explanation. Everything runs in your browser: results are never uploaded or stored on the server.</p>
-          <div class="hm-io">
-            <div><b><%- ico('upload') %> You need</b><p>The run's raw results from LRE — the folder or the ZIP (RawData.eve and the files next to it).</p></div>
-            <div><b><%- ico('download') %> You get</b><p>A dashboard with findings, and Excel, Word, PDF and HTML reports ready to share.</p></div>
-          </div>
-          <ul class="hm-list">
-            <li><%- tick %>Exact percentiles (P50–P99), TPS, pass / fail, SLA and Apdex</li>
-            <li><%- tick %>Detected steady state — adjustable analysis window</li>
-            <li><%- tick %>Insights: slow-downs over time, sudden changes, spikes, load-generator problems, pacing check</li>
-            <li><%- tick %>Any size (streamed) — Excel, Word, PDF and HTML reports</li>
-          </ul>
-          <div class="hm-card-foot"><button class="hm-btn" type="button" data-go="results">Open the Results Analyser <%- ico('arrowRight') %></button><button class="hm-link" type="button" data-help="hacc-analyser"><%- ico('help') %> How it works</button></div>
-        </div>
-      </article>
+      <% }) %>
     </div>
+  </section>
+
+  <!-- Analyse -->
+  <section aria-labelledby="hm-analyse-h" data-tab="analyser">
+    <div class="hm-sec-head"><h2 id="hm-analyse-h">Analyse results</h2><p>After the test has run in LoadRunner Enterprise.</p></div>
+    <article class="hm-task" data-tab="analyser">
+      <div class="hm-card hm-card-wide" style="--c:var(--c-results)">
+        <div class="hm-card-head"><span class="hm-ico"><%- ico('chart') %></span>
+          <div><div class="hm-tag">LRE raw results → Excel · Word · PDF</div><h3>Understand the results of a test run</h3><div class="hm-tool">Results Analyser</div></div></div>
+        <p class="hm-desc">Analyse a LoadRunner Enterprise run straight from its raw results folder or ZIP — independently of LRE Analysis. Transaction summary for the full run and the steady state, workload model, errors, load-generator health and automatic insights, each with a plain-English explanation. Everything runs in your browser: results are never uploaded or stored on the server.</p>
+        <dl class="hm-io">
+          <div><dt><%- ico('upload') %> You need</dt><dd>The run’s raw results from LRE — the folder or the ZIP (RawData.eve and the files next to it).</dd></div>
+          <div><dt><%- ico('download') %> You get</dt><dd>A dashboard with findings, and Excel, Word, PDF and HTML reports ready to share.</dd></div>
+        </dl>
+        <ul class="hm-list hm-list-2"><% ['Exact percentiles (P50–P99), TPS, pass / fail, SLA and Apdex', 'Detected steady state — adjustable analysis window', 'Insights: slow-downs over time, sudden changes, spikes, load-generator problems, pacing check', 'Any size (streamed) — Excel, Word, PDF and HTML reports'].forEach(x => { %><li><%- ico('check') %><span><%= x %></span></li><% }) %></ul>
+        <div class="hm-card-foot"><button class="ds-btn ds-btn-primary hm-btn" type="button" data-go="results">Open the Results Analyser <%- ico('arrowRight') %></button><button class="ds-btn ds-btn-ghost hm-link" type="button" data-help="hacc-analyser"><%- ico('help') %> How it works</button></div>
+      </div>
+    </article>
   </section>
 
   <!-- How the tools fit together -->
   <section aria-labelledby="hm-flow-h">
-    <h2 id="hm-flow-h">How the tools fit together</h2>
-    <p class="hm-lead">A typical performance test, from a recording to the report. Click a step to open its tool.</p>
-    <div class="hm-flow">
-      <button class="hm-step" type="button" data-go="record" style="--c:var(--c-record)"><span class="hm-step-n">1</span><h4>Record</h4><span class="hm-tool">Recorder · CDP Recorder</span><p>Walk through the user journey in your browser and mark each step as a transaction.</p></button>
-      <button class="hm-step" type="button" data-go="studio" style="--c:var(--c-studio)"><span class="hm-step-n">2</span><h4>Correlate</h4><span class="hm-tool">Script Studio</span><p>Dynamic values are found and captured so the script replays for many users.</p></button>
-      <div class="hm-step" style="--c:var(--text-3);cursor:default"><span class="hm-step-n">3</span><h4>Run the test</h4><span class="hm-tool">LoadRunner Enterprise</span><p>Upload the script to LRE and run the load test there, as usual.</p></div>
-      <button class="hm-step" type="button" data-go="results" style="--c:var(--c-results)"><span class="hm-step-n">4</span><h4>Analyse</h4><span class="hm-tool">Results Analyser</span><p>Open the run's raw results to see what happened, what to look at, and share the report.</p></button>
-    </div>
-    <div class="hm-flow-alt"><%- ico('spark') %> Already have an API collection or a JMeter test plan? Skip steps 1 and 2 — convert it directly:
-      <button class="hm-link" type="button" data-go="postman" style="color:var(--c-convert)">Postman / Bruno converter</button> ·
-      <button class="hm-link" type="button" data-go="jmeter" style="color:var(--c-jmeter)">JMeter converter</button></div>
+    <div class="hm-sec-head"><h2 id="hm-flow-h">How the tools fit together</h2><p>A typical performance test, from a recording to the report. Click a step to open its tool.</p></div>
+    <ol class="hm-flow">
+      <li><button class="hm-step" type="button" data-go="record" style="--c:var(--c-record)"><span class="hm-step-n">1</span><span class="hm-step-t"><b>Record</b><span>Recorder · CDP Recorder</span></span><p>Walk through the user journey in your browser and mark each step as a transaction.</p></button></li>
+      <li><button class="hm-step" type="button" data-go="studio" style="--c:var(--c-studio)"><span class="hm-step-n">2</span><span class="hm-step-t"><b>Correlate</b><span>Script Studio</span></span><p>Dynamic values are found and captured so the script replays for many users.</p></button></li>
+      <li><div class="hm-step is-static" style="--c:var(--ds-text-3)"><span class="hm-step-n">3</span><span class="hm-step-t"><b>Run the test</b><span>LoadRunner Enterprise</span></span><p>Upload the script to LRE and run the load test there, as usual.</p></div></li>
+      <li><button class="hm-step" type="button" data-go="results" style="--c:var(--c-results)"><span class="hm-step-n">4</span><span class="hm-step-t"><b>Analyse</b><span>Results Analyser</span></span><p>Open the run’s raw results to see what happened, what to look at, and share the report.</p></button></li>
+    </ol>
+    <p class="hm-flow-alt"><%- ico('spark') %> Already have an API collection or a JMeter test plan? Skip steps 1 and 2 — convert it directly:
+      <button class="hm-inline" type="button" data-go="postman">Postman / Bruno converter</button> or
+      <button class="hm-inline" type="button" data-go="jmeter">JMeter converter</button></p>
   </section>
 
-  <!-- CDP Recorder -->
-  <section aria-labelledby="hm-rec-h" data-tab="recorder">
-    <div class="hm-rec" id="hm-rec">
-      <div>
-        <div class="hm-tag">New · recommended for recording</div>
-        <h2 id="hm-rec-h">CDP Recorder — record without DevTools, no extension to install</h2>
-        <div class="hm-rec-status" aria-live="polite"><i></i><span id="hm-rec-state">Not running on this computer</span></div>
-        <p class="hm-lead" style="margin-bottom:16px">A floating toolbar that captures your traffic — including new tabs and pop-ups — names your transactions, and sends the recording straight to Script Studio. <b>It works even where browser extensions are blocked.</b></p>
-        <div class="hm-hero-actions">
-          <a class="hm-btn" id="hm-rec-btn" href="<%= basePath %>/downloads/cdp-recorder"><%- ico('download') %> <span>Get CDP Recorder</span></a>
-          <button class="hm-link" type="button" data-help="hacc-recorder"><%- ico('help') %> Recording guide</button>
+  <!-- CDP Recorder + Which tool -->
+  <div class="hm-split">
+    <section aria-labelledby="hm-rec-h" data-tab="recorder">
+      <div class="hm-rec" id="hm-rec">
+        <div class="hm-rec-top">
+          <span class="hm-ico" style="--c:var(--c-record)"><%- ico('record') %></span>
+          <div><h2 id="hm-rec-h">CDP Recorder</h2><div class="hm-tool">Recommended for recording · no DevTools, no extension</div></div>
+          <div class="hm-rec-status" aria-live="polite"><i></i><span id="hm-rec-state">Not running on this computer</span></div>
+        </div>
+        <p class="hm-desc">A floating toolbar that captures your traffic — including new tabs and pop-ups — names your transactions, and sends the recording straight to Script Studio. <b>It works even where browser extensions are blocked.</b></p>
+        <ol class="hm-steps" aria-label="One-time setup">
+          <li><span><b>Download the ZIP</b> once with “Get CDP Recorder”.</span></li>
+          <li><span><b>Extract it</b> to any folder on your computer.</span></li>
+          <li><span><b>Run cdp-recorder.exe.</b> A browser for recording and the toolbar open — click Start, record your journey, click Stop.</span></li>
+        </ol>
+        <div class="hm-card-foot">
+          <a class="ds-btn ds-btn-primary hm-btn" id="hm-rec-btn" href="<%= basePath %>/downloads/cdp-recorder"><%- ico('download') %> <span>Get CDP Recorder</span></a>
+          <button class="ds-btn ds-btn-ghost hm-link" type="button" data-help="hacc-recorder"><%- ico('help') %> Recording guide</button>
         </div>
       </div>
-      <ol class="hm-steps" aria-label="One-time setup">
-        <li><span><b>Download the ZIP</b> once with “Get CDP Recorder”.</span></li>
-        <li><span><b>Extract it</b> to any folder on your computer.</span></li>
-        <li><span><b>Run cdp-recorder.exe.</b> A browser for recording and the toolbar open — click Start, record your journey, click Stop.</span></li>
-      </ol>
-    </div>
-  </section>
+    </section>
 
-  <!-- Which tool do I need? -->
-  <section id="hm-which" aria-labelledby="hm-which-h">
-    <h2 id="hm-which-h">Which tool do I need?</h2>
-    <p class="hm-lead">Choose the sentence that describes your situation.</p>
-    <div class="hm-guide">
-      <details class="hm-q" name="hm-which" style="--c:var(--c-convert)" data-tab="converter">
-        <summary><span class="hm-ico"><%- ico('api') %></span>I have a Postman or Bruno API collection (.json, .yml, .bru)</summary>
-        <div class="hm-a"><p><b>Use the Postman / Bruno Converter.</b> Upload your collection (and an optional environment file), choose DevWeb or VuGen C output, download the ZIP and open it in VuGen.</p>
-          <button class="hm-btn" type="button" data-go="postman">Open the converter <%- ico('arrowRight') %></button></div>
-      </details>
-      <details class="hm-q" name="hm-which" style="--c:var(--c-jmeter)" data-tab="converter">
-        <summary><span class="hm-ico"><%- ico('migrate') %></span>I have an existing JMeter test plan (.jmx)</summary>
-        <div class="hm-a"><p><b>Use the JMeter Converter.</b> Upload your .jmx (and optional CSV and certificate files). You get a VuGen script with all thread groups and extractors, and a Workload Model Excel.</p>
-          <button class="hm-btn" type="button" data-go="jmeter">Open the JMeter converter <%- ico('arrowRight') %></button></div>
-      </details>
-      <details class="hm-q" name="hm-which" style="--c:var(--c-record)" data-tab="recorder">
-        <summary><span class="hm-ico"><%- ico('record') %></span>I need to record a new user journey — VuGen recording doesn't work on my machine</summary>
-        <div class="hm-a"><p><b>Use the Recorder, then Script Studio.</b> Two ways to record: the <b>CDP Recorder</b> — a floating toolbar, no browser extension at all, works even where extensions are blocked; or the <b>classic</b> F12 DevTools bookmarklet — no install. Both feed into the Recorder, then Script Studio adds the correlation.</p>
-          <button class="hm-btn" type="button" data-go="record">Open the Recorder <%- ico('arrowRight') %></button></div>
-      </details>
-      <details class="hm-q" name="hm-which" style="--c:var(--c-studio)" data-tab="studio">
-        <summary><span class="hm-ico"><%- ico('link') %></span>I already have a HAR file and want a script with automatic correlation</summary>
-        <div class="hm-a"><p><b>Use Script Studio.</b> Upload one HAR for pattern-based correlation. For the most complete result, record the same journey twice with different data and upload both HARs for diff-based analysis.</p>
-          <button class="hm-btn" type="button" data-go="studio">Open Script Studio <%- ico('arrowRight') %></button></div>
-      </details>
-      <details class="hm-q" name="hm-which" style="--c:var(--c-results)" data-tab="analyser">
-        <summary><span class="hm-ico"><%- ico('chart') %></span>My test has run in LRE and I need to understand or report the results</summary>
-        <div class="hm-a"><p><b>Use the Results Analyser.</b> Open the run's raw results folder or ZIP. You get the transaction summary, errors, load-generator health and automatic findings with plain-English explanations, and Excel, Word, PDF and HTML reports — without LRE Analysis.</p>
-          <button class="hm-btn" type="button" data-go="results">Open the Results Analyser <%- ico('arrowRight') %></button></div>
-      </details>
-    </div>
-  </section>
+    <section id="hm-which" aria-labelledby="hm-which-h">
+      <div class="hm-which-box">
+        <h2 id="hm-which-h">Which tool do I need?</h2>
+        <p class="hm-sub">Choose the sentence that describes your situation.</p>
+        <div class="hm-guide">
+          <details class="hm-q" name="hm-which" style="--c:var(--c-record)" data-tab="recorder">
+            <summary><span class="hm-ico"><%- ico('record') %></span><span>I need to record a new user journey — VuGen recording doesn’t work on my machine</span></summary>
+            <div class="hm-a"><p><b>Use the Recorder, then Script Studio.</b> Two ways to record: the <b>CDP Recorder</b> — a floating toolbar, no browser extension at all, works even where extensions are blocked; or the <b>classic</b> F12 DevTools bookmarklet — no install. Both feed into the Recorder, then Script Studio adds the correlation.</p>
+              <button class="ds-btn ds-btn-sm" type="button" data-go="record">Open the Recorder <%- ico('arrowRight') %></button></div>
+          </details>
+          <details class="hm-q" name="hm-which" style="--c:var(--c-studio)" data-tab="studio">
+            <summary><span class="hm-ico"><%- ico('link') %></span><span>I already have a HAR file and want a script with automatic correlation</span></summary>
+            <div class="hm-a"><p><b>Use Script Studio.</b> Upload one HAR for pattern-based correlation. For the most complete result, record the same journey twice with different data and upload both HARs for diff-based analysis.</p>
+              <button class="ds-btn ds-btn-sm" type="button" data-go="studio">Open Script Studio <%- ico('arrowRight') %></button></div>
+          </details>
+          <details class="hm-q" name="hm-which" style="--c:var(--c-convert)" data-tab="converter">
+            <summary><span class="hm-ico"><%- ico('api') %></span><span>I have a Postman or Bruno API collection (.json, .yml, .bru)</span></summary>
+            <div class="hm-a"><p><b>Use the Postman / Bruno Converter.</b> Upload your collection (and an optional environment file), choose DevWeb or VuGen C output, download the ZIP and open it in VuGen.</p>
+              <button class="ds-btn ds-btn-sm" type="button" data-go="postman">Open the converter <%- ico('arrowRight') %></button></div>
+          </details>
+          <details class="hm-q" name="hm-which" style="--c:var(--c-jmeter)" data-tab="converter">
+            <summary><span class="hm-ico"><%- ico('migrate') %></span><span>I have an existing JMeter test plan (.jmx)</span></summary>
+            <div class="hm-a"><p><b>Use the JMeter Converter.</b> Upload your .jmx (and optional CSV and certificate files). You get a VuGen script with all thread groups and extractors, and a Workload Model Excel.</p>
+              <button class="ds-btn ds-btn-sm" type="button" data-go="jmeter">Open the JMeter converter <%- ico('arrowRight') %></button></div>
+          </details>
+          <details class="hm-q" name="hm-which" style="--c:var(--c-results)" data-tab="analyser">
+            <summary><span class="hm-ico"><%- ico('chart') %></span><span>My test has run in LRE and I need to understand or report the results</span></summary>
+            <div class="hm-a"><p><b>Use the Results Analyser.</b> Open the run’s raw results folder or ZIP. You get the transaction summary, errors, load-generator health and automatic findings with plain-English explanations, and Excel, Word, PDF and HTML reports — without LRE Analysis.</p>
+              <button class="ds-btn ds-btn-sm" type="button" data-go="results">Open the Results Analyser <%- ico('arrowRight') %></button></div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </div>
 
   <!-- Good to know -->
-  <section aria-labelledby="hm-facts-h">
-    <h2 id="hm-facts-h">Good to know</h2>
-    <div class="hm-facts">
-      <div class="hm-fact"><span class="hm-ico"><%- ico('lock') %></span><div><h4>Nothing is stored</h4><p>Files you convert are processed in the server's memory and deleted as soon as you download the result (or after 5 minutes). Nothing is written to disk.</p></div></div>
-      <div class="hm-fact"><span class="hm-ico"><%- ico('monitor') %></span><div><h4>Works in your browser</h4><p>The Recorder, Script Studio and the Results Analyser run entirely in your browser — recordings and test results never leave your computer. Only usage statistics (tool, file name, counts) are recorded.</p></div></div>
-      <div class="hm-fact"><span class="hm-ico"><%- ico('shield') %></span><div><h4>Works on locked-down machines</h4><p>No install is needed for the web tools, and the CDP Recorder needs no browser extension — made for VCSE and corporate desktops.</p></div></div>
-    </div>
+  <section class="hm-facts" aria-label="Good to know">
+    <div class="hm-fact"><span class="hm-ico" style="--c:var(--ds-ok)"><%- ico('lock') %></span><div><h4>Nothing is stored</h4><p>Files you convert are processed in the server’s memory and deleted as soon as you download the result (or after 5 minutes). Nothing is written to disk.</p></div></div>
+    <div class="hm-fact"><span class="hm-ico" style="--c:var(--ds-ok)"><%- ico('monitor') %></span><div><h4>Works in your browser</h4><p>The Recorder, Script Studio and the Results Analyser run entirely in your browser — recordings and test results never leave your computer. Only usage statistics (tool, file name, counts) are recorded.</p></div></div>
+    <div class="hm-fact"><span class="hm-ico" style="--c:var(--ds-ok)"><%- ico('shield') %></span><div><h4>Works on locked-down machines</h4><p>No install is needed for the web tools, and the CDP Recorder needs no browser extension — made for virtual desktops and locked-down corporate machines.</p></div></div>
   </section>
-
-  <div class="hm-foot">PerfX Studio · Performance script generation · Files processed in memory — nothing stored on the server</div>
 </div>

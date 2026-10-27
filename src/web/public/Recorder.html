@@ -16,6 +16,7 @@
   if (window.parent !== window) document.documentElement.classList.add('embedded');
 })();
 </script>
+<link rel="stylesheet" href="portal/ds.css">
 <link rel="stylesheet" href="portal/recorder.css">
 <script>
 (function(){
@@ -31,55 +32,60 @@
 
 <!-- standalone header (hidden inside the portal) -->
 <header class="rc-top">
-  <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span>
-  <b>Recorder</b><span>HAR → VuGen / DevWeb script</span>
+  <span class="ds-ico logo" style="--c:var(--c-record)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span>
+  <b>Recorder</b><span class="sub">HAR to VuGen / DevWeb script</span>
   <span class="grow"></span>
-  <button class="rc-btn ghost sm" type="button" onclick="clearAll()">Clear</button>
-  <button class="rc-btn ghost sm" type="button" onclick="toggleTheme()" title="Light / dark theme" aria-label="Light / dark theme"><span id="theme-icon">☀</span></button>
+  <button class="ds-btn ds-btn-sm" type="button" onclick="clearAll()">Clear</button>
+  <button class="ds-btn ds-btn-sm rc-theme" type="button" onclick="toggleTheme()" title="Light / dark theme" aria-label="Light / dark theme"><span id="theme-icon"></span><svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
 </header>
 
 <div class="rc-page">
 <!-- ═══════════════ START PAGE ═══════════════ -->
 <div id="welcome" class="rc">
-  <h2 style="font-size:24px">Turn a browser recording into a LoadRunner script</h2>
-  <p class="lead">Record your user journey in Chrome or Edge, load the recording here, and get a ready-to-run VuGen Web HTTP/HTML or DevWeb script — with your transactions, filters for unwanted traffic, and a preview of every file.</p>
-
-  <div class="rc-steps" aria-label="How it works">
-    <div class="rc-step"><i>1</i><div><b>Record your journey</b><span>With the CDP Recorder or the bookmarks + DevTools (below).</span></div></div>
-    <div class="rc-step"><i>2</i><div><b>Load the recording</b><span>Drop the .har (or NetLog .json) file in the box below.</span></div></div>
-    <div class="rc-step"><i>3</i><div><b>Review and download</b><span>Choose the format, filter, check transactions, download the ZIP.</span></div></div>
-    <div class="rc-step opt" style="--sc:#6d28d9"><i>4</i><div><b>Optional: correlate</b><span>Open the recording in Script Studio to capture dynamic values.</span></div></div>
-  </div>
-
-  <div class="rc-resume" id="resume" hidden>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
-    <span><b id="resume-name"></b> is still open — load another file below, or go back to it.</span>
-    <button class="rc-btn sm" type="button" id="btn-back-ws">← Back to the recording</button>
-  </div>
-  <div class="rc-drop" id="dz" role="button" tabindex="0" aria-label="Load a recording: drop a .har or NetLog .json file, or press Enter to browse"
-       ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
-    <span class="rc-drop-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span>
-    <div>
-      <h3>Drop your .har or NetLog .json file here</h3>
-      <p>or click to browse · <b>HAR</b> (DevTools F12, or saved by the CDP Recorder) or <b>NetLog JSON</b> (chrome://net-export/).
-        Next you choose the script format, then review the requests and transactions.</p>
+  <section class="ds-card rc-hero" aria-labelledby="rc-h1">
+    <div class="rc-hero-text">
+      <h1 id="rc-h1">Turn a browser recording into a LoadRunner script</h1>
+      <p class="lead">Record your user journey in Chrome or Edge, load the recording here, and get a ready-to-run VuGen Web HTTP/HTML or DevWeb script — with your transactions, filters for unwanted traffic, and a preview of every file.</p>
     </div>
-    <button class="rc-btn" type="button" tabindex="-1" onclick="event.stopPropagation();document.getElementById('hf').click()">Browse file</button>
-  </div>
-  <input type="file" id="hf" accept=".har,.json" hidden onchange="onFilePick(event)">
 
-  <div class="rc-err" id="start-err" hidden role="alert">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
-    <div><b id="start-err-t"></b><p id="start-err-m"></p><p class="h" id="start-err-h"></p></div>
-    <button class="rc-mini x" type="button" id="start-err-x" aria-label="Close this message">✕</button>
-  </div>
+    <div class="rc-resume ds-note" id="resume" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+      <span><b id="resume-name"></b> is still open — load another file below, or go back to it.</span>
+      <button class="ds-btn ds-btn-sm" type="button" id="btn-back-ws"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>Back to the recording</button>
+    </div>
+    <div class="ds-drop rc-drop" id="dz" role="button" tabindex="0" aria-label="Load a recording: drop a .har or NetLog .json file, or press Enter to browse"
+         ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+      <span class="rc-drop-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span>
+      <div class="rc-drop-text">
+        <h3>Drop your .har or NetLog .json file here</h3>
+        <p>or click to browse · <b>HAR</b> (DevTools F12, or saved by the CDP Recorder) or <b>NetLog JSON</b> (chrome://net-export/).
+          Next you choose the script format, then review the requests and transactions.</p>
+      </div>
+      <button class="ds-btn ds-btn-primary" type="button" tabindex="-1" onclick="event.stopPropagation();document.getElementById('hf').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Browse file</button>
+    </div>
+    <input type="file" id="hf" accept=".har,.json" hidden onchange="onFilePick(event)">
 
-  <details class="rc-how" id="how" open>
-    <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><h2>How to record your journey</h2><small class="open">click to hide</small><small class="closed">click to show the instructions</small></summary>
+    <div class="rc-err ds-note bad" id="start-err" hidden role="alert">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+      <div><b id="start-err-t"></b><p id="start-err-m"></p><p class="h" id="start-err-h"></p></div>
+      <button class="ds-btn ds-btn-ghost ds-btn-sm rc-x" type="button" id="start-err-x" aria-label="Close this message"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+
+    <ol class="rc-steps" aria-label="How it works">
+      <li class="rc-step"><i>1</i><div><b>Record your journey</b><span>With the CDP Recorder or the bookmarks + DevTools (below).</span></div></li>
+      <li class="rc-step"><i>2</i><div><b>Load the recording</b><span>Drop the .har (or NetLog .json) file in the box above.</span></div></li>
+      <li class="rc-step"><i>3</i><div><b>Review and download</b><span>Choose the format, filter, check transactions, download the ZIP.</span></div></li>
+      <li class="rc-step opt"><i>4</i><div><b>Optional: correlate</b><span>Open the recording in Script Studio to capture dynamic values.</span></div></li>
+    </ol>
+  </section>
+
+  <details class="ds-card rc-how" id="how" open>
+    <summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><h2>How to record your journey</h2><small class="open">click to hide</small><small class="closed">click to show the instructions</small></summary>
+    <div class="rc-how-body">
     <p class="lead">Choose one way to record. Both give you a HAR file to load above. Can't install programs? Use <b>Bookmarks + DevTools</b> — nothing to install.</p>
     <div class="rc-tabs" role="tablist" aria-label="Recording method">
-      <button class="rc-tab" type="button" role="tab" aria-selected="true" aria-controls="how-cdp" id="tab-cdp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg><span><b>CDP Recorder</b><small>Pop-ups, new tabs, or DevTools / bookmarks blocked</small></span></button>
-      <button class="rc-tab" type="button" role="tab" aria-selected="false" aria-controls="how-classic" id="tab-classic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><span><b>Bookmarks + DevTools</b><small>No install at all</small></span></button>
+      <button class="rc-tab" type="button" role="tab" aria-selected="true" aria-controls="how-cdp" id="tab-cdp"><span class="ds-ico" style="--c:var(--c-record)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span><span><b>CDP Recorder</b><small>Pop-ups, new tabs, or DevTools / bookmarks blocked</small></span><span class="radio" aria-hidden="true"></span></button>
+      <button class="rc-tab" type="button" role="tab" aria-selected="false" aria-controls="how-classic" id="tab-classic"><span class="ds-ico" style="--c:var(--c-help)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span><span><b>Bookmarks + DevTools</b><small>No install at all</small></span><span class="radio" aria-hidden="true"></span></button>
     </div>
 
     <!-- CDP Recorder -->
@@ -95,7 +101,7 @@
           <li><span>Do the steps for that transaction, then click <b>End Transaction</b>. Repeat for each transaction</span></li>
           <li><span>Click <b>Stop Recording</b> — the <code>.har</code> file is saved in the same folder as <code>cdp-recorder.exe</code>. Drop it in the area above</span></li>
         </ol>
-        <div class="rc-call tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg><span>Transactions named on the toolbar are picked up automatically — no START/END bookmarks needed. Don't run <code>cdp-recorder.exe</code> from inside the ZIP: Windows would run it from a temporary folder and your recordings would be saved there.</span></div>
+        <div class="rc-call ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg><span>Transactions named on the toolbar are picked up automatically — no START/END bookmarks needed. Don't run <code>cdp-recorder.exe</code> from inside the ZIP: Windows would run it from a temporary folder and your recordings would be saved there.</span></div>
       </div>
     </div>
 
@@ -104,24 +110,24 @@
       <div class="rc-grid2">
         <div class="rc-card">
           <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Install the transaction bookmarks <small>(one-time setup)</small></h3>
-          <p>Show the Bookmarks Bar (<b>Ctrl+Shift+B</b>), then <b>drag both buttons below</b> onto it. During recording, click <b class="c-start">▶ START Transaction</b> before each transaction and <b class="c-end">■ END Transaction</b> after. A prompt lets you type the transaction name each time.</p>
+          <p>Show the Bookmarks Bar (<b>Ctrl+Shift+B</b>), then <b>drag both buttons below</b> onto it. During recording, click <b class="c-start"><svg class="rc-inl" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>START Transaction</b> before each transaction and <b class="c-end"><svg class="rc-inl" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>END Transaction</b> after. A prompt lets you type the transaction name each time.</p>
           <div class="rc-bm">
             <a class="start" title="Drag this button to your Bookmarks Bar — do not click it here."
                href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('Start transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n){localStorage.setItem('_vugen_txn',n);new Image().src='https://START-'+n+'.invalid/';}}}catch(e){}})();">&#x25B6; START Transaction</a>
             <a class="end" title="Drag this button to your Bookmarks Bar — do not click it here."
                href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('End transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n)new Image().src='https://END-'+n+'.invalid/';}}catch(e){}})();">&#x25A0; END Transaction</a>
           </div>
-          <div class="rc-call tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>How it works:</b> the last used transaction name is remembered automatically — the END prompt pre-fills with the same name you used for START. Both bookmarks fire a request to a <code>.invalid</code> domain which appears in the HAR and is detected as a transaction marker by this tool.</span></div>
-          <div class="rc-call warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>Bookmarklets only work on real websites.</b> They will not respond on the browser's New Tab page or any <code>chrome://</code> page — Chrome blocks them silently. Always navigate to your application URL first, then click the bookmark.</span></div>
+          <div class="rc-call ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>How it works:</b> the last used transaction name is remembered automatically — the END prompt pre-fills with the same name you used for START. Both bookmarks fire a request to a <code>.invalid</code> domain which appears in the HAR and is detected as a transaction marker by this tool.</span></div>
+          <div class="rc-call ds-note warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>Bookmarklets only work on real websites.</b> They will not respond on the browser's New Tab page or any <code>chrome://</code> page — Chrome blocks them silently. Always navigate to your application URL first, then click the bookmark.</span></div>
         </div>
         <div class="rc-card">
           <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Record your application</h3>
           <ol class="rc-ol">
             <li><span><b>Navigate to your application</b> in the browser (e.g. <code>https://myapp.company.com</code>)</span></li>
             <li><span>Press <b>F12</b> → click the <b>Network</b> tab → enable <b>Preserve Log</b> and <b>Disable Cache</b> checkboxes → click <svg class="rc-inl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" role="img" aria-label="the clear button"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg> to clear existing entries</span></li>
-            <li><span>Click the <b class="c-start">▶ START Transaction</b> bookmark — type a name (e.g. <code>T01_Login</code>) and click OK</span></li>
+            <li><span>Click the <b class="c-start"><svg class="rc-inl" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>START Transaction</b> bookmark — type a name (e.g. <code>T01_Login</code>) and click OK</span></li>
             <li><span>Perform all steps for that transaction (login, fill form, navigate, etc.)</span></li>
-            <li><span>Click the <b class="c-end">■ END Transaction</b> bookmark — the name is pre-filled from START, just click OK</span></li>
+            <li><span>Click the <b class="c-end"><svg class="rc-inl" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>END Transaction</b> bookmark — the name is pre-filled from START, just click OK</span></li>
             <li><span>Repeat START / END for each transaction (T02_Home, T03_Search…). Navigate freely between bookmarklet clicks — markers always fire in the current page's context</span></li>
             <li><span>After all transactions are done: in the Network tab, click the download icon → select <b>"Export HAR (with sensitive data)"</b> — or right-click any row → <b>"Save all as HAR with content"</b></span></li>
             <li><span>Drop the saved <code>.har</code> file in the area above — you choose the script format next, and the script is generated automatically</span></li>
@@ -137,19 +143,20 @@
             <li><span>Tick <b>"Allow to generate HAR with Sensitive Data"</b></span></li>
             <li><span>Close Settings → when downloading, choose <b>"Export HAR (with sensitive data)"</b></span></li>
           </ol>
-          <div class="rc-call tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>This ensures Authorization headers, cookies and Bearer tokens are included. NFT environments use test data only — safe to enable.</span></div>
+          <div class="rc-call ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>This ensures Authorization headers, cookies and Bearer tokens are included. NFT environments use test data only — safe to enable.</span></div>
         </div>
         <div class="rc-card">
-          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--primary)"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg> DevTools settings (required before recording)</h3>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> DevTools settings (required before recording)</h3>
           <ul class="rc-ol">
             <li><span><b>Preserve Log</b> — keeps all network requests visible across page navigations and redirects. Without this, requests from login redirects are lost.</span></li>
             <li><span><b>Disable Cache</b> — forces the browser to fetch fresh responses instead of using the local cache. Without this, response bodies may be empty in the HAR, making correlation extraction impossible in Script Studio.</span></li>
           </ul>
-          <p style="margin:10px 0 0;font-size:13px;color:var(--text-2)">Both checkboxes are in the Network tab toolbar at the top of the DevTools panel.</p>
-          <div class="rc-call tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>Forgot markers?</b> Use <b>Select mode</b> after loading the HAR to manually group requests into transactions.</span></div>
-          <div class="rc-call warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.</span></div>
+          <p class="rc-note-p">Both checkboxes are in the Network tab toolbar at the top of the DevTools panel.</p>
+          <div class="rc-call ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>Forgot markers?</b> Use <b>Select mode</b> after loading the HAR to manually group requests into transactions.</span></div>
+          <div class="rc-call ds-note warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.</span></div>
         </div>
       </div>
+    </div>
     </div>
   </details>
 </div>
@@ -157,29 +164,29 @@
 <!-- ═══════════════ WORKSPACE (after a recording is loaded) ═══════════════ -->
 <div id="main" class="rc rc-ws" hidden>
   <div class="rc-sum">
-    <div class="rc-file"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>
+    <div class="rc-file"><span class="ds-ico ico" style="--c:var(--c-record)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>
       <div><b id="file-name">Recording</b><span id="file-meta"></span></div></div>
     <div class="rc-kpis"><span class="rc-kpi" id="kpi-req"></span><span class="rc-kpi" id="kpi-txn"></span><span id="stats" class="vh"></span></div>
     <span class="grow"></span>
     <span class="rc-sumacts">
-      <span class="rc-pill fmt" id="fmt-badge" title="Script format"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span id="fmt-label">Web HTTP/HTML</span></span>
-      <span class="rc-pill auth" id="auth-badge" hidden title="Authentication detected in the recording (Kerberos, NTLM, Negotiate, Basic, Digest, Bearer or SAML)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M17 6l2 2M14 9l2 2"/></svg><span id="auth-label"></span></span>
-      <button class="rc-btn ghost sm" type="button" id="btn-change-fmt">Change format</button>
-      <button class="rc-btn ghost sm" type="button" id="btn-load-other" title="Go back to the start page to load another recording — this one stays until you load a new file">Load another</button>
+      <span class="ds-chip rc-pill fmt" id="fmt-badge" title="Script format"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg><span id="fmt-label">Web HTTP/HTML</span></span>
+      <span class="ds-chip rc-pill auth" id="auth-badge" hidden title="Authentication detected in the recording (Kerberos, NTLM, Negotiate, Basic, Digest, Bearer or SAML)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M17 6l2 2M14 9l2 2"/></svg><span id="auth-label"></span></span>
+      <button class="ds-btn ds-btn-sm" type="button" id="btn-change-fmt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M3 11V9a2 2 0 0 1 2-2h16M7 21l-4-4 4-4"/><path d="M21 13v2a2 2 0 0 1-2 2H3"/></svg>Change format</button>
+      <button class="ds-btn ds-btn-sm" type="button" id="btn-load-other" title="Go back to the start page to load another recording — this one stays until you load a new file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Load another</button>
     </span>
   </div>
 
-  <div class="rc-banner" id="netlog-banner" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+  <div class="rc-banner ds-note warn" id="netlog-banner" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
     <span><b>NetLog source (chrome://net-export/)</b> — POST request bodies are not available in NetLog files. GET/HEAD requests are fully reproduced. For POST bodies, check the TODO comments in the generated scripts and add them manually.</span></div>
 
   <div class="rc-filters" id="rc-filters">
-    <button class="rc-mini rc-fold rc-keep" type="button" id="btn-fold" aria-expanded="true" aria-controls="rc-filters" title="Fold the filters to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>Filters</button>
+    <button class="rc-mini rc-fold rc-keep" type="button" id="btn-fold" aria-expanded="true" aria-controls="rc-filters" title="Fold the filters to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>Filters</button>
     <span class="rc-fsum" id="f-sum"></span>
     <span class="rc-fset">
       <span class="rc-flabel">Leave out</span>
       <div class="rc-fgroup">
         <label class="rc-chip tog" title="Ticked = images, CSS, JS and fonts are left out of the script (only images and stylesheets named in the page HTML download on replay). Untick for JavaScript-based apps or realistic page load."><input type="checkbox" id="f-static" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Static assets</label>
-        <button class="rc-chip info" type="button" id="btn-res-help" aria-expanded="false" aria-controls="res-help" title="Should I include static assets?">?</button>
+        <button class="rc-chip info" type="button" id="btn-res-help" aria-expanded="false" aria-controls="res-help" title="Should I include static assets?" aria-label="Should I include static assets?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
         <label class="rc-chip tog" title="Ticked = analytics and ad requests are left out of the script."><input type="checkbox" id="f-noise" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Analytics / ads</label>
         <label class="rc-chip tog" title="Ticked = OPTIONS (pre-flight) requests are left out of the script."><input type="checkbox" id="f-opts" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>OPTIONS</label>
       </div>
@@ -201,13 +208,14 @@
     </span>
     <span class="grow rc-keep"></span>
     <span class="rc-factions rc-keep">
-      <button class="rc-btn ghost sm rc-keep" type="button" id="btn-collapse-all" hidden>Collapse all</button>
-      <button class="rc-btn sm rc-keep" type="button" id="btn-sel" aria-pressed="false" title="Select requests to group them into a new transaction"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>Select mode</button>
+      <button class="ds-btn ds-btn-sm rc-keep" type="button" id="btn-collapse-all" hidden>Collapse all</button>
+      <button class="ds-btn ds-btn-sm rc-keep" type="button" id="btn-sel" aria-pressed="false" title="Select requests to group them into a new transaction"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>Select mode</button>
     </span>
   </div>
 
-  <div class="rc-help" id="res-help" hidden>
-    <button class="rc-mini x" type="button" id="res-help-close" aria-label="Close">✕</button>
+  <div class="rc-help ds-note" id="res-help" hidden>
+    <svg class="rc-help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+    <div class="rc-help-body">
     <b>Static assets (images, CSS, JS, fonts) — should I include them?</b>
     <ul>
       <li><b>Leave them excluded</b> (default) for server / API load. On replay only the images and stylesheets named in the page HTML are downloaded (VuGen <code>Mode=HTML</code>, DevWeb <code>downloadHtmlStaticResources</code>).</li>
@@ -215,32 +223,34 @@
     </ul>
     Included files are added to the page step that loaded them, not as separate requests, and are never downloaded twice — safe for any site. Each page step's comment shows how many were in the HTML and how many are listed (<code>EXTRARES</code> / <code>resources[]</code>): if many are listed, the app is JavaScript-heavy and should keep them included.
     VuGen also needs the run-time setting <b>Download non-HTML resources</b> switched on (on by default).
+    </div>
+    <button class="ds-btn ds-btn-ghost ds-btn-sm rc-x" type="button" id="res-help-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
   </div>
 
   <div class="rc-split" id="rc-split">
     <div class="rc-pane dom-pane" id="domain-pane">
       <div class="rc-pane-h"><span id="dp-title">Domains</span><small id="dp-count"></small><span class="grow"></span>
-        <button class="rc-mini" type="button" id="btn-dom-all" title="Put every domain in the script">All</button><button class="rc-mini" type="button" id="btn-dom-none" title="Leave every domain out">None</button>
-        <button class="rc-mini hide-btn" type="button" data-hide="no-dom" title="Hide the domain list — the request list gets the space" aria-label="Hide the domain list">‹</button></div>
-      <input class="rc-dsearch dp-search" type="search" placeholder="Search domains…" aria-label="Search domains">
+        <button class="rc-mini hide-btn" type="button" data-hide="no-dom" title="Hide the domain list — the request list gets the space" aria-label="Hide the domain list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/></svg></button></div>
+      <div class="rc-dsearch-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="ds-field rc-dsearch dp-search" type="search" placeholder="Search domains…" aria-label="Search domains"></div>
+      <div class="rc-dtools"><span>In the script:</span><button class="rc-mini" type="button" id="btn-dom-all" title="Put every domain in the script">All</button><button class="rc-mini" type="button" id="btn-dom-none" title="Leave every domain out">None</button></div>
       <div class="rc-dlist" id="dp-list"><div class="rc-empty sm">Load a HAR file</div></div>
     </div>
     <div class="rc-rs" data-rs="left" title="Drag to resize"></div>
     <div class="rc-pane reqp" id="req-pane">
-      <div class="rc-pane-h"><button class="rc-mini rc-show rc-show-dom" type="button" data-hide="no-dom" title="Show the domain list">› Domains</button><span>Requests</span><small>grouped by transaction · faded = left out of the script</small><span class="grow"></span><button class="rc-mini rc-show rc-show-code" type="button" data-hide="no-code" title="Show the script preview">Script preview ‹</button><button class="rc-mini hide-btn" type="button" data-hide="no-req" title="Hide the request list — the script preview gets the space" aria-label="Hide the request list">Hide ‹</button></div>
+      <div class="rc-pane-h"><button class="rc-mini rc-show rc-show-dom" type="button" data-hide="no-dom" title="Show the domain list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/></svg>Domains</button><span>Requests</span><small>grouped by transaction · faded = left out of the script</small><span class="grow"></span><button class="rc-mini rc-show rc-show-code" type="button" data-hide="no-code" title="Show the script preview">Script preview<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M10 10l-2 2 2 2"/></svg></button><button class="rc-mini hide-btn" type="button" data-hide="no-req" title="Hide the request list — the script preview gets the space" aria-label="Hide the request list">Hide<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button></div>
       <div class="rc-selbar" id="sel-bar" role="region" aria-label="Selection">
         <div><b id="sel-cnt">0 selected</b><br><span>Click requests to group them into a transaction (Esc to stop)</span></div>
-        <button class="rc-btn sm" type="button" id="btn-create-txn" disabled>+ Create transaction</button>
-        <button class="rc-btn ghost sm" type="button" id="btn-sel-cancel">Cancel</button>
+        <button class="ds-btn ds-btn-sm" type="button" id="btn-sel-cancel">Cancel</button>
+        <button class="ds-btn ds-btn-primary ds-btn-sm" type="button" id="btn-create-txn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Create transaction</button>
       </div>
-      <div class="rc-nomark" id="no-markers" hidden><b>No transactions found in this recording.</b> Forgot markers? Use Select mode to group requests into transactions. <button class="rc-btn sm" type="button" data-selmode>Select mode</button></div>
+      <div class="rc-nomark" id="no-markers" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>No transactions found in this recording.</b> Forgot markers? Use Select mode to group requests into transactions.</span> <button class="ds-btn ds-btn-sm" type="button" data-selmode>Select mode</button></div>
       <div class="rc-reqs" tabindex="-1">
         <table class="rc-table"><thead><tr><th class="w-n">#</th><th>Request</th><th>Status</th><th class="w-ty">Type</th><th class="w-sz" style="text-align:right">Size</th><th class="w-tm" style="text-align:right">Time</th></tr></thead><tbody id="tbody"></tbody></table>
       </div>
     </div>
     <div class="rc-rs" data-rs="right" title="Drag to resize"></div>
     <div class="rc-pane code-pane" id="code-pane">
-      <div class="rc-pane-h"><button class="rc-mini rc-show rc-show-dom2" type="button" data-hide="no-dom" title="Show the domain list">› Domains</button><button class="rc-mini rc-show rc-show-req" type="button" data-hide="no-req" title="Show the request list">› Requests</button><button class="rc-mini hide-btn" type="button" data-hide="no-code" title="Hide the script preview — the request list gets the space" aria-label="Hide the script preview">›</button><span>Script preview</span><small id="code-panel-title">Action.c</small><span class="grow"></span><button class="rc-mini" type="button" id="btn-copy" title="Copy this file to the clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy</button></div>
+      <div class="rc-pane-h"><button class="rc-mini rc-show rc-show-dom2" type="button" data-hide="no-dom" title="Show the domain list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/></svg>Domains</button><button class="rc-mini rc-show rc-show-req" type="button" data-hide="no-req" title="Show the request list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>Requests</button><button class="rc-mini hide-btn" type="button" data-hide="no-code" title="Hide the script preview — the request list gets the space" aria-label="Hide the script preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M8 10l2 2-2 2"/></svg></button><span>Script preview</span><small id="code-panel-title">Action.c</small><span class="grow"></span><button class="rc-mini" type="button" id="btn-copy" title="Copy this file to the clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy</button></div>
       <div class="rc-ctabs" role="tablist" aria-label="Files">
         <button class="rc-ctab act" type="button" role="tab" aria-selected="true" data-tab="ac" data-file="Action.c">Action.c</button>
         <button class="rc-ctab" type="button" role="tab" aria-selected="false" data-tab="mj" data-file="main.js">main.js</button>
@@ -248,16 +258,16 @@
         <button class="rc-ctab" type="button" role="tab" aria-selected="false" data-tab="ve" data-file="vuser_end.c">vuser_end.c</button>
         <button class="rc-ctab" type="button" role="tab" aria-selected="false" data-tab="gh" data-file="globals.h">globals.h</button>
       </div>
-      <pre class="rc-code" id="code-body">// Load a HAR file to see generated scripts</pre>
+      <pre class="rc-code ds-code" id="code-body">// Load a HAR file to see generated scripts</pre>
     </div>
   </div>
 
   <div class="rc-actions">
     <span class="hint" id="dl-hint"></span>
     <span class="grow"></span>
-    <button class="rc-btn ghost" type="button" id="btn-studio" title="Open this recording in Script Studio to add correlation">Correlate in Script Studio →</button>
-    <button class="rc-btn" type="button" id="dl-webhttp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Download project ZIP — Web HTTP/HTML</button>
-    <button class="rc-btn" type="button" id="dl-devweb" style="--b:var(--primary)" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Download project ZIP — DevWeb</button>
+    <button class="ds-btn" type="button" id="btn-studio" title="Open this recording in Script Studio to add correlation">Correlate in Script Studio<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    <button class="ds-btn ds-btn-primary" type="button" id="dl-webhttp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Download project ZIP — Web HTTP/HTML</button>
+    <button class="ds-btn ds-btn-primary" type="button" id="dl-devweb" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Download project ZIP — DevWeb</button>
   </div>
 </div>
 </div>
@@ -265,29 +275,33 @@
 <!-- format dialog: shown after a file is chosen, and by "Change format" -->
 <dialog class="rc-dlg" id="fmt-dlg" aria-labelledby="fmt-h">
   <form method="dialog" onsubmit="return false">
-    <div><h3 id="fmt-h">Choose script format</h3><p id="fmt-sub">Select the protocol your LRE project uses. You can change this later.</p></div>
+    <div class="rc-dlg-head"><span class="ds-ico" style="--c:var(--c-record)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg></span><div><h3 id="fmt-h">Choose script format</h3><p id="fmt-sub">Select the protocol your LRE project uses. You can change this later.</p></div></div>
+    <div class="rc-dlg-body">
     <div class="rc-fmts">
-      <label class="rc-fmt" style="--k:var(--vugen)"><input type="radio" name="fmt" value="webhttp" id="fc-webhttp" checked><span class="t"><i>C</i>Web HTTP/HTML</span><small>C language protocol</small><span class="files"><code>Action.c</code><code>vuser_init.c</code><code>vuser_end.c</code><code>globals.h</code></span></label>
-      <label class="rc-fmt" style="--k:var(--primary)"><input type="radio" name="fmt" value="devweb" id="fc-devweb"><span class="t"><i>JS</i>DevWeb</span><small>JavaScript protocol</small><span class="files"><code>main.js</code></span></label>
+      <label class="rc-fmt"><input type="radio" name="fmt" value="webhttp" id="fc-webhttp" checked><span class="t"><i>C</i>Web HTTP/HTML</span><small>C language protocol</small><span class="files"><code>Action.c</code><code>vuser_init.c</code><code>vuser_end.c</code><code>globals.h</code></span><span class="radio" aria-hidden="true"></span></label>
+      <label class="rc-fmt"><input type="radio" name="fmt" value="devweb" id="fc-devweb"><span class="t"><i>JS</i>DevWeb</span><small>JavaScript protocol</small><span class="files"><code>main.js</code></span><span class="radio" aria-hidden="true"></span></label>
       <label class="rc-fmt" hidden><input type="radio" name="fmt" value="both" id="fc-both"><span class="t">Both formats</span></label>
     </div>
-    <div class="row"><button class="rc-btn ghost sm" type="button" id="fmt-cancel-btn">Cancel</button><button class="rc-btn sm" type="button" id="fmt-go" autofocus>Continue →</button></div>
+    </div>
+    <div class="row"><button class="ds-btn" type="button" id="fmt-cancel-btn">Cancel</button><button class="ds-btn ds-btn-primary" type="button" id="fmt-go" autofocus>Continue<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
   </form>
 </dialog>
 
 <!-- create / rename transaction -->
 <dialog class="rc-dlg narrow" id="txn-dlg" aria-labelledby="txn-h">
   <form method="dialog" onsubmit="return false">
-    <div><h3 id="txn-h">Create transaction</h3><p id="txn-sub"></p></div>
-    <label class="rc-field">Transaction name<input id="txn-inp" type="text" autocomplete="off" placeholder="e.g. T01_Login"><small>Use the format T01_Login, T02_Search, T03_Checkout — a letter first, then letters, numbers or underscores.</small><span class="rc-ferr" id="txn-err" role="alert" hidden></span></label>
-    <div class="row"><button class="rc-btn ghost sm" type="button" id="txn-cancel">Cancel</button><button class="rc-btn sm" type="button" id="txn-ok">Create</button></div>
+    <div class="rc-dlg-head"><div><h3 id="txn-h">Create transaction</h3><p id="txn-sub"></p></div></div>
+    <div class="rc-dlg-body">
+    <label class="rc-field">Transaction name<input class="ds-field" id="txn-inp" type="text" autocomplete="off" placeholder="e.g. T01_Login"><small>Use the format T01_Login, T02_Search, T03_Checkout — a letter first, then letters, numbers or underscores.</small><span class="rc-ferr" id="txn-err" role="alert" hidden></span></label>
+    </div>
+    <div class="row"><button class="ds-btn" type="button" id="txn-cancel">Cancel</button><button class="ds-btn ds-btn-primary" type="button" id="txn-ok">Create</button></div>
   </form>
 </dialog>
 
 <!-- confirmation -->
 <dialog class="rc-dlg narrow" id="confirm-dlg" aria-labelledby="confirm-h">
-  <form method="dialog"><div><h3 id="confirm-h"></h3><p id="confirm-t"></p></div>
-    <div class="row"><button class="rc-btn ghost sm" value="cancel">Cancel</button><button class="rc-btn sm danger" value="ok" id="confirm-ok">OK</button></div></form>
+  <form method="dialog"><div class="rc-dlg-head"><div><h3 id="confirm-h"></h3><p id="confirm-t"></p></div></div>
+    <div class="row"><button class="ds-btn" value="cancel">Cancel</button><button class="ds-btn ds-btn-primary" value="ok" id="confirm-ok">OK</button></div></form>
 </dialog>
 
 <div class="rc-progress" id="rc-progress" hidden role="status" aria-live="polite">

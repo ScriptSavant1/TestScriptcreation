@@ -1,8 +1,10 @@
 <%#
-  Postman / Bruno and JMeter converter panels (portal v3 design). Behaviour lives in index.ejs
-  (setProto, setMode, onPick, doConvert, doConvertJmx …) and public/portal/converter.js; styles in
+  Postman / Bruno and JMeter converter panels (design system v4, see portal/ds.css). Behaviour lives in
+  index.ejs (setProto, setMode, onPick, doConvert, doConvertJmx …) and public/portal/converter.js; styles in
   public/portal/converter.css (scoped to #portal-converter).
-  Every element id, handler and class the converter functions use is kept — the converter golden
+  Layout (both panels the same): intro sentence · steps card (1 Choose output, 2 Upload files) · Options card
+  (segmented options, Advanced settings, the one Convert button) — side by side on wide screens, the Options
+  card sticky. Every element id, handler and class the converter functions use is kept — the converter golden
   harness checks that the requests sent and the results are identical.
 %>
 <%
@@ -21,62 +23,68 @@
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
+    sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+    api: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
+    migrate: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+    plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
   };
-  const protoCard = (id, fn, cls, letter, name, desc, tagCls, tag) => `
+  const protoCard = (id, fn, cls, letter, name, desc, tag) => `
     <div class="proto-card${cls}" id="${id}" onclick="${fn}" role="radio" tabindex="0">
-      <div class="proto-icon">${letter}</div>
-      <div>
+      <div class="proto-icon" aria-hidden="true">${letter}</div>
+      <div class="proto-body">
         <div class="proto-name">${name}</div>
         <div class="proto-desc">${desc}</div>
-        <span class="proto-tag ${tagCls}">${tag}</span>
+        <span class="proto-tag">${svg(IC.file)}${tag}</span>
       </div>
       <span class="proto-check" aria-hidden="true">${svg(IC.check)}</span>
     </div>`;
+  const stepHead = (n, title, sub) => `<div class="section-label"><span class="section-num">${n}</span><span class="cv-step-t"><span class="cv-step-h">${title}</span>${sub ? `<span class="cv-step-sub">${sub}</span>` : ''}</span></div>`;
 %>
 <div id="portal-converter" style="display:none" class="portal-content-panel">
 
-<!-- ── Converter Hero (shown only outside the portal shell; the shell's top bar names the page) ── -->
-<header class="hero" style="text-align:center;padding:36px 0 24px">
-  <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:99px;margin-bottom:14px;background:var(--primary-dim);border:1px solid rgba(79,142,247,0.28);color:var(--primary);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">
-    ⚡ PerfX Studio — Converter
-  </div>
-  <p class="hero-sub" style="font-size:15px;margin-bottom:16px">Convert Postman/Bruno collections or JMeter scripts (.jmx) into production-ready LoadRunner VuGen scripts in seconds. Switch tabs below to select your input type.</p>
+<!-- ── Converter hero (shown only outside the portal shell; the shell's top bar names the page) ── -->
+<header class="hero">
+  <div class="cv-hero-badge"><%- svg(IC.migrate) %> PerfX Studio — Converter</div>
+  <p class="hero-sub">Convert Postman/Bruno collections or JMeter scripts (.jmx) into production-ready LoadRunner VuGen scripts in seconds. Switch tabs below to select your input type.</p>
   <div class="hero-badges">
-    <span class="chip">📂 Postman / Bruno</span>
-    <span class="chip">♨ JMeter .jmx</span>
-    <span class="chip">🟦 DevWeb JS</span>
-    <span class="chip">🟧 VuGen C</span>
-    <span class="chip">🔒 In-memory only</span>
+    <span class="chip">Postman / Bruno</span>
+    <span class="chip">JMeter .jmx</span>
+    <span class="chip">DevWeb JS</span>
+    <span class="chip">VuGen C</span>
+    <span class="chip">In-memory only</span>
   </div>
 </header>
 
 <!-- ── Tab bar (the sidebar's Postman / JMeter items do this inside the shell) ── -->
 <div class="tab-bar">
   <button class="tab-btn active-bruno" id="tab-bruno" onclick="switchTab('bruno')">
-    <span class="tab-icon">📂</span> Postman / Bruno
+    <span class="tab-icon"><%- svg(IC.api) %></span> Postman / Bruno
   </button>
   <button class="tab-btn" id="tab-jmx" onclick="switchTab('jmx')">
-    <span class="tab-icon">♨</span> JMeter (.jmx)
+    <span class="tab-icon"><%- svg(IC.migrate) %></span> JMeter (.jmx)
   </button>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <!-- Panel: Postman / Bruno                                                 -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<div class="card cv-panel" id="panel-bruno" style="--c:var(--c-convert)">
- <div class="cv-cols">
- <div class="cv-main">
+<div class="cv-panel" id="panel-bruno" style="--c:var(--c-convert)">
   <p class="cv-intro">Upload a Postman or Bruno collection — and, if you have one, its environment file. You get a ready-to-run DevWeb or VuGen Web HTTP/HTML script as a ZIP, with correlation, parameters and authentication handled.</p>
+ <div class="cv-cols">
+ <section class="cv-main" aria-label="Output and files">
 
-  <!-- 1 · Protocol -->
-  <div class="section-label"><span class="section-num">1</span>Choose Output Protocol</div>
+  <!-- 1 · Output -->
+  <div class="cv-step">
+  <%- stepHead(1, 'Choose output', 'The script type your LoadRunner project uses') %>
   <div class="proto-grid" role="radiogroup" aria-label="Output protocol">
-    <%- protoCard('pc-devweb', "setProto('devweb')", ' active-devweb', 'JS', 'DevWeb · JavaScript', 'Modern JS protocol for LRE. Generates <strong>main.js</strong> with per-request transactions, correlations, JWT helper &amp; full config files.', 'tag-js', 'main.js') %>
-    <%- protoCard('pc-vugen', "setProto('web-http')", '', 'C', 'VuGen · Web HTTP/HTML (C)', 'Classic C-based VuGen protocol. Generates <strong>Action.c</strong> with web_custom_request, NTLM/Kerberos, jsrsasign &amp; all VuGen config.', 'tag-c', 'Action.c') %>
+    <%- protoCard('pc-devweb', "setProto('devweb')", ' active-devweb', 'JS', 'DevWeb · JavaScript', 'Modern JS protocol for LRE. Generates <strong>main.js</strong> with per-request transactions, correlations, JWT helper &amp; full config files.', 'main.js') %>
+    <%- protoCard('pc-vugen', "setProto('web-http')", '', 'C', 'VuGen · Web HTTP/HTML (C)', 'Classic C-based VuGen protocol. Generates <strong>Action.c</strong> with web_custom_request, NTLM/Kerberos, jsrsasign &amp; all VuGen config.', 'Action.c') %>
+  </div>
   </div>
 
   <!-- 2 · Upload -->
-  <div class="section-label"><span class="section-num">2</span>Upload Files</div>
+  <div class="cv-step">
+  <%- stepHead(2, 'Upload files', 'Drop a file on a box, or click it to browse') %>
   <div class="upload-grid">
     <div class="drop-zone" id="dz-col"
          ondragover="onDrag(event,'dz-col')" ondragleave="offDrag('dz-col')"
@@ -84,7 +92,7 @@
       <input type="file" id="fi-col" accept=".json,.yml,.yaml,.bru" aria-label="Collection file (required)"
              onchange="onPick('dz-col','fi-col','lbl-col','collection')">
       <div class="dz-icon-wrap"><%- svg(IC.upload) %></div>
-      <div class="dz-label">Collection File <span class="dz-required">*</span></div>
+      <div class="dz-label">Collection file <span class="dz-required" aria-hidden="true">*</span></div>
       <div class="dz-sub">Postman v2.1 JSON &nbsp;·&nbsp; Bruno JSON / YAML &nbsp;·&nbsp; .bru</div>
       <div id="lbl-col" class="dz-name"></div>
     </div>
@@ -94,7 +102,7 @@
       <input type="file" id="fi-env" accept=".json,.bru" aria-label="Environment file (optional)"
              onchange="onPick('dz-env','fi-env','lbl-env','environment')">
       <div class="dz-icon-wrap"><%- svg(IC.key) %></div>
-      <div class="dz-label">Environment File</div>
+      <div class="dz-label">Environment file</div>
       <div class="dz-sub">Postman environment JSON &nbsp;·&nbsp; Bruno .bru vars</div>
       <span class="dz-opt">Optional — provides variable values</span>
       <div id="lbl-env" class="dz-name"></div>
@@ -104,7 +112,7 @@
   <!-- 2b · Client Certificates -->
   <div class="cert-zone-wrap">
     <div class="cert-zone-header">
-      <span class="cert-zone-title"><%- svg(IC.shield, ' class="cz-ico"') %> Client Certificates</span>
+      <span class="cert-zone-title"><%- svg(IC.shield, ' class="cz-ico"') %> Client certificates</span>
       <span class="cert-zone-badge">Optional — mutual TLS authentication</span>
     </div>
     <div class="drop-zone dz-secondary dz-cert-full" id="dz-bru-cert"
@@ -121,28 +129,32 @@
         <div class="dz-sub">.p12 (PKCS12) &nbsp;·&nbsp; .pem (certificate) &nbsp;·&nbsp; .key (private key) &nbsp;·&nbsp; multiple files supported</div>
         <div id="bru-cert-chips" class="cert-chip-list"></div>
         <div id="bru-cert-hint" class="cert-add-hint" style="display:none">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          <%- svg(IC.plus) %>
           Click or drag to add more certificates
         </div>
       </div>
     </div>
   </div>
+  </div>
 
-  </div><!-- /.cv-main -->
- <div class="cv-side">
-  <!-- 3 · Options -->
-  <div class="section-label"><span class="section-num">3</span>Configure Options</div>
+ </section><!-- /.cv-main -->
+ <aside class="cv-side" aria-label="Options">
+  <div class="cv-side-head">
+    <span class="cv-side-ico"><%- svg(IC.sliders) %></span>
+    <h2 class="cv-side-title">Options</h2>
+  </div>
+  <div class="cv-side-body">
   <div class="options-grid">
     <div class="opt-group">
-      <span class="opt-label">Script Mode</span>
-      <div class="seg-btns" role="group" aria-label="Script mode">
+      <span class="opt-label" id="cv-l-mode">Script mode</span>
+      <div class="seg-btns" role="group" aria-labelledby="cv-l-mode">
         <button class="seg-btn active" id="m-single" onclick="setMode('single')">Single</button>
         <button class="seg-btn"        id="m-multi"  onclick="setMode('multi')">Multi-Script</button>
       </div>
     </div>
     <div class="opt-group">
-      <span class="opt-label">Think Time</span>
-      <div class="seg-btns" role="group" aria-label="Think time">
+      <span class="opt-label" id="cv-l-tt">Think time</span>
+      <div class="seg-btns" role="group" aria-labelledby="cv-l-tt">
         <button class="seg-btn active" id="tt-1" onclick="setTT(1)">1s</button>
         <button class="seg-btn"        id="tt-2" onclick="setTT(2)">2s</button>
         <button class="seg-btn"        id="tt-3" onclick="setTT(3)">3s</button>
@@ -150,24 +162,19 @@
       </div>
     </div>
     <div class="opt-group">
-      <span class="opt-label">Log Level</span>
-      <div class="seg-btns" role="group" aria-label="Log level">
+      <span class="opt-label" id="cv-l-ll">Log level</span>
+      <div class="seg-btns" role="group" aria-labelledby="cv-l-ll">
         <button class="seg-btn active" id="ll-info"  onclick="setLL('info')">Info</button>
         <button class="seg-btn"        id="ll-debug" onclick="setLL('debug')">Debug</button>
       </div>
     </div>
   </div>
 
-  <div class="divider"></div>
-  <div class="prog-wrap" id="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
-  <button class="btn-convert devweb" id="btn-cvt" onclick="doConvert()">
-    <div class="spinner" id="spinner"></div>
-    <span id="btn-lbl">Convert to DevWeb Script</span>
-  </button>
   <!-- Advanced -->
   <button class="adv-toggle" id="adv-btn" onclick="toggleAdv()" aria-controls="adv-panel">
-    <span class="arrow"><%- svg(IC.chevron) %></span> Advanced settings
-    <small class="adv-hint">correlation · parameters · authentication · comments</small>
+    <span class="arrow"><%- svg(IC.chevron) %></span>
+    <span class="adv-t">Advanced settings
+    <small class="adv-hint">correlation · parameters · authentication · comments</small></span>
   </button>
   <div class="adv-panel" id="adv-panel">
     <div class="toggle-row">
@@ -200,34 +207,45 @@
     </div>
   </div>
 
- </div><!-- /.cv-side -->
+  <div class="cv-go">
+    <div class="prog-wrap" id="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
+    <button class="btn-convert devweb" id="btn-cvt" onclick="doConvert()">
+      <div class="spinner" id="spinner"></div>
+      <span id="btn-lbl">Convert to DevWeb Script</span>
+    </button>
+  </div>
+  </div><!-- /.cv-side-body -->
+ </aside><!-- /.cv-side -->
  </div><!-- /.cv-cols -->
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <!-- Panel: JMeter                                                          -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<div class="card cv-panel" id="panel-jmx" style="display:none;--c:var(--c-jmeter)">
- <div class="cv-cols">
- <div class="cv-main">
+<div class="cv-panel" id="panel-jmx" style="display:none;--c:var(--c-jmeter)">
   <p class="cv-intro">Upload a JMeter test plan (.jmx), plus any CSV data files and certificates it uses. You get a DevWeb or VuGen Web HTTP/HTML script — one per thread group if you choose — and a Workload Model Excel, as a ZIP.</p>
+ <div class="cv-cols">
+ <section class="cv-main" aria-label="Output and files">
 
-  <!-- 1 · Protocol -->
-  <div class="section-label"><span class="section-num">1</span>Choose Output Protocol</div>
+  <!-- 1 · Output -->
+  <div class="cv-step">
+  <%- stepHead(1, 'Choose output', 'The script type your LoadRunner project uses') %>
   <div class="proto-grid" role="radiogroup" aria-label="Output protocol">
-    <%- protoCard('jpc-devweb', "setJmxProto('devweb')", ' active-devweb', 'JS', 'DevWeb · JavaScript', 'Generates <strong>main.js</strong> with transactions, correlations, auth &amp; Workload Model Excel.', 'tag-js', 'main.js') %>
-    <%- protoCard('jpc-vugen', "setJmxProto('web-http')", '', 'C', 'VuGen · Web HTTP/HTML (C)', 'Generates <strong>Action.c</strong> with web_reg_save_param, NTLM/Kerberos auth &amp; Workload Model Excel.', 'tag-c', 'Action.c') %>
+    <%- protoCard('jpc-devweb', "setJmxProto('devweb')", ' active-devweb', 'JS', 'DevWeb · JavaScript', 'Generates <strong>main.js</strong> with transactions, correlations, auth &amp; Workload Model Excel.', 'main.js') %>
+    <%- protoCard('jpc-vugen', "setJmxProto('web-http')", '', 'C', 'VuGen · Web HTTP/HTML (C)', 'Generates <strong>Action.c</strong> with web_reg_save_param, NTLM/Kerberos auth &amp; Workload Model Excel.', 'Action.c') %>
+  </div>
   </div>
 
   <!-- 2 · Upload -->
-  <div class="section-label"><span class="section-num">2</span>Upload JMeter Script</div>
+  <div class="cv-step">
+  <%- stepHead(2, 'Upload JMeter script', 'The test plan, plus the data files and certificates it uses') %>
   <div class="upload-grid cv-jmx-grid">
     <div class="drop-zone" id="dz-jmx"
          ondragover="onDrag(event,'dz-jmx')" ondragleave="offDrag('dz-jmx')"
          ondrop="onDropJmx(event)">
       <input type="file" id="fi-jmx" accept=".jmx" onchange="onPickJmx()" aria-label="JMeter script (.jmx, required)">
       <div class="dz-icon-wrap"><%- svg(IC.upload) %></div>
-      <div class="dz-label">JMeter Script <span class="dz-required">*</span></div>
+      <div class="dz-label">JMeter script <span class="dz-required" aria-hidden="true">*</span></div>
       <div class="dz-sub">.jmx file — JMeter Test Plan</div>
       <div id="lbl-jmx" class="dz-name"></div>
     </div>
@@ -240,7 +258,7 @@
          ondrop="onDropCsv(event)">
       <input type="file" id="fi-csv" accept=".csv" multiple onchange="onPickCsv()" aria-label="CSV data files (optional)">
       <div class="dz-icon-wrap"><%- svg(IC.table) %></div>
-      <div class="dz-label">CSV Data Files <span class="dz-or">(optional)</span></div>
+      <div class="dz-label">CSV data files <span class="dz-or">(optional)</span></div>
       <div class="dz-sub">Multiple .csv files — added to output ZIP</div>
       <div id="lbl-csv" class="dz-name"></div>
     </div>
@@ -249,10 +267,11 @@
          ondrop="onDropCert(event)">
       <input type="file" id="fi-cert" accept=".jks,.p12,.cer,.crt,.key,.pem,.pfx" multiple onchange="onPickCert()" aria-label="Certificate files (optional)">
       <div class="dz-icon-wrap"><%- svg(IC.lock) %></div>
-      <div class="dz-label">Certificate Files <span class="dz-or">(optional)</span></div>
+      <div class="dz-label">Certificate files <span class="dz-or">(optional)</span></div>
       <div class="dz-sub">.jks .p12 .cer .crt .key .pem .pfx</div>
       <div id="lbl-cert" class="dz-name"></div>
     </div>
+  </div>
   </div>
 
   <!-- What gets generated -->
@@ -266,21 +285,24 @@
     <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span><strong>Workload Model Excel (.xlsx)</strong></div>
   </div>
 
-  </div><!-- /.cv-main -->
- <div class="cv-side">
-  <!-- 3 · Options -->
-  <div class="section-label"><span class="section-num">3</span>Configure Options</div>
+ </section><!-- /.cv-main -->
+ <aside class="cv-side" aria-label="Options">
+  <div class="cv-side-head">
+    <span class="cv-side-ico"><%- svg(IC.sliders) %></span>
+    <h2 class="cv-side-title">Options</h2>
+  </div>
+  <div class="cv-side-body">
   <div class="options-grid">
     <div class="opt-group">
-      <span class="opt-label">Script Generation Mode</span>
-      <div class="seg-btns" role="group" aria-label="Script generation mode">
+      <span class="opt-label" id="cv-l-jmode">Script generation mode</span>
+      <div class="seg-btns" role="group" aria-labelledby="cv-l-jmode">
         <button class="seg-btn active" id="jmode-single" onclick="setJmxMode('single')">Single Script</button>
         <button class="seg-btn"        id="jmode-multi"  onclick="setJmxMode('multi')">Per Thread Group</button>
       </div>
     </div>
     <div class="opt-group">
-      <span class="opt-label">Think Time</span>
-      <div class="seg-btns" role="group" aria-label="Think time">
+      <span class="opt-label" id="cv-l-jtt">Think time</span>
+      <div class="seg-btns" role="group" aria-labelledby="cv-l-jtt">
         <button class="seg-btn active" id="jtt-1" onclick="setJmxTT(1)">1s</button>
         <button class="seg-btn"        id="jtt-2" onclick="setJmxTT(2)">2s</button>
         <button class="seg-btn"        id="jtt-3" onclick="setJmxTT(3)">3s</button>
@@ -288,21 +310,23 @@
       </div>
     </div>
     <div class="opt-group">
-      <span class="opt-label">Workload Model Excel</span>
-      <div class="seg-btns" role="group" aria-label="Workload Model Excel">
+      <span class="opt-label" id="cv-l-jwlm">Workload Model Excel</span>
+      <div class="seg-btns" role="group" aria-labelledby="cv-l-jwlm">
         <button class="seg-btn active" id="jwlm-yes" onclick="setJmxWlm(true)">Include</button>
         <button class="seg-btn"        id="jwlm-no"  onclick="setJmxWlm(false)">Skip</button>
       </div>
     </div>
   </div>
 
-  <div class="divider"></div>
-  <div class="prog-wrap" id="jprog-wrap"><div class="prog-fill" id="jprog-fill"></div></div>
-  <button class="btn-convert devweb" id="btn-jmx" onclick="doConvertJmx()">
-    <div class="spinner" id="jspinner"></div>
-    <span id="jbtn-lbl">Convert JMeter to DevWeb Script</span>
-  </button>
- </div><!-- /.cv-side -->
+  <div class="cv-go">
+    <div class="prog-wrap" id="jprog-wrap"><div class="prog-fill" id="jprog-fill"></div></div>
+    <button class="btn-convert devweb" id="btn-jmx" onclick="doConvertJmx()">
+      <div class="spinner" id="jspinner"></div>
+      <span id="jbtn-lbl">Convert JMeter to DevWeb Script</span>
+    </button>
+  </div>
+  </div><!-- /.cv-side-body -->
+ </aside><!-- /.cv-side -->
  </div><!-- /.cv-cols -->
 </div>
 
@@ -317,9 +341,9 @@
   </div>
   <div class="stats-grid" id="stats-row"></div>
   <!-- Multi-script thread group list (hidden in single mode) -->
-  <div id="res-tg-list" style="display:none;margin:12px 0 4px"></div>
+  <div id="res-tg-list" class="cv-res-sec" style="display:none"></div>
   <!-- Dependency report (shown when CSV files are referenced) -->
-  <div id="res-dep-report" style="display:none;margin:12px 0 4px"></div>
+  <div id="res-dep-report" class="cv-res-sec" style="display:none"></div>
   <div class="res-actions">
     <a id="btn-dl" class="btn-dl" href="#" download><%- svg(IC.down) %> Download Script (.zip)</a>
     <button class="btn-reset" onclick="resetResult()"><%- svg(IC.back) %> Convert Another</button>
@@ -338,7 +362,7 @@
 </div>
 
 <!-- ── How it works (can be folded away — remembered) ──────────────────── -->
-<details class="card standalone cv-how" id="cv-how" open>
+<details class="cv-how" id="cv-how" open>
   <summary class="section-label"><span class="cv-how-chev"><%- svg(IC.chevron) %></span>How It Works</summary>
   <div class="steps-grid">
     <div class="step">
@@ -363,16 +387,16 @@
     </div>
   </div>
   <div class="formats-bar">
-    <span class="fmt-chip"><i style="--k:var(--c-convert)"></i>Postman v2.1 JSON</span>
-    <span class="fmt-chip"><i style="--k:var(--c-convert)"></i>Bruno JSON / YAML / .bru</span>
-    <span class="fmt-chip"><i style="--k:var(--c-jmeter)"></i>JMeter .jmx</span>
-    <span class="fmt-chip"><i style="--k:#4f8ef7"></i>DevWeb JS output</span>
-    <span class="fmt-chip"><i style="--k:#f0883e"></i>VuGen C output</span>
+    <span class="fmt-chip">Postman v2.1 JSON</span>
+    <span class="fmt-chip">Bruno JSON / YAML / .bru</span>
+    <span class="fmt-chip">JMeter .jmx</span>
+    <span class="fmt-chip">DevWeb JS output</span>
+    <span class="fmt-chip">VuGen C output</span>
   </div>
 </details>
 
-<!-- ── Footer ──────────────────────────────────────────────────────────── -->
-<footer>
+<!-- ── Footer (the sidebar's privacy note says the same — kept for screen readers only) ── -->
+<footer class="cv-foot">
   <div class="footer-links">
     <span>PerfX Studio · Performance Script Generation</span>
     <span class="footer-sep">·</span>

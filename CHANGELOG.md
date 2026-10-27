@@ -6,6 +6,23 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
+#### Changed — Portal redesign v4: one design system for every page
+
+- New shared design system `portal/ds.css`, loaded by the portal and by the Recorder, Script Studio and Results
+  Analyser pages: one neutral palette for both themes, one brand blue for actions (tool colours only on icons),
+  sentence-case labels, shared buttons, cards, tiles, chips, fields, tabs, panels, tables, code views, drop zones
+  and scroll bars. Every text colour is at least 4.5:1 in both themes.
+- Every page uses the full width beside the sidebar (no centred column); start pages of the Recorder, Script
+  Studio and the Results Analyser use two columns.
+- Sidebar and Home follow how the tools are used: Recorder, Script Studio, Postman / Bruno, JMeter, then the
+  Results Analyser. Home is grouped like the sidebar (Create scripts · Analyse results) with every card's
+  description, "You need / You get" and feature list kept.
+- Help opens with every section expanded; the duplicated page title is kept for screen readers only.
+- Script Studio's script preview is coloured like the Recorder's. Both previews are built from text nodes, so
+  Copy gives the exact script (Windows line endings were lost before when the preview was coloured).
+- A client-specific machine name in Help and Home replaced by general wording ("virtual desktops").
+- Generated output unchanged: converter, Recorder and Script Studio golden harnesses identical.
+
 #### Changed — Portal redesign, round 2: use the window, one section at a time
 
 - Each section was reviewed twice by a quality reviewer and a design reviewer; every tool's output is unchanged (golden harnesses identical).

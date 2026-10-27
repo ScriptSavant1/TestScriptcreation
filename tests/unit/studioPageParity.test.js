@@ -25,7 +25,8 @@ describe('Script Studio redesign — same scripts as the classic page', () => {
 
   test('the classic stylesheet is still loaded (it styles what the scripts draw), then the new one', () => {
     const sheets = [...page.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]).filter((src) => src !== 'portal/frame-guard.js');
-    expect(sheets).toEqual(['VuGen-Script-Studio.css', 'portal/studio.css']);
+    // the portal design system (portal/ds.css) comes first, before the page's own sheets
+    expect(sheets).toEqual(['portal/ds.css', 'VuGen-Script-Studio.css', 'portal/studio.css']);
   });
 });
 

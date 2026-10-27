@@ -82,6 +82,10 @@ function loadUi(opts = {}) {
     querySelector: () => null,
     querySelectorAll: () => [],
     documentElement: { setAttribute() {}, getAttribute: () => 'dark', classList: { add() {} } },
+    // just enough DOM for the preview colouring (_highlight builds text nodes and spans)
+    createDocumentFragment: () => ({ parts: [], appendChild(n) { this.parts.push(n); return n; } }),
+    createTextNode: (text) => ({ text }),
+    createElement: () => ({ className: '', textContent: '' }),
   };
   const localStorage = { getItem: () => null, setItem() {} };
   const calls = { regen: 0, refresh: 0 };
@@ -210,8 +214,9 @@ describe('Recorder redesign — filters and preview', () => {
       'load.action("Action", async () => {\n  const t = `${load.global.x}` /* c */;\n  await new load.WebRequest({ url: \'u\' }).send();\n});\n',
       '#include "lrun.h"\nchar *s = "\\"esc\\" \\\\";\n',
     ];
-    const unescape = (h) => h.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-    scripts.forEach((s) => expect(unescape(r._highlight(s))).toBe(s));
-    expect(r._highlight('web_url("a");')).toContain('<span class="f">web_url</span>');
+    scripts.push('Action()\r\n{\r\n\treturn 0;\r\n}\r\n');   // Windows line endings must survive too
+    const text = (frag) => frag.parts.map((n) => ('text' in n ? n.text : n.textContent)).join('');
+    scripts.forEach((s) => expect(text(r._highlight(s))).toBe(s));
+    expect(r._highlight('web_url("a");').parts).toContainEqual({ className: 'f', textContent: 'web_url' });
   });
 });

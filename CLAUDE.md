@@ -294,6 +294,12 @@ lre-utils.js lre-utils.dat` should always be empty.
 - [ ] No `console.error` or unhandled exceptions in modified code paths
 
 ## CSS / Design System
+**`src/web/public/portal/ds.css` is the design system (v4)** — tokens `--ds-*` for both themes and shared
+components `ds-btn`, `ds-card`, `ds-chip`, `ds-tile`, `ds-seg`, `ds-tabs`, `ds-panel`, `ds-table`, `ds-code`,
+`ds-drop`, `ds-note`. Loaded first by index.ejs, Recorder.html, Studio.html and the Results Analyser page; the
+portal's older tokens (`--bg`, `--text`, `--glass` …) are mapped onto it in shell.css. Rules: one brand blue for
+actions (one primary button per area), tool colours only on icons, sentence case, pages use the full width
+beside the sidebar (`--ds-page-max: 100%`), no emoji in the interface (SVG line icons).
 Portal design rules (checked by the design audit — scratchpad `audit/audit.js`, every section, both themes):
 - One text font (system: Segoe UI on Windows) + one code font (Cascadia Code / Consolas); no web-font requests.
 - Font weights 400 / 600 / 700 ONLY. Segoe UI has no 500/650/750/800/850 face — 750+ renders as Segoe UI Black (blocky).

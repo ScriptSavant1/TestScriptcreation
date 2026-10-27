@@ -1455,6 +1455,7 @@ code {
 </style>
 <!-- Portal shell (sidebar + top bar) and Home — public/portal/ -->
 <script>/* sidebar state before first paint */(function(){try{if(localStorage.getItem('perfx-sidebar')==='collapsed')document.documentElement.classList.add('sb-collapsed');}catch(e){}})();</script>
+<link rel="stylesheet" href="<%= basePath %>/portal/ds.css">
 <link rel="stylesheet" href="<%= basePath %>/portal/shell.css">
 <link rel="stylesheet" href="<%= basePath %>/portal/home.css">
 <script src="<%= basePath %>/portal/shell.js" defer></script>
@@ -2127,17 +2128,27 @@ function showJmxResult(data, err) {
   // escHtml: sanitize server-supplied strings before innerHTML insertion (XSS prevention)
   const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const tgListEl = document.getElementById('res-tg-list');
+  // line icons (24×24, stroke) in place of emoji — one per thread group type
+  const cvIco = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   if (data.multiScript && data.scripts && data.scripts.length) {
-    const typeIcon = { Standard:'🧵', SetUp:'▶', TearDown:'⏹', Stepping:'📈', Ultimate:'🚀', Concurrency:'⚡', Arrivals:'🌊' };
-    let html = '<div style="font-size:0.78rem;font-weight:600;color:var(--text-2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Generated Scripts</div>';
-    html += '<div style="display:flex;flex-direction:column;gap:4px">';
+    const typeIcon = {
+      Standard:    '<path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M21 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+      SetUp:       '<path d="m7 4 12 8-12 8z"/>',
+      TearDown:    '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+      Stepping:    '<path d="M3 20h5v-5h5v-5h5V5h3"/>',
+      Ultimate:    '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-6"/>',
+      Concurrency: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+      Arrivals:    '<path d="M2 12c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-3 5-2"/>'
+    };
+    let html = '<div class="cv-res-h">Generated Scripts</div>';
+    html += '<div class="cv-file-list">';
     for (const s of data.scripts) {
-      const icon = typeIcon[s.threadGroupType] || '🧵';
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:var(--glass);border:1px solid var(--glass-border);font-size:0.82rem">
-        <span>${icon}</span>
-        <span style="font-weight:500;color:var(--text)">${escHtml(s.threadGroupName)}</span>
-        <span style="color:var(--text-3);margin-left:auto">${Number(s.requestCount)} requests</span>
-        <span style="color:var(--text-3);font-family:var(--mono);font-size:0.72rem">${escHtml(s.safeDirName)}/</span>
+      const icon = cvIco(typeIcon[s.threadGroupType] || typeIcon.Standard);
+      html += `<div class="cv-file">
+        <span class="cv-file-ico">${icon}</span>
+        <span class="cv-file-name">${escHtml(s.threadGroupName)}</span>
+        <span class="cv-file-meta">${Number(s.requestCount)} requests</span>
+        <span class="cv-file-dir">${escHtml(s.safeDirName)}/</span>
       </div>`;
     }
     html += '</div>';
@@ -2151,29 +2162,27 @@ function showJmxResult(data, err) {
   const depEl = document.getElementById('res-dep-report');
   const dep   = data.dependency;
   if (dep) {
-    let html = '<div style="font-size:0.78rem;font-weight:600;color:var(--text-2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Dependency Report</div>';
+    const icWarn = cvIco('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>');
+    const icOk   = cvIco('<path d="M20 6 9 17l-5-5"/>');
+    const icInfo = cvIco('<circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/>');
+    let html = '<div class="cv-res-h">Dependency Report</div><div class="cv-dep">';
     if (dep.missing.length) {
-      html += '<div style="margin-bottom:6px">';
       for (const m of dep.missing) {
-        html += `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 10px;border-radius:6px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.2);font-size:0.8rem;margin-bottom:4px">
-          <span>⚠</span><span style="color:var(--text)">${escHtml(m.message)}</span></div>`;
+        html += `<div class="cv-dep-row bad">${icWarn}<span>${escHtml(m.message)}</span></div>`;
       }
-      html += '</div>';
     }
     if (dep.found.filter(f => f.type === 'csv').length) {
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:rgba(80,200,100,0.08);border:1px solid rgba(80,200,100,0.2);font-size:0.8rem">';
-      html += `<span>✓</span><span>${dep.found.filter(f=>f.type==='csv').length} CSV file(s) uploaded — included in output ZIP</span></div>`;
+      html += `<div class="cv-dep-row ok">${icOk}<span>${dep.found.filter(f=>f.type==='csv').length} CSV file(s) uploaded — included in output ZIP</span></div>`;
     }
     if (dep.warnings.length) {
-      html += '<div style="margin-top:6px">';
       for (const w of dep.warnings) {
-        html += `<div style="padding:5px 10px;border-radius:5px;background:var(--glass);font-size:0.78rem;color:var(--text-2);margin-bottom:3px">ℹ ${w}</div>`;
+        html += `<div class="cv-dep-row info">${icInfo}<span>${w}</span></div>`;
       }
-      html += '</div>';
     }
     if (dep.required.length === 0 && dep.warnings.length === 0) {
-      html += '<div style="font-size:0.8rem;color:var(--text-3)">No external file dependencies detected.</div>';
+      html += '<div class="cv-dep-none">No external file dependencies detected.</div>';
     }
+    html += '</div>';
     depEl.innerHTML = html;
     depEl.style.display = 'block';
   } else {

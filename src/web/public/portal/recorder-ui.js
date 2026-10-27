@@ -49,8 +49,7 @@ function _plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
 function _setTheme(t) {
   document.documentElement.setAttribute('data-theme', t || 'dark');
   try { localStorage.setItem('vr-theme', t || 'dark'); } catch (e) { /* ignore */ }
-  var b = document.getElementById('theme-icon');
-  if (b) b.textContent = (t === 'light') ? '☽' : '☀';
+  // the sun / moon icon follows data-theme (CSS) — no text glyph
 }
 // Called by the portal: sync the theme and drop this page's own header
 window.lrePortalInit = function (theme) {
@@ -69,13 +68,15 @@ function toggleTheme() {
 function _toast(msg, type, duration, action) {
   type = type || 'info';
   duration = duration == null ? (action ? 6500 : 3500) : duration;
-  var icons = { success: '✓', error: '✕', info: 'i', warning: '!' };
+  var P = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">';
+  var icons = { success: P + '<path d="M20 6 9 17l-5-5"/></svg>', error: P + '<path d="M18 6 6 18M6 6l12 12"/></svg>',
+    info: P + '<path d="M12 16v-5M12 7.5h.01"/></svg>', warning: P + '<path d="M12 7v6M12 17h.01"/></svg>' };
   var c = document.getElementById('toast-container');
   if (!c) return;
   var t = document.createElement('div');
   t.className = 'rc-toast toast-' + type;
   t.setAttribute('role', type === 'error' ? 'alert' : 'status');
-  var i = document.createElement('span'); i.className = 'i'; i.textContent = icons[type] || 'i';
+  var i = document.createElement('span'); i.className = 'i'; i.setAttribute('aria-hidden', 'true'); i.innerHTML = icons[type] || icons.info;
   var m = document.createElement('span'); m.textContent = msg;
   t.appendChild(i); t.appendChild(m);
   var gone = function () { t.classList.add('removing'); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 280); };
@@ -283,7 +284,7 @@ function renderTable() {
     var e = ents[i];
     if (!e.isMarker && ++shownReq > limit) {
       html.push('<tr class="more"><td colspan="6"><div class="rc-empty sm">Showing the first ' + limit.toLocaleString('en-GB') + ' of ' + totalReq.toLocaleString('en-GB') +
-        ' requests — the script includes all of them. <button class="rc-btn ghost sm" type="button" id="btn-show-all">Show all ' + totalReq.toLocaleString('en-GB') + '</button></div></td></tr>');
+        ' requests — the script includes all of them. <button class="ds-btn ds-btn-sm" type="button" id="btn-show-all">Show all ' + totalReq.toLocaleString('en-GB') + '</button></div></td></tr>');
       break;
     }
     if (e.isMarker) {
@@ -300,7 +301,7 @@ function renderTable() {
         open.push(e.txnName); noneShown = false;
       } else {
         for (var k = open.length - 1; k >= 0; k--) { if (open[k] === e.txnName) { open.splice(k); break; } }
-        html.push('<tr class="end" data-grp="' + esc(e.txnName) + '"><td colspan="6"><div class="rc-end" style="--g:' + c.bd + ';--d:' + open.length + '">■ END ' + esc(e.txnName) + '</div></td></tr>');
+        html.push('<tr class="end" data-grp="' + esc(e.txnName) + '"><td colspan="6"><div class="rc-end" style="--g:' + c.bd + ';--d:' + open.length + '"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>End ' + esc(e.txnName) + '</div></td></tr>');
       }
       continue;
     }
@@ -414,23 +415,28 @@ function switchTab(el, tab) {
   S.tab = tab; showScript();
 }
 
-// Light syntax colouring — wraps tokens only, so textContent stays the exact script
-var _HL = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\[\s\S])*`)|(#\w+)|\b(return|const|let|var|async|await|new|function|if|else|for|while|try|catch|throw|typeof|null|true|false|int|char|void|LAST|ENDITEM|ITEMDATA|EXTRARES)\b|\b([A-Za-z_$][\w$]*)(?=\s*\()/g;
+// Light syntax colouring — wraps tokens only, so textContent stays the exact script. Built from text nodes, not
+// HTML: HTML parsing would turn \r\n into \n, and Copy reads textContent.
+var _HL =/(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\[\s\S])*`)|(#\w+)|\b(return|const|let|var|async|await|new|function|if|else|for|while|try|catch|throw|typeof|null|true|false|int|char|void|LAST|ENDITEM|ITEMDATA|EXTRARES)\b|\b([A-Za-z_$][\w$]*)(?=\s*\()/g;
 function _highlight(text) {
-  var out = '', last = 0, m;
+  var frag = document.createDocumentFragment(), last = 0, m;
   _HL.lastIndex = 0;
   while ((m = _HL.exec(text))) {
-    out += esc(text.slice(last, m.index));
-    var cls = m[1] ? 'c' : m[2] ? 's' : (m[3] || m[4]) ? 'k' : 'f';
-    out += '<span class="' + cls + '">' + esc(m[0]) + '</span>';
+    if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+    var span = document.createElement('span');
+    span.className = m[1] ? 'c' : m[2] ? 's' : (m[3] || m[4]) ? 'k' : 'f';
+    span.textContent = m[0];
+    frag.appendChild(span);
     last = _HL.lastIndex;
   }
-  return out + esc(text.slice(last));
+  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+  return frag;
 }
 function showScript() {
   var body = document.getElementById('code-body');
   var text = S.scripts[S.tab] || '// No content  -  load a HAR file first';
-  if (text.length < 400000) body.innerHTML = _highlight(text);
+  body.textContent = '';
+  if (text.length < 400000) body.appendChild(_highlight(text));
   else body.textContent = text;
 }
 

@@ -1,6 +1,7 @@
 /* Postman / Bruno and JMeter converters — layout behaviour only (the converter itself is in
  * index.ejs): protocol cards work with the keyboard (Enter / Space, aria-checked follows the
- * selection), and the "How it works" section remembers whether it was folded away. */
+ * selection), option buttons announce aria-pressed, and the "How it works" section remembers
+ * whether it was folded away. */
 (function () {
   "use strict";
   const root = document.getElementById("portal-converter");
@@ -17,6 +18,8 @@
     });
     const adv = document.getElementById("adv-btn");
     if (adv) adv.setAttribute("aria-expanded", String(adv.classList.contains("open")));
+    // option buttons (Script mode, Think time …): the selected one is announced as pressed
+    root.querySelectorAll(".seg-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.classList.contains("active"))));
   };
   root.addEventListener("keydown", (e) => {
     const card = e.target.closest && e.target.closest(".proto-card");

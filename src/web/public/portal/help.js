@@ -106,6 +106,15 @@
   ["wheel", "keydown", "touchstart"].forEach((t) => addEventListener(t, () => { lockUntil = 0; }, { passive: true }));
   // and when Help is opened (the portal shows it by changing its style)
   if ("MutationObserver" in window) new MutationObserver(() => requestAnimationFrame(spy)).observe(help, { attributes: true, attributeFilter: ["style"] });
+  // opening Help (sidebar, top-bar "How it works", any Help link) shows every section expanded — the "Expand all"
+  // state; a jump, the search and "Collapse all" work as before. Runs on the hidden → shown change only.
+  let wasShown = help.style.display !== "none";
+  const expandOnOpen = () => {
+    const shown = help.style.display !== "none";
+    if (shown && !wasShown && !(q && q.value.trim())) items.forEach((i) => { if (!i.hidden) i.classList.add("open"); });
+    wasShown = shown;
+  };
+  if ("MutationObserver" in window) new MutationObserver(expandOnOpen).observe(help, { attributes: true, attributeFilter: ["style"] });
   spy();
 
   // ── the search bar: its height feeds the jump offset; a line under it once it sticks ──

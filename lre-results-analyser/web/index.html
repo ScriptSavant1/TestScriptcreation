@@ -7,126 +7,163 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Results Analyser — PerfX Studio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Cpath fill=%22none%22 stroke=%22%233b82f6%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 d=%22M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4%22/%3E%3C/svg%3E">
+  <!-- the portal design system (tokens + components), then this page's own layer -->
+  <link rel="stylesheet" href="portal/ds.css">
   <link rel="stylesheet" href="ra/app.css">
 </head>
 <body>
   <header class="ra-header">
     <div class="brand">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4"/></svg>
+      <span class="ds-ico brand-ico" style="--c: var(--c-results)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4"/></svg></span>
       <span class="brand-title">Results Analyser</span>
-      <span class="badge">LRE raw results</span>
+      <span class="badge ds-chip">LRE raw results</span>
     </div>
     <div class="header-right">
-      <span class="privacy" title="Your results are read by this page on your PC. No file is sent to the server.">🔒 Runs in your browser — nothing is uploaded</span>
-      <button class="icon-btn" id="btn-theme" title="Light / dark">◐</button>
+      <span class="privacy" title="Your results are read by this page on your PC. No file is sent to the server."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Runs in your browser — nothing is uploaded</span>
+      <button class="ds-btn icon-btn" id="btn-theme" title="Light / dark" aria-label="Switch light / dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
     </div>
   </header>
 
   <main>
     <!-- ── START ─────────────────────────────────────────────────────────── -->
     <section id="view-start" class="view active">
-      <div class="hero">
-        <h1>Analyse a LoadRunner Enterprise run</h1>
-        <p>Pick the run's <b>raw results</b> folder or ZIP. Transaction statistics, steady state, workload, errors and
-          insights are computed from <code>RawData.eve</code> and the scenario files — independently of LRE Analysis — and can be
-          exported to Excel, Word and PDF.</p>
-      </div>
-      <div class="pick-grid">
-        <label class="pick-card" id="pick-folder">
-          <input type="file" id="in-folder" webkitdirectory directory multiple hidden>
-          <div class="pick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
-          <div class="pick-title">Choose results folder</div>
-          <div class="pick-sub">Fastest. Best for very large runs — nothing is unzipped.</div>
-        </label>
-        <label class="pick-card" id="pick-zip">
-          <input type="file" id="in-zip" accept=".zip,application/zip" hidden>
-          <div class="pick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M10 7h1M10 10h1M10 13h1"/><rect x="9" y="15" width="3" height="3" rx=".5"/></svg></div>
-          <div class="pick-title">Choose results ZIP</div>
-          <div class="pick-sub">The ZIP downloaded from LRE. Read in place (ZIP64 supported).</div>
-        </label>
-      </div>
-      <div class="drop" id="drop">or drop the folder / ZIP here</div>
-      <div class="start-error" id="start-error" hidden></div>
-      <div class="info-grid">
-        <div class="info">
-          <h3>What is read</h3>
-          <ul>
-            <li><code>RawData.eve</code> — every transaction sample (required)</li>
-            <li><code>res*.lrr</code>, <code>RunInfo.ini</code>, <code>_t_rep.eve</code>, <code>RawData.map</code> — run, schedule, VUsers (required)</li>
-            <li><code>*.usp</code> / <code>*.cfg</code> / <code>*.usr</code> — pacing, think time, transactions per script</li>
-            <li><code>SqliteDb.db</code> — errors · <code>sum_data/</code> — LG CPU, HTTP codes, pass/fail</li>
-          </ul>
+      <div class="start-card ds-card">
+       <div class="start-main">
+        <div class="start-head">
+          <span class="ds-ico start-ico" style="--c: var(--c-results)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4"/></svg></span>
+          <div class="hero">
+            <h1>Analyse a LoadRunner Enterprise run</h1>
+            <p>Pick the run's <b>raw results</b> folder or ZIP. Transaction statistics, steady state, workload, errors and
+              insights are computed from <code>RawData.eve</code> and the scenario files — independently of LRE Analysis — and can be
+              exported to Excel, Word and PDF.</p>
+          </div>
         </div>
-        <div class="info">
-          <h3>Very large runs</h3>
-          <p>Any size works here — the file is streamed. For runs of hundreds of GB the command line is faster and can run on a server or LG with the files:</p>
-          <pre>node lre-results-analyser/cli/analyse.js "D:\Results\Run_59" --xlsx run59.xlsx --html run59.html</pre>
+
+        <div class="drop ds-drop" id="drop">
+          <span class="drop-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></span>
+          <div class="drop-title">Drop the results folder or ZIP here</div>
+          <div class="drop-sub">or choose it from your PC</div>
+          <div class="pick-grid">
+            <label class="pick-card ds-btn ds-btn-primary ds-btn-lg" id="pick-folder" tabindex="0" role="button">
+              <input type="file" id="in-folder" webkitdirectory directory multiple hidden>
+              <span class="pick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+              <span class="pick-title">Choose results folder</span>
+            </label>
+            <label class="pick-card ds-btn ds-btn-lg" id="pick-zip" tabindex="0" role="button">
+              <input type="file" id="in-zip" accept=".zip,application/zip" hidden>
+              <span class="pick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M10 7h1M10 10h1M10 13h1"/><rect x="9" y="15" width="3" height="3" rx=".5"/></svg></span>
+              <span class="pick-title">Choose results ZIP</span>
+            </label>
+          </div>
+          <div class="pick-notes">
+            <span class="pick-sub"><b>Folder</b> — fastest. Best for very large runs — nothing is unzipped.</span>
+            <span class="pick-sub"><b>ZIP</b> — the ZIP downloaded from LRE. Read in place (ZIP64 supported).</span>
+          </div>
+        </div>
+        <div class="start-error ds-note bad" id="start-error" role="alert" hidden></div>
+
+        <p class="privacy-line" title="Your results are read by this page on your PC. No file is sent to the server.">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          Runs in your browser — nothing is uploaded. No file is sent to the server.
+        </p>
+       </div>
+
+        <div class="info-grid start-side">
+          <div class="info">
+            <h3>What you get</h3>
+            <ul class="get-list">
+              <li><b>Overview</b> — verdict with the top issues, key figures, web traffic, load and throughput over time, slowest transactions</li>
+              <li><b>Transactions</b> — count, pass / fail, min / avg / max, P50–P99, TPS, SLA and Apdex, with details per transaction</li>
+              <li><b>Charts</b>, <b>Errors</b>, <b>Workload</b> and automatic <b>Insights</b> with evidence</li>
+              <li>Exports: <b>Excel</b>, <b>Word</b>, <b>PDF</b>, <b>HTML</b> and the result data (JSON)</li>
+            </ul>
+          </div>
+          <div class="info">
+            <h3>What is read</h3>
+            <ul>
+              <li><code>RawData.eve</code> — every transaction sample (required)</li>
+              <li><code>res*.lrr</code>, <code>RunInfo.ini</code>, <code>_t_rep.eve</code>, <code>RawData.map</code> — run, schedule, VUsers (required)</li>
+              <li><code>*.usp</code> / <code>*.cfg</code> / <code>*.usr</code> — pacing, think time, transactions per script</li>
+              <li><code>SqliteDb.db</code> — errors · <code>sum_data/</code> — LG CPU, HTTP codes, pass/fail</li>
+            </ul>
+          </div>
+          <div class="info">
+            <h3>Very large runs</h3>
+            <p>Any size works here — the file is streamed. For runs of hundreds of GB the command line is faster and can run on a server or LG with the files:</p>
+            <pre>node lre-results-analyser/cli/analyse.js "D:\Results\Run_59" --xlsx run59.xlsx --html run59.html</pre>
+          </div>
         </div>
       </div>
     </section>
 
     <!-- ── PROGRESS ──────────────────────────────────────────────────────── -->
     <section id="view-progress" class="view">
-      <div class="progress-card">
+      <div class="progress-card ds-card" role="status" aria-live="polite">
+        <span class="ds-ico" style="--c: var(--c-results)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4"/></svg></span>
         <div class="progress-stage" id="prog-stage">Starting…</div>
         <div class="bar"><div class="bar-fill" id="prog-fill"></div></div>
         <div class="progress-meta" id="prog-meta"></div>
-        <button class="btn" id="btn-cancel">Cancel</button>
+        <button class="btn ds-btn" id="btn-cancel">Cancel</button>
       </div>
     </section>
 
     <!-- ── RESULTS ───────────────────────────────────────────────────────── -->
     <section id="view-results" class="view">
       <div class="results-head">
+      <div class="head-card ds-card">
       <div class="toolbar">
         <div class="run-title">
-          <div class="run-name" id="run-name">-</div>
+          <div class="run-line">
+            <h1 class="run-name" id="run-name">-</h1>
+            <div class="verdict" id="verdict">-</div>
+          </div>
           <div class="run-sub" id="run-sub">-</div>
+          <div class="settings-summary" id="settings-summary">
+            <span class="chips" id="settings-chips"></span>
+            <button class="btn ds-btn ds-btn-ghost ds-btn-sm sm ghost" id="btn-settings" aria-expanded="false" aria-controls="settings-bar">Change</button>
+          </div>
         </div>
-        <div class="verdict" id="verdict">-</div>
         <div class="toolbar-actions">
-          <button class="btn primary" data-export="xlsx">⤓ Excel</button>
-          <button class="btn" data-export="docx">⤓ Word</button>
-          <button class="btn" data-export="pdf" title="Opens the report ready to print — choose Save as PDF">⎙ PDF</button>
-          <button class="btn" data-export="html" title="The same report as a web page you can keep, email or open in any browser">⤓ HTML</button>
-          <div class="menu">
-            <button class="btn" id="btn-more">More ▾</button>
-            <div class="menu-list" id="menu-more" hidden>
-              <button data-export="json">Result data (JSON)</button>
-              <button data-export="json-redacted">Result data — redacted (safe to share)</button>
+          <div class="export-group" role="group" aria-label="Export the report">
+            <button class="btn ds-btn" data-export="xlsx" title="Excel workbook — every table and chart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Excel</button>
+            <button class="btn ds-btn" data-export="docx" title="Word report you can edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>Word</button>
+            <button class="btn ds-btn" data-export="pdf" title="Opens the report ready to print — choose Save as PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>PDF</button>
+            <button class="btn ds-btn" data-export="html" title="The same report as a web page you can keep, email or open in any browser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>HTML</button>
+            <div class="menu">
+              <button class="btn ds-btn" id="btn-more" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-more">More<svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+              <div class="menu-list" id="menu-more" role="menu" hidden>
+                <button data-export="json" role="menuitem">Result data (JSON)</button>
+                <button data-export="json-redacted" role="menuitem">Result data — redacted (safe to share)</button>
+              </div>
             </div>
           </div>
-          <button class="btn ghost" id="btn-explain" aria-pressed="true" title="Show or hide the explanations under every chart and table">? Explanations</button>
-          <button class="btn ghost" id="btn-new">New analysis</button>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <button class="btn ds-btn ds-btn-ghost ghost" id="btn-explain" aria-pressed="true" title="Show or hide the explanations under every chart and table">Explanations</button>
+          <button class="btn ds-btn" id="btn-new">New analysis</button>
         </div>
-      </div>
-
-      <div class="settings-summary" id="settings-summary">
-        <span class="chips" id="settings-chips"></span>
-        <button class="btn sm ghost" id="btn-settings" aria-expanded="false" aria-controls="settings-bar">⚙ Change</button>
       </div>
 
       <div class="settings-bar" id="settings-bar" hidden>
         <div class="setting">
           <span class="setting-label">Analysis window</span>
-          <span class="t">From</span><input id="win-start" class="in-dt" type="datetime-local" step="1">
-          <span class="t">to</span><input id="win-end" class="in-dt" type="datetime-local" step="1">
+          <span class="t">From</span><input id="win-start" class="in-dt" type="datetime-local" step="1" aria-label="Analysis window start">
+          <span class="t">to</span><input id="win-end" class="in-dt" type="datetime-local" step="1" aria-label="Analysis window end">
+          <button class="btn ds-btn ds-btn-sm sm" id="win-apply">Apply</button>
+          <button class="btn ds-btn ds-btn-ghost ds-btn-sm sm ghost" id="win-reset" title="Back to the detected steady state">Detected</button>
           <span class="win-local" id="win-local"></span>
-          <button class="btn sm" id="win-apply">Apply</button>
-          <button class="btn sm ghost" id="win-reset" title="Back to the detected steady state">Detected</button>
         </div>
         <div class="setting">
           <span class="setting-label">SLA</span>
-          <select id="sla-pct"><option value="90">P90</option><option value="95">P95</option><option value="99">P99</option><option value="50">P50</option></select>
-          <span>≤</span><input id="sla-default" class="in-num" placeholder="default s">
-          <button class="btn sm" id="sla-apply">Apply</button>
+          <select id="sla-pct" aria-label="SLA percentile"><option value="90">P90</option><option value="95">P95</option><option value="99">P99</option><option value="50">P50</option></select>
+          <span>≤</span><input id="sla-default" class="in-num" placeholder="default s" aria-label="Default SLA in seconds">
+          <button class="btn ds-btn ds-btn-sm sm" id="sla-apply">Apply</button>
           <span class="hint">per transaction in the Transactions tab</span>
         </div>
         <div class="setting" id="agg-setting">
           <span class="setting-label" title="Exact = every transaction counted on its own (recommended). A time value = LoadRunner Analysis-style averaged figures, for comparing with an LRE report that has Data Aggregation switched on.">Granularity</span>
           <select id="agg" aria-label="Granularity"></select>
           <label class="chk" title="Average all VUsers together inside every time slot — LoadRunner Analysis with 'VuserID' ticked under 'graph properties to aggregate' (ticking it there merges the VUsers). Untick to average each VUser separately."><input type="checkbox" id="agg-combine" checked> combine VUsers</label>
-          <button class="btn sm ghost" id="agg-help-btn" aria-expanded="false" aria-controls="agg-help">ⓘ What is this?</button>
+          <button class="btn ds-btn ds-btn-ghost ds-btn-sm sm ghost" id="agg-help-btn" aria-expanded="false" aria-controls="agg-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>What is this?</button>
           <span class="hint" id="agg-hint"></span>
         </div>
       </div>
@@ -169,33 +206,34 @@
 
       <div class="agg-banner" id="agg-banner" hidden></div>
 
-      <nav class="tabs" id="tabs">
-        <button data-tab="overview" class="active">Overview</button>
-        <button data-tab="transactions">Transactions</button>
-        <button data-tab="charts">Charts</button>
-        <button data-tab="errors">Errors</button>
-        <button data-tab="workload">Workload</button>
-        <button data-tab="insights">Insights <span class="count" id="ins-count"></span></button>
+      <nav class="tabs ds-tabs" id="tabs" role="tablist" aria-label="Report sections">
+        <button data-tab="overview" class="active" role="tab" aria-selected="true">Overview</button>
+        <button data-tab="transactions" role="tab" aria-selected="false">Transactions <span class="count n" id="tx-count"></span></button>
+        <button data-tab="charts" role="tab" aria-selected="false">Charts</button>
+        <button data-tab="errors" role="tab" aria-selected="false">Errors <span class="count n" id="err-count"></span></button>
+        <button data-tab="workload" role="tab" aria-selected="false">Workload</button>
+        <button data-tab="insights" role="tab" aria-selected="false">Insights <span class="count" id="ins-count"></span></button>
       </nav>
       </div>
+      </div>
 
-      <div class="panel active" id="tab-overview"></div>
-      <div class="panel" id="tab-transactions"></div>
-      <div class="panel" id="tab-charts"></div>
-      <div class="panel" id="tab-errors"></div>
-      <div class="panel" id="tab-workload"></div>
-      <div class="panel" id="tab-insights"></div>
+      <div class="panel active" id="tab-overview" role="tabpanel"></div>
+      <div class="panel" id="tab-transactions" role="tabpanel"></div>
+      <div class="panel" id="tab-charts" role="tabpanel"></div>
+      <div class="panel" id="tab-errors" role="tabpanel"></div>
+      <div class="panel" id="tab-workload" role="tabpanel"></div>
+      <div class="panel" id="tab-insights" role="tabpanel"></div>
     </section>
   </main>
 
   <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
-  <aside class="drawer" id="drawer" hidden aria-labelledby="drawer-title" role="dialog">
+  <aside class="drawer ds-panel" id="drawer" hidden aria-labelledby="drawer-title" role="dialog" aria-modal="true">
     <div class="drawer-head"><div><div class="drawer-title" id="drawer-title"></div><div class="drawer-sub" id="drawer-sub"></div></div>
-      <button class="icon-btn" id="drawer-close" title="Close (Esc)">✕</button></div>
+      <button class="ds-btn ds-btn-ghost icon-btn" id="drawer-close" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="drawer-body" id="drawer-body"></div>
   </aside>
 
-  <div class="toast" id="toast" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="ra/vendor/echarts.min.js"></script>
   <script src="ra/report/format.js"></script>

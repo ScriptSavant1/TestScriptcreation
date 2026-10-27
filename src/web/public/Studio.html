@@ -16,7 +16,8 @@
         if (window.parent !== window) document.documentElement.classList.add("embedded");
       })();
     </script>
-    <!-- the classic stylesheet styles everything the Studio scripts draw; portal/studio.css restyles it -->
+    <!-- design system first; the classic stylesheet styles everything the Studio scripts draw; portal/studio.css restyles it -->
+    <link rel="stylesheet" href="portal/ds.css" />
     <link rel="stylesheet" href="VuGen-Script-Studio.css" />
     <link rel="stylesheet" href="portal/studio.css" />
     <script>
@@ -36,24 +37,28 @@
   <body>
     <!-- standalone header (hidden inside the portal, whose top bar and Clear do this job) -->
     <header class="app-header ss-top">
-      <span class="ss-logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+      <span class="ds-ico ss-logo" style="--c:var(--c-studio)" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
       <span class="app-header-title"><span class="title-accent">VuGen</span> Script Studio</span>
-      <span class="ss-top-sub">HAR &#x2192; Correlation Script Generator</span>
+      <span class="ss-top-sub">HAR to correlated script</span>
       <span class="ss-grow"></span>
-      <button class="ss-btn ghost sm" id="btn-clear-hdr" onclick="clearAll()" title="Clear all files and start a new session" style="display: none">Clear</button>
-      <button class="ss-btn ghost sm" type="button" onclick="toggleTheme()" title="Light / dark theme" aria-label="Light / dark theme"><span id="theme-icon">&#x2600;</span></button>
+      <button class="ds-btn ds-btn-sm" id="btn-clear-hdr" onclick="clearAll()" title="Clear all files and start a new session" style="display: none">Clear</button>
+      <button class="ds-btn ds-btn-sm ss-theme" type="button" onclick="toggleTheme()" title="Light / dark theme" aria-label="Light / dark theme"><span id="theme-icon">&#x2600;</span></button>
     </header>
 
     <div class="page-body">
       <!-- ═══════════════ PHASE 1: LOAD + SETTINGS ═══════════════ -->
       <div id="ph-upload" class="phase active">
         <div class="ss-wrap">
-          <h2 class="ss-h1">Turn a recording into a script that replays for many users</h2>
-          <p class="ss-lead">Load the HAR recording of your user journey. Script Studio finds the values that change every time — session ids, tokens, order numbers — and captures them, so the generated VuGen or DevWeb script replays correctly.</p>
-          <div class="ss-feats" aria-label="What Script Studio does">
-            <span class="ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>2-HAR diff-based correlation</span>
-            <span class="ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Auth detection &amp; injection</span>
-            <span class="ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>DevWeb &amp; Web HTTP/HTML output</span>
+          <div class="ss-head">
+            <div>
+              <h1 class="ss-h1">Turn a recording into a script that replays for many users</h1>
+              <p class="ss-lead">Load the HAR recording of your user journey. Script Studio finds the values that change every time — session ids, tokens, order numbers — and captures them, so the generated VuGen or DevWeb script replays correctly.</p>
+            </div>
+            <div class="ss-feats" aria-label="What Script Studio does">
+              <span class="ds-chip ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>2-HAR diff-based correlation</span>
+              <span class="ds-chip ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Auth detection &amp; injection</span>
+              <span class="ds-chip ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>DevWeb &amp; Web HTTP/HTML output</span>
+            </div>
           </div>
 
           <div class="ss-grid">
@@ -85,7 +90,7 @@
                   onclick="event.stopPropagation();clearSlot(2)" title="Remove file" aria-label="Remove recording 2" style="display:none">&#x2715;</button>
               </div>
               <details class="ss-why" id="ss-why">
-                <summary>One recording or two?</summary>
+                <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>One recording or two?</summary>
                 <p><b>One recording (pattern mode)</b> — dynamic values are found by their shape and by tracing them back to an earlier response. Quick to start.</p>
                 <p><b>Two recordings (diff mode)</b> — record the same journey twice with different data. Every value that changes between the two is found: the deepest and most reliable correlation.</p>
               </details>
@@ -115,6 +120,12 @@
                   <div class="fes-item"><span class="fes-dot" style="background:#4f8ef7"></span>Resource type &mdash; Fetch/XHR, Document, CSS, JS, Images&hellip;</div>
                   <div class="fes-item"><span class="fes-dot" style="background:#22c55e"></span>Domain &mdash; include or exclude specific hostnames</div>
                 </div>
+                <ol class="ss-howto" aria-label="How Script Studio works">
+                  <li><i>1</i><div><b>Load one or two recordings</b><span>Two recordings of the same journey (different data) give diff-based correlation.</span></div></li>
+                  <li><i>2</i><div><b>Choose the format and filters</b><span>Leave out static files, analytics and other domains before the analysis.</span></div></li>
+                  <li><i>3</i><div><b>Analyse and review</b><span>Accept the Correlation Advisor's suggestions, add your own, check the parameters.</span></div></li>
+                  <li><i>4</i><div><b>Download the project</b><span>A ready-to-run VuGen Web HTTP/HTML or DevWeb ZIP.</span></div></li>
+                </ol>
               </div>
               <div id="filter-section" style="display:none">
                 <div class="filter-panel-hdr">
@@ -131,7 +142,7 @@
                   </div>
                   <div class="rt-filter-list" id="rt-filter-list"></div>
                   <details class="rt-res-help">
-                    <summary>&#x24D8; Should I include Img / CSS / JS / Font?</summary>
+                    <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>Should I include Img / CSS / JS / Font?</summary>
                     <ul>
                       <li><strong>Leave them out</strong> (default) for server / API load. On replay only the images and stylesheets named in the page HTML are downloaded (VuGen <code>Mode=HTML</code>, DevWeb <code>downloadHtmlStaticResources</code>).</li>
                       <li><strong>Select them (or All)</strong> for realistic page load, and always for <strong>JavaScript-based apps</strong> (React, Angular, Vue&hellip;): script files, and files that JavaScript or CSS requests &#x2014; lazy-loaded code, fonts, images on later screens &#x2014; are not downloaded from the HTML, so they are only downloaded if they are in the script.</li>
@@ -167,17 +178,17 @@
         <div id="proc-msg">Please wait</div>
         <div class="proc-steps">
           <div class="proc-step-item" id="pstep-1">
-            <span class="proc-step-icon">&#x1F4E5;</span>
+            <span class="proc-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>
             <span class="proc-step-label">Parse HAR / NetLog</span>
             <span class="proc-step-status"></span>
           </div>
           <div class="proc-step-item" id="pstep-2">
-            <span class="proc-step-icon">&#x1F517;</span>
+            <span class="proc-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
             <span class="proc-step-label">Correlate Dynamic Values</span>
             <span class="proc-step-status"></span>
           </div>
           <div class="proc-step-item" id="pstep-3">
-            <span class="proc-step-icon">&#x1F4DD;</span>
+            <span class="proc-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg></span>
             <span class="proc-step-label">Generate Scripts</span>
             <span class="proc-step-status"></span>
           </div>
@@ -188,29 +199,32 @@
       <div id="ph-res" class="phase">
         <div class="res-header">
           <h2><span class="ss-ok" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Generated Scripts</h2>
-          <div class="ss-view" role="group" aria-label="Show or hide panels">
-            <button class="ss-btn ghost sm" type="button" id="btn-hide-review" aria-pressed="true" title="Show or hide the review panels (advisor, correlations, parameters)">Review</button>
-            <button class="ss-btn ghost sm" type="button" id="btn-hide-script" aria-pressed="true" title="Show or hide the script preview (the download buttons stay)">Script</button>
+          <span class="ss-grow"></span>
+          <div class="ss-view ds-seg" role="group" aria-label="Show or hide panels">
+            <button type="button" id="btn-hide-review" aria-pressed="true" title="Show or hide the review panels (advisor, correlations, parameters)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>Review</button>
+            <button type="button" id="btn-hide-script" aria-pressed="true" title="Show or hide the script preview (the download buttons stay)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Script</button>
           </div>
-          <button class="btn-back" onclick="goBack()">&#x2190; Start Over</button>
+          <button class="btn-back ds-btn ds-btn-sm" onclick="goBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Start Over</button>
+          <!-- downloads: always visible, whichever columns are shown (drawn by the Studio scripts) -->
+          <div class="dl-bar" id="dl-bar"></div>
         </div>
         <div class="stats-bar" id="stats-bar">
-          <div class="stat stat-ok"><span class="stat-icon" aria-hidden="true">&#x1F310;</span><span class="stat-val" id="st-req">0</span><span class="stat-lbl">Requests</span></div>
-          <div class="stat stat-ok"><span class="stat-icon" aria-hidden="true">&#x1F4CB;</span><span class="stat-val" id="st-txn">0</span><span class="stat-lbl">Transactions</span></div>
-          <div class="stat stat-ok"><span class="stat-icon" aria-hidden="true">&#x1F517;</span><span class="stat-val" id="st-corr">0</span><span class="stat-lbl">Correlations</span></div>
-          <div class="stat stat-ok"><span class="stat-icon" aria-hidden="true">&#x1F522;</span><span class="stat-val" id="st-params">0</span><span class="stat-lbl">Parameters</span></div>
-          <div class="stat"><span class="stat-icon" aria-hidden="true">&#x1F9EA;</span><span class="stat-val" id="st-mode">-</span><span class="stat-lbl">Mode</span></div>
-          <div class="stat"><span class="stat-icon" aria-hidden="true">&#x1F4C4;</span><span class="stat-val" id="st-fmt">-</span><span class="stat-lbl">Format</span></div>
-          <div class="stat" id="st-auth-wrap" style="display: none"><span class="stat-icon" aria-hidden="true">&#x1F512;</span><span class="stat-val" id="st-auth">-</span><span class="stat-lbl">Auth</span></div>
+          <div class="stat stat-ok"><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg></span><span class="stat-val" id="st-req">0</span><span class="stat-lbl">Requests</span></div>
+          <div class="stat stat-ok"><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></span><span class="stat-val" id="st-txn">0</span><span class="stat-lbl">Transactions</span></div>
+          <div class="stat stat-ok"><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span><span class="stat-val" id="st-corr">0</span><span class="stat-lbl">Correlations</span></div>
+          <div class="stat stat-ok"><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/></svg></span><span class="stat-val" id="st-params">0</span><span class="stat-lbl">Parameters</span></div>
+          <div class="stat"><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/></svg></span><span class="stat-val" id="st-mode">-</span><span class="stat-lbl">Mode</span></div>
+          <div class="stat"><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span><span class="stat-val" id="st-fmt">-</span><span class="stat-lbl">Format</span></div>
+          <div class="stat" id="st-auth-wrap" style="display: none"><span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span><span class="stat-val" id="st-auth">-</span><span class="stat-lbl">Auth</span></div>
         </div>
 
         <!-- background request review (shown only when background traffic is found) -->
         <div id="bgReviewPanel" class="bg-review-panel" style="display:none">
           <div class="bg-review-header">
-            <span class="bg-review-title">&#x1F6AB; Background Requests Detected</span>
+            <span class="bg-review-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Background Requests Detected</span>
             <span class="bg-review-subtitle" id="bgReviewSubtitle"></span>
           </div>
-          <div style="overflow-x:auto">
+          <div class="bg-review-scroll">
             <table class="bg-review-table" id="bgReviewTable">
               <thead><tr><th>Endpoint</th><th>Method</th><th>Interval</th><th>Count</th><th>Decision</th></tr></thead>
               <tbody id="bgReviewBody"></tbody>
@@ -218,12 +232,9 @@
           </div>
           <div class="bg-review-footer">
             <span id="bgReviewStats"></span>
-            <button class="bg-review-apply" onclick="applyBgDecisions()">&#x25B6; Apply &amp; Generate Script</button>
+            <button class="bg-review-apply ds-btn ds-btn-primary" onclick="applyBgDecisions()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Apply &amp; Generate Script</button>
           </div>
         </div>
-
-        <!-- downloads: always visible, whichever columns are shown -->
-        <div class="dl-bar" id="dl-bar"></div>
 
         <div class="ss-ws" id="ss-ws">
           <!-- review: advisor, correlations, parameters -->
@@ -231,23 +242,23 @@
             <div class="adv-panel" id="adv-panel" style="display:none">
               <div class="adv-panel-hdr" onclick="toggleAdvisorPanel()">
                 <div class="adv-panel-hdr-left">
-                  <span class="adv-panel-icon">&#x1F50D;</span>
+                  <span class="adv-panel-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg></span>
                   <span class="adv-panel-title">Correlation Advisor</span>
                   <span class="adv-badge" id="adv-badge"></span>
                 </div>
                 <div class="adv-panel-hdr-right">
-                  <button class="adv-btn-paste" onclick="event.stopPropagation();openPasteCorrelate()" title="Paste a response body and extract a value from it">&#x1F4CB; Paste &amp; Detect</button>
-                  <button class="adv-btn-add" onclick="event.stopPropagation();openAdvisorModal()" title="Add a custom correlation manually">+ Add Manual</button>
+                  <button class="adv-btn-paste" onclick="event.stopPropagation();openPasteCorrelate()" title="Paste a response body and extract a value from it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>Paste &amp; Detect</button>
+                  <button class="adv-btn-add" onclick="event.stopPropagation();openAdvisorModal()" title="Add a custom correlation manually"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add Manual</button>
                   <span class="adv-toggle-icon" id="adv-toggle-icon">&#x25BE;</span>
                 </div>
               </div>
               <div class="adv-info-line">
-                &#x2139;&#xFE0F; Shows up to 20 candidates &mdash; <strong>High confidence</strong> first (value traced from a prior server response), then <strong>Medium</strong> (dynamic pattern detected by shape: JWT, UUID, token). Use <strong>+ Add Manual</strong> or <strong>Paste &amp; Detect</strong> if a value is not listed.
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>Shows up to 20 candidates &mdash; <strong>High confidence</strong> first (value traced from a prior server response), then <strong>Medium</strong> (dynamic pattern detected by shape: JWT, UUID, token). Use <strong>+ Add Manual</strong> or <strong>Paste &amp; Detect</strong> if a value is not listed.</span>
               </div>
               <div class="adv-body" id="adv-body">
                 <div class="adv-inspector" id="adv-inspector">
                   <div class="adv-inspector-hdr" onclick="toggleInspector()">
-                    <span class="adv-inspector-title">&#x1F50D; Request Inspector</span>
+                    <span class="adv-inspector-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Request Inspector</span>
                     <span class="adv-inspector-hint">Select any request to see which values need correlation</span>
                     <span class="adv-insp-toggle" id="adv-insp-toggle">&#x25B8;</span>
                   </div>
@@ -266,32 +277,32 @@
                 <div class="adv-cards" id="adv-cards"></div>
                 <div class="adv-footer" id="adv-footer" style="display:none">
                   <span class="adv-footer-summary" id="adv-footer-summary"></span>
-                  <button class="adv-btn-regen" id="adv-btn-regen" onclick="advisorApplyAndRegen()">&#x25B6; Apply &amp; Regenerate</button>
+                  <button class="adv-btn-regen" id="adv-btn-regen" onclick="advisorApplyAndRegen()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Apply &amp; Regenerate</button>
                 </div>
               </div>
             </div>
             <div class="corr-panel" id="corr-panel">
               <div class="corr-panel-hdr" onclick="toggleCorrPanel()">
-                <span>&#x1F517; Correlation Details</span>
+                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Correlation Details</span>
                 <span class="corr-toggle-icon" id="corr-toggle-icon">&#x25BE;</span>
               </div>
               <div class="corr-list" id="corr-list"></div>
             </div>
             <div class="corr-panel" id="param-panel" style="display: none">
               <div class="corr-panel-hdr" onclick="toggleParamPanel()">
-                <span>&#x1F4CB; Parameterization Details</span>
+                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v14H3z"/><path d="M3 10h18M9 10v9"/></svg>Parameterization Details</span>
                 <span class="corr-toggle-icon" id="param-toggle-icon">&#x25BE;</span>
               </div>
               <div class="corr-list" id="param-list"></div>
             </div>
           </div>
 
-          <!-- script preview + downloads -->
+          <!-- script preview -->
           <div class="ss-col ss-script" id="ss-script">
             <div class="code-area">
               <div class="code-area-header">
                 <div class="code-tabs" id="code-tabs"></div>
-                <button class="btn-copy" id="btn-copy" onclick="copyCode()">&#x1F4CB; Copy</button>
+                <button class="btn-copy" id="btn-copy" onclick="copyCode()" aria-label="Copy this file to the clipboard" title="Copy this file to the clipboard">&#x1F4CB; Copy</button>
               </div>
               <pre id="code-body">// Loading...</pre>
             </div>
@@ -305,7 +316,7 @@
       <div class="adv-modal adv-modal-wide" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Add Custom Correlation">
         <div class="adv-modal-hdr">
           <span>Add Custom Correlation</span>
-          <button class="adv-modal-close" onclick="closeAdvisorModal()" aria-label="Close">&#x2715;</button>
+          <button class="adv-modal-close" onclick="closeAdvisorModal()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <div class="adv-modal-body">
           <label class="adv-modal-label">Source request <span class="adv-modal-hint">(whose <b>response</b> contains the value you want to extract)</span></label>
@@ -323,7 +334,7 @@
           <div class="adv-selected-info" id="adv-selected-info" style="display:none">
             <span class="adv-fb-type adv-fb-json" id="adv-sel-type">JSON</span>
             <span class="adv-sel-path" id="adv-sel-path"></span>
-            <span class="adv-sel-arrow">&#x2192;</span>
+            <span class="adv-sel-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
             <span class="adv-sel-value" id="adv-sel-value"></span>
           </div>
           <label class="adv-modal-label" style="margin-top:14px">Variable name</label>
@@ -340,24 +351,24 @@
     <div class="adv-modal-overlay" id="pc-modal-overlay" onclick="closePasteCorrelate()" style="display:none">
       <div class="adv-modal adv-modal-wide pc-modal" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Paste & Detect Correlation">
         <div class="adv-modal-hdr">
-          <span>&#x1F4CB; Paste &amp; Detect Correlation</span>
-          <button class="adv-modal-close" onclick="closePasteCorrelate()" aria-label="Close">&#x2715;</button>
+          <span>Paste &amp; Detect Correlation</span>
+          <button class="adv-modal-close" onclick="closePasteCorrelate()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <div class="adv-modal-body">
           <div class="pc-step-label">
-            &#x2460; Paste the server response body
+            <i class="pc-n">1</i>Paste the server response body
             <span class="adv-modal-hint">(optional — if you skip this, a pattern is auto-generated from the value shape)</span>
           </div>
           <textarea class="pc-textarea" id="pc-response-body"
             placeholder='{"access_token":"eyJa...","expires_in":3600}&#10;&#10;Leave empty to auto-generate from the value shape below.'
             rows="5"></textarea>
-          <div class="pc-step-label" style="margin-top:10px">&#x2461; Value to extract <span class="adv-modal-hint">(paste the exact value from the request)</span></div>
+          <div class="pc-step-label" style="margin-top:10px"><i class="pc-n">2</i>Value to extract <span class="adv-modal-hint">(paste the exact value from the request)</span></div>
           <input class="adv-modal-input" id="pc-target-value" type="text"
             placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off" />
-          <button class="pc-detect-btn" onclick="runPasteDetect()">&#x1F50D; Detect &amp; Generate</button>
+          <button class="pc-detect-btn" onclick="runPasteDetect()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Detect &amp; Generate</button>
           <div id="pc-result-section" style="display:none"></div>
           <div id="pc-src-row" style="margin-top:10px">
-            <div class="pc-step-label">&#x2462; Which request <em>uses</em> this value? <span class="adv-modal-hint">(optional — used to auto-locate all usage substitutions)</span></div>
+            <div class="pc-step-label"><i class="pc-n">3</i>Which request <em>uses</em> this value? <span class="adv-modal-hint">(optional — used to auto-locate all usage substitutions)</span></div>
             <select class="adv-modal-select" id="pc-src-select">
               <option value="">— select a request (optional) —</option>
             </select>

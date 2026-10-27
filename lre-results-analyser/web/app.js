@@ -17,6 +17,77 @@
   // now: the page shows the exact figures only. Set to true to bring the control back.
   const FEATURES = { granularity: false };
 
+  // Line icons drawn by this page (24×24, stroke currentColor — same style as the portal's).
+  const svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const IC = {
+    check: svg('<path d="M4 12l5 5L20 6"/>'),
+    x: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+    alert: svg('<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>'),
+    arrow: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+    sliders: svg('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'),
+    help: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>'),
+  };
+  const VERDICT_ICON = { pass: IC.check, fail: IC.x, warn: IC.alert };
+
+  // ── chart theme: axis / grid / label / tooltip colours from the portal tokens (ds.css) ───────
+  // report/charts.js builds the options with its own neutral colours (also used for the Excel /
+  // Word / PDF / HTML reports, which stay unchanged); on the page they are swapped for the tokens
+  // of the current theme just before rendering.
+  const tok = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  // categorical series colours that read on both themes (blue, orange, aqua, yellow, magenta, green, violet, red …)
+  const SERIES = {
+    dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#2fa34a", "#9085e9", "#e66767", "#06b6d4", "#84cc16", "#f97316", "#6366f1", "#14b8a6", "#eab308", "#a855f7", "#0ea5e9"],
+    light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948", "#0891b2", "#65a30d", "#ea580c", "#4f46e5", "#0d9488", "#ca8a04", "#9333ea", "#0284c7"],
+  };
+  function chartTheme() {
+    const t = {
+      text: tok("--ds-text-2"), sub: tok("--ds-text-3"), grid: tok("--ds-border"), line: tok("--ds-border-2"),
+      tip: tok("--ds-surface"), accent: tok("--ds-accent-text"), soft: tok("--ds-accent-soft"), bad: tok("--ds-bad"), warn: tok("--ds-warn"), font: tok("--ds-font"),
+    };
+    // colours report/charts.js uses for the dark and the light variant → the token they stand for
+    const map = state.dark
+      ? { "#cbd5e1": t.text, "#94a3b8": t.sub, "#334155": t.grid, "#1e293b": t.tip, "#ef4444": t.bad, "#f59e0b": t.warn }
+      : { "#1e293b": t.text, "#475569": t.sub, "#e2e8f0": t.grid, "#ffffff": t.tip, "#ef4444": t.bad, "#dc2626": t.bad, "#f59e0b": t.warn };
+    return { t, map };
+  }
+  /** ECharts theme object for echarts.init (dataZoom slider, toolbox, axis pointer). */
+  function echartsTheme(th) {
+    const t = th.t;
+    return {
+      backgroundColor: "transparent", color: SERIES[state.dark ? "dark" : "light"], textStyle: { fontFamily: t.font, color: t.text },
+      dataZoom: { backgroundColor: "transparent", borderColor: t.grid, fillerColor: t.soft, textStyle: { color: t.sub },
+        handleStyle: { color: tok("--ds-surface"), borderColor: t.sub }, moveHandleStyle: { color: t.line },
+        dataBackground: { lineStyle: { color: t.line }, areaStyle: { color: t.grid } },
+        selectedDataBackground: { lineStyle: { color: t.accent }, areaStyle: { color: t.soft } } },
+      toolbox: { iconStyle: { borderColor: t.sub }, emphasis: { iconStyle: { borderColor: t.accent } } },
+      axisPointer: { lineStyle: { color: t.line }, crossStyle: { color: t.line }, label: { backgroundColor: tok("--ds-surface-2"), color: tok("--ds-text") } },
+      legend: { pageTextStyle: { color: t.sub }, pageIconColor: t.text, pageIconInactiveColor: t.line },
+    };
+  }
+  /** Swap the report colours inside an option for the page tokens (data arrays are left alone). */
+  function themeOption(opt, th) {
+    const walk = (o, depth) => {
+      if (!o || typeof o !== "object" || depth > 8) return;
+      if (Array.isArray(o)) { if (o.length && (typeof o[0] === "number" || Array.isArray(o[0]) || o[0] == null)) return; o.forEach((x) => walk(x, depth + 1)); return; }
+      for (const k of Object.keys(o)) {
+        const v = o[k];
+        if (typeof v === "string") {
+          const low = v.toLowerCase();
+          if (th.map[low]) o[k] = th.map[low];
+          else if (k === "fontFamily") o[k] = th.t.font;
+        } else if (v && typeof v === "object") walk(v, depth + 1);
+      }
+    };
+    walk(opt, 0);
+    if (opt.color && Array.isArray(opt.color)) opt.color = SERIES[state.dark ? "dark" : "light"];
+    if (opt.tooltip && !Array.isArray(opt.tooltip)) {
+      opt.tooltip.borderColor = th.t.line;
+      opt.tooltip.extraCssText = "border-radius:10px;box-shadow:" + tok("--ds-shadow-2") + ";";
+      opt.tooltip.textStyle = Object.assign({}, opt.tooltip.textStyle, { color: tok("--ds-text"), fontFamily: th.t.font });
+    }
+    return opt;
+  }
+
   const state = {
     model: null, worker: null, dark: true, tab: "overview", txView: "steady", sort: null, filter: "",
     selected: new Set(), metric: "p90", detailTx: null, charts: new Map(), started: 0, lastSettings: {},
@@ -25,7 +96,11 @@
   // ── theme (also driven by the portal when embedded) ─────────────────────────
   function setTheme(t) {
     state.dark = t !== "light";
-    document.documentElement.setAttribute("data-theme", state.dark ? "dark" : "light");
+    // switch colours at once (no half-way colour fades on buttons and cards)
+    const root = document.documentElement;
+    root.classList.add("theme-switching");
+    root.setAttribute("data-theme", state.dark ? "dark" : "light");
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
     try { localStorage.setItem("lre-ra-theme", state.dark ? "dark" : "light"); } catch (_) { /* storage blocked */ }
     if (state.model) redrawCharts();
   }
@@ -71,6 +146,8 @@
     if (files.length) startFolder(files);
   };
   $("#in-zip").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) startZip(f); };
+  // the two pickers are labels styled as buttons: Enter / Space opens the file dialog
+  $$(".pick-card").forEach((l) => { l.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("input", l).click(); } }; });
   const drop = $("#drop");
   ["dragenter", "dragover"].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
   ["dragleave", "drop"].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); if (t === "drop" || e.target === drop) drop.classList.remove("over"); }));
@@ -208,7 +285,7 @@
         : `exact figures · charts ${m.granularity ? (m.granularity.sec % 60 ? m.granularity.sec + " s" : m.granularity.sec / 60 + " min") : ""} (auto)`;
       const b = $("#agg-banner");
       b.hidden = !a.active;
-      b.innerHTML = a.active ? `<b>⚠ ${esc(a.title)}.</b> Min, Max, Std Dev and percentiles are of ${a.sec}-second averages${a.byVuser ? " per VUser" : ""}; Count, Pass, Fail and Average are exact.` +
+      b.innerHTML = a.active ? `<b class="ab-title">${IC.alert} ${esc(a.title)}.</b> Min, Max, Std Dev and percentiles are of ${a.sec}-second averages${a.byVuser ? " per VUser" : ""}; Count, Pass, Fail and Average are exact.` +
         (a.partial ? " Some figures could not be averaged at this size (very large run or user-set window) and show exact values." : "") +
         ` <button class="btn sm" id="agg-exact">Show exact values</button>` : "";
       const ex = $("#agg-exact");
@@ -216,9 +293,9 @@
     }
     // one-line summary of the current settings (the editor opens with "Change")
     const chips = [];
-    chips.push(m.window ? `<span class="chip" title="${esc(fmt.relRange(m, m.window.start, m.window.end))}">${m.window.detected ? "Steady state" : "Analysis window"} <b>${esc(fmt.relWhen(m, m.window.start, true))} → ${esc(fmt.relWhen(m, m.window.end, true))}</b> · ${esc(fmt.dur(m.window.durationSec))}</span>` : `<span class="chip">No steady state</span>`);
-    chips.push(s && s.defaultSec != null ? `<span class="chip">SLA <b>P${s.percentile} ≤ ${s.defaultSec} s</b></span>` : `<span class="chip">SLA <b>${s && Object.keys(s.perTx || {}).length ? "per transaction" : "not set"}</b></span>`);
-    if (FEATURES.granularity) chips.push(a && a.active ? `<span class="chip warn">Granularity <b>${a.sec} s${a.byVuser ? " per VUser" : ""}</b> (LRE-style)</span>` : `<span class="chip">Granularity <b>Exact</b></span>`);
+    chips.push(m.window ? `<span class="chip ds-chip" title="${esc(fmt.relRange(m, m.window.start, m.window.end))}">${m.window.detected ? "Steady state" : "Analysis window"} <b>${esc(fmt.relWhen(m, m.window.start, true))} → ${esc(fmt.relWhen(m, m.window.end, true))}</b> · ${esc(fmt.dur(m.window.durationSec))}</span>` : `<span class="chip ds-chip">No steady state</span>`);
+    chips.push(s && s.defaultSec != null ? `<span class="chip ds-chip">SLA <b>P${s.percentile} ≤ ${s.defaultSec} s</b></span>` : `<span class="chip ds-chip">SLA <b>${s && Object.keys(s.perTx || {}).length ? "per transaction" : "not set"}</b></span>`);
+    if (FEATURES.granularity) chips.push(a && a.active ? `<span class="chip ds-chip warn">Granularity <b>${a.sec} s${a.byVuser ? " per VUser" : ""}</b> (LRE-style)</span>` : `<span class="chip ds-chip">Granularity <b>Exact</b></span>`);
     $("#settings-chips").innerHTML = chips.join("");
   }
   function aggKey(m) { return "lre-ra-agg2::" + (m.meta.sessionName || "run"); }
@@ -233,9 +310,14 @@
     const bar = $("#settings-bar");
     bar.hidden = !bar.hidden;
     $("#btn-settings").setAttribute("aria-expanded", String(!bar.hidden));
-    $("#btn-settings").textContent = bar.hidden ? "⚙ Change" : "✓ Done";
+    setSettingsLabel(!bar.hidden);
     if (bar.hidden) $("#agg-help").hidden = true;
+    else setTimeout(() => $("#win-start").focus(), 0);
   };
+  function setSettingsLabel(open) { $("#btn-settings").innerHTML = open ? IC.check + "Done" : IC.sliders + "Change"; }
+  setSettingsLabel(false);
+  // Escape inside the settings editor closes it (focus back on "Change")
+  $("#settings-bar").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); $("#btn-settings").click(); $("#btn-settings").focus(); } });
   $("#agg-help-btn").onclick = () => {
     const h = $("#agg-help");
     h.hidden = !h.hidden;
@@ -261,7 +343,7 @@
   function setExplain(on) {
     document.body.classList.toggle("no-explain", !on);
     $("#btn-explain").setAttribute("aria-pressed", String(on));
-    $("#btn-explain").textContent = on ? "? Hide explanations" : "? Show explanations";
+    $("#btn-explain").innerHTML = IC.help + (on ? "Hide explanations" : "Show explanations");
     try { localStorage.setItem("lre-ra-explain", on ? "1" : "0"); } catch (_) { /* storage blocked */ }
   }
   { let on = true; try { on = localStorage.getItem("lre-ra-explain") !== "0"; } catch (_) { /* default on */ } setExplain(on); }
@@ -274,7 +356,7 @@
   $$("#tabs button").forEach((b) => { b.onclick = () => openTab(b.dataset.tab); });
   function openTab(tab) {
     state.tab = tab;
-    $$("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    $$("#tabs button").forEach((b) => { b.classList.toggle("active", b.dataset.tab === tab); b.setAttribute("aria-selected", String(b.dataset.tab === tab)); });
     $$(".panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + tab));
     renderTab(tab);
   }
@@ -284,9 +366,13 @@
     $("#run-name").textContent = m.meta.sessionName || "LRE run";
     $("#run-sub").textContent = `${fmt.when(m.meta.startUtc, m.meta.localOffsetSec)} → ${fmt.when(m.meta.stopUtc, m.meta.localOffsetSec)} (${fmt.zone(m.meta.localOffsetSec)}) · ${fmt.dur(m.meta.durationSec)}${m.meta.project ? " · " + m.meta.project : ""}`;
     const v = $("#verdict");
-    v.textContent = m.insights.verdict.text; v.className = "verdict " + m.insights.verdict.status;
+    v.innerHTML = (VERDICT_ICON[m.insights.verdict.status] || "") + esc(m.insights.verdict.text); v.className = "verdict " + m.insights.verdict.status;
     const n = m.insights.findings.filter((f) => f.severity === "high").length;
     $("#ins-count").textContent = n ? String(n) : "";
+    $("#ins-count").title = n ? n + " high-severity finding" + (n === 1 ? "" : "s") : "";
+    // neutral counts on the other tabs
+    $("#tx-count").textContent = fmt.int(m.transactions.length);
+    $("#err-count").textContent = m.errors && m.errors.total ? fmt.int(m.errors.total) : "";
     syncSettingsBar();
     disposeCharts();
     for (const p of $$(".panel")) p.dataset.rendered = "";
@@ -360,7 +446,14 @@
   // ── charts helpers ──────────────────────────────────────────────────────────
   function mount(el, option, key) {
     if (!option) { el.innerHTML = `<div class="na">Not available for this run${key && NA[key] ? " — " + NA[key] : ""}.</div>`; el.style.height = "auto"; return null; }
-    const ch = echarts.init(el, state.dark ? "dark" : null, { renderer: "canvas" });
+    const th = chartTheme();
+    const ch = echarts.init(el, echartsTheme(th), { renderer: "canvas" });
+    themeOption(option, th);
+    // narrow charts: the legend gets its own line under the toolbox (they would overlap)
+    if (el.clientWidth && el.clientWidth < 560 && option.toolbox && option.legend && !Array.isArray(option.legend) && option.grid && !Array.isArray(option.grid)) {
+      option.legend.top = 30; option.legend.right = 8;
+      option.grid.top = (option.grid.top || 50) + 28;
+    }
     ch.setOption(option);
     // follow the card's size (grids re-flow as more cards are added, and on window/tab changes)
     if (window.ResizeObserver) { const ro = new ResizeObserver(() => { if (!ch.isDisposed()) ch.resize(); }); ro.observe(el); el._ro = ro; }
@@ -414,7 +507,7 @@
     const max = Math.max(...v.map((p) => p[1])), min = Math.min(...v.map((p) => p[1]));
     const w = 90, h = 22, n = values.length - 1 || 1;
     const pts = v.map(([i, y]) => `${((i / n) * w).toFixed(1)},${(h - 2 - ((y - min) / (max - min || 1)) * (h - 4)).toFixed(1)}`).join(" ");
-    return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline fill="none" stroke="var(--primary)" stroke-width="1.3" points="${pts}"/></svg>`;
+    return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline fill="none" stroke="var(--ds-accent-text)" stroke-width="1.5" stroke-linejoin="round" points="${pts}"/></svg>`;
   }
   function downsample(arr, n) {
     if (arr.length <= n) return arr;
@@ -427,7 +520,7 @@
   function overview(p) {
     const m = state.model, t = m.totals, ins = m.insights, off = m.meta.localOffsetSec;
     // full: the exact value, shown on hover when the tile shows a shortened one
-    const kpi = (l, v, sub, cls, key, ico, full) => `<div class="kpi ${cls ? "kpi-" + cls : ""}" title="${esc((full ? full + " — " : "") + (NT.KPIS[key] || ""))}"><div class="kpi-top"><span class="kpi-ico">${NT.icon(ico || "info")}</span><span class="l">${esc(l)}</span></div><div class="v ${cls || ""}">${esc(v)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ""}</div>`;
+    const kpi = (l, v, sub, cls, key, ico, full) => `<div class="kpi ds-tile ${cls ? "kpi-" + cls : ""}" title="${esc((full ? full + " — " : "") + (NT.KPIS[key] || ""))}"><div class="kpi-top"><span class="kpi-ico">${NT.icon(ico || "info")}</span><span class="l">${esc(l)}</span></div><div class="v ${cls === "warn" ? "" : cls || ""}">${esc(v)}</div>${sub ? `<div class="s ${cls === "warn" ? "warn" : ""}">${esc(sub)}</div>` : ""}</div>`;
     const issues = ins.findings.filter((f) => f.severity === "high" || f.severity === "medium");
     const total = t.pass != null && t.fail != null ? t.pass + t.fail : null;
     const failPct = total ? (t.fail / total) * 100 : null;
@@ -473,12 +566,12 @@
     p.innerHTML = `
       ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>Large run:</b> ${esc(m.method.summaryBasis)}.</div>`}
       <div class="ov-top">
-        <div class="hero-card ${ins.verdict.status}">
-          <div class="hero-status">${ins.verdict.status === "pass" ? "✓" : ins.verdict.status === "fail" ? "✕" : "!"} ${esc(ins.verdict.text)}</div>
+        <div class="hero-card ds-card ${ins.verdict.status}">
+          <div class="hero-status"><span class="hero-ico">${VERDICT_ICON[ins.verdict.status] || IC.alert}</span>${esc(ins.verdict.text)}</div>
           <div class="hero-line">${esc(line)}</div>
           ${issues.length ? `<ul class="hero-issues">${issues.slice(0, 4).map((f) => `<li><span class="pill ${f.severity}">${fmt.SEVERITY[f.severity].label}</span><span>${esc(f.title)}</span></li>`).join("")}</ul>`
             : `<div class="hero-line">No significant issues were found.</div>`}
-          <div class="hero-actions"><button class="btn sm" data-goto="insights">All findings (${ins.findings.length}) →</button><button class="btn sm ghost" data-goto="transactions">Transactions →</button></div>
+          <div class="hero-actions"><button class="btn sm ${ins.verdict.status === "pass" ? "" : "primary"}" data-goto="insights">All findings (${ins.findings.length}) ${IC.arrow}</button><button class="btn sm ghost" data-goto="transactions">Transactions ${IC.arrow}</button></div>
         </div>
         <div class="ov-kpis">
           ${kpi("Peak VUsers", fmt.int(t.peakVusers), m.lifecycle ? (early ? `${fmt.int(early)} of ${fmt.int(m.lifecycle.vusers)} stopped early` : `all ${fmt.int(m.lifecycle.vusers)} ran to the end`) : "", early ? "warn" : "", "vusers", "users")}
@@ -486,8 +579,8 @@
           ${kpi(winName, m.window ? fmt.durShort(m.window.durationSec) : "-", m.window ? `${fmt.relWhen(m, m.window.start, true)} → ${fmt.relWhen(m, m.window.end, true)}` : "not detected", "", "steady", "clock", m.window ? fmt.dur(m.window.durationSec) : "")}
           ${kpi("Transactions per second", t.tpsSteady != null ? fmt.num(t.tpsSteady, 2) : "-", `TPS in the ${winName.toLowerCase()} · whole test ${fmt.num(t.tpsFull, 2)}`, "", "throughput", "gauge")}
           ${kpi("Transactions passed", fmt.int(t.pass != null ? t.pass : t.samples), total ? `${pct(t.pass, total)} of ${fmt.int(total)}` : "", "ok", "passed", "check")}
-          ${kpi("Transactions failed", t.fail != null ? fmt.int(t.fail) : "n/a", total ? `${pct(t.fail, total)} of all transactions` : "", t.fail ? (failPct >= 1 ? "bad" : "warn") : "ok", "failed", "alert")}
-          ${kpi("Errors logged", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors && m.errors.summary[0] ? `${fmt.int(m.errors.summary.length)} different · most common ${m.errors.summary[0].code} (${fmt.int(m.errors.summary[0].count)}×)` : t.errors === 0 ? "no errors logged" : "", t.errors ? "bad" : "ok", "errors", "alert")}
+          ${kpi("Transactions failed", t.fail != null ? fmt.int(t.fail) : "n/a", total ? `${pct(t.fail, total)} of all transactions` : "", t.fail ? "bad" : "", "failed", "alert")}
+          ${kpi("Errors logged", t.errors != null ? fmt.int(t.errors) : "n/a", m.errors && m.errors.summary[0] ? `${fmt.int(m.errors.summary.length)} different · most common ${m.errors.summary[0].code} (${fmt.int(m.errors.summary[0].count)}×)` : t.errors === 0 ? "no errors logged" : "", t.errors ? "bad" : "", "errors", "alert")}
           ${slaRows.length ? kpi("SLA", `${slaRows.length - slaFail.length} / ${slaRows.length} met`, slaFail.length ? `${slaFail.length} missed` : "all within threshold", slaFail.length ? "bad" : "ok", "sla", "check")
             : kpi("Slowest (P90)", top ? fmt.sec(top[which].p.p90) : "-", top ? top.label || top.name : "", "", "slowest", "bar")}
         </div>
@@ -499,7 +592,7 @@
           <div class="table-wrap"><table class="t"><thead><tr><th>Transaction</th><th>P90</th><th class="num">Avg</th><th class="num">Count</th>${slaRows.length ? "<th>SLA</th>" : ""}</tr></thead><tbody>
           ${slow.map((x) => `<tr class="click" data-id="${x.id}"><td>${esc(x.label || x.name)}</td>
             <td><div class="bar-cell"><span class="num" style="min-width:52px">${n3(x[which].p.p90)}</span><span class="bar-track"><span class="bar-fill ${x.sla && x.sla.pass === false ? "bad" : ""}" style="width:${Math.max(2, ((x[which].p.p90 || 0) / maxP90) * 100).toFixed(1)}%"></span></span></div></td>
-            <td class="num">${n3(x[which].avg)}</td><td class="num">${fmt.int(x.count)}</td>${slaRows.length ? `<td>${x.sla ? `<span class="pill ${x.sla.pass ? "pass" : "fail"}">${x.sla.pass ? "PASS" : "FAIL"}</span>` : ""}</td>` : ""}</tr>`).join("")}
+            <td class="num">${n3(x[which].avg)}</td><td class="num">${fmt.int(x.count)}</td>${slaRows.length ? `<td>${x.sla ? `<span class="pill ${x.sla.pass ? "pass" : "fail"}">${x.sla.pass ? "Pass" : "Fail"}</span>` : ""}</td>` : ""}</tr>`).join("")}
           </tbody></table></div>
           <div class="hint" style="margin-top:6px">Seconds · click a transaction for its details</div></div>
         <div class="card" data-ckey="findings"><h3>Findings</h3>
@@ -524,7 +617,12 @@
     mount(el, el._build({ dark: state.dark, noTitle: true }), "load");
     $$("[data-goto]", p).forEach((b) => { b.onclick = () => openTab(b.dataset.goto); });
     $$("tr.click", p).forEach((tr) => { tr.onclick = () => openDrawer(+tr.dataset.id); });
+    rowKeys(p);
     bindFindingLinks(p);
+  }
+  /** Clickable rows are keyboard-reachable: Tab to a row, Enter opens its details. */
+  function rowKeys(p) {
+    $$("tr.click", p).forEach((tr) => { tr.tabIndex = 0; tr.onkeydown = (e) => { if (e.key === "Enter" && e.target === tr) { e.preventDefault(); tr.click(); } }; });
   }
   /** CPU / memory peak cell: red from 85 % (the usual warning level). */
   function pctCell(v) { return v == null ? "-" : `<span class="${v >= 85 ? "bad-txt" : ""}">${v.toFixed(0)} %</span>`; }
@@ -566,7 +664,7 @@
     p.innerHTML = `
       <div class="tx-controls">
         <div class="seg"><button data-v="steady" class="${which === "steady" ? "on" : ""}">${m.window && !m.window.detected ? "Analysis window" : "Steady state"}</button><button data-v="full" class="${which === "full" ? "on" : ""}">Full run</button></div>
-        <input id="tx-filter" placeholder="Filter transactions" value="${esc(state.filter)}">
+        <input id="tx-filter" placeholder="Filter transactions" aria-label="Filter transactions" value="${esc(state.filter)}">
         <span class="hint">${which === "steady" && m.window ? `${esc(fmt.relRange(m, m.window.start, m.window.end))} · ` : ""}seconds · click a row for detail${slaCols ? " · type an SLA (s) per transaction" : ""}</span>
       </div>
       ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. ${FEATURES.granularity && m.aggregation && m.aggregation.active ? "Choose “Exact” in Granularity to see every transaction on its own." : "Every figure is calculated from the individual transactions — nothing is averaged into time slots first."} P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>`}
@@ -577,7 +675,7 @@
         ${rows.map((r) => {
           if (r.group) return `<tr class="group"><td colspan="${TX_COLS.length + (slaCols ? 4 : 1)}">${esc(r.group)}</td></tr>`;
           const t = r.t, s = t[which];
-          const sla = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td><td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "PASS" : "FAIL"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
+          const sla = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td><td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "Pass" : "Fail"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
           return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(state.sort ? t.label || t.name : t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' +
             t.id + ' could not be matched to a name">unnamed</span>') : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
         }).join("")}
@@ -587,6 +685,7 @@
     fi.oninput = () => { state.filter = fi.value; clearTimeout(fi._h); fi._h = setTimeout(() => { rerender(p); const n = $("#tx-filter", p); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
     $$("th.sortable", p).forEach((th) => { th.onclick = () => { const k = th.dataset.k; state.sort = state.sort && state.sort.k === k ? (state.sort.asc ? null : { k, asc: true }) : { k, asc: false }; rerender(p); }; });
     $$("tr.click", p).forEach((tr) => { tr.onclick = (e) => { if (e.target.tagName === "INPUT") return; openDrawer(+tr.dataset.id); }; });
+    rowKeys(p);
     $$(".in-sla", p).forEach((inp) => {
       inp.onchange = () => {
         const v = inp.value.trim();
@@ -609,19 +708,20 @@
     const m = state.model;
     const t = m.transactions.find((x) => x.id === id);
     if (!t) return;
+    if ($("#drawer").hidden) state.drawerReturn = document.activeElement;
     closeDrawer(true);
     state.detailTx = id;
     $$("tr.click").forEach((tr) => tr.classList.toggle("selected", +tr.dataset.id === id));
     const w = m.window ? t.steady : t.full;
     $("#drawer-title").textContent = t.label || t.name;
     $("#drawer-sub").textContent = `${t.script} · first ${fmt.relWhen(m, t.firstRelSec, true)} · last ${fmt.relWhen(m, t.lastRelSec, true)}${m.aggregation && m.aggregation.active ? " · figures: " + m.aggregation.title : ""}`;
-    const kpi = (l, v) => `<div class="kpi"><div class="v" style="font-size:17px">${esc(v)}</div><div class="l">${esc(l)}</div></div>`;
+    const kpi = (l, v) => `<div class="kpi ds-tile"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div></div>`;
     const lgRows = (t.perLg || []).map((l) => `<tr><td>${esc(l.lg)}</td><td class="num">${fmt.int(l.full.count)}</td><td class="num">${n3(l.full.avg)}</td><td class="num">${n3(l.full.p.p90)}</td><td class="num">${n3(l.full.p.p95)}</td><td class="num">${fmt.int(l.steady.count)}</td><td class="num">${n3(l.steady.avg)}</td><td class="num">${n3(l.steady.p.p90)}</td></tr>`).join("");
     const body = $("#drawer-body");
     body.innerHTML = `<div class="drawer-kpis">
         ${kpi("Count", fmt.int(passOf(t, w) + failOf(t, w)))}${kpi("Failed", fmt.int(failOf(t, w)))}${kpi("Avg", fmt.sec(w.avg))}${kpi("P90", fmt.sec(w.p.p90))}${kpi("P95", fmt.sec(w.p.p95))}${kpi("Max", fmt.sec(w.max))}
       </div>
-      <div class="hint" style="margin:-4px 0 10px">${m.window ? `Figures for the ${m.window.detected ? "steady state" : "analysis window"}: ${esc(fmt.relRange(m, m.window.start, m.window.end))}` : "Figures for the whole test"} · seconds</div>
+      <div class="hint">${m.window ? `Figures for the ${m.window.detected ? "steady state" : "analysis window"}: ${esc(fmt.relRange(m, m.window.start, m.window.end))}` : "Figures for the whole test"} · seconds</div>
       <div id="txd-charts"></div>
       <div class="card" data-ckey="lg"><h3>Per load generator</h3><div class="table-wrap"><table class="t"><thead><tr><th>Load generator</th><th class="num">Count</th><th class="num">Avg</th><th class="num">P90</th><th class="num">P95</th><th class="num">Window count</th><th class="num">Window avg</th><th class="num">Window P90</th></tr></thead><tbody>${lgRows}</tbody></table></div></div>`;
     const g = $("#txd-charts", body);
@@ -658,7 +758,19 @@
     $("#drawer-backdrop").hidden = true;
     state.detailTx = null;
     $$("tr.click.selected").forEach((tr) => tr.classList.remove("selected"));
+    // focus back where it was (the row opened the drawer — rows are re-drawn, so fall back to the panel)
+    const back = state.drawerReturn; state.drawerReturn = null;
+    if (back && document.body.contains(back) && back.focus) back.focus();
   }
+  // keep keyboard focus inside the open drawer
+  $("#drawer").addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const f = $$('button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])', $("#drawer")).filter((x) => !x.disabled && x.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
   $("#drawer-close").onclick = () => closeDrawer();
   $("#drawer-backdrop").onclick = () => closeDrawer();
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#drawer").hidden) closeDrawer(); });
@@ -684,7 +796,7 @@
       </aside>
       <div>
         <div class="chart-controls"><span class="setting-label">Response-time metric</span>
-          <div class="seg" id="metric">${["avg", "p50", "p90", "p95", "p99", "max"].map((k) => `<button data-m="${k}" class="${state.metric === k ? "on" : ""}">${k === "avg" ? "Avg" : k.toUpperCase()}</button>`).join("")}</div>
+          <div class="seg" id="metric">${["avg", "p50", "p90", "p95", "p99", "max"].map((k) => `<button data-m="${k}" class="${state.metric === k ? "on" : ""}">${k === "avg" ? "Avg" : k === "max" ? "Max" : k.toUpperCase()}</button>`).join("")}</div>
           <span class="hint">Each point = ${esc(m.granularity ? `${m.granularity.sec}` : String(m.timeline.bucketSec))} s of the test · drag the slider or scroll inside a chart to zoom · the shaded band is the analysis window</span></div>
         <div id="chart-grid"></div>
       </div></div>`;
@@ -704,7 +816,7 @@
     const ids = [...state.selected];
     const hasLatency = ids.length > 0;
     chartCard(g, "Load and throughput", (o) => C.load(state.model, o), "load");
-    chartCard(g, `Response time over time — ${state.metric === "avg" ? "average" : state.metric.toUpperCase()}`, (o) => C.rtOverTime(state.model, ids, state.metric, o), "rtOverTime", "", ids.length ? "" : "Select transactions on the left");
+    chartCard(g, `Response time over time — ${state.metric === "avg" ? "average" : state.metric === "max" ? "max" : state.metric.toUpperCase()}`, (o) => C.rtOverTime(state.model, ids, state.metric, o), "rtOverTime", "", ids.length ? "" : "Select transactions on the left");
     chartCard(g, "Transactions per second", (o) => C.tpsPerTx(state.model, ids, o), "throughput");
     const heat = chartCard(g, "Latency heatmap — selected transactions", () => null, "latencyHeat", "tall", "Samples per time × response-time band: banding, bimodal behaviour and slow tails show up here");
     if (hasLatency) { $(".chart", heat).innerHTML = `<div class="na">Loading…</div>`; state.pendingHeat = $(".chart", heat); worker().postMessage({ type: "latency", ids, cols: 240, rows: 40 }); }
@@ -729,7 +841,7 @@
         <td>${g.firstUtc != null ? esc(fmt.when(g.firstUtc, off, true)) : "-"}</td><td>${g.lastUtc != null ? esc(fmt.when(g.lastUtc, off, true)) : "-"}</td></tr>`).join("") || `<tr><td colspan="8" class="na">No errors were logged.</td></tr>`}
       </tbody></table></div></div>
       <div id="err-chart"></div>
-      <div class="card" data-ckey="errLog"><h3>Error log</h3><div class="tx-controls"><input id="err-q" placeholder="Search message, code, script, VUser, load generator…" style="min-width:320px"><span class="hint" id="err-n"></span></div>
+      <div class="card" data-ckey="errLog"><h3>Error log</h3><div class="tx-controls"><input id="err-q" placeholder="Search message, code, script, VUser, load generator…" style="flex:1 1 260px;max-width:440px" aria-label="Search the error log"><span class="hint" id="err-n"></span></div>
       <div class="table-wrap" style="max-height:520px;overflow:auto"><table class="t"><thead><tr><th>Time (local)</th><th>Code</th><th>Message</th><th>Script</th><th>VUser</th><th>Load generator</th><th class="num">Iteration</th></tr></thead><tbody id="err-rows"></tbody></table></div></div>`;
     chartCard($("#err-chart", p), "Errors over time", (o) => C.errorsOverTime(state.model, o), "errors");
     const draw = () => {
@@ -778,7 +890,7 @@
     const show = (v) => (typeof v === "number" ? String(+v.toFixed(4)) : Array.isArray(v) ? (v.every((x) => typeof x !== "object") ? v.slice(0, 8).join(", ") + (v.length > 8 ? " …" : "") : null) : v && typeof v === "object" ? null : String(v));
     const ev = f.evidence ? Object.entries(f.evidence).map(([k, v]) => [k, show(v)]).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}: ${v}`).join(" · ").slice(0, 400) : "";
     return `<div class="finding ${f.severity}"><div class="ft"><span class="pill ${f.severity}">${fmt.SEVERITY[f.severity].label}</span> ${esc(f.title)}</div>
-      <div class="fx${compact ? " clamp" : ""}">${esc(f.text)}</div>${ev && !compact ? `<details class="ev-wrap"><summary>Evidence (numbers behind this finding)</summary><div class="ev">${esc(ev)}</div></details>` : ""}${f.chart ? `<button class="go" data-chart="${esc(f.chart)}">Show chart →</button>` : ""}</div>`;
+      <div class="fx${compact ? " clamp" : ""}">${esc(f.text)}</div>${ev && !compact ? `<details class="ev-wrap"><summary>Evidence (numbers behind this finding)</summary><div class="ev">${esc(ev)}</div></details>` : ""}${f.chart ? `<button class="go btn sm ghost" data-chart="${esc(f.chart)}">Show chart ${IC.arrow}</button>` : ""}</div>`;
   }
   function bindFindingLinks(p) {
     $$(".finding .go", p).forEach((b) => {
@@ -795,7 +907,7 @@
     const ins = state.model.insights;
     const groups = ["high", "medium", "low", "info", "good"];
     const counts = groups.map((s) => [s, ins.findings.filter((f) => f.severity === s).length]).filter(([, n]) => n);
-    p.innerHTML = `<div class="verdict-banner ${ins.verdict.status}"><span>${esc(ins.verdict.text)}</span>
+    p.innerHTML = `<div class="verdict-banner ${ins.verdict.status}"><span class="vb-title"><span class="hero-ico">${VERDICT_ICON[ins.verdict.status] || IC.alert}</span>${esc(ins.verdict.text)}</span>
         <span class="vb-counts">${counts.map(([s, n]) => `<span class="pill ${s}">${n} ${fmt.SEVERITY[s].label.toLowerCase()}</span>`).join("")}</span></div>
       ${explainHtml("insights")}
       ${groups.map((s) => ins.findings.filter((f) => f.severity === s).map(findingHtml).join("")).join("") || '<div class="na">No findings.</div>'}`;
@@ -877,14 +989,40 @@
   };
   $$("[data-export]").forEach((b) => {
     b.onclick = async () => {
-      $("#menu-more").hidden = true;
+      if (!menu.hidden) setMenu(false);
       const k = b.dataset.export;
-      const label = b.textContent;
+      const label = b.innerHTML;
       b.disabled = true; b.textContent = "Preparing…";
       try { await EXPORTS[k](); } catch (e) { toast("Export failed: " + (e.message || e), true); }
-      finally { b.disabled = false; b.textContent = label; }
+      finally { b.disabled = false; b.innerHTML = label; }
     };
   });
-  $("#btn-more").onclick = (e) => { e.stopPropagation(); $("#menu-more").hidden = !$("#menu-more").hidden; };
-  document.addEventListener("click", (e) => { if (!e.target.closest(".menu")) $("#menu-more").hidden = true; });
+  // "More" menu: opens below the button (flips to the left edge when it would leave the screen),
+  // arrow keys move between the items, Escape / Tab / a click outside close it
+  const menu = $("#menu-more"), moreBtn = $("#btn-more");
+  function setMenu(open, focusBtn) {
+    menu.hidden = !open;
+    moreBtn.setAttribute("aria-expanded", String(open));
+    if (open) {
+      menu.style.right = "";
+      const r = menu.getBoundingClientRect();
+      if (r.left < 8) menu.style.right = (r.left - 8) + "px"; // shift right so it stays on screen
+      const first = $("button", menu); if (first) first.focus();
+    } else if (focusBtn) moreBtn.focus();
+  }
+  moreBtn.onclick = (e) => { e.stopPropagation(); setMenu(menu.hidden); };
+  menu.addEventListener("keydown", (e) => {
+    const items = $$("button", menu), i = items.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setMenu(false, true); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === "Tab") setMenu(false);
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".menu")) setMenu(false); });
+
+  // height of the sticky report header → --rh-h (sticky chart picker, scroll targets, table heights)
+  { const head = $(".results-head");
+    const upd = () => document.documentElement.style.setProperty("--rh-h", (getComputedStyle(head).position === "sticky" ? head.offsetHeight : 0) + "px");
+    if (window.ResizeObserver) new ResizeObserver(upd).observe(head);
+    window.addEventListener("resize", upd); }
 })();

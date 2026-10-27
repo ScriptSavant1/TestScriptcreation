@@ -87,6 +87,40 @@
     el.click();
   });
 
+  // ── light syntax colouring of the script preview (same as the Recorder): the Studio scripts write plain
+  //    text into #code-body; this only wraps tokens in spans, so textContent stays the exact script ──
+  var HL = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\[\s\S])*`)|(#\w+)|\b(return|const|let|var|async|await|new|function|if|else|for|while|try|catch|throw|typeof|null|true|false|int|char|void|LAST|ENDITEM|ITEMDATA|EXTRARES)\b|\b([A-Za-z_$][\w$]*)(?=\s*\()/g;
+  // built from text nodes, not HTML, so the text is kept byte for byte (HTML parsing would turn \r\n into \n,
+  // and Copy reads textContent)
+  function colour(text) {
+    var frag = document.createDocumentFragment(), last = 0, m, n = 0;
+    HL.lastIndex = 0;
+    while ((m = HL.exec(text))) {
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var span = document.createElement("span");
+      span.className = m[1] ? "c" : m[2] ? "s" : (m[3] || m[4]) ? "k" : "f";
+      span.textContent = m[0];
+      frag.appendChild(span); n++;
+      last = HL.lastIndex;
+    }
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    return n ? frag : null;
+  }
+  var code = document.getElementById("code-body");
+  if (code) {
+    var painted = null;
+    var paint = function () {
+      if (code.firstElementChild) return;              // already coloured (or not plain text)
+      var t = code.textContent;
+      if (!t || t.length >= 400000 || t === painted) return;
+      painted = t;                                      // a file with nothing to colour is not repainted (no loop)
+      var frag = colour(t);
+      if (frag) { code.textContent = ""; code.appendChild(frag); }
+    };
+    new MutationObserver(paint).observe(code, { childList: true, characterData: true, subtree: true });
+    paint();
+  }
+
   ["dz1", "dz2"].forEach(function (id) {
     var dz = document.getElementById(id), inp = dz && dz.querySelector("input[type=file]");
     if (!inp) return;
