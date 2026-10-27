@@ -1,10 +1,11 @@
-/* Help & guides (portal v3) — behaviour added around the existing Help functions in
- * views/partials/help.ejs (haccToggle, haccJump, hTocToggle, hTocSetCur stay the source of truth):
- *  - a contents list beside the sections (built from the "On this page" menu), highlighting where you are
- *  - search: shows only the sections (and FAQ answers) that contain every word, opens them and marks the words
- *  - Expand all / Collapse all
- *  - a jump opens its section and scrolls only after the accordion has settled (it used to land too high
- *    because the previous section was still closing)
+/* Help & guides (portal v4) — behaviour added around the existing Help functions in
+ * views/partials/help.ejs (haccToggle, haccJump, hTocToggle, hTocSetCur):
+ *  - reading mode: ONE section at a time, shown open at the top with its group above it and Previous / Next
+ *    below; the last section read is remembered (localStorage "perfx-help-section"), Quick Start the first time
+ *  - a contents list in the portal sidebar (built from the "On this page" menu), marking the shown section
+ *  - search: lists every section (and FAQ answer) that contains every word, opened, with the words marked;
+ *    clearing the search returns to the section being read
+ *  - a jump (sidebar list, "On this page", any Help link, Previous / Next) shows that section
  *  - "/" focuses the search box while Help is open; Escape in the box clears it
  *  - the search bar stays at the top; its height is measured (--help-sticky-h) so a jump never lands under it */
 (function () {
@@ -62,19 +63,16 @@
     }
   }
 
-  // ── jumps: no accordion animation while jumping, so the scroll target is final ──
+  // ── jumps (sidebar list, "On this page", Help links, Previous / Next): show that section, at the top.
+  //    A search in progress is cleared first, so the reader lands on the section on its own. ──
   const origJump = window.haccJump, origSetCur = window.hTocSetCur;
   if (typeof origJump === "function") {
     window.haccJump = function (id) {
-      // a section hidden by the search: clear the search first, so the jump has somewhere to land
-      const target = document.getElementById(id);
-      if (target && target.hidden && q && q.value) { q.value = ""; run(); }
+      if (q && q.value) { q.value = ""; run(); }
+      if (typeof window.hTocClose === "function") window.hTocClose();
       help.classList.add("help-instant");
-      const r = origJump.apply(this, arguments);
-      setActive(id); lockUntil = Date.now() + 1200;
-      setTimeout(spy, 1250);   // re-check once the lock ends (the reader may have scrolled meanwhile)
-      setTimeout(() => help.classList.remove("help-instant"), 500);
-      return r;
+      show(id);
+      setTimeout(() => help.classList.remove("help-instant"), 300);
     };
   }
   if (typeof origSetCur === "function") {
@@ -93,6 +91,7 @@
   function spy() {
     spyQueued = false;
     if (help.style.display === "none" || Date.now() < lockUntil) return;
+    if (!help.classList.contains("help-searching")) { if (current) setActive(current); return; }   // reading mode: the shown section
     const shown = items.filter((i) => !i.hidden);
     if (!shown.length) return;
     // a section counts as current once its header is in the top part of the reading area
@@ -106,15 +105,59 @@
   ["wheel", "keydown", "touchstart"].forEach((t) => addEventListener(t, () => { lockUntil = 0; }, { passive: true }));
   // and when Help is opened (the portal shows it by changing its style)
   if ("MutationObserver" in window) new MutationObserver(() => requestAnimationFrame(spy)).observe(help, { attributes: true, attributeFilter: ["style"] });
-  // opening Help (sidebar, top-bar "How it works", any Help link) shows every section expanded — the "Expand all"
-  // state; a jump, the search and "Collapse all" work as before. Runs on the hidden → shown change only.
+  // ── reading mode: one section at a time (the last one read, remembered — Quick Start the first time).
+  //    A jump, the sidebar list, "On this page" and Previous / Next choose the section; it is shown open at the
+  //    top of the page, with the group it belongs to above it. Searching lists every matching section instead. ──
+  help.classList.add("help-reader");
+  const KEY = "perfx-help-section";
+  let current = (() => { try { return localStorage.getItem(KEY); } catch (_) { return null; } })();
+  if (!items.some((i) => i.id === current)) current = items[0] && items[0].id;
+  const groupOf = (it) => { for (let el = it.previousElementSibling; el; el = el.previousElementSibling) if (el.matches(".help-group-h")) return el.textContent.trim(); return ""; };
+  const titleOf = (it) => ((it && it.querySelector(".help-acc-title")) || {}).textContent || "";
+  const crumb = document.createElement("div"); crumb.className = "help-crumb";
+  const pager = document.createElement("nav"); pager.className = "help-pager"; pager.setAttribute("aria-label", "Previous and next section");
+  function show(id, keepScroll) {
+    const it = document.getElementById(id);
+    if (!it || !items.includes(it)) return;
+    current = id;
+    try { localStorage.setItem(KEY, id); } catch (_) { /* storage blocked */ }
+    items.forEach((i) => { i.classList.toggle("cur", i === it); });
+    it.classList.add("open");
+    crumb.textContent = groupOf(it);
+    it.before(crumb);
+    const k = items.indexOf(it), prev = items[k - 1], next = items[k + 1];
+    pager.innerHTML = "";
+    const btn = (to, cls, label) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = cls;
+      b.innerHTML = "<small></small><b></b>"; b.querySelector("small").textContent = label; b.querySelector("b").textContent = titleOf(to);
+      b.addEventListener("click", () => { window.haccJump(to.id); const h = to.querySelector(".help-acc-hdr"); if (h) h.focus({ preventScroll: true }); });
+      pager.appendChild(b);
+    };
+    if (prev) btn(prev, "prev", "← Previous");
+    if (next) btn(next, "next", "Next →");
+    it.after(pager);
+    setActive(id);
+    if (typeof origSetCur === "function") origSetCur(id);
+    if (!keepScroll) scrollTo(0, 0);
+  }
+  const searching = () => !!(q && q.value.trim().split(/\s+/).some((w) => w.length > 1));
+  // a header click on the open section does nothing (it is a page, not a fold); on another section it opens it
+  const origToggle = window.haccToggle;
+  if (typeof origToggle === "function") {
+    window.haccToggle = function (id) {
+      if (searching()) return origToggle.apply(this, arguments);
+      if (id !== current) show(id);
+    };
+  }
+  // every time Help is opened, the current section is shown (a jump that follows replaces it)
   let wasShown = help.style.display !== "none";
-  const expandOnOpen = () => {
+  const onOpen = () => {
     const shown = help.style.display !== "none";
-    if (shown && !wasShown && !(q && q.value.trim())) items.forEach((i) => { if (!i.hidden) i.classList.add("open"); });
+    if (shown && !wasShown && !searching()) show(current);
     wasShown = shown;
   };
-  if ("MutationObserver" in window) new MutationObserver(expandOnOpen).observe(help, { attributes: true, attributeFilter: ["style"] });
+  if ("MutationObserver" in window) new MutationObserver(onOpen).observe(help, { attributes: true, attributeFilter: ["style"] });
+  show(current, true);
   spy();
 
   // ── the search bar: its height feeds the jump offset; a line under it once it sticks ──
@@ -206,6 +249,7 @@
     // no open / close animation while the results change, so every scroll below lands on the final layout
     help.classList.add("help-instant"); clearTimeout(run.t); run.t = setTimeout(() => help.classList.remove("help-instant"), 400);
     unmark();
+    help.classList.toggle("help-searching", words.length > 0);
     if (!words.length) {
       items.forEach((i) => { i.hidden = false; });
       $$(".help-faq-item").forEach((f) => { f.hidden = false; });
@@ -214,8 +258,8 @@
         items.forEach((i) => i.classList.toggle("open", saved.has(i.id)));
         $$(".help-faq-item").forEach((f, k) => f.classList.toggle("open", savedFaq.has(k)));
         saved = savedFaq = null;
-        scrollTo(0, savedY);
       }
+      if (current) show(current);   // back to the section that was being read
       requestAnimationFrame(spy);
       $$all(".help-side-link, #htoc-panel .htoc-link").forEach((b) => b.classList.remove("dim"));
       count.textContent = ""; none.hidden = true;

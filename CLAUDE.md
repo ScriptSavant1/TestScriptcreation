@@ -97,7 +97,7 @@ whole app); they stay on disk only as the reference for the parity tests. The ad
 | File | Purpose |
 |------|---------|
 | `src/web/views/partials/help.ejs` | Help markup + its inline functions (haccToggle, haccJump, hTocToggle, hTocSetCur, hfaqToggle) — keep every word; 13 sections hacc-* |
-| `src/web/public/portal/help.js` | Search ("/" shortcut), section list built into the portal sidebar (`#sb-help-nav` in shell.ejs; fold = click Help again, localStorage `perfx-help-nav`) + where-you-are by scroll position, sticky bar height → `--help-sticky-h`, Expand / Collapse all, jump without accordion animation (BUG-079) |
+| `src/web/public/portal/help.js` | Search ("/" shortcut), section list built into the portal sidebar (`#sb-help-nav` in shell.ejs; fold = click Help again, localStorage `perfx-help-nav`) + where-you-are by scroll position, sticky bar height → `--help-sticky-h`; reading mode: ONE section at a time (class `help-reader`, current section `.cur`, Previous / Next, last section in localStorage `perfx-help-section`), search lists all matches (`help-searching`) |
 | `src/web/public/portal/help.css` | Styles, scoped to `body.has-shell #portal-help` |
 
 Rule: `tests/unit/helpPageParity.test.js` must pass; check text parity with the Help capture

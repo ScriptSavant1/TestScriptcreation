@@ -89,7 +89,7 @@
     <div class="drop-zone" id="dz-col"
          ondragover="onDrag(event,'dz-col')" ondragleave="offDrag('dz-col')"
          ondrop="onDrop(event,'dz-col','collection')">
-      <input type="file" id="fi-col" accept=".json,.yml,.yaml,.bru" aria-label="Collection file (required)"
+      <input type="file" title="" id="fi-col" accept=".json,.yml,.yaml,.bru" aria-label="Collection file (required)"
              onchange="onPick('dz-col','fi-col','lbl-col','collection')">
       <div class="dz-icon-wrap"><%- svg(IC.upload) %></div>
       <div class="dz-label">Collection file <span class="dz-required" aria-hidden="true">*</span></div>
@@ -99,7 +99,7 @@
     <div class="drop-zone" id="dz-env"
          ondragover="onDrag(event,'dz-env')" ondragleave="offDrag('dz-env')"
          ondrop="onDrop(event,'dz-env','environment')">
-      <input type="file" id="fi-env" accept=".json,.bru" aria-label="Environment file (optional)"
+      <input type="file" title="" id="fi-env" accept=".json,.bru" aria-label="Environment file (optional)"
              onchange="onPick('dz-env','fi-env','lbl-env','environment')">
       <div class="dz-icon-wrap"><%- svg(IC.key) %></div>
       <div class="dz-label">Environment file</div>
@@ -118,7 +118,7 @@
     <div class="drop-zone dz-secondary dz-cert-full" id="dz-bru-cert"
          ondragover="onDrag(event,'dz-bru-cert')" ondragleave="offDrag('dz-bru-cert')"
          ondrop="onDropBrunoCert(event)">
-      <input type="file" id="fi-bru-cert" accept=".p12,.pfx,.pem,.crt,.cer,.key" multiple aria-label="Client certificate files (optional)"
+      <input type="file" title="" id="fi-bru-cert" accept=".p12,.pfx,.pem,.crt,.cer,.key" multiple aria-label="Client certificate files (optional)"
              onchange="onPickBrunoCert()">
       <div class="dz-icon-wrap"><%- svg(IC.shield) %></div>
       <div class="cert-zone-body">
@@ -243,7 +243,7 @@
     <div class="drop-zone" id="dz-jmx"
          ondragover="onDrag(event,'dz-jmx')" ondragleave="offDrag('dz-jmx')"
          ondrop="onDropJmx(event)">
-      <input type="file" id="fi-jmx" accept=".jmx" onchange="onPickJmx()" aria-label="JMeter script (.jmx, required)">
+      <input type="file" title="" id="fi-jmx" accept=".jmx" onchange="onPickJmx()" aria-label="JMeter script (.jmx, required)">
       <div class="dz-icon-wrap"><%- svg(IC.upload) %></div>
       <div class="dz-label">JMeter script <span class="dz-required" aria-hidden="true">*</span></div>
       <div class="dz-sub">.jmx file — JMeter Test Plan</div>
@@ -256,7 +256,7 @@
     <div class="drop-zone dz-secondary" id="dz-csv"
          ondragover="onDrag(event,'dz-csv')" ondragleave="offDrag('dz-csv')"
          ondrop="onDropCsv(event)">
-      <input type="file" id="fi-csv" accept=".csv" multiple onchange="onPickCsv()" aria-label="CSV data files (optional)">
+      <input type="file" title="" id="fi-csv" accept=".csv" multiple onchange="onPickCsv()" aria-label="CSV data files (optional)">
       <div class="dz-icon-wrap"><%- svg(IC.table) %></div>
       <div class="dz-label">CSV data files <span class="dz-or">(optional)</span></div>
       <div class="dz-sub">Multiple .csv files — added to output ZIP</div>
@@ -265,7 +265,7 @@
     <div class="drop-zone dz-secondary" id="dz-cert"
          ondragover="onDrag(event,'dz-cert')" ondragleave="offDrag('dz-cert')"
          ondrop="onDropCert(event)">
-      <input type="file" id="fi-cert" accept=".p12,.pfx,.pem,.crt,.cer,.key" multiple onchange="onPickCert()" aria-label="Certificate files (optional)">
+      <input type="file" title="" id="fi-cert" accept=".p12,.pfx,.pem,.crt,.cer,.key" multiple onchange="onPickCert()" aria-label="Certificate files (optional)">
       <div class="dz-icon-wrap"><%- svg(IC.lock) %></div>
       <div class="dz-label">Certificate files <span class="dz-or">(optional)</span></div>
       <div class="dz-sub">.p12 .pfx .pem .crt .cer .key &nbsp;·&nbsp; a Java keystore (.jks) must be converted to .p12 first (keytool -importkeystore)</div>

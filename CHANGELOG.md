@@ -6,6 +6,15 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
+#### Changed — Help & guides: one section at a time
+
+- Help shows one section at a time, open, like a documentation site: chosen in the sidebar list, "On this page",
+  any Help link or quick search, with Previous / Next below it and its group above it. The last section read is
+  remembered. Searching lists every matching section; clearing the search returns to the section being read.
+- Replaces "every section expanded" and the two-column layout very wide screens got (sections out of reading
+  order). Expand all / Collapse all are no longer needed and are hidden. Every word of Help is unchanged.
+- File inputs no longer show the browser's "No file chosen" tooltip.
+
 #### Added — quick search, drop a file anywhere, remembered options
 
 - **Quick search** (Ctrl+K / ⌘K, or Search in the top bar, also while a tool page has the focus): finds any tool,

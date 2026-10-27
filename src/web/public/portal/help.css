@@ -217,13 +217,37 @@ body.has-shell #portal-help mark.help-hl, body.has-shell #portal-help mark.help-
   body.has-shell #portal-help .htoc-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* very wide windows: the sections side by side (two columns, reading order top to bottom per column) */
-@container hp (min-width: 1700px) {
-  body.has-shell #portal-help .help-main { display: block; columns: 2; column-gap: 16px; }
-  body.has-shell #portal-help .help-main > * { break-inside: avoid; margin-bottom: 12px; }
-  body.has-shell #portal-help .help-main > .help-group-h { break-after: avoid; margin-top: 8px; margin-bottom: 8px; }
-  body.has-shell #portal-help .help-main > .help-group-h:first-child { margin-top: 0; }
-}
+/* ── reading mode (help.js): one section at a time, chosen in the sidebar list, "On this page", a Help link or
+      Previous / Next. The section is a plain open page, not an accordion. While searching, every matching
+      section is listed (open) instead. ── */
+body.has-shell #portal-help.help-reader:not(.help-searching) .help-acc-item:not(.cur),
+body.has-shell #portal-help.help-reader:not(.help-searching) .help-group-h,
+body.has-shell #portal-help.help-reader .help-expand-btns,
+body.has-shell #portal-help.help-reader #help-expand-all,
+body.has-shell #portal-help.help-reader #help-collapse-all { display: none !important; }
+body.has-shell #portal-help.help-reader .help-acc-chevron { display: none; }
+body.has-shell #portal-help.help-reader .help-acc-hdr { cursor: default; padding: 22px var(--ds-pad) 18px; }
+body.has-shell #portal-help.help-reader .help-acc-hdr:hover { background: none; }
+body.has-shell #portal-help.help-reader .help-acc-title { font-size: var(--ds-fs-xl); font-weight: 700; }
+body.has-shell #portal-help.help-reader .help-acc-sub { font-size: var(--ds-fs); }
+body.has-shell #portal-help.help-reader .help-acc-icon { width: 44px; height: 44px; }
+body.has-shell #portal-help.help-reader .help-acc-inner { padding-left: 28px; padding-right: 28px; }
+body.has-shell #portal-help.help-reader .help-acc-item.open .help-acc-inner { padding-top: 22px; padding-bottom: 28px; }
+/* the group the section belongs to, above its title */
+body.has-shell #portal-help .help-crumb { display: none; }
+body.has-shell #portal-help.help-reader:not(.help-searching) .help-crumb { display: block; margin: 4px 4px 10px; font-size: var(--ds-fs-sm); font-weight: 600; color: var(--ds-text-3); }
+/* Previous / Next under the section */
+body.has-shell #portal-help .help-pager { display: none; }
+body.has-shell #portal-help.help-reader:not(.help-searching) .help-pager { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 16px; }
+body.has-shell #portal-help .help-pager button { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 14px 18px; border-radius: var(--ds-r-tile); border: 1px solid var(--ds-border); background: var(--ds-surface); color: var(--ds-text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+body.has-shell #portal-help .help-pager button:hover { border-color: var(--ds-accent-line); background: var(--ds-surface-2); }
+body.has-shell #portal-help .help-pager button.next { grid-column: 2; text-align: right; align-items: flex-end; }
+body.has-shell #portal-help .help-pager small { font-size: var(--ds-fs-xs); font-weight: 600; color: var(--ds-text-3); }
+body.has-shell #portal-help .help-pager b { font-size: var(--ds-fs); font-weight: 600; color: var(--ds-accent-text); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 600px) { body.has-shell #portal-help.help-reader .help-acc-inner { padding-left: 16px; padding-right: 16px; } }
 
 /* the top bar already names the page — the H1 stays for screen readers only, the intro line stays visible */
 body.has-shell #portal-help .help-h1 { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* reading mode: the section's own small name label repeats the title right above it — kept for screen readers only */
+body.has-shell #portal-help.help-reader:not(.help-searching) .help-acc-inner > .help-tool-badge:first-child { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
