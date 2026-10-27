@@ -13,15 +13,11 @@ requirements for new/changed functions, the documentation update matrix, and
 the Definition of Done checklist. They apply in addition to everything below
 — nothing below is overridden by them.
 
----
-
 ## Session Startup Protocol (MANDATORY)
 1. Read `C:/Users/karrir/.claude/projects/c--Workspace-bruno-devweb-converter/memory/state.md` → current feature status
 2. Read `BUGS.md` (repo root) → active bugs
 3. Proceed with task
 4. At end of session → update state.md, BUGS.md, any affected Docs/
-
----
 
 ## What This Tool Does
 Converts HAR recordings, Bruno/Postman collections, and JMX files into:
@@ -31,8 +27,6 @@ Converts HAR recordings, Bruno/Postman collections, and JMX files into:
   - Correlation Advisor (auto-detect + manual correlation)
   - Parameterization engine
   - Code generation for both protocols
-
----
 
 ## Critical File Map
 
@@ -54,7 +48,7 @@ Converts HAR recordings, Bruno/Postman collections, and JMX files into:
 **Phase history:** `VuGen-Script-Studio-app.js` was the Phase 3c monolithic file
 (~5200 lines). In Phase 4B it was split into `studio-app.js` (orchestrator),
 `studio-codegen.js` (codegen), and `studio-ui.js` (UI). The HTML was updated to
-load the split files. The monolithic file is **DELETED** (commit `d641ddc`).
+load the split files. The monolithic file is **DELETED**.
 Do NOT recreate it — all its functions exist in the three split files above.
 
 ### Portal shell (sidebar + Home) — redesign in progress
@@ -100,7 +94,7 @@ whole app); they stay on disk only as the reference for the parity tests. The ad
 | File | Purpose |
 |------|---------|
 | `src/web/views/partials/help.ejs` | Help markup + its inline functions (haccToggle, haccJump, hTocToggle, hTocSetCur, hfaqToggle) — keep every word; 13 sections hacc-* |
-| `src/web/public/portal/help.js` | Search ("/" shortcut), contents list + where-you-are, Expand / Collapse all, jump without accordion animation (BUG-079) |
+| `src/web/public/portal/help.js` | Search ("/" shortcut), section list built into the portal sidebar (`#sb-help-nav` in shell.ejs; fold = click Help again, localStorage `perfx-help-nav`) + where-you-are by scroll position, sticky bar height → `--help-sticky-h`, Expand / Collapse all, jump without accordion animation (BUG-079) |
 | `src/web/public/portal/help.css` | Styles, scoped to `body.has-shell #portal-help` |
 
 Rule: `tests/unit/helpPageParity.test.js` must pass; check text parity with the Help capture
@@ -172,8 +166,6 @@ Model rule: the model is plain JSON; the stats store is a NON-enumerable `model.
 | `src/generators/webHttpScriptGenerator.js` | VuGen C script generation from Bruno/Postman |
 | `src/web/public/shared/vugen-codegen.js` | Shared VuGen codegen (UMD, works browser+Node) |
 
----
-
 ## Global State Object `S` (studio-app.js)
 ```
 S.entries1        — full HAR entries array (ALL entries, including filtered)
@@ -186,8 +178,6 @@ S.hasDpop         — DPoP enabled flag
 S.harPages        — Map<pageref, title> built from har.log.pages[] (extension HARs only; empty for bookmarklet HARs)
 S.bgDecisions     — Map<requestId, 'once'|'periodic'|'all'> — background traffic classification from Phase 5
 ```
-
----
 
 ## CRITICAL Architecture Rules (NEVER BREAK THESE)
 
@@ -263,8 +253,6 @@ found only after a real user hit a VuGen runtime error running a DPoP script).
 (`cp lre-utils.js lre-utils.dat`) and re-run the test to confirm both still parse. `git diff
 lre-utils.js lre-utils.dat` should always be empty.
 
----
-
 ## Body Generation: DevWeb vs VuGen
 
 ### DevWeb (JavaScript)
@@ -277,8 +265,6 @@ lre-utils.js lre-utils.dat` should always be empty.
 - Body ALWAYS goes through `escBodyBinary()` — escapes `"→\"`, `\→\\`, `\n→\n`
 - Parameters use `{paramName}` syntax substituted at runtime
 - Correlations use `{corrName}` syntax
-
----
 
 ## Correlation Advisor: Key Functions
 | File | Function | Purpose |
@@ -297,8 +283,6 @@ lre-utils.js lre-utils.dat` should always be empty.
 | studio-ui.js | `openAdvisorModal()` | Open Add Manual modal |
 | studio-ui.js | `advisorApplyAndRegen()` | Accept candidates + regenerate |
 
----
-
 ## Session-End Checklist (run after EVERY code change session)
 - [ ] Impact analysis was done for any non-trivial change (see playbook)
 - [ ] `node --check` on all modified .js files
@@ -308,8 +292,6 @@ lre-utils.js lre-utils.dat` should always be empty.
 - [ ] Update `Docs/CORRELATION-LOGIC-EXPLAINED.md` if correlation logic changed
 - [ ] `git add` + `git commit` with descriptive message
 - [ ] No `console.error` or unhandled exceptions in modified code paths
-
----
 
 ## CSS / Design System
 Portal design rules (checked by the design audit — scratchpad `audit/audit.js`, every section, both themes):
@@ -324,16 +306,15 @@ Key token groups: `--bg-*`, `--text-*`, `--accent-*`, `--border-*`, `--radius-*`
 Component naming: `.adv-*` (advisor), `.corr-*` (correlations), `.param-*` (parameters), `.studio-*` (main studio).
 Dark mode: `.dark` class on `<body>`.
 
----
-
 ## Auto-maintenance Conventions
 - **`Docs/` is local-only** (in `.gitignore`, removed from GitHub history) — never `git add -f` it.
-- **After bug fix**: Add entry to `BUGS.md` (repo root) as FIXED; add to `CHANGELOG.md`
-- **After new feature**: Add one-liner to relevant section in `Docs/FUNCTIONAL-SPEC.md`; add to `CHANGELOG.md`
+- **After bug fix**: move the row in `BUGS.md` (repo root) to "Fixed — not released yet" with the cause and fix; add an entry to `CHANGELOG.md`
+- **After new feature**: Add one-liner to relevant section in `Docs/FUNCTIONAL-SPEC.md`; add an entry to `CHANGELOG.md`
 - **After correlation change**: Update `Docs/CORRELATION-LOGIC-EXPLAINED.md`
 - **Always**: Update `memory/state.md` with current feature status
-- **CHANGELOG.md**: Append-only, lives at project root. Never rewrite or summarize away old entries. When it exceeds ~1 year of entries, move older entries to `CHANGELOG-ARCHIVE.md`.
-- **BUGS.md archiving**: When fixed-bugs list grows very long, move old FIXED entries to `BUGS-ARCHIVE.md` (repo root) — keep them findable but out of the active file.
+- **CHANGELOG.md**: at the project root, newest first. New entries go under "Not released yet" in their area (Portal, Performance, Results Analyser, CDP Recorder, Script generation, Recorder and Script Studio, Server) as a `####` heading; at release time they move under the version. Never summarise away old entries. When it exceeds ~1 year of entries, move older versions to `CHANGELOG-ARCHIVE.md`.
+- **BUGS.md**: sections Open bugs · Known limitations · Fixed — not released yet · Fixed in released versions (by version) · Performance · Refactors · Process improvements. When the fixed list grows very long, move old versions to `BUGS-ARCHIVE.md` (repo root).
+- **No repository details in any file**: never write the GitHub account, repository name or URL, branch names, or commit IDs into documents or code comments — refer to a version number or describe the change instead. No `---` divider lines in documents.
 
 ## Known Governance Gaps (track, don't ignore)
 - **`processField()` untested** — inner closure of `genParamSuggestions()` in `studio-codegen.js`; not directly accessible. Requires refactoring to export or testing via `genParamSuggestions()`. Lowest-priority remaining gap.

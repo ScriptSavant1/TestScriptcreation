@@ -7,8 +7,6 @@ the section below into your AI coding agent.
 Let it finish Phase 0 (design) before approving Phase 1+ (creation). Don't let
 it run all phases unattended — review the proposed plan first.
 
----
-
 # PASTE THIS INTO YOUR AI CODING AGENT
 
 You are acting as Principal Software Architect for this project. I use more

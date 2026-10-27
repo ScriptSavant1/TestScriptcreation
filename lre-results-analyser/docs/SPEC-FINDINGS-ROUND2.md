@@ -9,8 +9,6 @@ one is in `txnames.js` (name resolution). Both are described below with the exac
 
 Nothing in the code was changed by this review; only the docs were updated.
 
----
-
 ## What is now CORRECT (good progress)
 
 - `eve.js` reads the right record **family** `{12586944, 12586945, 12619721}` and uses
@@ -18,8 +16,6 @@ Nothing in the code was changed by this review; only the docs were updated.
   id 10 → count 2,995, avg 1.064 s (= SC01_04 `1.063`); id 14 → 0.257 s (= SC01_07); etc.
 - subType 762 is correctly treated as a data-point stream, not a transaction.
 - Total transaction records summed across the family = **30,304** = LRE's 30,301 pass + 3 fail. ✅
-
----
 
 ## DEFECT 1 — `eve.js`: the three variants are read at the SAME offsets (they must not be)
 
@@ -54,8 +50,6 @@ and corrupt a real transaction's stats (id 15 shows avg in the millions, count i
 
 After the fix, the family must yield exactly 14 distinct transaction ids (not ~160), summing to
 30,301 pass + 3 fail.
-
----
 
 ## DEFECT 2 — `txnames.js` / `analyse.js`: names are wrong or unresolved
 
@@ -94,8 +88,6 @@ present in the result set; it should not be guessed from statistics at all.
 
 > Pass/fail itself is already available and correct in `Report2.csv` / `graph_2` / `graph_14`;
 > once the names are parsed, `crossCheckSumData()` will reconcile cleanly.
-
----
 
 ## Acceptance checklist (unchanged — the target)
 

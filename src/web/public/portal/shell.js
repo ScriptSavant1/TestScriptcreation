@@ -53,6 +53,39 @@
     if (helpBtn) helpBtn.hidden = !p.help;
     document.title = page === "home" ? "PerfX Studio — Performance Script Generation" : `${p.name} — PerfX Studio`;
     html.classList.remove("sb-open");
+    html.classList.toggle("page-help", page === "help");
+    syncHelpNav();
+    keepInView($(`.sb-item[data-page="${page}"]`));
+  }
+
+  /** Scroll only the sidebar so an item is visible (short windows). */
+  function keepInView(el) {
+    const nav = $(".sb-nav");
+    if (!el || !nav || nav.scrollHeight <= nav.clientHeight) return;
+    const r = el.getBoundingClientRect(), n = nav.getBoundingClientRect();
+    if (r.top < n.top) nav.scrollTop -= n.top - r.top + 8;
+    else if (r.bottom > n.bottom) nav.scrollTop += r.bottom - n.bottom + 8;
+  }
+
+  /** The Help section list under "Help & guides": visible on the Help page unless folded away. */
+  function syncHelpNav() {
+    const nav = $("#sb-help-nav"), item = $('.sb-item[data-page="help"]');
+    if (!nav || !item) return;
+    const show = current === "help" && store.get("perfx-help-nav") !== "folded";
+    nav.hidden = !show;
+    // the item only expands / folds while Help is open
+    if (current === "help") item.setAttribute("aria-expanded", String(show)); else item.removeAttribute("aria-expanded");
+    item.classList.toggle("sb-has-sub", current === "help");
+    html.classList.toggle("help-nav-folded", current === "help" && !show);
+    navFade();
+  }
+
+  /** A soft fade at the sidebar's top / bottom edge while there is more to scroll to. */
+  function navFade() {
+    const nav = $(".sb-nav");
+    if (!nav) return;
+    nav.classList.toggle("fade-top", nav.scrollTop > 2);
+    nav.classList.toggle("fade-bottom", nav.scrollTop + nav.clientHeight < nav.scrollHeight - 2);
   }
 
   /** Open a page through the portal's own switchers (with a view transition where supported). */
@@ -98,7 +131,15 @@
   wrap("switchTab", (sub) => { if (current === "postman" || current === "jmeter") reflect(sub === "jmx" ? "jmeter" : "postman"); });
 
   // ── sidebar: navigation, collapse, drawer ──
-  $$(".sb-item[data-page]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); go(a.dataset.page); }));
+  $$(".sb-item[data-page]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    // already on Help: the click folds / unfolds its section list instead
+    if (a.dataset.page === "help" && current === "help") {
+      store.set("perfx-help-nav", store.get("perfx-help-nav") === "folded" ? "open" : "folded");
+      syncHelpNav(); return;
+    }
+    go(a.dataset.page);
+  }));
   $(".sb-brand").addEventListener("click", (e) => { e.preventDefault(); go("home"); });
   $(".sb-collapse").addEventListener("click", () => {
     const on = !html.classList.contains("sb-collapsed");
@@ -111,6 +152,12 @@
   $(".sb-collapse").setAttribute("aria-expanded", String(!html.classList.contains("sb-collapsed")));
   $(".sb-collapse .sb-label").textContent = html.classList.contains("sb-collapsed") ? "Expand menu" : "Collapse menu";
   $("#tb-menu").addEventListener("click", () => html.classList.toggle("sb-open"));
+  // the window grew past the drawer width: no drawer left open behind the sidebar
+  const wide = matchMedia("(min-width: 901px)");
+  const onWide = () => { if (wide.matches) html.classList.remove("sb-open"); navFade(); };
+  if (wide.addEventListener) wide.addEventListener("change", onWide);
+  $(".sb-nav").addEventListener("scroll", navFade, { passive: true });
+  addEventListener("resize", navFade, { passive: true });
   $(".sb-scrim").addEventListener("click", () => html.classList.remove("sb-open"));
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") html.classList.remove("sb-open");

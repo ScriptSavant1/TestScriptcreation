@@ -850,7 +850,7 @@ function _initResizers() {
       rs.setPointerCapture(e.pointerId); rs.classList.add('on');
       var move = function (m) {
         var dx = m.clientX - start;
-        w = left ? Math.max(150, Math.min(440, w0 + dx)) : Math.max(260, Math.min(900, w0 - dx));
+        w = left ? Math.max(180, Math.min(440, w0 + dx)) : Math.max(260, Math.min(900, w0 - dx));
         sp.style.setProperty(left ? '--dw' : '--cw', w + 'px');
       };
       var up = function () {
@@ -984,4 +984,56 @@ function _initResizers() {
   if (RC.prefs['no-req']) _setPane('no-req', true);
   _initResizers();
   _syncRtChips();
+})();
+
+/* ── keyboard and screen-reader extras (layout only; nothing here changes what the Recorder does) ──
+ *  - Tab stays inside an open dialog (inside the portal's iframe a modal <dialog> does not keep it)
+ *  - tab lists answer the arrow keys / Home / End
+ *  - long file and transaction names can be read in full (title)
+ *  - after a button hides itself (help ✕, a pane's hide button) the focus goes to the control that brings it back */
+(function () {
+  'use strict';
+  var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  function visible(el) { return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab') return;
+    var dlg = document.querySelector('dialog[open]');
+    if (!dlg) return;
+    var items = Array.prototype.filter.call(dlg.querySelectorAll(FOCUSABLE), visible);
+    if (!items.length) return;
+    var first = items[0], last = items[items.length - 1], at = document.activeElement;
+    if (!dlg.contains(at)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
+  }, true);
+
+  document.addEventListener('keydown', function (e) {
+    var tab = e.target.closest && e.target.closest('[role="tab"]');
+    if (!tab || !/^(ArrowLeft|ArrowRight|Home|End)$/.test(e.key)) return;
+    var tabs = Array.prototype.filter.call(tab.parentElement.querySelectorAll('[role="tab"]'), visible);
+    var i = tabs.indexOf(tab);
+    var next = e.key === 'Home' ? tabs[0] : e.key === 'End' ? tabs[tabs.length - 1] : tabs[(i + (e.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length];
+    if (!next || next === tab) return;
+    e.preventDefault(); next.click(); next.focus(); if (next.scrollIntoView) next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
+
+  function titles() {
+    ['file-name', 'file-meta'].forEach(function (id) { var el = document.getElementById(id); if (el && el.title !== el.textContent) el.title = el.textContent; });
+    Array.prototype.forEach.call(document.querySelectorAll('.rc-grp .nm'), function (el) { if (el.title !== el.textContent) el.title = el.textContent; });
+  }
+  new MutationObserver(titles).observe(document.body, { subtree: true, childList: true, characterData: true });
+  titles();
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('#res-help-close, .hide-btn, .rc-show');
+    if (!b) return;
+    setTimeout(function () {
+      if (document.activeElement && document.activeElement !== document.body && visible(document.activeElement)) return;
+      var sel = b.classList.contains('rc-show') ? '.hide-btn' : '.rc-show';   // shown again → its hide button; hidden → the show button
+      var to = b.id === 'res-help-close' ? document.getElementById('btn-res-help')
+        : Array.prototype.filter.call(document.querySelectorAll(sel + '[data-hide="' + b.getAttribute('data-hide') + '"]'), visible)[0];
+      if (to) to.focus();
+    }, 0);
+  });
 })();

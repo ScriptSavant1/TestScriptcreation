@@ -377,3 +377,145 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ── one shape scale across the portal ── */
 .rc-filters { border-radius: 16px; }
+
+/* ── round 2 (use the window) ── */
+/* start page: as wide as the other tools on big screens */
+.rc { max-width: 1440px; }
+/* file bar: one line on laptops (the file details shorten with "…"); on narrow screens they wrap instead of
+   pushing the page sideways */
+.rc-file { flex: 1 1 220px; }
+.rc-file > div { min-width: 0; }
+.rc-file span { display: block; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 1101px) {
+  .rc-sum { flex-wrap: nowrap; }
+  .rc-sum > :not(.rc-file):not(.grow) { flex: none; }
+}
+@media (max-width: 1100px) { .rc-file span { white-space: normal; } }
+/* filters: a little tighter, so the actions stay on the first row on wide screens */
+.rc-filters { gap: 8px 10px; }
+.rc-filters .rc-chip { padding: 0 10px; }
+/* download bar: one row — the explanation wraps beside the buttons instead of pushing them to a second row */
+@media (min-width: 1101px) {
+  .rc-actions { flex-wrap: nowrap; }
+  .rc-actions .hint { flex: 1 1 auto; }
+  .rc-actions > :not(.hint):not(.grow) { flex: none; }
+  .rc-actions > .grow { display: none; }
+}
+/* the 1440px limit is for the start page only — the workspace keeps the full width */
+.rc.rc-ws, .rc-ws { max-width: none; }
+/* filter actions stay at the right end, also when they wrap to a second row */
+.rc-filters #btn-collapse-all, .rc-filters #btn-collapse-all[hidden] + #btn-sel { margin-left: auto; }
+/* "Collapse all" and "Select mode" stay together at the right end (one group, so they wrap together) */
+.rc-filters #btn-collapse-all, .rc-filters #btn-collapse-all[hidden] + #btn-sel { margin-left: 0; }
+.rc-factions { display: inline-flex; gap: 8px; margin-left: auto; flex: none; }
+
+/* ── round 2, review fixes ── */
+/* weights 400 / 600 / 700 only */
+.rc-card h3 small, .rc-field small { font-weight: 400; }
+/* start title the same size as Script Studio's */
+#welcome > h2 { font-size: 22px !important; }
+/* guide: comfortable line length on wide screens — the CDP steps on the left, the tip beside them */
+.rc-card > p, .rc-ol li > span { max-width: 92ch; }
+@media (min-width: 1280px) {
+  #how-cdp .rc-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); column-gap: 32px; align-items: start; }
+  #how-cdp .rc-card > :is(h3, p) { grid-column: 1 / -1; }
+  #how-cdp .rc-card > .rc-ol { grid-column: 1; }
+  #how-cdp .rc-card > .rc-call { grid-column: 2; grid-row: 3; margin-top: 0; }
+}
+.rc-inl { width: 1.05em; height: 1.05em; vertical-align: -.17em; }
+/* file bar: the format pill and its two buttons stay together when the bar wraps */
+.rc-sumacts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-left: auto; }
+/* filters: each label moves with its chips; no separator line */
+.rc-fset { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.rc-filters > .rc-sep { display: none; }
+.rc-filters { column-gap: 18px; }
+.rc-filters.folded .rc-fsum { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* panes: the request list gets the room on laptops (the drag handles still override these) */
+.rc-split { --dw: clamp(180px, 15%, 250px); --cw: clamp(360px, 32%, 620px); }
+/* stacked layout (≤1100): the request list first */
+@media (max-width: 1100px) { .rc-split > .reqp { order: -1; } .rc-split > .dom-pane { order: 2; max-height: 260px; } .rc-split > .code-pane { order: 3; } }
+/* select bar: one row */
+.rc-selbar { flex-wrap: nowrap; }
+.rc-selbar > div { min-width: 0; }
+.rc-selbar br { display: none; }
+.rc-selbar > div span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* file tabs: the cut edge fades */
+.rc-ctabs { padding-right: 24px; scrollbar-width: thin; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
+/* faded ("left out") rows: readable — muted text instead of see-through, the reason label at full strength */
+.rc-table tr.dim td { opacity: 1; color: var(--text-3); }
+.rc-table tr.dim td :is(.rc-m, .rc-type, .rc-s, .st) { opacity: .55; }
+.rc-table tr.dim td .p { color: var(--text-3); }
+/* a long transaction name ends in "…" instead of widening the list */
+.rc-table td:has(> .rc-grp-row) { max-width: 0; width: 100%; }
+.rc-grp-row { min-width: 0; }
+/* download bar: the explanation keeps a readable width (buttons wrap first); phones: buttons full width */
+.rc-actions .hint { min-width: 220px; }
+#dl-devweb { --b: #1d4ed8 !important; }
+@media (max-width: 600px) { .rc-actions .rc-btn { flex: 1 1 100%; justify-content: center; white-space: normal; text-align: center; } }
+/* toasts: long names wrap */
+.rc-toast { overflow-wrap: anywhere; }
+/* format dialog: icon letters readable in the light theme */
+[data-theme="light"] .rc-fmt .t i { color: color-mix(in srgb, var(--k) 60%, #000); }
+/* group tags: readable on their tinted row in both themes (the group colour mixed toward the text colour) */
+.rc-grp-row .tag { color: color-mix(in srgb, var(--g) 62%, #fff); }
+[data-theme="light"] .rc-grp-row .tag { color: color-mix(in srgb, var(--g) 50%, #000); }
+.rc-split { --dw: clamp(200px, 16%, 260px); }
+.rc-ctabs { scrollbar-width: none; } .rc-ctabs::-webkit-scrollbar { display: none; }   /* the edge fade shows more tabs; arrow keys and Shift+wheel scroll them */
+
+/* ── round 2, second design review ── */
+/* download bar: one row when it fits, wraps when it has to ("Both" formats on a laptop has two download buttons) */
+@media (min-width: 1101px) { .rc-actions { flex-wrap: wrap; } .rc-actions .hint { flex: 1 1 260px; min-width: 220px; } }
+/* domain pane header: its hide button stays inside at the narrow width */
+.dom-pane .rc-pane-h { gap: 4px; padding-right: 8px; }
+.dom-pane .rc-pane-h .rc-mini { padding: 4px 7px; }
+.rc-dlist { padding: 4px 6px 10px; }
+/* guide: steps and tip side by side from laptop width (the page is measured inside the portal frame) */
+@media (min-width: 1060px) {
+  #how-cdp .rc-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); column-gap: 32px; align-items: start; }
+  #how-cdp .rc-card > :is(h3, p) { grid-column: 1 / -1; }
+  #how-cdp .rc-card > .rc-ol { grid-column: 1; }
+  #how-cdp .rc-card > .rc-call { grid-column: 2; grid-row: 3; margin-top: 0; }
+}
+.rc-drop p { max-width: 92ch; }
+/* faded rows: badges and status muted by colour, readable (≥4.5:1) */
+.rc-table tr.dim td :is(.rc-m, .rc-type, .rc-s, .st) { opacity: 1; color: var(--text-3); }
+.rc-table tr.dim td .rc-m { background: var(--glass); }
+/* selected rows: a lighter tint, secondary text a step darker */
+.rc-table tr.sel td { background: color-mix(in srgb, var(--c) 12%, transparent) !important; }
+.rc-table tr.sel td :is(.rc-host, .rc-meta), .rc-table tr.sel td.num { color: var(--text-2); }
+[data-theme="light"] .rc-pill.fmt { color: #9a3412; }
+/* no text under 11px */
+.rc-m, .rc-why, .rc-grp-row .tag, .rc-grp small { font-size: 11px; }
+/* one shape scale: panels 16, tiles 12, buttons 10 (small 9) */
+.rc-mini, .rc-ol li::before, .rc-toast button { border-radius: 9px; }
+.rc-step, .rc-tabs, .rc-fmt, .rc-help, .rc-err, .rc-resume { border-radius: 12px; }
+.rc-filters { border-radius: 16px; }
+.rc-dlg, .rc-progress-box { border-radius: 16px; }
+.rc-drop-ico { border-radius: 12px; }
+.rc-ctab { border-radius: 10px 10px 0 0; }
+/* very wide screens: the filter bar in one row */
+@media (min-width: 1500px) { .rc-filters, .rc-fset { flex-wrap: nowrap; } }
+
+/* ── round 2, second QA review ── */
+/* filters in one row only where everything fits; labels never break */
+@media (min-width: 1500px) { .rc-filters, .rc-fset { flex-wrap: wrap; } }
+@media (min-width: 1700px) { .rc-filters, .rc-fset { flex-wrap: nowrap; } }
+.rc-flabel { white-space: nowrap; }
+/* a long transaction name: its END row ends in "…" too */
+.rc-table tr.end td { max-width: 0; width: 100%; }
+.rc-end { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* dark theme: white on a deep red (≥4.5:1) */
+.rc-btn.danger { --b: color-mix(in srgb, var(--danger) 58%, #000); }
+[data-theme="light"] .rc-btn.danger { --b: #dc2626; }
+/* download bar: a button that wraps sits on the right with the others */
+.rc-actions { justify-content: flex-end; }
+/* code tabs: the selected tab is never left under the edge fade */
+.rc-ctabs { scroll-padding-inline: 24px; }
+/* small tags and selected rows */
+.rc-tag { font-size: 11px; }
+.rc-table tr.sel td .rc-tag { color: var(--text); }
+[data-theme="light"] .rc-table tr.sel td .rc-s { color: var(--text-2); }
+.rc-fmt .t i { color: color-mix(in srgb, var(--k) 70%, #fff); }
+[data-theme="light"] .rc-fmt .t i { color: color-mix(in srgb, var(--k) 60%, #000); }
+/* the domain count stays readable at the default width */
+.dom-pane .rc-pane-h > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

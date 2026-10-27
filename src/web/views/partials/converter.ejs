@@ -64,13 +64,15 @@
 <!-- Panel: Postman / Bruno                                                 -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="card cv-panel" id="panel-bruno" style="--c:var(--c-convert)">
+ <div class="cv-cols">
+ <div class="cv-main">
   <p class="cv-intro">Upload a Postman or Bruno collection — and, if you have one, its environment file. You get a ready-to-run DevWeb or VuGen Web HTTP/HTML script as a ZIP, with correlation, parameters and authentication handled.</p>
 
   <!-- 1 · Protocol -->
   <div class="section-label"><span class="section-num">1</span>Choose Output Protocol</div>
   <div class="proto-grid" role="radiogroup" aria-label="Output protocol">
-    <%- protoCard('pc-devweb', "setProto('devweb')", ' active-devweb', 'JS', 'DevWeb · JavaScript', 'Modern JS protocol for LRE. Generates <strong>main.js</strong> with per-request transactions, correlations, JWT helper &amp; full config files.', 'tag-js', '⚡ main.js') %>
-    <%- protoCard('pc-vugen', "setProto('web-http')", '', 'C', 'VuGen · Web HTTP/HTML (C)', 'Classic C-based VuGen protocol. Generates <strong>Action.c</strong> with web_custom_request, NTLM/Kerberos, jsrsasign &amp; all VuGen config.', 'tag-c', '⚙ Action.c') %>
+    <%- protoCard('pc-devweb', "setProto('devweb')", ' active-devweb', 'JS', 'DevWeb · JavaScript', 'Modern JS protocol for LRE. Generates <strong>main.js</strong> with per-request transactions, correlations, JWT helper &amp; full config files.', 'tag-js', 'main.js') %>
+    <%- protoCard('pc-vugen', "setProto('web-http')", '', 'C', 'VuGen · Web HTTP/HTML (C)', 'Classic C-based VuGen protocol. Generates <strong>Action.c</strong> with web_custom_request, NTLM/Kerberos, jsrsasign &amp; all VuGen config.', 'tag-c', 'Action.c') %>
   </div>
 
   <!-- 2 · Upload -->
@@ -126,6 +128,8 @@
     </div>
   </div>
 
+  </div><!-- /.cv-main -->
+ <div class="cv-side">
   <!-- 3 · Options -->
   <div class="section-label"><span class="section-num">3</span>Configure Options</div>
   <div class="options-grid">
@@ -154,6 +158,12 @@
     </div>
   </div>
 
+  <div class="divider"></div>
+  <div class="prog-wrap" id="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
+  <button class="btn-convert devweb" id="btn-cvt" onclick="doConvert()">
+    <div class="spinner" id="spinner"></div>
+    <span id="btn-lbl">Convert to DevWeb Script</span>
+  </button>
   <!-- Advanced -->
   <button class="adv-toggle" id="adv-btn" onclick="toggleAdv()" aria-controls="adv-panel">
     <span class="arrow"><%- svg(IC.chevron) %></span> Advanced settings
@@ -190,25 +200,23 @@
     </div>
   </div>
 
-  <div class="divider"></div>
-  <div class="prog-wrap" id="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
-  <button class="btn-convert devweb" id="btn-cvt" onclick="doConvert()">
-    <div class="spinner" id="spinner"></div>
-    <span id="btn-lbl">⚡ Convert to DevWeb Script</span>
-  </button>
+ </div><!-- /.cv-side -->
+ </div><!-- /.cv-cols -->
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <!-- Panel: JMeter                                                          -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="card cv-panel" id="panel-jmx" style="display:none;--c:var(--c-jmeter)">
+ <div class="cv-cols">
+ <div class="cv-main">
   <p class="cv-intro">Upload a JMeter test plan (.jmx), plus any CSV data files and certificates it uses. You get a DevWeb or VuGen Web HTTP/HTML script — one per thread group if you choose — and a Workload Model Excel, as a ZIP.</p>
 
   <!-- 1 · Protocol -->
   <div class="section-label"><span class="section-num">1</span>Choose Output Protocol</div>
   <div class="proto-grid" role="radiogroup" aria-label="Output protocol">
-    <%- protoCard('jpc-devweb', "setJmxProto('devweb')", ' active-devweb', 'JS', 'DevWeb · JavaScript', 'Generates <strong>main.js</strong> with transactions, correlations, auth &amp; Workload Model Excel.', 'tag-js', '⚡ main.js') %>
-    <%- protoCard('jpc-vugen', "setJmxProto('web-http')", '', 'C', 'VuGen · Web HTTP/HTML (C)', 'Generates <strong>Action.c</strong> with web_reg_save_param, NTLM/Kerberos auth &amp; Workload Model Excel.', 'tag-c', '⚙ Action.c') %>
+    <%- protoCard('jpc-devweb', "setJmxProto('devweb')", ' active-devweb', 'JS', 'DevWeb · JavaScript', 'Generates <strong>main.js</strong> with transactions, correlations, auth &amp; Workload Model Excel.', 'tag-js', 'main.js') %>
+    <%- protoCard('jpc-vugen', "setJmxProto('web-http')", '', 'C', 'VuGen · Web HTTP/HTML (C)', 'Generates <strong>Action.c</strong> with web_reg_save_param, NTLM/Kerberos auth &amp; Workload Model Excel.', 'tag-c', 'Action.c') %>
   </div>
 
   <!-- 2 · Upload -->
@@ -222,15 +230,6 @@
       <div class="dz-label">JMeter Script <span class="dz-required">*</span></div>
       <div class="dz-sub">.jmx file — JMeter Test Plan</div>
       <div id="lbl-jmx" class="dz-name"></div>
-    </div>
-    <div class="jmx-features">
-      <div class="jmx-feat-title">What gets generated</div>
-      <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>DevWeb JS or VuGen C script per thread group</div>
-      <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>Regex / JSON / Boundary / XPath / CSS extractors</div>
-      <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>Global + per-request headers correctly scoped</div>
-      <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>Loop / If / ForEach controller context preserved</div>
-      <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>CSV parameter files + dependency report</div>
-      <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span><strong>Workload Model Excel (.xlsx)</strong></div>
     </div>
   </div>
 
@@ -256,6 +255,19 @@
     </div>
   </div>
 
+  <!-- What gets generated -->
+  <div class="jmx-features">
+    <div class="jmx-feat-title">What gets generated</div>
+    <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>DevWeb JS or VuGen C script per thread group</div>
+    <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>Regex / JSON / Boundary / XPath / CSS extractors</div>
+    <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>Global + per-request headers correctly scoped</div>
+    <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>Loop / If / ForEach controller context preserved</div>
+    <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span>CSV parameter files + dependency report</div>
+    <div class="feat-item"><span class="feat-check"><%- svg(IC.check) %></span><strong>Workload Model Excel (.xlsx)</strong></div>
+  </div>
+
+  </div><!-- /.cv-main -->
+ <div class="cv-side">
   <!-- 3 · Options -->
   <div class="section-label"><span class="section-num">3</span>Configure Options</div>
   <div class="options-grid">
@@ -288,8 +300,10 @@
   <div class="prog-wrap" id="jprog-wrap"><div class="prog-fill" id="jprog-fill"></div></div>
   <button class="btn-convert devweb" id="btn-jmx" onclick="doConvertJmx()">
     <div class="spinner" id="jspinner"></div>
-    <span id="jbtn-lbl">♨ Convert JMeter to DevWeb Script</span>
+    <span id="jbtn-lbl">Convert JMeter to DevWeb Script</span>
   </button>
+ </div><!-- /.cv-side -->
+ </div><!-- /.cv-cols -->
 </div>
 
 <!-- ── Results ─────────────────────────────────────────────────────────── -->

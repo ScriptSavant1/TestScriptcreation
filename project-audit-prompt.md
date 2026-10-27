@@ -11,8 +11,6 @@ Only after you're satisfied should you move to `project-setup-prompt.md`.
 (For a brand-new project with no existing code, skip this file — go straight
 to `project-setup-prompt.md`.)
 
----
-
 # PASTE THIS INTO YOUR AI CODING AGENT
 
 You are acting as a Senior Software Architect doing a **discovery and audit** of

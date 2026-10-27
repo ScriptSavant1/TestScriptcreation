@@ -40,9 +40,26 @@ describe('Help — sections and jumps', () => {
   test('every section has a name for the "On this page" label', () => {
     SECTIONS.filter((s) => s !== 'hacc-formats' || help.includes("'hacc-formats'")).forEach((s) => expect(help).toContain(`'${s}':`));
   });
-  test('search, contents list and no-result message are present', () => {
-    ['id="help-q"', 'id="help-side"', 'id="help-noresult"', 'id="help-expand-all"', 'id="help-collapse-all"'].forEach((x) => expect(help).toContain(x));
+  test('search and no-result message are on the page; the section list lives in the portal sidebar', () => {
+    ['id="help-q"', 'id="help-noresult"', 'id="help-expand-all"', 'id="help-collapse-all"'].forEach((x) => expect(help).toContain(x));
+    expect(read('partials/shell.ejs')).toContain('id="sb-help-nav"');
     expect(index).toContain('portal/help.js');
+  });
+  test('the Privacy & Security section title matches its contents entry', () => {
+    expect(help).toContain('<div class="help-acc-title">Privacy &amp; Security</div>');
+    expect(help).toMatch(/haccJump\('hacc-privacy'\)"><span class="htoc-link-icon"><svg[^]*?<\/svg><\/span>Privacy &amp; Security</);
+    expect(help).not.toContain('Technology &amp; Privacy');
+  });
+  test('the sections follow the contents order, under the same group headings', () => {
+    const order = [...help.matchAll(/<div id="(hacc-[\w-]+)" class="help-acc-item/g)].map((m) => m[1]);
+    const menu = [...new Set([...help.matchAll(/class="htoc-link" onclick="haccJump\('([\w-]+)'\)/g)].map((m) => m[1]))];
+    expect(order).toEqual(menu);
+    const groups = [...help.matchAll(/<h2 class="help-group-h">([^<]+)<\/h2>/g)].map((m) => m[1]);
+    expect(groups).toEqual([...help.matchAll(/<div class="htoc-group-label">([^<]+)<\/div>/g)].map((m) => m[1]));
+  });
+  test('every section has a line icon (no emoji) in its header and in the contents', () => {
+    expect(help.match(/<div class="help-acc-icon" style="--c-tool:[^"]+"><svg /g)).toHaveLength(SECTIONS.length);
+    expect(help.match(/<span class="htoc-link-icon"><svg /g)).toHaveLength(SECTIONS.length);
   });
   test('no Help text still points to the old top navigation or tabs', () => {
     expect(help).not.toMatch(/in the nav<|top navigation|from the navigation|Recorder<\/strong> tab/);

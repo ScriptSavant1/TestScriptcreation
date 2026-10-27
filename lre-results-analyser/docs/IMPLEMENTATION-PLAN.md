@@ -9,9 +9,6 @@
 > `docs/` folder; sample text files in `RawResults_59/` at the repo root (never committed — internal host names)
 > **Owner decisions still open:** see [§11 Inputs still needed](#11-inputs-still-needed)
 
-
----
-
 ## 1. Goal
 
 A new **Results Analyser** menu in the portal. A performance engineer selects an LRE raw-results
@@ -34,8 +31,6 @@ in the output, and the engine is validated against LRE Analysis on real runs (Ph
 | Works on locked-down corporate PCs | No CDN, no external calls; all libraries vendored; no install for the web path |
 | Isolated module | New folder; existing tools untouched except one portal menu entry |
 
----
-
 ## 2. Sources of data (verified against `RawResults_59/` text files)
 
 | Source | Provides | Notes / corrections to SPEC |
@@ -55,8 +50,6 @@ in the output, and the engine is validated against LRE Analysis on real runs (Ph
 
 **Controller host:** not named in the text files. A monitored host with no VUsers (run 59: a
 third host in `graph_1`) is probably the Controller — to be confirmed (§11).
-
----
 
 ## 3. Architecture
 
@@ -119,8 +112,6 @@ documentation. Libraries are **vendored** (like `jszip.min.js` today) — no CDN
 | Word | **docx** (browser build) | Already a server dependency |
 | PDF | Print-optimised report HTML → browser "Save as PDF" | No server-side rendering; programmatic PDF (pdf-lib) only if needed later |
 
----
-
 ## 4. Parsing rules
 
 ### 4.1 File discovery
@@ -158,8 +149,6 @@ All internal times = seconds since scenario start (UTC epoch from `.lrr`). Displ
 time using the run's time-zone fields; the sheet header states the zone. SQLite error times are
 local — convert before correlating with samples.
 
----
-
 ## 5. Statistics engine
 
 ### 5.1 Data never fully held in memory
@@ -195,8 +184,6 @@ Progress bar, cancel, and memory guard in all paths.
 ### 5.5 Granularity
 Base aggregation at 1 s; chart buckets chosen automatically to give ~300–600 points per chart
 (1 s, 5 s, 15 s, 30 s, 1 min, 5 min, 15 min). User can override.
-
----
 
 ## 6. Outputs
 
@@ -242,8 +229,6 @@ User enters thresholds per transaction (or a default, e.g. P90 ≤ x s) in the U
 browser storage; SLA-scope list from `SLAConfiguration.xml`. Apdex per transaction from the
 same thresholds.
 
----
-
 ## 7. Insights (data-science checks)
 
 All offline and rule-based; every finding shows the evidence and the chart it comes from.
@@ -264,8 +249,6 @@ Findings are written in plain English (e.g. "SC01_07 P95 rose 34 % over the soak
 slow samples ran on LG-B, whose CPU exceeded 85 % for 41 min"). An optional AI-written narrative is
 out of scope until approved (client data must not leave the machine).
 
----
-
 ## 8. Validation & testing
 
 - **Self-check output** on every run: record counts per type, unknown field values, transactions
@@ -276,8 +259,6 @@ out of scope until approved (client data must not leave the machine).
   exactly; averages/percentiles within the documented method difference.
 - Unit tests per engine module; scale test with a synthetic multi-GB `.eve` (memory flat,
   throughput measured); browser test (Playwright) for the page and exports.
-
----
 
 ## 9. Phases
 
@@ -293,8 +274,6 @@ out of scope until approved (client data must not leave the machine).
 
 Phase 0 is the gate: no reporting work starts until the decode is confirmed on real data.
 
----
-
 ## 10. Risks
 
 | Risk | Mitigation |
@@ -304,8 +283,6 @@ Phase 0 is the gate: no reporting work starts until the decode is confirmed on r
 | Very large runs exceed browser limits | Folder selection (no unzip), streaming, CLI path |
 | Corporate browser blocks WASM / File System Access | Fallbacks: `<input webkitdirectory>`; sql.js-free error sheet from `sum_data` if WASM blocked |
 | Users compare with LRE and see differences | Method & Validation sheet explains each difference (percentile method, steady window, clamping) |
-
----
 
 ## 11. Inputs still needed
 
@@ -320,8 +297,6 @@ Phase 0 is the gate: no reporting work starts until the decode is confirmed on r
 | 7 | Largest expected results size and typical one | Default path (browser vs CLI) |
 | 8 | SLA thresholds — user-entered or a standard set? | §6.4 |
 | 9 | Company template / logo for PDF and Word | Phase 5 |
-
----
 
 ## 12. Documentation to update as phases land
 

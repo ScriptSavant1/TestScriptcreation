@@ -6,12 +6,18 @@ touched, *when*, *where they live*, and *who owns the final call* on each.
 Copy into any project's root (new or existing) and let the agent read it
 before starting work.
 
+**In this project (PerfX Studio):** the `/ai-brain/` locations below are the generic default and are not
+used here. `BUGS.md`, `CHANGELOG.md` and `CLAUDE.md` live at the repository root. Everything in `Docs/`
+(`FUNCTIONAL-SPEC.md` in place of FEATURES.md, `DECISIONS.md`, `CORRELATION-LOGIC-EXPLAINED.md`,
+`deployment/CONFIGURATION.md`, the deployment and business guides) is local-only — listed in `.gitignore`
+and never committed. `CHANGELOG.md` is not appended at the end: it is newest first, new entries go under
+"Not released yet" in their area (Portal, Performance, Results Analyser, CDP Recorder, Script generation,
+Recorder and Script Studio, Server), and they move under the version number at release.
+
 The core idea: not every doc updates on every change. Doc updates are tied to
 the *type* of change, not fired blindly on every task. This keeps docs
 accurate instead of bloated, and keeps you from burning tokens rewriting a
 deployment guide because you renamed a variable.
-
----
 
 ## Part 1 — The full document set, what each is for, and where it lives
 
@@ -46,8 +52,6 @@ relevant — an empty `DEPLOYMENT.md` before you've deployed anything is just
 noise. But when the relevant milestone hits (first deploy, first real
 decision, first external contributor), the agent should be the one to notice
 and say "this doc should exist now," not wait for you to ask.
-
----
 
 ## Part 2 — What triggers what (the update matrix)
 
@@ -108,8 +112,6 @@ happens, since each is a moment drift is especially likely:**
   Fix docs in a dedicated pass, not folded into an unrelated code task.
 ```
 
----
-
 ## Part 3 — Ownership: what AI drafts vs. what you must personally approve
 
 Three tiers, and the agent should know which tier it's operating in:
@@ -126,8 +128,6 @@ Three tiers, and the agent should know which tier it's operating in:
    tradeoffs were accepted for business reasons — an AI inferring this from
    code will get it wrong or make it up. If this doc doesn't exist yet, the
    agent should ask you to write it, not draft one from guesses.
-
----
 
 ## Part 4 — Rules to append to AI_RULES.md
 
@@ -150,8 +150,6 @@ Three tiers, and the agent should know which tier it's operating in:
   don't wait to be asked.
 ```
 
----
-
 ## Part 5 — Add to the generic kickoff prompt (Part 5 of the playbook)
 
 Append this paragraph to that template:
@@ -165,8 +163,6 @@ drafts I need to approve, not final. Never invent content for
 BUSINESS_CONTEXT.md or SECURITY.md policy — ask me instead. Run the periodic
 architecture-doc audit on the cadence stated in that file.
 ```
-
----
 
 ## What you were still missing (worth knowing, not necessarily building today)
 
@@ -189,8 +185,6 @@ to a solo/two-tool setup. The main things to hold onto are Part 2's matrix
 (what updates when) and Part 1's location split (what lives in /ai-brain/
 vs. project root) — together they keep "everything updates automatically"
 from becoming "everything updates sloppily, in the wrong place."
-
----
 
 ## Part 6 — Keeping the docs themselves from growing unbounded
 

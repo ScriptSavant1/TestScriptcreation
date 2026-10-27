@@ -8,8 +8,6 @@
 > **Last Updated**: 2025
 > **Purpose**: Complete reference — no re-analysis needed. Everything decoded and documented here.
 
----
-
 ## PART 1 — RAW RESULTS FOLDER STRUCTURE
 
 ### 1.1 Folder Layout
@@ -70,8 +68,6 @@ RawResults_59/                                      (root — zip this for uploa
 | 12 — SKIP | `sum_data/graph_4.dat` | Summarised RT — we compute from raw |
 | 13 — SKIP | All other .dat files | Redundant or derivable |
 
----
-
 ## PART 2 — FILE FORMATS (COMPLETE DECODE)
 
 ### 2.1 RunInfo.ini
@@ -95,8 +91,6 @@ TestDescription=
 - `Duration` → total duration in minutes (integer)
 
 **Parse with:** `ini` style parser — split on `=`, trim values.
-
----
 
 ### 2.2 res59.lrr
 
@@ -128,8 +122,6 @@ LRE_Upgrade_263_NFT_Scripts_1=DevWeb
 - Peak VUsers = 27 (from `ST27`)
 - Ramp-up rate = 1 VUser every 5s (from `1E5`)
 - Steady-state duration = 28,800s = 8 hours (from `R28800`)
-
----
 
 ### 2.3 RawData.map
 
@@ -168,8 +160,6 @@ INI format, two sections.
 
 **Parse:** regex `^(\d+)="(.+)"` per line, build two Maps: `dataPointMap` and `transactionMap`.
 
----
-
 ### 2.4 SLAConfiguration.xml
 
 ```xml
@@ -194,8 +184,6 @@ SC01_13_SYSTEM_REPORTS, SC01_14_LOGOUT, Main_Transaction
 **Note:** No numeric thresholds defined in this file — SLA rules are configured in LRE UI, not stored here. We apply our own thresholds or flag all as "measured".
 
 **Parse:** simple XML — extract all `<Tx>` text nodes into a Set.
-
----
 
 ### 2.5 SqliteDb.db
 
@@ -262,8 +250,6 @@ const errors = db.prepare(`
 `).all();
 ```
 
----
-
 ### 2.6 _t_rep.eve
 
 Plain text, Windows line endings. Format: `28 <eventType> <fields...>`
@@ -326,8 +312,6 @@ Plain text, Windows line endings. Format: `28 <eventType> <fields...>`
 - lg-host-02: VUsers 1,3,5,7,9,11,13,15,17,19,21,23,25,27 (odd)
 - lg-host-01: VUsers 2,4,6,8,10,12,14,16,18,20,22,24,26 (even)
 
----
-
 ### 2.7 lre_upgrade_263_nft_scripts_1.cfg
 
 INI format. Contains DevWeb rts.yml settings and run configuration.
@@ -356,8 +340,6 @@ INI format. Contains DevWeb rts.yml settings and run configuration.
   Encoding: UTF8
 ```
 
----
-
 ### 2.8 lre_upgrade_263_nft_scripts_1.usp
 
 INI format. Defines action pacing.
@@ -370,10 +352,6 @@ RunLogicPaceConstTime: 260        (260s total iteration time budget)
 ```
 
 This means each VUser waits 60 seconds after completing an iteration before starting the next one. With 27 VUsers and ~260s per iteration, throughput is approximately 27/260 = ~0.1 iterations/second.
-
----
-
----
 
 ## PART 3 — RAWDATA.EVE BINARY FORMAT (COMPLETE DECODE)
 
@@ -538,8 +516,6 @@ Iteration range: 0 to 113
 
 **SLA failure confirmed:** SC01_05_SELECT_SCENARIO — first spike at t+15s (VUser 3, 28.7s RT)
 
----
-
 ## PART 4 — SUM_DATA .DAT FILE FORMATS
 
 ### 4.1 Universal .dat Format
@@ -621,10 +597,10 @@ The `avg` column = VUser count at that second.
 
 Sample rows:
 ```
-2 1790688833 40.299531 1 40.299531 40.299531 0.000000    ← LG026121 CPU 40.3%
-3 1790688833 19.656665 1 19.656665 19.656665 0.000000    ← LG026121 Memory 19.7%
-4 1790688833  7.736638 1  7.736638  7.736638 0.000000    ← LG026121 Disk 7.7%
-5 1790688836  0.000000 1  0.000000  0.000000 0.000000    ← LG027762 CPU 0%
+2 1790688833 40.299531 1 40.299531 40.299531 0.000000    ← lg-host-01 CPU 40.3%
+3 1790688833 19.656665 1 19.656665 19.656665 0.000000    ← lg-host-01 Memory 19.7%
+4 1790688833  7.736638 1  7.736638  7.736638 0.000000    ← lg-host-01 Disk 7.7%
+5 1790688836  0.000000 1  0.000000  0.000000 0.000000    ← lg-host-02 CPU 0%
 ```
 
 Lines: 52,257 | Granularity: ~3 seconds (irregular)
@@ -712,10 +688,6 @@ Sample: `13 1790688840 0.138000 2 0.127000 0.149000 0.011000`
 
 **We do NOT use this file** — we compute better stats from RawData.eve directly.
 
----
-
----
-
 ## PART 5 — SCENARIO FACTS SUMMARY
 
 | Property | Value |
@@ -743,8 +715,6 @@ Sample: `13 1790688840 0.138000 2 0.127000 0.149000 0.011000`
 | HTTP errors | HTTP 500 at t+92s on VUsers 2,3,4 |
 | Total tx records | 422,225 |
 | Transactions with data | 10 of 14 (4 never reached) |
-
----
 
 ## PART 6 — ANALYTICS & DATA SCIENCE PLAN
 
@@ -885,8 +855,6 @@ function histogram(rts, buckets = 20) {
 }
 ```
 
----
-
 ## PART 7 — ARCHITECTURE & FILE PLAN
 
 ### 7.1 New Files (zero changes to existing code)
@@ -1015,8 +983,6 @@ POST /analyse-results     multipart ZIP upload → returns download token
 GET  /download/:token     one-time download (reuses existing memoryFsInterceptor)
 ```
 
----
-
 ## PART 8 — REPORT SECTIONS (UI DESIGN)
 
 ### 8.1 Executive Summary Card
@@ -1070,8 +1036,6 @@ Columns: Transaction | Count | Avg | P90 | P95 | P99 | Max | Trend | SLA
 - Cell colour = avg RT for that VUser in that time window
 - Reveals if specific VUsers or LGs are slower
 
----
-
 ## PART 9 — DOWNLOADABLE REPORT FORMATS
 
 ### 9.1 HTML Report (primary)
@@ -1095,8 +1059,6 @@ Sheets:
 - Browser print of HTML report (no server-side Puppeteer needed for MVP)
 - "Download PDF" button triggers `window.print()` with print CSS
 
----
-
 ## PART 10 — DEPENDENCIES
 
 ### New runtime dependency (1 only):
@@ -1116,8 +1078,6 @@ Sheets:
 ### Optional (for offline HTML):
 - Bundle Chart.js minified inline (~200KB) for fully offline reports
 
----
-
 ## PART 11 — ISOLATION GUARANTEE
 
 Zero changes to any existing file. New files only:
@@ -1131,8 +1091,6 @@ Zero changes to any existing file. New files only:
 | Recorder | None |
 | Script Studio | None |
 | All existing tests | None |
-
----
 
 ## PART 12 — KNOWN EDGE CASES & GOTCHAS
 
@@ -1160,17 +1118,11 @@ Zero changes to any existing file. New files only:
 
 12. **sum_dat.ini measurement IDs** — the IDs in sum_dat.ini (e.g. `graph_4 Measurement_0=SC01_01_LAUNCH,17`) are the measurementIds used in the .dat files. The number after the comma (17) is the measurementId for that graph's data. These are DIFFERENT from the transaction IDs in RawData.map.
 
----
-
 *End of Specification — All files decoded, all formats documented, ready to build.*
-
----
 
 ## PART 13 — GAP FIXES & UNAMBIGUOUS RULES
 
 > These sections resolve the 5 identified ambiguities. Any AI building from this spec MUST follow these rules exactly.
-
----
 
 ### 13.1 GAP 1 — res*.lrr Filename Resolution (FIXED)
 
@@ -1207,8 +1159,6 @@ function findLrrFile(folderPath) {
 | `sum_data/` | Always this exact folder name — never changes |
 | `sum_data/sum_dat.ini` | Always this exact name — never changes |
 | `sum_data/graph_N.dat` | N is 0-14, always present |
-
----
 
 ### 13.2 GAP 2 — ZIP Extraction Path Handling (FIXED)
 
@@ -1270,8 +1220,6 @@ const graph1Buf  = files['sum_data/graph_1.dat'];
 
 **No disk writes. Everything stays in memory.**
 
----
-
 ### 13.3 GAP 3 — VUser Count Source (FIXED)
 
 **graph_0.dat is unreliable for VUser counts.** The `avg` column shows the running VUser count but only updates when a VUser state changes — it does NOT emit a row every second during steady state. Many seconds are missing.
@@ -1311,8 +1259,6 @@ function buildVuserTimeline(trepContent, scenarioStart) {
 // steadyStateStart = timestamp when last VUser (27th) fires event type 2
 // steadyStateEnd   = timestamp when first VUser fires event type 1 (ramp-down)
 ```
-
----
 
 ### 13.4 GAP 4 — Report HTML Structure (FIXED)
 
@@ -1436,8 +1382,6 @@ Chart.defaults.plugins.tooltip.mode = 'index';
 Chart.defaults.plugins.tooltip.intersect = false;
 ```
 
----
-
 ### 13.5 GAP 5 — Excel Sheet Structure (FIXED)
 
 Use `exceljs` (already in project). All sheets follow these formatting rules:
@@ -1547,8 +1491,6 @@ Phase column values: "Ramp-Up", "Steady State", "Ramp-Down"
 | E | Z-Score | 12 | 0.00 |
 | F | Affected VUsers | 20 | text |
 | G | LG CPU at time | 16 | 0.0% |
-
----
 
 ## PART 14 — GENERIC FILE HANDLING (works for ANY run, not just Run 59)
 
@@ -1667,8 +1609,6 @@ function parseDatFile(content, measurementIdFilter = null) {
 }
 ```
 
----
-
 ## PART 15 — COMPLETE PARSER FLOW (step by step)
 
 This is the exact sequence the parser must follow. No steps can be skipped or reordered.
@@ -1693,8 +1633,6 @@ Step 12: Parse sum_data/graph_0.dat → vuserCounts[] (for chart only)
 Step 13: Return complete data model
 ```
 
----
-
 ## PART 16 — WHAT SCALES WITH LARGER RESULT SETS
 
 As the user confirmed: future ZIPs will have the same file structure but potentially more data.
@@ -1716,8 +1654,6 @@ As the user confirmed: future ZIPs will have the same file structure but potenti
 - File names of the fixed files (RawData.eve, RunInfo.ini, etc.)
 - The 7-column .dat format
 - The SQLite schema
-
----
 
 *End of Gap Fixes — Specification is now complete and unambiguous.*
 *Any AI can build the full system from SPEC.md alone without access to the raw results files.*

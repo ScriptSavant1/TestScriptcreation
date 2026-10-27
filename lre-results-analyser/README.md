@@ -1,47 +1,55 @@
 # LRE Results Analyser
 
 Analyses LoadRunner Enterprise **raw results** (`RawData.eve`, `_t_rep.eve`, `res*.lrr`, …)
-independently of LRE Analysis, and produces a dashboard plus Excel, Word and PDF reports.
+independently of LRE Analysis, and produces a dashboard plus Excel, Word, PDF and HTML reports.
+It is the **Results Analyser** tool of the PerfX Studio portal.
 
 **Nothing is uploaded or stored on the server.** The browser reads the files straight from the
 user's disk (a Web Worker streams them), so a run of any size works. The same engine also runs
 from the command line for runs of hundreds of GB.
 
-- Plan and phases: [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md)
-- File formats: [docs/SPEC-file-formats.md](docs/SPEC-file-formats.md)
-
 - User guide (admins, testers, non-technical readers): [docs/USER-GUIDE.md](docs/USER-GUIDE.md) · [docs/USER-GUIDE.html](docs/USER-GUIDE.html)
 - Technical design for developers (data flow, every calculation, granularity): [docs/TECHNICAL-DESIGN.md](docs/TECHNICAL-DESIGN.md)
+- Plan and phases: [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md)
+- File formats: [docs/SPEC-file-formats.md](docs/SPEC-file-formats.md) and [docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md](docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md)
 
 **Status:** Phases 0–5 are built and validated against LRE Analysis on runs 59 and 2144 (see
 *Validation against LRE Analysis* below).
 
 ## Use it in the portal
 
-Open **Results** in the PerfX menu (or go to `/results-analyser`), then choose the run's raw-results
-**ZIP** or its unzipped **folder**.
+Click **Results Analyser** in the portal's left sidebar, then **Choose results ZIP** or **Choose
+results folder** (faster for very large runs — nothing is unzipped). The page is served at
+`/results-analyser` and loaded inside the portal; opened on its own in a browser tab it sends the
+user to `…/converter/` with the Results Analyser open (`src/web/public/portal/frame-guard.js`).
 
 | Tab | Shows |
 |---|---|
-| Overview | Key figures, test details, schedule planned vs actual, load generators, key findings |
-| Transactions | Summary for the steady state or the full run: count, pass/fail, min/avg/max, std dev, P50–P99, TPS, SLA, Apdex, P90 trend. Click a row for its distribution, behaviour over time, latency heatmap and figures per load generator |
+| Overview | Verdict card with the top issues, eight key-figure tiles, "Web traffic — whole test" (hits, throughput), load / throughput / errors chart, slowest transactions (P90), findings, and a collapsed "Test details" panel (scenario, schedule planned vs actual, machines) |
+| Transactions | Summary for the steady state (or analysis window) or the full run: count, pass, fail, fail %, min/avg/max, std dev, P50–P99 (with P98), TPS, SLA, Apdex, P90 trend. Pass and fail follow the chosen view. Click a row to open a side drawer with its behaviour over time, distribution, latency heatmap and figures per load generator |
 | Charts | Load, response time, TPS, latency heatmap, TPS vs RT, errors, HTTP codes, throughput, LG CPU, RT per LG, RT per VUser |
 | Errors | Errors grouped by code and message pattern, plus a searchable error log |
 | Workload | Scripts (pacing, think time, iterations planned vs achieved), load generators, VUsers |
 | Insights | Automatic findings with evidence, and an overall verdict |
 
-The **analysis window** defaults to the detected steady state and can be changed. **SLA**
-thresholds can be set as a default or per transaction; they are remembered per test in this
-browser. Every figure, chart and insight updates when either changes.
+The settings summary under the header shows the current window and SLA; **Change** opens the
+editor. The **analysis window** defaults to the detected steady state and is chosen with date / time
+pickers (**Apply**; **Detected** goes back to the steady state). **SLA** thresholds can be set as a
+default (with the percentile: P90, P95, P99 or P50) or per transaction in the Transactions tab; they
+are remembered per test in this browser. Every figure, chart and insight updates when either changes.
+Every panel can be collapsed ("Collapse all / Expand all", remembered). **New analysis** starts again.
 
-Exports: **Excel** (9 sheets), **Word** (editable, with charts), **PDF** (print-ready report:
-choose "Save as PDF"), **HTML**, **JSON** (full or redacted).
+Exports: **Excel** (10 sheets from the page, including Charts; 9 from the CLI), **Word** (editable,
+landscape, with charts), **PDF** (print-ready landscape report: choose "Save as PDF"), **HTML**, and
+under **More**: **JSON** (full or redacted).
+
+There is no Validation tab: the technical self-checks are in the JSON export (and the CLI console).
 
 ### Explanations on every panel
 
 Each chart and table has a one-line explanation and an expandable "How to read it", written for non-technical readers.
 The text lives in `web/notes.js` (edit the wording there). Column titles and overview tiles show help on hover.
-"? Hide explanations" turns them off (remembered per browser).
+The "? Explanations" button turns them off (remembered per browser).
 
 ## Command line
 
@@ -56,9 +64,10 @@ node lre-results-analyser/cli/analyse.js Results_59.zip --sla 3 --docx run59.doc
 | `--out f.json` | Full result model |
 | `--sla 2.5`, `--sla-pct 95` | SLA threshold in seconds for every named transaction, and the percentile it applies to (default 90) |
 | `--window 600-28800` | Analysis window in seconds from scenario start (default: the detected steady state) |
-| `--granularity 600` | Chart / Time Series granularity in seconds (default auto; coarser than auto only). The transaction summary never uses a granularity |
+| `--granularity 200` | LoadRunner-style figures: Min / Max / Std Dev / percentiles over 200-second averages, all VUsers together (as LRE Analysis with Data Aggregation on and "VuserID" ticked). Count, Pass, Fail and Average stay exact; charts use the same slots. Default `exact` (every transaction on its own). `--lre-granularity` is an older name for the same option |
+| `--per-vuser` | With `--granularity`: average each VUser separately (LRE "VuserID" not ticked). `--all-vusers` (the default) is kept for older command lines |
+| `--chart-granularity 300` | Charts and the Time Series sheet only, in seconds (default auto) |
 | `--exact-limit 100000000` | Instances kept for exact percentiles (default 20,000,000 ≈ 240 MB, ~12 bytes each). Above it percentiles come from histograms (within 0.5 %) and a warning is shown |
-| `--lre-granularity 2` | Diagnostic only: also compute LRE-style min/max/std-dev/P90 over N-second × LG bucket means, printed to the console (default off; never in reports) |
 | `--redact` | Host names become LG1, LG2…; IP addresses, script paths and error text are removed. Use it before sharing output outside the client |
 | `--quiet` | No console summary |
 
@@ -84,9 +93,9 @@ transaction, and high LG CPU.
 | Transactions | `RawData.eve` transaction records — sub-type `0x00C00FC0 + flags` (flag 0x8000 = failed); one record per transaction instance. Layout: `docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md` |
 | Response time | End − start − wasted − think time of each record (seconds) = LRE's "do not include think time". Statistics use passed transactions; failed ones are counted (as LRE does) |
 | Transaction names | Record ids are per VUser; the first record of each (VUser, id) carries its RawData.map id, so names are exact. `sum_data/` is not needed |
-| Transaction summary basis | Every transaction instance — **no granularity**. Stated in the UI (note above the Transactions table), Excel ("Results calculated", sheet subtitles), reports and the `method` self-check |
-| Chart granularity | Charts and the Time Series sheet only: auto ≤ 1,500 points over the run (30 s for 8 h, 120 s for 27.6 h); users can choose coarser (settings bar / `--granularity`); merged from stored buckets without re-reading; insights always use the auto granularity |
-| LRE-style min / max / std-dev / P90 | Diagnostic, **off by default** (`--lre-granularity 2` reproduces run 59's LRE table). Never shown in reports |
+| Transaction summary basis | Every transaction instance — **no granularity** by default (Exact). Stated in the UI, Excel ("Results calculated", sheet subtitles), reports and the `method` self-check |
+| Chart granularity | Charts and the Time Series sheet only: auto ≤ 1,500 points over the run (30 s for 8 h, 120 s for 27.6 h); coarser with `--chart-granularity`; merged from stored buckets without re-reading; insights always use the auto granularity |
+| LRE-style min / max / std-dev / percentiles | **Off by default**. With `--granularity N` (CLI; the page control is hidden — see "Granularity" below), figures are taken over N-second averages, as LRE Analysis does with Data Aggregation on |
 | Hits, HTTP codes, throughput | `RawData.eve` data points (762/766): Σ HTTP_xxx, Σ mic_recv bytes; per second = total ÷ (run seconds + 1), as LRE |
 | Percentiles | Nearest-rank: P = sorted[⌈p/100·n⌉]. Exact when ≤ 20 M samples are kept; otherwise 1 % log histograms (≤ 0.5 % error). The method used is printed in every output |
 | Std deviation | Population (÷ n), Welford |
@@ -108,7 +117,7 @@ LG CPU and memory; errors and failures; SLA and Apdex; throughput stability; clo
 | Names, Count, Pass, Fail | exact | exact |
 | Average | exact | exact (515/515; one transaction never passed) |
 | Hits, HTTP codes, throughput (total and per second) | exact | exact |
-| Min / Max / Std dev / P90 | exact with LRE-style buckets | match only where LRE did not smooth (≈ 180 rows) |
+| Min / Max / Std dev / P90 | exact with LRE-style averaging (`--granularity`) | match only where LRE did not smooth (≈ 180 rows) |
 
 **Why Min / Max / Std dev / P90 can differ from the LRE HTML report:** the analyser uses every
 transaction instance. LRE's summary table averages instances into time buckets first and takes
@@ -125,7 +134,10 @@ LRE report shows maxima of 7.421 s and 0.363 s. The analyser's figures are the t
 |---|---|
 | Test Overview | Cards: Test Metadata, Execution Time, Run Details, High-Level Metrics, Performance, VUsers per LG, HTTP codes, schedule planned vs actual |
 | Transactions – Full Run / – Steady State | One merged script cell per group, a row per transaction (count, pass, fail, min/avg/max, std dev, P50–P99, TPS, SLA, Apdex) and a subtotal |
-| Charts (page export only — the CLI has no PNG renderer), Workload Model, Errors, Time Series, LG Health, Insights, About this report | as named |
+| Workload Model, Errors | Scripts, load generators and VUsers; grouped errors and the error log |
+| Charts | All report charts, two per row (page export only — the CLI has no PNG renderer) |
+| Time Series, LG Health | Plain data sheets (only the header row is frozen) |
+| Insights, About this report | Findings with evidence; how the figures were produced (the self-checks are in the JSON export) |
 
 The layout is agreed with the users — keep it.
 

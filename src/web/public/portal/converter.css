@@ -63,7 +63,7 @@ body.has-shell #portal-converter .dz-clear { z-index: 2; border-radius: 8px; wid
 body.has-shell #portal-converter .cert-zone-wrap { margin: 4px 0 4px; }
 body.has-shell #portal-converter .cert-zone-title { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--text); }
 body.has-shell #portal-converter .cz-ico { color: var(--c); }
-body.has-shell #portal-converter .cert-zone-badge { font-size: 11.5px; color: var(--text-2); }
+body.has-shell #portal-converter .cert-zone-badge { font-size: 11.5px; font-weight: 400; color: var(--text-2); }
 body.has-shell #portal-converter .jmx-features { border-radius: 14px; padding: 16px 18px; background: var(--cv-field); border: 1px solid var(--glass-border); }
 body.has-shell #portal-converter .jmx-feat-title { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
 body.has-shell #portal-converter .feat-item { font-size: 13px; color: var(--text); }
@@ -83,14 +83,14 @@ body.has-shell #portal-converter .seg-btn.active { background: color-mix(in srgb
 body.has-shell #portal-converter .adv-toggle { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--cv-field); color: var(--text); font-size: 13px; font-weight: 600; }
 body.has-shell #portal-converter .adv-toggle .arrow { display: inline-grid; transition: transform .15s; transform: rotate(-90deg); font-size: 14px; }
 body.has-shell #portal-converter .adv-toggle.open .arrow { transform: none; }
-body.has-shell #portal-converter .adv-hint { font-size: 12px; font-weight: 500; color: var(--text-3); }
+body.has-shell #portal-converter .adv-hint { font-size: 12px; font-weight: 400; color: var(--text-3); }
 body.has-shell #portal-converter .adv-panel { margin-top: 10px; border-radius: 14px; background: var(--cv-field); border: 1px solid var(--glass-border); }
 body.has-shell #portal-converter .tgl-label { font-size: 13.5px; font-weight: 700; }
 body.has-shell #portal-converter .tgl-sub { font-size: 12.5px; color: var(--text-2); }
 body.has-shell #portal-converter .switch input:focus-visible + .slider { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* convert button: solid, protocol coloured, white text ≥ 4.5:1 */
-body.has-shell #portal-converter .btn-convert { height: 52px; border-radius: 13px; font-size: 15.5px; font-weight: 700; letter-spacing: 0; color: #fff; box-shadow: none; }
+body.has-shell #portal-converter .btn-convert { height: 52px; border-radius: 12px; font-size: 15.5px; font-weight: 700; letter-spacing: 0; color: #fff; box-shadow: none; }
 body.has-shell #portal-converter .btn-convert::before { display: none; }
 body.has-shell #portal-converter .btn-convert.devweb { background: var(--btn-dev); box-shadow: 0 10px 26px color-mix(in srgb, var(--btn-dev) 30%, transparent); }
 body.has-shell #portal-converter .btn-convert.vugen { background: var(--btn-vug); box-shadow: 0 10px 26px color-mix(in srgb, var(--btn-vug) 30%, transparent); }
@@ -154,3 +154,79 @@ body.has-shell #portal-converter .stat-num { color: #a5b4fc; -webkit-text-fill-c
 body.has-shell #portal-converter > .card, body.has-shell #portal-converter .result-box { border-radius: 16px; }
 body.has-shell #portal-converter .btn-convert { border-radius: 12px; }
 body.has-shell #portal-converter .stat { border-radius: 12px; }
+
+/* ── round 2 (use the window): two columns on wide screens — steps 1–2 on the left, options and Convert on the right ── */
+body.has-shell #portal-converter { max-width: 1440px; container-type: inline-size; }
+body.has-shell #portal-converter > .card { overflow: visible; }
+@container (min-width: 960px) {
+  body.has-shell #portal-converter .cv-cols { display: grid; grid-template-columns: minmax(0, 1fr) clamp(290px, 28%, 380px); gap: 0 24px; align-items: start; }
+  /* the side column stays in view while the left column scrolls, so Convert is always one click away */
+  body.has-shell #portal-converter .cv-side { position: sticky; top: calc(var(--tb-h) + 20px); padding: 20px; border-radius: 16px; background: var(--cv-field); border: 1px solid var(--glass-border); }
+  body.has-shell #portal-converter .cv-side > .section-label:first-child { margin-top: 0; }
+  body.has-shell #portal-converter .cv-side .options-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  body.has-shell #portal-converter .cv-side .opt-group { padding: 0; background: none; border: 0; border-radius: 0; }
+  body.has-shell #portal-converter .cv-side .adv-toggle { display: flex; width: 100%; flex-wrap: wrap; row-gap: 2px; }
+  body.has-shell #portal-converter .cv-side .adv-hint { flex-basis: 100%; padding-left: 22px; }
+  body.has-shell #portal-converter .cv-side .divider { margin: 18px 0 14px; }
+}
+/* JMeter: the .jmx box at its natural height (no longer stretched beside the list); "What gets generated" as a
+   checklist underneath, two columns where there is room */
+body.has-shell #portal-converter .cv-jmx-grid { grid-template-columns: minmax(0, 1fr); }
+body.has-shell #portal-converter .jmx-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); column-gap: 22px; }
+body.has-shell #portal-converter .jmx-feat-title { grid-column: 1 / -1; }
+body.has-shell #portal-converter .cv-side .adv-toggle { text-align: left; justify-content: flex-start; }
+
+/* ── round 2, review fixes ── */
+/* JMeter: "What gets generated" now follows the upload boxes in the page itself */
+body.has-shell #portal-converter #panel-jmx .jmx-features { margin-top: 14px; }
+body.has-shell #portal-converter .feat-item { align-items: flex-start; }
+/* side column a little wider; the Convert button grows with its label instead of clipping it */
+@container (min-width: 960px) {
+  body.has-shell #portal-converter .cv-cols { grid-template-columns: minmax(0, 1fr) clamp(310px, 30%, 400px); }
+  body.has-shell #portal-converter .cv-side .btn-convert { font-size: 14.5px; }
+  body.has-shell #portal-converter .cv-side .adv-toggle { margin-top: 14px; }
+  body.has-shell #portal-converter .cv-side .tgl-sub { font-size: 12px; line-height: 1.45; }
+  body.has-shell #portal-converter .cv-side .toggle-row { gap: 12px; }
+  /* upload boxes: compact, icon on the left (like Script Studio) */
+  body.has-shell #portal-converter .cv-main .drop-zone { display: grid; grid-template-columns: 46px minmax(0, 1fr); column-gap: 14px; row-gap: 2px; align-items: center; align-content: center; text-align: left; padding: 18px 20px; }
+  body.has-shell #portal-converter .cv-main .drop-zone > .dz-icon-wrap { grid-row: 1 / span 4; margin: 0; align-self: center; }
+  body.has-shell #portal-converter .cv-main .drop-zone > :not(.dz-icon-wrap):not(input):not(.dz-clear) { grid-column: 2; margin: 0; }
+  body.has-shell #portal-converter .cv-main .dz-secondary { grid-template-columns: 36px minmax(0, 1fr); }
+}
+body.has-shell #portal-converter .btn-convert { height: auto; min-height: 52px; padding-block: 10px; line-height: 1.3; }
+/* protocol cards: same height, the file tag at the bottom */
+body.has-shell #portal-converter .proto-grid { align-items: stretch; }
+body.has-shell #portal-converter .proto-card > div:not(.proto-icon) { display: flex; flex-direction: column; align-self: stretch; }
+body.has-shell #portal-converter .proto-card .proto-tag { margin-top: auto; align-self: flex-start; }
+body.has-shell #portal-converter .proto-desc { margin-bottom: 8px; }
+/* one column (700–959px): the three option tiles side by side, no orphan */
+@container (min-width: 600px) and (max-width: 959px) { body.has-shell #portal-converter .options-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } body.has-shell #portal-converter #panel-jmx .options-grid { grid-template-columns: 1.5fr 1fr 1fr; } }
+/* results: clear space above and below, actions apart from the report */
+body.has-shell #portal-converter .result-box { margin: 24px 0; }
+body.has-shell #portal-converter .cv-how { margin-top: 24px; }
+body.has-shell #portal-converter .res-actions { margin-top: 18px; gap: 10px; }
+@media (max-width: 600px) { body.has-shell #portal-converter .res-actions > * { flex: 1 1 100%; justify-content: center; } }
+body.has-shell #portal-converter .cv-panel { scroll-margin-top: calc(var(--tb-h) + 16px); }
+/* contrast + target size */
+[data-theme="light"] body.has-shell #portal-converter .dz-required { color: #b91c1c; }
+body.has-shell #portal-converter .cert-chip .chip-rm { min-width: 24px; min-height: 24px; display: inline-grid; place-items: center; }
+/* ── round 2, second review ── */
+/* even line breaks in short labels */
+body.has-shell #portal-converter :is(.btn-convert, .proto-name, .adv-hint, .dz-label) { text-wrap: balance; }
+/* upload boxes side by side: headings on the same line */
+@container (min-width: 960px) { body.has-shell #portal-converter .cv-main .drop-zone { align-content: start; } }
+/* one shape scale: tiles 12, small squares / tracks 10, buttons inside a track 9 */
+body.has-shell #portal-converter :is(.proto-card, .drop-zone, .adv-panel, .jmx-features, .opt-group, .step) { border-radius: 12px; }
+body.has-shell #portal-converter :is(.proto-icon, .dz-icon-wrap, .seg-btns, .step-icon, .res-icon) { border-radius: 10px; }
+body.has-shell #portal-converter .seg-btn { border-radius: 9px; }
+@container (min-width: 600px) and (max-width: 959px) { body.has-shell #portal-converter #panel-jmx .opt-group:first-child .seg-btn { white-space: nowrap; padding-inline: 8px; } }
+body.has-shell #portal-converter .btn-reset { font-weight: 600; }   /* weights 400 / 600 / 700 only */
+
+/* line icons in place of the emoji that used to start these labels (the words are unchanged) */
+body.has-shell #portal-converter .btn-convert:not(:disabled) :is(#btn-lbl, #jbtn-lbl)::before { content: ""; display: inline-block; width: 17px; height: 17px; margin-right: 9px; vertical-align: -3px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3l4 4-4 4'/%3E%3Cpath d='M3 7h18'/%3E%3Cpath d='M7 21l-4-4 4-4'/%3E%3Cpath d='M21 17H3'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3l4 4-4 4'/%3E%3Cpath d='M3 7h18'/%3E%3Cpath d='M7 21l-4-4 4-4'/%3E%3Cpath d='M21 17H3'/%3E%3C/svg%3E") center / contain no-repeat; }
+body.has-shell #portal-converter .proto-tag { display: inline-flex; align-items: center; gap: 6px; }
+body.has-shell #portal-converter .proto-tag::before { content: ""; width: 12px; height: 12px; flex: none; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='m10 13-2 2 2 2M14 13l2 2-2 2'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='m10 13-2 2 2 2M14 13l2 2-2 2'/%3E%3C/svg%3E") center / contain no-repeat; }

@@ -187,3 +187,41 @@ body.has-shell .help-acc-item { scroll-margin-top: calc(var(--tb-h) + 70px); }
    inside bold text into 900 (Segoe UI Black). Controls use the page font (buttons default to Arial). */
 b, strong { font-weight: 700; }
 button, input, select, textarea { font-family: inherit; }
+
+/* ── Help sections under "Help & guides" (built by help.js; visible on the Help page) ── */
+.sb-chev { display: none; margin-left: auto; color: var(--text-3); }
+.sb-chev svg { width: 15px; height: 15px; transition: transform .15s; }
+.sb-item.sb-has-sub .sb-chev { display: inline-grid; }
+.sb-item.sb-has-sub[aria-expanded="false"] .sb-chev svg { transform: rotate(-90deg); }
+.sb-subnav { margin: 2px 0 6px 27px; padding: 2px 0 4px 12px; border-left: 2px solid color-mix(in srgb, var(--c-help) 45%, var(--sb-line)); display: flex; flex-direction: column; gap: 1px; }
+.sb-subnav[hidden] { display: none; }
+.sb-subnav .help-side-group { margin: 0 0 4px; }
+.sb-subnav .help-side-label { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 8px 8px 3px; white-space: nowrap; }
+.sb-subnav .help-side-link { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 400; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-subnav .help-side-link:hover { background: var(--sb-hover); color: var(--text); }
+.sb-subnav .help-side-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.sb-subnav .help-side-link.on { background: color-mix(in srgb, var(--c-help) 16%, transparent); color: var(--text); font-weight: 600; }
+.sb-subnav .help-side-link.dim { opacity: .45; }
+.sb-subnav .help-side-ico { width: 18px; text-align: center; font-size: 13px; flex: none; }
+html.sb-collapsed .sb-subnav, html.sb-collapsed .sb-chev { display: none !important; }
+@media (max-width: 900px) { html.sb-collapsed .sb-subnav:not([hidden]) { display: flex !important; } }
+
+/* ── v3: the Help list — line icons in the tool colour, the current section marked on the guide line ── */
+.sb-subnav { margin: 2px 0 6px 25px; padding: 0 0 2px 10px; }
+.sb-subnav .help-side-label { padding: 8px 8px 2px; }
+.sb-subnav .help-side-link { position: relative; padding: 5px 8px; }
+.sb-subnav .help-side-txt { overflow: hidden; text-overflow: ellipsis; }
+.sb-subnav .help-side-ico { display: inline-grid; place-items: center; width: 16px; color: var(--c-tool, var(--text-3)); opacity: .85; }
+.sb-subnav .help-side-ico svg { width: 15px; height: 15px; }
+.sb-subnav .help-side-link.on::before { content: ""; position: absolute; left: -12px; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--c-help); }
+.sb-subnav .help-side-link.on .help-side-ico { opacity: 1; }
+.sb-subnav .help-side-link.dim { opacity: 1; color: var(--text-3); }
+.sb-subnav .help-side-link.dim .help-side-ico { opacity: .4; }
+/* more to scroll in the sidebar: a soft fade at that edge */
+.sb-nav.fade-bottom { -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
+.sb-nav.fade-top { -webkit-mask-image: linear-gradient(transparent, #000 28px); mask-image: linear-gradient(transparent, #000 28px); }
+.sb-nav.fade-top.fade-bottom { -webkit-mask-image: linear-gradient(transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+
+.sb-brand:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 10px; }
+
+.sb-brand:focus-visible { outline-offset: -2px; }

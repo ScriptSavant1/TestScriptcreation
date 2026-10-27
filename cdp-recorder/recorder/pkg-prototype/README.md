@@ -1,4 +1,7 @@
-# Packaging prototype — Step 1: prove it works standalone
+# Packaging the CDP Recorder as a single `.exe`
+
+This folder started as a prototype (Step 1: prove it works standalone) and is
+now how the `cdp-recorder.exe` that users download is built.
 
 **Result: it works.** A single `.exe`, no Node.js install, no `npm install`,
 no `node_modules` on the target machine, built from this exact codebase.
@@ -6,8 +9,8 @@ Full lifecycle (launch browser → connect CDP → serve the control API →
 open the floating toolbar → start/stop a recording → clean teardown)
 verified working identically to the normal `npm start` (tsx) path.
 
-**Two real caveats found, not glossed over** — see the end of this file
-before deciding whether to build Step 2 on top of this.
+**Two caveats were found** — see "Two caveats" near the end of this file,
+and "Step 2 progress" for how they turned out.
 
 ## How it's built
 
@@ -18,7 +21,8 @@ npm run build:exe
 ```
 
 Produces `dist/cdp-recorder.exe` and `dist/cdp-recorder.zip` (the .exe plus
-a README.txt). The ZIP is what `server.js`'s `/downloads/cdp-recorder` route
+a README.txt, copied from `scripts/zip-readme.txt`). Both are build output and
+are not committed to the repository. The ZIP is what `server.js`'s `/downloads/cdp-recorder` route
 serves — some corporate proxies block a bare `.exe` download — falling back
 to the `.exe` if no ZIP is present. Run this (the web server picks up the new
 file on the next request) any time `pkg-prototype/entry.ts` or anything it
@@ -86,7 +90,7 @@ exactly as `npm start` does. Drove a full `start` → `status` → `quit` cycle
 against its HTTP API and confirmed zero leftover `msedge.exe` or
 `cdp-recorder.exe` processes afterward.
 
-## Two real caveats — read before building Step 2
+## Two caveats (found during Step 1)
 
 1. **The resulting `.exe`'s code signature is invalidated.** `postject`
    prints `warning: The signature seems corrupted!` during injection — it's
@@ -110,7 +114,9 @@ against its HTTP API and confirmed zero leftover `msedge.exe` or
    (`DEP0169: url.parse() behavior is not standardized...`) — harmless,
    comes from a dependency (not this project's own code), but worth
    suppressing with `--no-deprecation` or similar in the final build so it
-   doesn't look like something is wrong on every launch.
+   doesn't look like something is wrong on every launch. (`sea-config.json`
+  already sets `disableExperimentalSEAWarning`, which silences Node's own
+  SEA warning; the DEP0169 warning is not suppressed yet.)
 
 ## Step 2 progress
 
@@ -123,7 +129,9 @@ against its HTTP API and confirmed zero leftover `msedge.exe` or
   this local server's API directly from the browser.
 - [x] **`/downloads/cdp-recorder` route** on the main `server.js` — serves
   `dist/cdp-recorder.zip` (falls back to `dist/cdp-recorder.exe`) for direct
-  download, same pattern as the existing extension distribution route.
+  download (also under `/converter`). The portal offers it as "Get CDP
+  Recorder" on Home and on the Recorder page. (The extension download route
+  it was modelled on has been removed along with the retired extension.)
 - [ ] Fold `entry.ts`'s approach back into the real `src/main.ts` (one entry
   point, not two) — still outstanding, not blocking anything.
 - [ ] The custom URL protocol registration discussed with the user, so a

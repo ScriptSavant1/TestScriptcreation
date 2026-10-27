@@ -5,7 +5,10 @@ covers the *test pyramid* (unit, integration, regression), a set of
 code-level guardrails learned from real audits, and a single **Definition of
 Done** checklist that ties everything together so nothing gets skipped.
 
----
+**In this project (PerfX Studio):** unit tests are in `tests/unit/` (Jest, `npm test`); the Results
+Analyser has its own Jest tests in `lre-results-analyser/tests/` (synthetic data only); `/regression-tests/`
+holds the skeleton only. Bugs go in `BUGS.md` at the repository root, and changelog entries under
+"Not released yet" in their area in `CHANGELOG.md`.
 
 ## Part 1 — The three test layers
 
@@ -36,8 +39,6 @@ want.
   hidden dependencies), flag that as a design issue rather than skipping
   tests for it.
 ```
-
----
 
 ## Part 1B — Code-level guardrails (found the hard way, worth having from day one)
 
@@ -118,8 +119,6 @@ from the start, not just after finding them the hard way.
   not mean data handling questions don't apply.
 ```
 
----
-
 ## Part 2 — Definition of Done (the actual gate, per task)
 
 This is the single checklist that pulls together everything across all
@@ -153,8 +152,6 @@ Trivial fixes can skip most of this (see the playbook's "scale to size of
 change" rule) — but the agent should say *which* items it's skipping and why,
 not silently shorten the checklist.
 
----
-
 ## Part 3 — A few more things worth having, now that the system's this complete
 
 - **Semantic versioning (semver)** — if you ever expect other people (or even
@@ -177,8 +174,6 @@ not silently shorten the checklist.
 Nothing above needs to be built today — but they're the kind of gaps that
 don't bite you until a project's a year old, so better to have the rule
 written down now while it costs nothing.
-
----
 
 ## Part 4 — Add to the kickoff prompt (Part 5 of the playbook)
 

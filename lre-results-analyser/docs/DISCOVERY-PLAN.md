@@ -9,8 +9,6 @@
 > **Date**: 2025
 > **Based on**: RawResults_59 (Run 59 — LRE263_DEV_Soak_100pct_27VU_8hr)
 
----
-
 ## 1. Feasibility Verdict: YES — Build From Raw Data, Not Summaries
 
 The user's instinct is correct. **RawData.eve contains every individual transaction execution** — 422,225 raw records across 27 VUsers over 8 hours. We can compute our own percentiles, averages, spikes, and trends from scratch.
@@ -23,8 +21,6 @@ We do not need to trust LRE's pre-summarised `.dat` files.
 - We can detect which specific VUser had a spike, at what exact time, in which iteration
 - We can correlate failures across VUsers at the same timestamp
 - The SQLite DB has the actual error messages with timestamps
-
----
 
 ## 2. File Inventory — What We Use
 
@@ -45,8 +41,6 @@ We do not need to trust LRE's pre-summarised `.dat` files.
 - `ControllerMonitoring.eve` — binary, same data as graph_1.dat
 - `sum_data/graph_2-9,11-14.dat` — redundant, we compute from raw
 - `AnalysisDataBaseStructure.pdf` — compressed, not needed
-
----
 
 ## 3. RawData.eve — Fully Decoded Binary Format
 
@@ -112,8 +106,6 @@ Contains LG CPU/Memory/Disk values. The payload includes:
 - **TX_21** appears (6,740 records) — not in RawData.map, likely `Main_Transaction`
 - Time range: t+11s to t+29063s = 484.2 minutes ✓ matches RunInfo.ini (485 min)
 
----
-
 ## 4. Transaction Statistics — Computed From Raw Data
 
 These are computed directly from the 422,225 raw records. **These are the ground truth.**
@@ -138,8 +130,6 @@ These are computed directly from the 422,225 raw records. **These are the ground
 
 **Missing transactions**: SC01_08_MONITORS, SC01_09_ANALYSIS_TEMPLATES, SC01_10_HOSTS, SC01_13_SYSTEM_REPORTS have zero records — these pages were either not reached or not instrumented.
 
----
-
 ## 5. SQLite DB — Error Log
 
 The `SqliteDb.db` contains 4 error records:
@@ -150,8 +140,6 @@ The `SqliteDb.db` contains 4 error records:
 | 2026-09-29 14:35:22 | -227822 | 2,3,4 | HTTP 500 from `https://app.example.test/loadtest/rest-pcweb/test/getRunTrends` |
 
 The HTTP 500 error at 14:35:22 (t+112s) on VUsers 2, 3, 4 is the root cause of the early spikes.
-
----
 
 ## 6. _t_rep.eve — VUser Lifecycle Events
 
@@ -170,8 +158,6 @@ Plain text file, 139 lines. Format: `28 <eventType> <scriptName> <vuserNum> <tim
 
 VUser ramp: VUser 1 starts at t+9s, VUser 27 starts at t+62s (1 VUser every ~2s, not 5s as in config — actual measured from file).
 
----
-
 ## 7. Architecture — 3 New Files Only
 
 ```
@@ -185,8 +171,6 @@ src/
 ```
 
 Zero changes to existing files. New CLI command: `node src/cli.js analyse-results -i RawResults_59/ -o report.html`
-
----
 
 ## 8. Parser Design — lreResultsParser.js
 
@@ -222,8 +206,6 @@ parseVuserLifecycle(filePath)  // → { startTime, endTime, vuserEvents[] }
 parseGraphDat(filePath)        // → [{ id, ts, avg, count, min, max, stddev }]
 parseSqliteErrors(filePath)    // → [{ time, errorCode, message, vuser }]
 ```
-
----
 
 ## 9. Analyser Design — lreResultsAnalyser.js
 
@@ -266,8 +248,6 @@ isolateSteadyState(transactions, vuserLifecycle) {
 }
 ```
 
----
-
 ## 10. Report Generator Design — lreReportGenerator.js
 
 Self-contained HTML with embedded Chart.js (CDN link, or inline minified for offline use).
@@ -282,8 +262,6 @@ Self-contained HTML with embedded Chart.js (CDN link, or inline minified for off
 6. **LG Health** — CPU/Memory from graph_1.dat
 7. **Spike Report** — auto-detected anomalies with timestamps
 8. **Error Log** — from SqliteDb.db
-
----
 
 ## 11. Development Phases
 
@@ -304,8 +282,6 @@ Self-contained HTML with embedded Chart.js (CDN link, or inline minified for off
 - `src/web/server.js`: add `/analyse-results` POST endpoint
 - `src/web/views/index.ejs`: add "Results Analyser" tab
 
----
-
 ## 12. Dependencies
 
 Only one new runtime dependency:
@@ -315,8 +291,6 @@ Only one new runtime dependency:
 ```
 
 Chart.js is embedded via CDN link in the output HTML (no server-side dependency).
-
----
 
 ## 13. Isolation Guarantee
 
@@ -329,7 +303,5 @@ Chart.js is embedded via CDN link in the output HTML (no server-side dependency)
 | Recorder / Script Studio | None |
 
 New files only — zero changes to existing generators, parsers, or analyzers.
-
----
 
 *End of Plan Document*

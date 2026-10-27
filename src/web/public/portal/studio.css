@@ -249,3 +249,155 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ── one shape scale across the portal ── */
 #ph-res .stat { border-radius: 12px; }
+
+/* ── round 2 (use the window): the script fills the window height; the start page uses the width ── */
+/* script preview: as tall as the window (minus the page padding), never the old fixed 520px box.
+   Wide windows: it stays in view beside the review while the review scrolls (sticky column). */
+#ph-res .code-area { height: calc(100vh - 24px); min-height: 420px; max-height: none; }   /* sticky at 12px: 12px free above and below */
+html:not(.embedded) #ph-res .code-area { height: calc(100vh - 80px); max-height: none; }
+#ph-res #code-body { flex: 1 1 0; min-height: 0; max-height: none; }
+@media (max-width: 1100px) { #ph-res .code-area { height: calc(100vh - 2 * var(--pad)); max-height: none; } }
+@media (max-width: 600px) { #ph-res .code-area { height: calc(100vh - 2 * var(--pad)); min-height: 360px; } }
+/* the review column scrolls with the page; the script column sticks at the top */
+@media (min-width: 1101px) { .ss-ws { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); } }
+
+/* start page: wider on big screens; with no recording loaded yet, both cards are the same height
+   and the filter explanation sits in the middle of its card */
+.ss-wrap { max-width: 1440px; }
+.ss-grid:has(#filter-empty-state:not([style*="none"])) { align-items: stretch; }
+.ss-filters:has(#filter-empty-state:not([style*="none"])) { display: grid; place-items: center; }
+/* the seven summary tiles stay in one row down to tablet width (no 5 + 2 rows) */
+#ph-res .stats-bar { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+@media (max-width: 640px) { #ph-res .stats-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 641px) and (max-width: 1100px) { #ph-res .stats-bar { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* six tiles when no sign-in was found (the Auth tile is hidden): 3 + 3 instead of 4 + 2 */
+@media (min-width: 641px) and (max-width: 1100px) { #ph-res .stats-bar:has(#st-auth-wrap[style*="none"]) { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* phones: compact summary tiles (no icon, tighter), so the review starts sooner */
+@media (max-width: 640px) { #ph-res .stat { padding: 8px 12px; } #ph-res .stat-icon { display: none; } #ph-res .stat-val { font-size: 16px; } }
+/* weights 400 / 600 / 700 only: the classic sheet uses 500 in a few places (Segoe UI has no 500 face) */
+:is(.filter-group-acts button, .rt-filter-label, .toast, .adv-btn-add, .adv-card-flow b, .bg-dec) { font-weight: 600; }
+
+/* ── round 2, review fixes (QA + design) ── */
+/* columns: an even split on laptop widths (the review header stays on one line), more room for the script above 1280 */
+@media (min-width: 1101px) { .ss-ws { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (min-width: 1280px) { .ss-ws { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); } }
+#ph-res .adv-panel-hdr { flex-wrap: wrap; row-gap: 8px; }
+#ph-res :is(.adv-panel-title, .adv-badge, .adv-btn-add, .adv-btn-paste) { white-space: nowrap; }
+/* stacked layout (≤1100): the script is below the review — a comfortable box that does not take over scrolling */
+@media (max-width: 1100px) { #ph-res .code-area { height: min(calc(100vh - 2 * var(--pad)), 70vh); min-height: 360px; } }
+
+/* the top of the results: shorter tiles (icon beside the number) and the download bar beside them on wide screens */
+#ph-res .stat { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 10px 14px; }
+#ph-res .stat-icon { grid-row: 1 / 3; margin: 0; font-size: 0; width: 18px; height: 18px; background: var(--c-studio); -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; }
+#ph-res .stat-val, #ph-res .stat-lbl { grid-column: 2; }
+#ph-res .stat:nth-child(1) { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18'/%3E%3C/svg%3E"); }
+#ph-res .stat:nth-child(2) { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01'/%3E%3C/svg%3E"); }
+#ph-res .stat:nth-child(3) { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3C/svg%3E"); }
+#ph-res .stat:nth-child(4) { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M5 9h14M5 15h14M10 4 8 20M16 4l-2 16'/%3E%3C/svg%3E"); }
+#ph-res .stat:nth-child(5) { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3'/%3E%3C/svg%3E"); }
+#ph-res .stat:nth-child(6) { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E"); }
+#ph-res .stat:nth-child(7) { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Crect x='4' y='11' width='16' height='10' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E"); }
+@media (min-width: 1440px) {   /* download beside the tiles only when both fit — the same in the normal and the Script-only view */
+  #ph-res.active { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); column-gap: 16px; align-items: start; }
+  #ph-res.active > * { grid-column: 1 / -1; }
+  #ph-res.active > .res-header { grid-row: 1; }
+  #ph-res.active > .stats-bar { grid-column: 1; grid-row: 2; }
+  #ph-res.active > .dl-bar:not(:empty) { grid-column: 2; grid-row: 2; align-self: stretch; margin: 16px 0; flex-direction: row; flex-wrap: nowrap; align-items: center; white-space: nowrap; }
+  #ph-res.active > :is(.ss-ws, .bg-review-panel) { grid-row: 3; }
+  #ph-res.active:has(.ss-ws.no-review) { height: 100vh; box-sizing: border-box; align-content: stretch; }
+  #ph-res.active:has(.ss-ws.no-review) > .ss-ws { align-self: stretch; min-height: 0; }
+}
+/* downloads: one violet action (the formats are told apart by their label) */
+#ph-res > .dl-bar :is(.btn-success, .btn-primary, .btn-both) { background: var(--btn-studio); }
+
+/* Script-only view: the script ends at the bottom of the window — one scrollbar, inside the code */
+@media (max-width: 1439px) {
+  #ph-res.active:has(.ss-ws.no-review) { display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
+  #ph-res.active:has(.ss-ws.no-review) > * { flex: none; }
+  #ph-res.active:has(.ss-ws.no-review) > .ss-ws { flex: 1 1 0; min-height: min(320px, 45vh); }
+}
+html:not(.embedded) #ph-res.active:has(.ss-ws.no-review) { height: calc(100vh - 56px); }
+.ss-ws.no-review > .ss-script { position: static; height: 100%; }
+#ph-res .ss-ws.no-review .code-area { height: 100% !important; min-height: 0; }
+/* phones: the page scrolls on its own; the code box is a comfortable height */
+@media (max-width: 640px) {
+  #ph-res.active:has(.ss-ws.no-review) { height: auto; }
+  #ph-res .ss-ws.no-review .code-area { height: 70vh !important; min-height: 320px; }
+}
+
+/* Review / Script: one segmented switch */
+.ss-view { padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); }
+.ss-view .ss-btn { border: 0; height: 28px; border-radius: 8px; }
+.ss-view .ss-btn.ghost[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.ss-view .ss-btn.ghost[aria-pressed="false"] { background: transparent; border: 0; color: var(--text-2); }
+#ph-res .res-header { border-bottom: 0; padding-bottom: 4px; }
+#ph-res .res-header h2 { font-size: 18px; }
+
+/* advisor cards: calmer (no hover shift, thinner stripe), one shape scale, readable small text */
+#ph-res .adv-card { border-radius: 12px; border-left-width: 3px; }
+#ph-res .adv-card:hover { transform: none; }
+#ph-res .adv-conf-label, #ph-res .adv-card-name-label { font-size: 12px; }
+#ph-res .adv-arr-table { font-size: 12px; }
+#ph-res .adv-arr-table code { font-size: 11.5px; }
+#ph-res .adv-arr-detail span[style*="font-size:10px"] { font-size: 12px !important; }
+#ph-res .adv-info-line { padding: 8px 16px; font-size: 12.5px; }
+/* contrast ≥ 4.5:1 for the advisor tags and the violet action chips (inline styles read --accent-1) */
+#ph-res { --accent-1: #4f46e5; }
+[data-theme="light"] #ph-res .adv-manual-tag[style*="#10b981"] { color: #047857 !important; }
+[data-theme="light"] #ph-res .adv-tag-array-reconstr { color: #6d28d9; }
+[data-theme="dark"] #ph-res .adv-tag-array-reconstr { color: #c4b5fd; }
+
+/* things that scroll sideways say so: a fade at the right edge */
+#ph-res .code-tabs, #ph-res .adv-arr-detail { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); scrollbar-width: thin; }
+[data-theme="light"] #ph-res .code-area-header { background: var(--surface2); }
+
+/* one shape scale: cards 16, tiles 12, buttons 10 (small 9) */
+.adv-modal { border-radius: 16px !important; }
+#ph-proc { border-radius: 16px; }
+.ss-setup .drop-zone { border-radius: 12px; }
+.ss-btn, #ph-res .btn-back { border-radius: 10px; }
+#ph-res .btn-copy { border-radius: 9px; }
+
+/* phones: the heading gets its own line, so Start Over sits beside the switch */
+@media (max-width: 640px) { #ph-res .res-header h2 { flex-basis: 100%; } }
+
+/* ── round 2, second review ── */
+/* gap above the tiles: the same in every layout */
+#ph-res .res-header { margin-bottom: 4px; }
+/* tiles: values never break mid-word; the icon shows only where the tiles are wide enough */
+#ph-res .stat-val { overflow-wrap: normal; word-break: normal; }
+#ph-res .stat-lbl { letter-spacing: .04em; }
+@media (min-width: 1101px) and (max-width: 1439px) {
+  #ph-res .stat { grid-template-columns: minmax(0, 1fr); padding: 10px 12px; }
+  #ph-res .stat-icon { display: none; }
+  #ph-res .stat-val, #ph-res .stat-lbl { grid-column: 1; }
+}
+@media (max-width: 640px) { #ph-res .stat { padding: 8px 12px; column-gap: 0; } }
+/* below 1440: the download row is a plain strip, not a card holding one button */
+@media (max-width: 1439px) { #ph-res > .dl-bar { background: transparent; border: 0; box-shadow: none; padding: 0; } }
+/* edge fades only ever cover empty padding, so nothing readable is faded */
+#ph-res :is(.adv-arr-detail, .code-tabs) { padding-right: 24px; scroll-padding-inline: 24px; }
+#ph-res .code-tab:focus-visible { outline-offset: -2px; }
+/* readable small text inside the advisor (the scripts set these sizes inline) */
+#ph-res [style*="font-size:9px"], #ph-res [style*="font-size:10px"], #ph-res [style*="font-size:11px"] { font-size: 12px !important; }
+#ph-res :is(.adv-card-value, .corr-src, .corr-usage, .adv-inspector-hint, .adv-btn-paste) { font-size: 12px; }
+/* button corners on the scale (small buttons 9) */
+#ph-res :is(.adv-btn-accept, .adv-btn-skip) { border-radius: 9px; }
+#ph-res button[style*="border-radius:4px"] { border-radius: 9px !important; }
+/* the array table fits its column on laptop widths instead of hiding "Target key" */
+@media (min-width: 1101px) and (max-width: 1279px) { #ph-res .adv-arr-table { table-layout: fixed; width: 100%; } #ph-res .adv-arr-table td { overflow-wrap: anywhere; } }
+/* dialogs: the main action in the studio colour, readable */
+.adv-modal .adv-modal-submit:not(:disabled), .adv-modal .pc-detect-btn { background: var(--btn-studio) !important; color: #fff !important; border-radius: 10px !important; border: 0 !important; }
+/* empty start page fits a 768px laptop without scrolling */
+.ss-feats { margin-bottom: 16px; }
+.ss-lead { margin-bottom: 12px; }
+
+/* script preview: scrollbars always visible (both directions) — the browser's overlay scrollbars only appear while
+   scrolling and are hard to see on the dark code background, so there was no cue that more code is below / to the right */
+#ph-res #code-body { overflow: auto; }
+@supports not selector(::-webkit-scrollbar) { #ph-res #code-body { scrollbar-width: auto; scrollbar-color: #5b6b86 #0f1a2e; } }   /* Firefox */
+#ph-res #code-body::-webkit-scrollbar { width: 12px; height: 12px; }
+#ph-res #code-body::-webkit-scrollbar-track { background: #0f1a2e; }
+#ph-res #code-body::-webkit-scrollbar-thumb { background: #5b6b86; border-radius: 6px; border: 3px solid #0f1a2e; }
+#ph-res #code-body::-webkit-scrollbar-thumb:hover { background: #7d8ca6; }
+#ph-res #code-body::-webkit-scrollbar-corner { background: #0f1a2e; }

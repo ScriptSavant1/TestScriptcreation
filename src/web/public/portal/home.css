@@ -47,8 +47,6 @@
 .hm-tasks { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
 .hm-task { grid-column: span 2; container-type: inline-size; }
 .hm-task.wide { grid-column: span 3; }
-@media (max-width: 1280px) { .hm-task, .hm-task.wide { grid-column: span 3; } .hm-task.full { grid-column: 1 / -1; } }
-@media (max-width: 760px) { .hm-tasks { grid-template-columns: 1fr; } .hm-task, .hm-task.wide, .hm-task.full { grid-column: auto; } }
 .hm-card {
   --c: var(--primary);
   height: 100%; display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 18px;
@@ -77,8 +75,6 @@
 
 /* ── how the tools fit together ── */
 .hm-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; position: relative; }
-@media (max-width: 900px) { .hm-flow { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 520px) { .hm-flow { grid-template-columns: 1fr; } }
 .hm-step {
   --c: var(--primary);
   position: relative; text-align: left; padding: 18px; border-radius: 16px; background: var(--surface); border: 1px solid var(--glass-border);
@@ -94,12 +90,10 @@
   content: ""; position: absolute; top: 30px; right: -12px; width: 10px; height: 10px; z-index: 1;
   border-top: 2px solid var(--text-3); border-right: 2px solid var(--text-3); transform: rotate(45deg);
 }
-@media (max-width: 900px) { .hm-step::after { display: none; } }
 .hm-flow-alt { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13.5px; color: var(--text-2); padding: 14px 18px; border-radius: 14px; border: 1px dashed var(--glass-border); }
 
 /* ── CDP Recorder ── */
 .hm-rec { --c: var(--c-record); display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; padding: 26px; border-radius: 20px; background: linear-gradient(135deg, color-mix(in srgb, var(--c) 10%, var(--surface)), var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 30%, var(--glass-border)); }
-@media (max-width: 860px) { .hm-rec { grid-template-columns: 1fr; } }
 .hm-rec .hm-tag { color: var(--c); }
 .hm-rec h2 { margin-top: 6px; }
 .hm-rec-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 99px; background: var(--glass); border: 1px solid var(--glass-border); color: var(--text-2); margin-bottom: 12px; }
@@ -129,7 +123,6 @@
 
 /* ── good to know ── */
 .hm-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-@media (max-width: 860px) { .hm-facts { grid-template-columns: 1fr; } }
 .hm-fact { display: flex; gap: 14px; padding: 18px; border-radius: 16px; background: var(--surface); border: 1px solid var(--glass-border); }
 .hm-fact .hm-ico { --c: var(--success); }
 .hm-fact h4 { margin: 2px 0 4px; font-size: 14.5px; font-weight: 700; }
@@ -159,3 +152,92 @@
 /* ── one shape scale across the portal: cards 16px · tiles 12px · buttons 10px (small 9px, large 12px) ── */
 .hm-card { border-radius: 16px; }
 .hm-btn { border-radius: 10px; }
+
+/* ── round 2 (use the window): as wide as the other tools on big screens ── */
+#portal-home.hm { max-width: 1440px; }
+
+/* ── round 2, review fixes (QA + design) ── */
+/* layout follows the space Home actually has (the open sidebar takes 260px), not the window */
+#portal-home.hm { container: hm / inline-size; }
+@container hm (min-width: 1200px) { .hm-task { grid-column: span 2; } .hm-task.wide { grid-column: span 3; } }
+@container hm (max-width: 1199px) { .hm-task, .hm-task.wide { grid-column: span 3; } .hm-task.full { grid-column: 1 / -1; } }
+@container hm (max-width: 640px) { .hm-tasks { grid-template-columns: 1fr; } .hm-task, .hm-task.wide, .hm-task.full { grid-column: auto; } }
+@container hm (min-width: 901px) { .hm-flow { grid-template-columns: repeat(4, minmax(0, 1fr)); } .hm-step:not(:last-child)::after { display: block; } }
+@container hm (max-width: 900px) { .hm-flow { grid-template-columns: 1fr 1fr; } .hm-step::after { display: none !important; } }
+@container hm (max-width: 480px) { .hm-flow { grid-template-columns: 1fr; } }
+@container hm (min-width: 861px) { .hm-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hm-rec { grid-template-columns: 1.4fr 1fr; } }
+@container hm (max-width: 860px) { .hm-facts, .hm-rec { grid-template-columns: 1fr; } }
+
+/* jumps from the hero land with the heading below the top bar */
+.hm section[id], .hm [id].hm-guide { scroll-margin-top: calc(var(--tb-h, 60px) + 16px); }
+
+/* hero: shorter on laptops; the heading on one line where it fits; a reading width for the text */
+.hm-hero { padding: 30px 32px; border-radius: 16px; margin-bottom: 40px; }
+.hm-hero h1 { font-size: clamp(24px, 2.4vw, 36px); margin: 10px 0 10px; }
+@container hm (min-width: 1000px) { .hm-hero h1 { max-width: none; } }
+.hm-hero p { font-size: 15px; max-width: 85ch; }
+@container hm (min-width: 1100px) { .hm-hero p { max-width: 105ch; } }
+.hm-chips { margin: 16px 0 20px; }
+.hm-eyebrow { letter-spacing: .06em; }
+.hm .hm-lead { max-width: 100ch; }
+.hm-a p { max-width: 75ch; }
+
+/* task cards: no third level of boxes — "You need / You get" as two quiet columns with a tool-coloured rule */
+.hm-io > div { background: none; border: 0; border-left: 2px solid color-mix(in srgb, var(--c) 40%, transparent); border-radius: 0; padding: 2px 0 2px 12px; }
+.hm-io b { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.hm-io p, .hm-step p { font-size: 13px; }
+.hm-desc, .hm-a p { font-size: 14px; }
+.hm-chip, .hm-tool { font-size: 12px; }
+.hm-tag { font-size: 11px; }
+/* the wide cards use their width: the feature list in two columns */
+@container (min-width: 600px) { .hm-list { grid-template-columns: 1fr 1fr; column-gap: 20px; } }
+@container (min-width: 600px) { .hm-task.wide .hm-desc { max-width: 75ch; } }
+/* card footers: button and "How it works" on one line, so the buttons line up across a row */
+.hm-card-foot { flex-wrap: nowrap; }
+.hm-card-foot .hm-link { white-space: nowrap; }
+@container (max-width: 300px) { .hm-card-foot { flex-wrap: wrap; } }
+/* calmer hover: tint the border, no lift */
+.hm-card:hover { transform: none; box-shadow: var(--shadow-sm); }
+
+/* flow steps: visible keyboard focus; the step that happens outside the portal is not a button and does not react */
+.hm-step:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+div.hm-step { background: transparent; border-style: dashed; cursor: default; }
+div.hm-step:hover { transform: none !important; border-color: var(--glass-border) !important; }
+
+/* "Which tool do I need?": two columns on wide pages (one open at a time, as before) */
+@container hm (min-width: 1200px) { .hm-guide { display: block; columns: 2; column-gap: 10px; } .hm-guide > .hm-q { break-inside: avoid; margin-bottom: 10px; } }
+
+/* CDP Recorder banner: status dot stays round when the pill wraps */
+.hm-rec { padding: 24px 28px; border-radius: 16px; }
+.hm-rec-status i { flex: none; }
+.hm-rec-status { border-radius: 16px; }
+
+/* one shape scale and one section rhythm */
+.hm section { margin-bottom: 40px; }
+.hm-q { border-radius: 16px; }
+.hm-flow-alt, .hm-ico { border-radius: 12px; }
+
+/* phones: a compact hero; the chips scroll in their own row; full-width actions */
+@media (max-width: 520px) {
+  .hm-hero { padding: 22px 18px; }
+  .hm-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -18px; padding-inline: 18px; }
+  .hm-chip { flex: none; }
+  .hm-hero-actions .hm-btn { width: 100%; justify-content: center; }
+}
+/* the page-width rules own the task grid (the old window-based 760px rule must not leave a 1-column grid behind) */
+@container hm (min-width: 641px) { .hm-tasks { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+/* whole-pixel type scale (11 / 12 / 13 / 14 / 15) */
+.hm-btn, .hm-flow-alt { font-size: 14px; }
+.hm-eyebrow { font-size: 12px; }
+.hm-q summary, .hm-fact h4 { font-size: 15px; }
+.hm-step-n { font-size: 12px; }
+.hm-q summary .hm-ico { border-radius: 12px; }
+/* no lone hero button on its own row */
+@container hm (max-width: 1100px) { .hm-hero-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); } .hm-hero-actions .hm-btn { justify-content: center; } }
+/* phones: a tighter hero; the chip row fades at its edge to show it scrolls */
+@media (max-width: 520px) {
+  .hm-hero p { font-size: 14px; line-height: 1.55; }
+  .hm-hero-actions .hm-btn { height: auto; padding-block: 10px; }
+  .hm-chips { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+}

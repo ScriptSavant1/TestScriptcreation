@@ -68,7 +68,7 @@ export function startServer(recorder: Recorder, outDir: string, uiPort: number, 
     const url = new URL(req.url ?? "/", `http://localhost:${uiPort}`);
 
     // CORS: lets the shared /converter page (a different origin —
-    // https://loadrunner.webdev.banksvcs.net, or localhost during dev) call
+    // https://your-portal-host, or localhost during dev) call
     // this local server directly from the browser, so "Start Recording" on
     // that page can detect and drive an already-running recorder without a
     // server-side round trip (which is impossible here anyway — see

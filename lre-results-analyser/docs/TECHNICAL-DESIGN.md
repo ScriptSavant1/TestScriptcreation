@@ -1,5 +1,7 @@
 # LRE Results Analyser — Technical Design
 
+**Status:** current — describes the analyser as built (`lre-results-analyser/engine/`, `report/`, `web/`, `cli/`); not released yet.
+
 For developers who maintain or extend the analyser. It explains how the raw results are read,
 how every figure is calculated, and why figures can differ from the LRE Analysis HTML report.
 
@@ -11,8 +13,6 @@ Related documents:
 | `USER-GUIDE.md` / `.html` | What users see in each tab, column and export |
 | `../README.md` | Usage, CLI options, method table |
 | `SPEC-file-formats.md` | Text file formats (`.lrr`, `RunInfo.ini`, `_t_rep.eve`, `sum_data`, SQLite). Its RawData.eve part is superseded |
-
----
 
 ## 1. Principles
 

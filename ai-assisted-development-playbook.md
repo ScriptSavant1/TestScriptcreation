@@ -4,7 +4,11 @@ This is not project-specific. Copy this file into any new or existing
 project's root and it applies as-is. Works with any coding agent (Claude
 Code, Kiro, etc.) — nothing here assumes a specific tool.
 
----
+**In this project (PerfX Studio):** there is no `/ai-brain/` folder. `CLAUDE.md`, `BUGS.md` and
+`CHANGELOG.md` are at the repository root. `Docs/` (functional spec, correlation logic, decisions in
+`Docs/DECISIONS.md`, configuration and deployment guides) is local-only and not in git. Unit tests are
+in `tests/unit/` (Jest). `CHANGELOG.md` is newest first: new entries go under "Not released yet",
+grouped by area, and move under a version number at release — old entries are never summarised away.
 
 ## Part 1 — Before you write a single line of code
 
@@ -61,8 +65,6 @@ building the habit from feature #1.
 **Write AI_RULES.md before the first prompt to any agent.** See Part 3 — this
 is the single highest-leverage file for keeping an agent from deviating.
 
----
-
 ## Part 2 — Every time you ask an agent to do something
 
 Scale the process to the size of the change. Don't apply heavyweight process to
@@ -93,8 +95,6 @@ feature:**
 - Commit secrets, credentials, tokens, or keys — see the secrets rule in
   testing-strategy-and-definition-of-done.md Part 1B.
 
----
-
 ## Part 3 — AI_RULES.md starter (copy and adapt)
 
 ```
@@ -120,8 +120,6 @@ feature:**
   documentation-automation-system.md on the cadence stated in that file.
 ```
 
----
-
 ## Part 4 — When requirements or dependencies change later
 
 (e.g. a vendor updates their API/docs, or you change project requirements)
@@ -135,8 +133,6 @@ feature:**
    analysis flagged as dependent on it.
 5. Update the relevant reference doc (vendor doc snapshot, ARCHITECTURE.md,
    whichever changed) in the same session.
-
----
 
 ## Part 5 — Generic kickoff prompt template
 
@@ -170,8 +166,6 @@ before declaring any non-trivial task complete.
 Do not implement everything in one pass. Confirm scope with me at each
 meaningful step rather than assuming.
 ```
-
----
 
 ## Notes for yourself
 
