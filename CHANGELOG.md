@@ -278,6 +278,12 @@ Files changed: `jwt-helper.js`, `lre-utils.dat`, `lre-utils.js`,
 
 ### Results Analyser
 
+#### Fixed — progress bar no longer flashes near the end (BUG-085)
+
+- One progress bar for the whole analysis: each stage has its share, so the bar only moves forward; stages
+  without a known size shimmer instead of switching to the sliding animation at full width.
+
+
 #### Changed — Results Analyser matches the portal
 
 - System fonts like the rest of the portal (no Google Fonts request — works the same on locked-down networks),

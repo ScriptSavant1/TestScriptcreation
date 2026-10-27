@@ -192,7 +192,9 @@
     state.started = Date.now();
     $("#prog-stage").textContent = "Opening " + (source.kind === "zip" ? source.file.name : "folder") + "…";
     $("#prog-meta").textContent = fmt.bytes(bytes) + " selected";
-    $("#prog-fill").style.width = "0";
+    state.progPct = 0;
+    $("#prog-fill").style.width = "";   // the "waiting" animation uses its own width (an inline 0 hid it)
+    $("#prog-fill").classList.remove("working");
     $("#prog-fill").classList.add("indeterminate");
     worker().postMessage({ type: "analyse", source, settings: {} });
   }
@@ -203,18 +205,29 @@
   };
   $("#btn-new").onclick = () => { disposeCharts(); state.model = null; show("start"); };
 
+  // One bar for the whole analysis: each stage owns a share of it, so the bar only ever moves forward.
+  // (It used to fill to 100 % while RawData.eve was decoded, then switch to the sliding "unknown length"
+  // animation for the later stages — still at full width, which made the whole bar flash.)
+  const STAGES = [["Reading scenario files", 0, 4], ["Decoding RawData.eve", 4, 86], ["Reading errors", 86, 92], ["Reading sum_data graphs", 92, 98]];
   function progress(m) {
     $("#prog-stage").textContent = m.stage || "Working…";
     const fill = $("#prog-fill");
+    const st = STAGES.find((s) => s[0] === m.stage) || [m.stage, state.progPct || 0, state.progPct || 0];
+    const share = m.total ? Math.min(1, m.done / m.total) : 0;
+    const pct = Math.max(state.progPct || 0, st[1] + (st[2] - st[1]) * share);
+    state.progPct = pct;
+    if (fill.classList.contains("indeterminate")) {   // leaving the "waiting" animation: start from 0, no shrink
+      fill.style.transition = "none"; fill.classList.remove("indeterminate"); fill.style.width = "0";
+      void fill.offsetWidth; fill.style.transition = "";
+    }
+    fill.classList.toggle("working", !m.total);   // a stage without a size: a soft shimmer on the bar, no jump
+    fill.style.width = pct.toFixed(1) + "%";
+    const secs = (Date.now() - state.started) / 1000;
     if (m.total) {
-      fill.classList.remove("indeterminate");
-      const pct = Math.min(100, (m.done / m.total) * 100);
-      fill.style.width = pct.toFixed(1) + "%";
-      const secs = (Date.now() - state.started) / 1000;
       const rate = m.done / Math.max(0.5, secs);
       const eta = rate ? (m.total - m.done) / rate : 0;
       $("#prog-meta").textContent = `${fmt.bytes(m.done)} of ${fmt.bytes(m.total)} · ${fmt.bytes(rate)}/s · about ${fmt.hms(eta)} left`;
-    } else fill.classList.add("indeterminate");
+    } else $("#prog-meta").textContent = `${Math.round(pct)} % · ${fmt.hms(secs)} so far`;
   }
 
   // ── result ──────────────────────────────────────────────────────────────────
