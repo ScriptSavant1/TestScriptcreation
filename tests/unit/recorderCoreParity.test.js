@@ -51,7 +51,7 @@ describe('Recorder redesign — engine parity with the classic page', () => {
     const engine = scripts(classic);
     const mine = scripts(page);
     expect(mine.slice(0, engine.length)).toEqual(engine);
-    expect(mine.slice(engine.length)).toEqual(['portal/recorder-core.js', 'portal/recorder-ui.js']);
+    expect(mine.slice(engine.length)).toEqual(['portal/recorder-core.js', 'portal/drop-anywhere.js', 'portal/recorder-ui.js']);
   });
 
   test.each(['f-static', 'f-noise', 'f-opts', 'txn-inp', 'tbody', 'code-body', 'dp-list', 'dp-title', 'stats', 'hf', 'dz', 'welcome', 'main',

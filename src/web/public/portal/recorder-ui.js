@@ -1043,3 +1043,24 @@ function _initResizers() {
     }, 0);
   });
 })();
+
+// Drop a .har / NetLog .json anywhere on the page — it goes to the same file input as "Browse file"
+(function () {
+  if (!window.PerfxDrop) return;
+  window.PerfxDrop.attach({
+    label: function () { return ['Drop to load the recording', '.har or NetLog .json']; },
+    route: function (files, ext) {
+      var rec = files.filter(function (f) { return ext(f) === '.har' || ext(f) === '.json'; });
+      return [{ input: document.getElementById('hf'), files: rec.slice(0, 1) }];
+    },
+  });
+})();
+
+// Remember the script format per browser (localStorage "perfx-rec-format"): the format dialog opens on the
+// format used last time. Saved when the dialog closes — by then Cancel has already put back the previous one.
+(function () {
+  var KEY = 'perfx-rec-format', OK = ['webhttp', 'devweb', 'both'];
+  try { var f = localStorage.getItem(KEY); if (OK.indexOf(f) !== -1 && typeof S !== 'undefined') S.format = f; } catch (e) { /* storage blocked */ }
+  var d = document.getElementById('fmt-dlg');
+  if (d) d.addEventListener('close', function () { try { if (OK.indexOf(S.format) !== -1) localStorage.setItem(KEY, S.format); } catch (e) { /* storage blocked */ } });
+})();

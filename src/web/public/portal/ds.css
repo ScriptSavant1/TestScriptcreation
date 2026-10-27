@@ -191,3 +191,12 @@ button, input, select, textarea { font-family: inherit; }
 :where(a, button, input, select, textarea, summary, [tabindex], [role="button"], [role="tab"]):focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+
+/* drop a file anywhere on a tool page (portal/drop-anywhere.js) — a hint over the page while dragging */
+.ds-dropall { position: fixed; inset: 12px; z-index: 800; display: grid; place-items: center; pointer-events: none; border: 2px dashed var(--ds-accent-text); border-radius: var(--ds-r-card); background: color-mix(in srgb, var(--ds-bg) 72%, transparent); }
+.ds-dropall[hidden] { display: none; }
+.ds-dropall > div { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 32px; border-radius: var(--ds-r-card); background: var(--ds-surface); border: 1px solid var(--ds-border); box-shadow: var(--ds-shadow-2); text-align: center; }
+.ds-dropall svg { width: 28px; height: 28px; color: var(--ds-accent-text); }
+.ds-dropall b { font-size: var(--ds-fs-md); font-weight: 700; color: var(--ds-text); }
+.ds-dropall span { font-size: var(--ds-fs-sm); color: var(--ds-text-3); }
+.ds-dropall span:empty { display: none; }

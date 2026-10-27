@@ -128,3 +128,38 @@
     inp.addEventListener("blur", function () { dz.classList.remove("kb-focus"); });
   });
 })();
+
+// Drop .har / NetLog .json files anywhere on the start page: the first free recording slot (1, then 2) gets
+// each file, through the slot's own file input — the same as choosing it in the box.
+(function () {
+  "use strict";
+  if (!window.PerfxDrop) return;
+  var upload = document.getElementById("ph-upload");
+  function slotInput(n) { var dz = document.getElementById("dz" + n); return dz && dz.querySelector("input[type=file]"); }
+  function loaded(n) { var dz = document.getElementById("dz" + n); return !!dz && dz.classList.contains("loaded"); }
+  window.PerfxDrop.attach({
+    when: function () { return !!upload && upload.offsetParent !== null; },
+    label: function () { return ["Drop to load", "One or two .har / NetLog .json recordings"]; },
+    route: function (files, ext) {
+      var recs = files.filter(function (f) { return ext(f) === ".har" || ext(f) === ".json"; }).slice(0, 2);
+      var free = [1, 2].filter(function (n) { return !loaded(n); });
+      if (!free.length) free = [1, 2];
+      return recs.map(function (f, i) { return { input: slotInput(free[i] || free[0]), files: [f] }; });
+    },
+  });
+})();
+
+// Remember the output format per browser (localStorage "perfx-studio-fmt"): restored through setFmt(), so it is
+// exactly like clicking the button; nothing saved = the usual default (DevWeb).
+(function () {
+  "use strict";
+  var KEY = "perfx-studio-fmt", OK = ["webhttp", "devweb"];
+  var orig = window.setFmt;
+  if (typeof orig !== "function") return;
+  try { var f = localStorage.getItem(KEY); if (OK.indexOf(f) !== -1) orig(f); } catch (e) { /* storage blocked */ }
+  window.setFmt = function (f) {
+    var r = orig.apply(this, arguments);
+    try { if (OK.indexOf(f) !== -1) localStorage.setItem(KEY, f); } catch (e) { /* storage blocked */ }
+    return r;
+  };
+})();

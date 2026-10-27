@@ -1459,8 +1459,10 @@ code {
 <link rel="stylesheet" href="<%= basePath %>/portal/shell.css">
 <link rel="stylesheet" href="<%= basePath %>/portal/home.css">
 <script src="<%= basePath %>/portal/shell.js" defer></script>
+<script src="<%= basePath %>/portal/palette.js" defer></script>
 <script src="<%= basePath %>/portal/home.js" defer></script>
 <link rel="stylesheet" href="<%= basePath %>/portal/converter.css">
+<script src="<%= basePath %>/portal/drop-anywhere.js" defer></script>
 <script src="<%= basePath %>/portal/converter.js" defer></script>
 <link rel="stylesheet" href="<%= basePath %>/portal/help.css">
 <script src="<%= basePath %>/portal/help.js" defer></script>
@@ -1925,7 +1927,7 @@ function onPickBrunoCert() {
 }
 function onDropBrunoCert(e) {
   e.preventDefault(); offDrag('dz-bru-cert');
-  const valid = ['.p12', '.pem', '.key'];
+  const valid = ['.p12', '.pfx', '.pem', '.crt', '.cer', '.key'];   // the same list the server accepts (BUG-082)
   const files = Array.from(e.dataTransfer.files)
     .filter(f => valid.some(ext => f.name.toLowerCase().endsWith(ext)));
   if (files.length) attachBrunoCerts(files);

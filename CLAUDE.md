@@ -1,4 +1,6 @@
-# Bruno DevWeb Converter — CLAUDE.md
+#| `src/web/public/portal/palette.js` | Quick search (Ctrl+K / ⌘K, top-bar Search): tools, Help sections + text, FAQ questions, actions; read from the page; also hooks Ctrl+K inside the tool iframes |
+| `src/web/public/portal/drop-anywhere.js` | `PerfxDrop.attach({ when, label, route })` — a page-wide drop hands files to the page's own file inputs (used by converter.js, recorder-ui.js, studio-page.js); drops on a box that handles them itself are left alone |
+ Bruno DevWeb Converter — CLAUDE.md
 # READ THIS FIRST. Updated automatically after every session.
 
 ## Standing Rules (read once, apply always)
@@ -60,6 +62,7 @@ Do NOT recreate it — all its functions exist in the three split files above.
 | `src/web/public/portal/home.js` | Home buttons (`data-go`, `data-help`, `data-scroll`), PORTAL_CONFIG flags (`data-tab`) |
 | `src/web/public/portal/{shell,home}.css` | Styles; tool colours `--c-convert/-jmeter/-record/-studio/-results/-help` |
 
+Remembered options (localStorage): `perfx-cv-prefs` (converter.js), `perfx-rec-format` (recorder-ui.js), `perfx-studio-fmt` (studio-page.js) — restored through the pages' own setters.
 Rule: the old switchers in index.ejs stay the source of truth; the shell only wraps them. Tool panels (Converter, Recorder, Studio, Analyser, Help) are redesigned one at a time — keep every piece of Help text.
 
 ### Entry Point

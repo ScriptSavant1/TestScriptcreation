@@ -818,12 +818,18 @@ class CustomScriptParser {
     // instead of "client_assertion", leaving the real "client_assertion" reference
     // in the request body permanently undefined). First-wins also matches
     // detectJwtUsage()'s outputVars, which scriptGenerator.js's `_primaryOut`
-    // already treats as "first non-library match wins".
+    // already treats as "first non-library match wins". Library-loading variables are
+    // skipped the same way (BUG-081): a script that first downloads the signing library
+    // (`pm.globals.set('jsrsasign', responseText)`) would otherwise store the JWT as "jsrsasign".
     const setRe =
       /(?:pm\.(?:environment|globals|collectionVariables|variables)\.set|postman\.(?:setEnvironmentVariable|setGlobalVariable)|bru\.(?:setVar|setEnvVar))\s*\(\s*['"]([^'"]+)['"]/g;
-    const setMatch = setRe.exec(script);
-    if (setMatch) {
-      map.output = setMatch[1];
+    const LIBRARY_RE = /jsrsasign|kjur|cryptojs|jsonwebtoken|jose|forge|jsbn/i;
+    let setMatch;
+    while ((setMatch = setRe.exec(script)) !== null) {
+      if (!LIBRARY_RE.test(setMatch[1])) {
+        map.output = setMatch[1];
+        break;
+      }
     }
 
     // ── Literal-valued + templated claims (Postman/Bruno JS) ────────────────────

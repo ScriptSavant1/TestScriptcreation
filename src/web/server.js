@@ -96,8 +96,8 @@ const VALID_LOG_LEVELS = new Set(["debug", "info", "warn", "error"]);
 /** Allowed file extensions per upload field (allowlist). */
 const ALLOWED_EXTENSIONS = {
   collection:  new Set([".json", ".yml", ".yaml", ".bru", ".zip"]),
-  environment: new Set([".json"]),
-  certFiles:   new Set([".pem", ".p12", ".pfx", ".crt", ".cer"]),
+  environment: new Set([".json", ".bru"]),   // .bru = Bruno environment (vars { … }), read by collection-converter (BUG-083)
+  certFiles:   new Set([".pem", ".p12", ".pfx", ".crt", ".cer", ".key"]),   // .key = private key paired with a .pem / .crt (BUG-082)
   jmxFile:     new Set([".jmx"]),
   csvFiles:    new Set([".csv", ".tsv", ".txt"]),
 };

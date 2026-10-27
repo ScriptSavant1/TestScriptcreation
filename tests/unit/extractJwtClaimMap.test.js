@@ -74,6 +74,40 @@ describe('CustomScriptParser.extractJwtClaimMap() — output variable detection'
     expect(CustomScriptParser.extractJwtClaimMap(scriptBru).output).toBe('id_token');
   });
 
+  test('BUG-081: a library-loading .set() before the JWT is skipped (first NON-library set wins)', () => {
+    // the pattern in collection-examples/jwt_ps256_20api_collection.json: download jsrsasign, keep it in a
+    // global, eval it, sign, then store the JWT
+    const script = `
+      if (!pm.globals.get('jsrsasign')) {
+        pm.sendRequest('https://cdn.example.com/jsrsasign-all-min.js', (err, res) => {
+          pm.globals.set('jsrsasign', res.text());
+        });
+      }
+      eval(pm.globals.get('jsrsasign'));
+      const header = { alg: 'PS256', typ: 'JWT' };
+      const payload = { iss: pm.environment.get('client_id'), aud: pm.environment.get('token_url') };
+      const sJWT = KJUR.jws.JWS.sign('PS256', JSON.stringify(header), JSON.stringify(payload), pm.environment.get('private_key'));
+      pm.environment.set('jwt_token', sJWT);
+    `;
+    const map = CustomScriptParser.extractJwtClaimMap(script);
+    expect(map).not.toBeNull();
+    expect(map.output).toBe('jwt_token');
+  });
+
+  test('the bundled PS256 example collection stores its JWT as jwt_token (BUG-081)', () => {
+    const col = require('../../collection-examples/jwt_ps256_20api_collection.json');
+    const scripts = [];
+    (function walk(items) {
+      for (const it of items || []) {
+        if (it.item) walk(it.item);
+        for (const ev of it.event || []) if (ev.listen === 'prerequest') scripts.push([].concat(ev.script.exec).join('\n'));
+      }
+    })(col.item);
+    const jwtScript = scripts.find((s) => CustomScriptParser.detectJwtUsage(s).isJwt);
+    expect(jwtScript).toBeDefined();
+    expect(CustomScriptParser.extractJwtClaimMap(jwtScript).output).toBe('jwt_token');
+  });
+
   test('no .set() call at all -> map.output is undefined (caller falls back to a default)', () => {
     const script = `const x = 1;`;
     const map = CustomScriptParser.extractJwtClaimMap(script);

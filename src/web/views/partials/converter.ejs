@@ -118,7 +118,7 @@
     <div class="drop-zone dz-secondary dz-cert-full" id="dz-bru-cert"
          ondragover="onDrag(event,'dz-bru-cert')" ondragleave="offDrag('dz-bru-cert')"
          ondrop="onDropBrunoCert(event)">
-      <input type="file" id="fi-bru-cert" accept=".p12,.pem,.key" multiple aria-label="Client certificate files (optional)"
+      <input type="file" id="fi-bru-cert" accept=".p12,.pfx,.pem,.crt,.cer,.key" multiple aria-label="Client certificate files (optional)"
              onchange="onPickBrunoCert()">
       <div class="dz-icon-wrap"><%- svg(IC.shield) %></div>
       <div class="cert-zone-body">
@@ -126,7 +126,7 @@
           Drop certificate files here
           <span class="dz-or">&nbsp;or click to browse</span>
         </div>
-        <div class="dz-sub">.p12 (PKCS12) &nbsp;·&nbsp; .pem (certificate) &nbsp;·&nbsp; .key (private key) &nbsp;·&nbsp; multiple files supported</div>
+        <div class="dz-sub">.p12 / .pfx (PKCS12) &nbsp;·&nbsp; .pem / .crt / .cer (certificate) &nbsp;·&nbsp; .key (private key) &nbsp;·&nbsp; multiple files supported</div>
         <div id="bru-cert-chips" class="cert-chip-list"></div>
         <div id="bru-cert-hint" class="cert-add-hint" style="display:none">
           <%- svg(IC.plus) %>
@@ -265,10 +265,10 @@
     <div class="drop-zone dz-secondary" id="dz-cert"
          ondragover="onDrag(event,'dz-cert')" ondragleave="offDrag('dz-cert')"
          ondrop="onDropCert(event)">
-      <input type="file" id="fi-cert" accept=".jks,.p12,.cer,.crt,.key,.pem,.pfx" multiple onchange="onPickCert()" aria-label="Certificate files (optional)">
+      <input type="file" id="fi-cert" accept=".p12,.pfx,.pem,.crt,.cer,.key" multiple onchange="onPickCert()" aria-label="Certificate files (optional)">
       <div class="dz-icon-wrap"><%- svg(IC.lock) %></div>
       <div class="dz-label">Certificate files <span class="dz-or">(optional)</span></div>
-      <div class="dz-sub">.jks .p12 .cer .crt .key .pem .pfx</div>
+      <div class="dz-sub">.p12 .pfx .pem .crt .cer .key &nbsp;·&nbsp; a Java keystore (.jks) must be converted to .p12 first (keytool -importkeystore)</div>
       <div id="lbl-cert" class="dz-name"></div>
     </div>
   </div>

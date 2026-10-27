@@ -6,6 +6,23 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
+#### Added — quick search, drop a file anywhere, remembered options
+
+- **Quick search** (Ctrl+K / ⌘K, or Search in the top bar, also while a tool page has the focus): finds any tool,
+  Help section (including the text inside it), FAQ question, and the theme / menu / CDP Recorder actions;
+  keyboard only (arrows, Enter, Escape). The list is read from the page, so it never goes out of date.
+- **Drop a file anywhere** on the converter, Recorder and Script Studio pages: it goes to the right box (Postman:
+  collection, then environment, certificates; JMeter: .jmx, .csv, certificates; Studio: the first free recording
+  slot). A file dropped outside a box no longer makes the browser open it in place of the app.
+- **Last-used options are remembered** per browser: converter protocol, script mode, think time, log level,
+  Advanced switches and the JMeter options; the Recorder's script format; Script Studio's output format.
+  A fresh browser still gets the usual defaults.
+
+#### Fixed — Help: Results Analyser section brought up to date (BUG-084)
+
+- Sidebar name, the six report tabs (no Validation tab), Excel 10 sheets, the HTML export, where the self-checks
+  are now, and the command-line example path (its backslashes had been lost).
+
 #### Changed — Portal redesign v4: one design system for every page
 
 - New shared design system `portal/ds.css`, loaded by the portal and by the Recorder, Script Studio and Results
@@ -530,6 +547,12 @@ Implementation:
 
 ### Script generation — JWT, DPoP and VuGen runtime
 
+#### Fixed — JWT stored under the signing library's name (BUG-081)
+
+- A pre-request script that first keeps the downloaded signing library (`pm.globals.set('jsrsasign', …)`) and
+  then stores the token now gets the token's real name (`jwt_token`): library-loading variables are skipped when
+  the JWT output is chosen. Fixes the bundled `jwt_ps256_20api_collection.json` example in DevWeb and VuGen.
+
 #### Fixed — VuGen JWT: "RSA parse: expected outer SEQUENCE" and "// line comment" warning (BUG-054)
 
 - `lre-utils.js`/`.dat` now accept a private key whose newlines are written as `\n`, which
@@ -819,6 +842,13 @@ is a JS built-in; `emitDateHelpers()` silently skips it because it has no entry 
 Files changed: `src/web/public/studio-codegen.js`
 
 ### Server, deployment and operations
+
+#### Fixed — converter uploads match what the converter supports (BUG-082, BUG-083)
+
+- Certificate private keys (`.key`) are accepted, so a `.pem` / `.crt` + `.key` pair can be uploaded for mutual
+  TLS; both certificate boxes accept the same list as the server, and the JMeter box explains that a Java
+  keystore (`.jks`) must be converted to `.p12` first.
+- Bruno `.bru` environment files are accepted (the converter already read them; the server refused them).
 
 #### Added — scripts/merge-analytics-db.js (moving from two IIS servers to one)
 

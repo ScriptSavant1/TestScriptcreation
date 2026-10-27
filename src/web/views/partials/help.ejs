@@ -436,10 +436,10 @@
         <h3 class="help-h3">How to use it</h3>
         <ol class="help-steps-list">
           <li>In LRE, download the run's <strong>raw results</strong> (the ZIP that contains <code>RawData.eve</code>, <code>_t_rep.eve</code> and <code>res*.lrr</code>).</li>
-          <li>Open <strong>Results</strong> in the menu and choose the ZIP — or, faster for very large runs, unzip it and choose the folder.</li>
-          <li>Review the tabs: <strong>Overview</strong>, <strong>Transactions</strong> (full run and steady state), <strong>Charts</strong>, <strong>Errors</strong>, <strong>Workload</strong>, <strong>Insights</strong> and <strong>Validation</strong>.</li>
+          <li>Open <strong>Results Analyser</strong> in the sidebar and choose the ZIP — or, faster for very large runs, unzip it and choose the folder.</li>
+          <li>Review the tabs: <strong>Overview</strong>, <strong>Transactions</strong> (full run and steady state), <strong>Charts</strong>, <strong>Errors</strong>, <strong>Workload</strong> and <strong>Insights</strong>.</li>
           <li>Optional: change the <strong>analysis window</strong> (default = detected steady state) and enter <strong>SLA</strong> thresholds — all figures and insights update.</li>
-          <li>Export <strong>Excel</strong> (9 sheets), <strong>Word</strong> (editable report) or <strong>PDF</strong> (print dialog → Save as PDF).</li>
+          <li>Export <strong>Excel</strong> (10 sheets, including Charts), <strong>Word</strong> (editable report), <strong>HTML</strong> (a web page you can keep or email) or <strong>PDF</strong> (print dialog → Save as PDF).</li>
         </ol>
         <h3 class="help-h3">How the numbers are computed</h3>
         <ul class="help-list">
@@ -447,10 +447,10 @@
           <li><strong>Steady state</strong> = from the moment the last VUser starts running to the moment the first VUser exits (from <code>_t_rep.eve</code>).</li>
           <li><strong>Pass / fail</strong> counts come from LRE's own sum_data graphs, used only when they reproduce the RawData.eve counts.</li>
           <li><strong>Insights</strong> are offline statistical checks: pacing and Little's Law, trend (Mann-Kendall), change points, spikes (median/MAD), load-generator comparison, LG CPU and memory, errors, SLA and Apdex.</li>
-          <li>The <strong>Validation</strong> tab lists every self-check. Transaction counts should match LRE Analysis exactly; percentiles may differ slightly because LRE interpolates.</li>
+          <li>The technical self-checks are in the result data export (<strong>More</strong> → Result data (JSON)) and the command-line output. Transaction counts should match LRE Analysis exactly; percentiles may differ slightly because LRE interpolates.</li>
         </ul>
         <h3 class="help-h3">Very large runs</h3>
-        <p class="help-p">Any size works in the browser because files are streamed. For runs of hundreds of GB, the same engine runs from the command line on a machine that has the files: <code>node lre-results-analyser/cli/analyse.js "D:ResultsRun_59" --xlsx run59.xlsx --html run59.html</code>. Add <code>--redact</code> to remove host names and IP addresses before sharing the output.</p>
+        <p class="help-p">Any size works in the browser because files are streamed. For runs of hundreds of GB, the same engine runs from the command line on a machine that has the files: <code>node lre-results-analyser/cli/analyse.js "D:\Results\Run_59" --xlsx run59.xlsx --html run59.html</code>. Add <code>--redact</code> to remove host names and IP addresses before sharing the output.</p>
       </div>
     </div>
   </div>
