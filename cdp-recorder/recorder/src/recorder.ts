@@ -19,7 +19,8 @@
  */
 import type CDP from "chrome-remote-interface";
 import {
-  findBrowser,
+  findBrowsers,
+  browserName,
   resolveProfile,
   launchAndWaitForPort,
   connectBrowserLevel,
@@ -57,15 +58,40 @@ export class Recorder {
   // build() has assigned each transaction its final `id`.
   private screenshots = new Map<string, { start: string[]; end: string[] }>();
 
+  /** The browser that is recording — the floating toolbar opens in the same one. */
+  browserPath: string | undefined;
+
+  /**
+   * Launches the recording browser. With `auto`, Edge is tried first and, if
+   * its debug port never opens (a policy or security product on that machine),
+   * Chrome next with a fresh profile. --real-profile is Edge's own profile, so
+   * it never falls back.
+   */
   async connect(profileMode: ProfileMode, port = DEFAULT_PORT, browserChoice: BrowserChoice = "auto"): Promise<void> {
-    const browserPath = findBrowser(browserChoice);
-    if (!browserPath) {
+    const candidates = profileMode.kind === "real" ? findBrowsers(browserChoice).slice(0, 1) : findBrowsers(browserChoice);
+    if (!candidates.length) {
       const which = browserChoice === "auto" ? "Edge/Chrome" : browserChoice === "edge" ? "Edge" : "Chrome";
       throw new Error(`No ${which} install found in the usual locations — set EDGE_PATH/CHROME_PATH, or pass --browser to pick the other one.`);
     }
-    this.profile = await resolveProfile(profileMode);
-    this.child = await launchAndWaitForPort(browserPath, this.profile.userDataDir, port);
-    this.client = await connectBrowserLevel(port);
+    const failures: string[] = [];
+    for (const browserPath of candidates) {
+      this.profile = await resolveProfile(profileMode);
+      try {
+        const launched = await launchAndWaitForPort(browserPath, this.profile.userDataDir, port);
+        this.child = launched.child;
+        this.client = await connectBrowserLevel(launched.port);
+        this.browserPath = browserPath;
+        return;
+      } catch (err) {
+        failures.push((err as Error).message);
+        await teardown(this.client, this.child, this.profile);
+        this.client = this.child = this.profile = undefined;
+        if (candidates.length > 1 && browserPath !== candidates[candidates.length - 1]) {
+          console.warn(`${(err as Error).message}\nTrying ${browserName(candidates[candidates.length - 1])} instead...`);
+        }
+      }
+    }
+    throw new Error(failures.join("\n"));
   }
 
   isRecording(): boolean {

@@ -31,9 +31,9 @@ The PerfX Studio portal detects a running recorder through `GET /api/status` on 
 ### Options
 
 - `--out <dir>` — where recorded `.har` files are written (default: the current folder)
-- `--browser edge|chrome` — which browser to record with (default: Edge, falling back to Chrome)
+- `--browser edge|chrome` — which browser to record with (default: Edge, falling back to Chrome when Edge's debug port is blocked). `--browser=chrome` works too
 - `--ui-port <n>` — control page port (default 8787)
-- `--cdp-port <n>` — CDP debug port for the dedicated recording browser (default 9333)
+- `--cdp-port <n>` — CDP debug port for the dedicated recording browser (default: automatic — the browser picks a free port and the recorder reads it from the profile's `DevToolsActivePort` file)
 - `--profile <dir>` / `--real-profile` — see "Profile modes" below
 
 ### Control API (local only)

@@ -439,6 +439,16 @@ Files changed: `jwt-helper.js`, `lre-utils.dat`, `lre-utils.js`,
 
 ### CDP Recorder and the retired browser extension
 
+#### Fixed — CDP Recorder would not start on some machines (BUG-086)
+
+- The recording browser picks a free debug port itself (it was always 9333, which fails silently where that port is
+  taken or reserved by Windows); the recorder connects over 127.0.0.1.
+- A browser policy that blocks remote debugging is found in the registry before launch and named in the message;
+  when Edge is blocked the recorder uses Chrome by itself, and the floating toolbar opens in the same browser.
+- `--browser=chrome` (and every other `--option=value`) now works; before, the value was ignored.
+- Clearer messages (port, connection error, browser exit); 30 s start-up wait; no Node deprecation warning.
+- Rebuilt `dist/cdp-recorder.exe` / `.zip` — copy the new zip to the server's dist folder.
+
 #### Removed — PerfX Recorder browser extension; Docs/ made local-only
 
 - `perfx-recorder-extension/` deleted (replaced by the CDP Recorder) and purged from the GitHub history of

@@ -18,6 +18,7 @@ import { startServer } from "../src/server.js";
 import {
   DEFAULT_PORT,
   findBrowser,
+  splitEqualsArgs,
   resolveProfile,
   launchAppWindow,
   teardown,
@@ -38,6 +39,7 @@ function parseArgs(argv: string[]): {
   let uiPort = 8787;
   let outDir = process.cwd();
   let browserChoice: BrowserChoice = "auto";
+  argv = splitEqualsArgs(argv); // --browser=chrome as well as --browser chrome
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--real-profile") profileMode = { kind: "real" };
@@ -48,6 +50,7 @@ function parseArgs(argv: string[]): {
     else if (a === "--browser") {
       const v = (argv[++i] ?? "").toLowerCase();
       if (v === "edge" || v === "chrome") browserChoice = v;
+      else console.warn(`Unrecognized --browser value "${v}" — expected "edge" or "chrome". Falling back to auto-detect.`);
     }
   }
   return { profileMode, cdpPort, uiPort, outDir, browserChoice };
@@ -60,6 +63,8 @@ function openAsNormalTab(url: string): void {
 }
 
 async function main(): Promise<void> {
+  // chrome-remote-interface still calls url.parse(): Node prints a DEP0169 warning that only confuses users
+  process.noDeprecation = true;
   console.log("CDP Recorder (packaged prototype build)\n");
   const { profileMode, cdpPort, uiPort, outDir, browserChoice } = parseArgs(process.argv.slice(2));
 
@@ -79,7 +84,7 @@ async function main(): Promise<void> {
 
   let controlChild: ChildProcess | undefined;
   let controlProfile: ResolvedProfile | undefined;
-  const browserPath = findBrowser(browserChoice);
+  const browserPath = recorder.browserPath ?? findBrowser(browserChoice); // the browser that is recording
   if (browserPath) {
     try {
       controlProfile = await resolveProfile({ kind: "temp" });

@@ -17,6 +17,7 @@ import { startServer } from "./server.js";
 import {
   DEFAULT_PORT,
   findBrowser,
+  splitEqualsArgs,
   resolveProfile,
   launchAppWindow,
   teardown,
@@ -39,6 +40,7 @@ function parseArgs(argv: string[]): {
   let uiPort = 8787;
   let outDir = process.cwd();
   let browserChoice: BrowserChoice = "auto";
+  argv = splitEqualsArgs(argv); // --browser=chrome as well as --browser chrome
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -102,7 +104,7 @@ async function main(): Promise<void> {
 
   let controlChild: ChildProcess | undefined;
   let controlProfile: ResolvedProfile | undefined;
-  const browserPath = findBrowser(browserChoice);
+  const browserPath = recorder.browserPath ?? findBrowser(browserChoice); // the browser that is recording
   if (browserPath) {
     try {
       controlProfile = await resolveProfile({ kind: "temp" });

@@ -16,15 +16,37 @@
  */
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, mkdtempSync, rmSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import CDP from "chrome-remote-interface";
 
 const execFileAsync = promisify(execFile);
 
-export const DEFAULT_PORT = 9333;
-const LAUNCH_TIMEOUT_MS = 15_000;
+// Browser debug port. 0 = the browser picks a free port itself and writes it to
+// <user-data-dir>/DevToolsActivePort, which we read back. A fixed port (it used
+// to be 9333) fails silently on machines where that port is already in use or
+// inside a Windows reserved range (Hyper-V / WSL / Docker reserve ranges per
+// machine — `netsh int ipv4 show excludedportrange protocol=tcp`): the browser
+// window opens, its debug port never does.
+export const DEFAULT_PORT = 0;
+// Corporate machines: antivirus scans a fresh profile on first start — 15 s was
+// not always enough.
+const LAUNCH_TIMEOUT_MS = 30_000;
+// Chromium's DevTools server listens on the IPv4 loopback only; "localhost" can
+// resolve to ::1 first on some machines.
+const CDP_HOST = "127.0.0.1";
+
+/**
+ * Accept `--key=value` as well as `--key value` (`--browser=chrome` used to be
+ * ignored silently, so the browser never changed). Used by both entry points.
+ */
+export function splitEqualsArgs(argv: string[]): string[] {
+  return argv.flatMap((a) => {
+    const i = a.indexOf("=");
+    return a.startsWith("--") && i > 2 ? [a.slice(0, i), a.slice(i + 1)] : [a];
+  });
+}
 
 const EDGE_PATHS = [
   process.env.EDGE_PATH,
@@ -47,12 +69,22 @@ export type BrowserChoice = "auto" | "edge" | "chrome";
  * if both are installed and the default pick isn't the one you want.
  */
 export function findBrowser(choice: BrowserChoice = "auto"): string | null {
-  const paths = choice === "edge" ? EDGE_PATHS : choice === "chrome" ? CHROME_PATHS : [...EDGE_PATHS, ...CHROME_PATHS];
-  for (const p of paths) {
-    if (existsSync(p)) return p;
-  }
-  return null;
+  return findBrowsers(choice)[0] ?? null;
 }
+
+/**
+ * Every installed browser for this choice, in the order to try them: `auto`
+ * gives Edge then Chrome (one of each), so the recorder can fall back to
+ * Chrome when Edge's debug port is blocked on a machine.
+ */
+export function findBrowsers(choice: BrowserChoice = "auto"): string[] {
+  const first = (paths: string[]) => paths.filter((p) => existsSync(p)).slice(0, 1);
+  if (choice === "edge") return first(EDGE_PATHS);
+  if (choice === "chrome") return first(CHROME_PATHS);
+  return [...first(EDGE_PATHS), ...first(CHROME_PATHS)];
+}
+
+export const browserName = (path: string): string => (/chrome\.exe$/i.test(path) ? "Chrome" : "Edge");
 
 export async function isBrowserAlreadyRunning(): Promise<boolean> {
   try {
@@ -134,13 +166,75 @@ h1{color:#c2410c;margin:0 0 12px;font-size:24px}li{margin:6px 0}</style></head><
 </div></body></html>`;
 const RECORDING_WINDOW_LANDING_URL = "data:text/html;charset=utf-8," + encodeURIComponent(RECORDING_WINDOW_LANDING_HTML);
 
+/** The port the browser wrote to <user-data-dir>/DevToolsActivePort, or null while it hasn't yet. */
+function readDevToolsActivePort(userDataDir: string): number | null {
+  try {
+    const port = Number(readFileSync(join(userDataDir, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0]);
+    return Number.isInteger(port) && port > 0 && port < 65536 ? port : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Windows browser policies that switch remote debugging off (Group Policy or
+ * Intune write them to the registry). Returns readable findings, e.g.
+ * "HKLM Microsoft\Edge RemoteDebuggingAllowed = 0"; empty when none is set.
+ */
+async function findBlockingPolicies(browserPath: string, names = ["RemoteDebuggingAllowed", "DeveloperToolsAvailability"]): Promise<string[]> {
+  if (process.platform !== "win32") return [];
+  const vendor = /chrome\.exe$/i.test(browserPath) ? "Google\\Chrome" : "Microsoft\\Edge";
+  const blocks: Record<string, number> = { RemoteDebuggingAllowed: 0, DeveloperToolsAvailability: 2 };
+  const found: string[] = [];
+  for (const hive of ["HKLM", "HKCU"]) {
+    for (const [name, blockedValue] of Object.entries(blocks).filter(([n]) => names.includes(n))) {
+      try {
+        const { stdout } = await execFileAsync("reg", ["query", `${hive}\\SOFTWARE\\Policies\\${vendor}`, "/v", name]);
+        const m = /REG_DWORD\s+0x([0-9a-f]+)/i.exec(stdout);
+        if (m && parseInt(m[1], 16) === blockedValue) found.push(`${hive} ${vendor} ${name} = ${blockedValue}`);
+      } catch {
+        /* value not set */
+      }
+    }
+  }
+  return found;
+}
+
+export interface LaunchedBrowser {
+  child: ChildProcess;
+  port: number;
+}
+
+/**
+ * Starts the recording browser and waits until its DevTools endpoint answers.
+ * `requestedPort` 0 (the default) lets the browser choose a free port.
+ */
 export async function launchAndWaitForPort(
   browserPath: string,
   userDataDir: string,
-  port: number,
-): Promise<ChildProcess> {
+  requestedPort: number,
+): Promise<LaunchedBrowser> {
+  // RemoteDebuggingAllowed = 0 always wins over the command line: the window
+  // would open and the port never would. Say so at once instead of after the
+  // 30-second wait.
+  const hardBlock = await findBlockingPolicies(browserPath, ["RemoteDebuggingAllowed"]);
+  if (hardBlock.length) {
+    throw new Error(
+      `${browserName(browserPath)} does not allow remote debugging on this machine (policy ${hardBlock.join("; ")}) — ` +
+        `ask IT to allow it, or use the other browser (--browser chrome / --browser edge)`,
+    );
+  }
+  // A persistent or real profile can hold a DevToolsActivePort file from an
+  // earlier run, pointing at a port that is long gone.
+  if (requestedPort === 0) {
+    try {
+      unlinkSync(join(userDataDir, "DevToolsActivePort"));
+    } catch {
+      /* not there */
+    }
+  }
   const args = [
-    `--remote-debugging-port=${port}`,
+    `--remote-debugging-port=${requestedPort}`,
     `--user-data-dir=${userDataDir}`,
     "--no-first-run",
     "--no-default-browser-check",
@@ -163,20 +257,42 @@ export async function launchAndWaitForPort(
   });
   if (spawnError) throw spawnError;
 
+  let exited = "";
+  let exitedAt = 0;
+  child.once("exit", (code, signal) => {
+    exited = `the browser process ended early (code ${code ?? "none"}${signal ? `, ${signal}` : ""})`;
+    exitedAt = Date.now();
+  });
+
   const deadline = Date.now() + LAUNCH_TIMEOUT_MS;
-  let lastErr = "";
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`http://localhost:${port}/json/version`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return child;
-      lastErr = `HTTP ${res.status}`;
-    } catch (err) {
-      lastErr = (err as Error).message;
+  let lastErr = requestedPort === 0 ? "the browser never reported its debug port" : "";
+  // stop waiting shortly after the browser process has gone — its port will not open any more
+  while (Date.now() < deadline && !(exitedAt && Date.now() - exitedAt > 3000)) {
+    const port = requestedPort || readDevToolsActivePort(userDataDir);
+    if (port) {
+      try {
+        const res = await fetch(`http://${CDP_HOST}:${port}/json/version`, { signal: AbortSignal.timeout(1000) });
+        if (res.ok) return { child, port };
+        lastErr = `HTTP ${res.status} from ${CDP_HOST}:${port}`;
+      } catch (err) {
+        const e = err as Error & { cause?: { code?: string } };
+        lastErr = `${e.name === "TimeoutError" ? "no answer" : e.cause?.code ?? e.message} on ${CDP_HOST}:${port}`;
+      }
     }
     await new Promise((r) => setTimeout(r, 300));
   }
+  const exitInfo = exited; // before the kill below, which ends the process itself
   await killProcessTree(child.pid!).catch(() => {});
-  throw new Error(`remote debugging port never opened (${lastErr}) — may be disabled by policy`);
+
+  const policies = await findBlockingPolicies(browserPath);
+  const hint = policies.length
+    ? `blocked by browser policy (${policies.join("; ")}) — ask IT to allow remote debugging for ${browserName(browserPath)}, or try --browser chrome / --browser edge`
+    : requestedPort
+      ? `port ${requestedPort} may be in use or reserved (netsh int ipv4 show excludedportrange protocol=tcp) — leave out --cdp-port to let the browser pick a free one`
+      : "no blocking browser policy found in the registry — security software may be blocking the browser's local debug port";
+  throw new Error(
+    `${browserName(browserPath)}'s remote debugging port never opened (${[lastErr, exitInfo].filter(Boolean).join("; ")}): ${hint}`,
+  );
 }
 
 const APP_WINDOW_SIZE = { width: 300, height: 480 };
@@ -251,7 +367,7 @@ export async function launchAppWindow(browserPath: string, url: string, userData
 }
 
 export async function connectBrowserLevel(port: number): Promise<CDP.Client> {
-  const version = await CDP.Version({ port });
+  const version = await CDP.Version({ host: CDP_HOST, port });
   return CDP({ target: version.webSocketDebuggerUrl });
 }
 
