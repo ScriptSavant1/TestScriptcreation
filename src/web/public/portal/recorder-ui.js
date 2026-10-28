@@ -182,6 +182,7 @@ function readFile(file) {
         S.pendingNetLog = null;
       }
       _nextFile = { name: file.name || 'recording.har', size: file.size || 0, file: file };
+      _trackStart = Date.now();
       openFmtModal(false);
     } catch (err) { showToast('Could not parse file: ' + err.message, 'error'); }
   };
@@ -709,6 +710,7 @@ function confirmFmt() {
   }
   var kept = 0;
   if (replay.length) { kept = _replayTxnLog(replay); _regen(); }
+  if (!fromToolbar) _trackRecording('success');
   document.getElementById('welcome').hidden = true;
   document.getElementById('main').hidden = false;
   applyFmtUI();
@@ -725,7 +727,20 @@ function _onFmtContinue() {
     catch (err) {
       showWelcome();
       _showStartError('This recording could not be read', 'Some entries in the file are damaged (' + err.message + ').', 'Export the HAR again, or record the journey again.');
+      _trackRecording('failed', 'unreadable_recording');
     }
+  });
+}
+// Usage statistics (portal/track.js): one event per recording turned into a script — the file name, its size,
+// the number of requests kept and the format; never the recording itself.
+var _trackStart = 0;
+function _trackRecording(result, errorCode) {
+  if (!window.PerfxTrack) return;
+  var f = _file || {}, kept = (S.entries || []).filter(function (e) { return !e.filtered && !e.isMarker; }).length;
+  window.PerfxTrack.send({
+    tool: 'recorder', protocol: S.format === 'webhttp' ? 'vugen' : S.format, mode: S.isNetLogSource ? 'netlog' : 'har',
+    filename: f.name || null, sizeKb: f.size ? Math.round(f.size / 1024) : null, requestCount: result === 'success' ? kept : null,
+    result: result, errorCode: errorCode || null, duration: _trackStart ? Date.now() - _trackStart : null,
   });
 }
 // Run fn now, or — for large recordings — after the progress overlay has been painted

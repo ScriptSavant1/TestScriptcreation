@@ -133,7 +133,17 @@
     state.worker = w;
     return w;
   }
+  // Usage statistics (portal/track.js): one event per analysis — the ZIP / folder name, its size, the number of
+  // transactions and how long it took; never the results themselves.
+  function track(result, extra) {
+    const t = state.track; state.track = null;
+    if (!t || !window.PerfxTrack) return;
+    window.PerfxTrack.send(Object.assign({ tool: "analyser", mode: t.kind, filename: t.name, sizeKb: Math.round(t.bytes / 1024), duration: Date.now() - t.started, result }, extra));
+  }
+  // page closed (or reloaded) while an analysis was still running: record it too (track.js sends with keepalive)
+  window.addEventListener("pagehide", () => { if (!state.model) track("failed", { errorCode: "page_closed" }); });
   function onError(msg) {
+    if (!state.model) track("failed", { errorCode: /RawData\.eve was not found/.test(msg) ? "rawdata_missing" : /memory/i.test(msg) ? "out_of_memory" : "analysis_error" });
     setBusy(false);
     if (!state.model) { show("start"); const e = $("#start-error"); e.textContent = msg; e.hidden = false; }
     else toast(msg, true);
@@ -177,6 +187,7 @@
 
   function startFolder(files) {
     if (!files.some((f) => /(^|\/)rawdata\.eve$/i.test(f.path))) {
+      state.track = { kind: "folder", name: (files[0].path.split("/")[0] || "folder"), bytes: files.reduce((a, f) => a + f.file.size, 0), started: Date.now() };
       const zips = files.filter((f) => /\.zip$/i.test(f.path)).map((f) => f.path);
       return onError("RawData.eve was not found in the selected folder." + (zips.length ? `\nIt contains ZIP file(s): ${zips.slice(0, 3).join(", ")} — choose that ZIP instead.` : "\nChoose the run's raw-results folder (the one that holds RawData.eve, _t_rep.eve and res*.lrr)."));
     }
@@ -190,6 +201,8 @@
     disposeCharts();
     show("progress");
     state.started = Date.now();
+    state.track = { kind: source.kind, bytes, started: state.started,
+      name: source.kind === "zip" ? source.file.name : ((source.files[0] && source.files[0].path.split("/")[0]) || "folder") };
     $("#prog-stage").textContent = "Opening " + (source.kind === "zip" ? source.file.name : "folder") + "…";
     $("#prog-meta").textContent = fmt.bytes(bytes) + " selected";
     state.progPct = 0;
@@ -200,6 +213,7 @@
   }
   $("#btn-cancel").onclick = () => {
     if (state.worker) { state.worker.terminate(); state.worker = null; }
+    if (!state.model) track("failed", { errorCode: "cancelled" });
     show("start");
     toast("Analysis cancelled");
   };
@@ -239,6 +253,7 @@
     const first = !state.model;
     state.model = model;
     setBusy(false);
+    if (first) track("success", { requestCount: (model.transactions || []).length });
     if (first) {
       const named = model.transactions.some((t) => t.inMap) ? model.transactions.filter((t) => t.inMap) : model.transactions;
       state.selected = new Set(named.filter((t) => t.full.count).sort((a, b) => (b.steady.p.p90 || 0) - (a.steady.p.p90 || 0)).slice(0, 5).map((t) => t.id));

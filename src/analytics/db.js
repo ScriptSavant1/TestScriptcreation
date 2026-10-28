@@ -111,7 +111,7 @@ function updateHostname(id, hostname) {
  * @param {string}  [opts.to]      ISO date string end (inclusive)
  * @param {string}  [opts.tool]    filter by tool
  * @param {string}  [opts.result]  filter by result
- * @param {string}  [opts.search]  hostname/IP substring search
+ * @param {string}  [opts.search]  hostname / IP / file substring search
  * @param {number}  [opts.limit]   max rows (default 500)
  * @param {number}  [opts.offset]  pagination offset (default 0)
  */
@@ -125,7 +125,7 @@ function queryEvents(opts = {}) {
   if (tool)   { where.push("tool = @tool");           params.tool   = tool; }
   if (result) { where.push("result = @result");       params.result = result; }
   if (search) {
-    where.push("(hostname LIKE @search OR ip_address LIKE @search OR device_id LIKE @search)");
+    where.push("(hostname LIKE @search OR ip_address LIKE @search OR device_id LIKE @search OR filename LIKE @search)");
     params.search = `%${search}%`;
   }
 
@@ -180,9 +180,58 @@ function queryStats(opts = {}) {
        ROUND(AVG(CASE WHEN duration_ms IS NOT NULL THEN duration_ms END), 0) AS avg_duration_ms,
        COUNT(DISTINCT device_id)  AS unique_devices,
        COUNT(DISTINCT ip_address) AS unique_ips,
-       COUNT(DISTINCT hostname)   AS unique_hosts
+       COUNT(DISTINCT hostname)   AS unique_hosts,
+       COUNT(DISTINCT COALESCE(hostname, ip_address)) AS unique_people
      FROM conversions WHERE ${w}`
   ).get(params);
+
+  // One row per tool: uses, people, results, average time, DevWeb / VuGen output
+  const toolSummary = db.prepare(
+    `SELECT tool,
+       COUNT(*) AS n,
+       COUNT(DISTINCT COALESCE(hostname, ip_address)) AS people,
+       SUM(CASE WHEN result='success' THEN 1 ELSE 0 END) AS success_count,
+       SUM(CASE WHEN result<>'success' THEN 1 ELSE 0 END) AS problem_count,
+       ROUND(AVG(duration_ms), 0) AS avg_duration_ms,
+       SUM(CASE WHEN protocol='devweb' THEN 1 ELSE 0 END) AS devweb,
+       SUM(CASE WHEN protocol IN ('vugen','web-http','webhttp') THEN 1 ELSE 0 END) AS vugen
+     FROM conversions WHERE ${w}
+     GROUP BY tool ORDER BY n DESC`
+  ).all(params);
+
+  // Who uses it: one row per machine (host name, else IP address)
+  const topPeople = db.prepare(
+    `SELECT
+       COALESCE(hostname, ip_address, 'Unknown') AS person,
+       MAX(hostname) AS hostname,
+       MAX(ip_address) AS ip_address,
+       COUNT(*) AS n,
+       SUM(CASE WHEN result='success' THEN 1 ELSE 0 END) AS success_count,
+       GROUP_CONCAT(DISTINCT tool) AS tools,
+       MIN(started_at) AS first_seen,
+       MAX(started_at) AS last_seen
+     FROM conversions WHERE ${w}
+     GROUP BY COALESCE(hostname, ip_address, 'Unknown')
+     ORDER BY n DESC LIMIT 25`
+  ).all(params);
+
+  // What went wrong: failures and time-outs by cause, with the tools it happened in
+  const problems = db.prepare(
+    `SELECT COALESCE(error_code, CASE WHEN result='timeout' THEN 'timeout' ELSE 'unknown' END) AS error_code,
+       GROUP_CONCAT(DISTINCT tool) AS tools,
+       COUNT(*) AS n,
+       COUNT(DISTINCT COALESCE(hostname, ip_address)) AS people,
+       MAX(started_at) AS last_seen
+     FROM conversions WHERE ${w} AND result<>'success'
+     GROUP BY 1 ORDER BY n DESC LIMIT 15`
+  ).all(params);
+
+  // Uses per day and tool (stacked chart)
+  const dailyByTool = db.prepare(
+    `SELECT SUBSTR(started_at, 1, 10) AS day, tool, COUNT(*) AS n
+     FROM conversions WHERE ${w}
+     GROUP BY day, tool ORDER BY day ASC`
+  ).all(params);
 
   const toolBreakdown = db.prepare(
     `SELECT tool, COUNT(*) AS n FROM conversions WHERE ${w}
@@ -238,7 +287,7 @@ function queryStats(opts = {}) {
      GROUP BY hour, dow`
   ).all(params);
 
-  return { totals, toolBreakdown, protocolBreakdown, topMachines, topFiles, dailyTrend, hourlyHeatmap };
+  return { totals, toolBreakdown, protocolBreakdown, topMachines, topFiles, dailyTrend, hourlyHeatmap, toolSummary, topPeople, problems, dailyByTool };
 }
 
 /** Delete records older than retentionDays (0 = keep forever). */

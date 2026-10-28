@@ -671,31 +671,38 @@ class WebServer {
     // Registered at both /analytics/track and /converter/analytics/track so it
     // works whether the app is accessed directly (localhost:3000) or via IIS
     // sub-app mount at /converter/.
+    // The browser tools (Script Studio, Recorder, Results Analyser) work client-side, so they report a finished
+    // job here: { tool, protocol, filename, sizeKb, mode, requestCount, correlationsFound, correlationsAccepted,
+    // result, errorCode, duration }. Input is untrusted — every field is checked and trimmed.
+    const BROWSER_TOOLS = new Set(["studio", "recorder", "analyser"]);
     const _studioTrackHandler = express.json({ limit: "2kb" });
     const _studioTrackRoute   = (req, res) => {
       res.status(204).end(); // respond immediately, work happens below
       if (!analytics) return;
       try {
         const b = req.body || {};
-        const event = analytics.startEvent(req, "studio");
-        const proto = String(b.protocol || "").slice(0, 32) || null;
-        const fname = b.filename ? String(b.filename).slice(0, 255) : null;
-        event.protocol    = proto;
-        event.script_mode = "studio";
-        event.filename    = fname;
-        event.file_ext    = fname ? require("path").extname(fname).toLowerCase() || null : null;
-        event.file_size_kb = null; // HAR is loaded in-browser; size not available
+        const tool = BROWSER_TOOLS.has(b.tool) ? b.tool : "studio";   // older Studio pages sent no tool
+        const int = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : null; };
+        const word = (v, max) => { const s = String(v == null ? "" : v).trim().slice(0, max); return /^[\w .:\-/]*$/.test(s) && s ? s : null; };
+        const event = analytics.startEvent(req, tool);
+        const fname = b.filename ? String(b.filename).replace(/[\x00-\x1f\x7f]/g, "").slice(0, 255) : null;
+        event.protocol     = word(b.protocol, 32);
+        event.script_mode  = word(b.mode, 32) || (tool === "studio" ? "studio" : null);
+        event.filename     = fname;
+        event.file_ext     = fname ? require("path").extname(fname).toLowerCase() || null : null;
+        event.file_size_kb = int(b.sizeKb);
         // Client-reported duration: override the internal timer
-        const dur = parseInt(b.duration, 10);
+        const dur = int(b.duration);
         if (dur > 0) event._startMs = Date.now() - dur;
         analytics.finishEvent(event, {
-          result:               "success",
-          requestCount:         parseInt(b.requestCount, 10) || null,
-          correlationsFound:    parseInt(b.correlationsFound, 10) || null,
-          correlationsAccepted: parseInt(b.correlationsAccepted, 10) || null,
+          result:               b.result === "failed" ? "failed" : "success",
+          errorCode:            b.result === "failed" ? (word(b.errorCode, 64) || "client_error") : null,
+          requestCount:         int(b.requestCount),
+          correlationsFound:    int(b.correlationsFound),
+          correlationsAccepted: int(b.correlationsAccepted),
         });
       } catch (err) {
-        console.warn("[analytics] studio track failed:", err.message);
+        console.warn("[analytics] track failed:", err.message);
       }
     };
     this.app.post("/analytics/track",           _studioTrackHandler, _studioTrackRoute);
@@ -882,37 +889,50 @@ function makeSessionToken(rawToken) {
 
 /** Inline login page — no separate view file. showError = true adds a "wrong token" message. */
 function adminLoginHtml(showError) {
+  // Same look as the portal (design system v4 colours, theme from localStorage "lr-theme"); self-contained.
   const err = showError
-    ? `<p style="color:#EF4444;font-size:12px;margin-top:10px">Incorrect token — try again.</p>`
+    ? `<p class="err" role="alert">That token is not correct. Try again.</p>`
     : "";
   return `<!DOCTYPE html>
-<html lang="en"><head>
+<html lang="en" data-theme="dark"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PerfX Studio — Admin</title>
+<title>Sign in — PerfX Studio usage analytics</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M7 21l6-7 5 4 7-9' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>(function(){try{var t=localStorage.getItem('lr-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{color-scheme:dark}
-body{background:#0A0D14;color:#E2E8F0;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.box{background:#141721;border:1px solid #252A40;border-radius:16px;padding:44px 40px;width:340px;text-align:center;box-shadow:0 8px 48px rgba(0,0,0,.6)}
-.logo{width:58px;height:58px;background:linear-gradient(135deg,#1D4ED8,#7C3AED);border-radius:14px;margin:0 auto 22px;display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 0 24px rgba(59,130,246,.35)}
-h1{font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em;margin-bottom:4px}
-.sub{font-size:13px;color:#8B95B0;margin-bottom:28px}
-input{width:100%;background:#0A0D14;border:1px solid #252A40;border-radius:8px;padding:12px 14px;font-size:14px;color:#E2E8F0;outline:none;margin-bottom:12px;transition:border-color .15s}
-input:focus{border-color:#3B82F6}
-button{width:100%;background:#3B82F6;color:#fff;border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s}
-button:hover{opacity:.88}
+:root{color-scheme:dark;--bg:#0c111b;--surface:#121926;--inset:#0e1420;--border:#233047;--border-2:#31405a;--text:#e8edf5;--text-2:#aab5c7;--text-3:#8693a8;--accent:#2563eb;--accent-hover:#1d4ed8;--focus:#75a7ff;--bad:#f27a7a;--bad-soft:rgba(242,122,122,.13)}
+[data-theme="light"]{color-scheme:light;--bg:#f3f5f9;--surface:#fff;--inset:#f5f7fa;--border:#e1e6ee;--border-2:#cbd3df;--text:#0f172a;--text-2:#3a495f;--text-3:#58687f;--focus:#2563eb;--bad:#c42727;--bad-soft:rgba(220,38,38,.08)}
+body{background:var(--bg);color:var(--text);font-family:"Segoe UI",-apple-system,system-ui,sans-serif;font-size:14px;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
+.box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.logo{width:40px;height:40px;border-radius:11px;background:var(--accent);color:#fff;display:grid;place-items:center;flex:none}
+.logo svg{width:22px;height:22px}
+h1{font-size:18px;font-weight:700}
+.sub{font-size:13px;color:var(--text-3)}
+label{display:block;font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:6px}
+input{width:100%;height:42px;background:var(--inset);border:1px solid var(--border-2);border-radius:10px;padding:0 12px;font:inherit;color:var(--text);outline:none;margin-bottom:14px}
+input:focus{border-color:var(--focus);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+button{width:100%;height:42px;background:var(--accent);color:#fff;border:0;border-radius:10px;font:inherit;font-weight:600;cursor:pointer}
+button:hover{background:var(--accent-hover)}
+button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.err{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--bad-soft);color:var(--bad);font-size:13px}
+.note{margin-top:18px;font-size:12px;color:var(--text-3);line-height:1.5}
 </style>
 </head><body>
-<div class="box">
-  <div class="logo">📊</div>
-  <h1>PerfX Studio</h1>
-  <p class="sub">Analytics Admin</p>
+<main class="box">
+  <div class="brand">
+    <span class="logo"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg></span>
+    <div><h1>PerfX Studio</h1><p class="sub">Usage analytics</p></div>
+  </div>
   <form method="POST" action="login">
-    <input type="password" name="token" placeholder="Enter admin token" autocomplete="current-password" autofocus>
-    <button type="submit">Sign in &rarr;</button>
+    <label for="token">Admin token</label>
+    <input type="password" id="token" name="token" autocomplete="current-password" autofocus required>
+    <button type="submit">Sign in</button>
     ${err}
   </form>
-</div>
+  <p class="note">The token is set by the server administrator (ADMIN_TOKEN). You stay signed in for 8 hours.</p>
+</main>
 </body></html>`;
 }
 

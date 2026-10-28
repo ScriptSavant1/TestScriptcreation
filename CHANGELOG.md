@@ -6,6 +6,29 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
+#### Added — usage statistics for the Recorder and the Results Analyser; a clearer admin report
+
+- The Recorder (one event per recording turned into a script) and the Results Analyser (one event per analysis, and
+  failures: a folder without RawData.eve, an analysis that fails, is cancelled, or whose page is closed
+  before it finishes) now record usage, like the other tools. Only file name, size, counts,
+  format and duration are sent — never the recording or the results. Before, only the converters and Script Studio did.
+- Admin report rethought: key figures (uses, machines, success rate, problems, most used tool); uses per day stacked by
+  tool; one Tools table (uses, share, machines, success, problems, average time, DevWeb / VuGen) replacing three charts;
+  Who uses it (machine, IP address, tools, success, last seen) replacing the machines table; Problems grouped by cause. The
+  results doughnut (it repeated the key figures) is gone. Excel, Word and CSV follow.
+
+
+#### Changed — admin usage analytics and its reports in the v4 design
+
+- The admin dashboard and sign-in page use the portal's design system: same palette, light / dark toggle shared
+  with the portal, line icons instead of emoji, sentence case, full width; charts follow the theme; the heatmap is
+  days × hours; machines and files side by side; the event log scrolls inside its card. Every route, filter and
+  export is unchanged. "AI-generated insights" is now "Insights" (they are worked out from the figures).
+- Excel report: brand-coloured headers, real number / percentage formats, filters and frozen headers on every
+  table, a new Protocols sheet. Word report: title block with key-figure tiles, real bullet lists, clean tables
+  with right-aligned numbers, page numbers. Every figure is the same as before; the CSV is unchanged.
+
+
 #### Changed — Help & guides: one section at a time
 
 - Help shows one section at a time, open, like a documentation site: chosen in the sidebar list, "On this page",

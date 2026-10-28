@@ -2,41 +2,70 @@
 
 const ExcelJS = require("exceljs");
 
+// Same look as the portal (design system v4): brand blue headers, slate text, light row bands.
+const C = {
+  accent: "FF2563EB", text: "FF0F172A", text2: "FF3A495F", text3: "FF58687F",
+  border: "FFE1E6EE", band: "FFF7F9FC", soft: "FFEEF3FD",
+  ok: "FF15803D", warn: "FFA85B06", bad: "FFC42727",
+};
+const FONT = "Calibri";
+
 const TOOL_LABELS = {
-  converter: "Postman / Bruno Converter",
-  jmx:       "JMeter Converter",
   recorder:  "Recorder",
   studio:    "Script Studio",
+  converter: "Postman / Bruno Converter",
+  jmx:       "JMeter Converter",
+  analyser:  "Results Analyser",
 };
+const RESULT_LABELS = { success: "Success", failed: "Failed", timeout: "Timed out" };
 
-const HEADER_STYLE = {
-  font:      { bold: true, color: { argb: "FFFFFFFF" } },
-  fill:      { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E40AF" } },
-  alignment: { vertical: "middle", horizontal: "center" },
-  border: {
-    bottom: { style: "medium", color: { argb: "FF1E3A8A" } },
-  },
-};
+const THIN = { style: "thin", color: { argb: C.border } };
 
-function applyHeaderRow(row) {
-  row.eachCell((cell) => {
-    cell.font      = HEADER_STYLE.font;
-    cell.fill      = HEADER_STYLE.fill;
-    cell.alignment = HEADER_STYLE.alignment;
-    cell.border    = HEADER_STYLE.border;
+/**
+ * A formatted table: blue header row, banded body, number formats per column, filter + frozen header.
+ * cols: [{ header, key?, width, fmt?, align? }]; rows: arrays in column order. Returns the last row number.
+ */
+function addTable(ws, startRow, cols, rows, opts = {}) {
+  cols.forEach((c, i) => { ws.getColumn(i + 1).width = Math.max(ws.getColumn(i + 1).width || 0, c.width); });
+  const head = ws.getRow(startRow);
+  cols.forEach((c, i) => {
+    const cell = head.getCell(i + 1);
+    cell.value = c.header;
+    cell.font = { name: FONT, bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.accent } };
+    cell.alignment = { vertical: "middle", horizontal: c.align || (c.fmt ? "right" : "left"), wrapText: true };
+    cell.border = { bottom: THIN };
   });
-  row.height = 22;
+  head.height = 24;
+  rows.forEach((r, k) => {
+    const row = ws.getRow(startRow + 1 + k);
+    r.forEach((v, i) => {
+      const cell = row.getCell(i + 1);
+      cell.value = v === undefined ? null : v;
+      cell.font = { name: FONT, size: 11, color: { argb: C.text } };
+      cell.alignment = { vertical: "middle", horizontal: cols[i].align || (cols[i].fmt ? "right" : "left") };
+      if (cols[i].fmt) cell.numFmt = cols[i].fmt;
+      cell.border = { bottom: THIN };
+      if (k % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.band } };
+    });
+    if (opts.styleRow) opts.styleRow(row, r);
+  });
+  const last = startRow + rows.length;
+  if (rows.length && opts.filter !== false) ws.autoFilter ={ from: { row: startRow, column: 1 }, to: { row: last, column: cols.length } };
+  return last;
 }
 
-function autoWidth(sheet, minW = 10, maxW = 50) {
-  sheet.columns.forEach((col) => {
-    let max = minW;
-    col.eachCell({ includeEmpty: false }, (cell) => {
-      const len = cell.value ? String(cell.value).length : 0;
-      if (len > max) max = len;
-    });
-    col.width = Math.min(max + 2, maxW);
-  });
+/** Sheet title + one-line description above a table. */
+function sheetTitle(ws, title, sub) {
+  ws.getCell("A1").value = title;
+  ws.getCell("A1").font = { name: FONT, bold: true, size: 16, color: { argb: C.text } };
+  ws.getCell("A2").value = sub;
+  ws.getCell("A2").font = { name: FONT, size: 11, color: { argb: C.text3 } };
+  ws.getRow(1).height = 26;
+}
+
+function newSheet(wb, name, tab, frozenRow) {
+  return wb.addWorksheet(name, { properties: { tabColor: { argb: tab } }, views: [{ state: "frozen", ySplit: frozenRow, showGridLines: false }] });
 }
 
 /**
@@ -48,114 +77,101 @@ function autoWidth(sheet, minW = 10, maxW = 50) {
  */
 async function streamXlsx(res, stats, rows, period = "All time") {
   const wb = new ExcelJS.Workbook();
-  wb.creator   = "PerfX Studio";
-  wb.created   = new Date();
-  wb.modified  = new Date();
+  wb.creator  = "PerfX Studio";
+  wb.created  = new Date();
+  wb.modified = new Date();
+  const sub = `PerfX Studio · ${period} · generated ${new Date().toLocaleString("en-GB")}`;
 
-  // ── Sheet 1: Summary ──────────────────────────────────────────────────────
-  const summary = wb.addWorksheet("Summary", { properties: { tabColor: { argb: "FF1E40AF" } } });
-  summary.addRow(["PerfX Studio — Usage Analytics Report"]);
-  summary.getRow(1).font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
-  summary.addRow([`Period: ${period}`]);
-  summary.addRow([`Generated: ${new Date().toLocaleString()}`]);
-  summary.addRow([]);
-
-  const summaryData = [
-    ["Metric", "Value"],
-    ["Total Conversions",  stats.total],
-    ["Successful",         stats.successCount],
-    ["Failed",             stats.failCount],
-    ["Timed Out",          stats.timeoutCount],
-    ["Success Rate",       stats.successRate + "%"],
-    ["Avg Duration",       stats.avgDurationLabel],
-    ["Unique Machines",    stats.uniqueHosts],
-    ["Unique Devices",     stats.uniqueDevices],
+  // ── Summary: key figures + insights ──────────────────────────────────────
+  const summary = wb.addWorksheet("Summary", { properties: { tabColor: { argb: C.accent } }, views: [{ showGridLines: false }] });
+  summary.getColumn(1).width = 30; summary.getColumn(2).width = 18; summary.getColumn(3).width = 70;
+  sheetTitle(summary, "Usage analytics report", sub);
+  const figs = [
+    ["Uses (all tools)", stats.total, "#,##0"],
+    ["Machines", stats.uniquePeople, "#,##0"],
+    ["Success rate", stats.successRate / 100, "0%"],
+    ["Successful", stats.successCount, "#,##0"],
+    ["Failed", stats.failCount, "#,##0"],
+    ["Timed out", stats.timeoutCount, "#,##0"],
+    ["Most used tool", stats.busiestTool ? stats.busiestTool.label : "—", null],
   ];
-  summaryData.forEach((r, i) => {
-    const row = summary.addRow(r);
-    if (i === 0) applyHeaderRow(row);
-    else {
-      row.getCell(1).font = { bold: true };
-      row.getCell(2).alignment = { horizontal: "right" };
-    }
+  let r = addTable(summary, 4, [{ header: "Key figure", width: 30 }, { header: "Value", width: 18, fmt: "#,##0", align: "right" }],
+    figs.map((f) => [f[0], f[1]]), { filter: false });
+  figs.forEach((f, i) => { const c = summary.getCell(`B${5 + i}`); if (f[2]) c.numFmt = f[2]; else c.alignment = { horizontal: "right" }; });
+  r += 2;
+  summary.getCell(`A${r}`).value = "Insights";
+  summary.getCell(`A${r}`).font = { name: FONT, bold: true, size: 13, color: { argb: C.text } };
+  for (const ins of stats.insights) {
+    r++;
+    summary.mergeCells(`A${r}:C${r}`);
+    const cell = summary.getCell(`A${r}`);
+    cell.value = ins;
+    cell.font = { name: FONT, size: 11, color: { argb: C.text2 } };
+    cell.alignment = { wrapText: true, vertical: "top", indent: 1 };
+    summary.getRow(r).height = Math.max(18, Math.ceil(ins.length / 110) * 16);
+  }
+
+  // ── Tools ────────────────────────────────────────────────────────────────
+  const tools = newSheet(wb, "Tools", "FF7C5CE6", 4);
+  sheetTitle(tools, "Each tool: uses, machines, success and output", sub);
+  addTable(tools, 4, [
+    { header: "Tool", width: 28 }, { header: "Uses", width: 10, fmt: "#,##0" }, { header: "Share", width: 10, fmt: "0%" },
+    { header: "Machines", width: 12, fmt: "#,##0" }, { header: "Success rate", width: 13, fmt: "0%" },
+    { header: "Problems", width: 11, fmt: "#,##0" }, { header: "Average time (s)", width: 16, fmt: "0.0" },
+    { header: "DevWeb", width: 10, fmt: "#,##0" }, { header: "VuGen", width: 10, fmt: "#,##0" },
+  ], stats.toolSummaryRows.map((t) => [t.label, t.count, t.pct / 100, t.people, t.successRate / 100, t.problems, t.avgDurationMs / 1000, t.devweb || null, t.vugen || null]));
+
+  // ── People ───────────────────────────────────────────────────────────────
+  const people = newSheet(wb, "Machines", "FF0E9FB5", 4);
+  sheetTitle(people, "Who uses PerfX Studio — by machine", sub);
+  addTable(people, 4, [
+    { header: "Machine", width: 24 }, { header: "IP address", width: 16 }, { header: "Uses", width: 10, fmt: "#,##0" },
+    { header: "Share", width: 10, fmt: "0%" }, { header: "Success rate", width: 13, fmt: "0%" }, { header: "Tools", width: 50 },
+    { header: "First seen", width: 13 }, { header: "Last seen", width: 18 },
+  ], stats.peopleRows.map((p) => [p.machine, p.ip_address, p.count, p.pct / 100, p.successRate / 100, p.tools.join(", "), p.firstSeen, p.lastSeen]), {
+    styleRow: (row, v) => { const c = row.getCell(5); c.font = { name: FONT, bold: true, color: { argb: v[4] >= 0.95 ? C.ok : v[4] >= 0.75 ? C.warn : C.bad } }; },
   });
 
-  summary.addRow([]);
-  summary.addRow(["Auto-Generated Insights"]);
-  summary.lastRow.font = { bold: true, size: 12 };
-  for (const ins of stats.insights) {
-    summary.addRow(["• " + ins]);
-  }
-  autoWidth(summary);
+  // ── Problems ─────────────────────────────────────────────────────────────
+  const probs = newSheet(wb, "Problems", "FFC42727", 4);
+  sheetTitle(probs, "What went wrong — failures and time-outs by cause", sub);
+  addTable(probs, 4, [
+    { header: "What went wrong", width: 32 }, { header: "Error code", width: 24 }, { header: "Tools", width: 60 },
+    { header: "Times", width: 10, fmt: "#,##0" }, { header: "Machines", width: 12, fmt: "#,##0" }, { header: "Last seen", width: 18 },
+  ], stats.problemRows.map((e) => [e.label, e.code, e.toolLabel, e.count, e.people, e.lastSeen]));
 
-  // ── Sheet 2: Tool Breakdown ───────────────────────────────────────────────
-  const tools = wb.addWorksheet("Tool Breakdown", { properties: { tabColor: { argb: "FF059669" } } });
-  const toolHeader = tools.addRow(["Tool", "Conversions", "Share (%)"]);
-  applyHeaderRow(toolHeader);
-  for (const t of stats.toolRows) {
-    tools.addRow([TOOL_LABELS[t.tool] || t.tool, t.count, t.pct + "%"]);
-  }
-  autoWidth(tools);
+  // ── Files ────────────────────────────────────────────────────────────────
+  const files = newSheet(wb, "Files", "FF16A34A", 4);
+  sheetTitle(files, "Most used files", sub);
+  addTable(files, 4, [
+    { header: "File", width: 40 }, { header: "Type", width: 10 }, { header: "Uses", width: 10, fmt: "#,##0" },
+    { header: "Average size", width: 14, align: "right" }, { header: "Average time (s)", width: 16, fmt: "0.0" },
+  ], stats.fileRows.map((f) => [f.filename, (f.ext || "").replace(/^\./, ""), f.count, f.avg_size_label, f.avg_duration_s != null ? Number(f.avg_duration_s) : null]));
 
-  // ── Sheet 3: Top Machines ─────────────────────────────────────────────────
-  const machines = wb.addWorksheet("Top Machines", { properties: { tabColor: { argb: "FFF59E0B" } } });
-  const machHeader = machines.addRow(["Machine / Hostname", "IP Address", "Conversions", "Success Rate", "Last Seen"]);
-  applyHeaderRow(machHeader);
-  for (const m of stats.machineRows) {
-    machines.addRow([m.machine, m.ip_address, m.count, m.success_rate + "%", m.last_seen]);
-  }
-  autoWidth(machines);
+  // ── Uses per day, one column per tool ────────────────────────────────────
+  const trend = newSheet(wb, "Daily", "FF2F6FE4", 4);
+  sheetTitle(trend, "Uses per day, by tool", sub);
+  const series = stats.dailyTools.series;
+  addTable(trend, 4, [{ header: "Date", width: 13 }].concat(series.map((s) => ({ header: s.label, width: Math.max(12, s.label.length + 2), fmt: "#,##0" }))).concat([{ header: "Total", width: 10, fmt: "#,##0" }]),
+    stats.dailyTools.days.map((day, i) => [day].concat(series.map((s) => s.counts[i])).concat([series.reduce((a, s) => a + s.counts[i], 0)])));
 
-  // ── Sheet 4: Top Files ────────────────────────────────────────────────────
-  const files = wb.addWorksheet("Top Files", { properties: { tabColor: { argb: "FF7C3AED" } } });
-  const fileHeader = files.addRow(["Filename", "Extension", "Times Converted", "Avg Size", "Avg Duration (s)"]);
-  applyHeaderRow(fileHeader);
-  for (const f of stats.fileRows) {
-    files.addRow([f.filename, f.ext, f.count, f.avg_size_label, f.avg_duration_s]);
-  }
-  autoWidth(files);
+  // ── All events ───────────────────────────────────────────────────────────
+  const events = newSheet(wb, "All events", "FF64748B", 4);
+  sheetTitle(events, "Every event in the period", sub);
+  addTable(events, 4, [
+    { header: "ID", width: 8, fmt: "0" }, { header: "Started at", width: 22 }, { header: "Duration (ms)", width: 14, fmt: "#,##0" },
+    { header: "Machine", width: 18 }, { header: "IP address", width: 16 }, { header: "Device", width: 11 },
+    { header: "Browser", width: 14 }, { header: "OS", width: 14 }, { header: "Tool", width: 24 }, { header: "Output", width: 10 },
+    { header: "File", width: 36 }, { header: "Size (KB)", width: 12, fmt: "#,##0" }, { header: "Requests / transactions", width: 22, fmt: "#,##0" },
+    { header: "Result", width: 12 }, { header: "Error code", width: 22 }, { header: "Correlations found", width: 18, fmt: "#,##0" },
+  ], rows.map((e) => [
+    e.id, e.started_at, e.duration_ms, e.hostname, e.ip_address, e.device_id ? e.device_id.slice(0, 8) : null,
+    e.browser, e.os, TOOL_LABELS[e.tool] || e.tool, e.protocol, e.filename, e.file_size_kb, e.request_count,
+    RESULT_LABELS[e.result] || e.result, e.error_code, e.correlations_found,
+  ]), {
+    styleRow: (row, v) => { const c = row.getCell(14); c.font = { name: FONT, bold: true, color: { argb: v[13] === "Success" ? C.ok : v[13] === "Timed out" ? C.warn : C.bad } }; },
+  });
 
-  // ── Sheet 5: Daily Trend ──────────────────────────────────────────────────
-  const trend = wb.addWorksheet("Daily Trend", { properties: { tabColor: { argb: "FFDC2626" } } });
-  const trendHeader = trend.addRow(["Date", "Total Conversions", "Successful"]);
-  applyHeaderRow(trendHeader);
-  for (const d of stats.dailyTrend) {
-    trend.addRow([d.day, d.n, d.success_count]);
-  }
-  autoWidth(trend);
-
-  // ── Sheet 6: Raw Events ───────────────────────────────────────────────────
-  const events = wb.addWorksheet("All Events", { properties: { tabColor: { argb: "FF374151" } } });
-  const evtHeaders = [
-    "ID","Started At","Duration (ms)","Hostname","IP","Device ID",
-    "Browser","OS","Tool","Protocol","Filename","File Size (KB)",
-    "Requests","Result","Error Code","Correlations Found",
-  ];
-  const evtHeader = events.addRow(evtHeaders);
-  applyHeaderRow(evtHeader);
-  events.views = [{ state: "frozen", ySplit: 1 }];
-
-  for (const r of rows) {
-    const row = events.addRow([
-      r.id, r.started_at, r.duration_ms,
-      r.hostname, r.ip_address, r.device_id ? r.device_id.slice(0, 8) : null,
-      r.browser, r.os, r.tool, r.protocol,
-      r.filename, r.file_size_kb, r.request_count,
-      r.result, r.error_code, r.correlations_found,
-    ]);
-    // Colour code result
-    const resultCell = row.getCell(14);
-    if (r.result === "success") {
-      resultCell.font = { color: { argb: "FF059669" }, bold: true };
-    } else if (r.result === "timeout") {
-      resultCell.font = { color: { argb: "FFF59E0B" }, bold: true };
-    } else {
-      resultCell.font = { color: { argb: "FFDC2626" }, bold: true };
-    }
-  }
-  autoWidth(events, 8, 40);
-
-  // Stream to response
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="perfx-analytics-${today()}.xlsx"`);
   await wb.xlsx.write(res);

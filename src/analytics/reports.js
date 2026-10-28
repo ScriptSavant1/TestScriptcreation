@@ -3,11 +3,31 @@
 const db = require("./db");
 
 const TOOL_LABELS = {
-  converter: "Postman / Bruno Converter",
-  jmx:       "JMeter Converter",
   recorder:  "Recorder",
   studio:    "Script Studio",
+  converter: "Postman / Bruno Converter",
+  jmx:       "JMeter Converter",
+  analyser:  "Results Analyser",
 };
+// the order the tools are shown in everywhere (sidebar order)
+const TOOL_ORDER = ["recorder", "studio", "converter", "jmx", "analyser"];
+
+const ERROR_LABELS = {
+  timeout: "Took too long (time-out)",
+  parse_error: "File could not be read",
+  unsupported_file_type: "Unsupported file type",
+  file_too_large: "File too large",
+  unreadable_recording: "Recording could not be read",
+  rawdata_missing: "RawData.eve not in the folder",
+  out_of_memory: "Browser ran out of memory",
+  analysis_error: "Analysis failed",
+  cancelled: "Cancelled before it finished",
+  page_closed: "Page closed before it finished",
+  client_error: "Failed in the browser",
+  unknown: "Unknown error",
+};
+
+const fmtDuration = (ms) => (!ms ? "—" : ms < 1000 ? Math.round(ms) + " ms" : ms < 60000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms / 60000) + " min");
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -17,7 +37,7 @@ const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
  */
 function getStats(opts = {}) {
   const raw = db.queryStats(opts);
-  const { totals, toolBreakdown, protocolBreakdown, topMachines, topFiles, dailyTrend, hourlyHeatmap } = raw;
+  const { totals, toolBreakdown, protocolBreakdown, topMachines, topFiles, dailyTrend, hourlyHeatmap, toolSummary, topPeople, problems, dailyByTool } = raw;
 
   const total        = totals.total        || 0;
   const successCount = totals.success_count || 0;
@@ -76,17 +96,75 @@ function getStats(opts = {}) {
     heatmap[h.hour][h.dow] = h.n;
   }
 
+  // ── per tool: uses, people, success, average time, DevWeb / VuGen ──
+  const toolSummaryRows = toolSummary
+    .sort((a, b) => TOOL_ORDER.indexOf(a.tool) - TOOL_ORDER.indexOf(b.tool))
+    .map((t) => ({
+      tool:        t.tool,
+      label:       TOOL_LABELS[t.tool] || t.tool,
+      count:       t.n,
+      pct:         total > 0 ? Math.round((t.n / total) * 100) : 0,
+      people:      t.people,
+      successRate: t.n > 0 ? Math.round((t.success_count / t.n) * 100) : 0,
+      problems:    t.problem_count,
+      avgDurationMs:    t.avg_duration_ms || 0,
+      avgDurationLabel: fmtDuration(t.avg_duration_ms),
+      devweb:      t.devweb,
+      vugen:       t.vugen,
+      outputLabel: t.devweb || t.vugen ? `DevWeb ${t.devweb} · VuGen ${t.vugen}` : "—",
+    }));
+
+  // ── who uses it: one row per machine ──
+  const peopleRows = topPeople.map((p) => ({
+    person:      p.person,
+    machine:     p.hostname || p.ip_address || null,
+    ip_address:  p.ip_address || null,
+    count:       p.n,
+    pct:         total > 0 ? Math.round((p.n / total) * 100) : 0,
+    successRate: p.n > 0 ? Math.round((p.success_count / p.n) * 100) : 0,
+    tools:       String(p.tools || "").split(",").filter(Boolean).sort((a, b) => TOOL_ORDER.indexOf(a) - TOOL_ORDER.indexOf(b)).map((t) => TOOL_LABELS[t] || t),
+    firstSeen:   p.first_seen ? p.first_seen.slice(0, 10) : null,
+    lastSeen:    p.last_seen ? p.last_seen.slice(0, 16).replace("T", " ") : null,
+  }));
+
+  // ── problems: failures and time-outs grouped by error and tool ──
+  const problemRows = problems.map((e) => ({
+    code:     e.error_code,
+    label:    ERROR_LABELS[e.error_code] || e.error_code,
+    tools:    String(e.tools || "").split(",").filter(Boolean).sort((a, b) => TOOL_ORDER.indexOf(a) - TOOL_ORDER.indexOf(b)),
+    toolLabel: String(e.tools || "").split(",").filter(Boolean).sort((a, b) => TOOL_ORDER.indexOf(a) - TOOL_ORDER.indexOf(b)).map((t) => TOOL_LABELS[t] || t).join(", "),
+    count:    e.n,
+    people:   e.people,
+    lastSeen: e.last_seen ? e.last_seen.slice(0, 16).replace("T", " ") : null,
+  }));
+
+  // ── uses per day and tool, every day of the period (zero days included, so the chart is a true timeline) ──
+  const dayList = [];
+  const first = opts.from || (dailyByTool[0] && dailyByTool[0].day);
+  const last  = opts.to   || (dailyByTool.length ? dailyByTool[dailyByTool.length - 1].day : null);
+  if (first && last) {
+    for (let d = new Date(first + "T00:00:00Z"), end = new Date(last + "T00:00:00Z"); d <= end && dayList.length < 400; d.setUTCDate(d.getUTCDate() + 1)) dayList.push(d.toISOString().slice(0, 10));
+  }
+  const toolsSeen = TOOL_ORDER.filter((t) => dailyByTool.some((r) => r.tool === t)).concat([...new Set(dailyByTool.map((r) => r.tool))].filter((t) => !TOOL_ORDER.includes(t)));
+  const dailyTools = {
+    days:   dayList,
+    series: toolsSeen.map((t) => ({ tool: t, label: TOOL_LABELS[t] || t, counts: dayList.map((day) => (dailyByTool.find((r) => r.day === day && r.tool === t) || {}).n || 0) })),
+  };
+
   return {
     total, successCount, failCount, timeoutCount, successRate,
     avgDurationMs,
     avgDurationLabel: (avgDurationMs / 1000).toFixed(1) + "s",
     uniqueDevices:  totals.unique_devices || 0,
     uniqueHosts:    totals.unique_hosts   || 0,
+    uniquePeople:   totals.unique_people  || 0,
     toolRows, protoRows, machineRows, fileRows,
+    toolSummaryRows, peopleRows, problemRows, dailyTools,
+    busiestTool: toolSummaryRows.slice().sort((a, b) => b.count - a.count)[0] || null,
     dailyTrend, heatmap,
     peakHour, peakDow,
     peakDayLabel: peakDow !== null ? DAY_NAMES[peakDow] : null,
-    insights: generateInsights({ total, successCount, failCount, timeoutCount, successRate, avgDurationMs, toolRows, peakHour, peakDow }),
+    insights: generateInsights({ total, successCount, failCount, timeoutCount, successRate, avgDurationMs, toolRows, peakHour, peakDow, peopleRows, uniquePeople: totals.unique_people || 0, problemRows }),
   };
 }
 
@@ -95,15 +173,15 @@ function getStats(opts = {}) {
  */
 function generateInsights(s) {
   const insights = [];
-  if (s.total === 0) return ["No conversions recorded in this period."];
+  if (s.total === 0) return ["No use of PerfX Studio was recorded in this period."];
 
   // Reliability
   if (s.successRate >= 98) {
-    insights.push(`Excellent reliability — ${s.successRate}% success rate across ${s.total.toLocaleString()} conversions.`);
+    insights.push(`Excellent reliability — ${s.successRate}% success rate across ${s.total.toLocaleString()} uses.`);
   } else if (s.successRate >= 90) {
-    insights.push(`Good reliability at ${s.successRate}% success. ${s.failCount} failure${s.failCount !== 1 ? "s" : ""} worth reviewing in the event log.`);
+    insights.push(`Good reliability at ${s.successRate}% success. ${s.failCount} failure${s.failCount !== 1 ? "s" : ""} worth reviewing under Problems.`);
   } else {
-    insights.push(`Success rate is ${s.successRate}% — below expectations. ${s.failCount} failures recorded; review error codes in the event log.`);
+    insights.push(`Success rate is ${s.successRate}% — below expectations. ${s.failCount} failures recorded — see Problems.`);
   }
 
   // Top tool
@@ -114,27 +192,34 @@ function generateInsights(s) {
       converter: "indicating collection-based scripting is the most common workflow",
       jmx:       "indicating JMeter migration is an active workstream",
       recorder:  "indicating browser-capture recording is frequently used",
+      analyser:  "indicating test-result analysis is the main activity",
     };
-    insights.push(`${top.label} is the most used tool at ${top.pct}% of conversions (${top.count.toLocaleString()} total), ${notes[top.tool] || ""}.`);
+    insights.push(`${top.label} is the most used tool at ${top.pct}% of uses (${top.count.toLocaleString()} total), ${notes[top.tool] || ""}.`);
+  }
+
+  // People
+  if (s.uniquePeople > 0 && s.peopleRows.length) {
+    const who = "machines";
+    const lead = s.peopleRows[0];
+    insights.push(`${s.uniquePeople.toLocaleString()} ${s.uniquePeople === 1 ? who.slice(0, -1) : who} used PerfX Studio; the most active was ${lead.person} with ${lead.count.toLocaleString()} use${lead.count === 1 ? "" : "s"} (${lead.pct}%).`);
+  }
+
+  // Most common problem
+  if (s.problemRows && s.problemRows.length) {
+    const p = s.problemRows[0];
+    insights.push(`The most common problem was "${p.label}" (${p.count.toLocaleString()} time${p.count === 1 ? "" : "s"}, in ${p.toolLabel}) — see Problems.`);
   }
 
   // Peak time
   if (s.peakHour !== null && s.peakDow !== null) {
     const dayName  = DAY_NAMES[s.peakDow];
     const period   = s.peakHour < 12 ? "morning" : s.peakHour < 17 ? "afternoon" : "evening";
-    insights.push(`Peak usage is ${dayName} ${s.peakHour}:00–${s.peakHour + 1}:00, suggesting scripting sessions align with ${period} ${dayName.toLowerCase()} workflows.`);
+    insights.push(`Peak usage is ${dayName} ${s.peakHour}:00–${s.peakHour + 1}:00 — most scripting happens on ${dayName} ${period}s.`);
   }
 
   // Timeouts
   if (s.timeoutCount > 0) {
     insights.push(`${s.timeoutCount} conversion${s.timeoutCount !== 1 ? "s" : ""} timed out. These typically occur with HAR files over 150 MB — splitting large recordings into smaller journeys will resolve this.`);
-  }
-
-  // Performance
-  if (s.avgDurationMs > 0) {
-    const sec = (s.avgDurationMs / 1000).toFixed(1);
-    const rating = s.avgDurationMs < 5000 ? "excellent" : s.avgDurationMs < 15000 ? "good" : "moderate";
-    insights.push(`Average conversion time is ${sec}s — ${rating} performance, well within the 120-second timeout limit.`);
   }
 
   return insights;
@@ -164,7 +249,8 @@ function dateRangePreset(preset) {
 function formatSize(kb) {
   if (!kb) return "—";
   if (kb < 1024) return kb + " KB";
-  return (kb / 1024).toFixed(1) + " MB";
+  if (kb < 1048576) return (kb / 1024).toFixed(1) + " MB";
+  return (kb / 1048576).toFixed(2) + " GB";
 }
 
 module.exports = { getStats, dateRangePreset };

@@ -62,6 +62,9 @@ Do NOT recreate it — all its functions exist in the three split files above.
 | `src/web/public/portal/home.js` | Home buttons (`data-go`, `data-help`, `data-scroll`), PORTAL_CONFIG flags (`data-tab`) |
 | `src/web/public/portal/{shell,home}.css` | Styles; tool colours `--c-convert/-jmeter/-record/-studio/-results/-help` |
 
+| `src/web/public/portal/track.js` | `PerfxTrack.send({...})` — usage ping of the browser tools (Recorder, Results Analyser) to …/analytics/track; Script Studio pings from studio-app.js |
+
+Usage statistics: tools `recorder`, `studio`, `converter`, `jmx`, `analyser`. Machine = reverse DNS of `req.ip`, else the IP (anonymous IIS authentication — no user names).
 Remembered options (localStorage): `perfx-cv-prefs` (converter.js), `perfx-rec-format` (recorder-ui.js), `perfx-studio-fmt` (studio-page.js) — restored through the pages' own setters.
 Rule: the old switchers in index.ejs stay the source of truth; the shell only wraps them. Tool panels (Converter, Recorder, Studio, Analyser, Help) are redesigned one at a time — keep every piece of Help text.
 
@@ -303,6 +306,8 @@ components `ds-btn`, `ds-card`, `ds-chip`, `ds-tile`, `ds-seg`, `ds-tabs`, `ds-p
 portal's older tokens (`--bg`, `--text`, `--glass` …) are mapped onto it in shell.css. Rules: one brand blue for
 actions (one primary button per area), tool colours only on icons, sentence case, pages use the full width
 beside the sidebar (`--ds-page-max: 100%`), no emoji in the interface (SVG line icons).
+The admin pages use it too: `src/web/views/admin.ejs` links `portal/ds.css` (prefix from `adminBase`); the sign-in page
+(`adminLoginHtml()` in server.js) carries the same tokens inline. Admin reports: `src/analytics/exporters/{xlsx,docx}.js`.
 Portal design rules (checked by the design audit — scratchpad `audit/audit.js`, every section, both themes):
 - One text font (system: Segoe UI on Windows) + one code font (Cascadia Code / Consolas); no web-font requests.
 - Font weights 400 / 600 / 700 ONLY. Segoe UI has no 500/650/750/800/850 face — 750+ renders as Segoe UI Black (blocky).
