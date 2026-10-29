@@ -31,7 +31,7 @@ var RT_TYPES = {
   fetch: ['Fetch/XHR', '#4f8ef7'], document: ['Doc', '#e8a838'], stylesheet: ['CSS', '#9b59b6'], script: ['JS', '#f39c12'],
   font: ['Font', '#16a085'], image: ['Img', '#27ae60'], media: ['Media', '#e74c3c'], other: ['Other', '#7f8c8d']
 };
-var RT_KEYS = ['fetch', 'document', 'stylesheet', 'script', 'font', 'image', 'media', 'other'];
+var RT_KEYS = ['document', 'fetch', 'script', 'stylesheet', 'image', 'font', 'media', 'other'];   // order of the type buttons
 
 var _file = null;        // { name, size, file } of the loaded recording
 var _nextFile = null;    // file chosen in the format dialog, not confirmed yet
@@ -191,58 +191,84 @@ function readFile(file) {
 }
 
 // ===========================================================================
-// RESOURCE-TYPE CHIPS ("Types in the script") — same S.resourceTypeFilter
-// semantics as the classic page: null = every type; a Set = only those types.
+// TYPE BUTTONS ("In the script") — S.typeOff holds the types left out (keys of
+// recTypeKey). JS, CSS, Img and Font start off: what the old "Static assets" tick
+// box left out. Each button shows how many requests it covers.
 // ===========================================================================
 function setRecorderRt(key) {
-  if (key === '__all__') {
-    S.resourceTypeFilter = null;
-    _syncRtChips(); refresh(); return;
-  }
   if (RT_KEYS.indexOf(key) < 0) return;
-  if (!S.resourceTypeFilter) S.resourceTypeFilter = new Set(RT_KEYS);
-  if (S.resourceTypeFilter.has(key)) S.resourceTypeFilter.delete(key);
-  else S.resourceTypeFilter.add(key);
-  if (S.resourceTypeFilter.size === 0) S.resourceTypeFilter = new Set([key]);
+  if (!S.typeOff) S.typeOff = new Set();
+  if (S.typeOff.has(key)) S.typeOff.delete(key);
+  else {
+    if (RT_KEYS.every(function (k) { return k === key || S.typeOff.has(k); })) { _toast('At least one type stays in the script.', 'warning'); return; }
+    S.typeOff.add(key);
+  }
   _syncRtChips(); refresh();
 }
+// per type: requests in the recording, and requests it puts in the script when on (the other filters still apply)
+function _typeCounts() {
+  var all = {}, n = {};
+  S.entries.forEach(function (e) {
+    if (e.isMarker) return;
+    var k = recTypeKey(e);
+    all[k] = (all[k] || 0) + 1;
+    if (!e.leftOut || e.leftOut === 'type') n[k] = (n[k] || 0) + 1;
+  });
+  return { all: all, n: n };
+}
 function _syncRtChips() {
-  var f = S.resourceTypeFilter;
-  RC.$$('#rec-rt-bar [data-key]').forEach(function (c) {
-    var k = c.dataset.key;
-    var on = k === '__all__' ? (!f || f.size === RT_KEYS.length) : (!f || f.has(k));
-    c.setAttribute('aria-pressed', String(on));
+  var off = S.typeOff || new Set(), c = S.entries.length ? _typeCounts() : null;
+  RC.$$('#rec-rt-bar [data-key]').forEach(function (b) {
+    var k = b.dataset.key, on = !off.has(k), label = (RT_TYPES[k] || [k])[0];
+    var cnt = c ? (c.n[k] || 0) : null, them = cnt === 1 ? 'it' : 'them';
+    b.setAttribute('aria-pressed', String(on));
+    var nEl = b.querySelector('.n');
+    if (nEl) nEl.textContent = cnt === null ? '' : String(cnt);
+    b.hidden = !!c && !c.all[k];                     // a type the recording does not have
+    b.title = cnt === null ? label
+      : on ? label + ': ' + _plural(cnt, 'request') + ' in the script — click to leave ' + them + ' out'
+      : label + ': ' + _plural(cnt, 'request') + ' left out — click to put ' + them + ' in the script';
   });
   _syncFilterSummary();
 }
 function _syncFilterSummary() {
   var el = document.getElementById('f-sum');
   if (!el) return;
+  var off = S.typeOff || new Set();
+  var on = RT_KEYS.filter(function (k) { return !off.has(k); }).map(function (k) { return RT_TYPES[k][0]; });
   var out = [];
-  if (document.getElementById('f-static').checked) out.push('static assets');
   if (document.getElementById('f-noise').checked) out.push('analytics / ads');
   if (document.getElementById('f-opts').checked) out.push('OPTIONS');
-  var f = S.resourceTypeFilter;
-  var types = !f || f.size === RT_KEYS.length ? 'all types' : RT_KEYS.filter(function (k) { return f.has(k); }).map(function (k) { return RT_TYPES[k][0]; }).join(', ');
-  el.textContent = 'Leaving out: ' + (out.length ? out.join(', ') : 'nothing') + ' · Types: ' + types;
+  el.textContent = 'In the script: ' + (on.length === RT_KEYS.length ? 'all types' : on.join(', ')) + ' · Leaving out: ' + (out.length ? out.join(', ') : 'nothing else');
 }
 
 // ===========================================================================
 // REQUEST LIST
 // ===========================================================================
-// Why a request is left out of the script — mirrors applyFilters() (same order).
+// Why a request is left out of the script — the reason applyFilters() recorded (recLeftOut).
+var _WHY = { report: 'browser security report', websocket: 'WebSocket — cannot be replayed', nonhttp: 'not a network request',
+  domain: 'domain switched off', options: 'OPTIONS left out', ads: 'analytics / ads left out',
+  prefetch: 'browser prefetch — the page itself is opened later in the script' };
 function _whyLeftOut(e) {
-  var reqCt = ((e.hdrsMap || {})['content-type'] || '').split(';')[0].trim().toLowerCase();
-  if (reqCt === 'application/csp-report' || reqCt === 'application/reports+json') return 'browser security report';
-  if (e.body && e.body.text && e.body.text.includes('"blocked-uri"')) return 'browser security report';
-  if (/^wss?:\/\//i.test(e.url)) return 'WebSocket — cannot be replayed';
-  if (!/^https?:\/\//i.test(e.url)) return 'not a network request';
-  try { if (S.domainFilter[new URL(e.url).hostname] === false) return 'domain switched off'; } catch (x) { /* ignore */ }
-  if (document.getElementById('f-opts').checked && e.method === 'OPTIONS') return 'OPTIONS left out';
-  if (document.getElementById('f-static').checked && (STATIC_CT.has(e.ct) || STATIC_EXT.test(e.url.split('?')[0]))) return 'static asset left out';
-  if (document.getElementById('f-noise').checked) { try { if (NOISY.test(new URL(e.url).hostname)) return 'analytics / ads left out'; } catch (x) { /* ignore */ } }
-  if (S.resourceTypeFilter && S.resourceTypeFilter.size > 0 && !S.resourceTypeFilter.has(classifyHarEntry(e))) return 'type ' + (RT_TYPES[classifyHarEntry(e)] || [classifyHarEntry(e)])[0] + ' switched off';
-  return 'left out';
+  var code = e.leftOut !== undefined ? e.leftOut : recLeftOut(e, recFilterFlags());
+  if (code === 'type') return (RT_TYPES[recTypeKey(e)] || ['Other'])[0] + ' switched off';
+  return _WHY[code] || 'left out';
+}
+
+// Left-out requests are hidden: each transaction ends with one line saying how many and why, with Show.
+var _showOut = !!RC.prefs.showOut;  // "Show left-out": every left-out request drawn, faded (the earlier view)
+var _openOut = {};                  // parts of the list whose left-out requests are shown: key -> true
+var _OUT_LABEL = { report: 'browser reports', websocket: 'WebSocket', nonhttp: 'non-network', domain: 'from switched-off domains', options: 'OPTIONS', ads: 'analytics / ads', prefetch: 'prefetch' };
+function _outSummary(list) {
+  var by = {}, res = false;
+  list.forEach(function (e) {
+    var k = e.leftOut === 'type' ? recTypeKey(e) : '';
+    var l = k ? RT_TYPES[k][0] : (_OUT_LABEL[e.leftOut] || 'other');
+    if (k === 'stylesheet' || k === 'image') res = true;
+    by[l] = (by[l] || 0) + 1;
+  });
+  var text = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).map(function (l) { return by[l] + ' ' + l; }).join(', ');
+  return { text: text, res: res };
 }
 
 function _splitUrl(url) {
@@ -277,18 +303,44 @@ function renderTable() {
     stack.forEach(function (si) { counts[si].n++; if (!e.filtered) counts[si].inc++; });
   });
 
-  // Pass 2: rows
-  var html = [], open = [], noneShown = false, shownReq = 0;
-  var totalReq = ents.filter(function (x) { return !x.isMarker; }).length;
+  // Pass 2: rows. Left-out requests are not drawn (unless shown): each part of the list — a transaction, or
+  // the requests between transactions — ends with one line saying how many were left out and why.
+  var html = [], open = [], noneShown = false, shownReq = 0, outSeg = 0, partOut = [], hiddenOut = 0;
+  var totalReq = ents.filter(function (x) { return !x.isMarker && (_showOut || !x.filtered); }).length;
   var limit = !_showAllRows && totalReq >= ROW_LIMIT_FROM ? ROW_LIMIT : Infinity;
+  var partKey = function () { return open.length ? 'T:' + open[open.length - 1] : 'O:' + outSeg; };
+  var noneHeader = function () {
+    if (hasMarkers && open.length === 0 && !noneShown) {
+      html.push('<tr class="grp none"><td colspan="6"><div class="rc-grp-row none"><span class="rc-grp">Not in a transaction <small>requests recorded outside your transactions</small></span></div></td></tr>');
+      noneShown = true;
+    }
+  };
+  var flushOut = function () {
+    if (!partOut.length) return;
+    if (!_showOut) {
+      var k = partKey(), shown = !!_openOut[k], s = _outSummary(partOut);
+      noneHeader();
+      html.push('<tr class="outsum"><td colspan="6"><div class="rc-outsum" style="--d:' + open.length + '"><span title="' + esc(_plural(partOut.length, 'request') + ' left out — ' + s.text) + '">' + (shown ? '' : '+ ') +
+        _plural(partOut.length, 'request') + ' left out — ' + esc(s.text) +
+        (s.res ? '<span class="res"> · images and stylesheets in a page’s HTML still download with the page</span>' : '') + '</span>' +
+        '<button class="rc-mini" type="button" data-out="' + esc(k) + '" aria-expanded="' + shown + '">' + (shown ? 'Hide' : 'Show') + '</button></div></td></tr>');
+    }
+    partOut = [];
+  };
   for (var i = 0; i < ents.length; i++) {
     var e = ents[i];
+    if (!e.isMarker && e.filtered) {
+      partOut.push(e);
+      if (!_showOut && !_openOut[partKey()]) { hiddenOut++; continue; }
+    }
     if (!e.isMarker && ++shownReq > limit) {
       html.push('<tr class="more"><td colspan="6"><div class="rc-empty sm">Showing the first ' + limit.toLocaleString('en-GB') + ' of ' + totalReq.toLocaleString('en-GB') +
         ' requests — the script includes all of them. <button class="ds-btn ds-btn-sm" type="button" id="btn-show-all">Show all ' + totalReq.toLocaleString('en-GB') + '</button></div></td></tr>');
+      partOut = [];
       break;
     }
     if (e.isMarker) {
+      flushOut();
       var c = S.colorMap[e.txnName] || COLORS[0];
       if (e.markerType === 'start') {
         var cnt = counts[i], d = open.length, collapsed = !!S.collapsed[e.txnName];
@@ -302,15 +354,13 @@ function renderTable() {
         open.push(e.txnName); noneShown = false;
       } else {
         for (var k = open.length - 1; k >= 0; k--) { if (open[k] === e.txnName) { open.splice(k); break; } }
+        if (!open.length) outSeg++;
         html.push('<tr class="end" data-grp="' + esc(e.txnName) + '"><td colspan="6"><div class="rc-end" style="--g:' + c.bd + ';--d:' + open.length + '"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>End ' + esc(e.txnName) + '</div></td></tr>');
       }
       continue;
     }
-    if (hasMarkers && open.length === 0 && !noneShown) {
-      html.push('<tr class="grp none"><td colspan="6"><div class="rc-grp-row none"><span class="rc-grp">Not in a transaction <small>requests recorded outside your transactions</small></span></div></td></tr>');
-      noneShown = true;
-    }
-    var u = _splitUrl(e.url), rt = classifyHarEntry(e), tinfo = RT_TYPES[rt] || [rt, '#7f8c8d'];
+    noneHeader();
+    var u = _splitUrl(e.url), rt = recTypeKey(e), tinfo = RT_TYPES[rt] || [rt, '#7f8c8d'];
     var note = '';
     if (e.filtered) note = '<span class="rc-why">' + esc(_whyLeftOut(e)) + '</span>';
     else if (auto.has(i)) note = e.status === 401
@@ -329,12 +379,17 @@ function renderTable() {
       '<td class="w-ty"><span class="rc-type" style="--k:' + tinfo[1] + '"><i></i>' + esc(tinfo[0]) + '</span></td>' +
       '<td class="num w-sz">' + size + '</td><td class="num w-tm">' + time + '</td></tr>');
   }
+  flushOut();
   tbody.innerHTML = html.length ? html.join('')
     : '<tr><td colspan="6"><div class="rc-empty"><b>No requests in this file</b>The recording is empty. Record the journey again, then load the new file.</div></td></tr>';
   applyCollapse();
   updateCollapseAllBtn();
   var nm = document.getElementById('no-markers');
   if (nm) nm.hidden = S.txns.length > 0 || !ents.some(function (x) { return !x.isMarker; });
+  var note = document.getElementById('req-note');
+  if (note) note.textContent = 'grouped by transaction' + (_showOut ? ' · faded = left out of the script' : hiddenOut ? ' · ' + hiddenOut.toLocaleString('en-GB') + ' left out, hidden' : '');
+  var so = document.getElementById('btn-show-out');
+  if (so) { so.setAttribute('aria-pressed', String(_showOut)); so.lastChild.textContent = _showOut ? 'Hide left-out' : 'Show left-out'; }
 }
 
 function toggleTxn(el) {
@@ -402,7 +457,8 @@ function renderStats() {
   } else authBadge.hidden = true;
   var empty = total === 0;
   ['dl-webhttp', 'dl-devweb', 'btn-copy', 'btn-studio'].forEach(function (id) { var b = document.getElementById(id); if (b) b.disabled = empty; });
-  _syncFilterSummary();
+  _syncRtChips();
+  renderDomainPanel(_domSearch());   // in-script counts and server parameter names follow every change
 }
 
 // ===========================================================================
@@ -603,6 +659,35 @@ function _ungroupWithUndo(name) {
   _toast('Transaction ' + name + ' removed — its requests stay in the script', 'success', null, { label: 'Undo', run: function () { _txnRestore(snap); } });
 }
 
+// A transaction whose START is missing from the recording (an END without a START — the START bookmark fired
+// before DevTools was recording) starts where the previous transaction ended, or at the beginning. Without this,
+// VuGen got lr_end_transaction for a transaction never started and DevWeb dropped the transaction.
+function _repairOrphanEnds() {
+  var open = [], from = 0, added = 0;
+  for (var i = 0; i < S.entries.length; i++) {
+    var e = S.entries[i];
+    if (!e.isMarker) continue;
+    if (e.markerType === 'start') { open.push(e.txnName); from = i + 1; continue; }
+    var k = open.lastIndexOf(e.txnName);
+    if (k >= 0) { open.splice(k); from = i + 1; continue; }
+    S.entries.splice(from, 0, _makeRecMarker('start', e.txnName));
+    i++;
+    for (var j = from + 1; j < i; j++) { var r = S.entries[j]; if (!r.isMarker && !r.txn) r.txn = e.txnName; }
+    from = i + 1; added++;
+  }
+  if (!added) return 0;
+  // transaction list (numbering SC01_01 …) in the order the transactions start
+  var byName = {}, seen = {}, list = [];
+  S.txns.forEach(function (t) { byName[t.name] = t; });
+  S.entries.forEach(function (x) { if (x.isMarker && x.markerType === 'start' && !seen[x.txnName]) { seen[x.txnName] = 1; list.push(x.txnName); } });
+  S.txns = list.map(function (n, ix) {
+    var t = byName[n] || { name: n, color: COLORS[ix % COLORS.length] };
+    S.colorMap[n] = t.color;
+    return t;
+  });
+  return added;
+}
+
 // Replay manual edits after the recording was processed again (format change)
 function _replayTxnLog(log) {
   var kept = 0;
@@ -617,6 +702,27 @@ function _replayTxnLog(log) {
 // ===========================================================================
 // DOMAINS
 // ===========================================================================
+// Two parts: domains the script uses (with their server parameter, which can be renamed), then — folded —
+// the domains whose requests are all left out or that are switched off.
+var _domRestOpen = !!RC.prefs.domRest;
+function _domHostParams(d) {
+  var hp = S.hostParams;
+  return hp && hp.list ? hp.list.filter(function (p) { return HostParams.hostName(p.key) === d; }) : [];
+}
+function _domRow(d, max, inScript) {
+  var st = S.domainStats[d], on = S.domainFilter[d] !== false, n = inScript[d] || 0;
+  var params = _domHostParams(d);
+  var meta = _plural(st.count, 'request') + ' · ' + fmtSize(st.size) +
+    (on && n && n !== st.count ? ' · ' + n + ' in the script' : !n && params.length ? ' · named in headers only' : '');
+  var hp = params.map(function (p) {
+    return '<div class="rc-hp"><code title="Server parameter: ' + esc(p.key) + ' is {' + esc(p.name) + '} in VuGen and ${' + esc(p.name) + '} in DevWeb">{' + esc(p.name) + '}</code>' +
+      '<button class="rc-mini" type="button" data-rename="' + esc(p.key) + '" title="Rename the parameter of ' + esc(p.key) + ' — the script uses the new name everywhere">Rename</button></div>';
+  }).join('');
+  return '<div class="rc-dom' + (on ? ' on' : '') + '" data-host="' + esc(d) + '">' +
+    '<button class="rc-dsw" type="button" role="switch" aria-checked="' + on + '" title="' + esc(d) + (on ? ' — in the script (click to leave it out)' : ' — left out of the script (click to put it back)') + '">' +
+    '<span class="sw"></span><b>' + (d ? esc(d) : '<i>no host (data:, blob: …)</i>') + '</b><span class="m">' + (params.some(function (p) { return p.main; }) ? '<span class="rc-hp-main" title="The main application: the server of the first page of your journey">main</span> ' : '') + meta +
+    '<span class="bar" style="width:' + Math.max(4, (st.size || 0) / max * 100) + '%"></span></span></button>' + hp + '</div>';
+}
 function renderDomainPanel(search) {
   var q = (search || '').trim().toLowerCase();
   var all = Object.keys(S.domainStats);
@@ -630,25 +736,113 @@ function renderDomainPanel(search) {
     list.innerHTML = '<div class="rc-empty sm">' + (q ? 'No domain matches “' + esc(q) + '”' : all.length ? 'No domains' : 'Load a HAR file') + '</div>';
     return;
   }
+  // requests in the script per domain
+  var inScript = {};
+  S.entries.forEach(function (e) {
+    if (e.isMarker || e.filtered) return;
+    var h = HostParams.hostName(HostParams.hostKey(e.url));
+    if (h) inScript[h] = (inScript[h] || 0) + 1;
+  });
   var max = Math.max.apply(null, [1].concat(all.map(function (d) { return S.domainStats[d].size || 0; })));
-  list.innerHTML = domains.map(function (d) {
-    var st = S.domainStats[d], on = S.domainFilter[d] !== false;
-    return '<div class="rc-dom' + (on ? ' on' : '') + '" role="switch" aria-checked="' + on + '" tabindex="0" data-host="' + esc(d) + '" title="' + esc(d) + (on ? ' — in the script' : ' — left out of the script') + '">' +
-      '<span class="sw"></span><b>' + (d ? esc(d) : '<i>no host (data:, blob: …)</i>') + '</b><span>' + _plural(st.count, 'request') + ' · ' + fmtSize(st.size) +
-      '<div class="bar" style="width:' + Math.max(4, (st.size || 0) / max * 100) + '%"></div></span></div>';
-  }).join('');
+  var used = function (d) { return S.domainFilter[d] !== false && (inScript[d] || _domHostParams(d).length); };
+  var mine = domains.filter(used), rest = domains.filter(function (d) { return !used(d); });
+  var open = _domRestOpen || !!q;
+  var html = '<div class="rc-dsec" title="Domains with requests in the script, each with its server parameter">In the script <small>' + mine.length + '</small></div>' +
+    (mine.length ? mine.map(function (d) { return _domRow(d, max, inScript); }).join('') : '<div class="rc-empty sm">' + (q ? 'No match' : 'No domain is in the script') + '</div>');
+  if (rest.length) {
+    html += '<button class="rc-dsec fold" type="button" id="dom-rest" aria-expanded="' + open + '" title="Domains whose requests are all left out by the filters, or that are switched off"><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><span>Not in the script</span> <small>' + rest.length + '</small></button>' +
+      (open ? rest.map(function (d) { return _domRow(d, max, inScript); }).join('') : '');
+  }
+  list.innerHTML = html;
 }
 function _domSearch() { var s = document.querySelector('.dp-search'); return s ? s.value : ''; }
 function onDpClick(event, domain) { toggleDomain(domain, S.domainFilter[domain] === false); }
 function toggleDomain(domain, state) {
   S.domainFilter[domain] = state;
-  renderDomainPanel(_domSearch());
   applyFilters(); buildScripts(); renderTable(); renderStats(); showScript();
 }
 function toggleAllDomains(state) {
   Object.keys(S.domainFilter).forEach(function (d) { S.domainFilter[d] = state; });
-  renderDomainPanel(_domSearch());
   applyFilters(); buildScripts(); renderTable(); renderStats(); showScript();
+}
+
+// Before a domain is left out: what in the script depends on it (a page of the journey, a redirect to it,
+// sign-in, cookies) — so a needed server is not dropped by mistake
+var _SIGN_IN = /\/(login|logon|signin|sign-in|oauth2?|authorize|token|saml2?|sso|adfs|openid|auth)(\/|\?|\.|$)/i;
+function _domainNeeds(d) {
+  var page = null, sso = null, cookie = false, from = null;
+  S.entries.forEach(function (e) {
+    if (e.isMarker || e.filtered) return;
+    var h = HostParams.hostName(HostParams.hostKey(e.url));
+    if (h === d) {
+      if (!page && HostParams.isPageLoad(e)) page = e;
+      if (!sso && _SIGN_IN.test(_splitUrl(e.url).path)) sso = e;
+      if ((e.respHdrsMap || {})['set-cookie']) cookie = true;
+    } else if (!from && e.status >= 300 && e.status < 400 && HostParams.hostName(HostParams.hostKey((e.respHdrsMap || {}).location || '')) === d) from = h;
+  });
+  var path = function (x) { var p = _splitUrl(x.url).path; return p.length > 70 ? p.slice(0, 70) + '…' : p; };
+  var r = [];
+  if (page) r.push('It loads a page of your journey: ' + path(page));
+  if (from) r.push(from + ' redirects to it');
+  if (sso) r.push('It looks like sign-in: ' + path(sso));
+  if (cookie) r.push('It sets cookies that later requests send back');
+  return r;
+}
+function _setDomain(host, on) {
+  var again = function () {
+    var b = document.querySelector('.rc-dom[data-host="' + (window.CSS && CSS.escape ? CSS.escape(host) : host) + '"] .rc-dsw');
+    if (b) b.focus(); else document.querySelector('.dp-search').focus();
+  };
+  var run = function () { _busy('Applying filters…', _isBig(), function () { toggleDomain(host, on); again(); }); };
+  if (on) { run(); return; }
+  var needs = _domainNeeds(host);
+  if (!needs.length) { run(); return; }
+  _ask('Leave out ' + host + '?', 'The script may not work without it:', 'Leave it out', run, needs);
+}
+
+// ── rename a server parameter (S.hostNames; the generators use the name everywhere) ──
+var _hostDlgKey = null;
+function _openHostDialog(key) {
+  var hp = S.hostParams;
+  if (!hp || !hp.map[key]) return;
+  _hostDlgKey = key;
+  var inp = document.getElementById('host-inp');
+  inp.value = hp.map[key]; inp.removeAttribute('aria-invalid');
+  document.getElementById('host-err').hidden = true;
+  document.getElementById('host-sub').textContent = key + (key === hp.main ? ' (main application)' : '') +
+    '. Every URL, header and body that calls this server uses the new name — in vuser_init and in every step, in both formats.';
+  document.getElementById('host-default').hidden = !S.hostNames[key];
+  var d = document.getElementById('host-dlg');
+  if (!d.open) d.showModal();
+  setTimeout(function () { inp.focus(); inp.select(); }, 30);
+}
+function _closeHostDialog() {
+  var d = document.getElementById('host-dlg'); if (d.open) d.close();
+  var key = _hostDlgKey, b = key && document.querySelector('[data-rename="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+  if (b) b.focus();
+}
+function _confirmHostRename(useDefault) {
+  var key = _hostDlgKey, hp = S.hostParams;
+  if (!key || !hp) return;
+  var name = document.getElementById('host-inp').value.trim(), from = hp.map[key];
+  if (!useDefault) {
+    var taken = {};
+    Object.keys(hp.map).forEach(function (k) { if (k !== key) taken[k] = hp.map[k]; });
+    var err = HostParams.validName(name, key, taken, _recReservedNames());
+    if (err) {
+      var el = document.getElementById('host-err'), inp = document.getElementById('host-inp');
+      el.textContent = err; el.hidden = false; inp.setAttribute('aria-invalid', 'true'); inp.focus();
+      return;
+    }
+    if (name === from) { _closeHostDialog(); return; }
+  }
+  var before = Object.assign({}, S.hostNames);
+  if (useDefault) delete S.hostNames[key]; else S.hostNames[key] = name;
+  _regen();
+  _closeHostDialog();
+  var to = S.hostParams.map[key];
+  _toast((useDefault ? key + ' uses the default name ' + to + ' again' : 'Renamed ' + from + ' to ' + to) + ' — updated everywhere in the script', 'success', null,
+    { label: 'Undo', run: function () { S.hostNames = before; _regen(); } });
 }
 
 // ===========================================================================
@@ -691,6 +885,7 @@ function confirmFmt() {
   _dropUndo();
   if (!fromToolbar) {
     S.domainFilter = {};                           // a new file: domain choices start fresh (classic readFile did this)
+    S.hostNames = {}; _openOut = {};               // …and so do renamed server parameters and opened summaries
     if (_nextFile) _file = _nextFile;
     _nextFile = null; _stash = null; _showAllRows = false;
   }
@@ -709,7 +904,9 @@ function confirmFmt() {
     return;
   }
   var kept = 0;
-  if (replay.length) { kept = _replayTxnLog(replay); _regen(); }
+  var repaired = _repairOrphanEnds();
+  if (replay.length) kept = _replayTxnLog(replay);
+  if (replay.length || repaired) _regen();
   if (!fromToolbar) _trackRecording('success');
   document.getElementById('welcome').hidden = true;
   document.getElementById('main').hidden = false;
@@ -791,10 +988,16 @@ function _backToWorkspace() {
   document.getElementById('main').hidden = false;
 }
 
-function _ask(title, text, okLabel, then) {
+function _ask(title, text, okLabel, then, list) {
   var d = document.getElementById('confirm-dlg');
   document.getElementById('confirm-h').textContent = title;
   document.getElementById('confirm-t').textContent = text;
+  var ul = document.getElementById('confirm-list');
+  if (ul) {
+    ul.textContent = '';
+    (list || []).forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+    ul.hidden = !(list && list.length);
+  }
   document.getElementById('confirm-ok').textContent = okLabel;
   d.returnValue = '';
   d.onclose = function () { if (d.returnValue === 'ok') then(); };
@@ -810,6 +1013,7 @@ function clearAll() {
 function _doClear() {
   S.entries = []; S.txns = []; S.colorMap = {}; S.selIds.clear(); S.scripts = {}; S.pendingHar = null; S.pendingNetLog = null; S.isNetLogSource = false; S.domainFilter = {}; S.domainStats = {}; S.auth = null; S.serverHost = null;
   S.selMode = false; _txnLog = []; _file = null; _nextFile = null; _stash = null; _showAllRows = false;
+  S.hostNames = {}; S.hostParams = null; _openOut = {};
   _dropUndo();
   document.getElementById('tbody').innerHTML = '';
   document.getElementById('stats').textContent = '';
@@ -840,7 +1044,12 @@ function _openInStudio() {
     var f = shell.document.getElementById('iframe-studio');
     var w = f && f.contentWindow;
     var ready = w && w.document && w.document.readyState === 'complete' && typeof w.loadFile === 'function' && w.document.getElementById('dz1');
-    if (ready) { try { w.loadFile(file, 1); } catch (e) { /* Studio shows its own message */ } return; }
+    if (ready) {
+      // the server names renamed here are used by Script Studio too (the same names in both tools)
+      try { if (w.S) w.S.hostNames = Object.assign({}, S.hostNames || {}); } catch (e) { /* different page version */ }
+      try { w.loadFile(file, 1); } catch (e) { /* Studio shows its own message */ }
+      return;
+    }
     if (++tries < 150) setTimeout(wait, 100);
   })();
 }
@@ -933,6 +1142,16 @@ function _initResizers() {
   var conf = document.getElementById('confirm-dlg');
   conf.addEventListener('click', function (e) { if (e.target === conf) conf.close('cancel'); });
 
+  // server parameter rename dialog
+  var hd = document.getElementById('host-dlg');
+  document.getElementById('host-ok').addEventListener('click', function () { _confirmHostRename(false); });
+  document.getElementById('host-default').addEventListener('click', function () { _confirmHostRename(true); });
+  document.getElementById('host-cancel').addEventListener('click', _closeHostDialog);
+  document.getElementById('host-inp').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); _confirmHostRename(false); } });
+  document.getElementById('host-inp').addEventListener('input', function () { document.getElementById('host-err').hidden = true; this.removeAttribute('aria-invalid'); });
+  hd.addEventListener('cancel', function (e) { e.preventDefault(); _closeHostDialog(); });
+  hd.addEventListener('click', function (e) { if (e.target === hd) _closeHostDialog(); });
+
   // workspace
   var main = document.getElementById('main');
   main.addEventListener('click', function (e) {
@@ -946,10 +1165,27 @@ function _initResizers() {
       return;
     }
     if (t.closest('#btn-show-all')) { _busy('Showing every request…', true, function () { _showAllRows = true; renderTable(); }); return; }
+    var outBtn = t.closest('[data-out]');
+    if (outBtn) {
+      var ok = outBtn.dataset.out;
+      _openOut[ok] = !_openOut[ok];
+      renderTable();
+      var same = document.querySelector('[data-out="' + (window.CSS && CSS.escape ? CSS.escape(ok) : ok) + '"]');
+      if (same) same.focus();
+      return;
+    }
+    if (t.closest('#btn-show-out')) { _showOut = !_showOut; RC.save('showOut', _showOut); _busy('Showing the requests…', _isBig(), renderTable); return; }
+    var ren = t.closest('[data-rename]');
+    if (ren) { _openHostDialog(ren.dataset.rename); return; }
+    if (t.closest('#dom-rest')) {
+      _domRestOpen = !_domRestOpen; RC.save('domRest', _domRestOpen); renderDomainPanel(_domSearch());
+      var fb = document.getElementById('dom-rest'); if (fb) fb.focus();
+      return;
+    }
     var row = t.closest('tr.req');
     if (row) { rowClick(+row.dataset.id); return; }
-    var dom = t.closest('.rc-dom');
-    if (dom) { var host = dom.dataset.host, on = dom.classList.contains('on'); _busy('Applying filters…', _isBig(), function () { toggleDomain(host, !on); }); return; }
+    var dsw = t.closest('.rc-dsw');
+    if (dsw) { var dom = dsw.closest('.rc-dom'); _setDomain(dom.dataset.host, !dom.classList.contains('on')); return; }
     var chip = t.closest('#rec-rt-bar [data-key]');
     if (chip) { var key = chip.dataset.key; _busy('Applying filters…', _isBig(), function () { setRecorderRt(key); }); return; }
     var hide = t.closest('[data-hide]');
@@ -958,24 +1194,13 @@ function _initResizers() {
     if (tab) { switchTab(tab, tab.dataset.tab); }
   });
   main.addEventListener('keydown', function (e) {
-    var dom = e.target.closest && e.target.closest('.rc-dom');
-    if (dom && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
-      var h = dom.dataset.host;
-      _busy('Applying filters…', _isBig(), function () {
-        toggleDomain(h, !dom.classList.contains('on'));
-        var again = document.querySelector('.rc-dom[data-host="' + (window.CSS && CSS.escape ? CSS.escape(h) : h) + '"]');
-        if (again) again.focus();
-      });
-      return;
-    }
     var row = e.target.closest && e.target.closest('tr.req[tabindex]');
     if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); rowClick(+row.dataset.id); }
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && S.selMode && !document.querySelector('dialog[open]')) toggleSelMode();
   });
-  ['f-static', 'f-noise', 'f-opts'].forEach(function (id) { document.getElementById(id).addEventListener('change', function () { _busy('Applying filters…', _isBig(), function () { refresh(); _syncFilterSummary(); }); }); });
+  ['f-noise', 'f-opts'].forEach(function (id) { document.getElementById(id).addEventListener('change', function () { _busy('Applying filters…', _isBig(), function () { refresh(); _syncFilterSummary(); }); }); });
   document.querySelector('.dp-search').addEventListener('input', function (e) { renderDomainPanel(e.target.value); });
   document.getElementById('btn-dom-all').addEventListener('click', function () { _busy('Applying filters…', _isBig(), function () { toggleAllDomains(true); }); });
   document.getElementById('btn-dom-none').addEventListener('click', function () { _busy('Applying filters…', _isBig(), function () { toggleAllDomains(false); }); });

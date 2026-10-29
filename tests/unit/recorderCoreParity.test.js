@@ -39,7 +39,9 @@ describe('Recorder redesign — engine parity with the classic page', () => {
   const core = read('portal/recorder-core.js');
   const page = read('Recorder.html');
 
-  test.each(['detectMarkers', '_recInjectPagerefMarkers', '_makeRecMarker', 'classifyHarEntry', 'applyFilters', 'refresh'])(
+  // applyFilters is this page's own since the type buttons replaced the "Static assets" tick box —
+  // its default result is checked against the classic rule further down
+  test.each(['detectMarkers', '_recInjectPagerefMarkers', '_makeRecMarker', 'classifyHarEntry', 'refresh'])(
     '%s is identical in recorder-core.js and VuGen-Recorder.html', (name) => {
       const a = fnSource(classic, name), b = fnSource(core, name);
       expect(a).not.toBeNull();
@@ -54,14 +56,24 @@ describe('Recorder redesign — engine parity with the classic page', () => {
     expect(mine.slice(engine.length)).toEqual(['portal/recorder-core.js', 'portal/drop-anywhere.js', 'portal/track.js', 'portal/recorder-ui.js']);
   });
 
-  test.each(['f-static', 'f-noise', 'f-opts', 'txn-inp', 'tbody', 'code-body', 'dp-list', 'dp-title', 'stats', 'hf', 'dz', 'welcome', 'main',
-    'netlog-banner', 'auth-badge', 'sel-cnt', 'btn-sel', 'rec-rt-bar', 'cdp-dl', 'fc-webhttp', 'fc-devweb', 'fc-both', 'fmt-cancel-btn', 'toast-container'])(
+  test.each(['f-noise', 'f-opts', 'txn-inp', 'tbody', 'code-body', 'dp-list', 'dp-title', 'stats', 'hf', 'dz', 'welcome', 'main',
+    'netlog-banner', 'auth-badge', 'sel-cnt', 'btn-sel', 'rec-rt-bar', 'cdp-dl', 'fc-webhttp', 'fc-devweb', 'fc-both', 'fmt-cancel-btn', 'toast-container',
+    'req-note', 'btn-show-out', 'host-dlg', 'host-inp', 'host-err', 'host-ok', 'host-default', 'confirm-list'])(
     'Recorder.html has #%s', (id) => {
       expect(page).toContain('id="' + id + '"');
     });
 
-  test('the static-asset, analytics and OPTIONS filters start ticked, as on the classic page', () => {
-    ['f-static', 'f-noise', 'f-opts'].forEach((id) => expect(page).toMatch(new RegExp('id="' + id + '"[^>]*checked')));
+  test('analytics and OPTIONS start ticked; JS, CSS, Img and Font start off (what "Static assets" left out)', () => {
+    ['f-noise', 'f-opts'].forEach((id) => expect(page).toMatch(new RegExp('id="' + id + '"[^>]*checked')));
+    expect(page).not.toContain('id="f-static"');
+    const pressed = Object.fromEntries([...page.matchAll(/data-key="(\w+)"[^>]*aria-pressed="(true|false)"/g)].map((m) => [m[1], m[2] === 'true']));
+    expect(pressed).toEqual({ document: true, fetch: true, script: false, stylesheet: false, image: false, font: false, media: true, other: true });
+    const S = new Function(read('VuGen-Recorder-state.js') + '\nreturn S;')();
+    expect([...S.typeOff].sort()).toEqual(['font', 'image', 'script', 'stylesheet']);
+  });
+
+  test('both Recorder pages load the server-parameter module after page-resources', () => {
+    [classic, page].forEach((html) => expect(html).toContain('<script src="shared/page-resources.js"></script>\n<script src="shared/host-params.js"></script>'));
   });
 
   test('bookmarklets are byte-identical to the classic page', () => {
@@ -74,9 +86,11 @@ describe('Recorder redesign — engine parity with the classic page', () => {
 // ── the new page's own logic ────────────────────────────────────────────────
 function loadUi(opts = {}) {
   const state = read('VuGen-Recorder-state.js');
+  const hostParams = read('shared/host-params.js');
+  const core = read('portal/recorder-core.js');
   const ui = read('portal/recorder-ui.js');
   const logic = ui.slice(0, ui.indexOf('// WIRING'));        // everything except the DOM wiring
-  const checks = Object.assign({ 'f-static': true, 'f-noise': true, 'f-opts': true }, opts.checks);
+  const checks = Object.assign({ 'f-noise': true, 'f-opts': true }, opts.checks);
   const document = {
     getElementById: (id) => (id in checks ? { checked: checks[id] } : null),
     querySelector: () => null,
@@ -92,12 +106,13 @@ function loadUi(opts = {}) {
   // eslint-disable-next-line no-new-func
   const window = {};
   const factory = new Function('document', 'localStorage', 'calls', 'window',
-    state +
+    state + '\n' + hostParams + '\nvar HostParams = window.HostParams;\n' + core +
     '\nfunction esc(s){ return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }' +
-    '\nfunction classifyHarEntry(e){ return e._rt || "fetch"; }' +
     '\nfunction buildScripts(){ calls.regen++; } function renderTable(){} function renderStats(){} function showScript(){} function refresh(){ calls.refresh++; }' +
+    '\nfunction _recReservedNames(){ return ["AccessToken"]; }' +
     '\n' + logic.replace(/function _regen\(\) \{[^}]*\}/, 'function _regen(){ calls.regen++; }') +
     '\nreturn { S, COLORS, _createTxn, _renameTxn, _ungroupTxn, _txnSnapshot, _txnRestore, _replayTxnLog, setRecorderRt, _whyLeftOut, _splitUrl, _highlight,' +
+    ' applyFilters, recTypeKey, recLeftOut, _outSummary, _domainNeeds, _typeCounts, _repairOrphanEnds, STATIC_CT, STATIC_EXT,' +
     ' get log(){ return _txnLog; }, set log(v){ _txnLog = v; } };');
   return Object.assign(factory(document, localStorage, calls, window), { calls });
 }
@@ -169,19 +184,76 @@ describe('Recorder redesign — manual transactions', () => {
   });
 });
 
-describe('Recorder redesign — filters and preview', () => {
-  test('type chips: first click turns only that type off; the last type cannot be turned off; All resets', () => {
+describe('Recorder — transaction whose START is missing', () => {
+  test('an END without a START starts where the previous transaction ended; numbering follows the start order', () => {
     const r = loadUi();
-    r.setRecorderRt('fetch');
-    expect([...r.S.resourceTypeFilter].sort()).toEqual(['document', 'font', 'image', 'media', 'other', 'script', 'stylesheet']);
-    ['document', 'font', 'image', 'media', 'other', 'script', 'stylesheet'].forEach((k) => r.setRecorderRt(k));
-    expect([...r.S.resourceTypeFilter]).toEqual(['stylesheet']);   // classic rule: never an empty set
-    r.setRecorderRt('__all__');
-    expect(r.S.resourceTypeFilter).toBeNull();
-    expect(r.calls.refresh).toBe(9);
+    r.S.entries = [req(1), req(2), marker('end', 't01_login'), marker('start', 't02_home'), req(3, { txn: 't02_home' }), marker('end', 't02_home'),
+      req(4), marker('end', 't03_out')];
+    r.S.txns = [{ name: 't02_home', color: r.COLORS[0] }]; r.S.colorMap = { t02_home: r.COLORS[0] };
+    expect(r._repairOrphanEnds()).toBe(2);
+    expect(shape(r.S)).toEqual(['[t01_login', '1:t01_login', '2:t01_login', ']t01_login', '[t02_home', '3:t02_home', ']t02_home', '[t03_out', '4:t03_out', ']t03_out']);
+    expect(r.S.txns.map((t) => t.name)).toEqual(['t01_login', 't02_home', 't03_out']);
+    expect(r.S.colorMap.t02_home).toBe(r.COLORS[0]);
+    expect(r._repairOrphanEnds()).toBe(0);                            // nothing left to repair
+  });
+});
+
+describe('Recorder redesign — filters and preview', () => {
+  test('type buttons: a click turns that type on or off; every type off at once is refused', () => {
+    const r = loadUi();
+    r.setRecorderRt('stylesheet');                                   // CSS starts off -> on
+    expect([...r.S.typeOff].sort()).toEqual(['font', 'image', 'script']);
+    r.setRecorderRt('fetch');                                        // Fetch/XHR on -> off
+    expect(r.S.typeOff.has('fetch')).toBe(true);
+    ['document', 'stylesheet', 'media'].forEach((k) => r.setRecorderRt(k));
+    expect(r.S.typeOff.size).toBe(7);                                // only Other is still on
+    r.setRecorderRt('other');                                        // the last one: refused
+    expect(r.S.typeOff.has('other')).toBe(false);
+    r.setRecorderRt('nonsense');
+    expect(r.calls.refresh).toBe(5);
   });
 
-  test('why a request is left out follows the applyFilters order', () => {
+  // The classic "Static assets" rule, applied before analytics and the old type chips (all on by default)
+  const classicStatic = (r, e) => r.STATIC_CT.has(e.ct) || r.STATIC_EXT.test(e.url.split('?')[0]);
+  const SAMPLES = [
+    ['/a.css', 'text/css', 'stylesheet'], ['/a.js', 'application/javascript', 'script'], ['/a.js', 'text/javascript', ''],
+    ['/a.png', 'image/png', 'image'], ['/x', 'image/svg+xml', 'image'], ['/f.woff2', 'font/woff2', 'font'], ['/f.ttf', 'application/octet-stream', ''],
+    ['/a.js.map', 'application/json', ''], ['/logo.png', 'text/html', 'image'], ['/pixel', 'text/html', 'image'], ['/jsonp', 'application/json', 'script'],
+    ['/cfg.js', 'text/plain', 'script'], ['/', 'text/html', 'document'], ['/api', 'application/json', 'fetch'], ['/api', 'application/json', ''],
+    ['/v.mp4', 'video/mp4', 'media'], ['/manifest.webmanifest', 'application/manifest+json', 'manifest'], ['/beacon', 'text/plain', 'ping'],
+    ['/x.ico', 'image/x-icon', 'other'], ['/sw', 'text/javascript', 'other'], ['/e', '', 'eventsource'], ['/d', 'application/pdf', ''],
+  ];
+
+  test('by default exactly the requests "Static assets" left out are left out (JS, CSS, Img, Font off)', () => {
+    const r = loadUi();
+    SAMPLES.forEach(([p, ct, rt]) => {
+      const e = req(1, { url: 'https://app.example.com' + p, ct, _resourceType: rt });
+      expect([p, ct, rt, !!r.recLeftOut(e, { noise: true, opts: true })]).toEqual([p, ct, rt, classicStatic(r, e)]);
+      // a static file is always JS, CSS, Img or Font; anything else never is
+      expect(['script', 'stylesheet', 'image', 'font'].includes(r.recTypeKey(e))).toBe(classicStatic(r, e));
+    });
+  });
+
+  test('type keys: static files by their content; JSONP and pixels stay in the script; unknown browser types are Other', () => {
+    const r = loadUi();
+    const k = (p, ct, rt) => r.recTypeKey(req(1, { url: 'https://app.example.com' + p, ct, _resourceType: rt }));
+    expect(k('/a.css', 'text/css', 'stylesheet')).toBe('stylesheet');
+    expect(k('/x', 'application/javascript', 'fetch')).toBe('script');        // the content decides, not the browser
+    expect(k('/logo.png', 'text/html', 'document')).toBe('image');
+    expect(k('/jsonp', 'application/json', 'script')).toBe('fetch');
+    expect(k('/pixel', 'text/html', 'image')).toBe('other');
+    expect(k('/manifest.webmanifest', 'application/manifest+json', 'manifest')).toBe('other');
+    expect(k('/e', '', 'eventsource')).toBe('other');
+  });
+
+  test('applyFilters records the reason on each request (one rule set for the script and the list)', () => {
+    const r = loadUi();
+    r.S.entries = [marker('start', 'T'), req(1, { url: 'https://app.example.com/a.css', ct: 'text/css' }), req(2), req(3, { method: 'OPTIONS' }), marker('end', 'T')];
+    r.applyFilters();
+    expect(r.S.entries.map((e) => [e.filtered, e.leftOut])).toEqual([[false, null], [true, 'type'], [false, null], [true, 'options'], [false, null]]);
+  });
+
+  test('why a request is left out follows the filter order', () => {
     const r = loadUi();
     expect(r._whyLeftOut(req(1, { url: 'wss://app.example.com/ws' }))).toMatch(/WebSocket/);
     expect(r._whyLeftOut(req(1, { url: 'data:image/png;base64,AA' }))).toBe('not a network request');
@@ -189,15 +261,69 @@ describe('Recorder redesign — filters and preview', () => {
     expect(r._whyLeftOut(req(1))).toBe('domain switched off');
     r.S.domainFilter = {};
     expect(r._whyLeftOut(req(1, { method: 'OPTIONS' }))).toBe('OPTIONS left out');
-    expect(r._whyLeftOut(req(1, { url: 'https://app.example.com/a.css', ct: 'text/css' }))).toBe('static asset left out');
+    expect(r._whyLeftOut(req(1, { url: 'https://app.example.com/a.css', ct: 'text/css' }))).toBe('CSS switched off');
     expect(r._whyLeftOut(req(1, { url: 'https://www.google-analytics.com/g/collect' }))).toBe('analytics / ads left out');
+    expect(r._whyLeftOut(req(1, { url: 'https://www.google-analytics.com/a.js', ct: 'application/javascript' }))).toBe('analytics / ads left out');
+    expect(r._whyLeftOut(req(1, { url: 'https://fundingchoicesmessages.google.com/i/x' }))).toBe('analytics / ads left out');
     expect(r._whyLeftOut(req(1, { hdrsMap: { 'content-type': 'application/csp-report' } }))).toBe('browser security report');
   });
 
   test('why: OPTIONS is not blamed when that filter is off', () => {
     const r = loadUi({ checks: { 'f-opts': false } });
-    r.S.resourceTypeFilter = new Set(['document']);
-    expect(r._whyLeftOut(req(1, { method: 'OPTIONS' }))).toBe('type Fetch/XHR switched off');
+    r.S.typeOff = new Set(['fetch']);
+    expect(r._whyLeftOut(req(1, { method: 'OPTIONS' }))).toBe('Fetch/XHR switched off');
+  });
+
+  test('one line per transaction for the hidden requests: counts by reason, biggest first', () => {
+    const r = loadUi();
+    const list = [req(1, { leftOut: 'ads' }), req(2, { leftOut: 'type', url: 'https://a.example.com/x.png', ct: 'image/png' }),
+      req(3, { leftOut: 'type', url: 'https://a.example.com/y.png', ct: 'image/png' }), req(4, { leftOut: 'options' })];
+    expect(r._outSummary(list)).toEqual({ text: '2 Img, 1 analytics / ads, 1 OPTIONS', res: true });
+    expect(r._outSummary([req(1, { leftOut: 'type', url: 'https://a.example.com/a.js', ct: 'text/javascript' })]).res).toBe(false);
+  });
+
+  test('ad pixels on www.google.com (/ads/, /pagead/) are analytics / ads; reCAPTCHA on the same server is not', () => {
+    const r = loadUi();
+    r.S.entries = [req(1, { url: 'https://www.google.com/ads/measurement/l?ebcid=x', ct: 'image/gif' }),
+      req(2, { url: 'https://www.google.com/pagead/1p-conversion/1/' }), req(3, { url: 'https://www.google.com/recaptcha/api2/aframe', ct: 'text/html' }),
+      req(4, { url: 'https://sync-tm.everesttech.net/upi/pid/x' })];
+    r.applyFilters();
+    expect(r.S.entries.map((e) => e.leftOut)).toEqual(['ads', 'ads', null, 'ads']);
+  });
+
+  test('a page the browser prefetched and then opened is scripted once — the prefetch is left out', () => {
+    const r = loadUi();
+    const pf = { 'sec-purpose': 'prefetch' };
+    r.S.entries = [req(1, { url: 'https://app.example.com/', ct: 'text/html' }),
+      req(2, { url: 'https://app.example.com/next/', ct: 'text/html', hdrsMap: pf }),
+      req(3, { url: 'https://app.example.com/next/', ct: 'text/html' }),
+      req(4, { url: 'https://app.example.com/never-opened/', ct: 'text/html', hdrsMap: { 'sec-purpose': 'prefetch;prerender' } })];
+    r.applyFilters();
+    expect(r.S.entries.map((e) => e.leftOut)).toEqual([null, 'prefetch', null, null]);   // one never opened stays in
+    expect(r._whyLeftOut(r.S.entries[1])).toMatch(/^browser prefetch/);
+    expect(r._outSummary([r.S.entries[1]]).text).toBe('1 prefetch');
+  });
+
+  test('type counts: requests per type, and how many each would put in the script', () => {
+    const r = loadUi();
+    r.S.entries = [req(1, { url: 'https://a.example.com/a.css', ct: 'text/css' }), req(2, { url: 'https://www.google-analytics.com/a.css', ct: 'text/css' }), req(3)];
+    r.applyFilters();
+    expect(r._typeCounts()).toEqual({ all: { stylesheet: 2, fetch: 1 }, n: { stylesheet: 1, fetch: 1 } });
+  });
+
+  test('leaving out a domain warns when the script needs it: page load, redirect to it, sign-in, cookies', () => {
+    const r = loadUi();
+    r.S.entries = [
+      req(1, { url: 'https://app.example.com/', _resourceType: 'document', ct: 'text/html', status: 302, respHdrsMap: { location: 'https://login.example.com/oauth2/authorize?x=1' } }),
+      req(2, { url: 'https://login.example.com/oauth2/authorize?x=1', _resourceType: 'document', ct: 'text/html', respHdrsMap: { 'set-cookie': 'a=1' } }),
+      req(3, { url: 'https://cdn.example.com/lib.json' }),
+    ];
+    const why = r._domainNeeds('login.example.com');
+    expect(why).toEqual(['It loads a page of your journey: /oauth2/authorize?x=1', 'app.example.com redirects to it',
+      'It looks like sign-in: /oauth2/authorize?x=1', 'It sets cookies that later requests send back']);
+    expect(r._domainNeeds('cdn.example.com')).toEqual([]);
+    r.S.entries[1].filtered = true;                                   // already left out: nothing in the script needs it
+    expect(r._domainNeeds('login.example.com')).toEqual(['app.example.com redirects to it']);
   });
 
   test('URL split never uses new URL() — {{variables}} and odd schemes stay as they are', () => {

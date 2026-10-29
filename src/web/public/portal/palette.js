@@ -46,8 +46,10 @@
     });
     list.push({ group: "Actions", title: "Switch light / dark theme", sub: "", icon: I_THEME, run: () => { const b = $("#tb-theme"); if (b) b.click(); } });
     if (innerWidth > 900) list.push({ group: "Actions", title: document.documentElement.classList.contains("sb-collapsed") ? "Expand the menu" : "Collapse the menu", sub: "Ctrl+B", icon: I_MENU, run: () => { const b = $(".sb-collapse"); if (b) b.click(); } });
-    const rec = $("#hm-rec-btn");
-    if (rec && !rec.closest("[hidden]")) list.push({ group: "Actions", title: "Get CDP Recorder", sub: "Download the recording toolbar", icon: I_DL, c: "--c-record", run: () => rec.click() });
+    /* global PORTAL_CONFIG */
+    const recOff = typeof PORTAL_CONFIG !== "undefined" && PORTAL_CONFIG.tabs && PORTAL_CONFIG.tabs.recorder && PORTAL_CONFIG.tabs.recorder.enabled === false;
+    if (!recOff) list.push({ group: "Actions", title: "Get CDP Recorder", sub: "Download the recording toolbar", icon: I_DL, c: "--c-record",
+      run: () => { location.href = (location.pathname.indexOf("/converter") === 0 ? "/converter" : "") + "/downloads/cdp-recorder"; } });
     return list;
   }
 

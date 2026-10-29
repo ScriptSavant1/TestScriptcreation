@@ -92,7 +92,7 @@ describe('VuGen-Recorder-generators.js genVuserInit() — DPoP init Code= string
     expect(() => new Function(codeStr)).not.toThrow();
   });
 
-  test('vuser_init() without DPoP is unaffected', () => {
+  test('vuser_init() without DPoP: only the once-per-Vuser SSL setting (no servers, no common headers here)', () => {
     const code = fs.readFileSync(
       path.resolve(__dirname, '../../src/web/public/VuGen-Recorder-generators.js'),
       'utf-8'
@@ -102,6 +102,6 @@ describe('VuGen-Recorder-generators.js genVuserInit() — DPoP init Code= string
     const factory = new Function('S', code + '\nreturn { genVuserInit };');
     const { genVuserInit } = factory(S);
     const output = genVuserInit();
-    expect(output).toBe('vuser_init()\n{\n\treturn 0;\n}\n');
+    expect(output).toBe('vuser_init()\n{\n\n\tweb_set_sockets_option("SSL_VERSION", "AUTO");\n\n\treturn 0;\n}\n');
   });
 });

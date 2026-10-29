@@ -96,6 +96,8 @@ class CorrelationDetector {
               consumerIndex: i,
               extractorType: producer.extractorType,
               extractPath: producer.extractPath,
+              xpathQuery: producer.xpathQuery,
+              pattern: producer.pattern,
               usageLocation: consume.location,
               usagePath: consume.path
             });
@@ -123,7 +125,10 @@ class CorrelationDetector {
           name: varInfo.name,
           type: this.inferType(varInfo.name, varInfo.source),
           extractorType: varInfo.extractorType || 'json',
-          extractPath: varInfo.extractPath || `$.${varInfo.name}`
+          extractPath: varInfo.extractPath || `$.${varInfo.name}`,
+          // carried to the generators (an XPath / regex correlation fell back to "//name" / "(.+?)" without them)
+          xpathQuery: varInfo.xpathQuery,
+          pattern: varInfo.pattern
         });
       });
     }
@@ -410,7 +415,8 @@ class CorrelationDetector {
     if (/\.match\s*\(/.test(source)) return 'regex';
 
     // ── XML extraction: xml2js / cheerio / DOMParser ──────────────────────────
-    if (/xml2js|parseString|cheerio|DOMParser|getElementsByTagName|xpath\.|XPath/.test(source)) return 'xpath';
+    // (xml2Json is Postman's built-in XML → object function — BUG-103: read as JSON, path "$.text()).batchInfo.id")
+    if (/xml2js|xml2Json|parseString|cheerio|DOMParser|getElementsByTagName|xpath\.|XPath/.test(source)) return 'xpath';
 
     // ── Header detection (must check BEFORE body to avoid false match on "headers") ──
     if (/(?:res|response|pm\.response)\.headers|getResponseHeader|pm\.response\.headers/.test(source)) return 'header';
@@ -580,6 +586,24 @@ class CorrelationDetector {
    */
   extractXPathQuery(source) {
     if (!source) return null;
+    // Postman xml2Json(...) / xml2js result read with ['a']['b'] or .a.b — the keys are element names from the
+    // root down. Plain names, no prefixes: DevWeb and VuGen match them on a default namespace too (Salesforce Bulk
+    // API), and DevWeb does not support local-name() — both checked with the engines.
+    // xml2Json(pm.response.text())['batchInfo']['id'] → /batchInfo/id
+    const x2j = source.match(/xml2Json\s*\(((?:[^()]|\([^()]*\))*)\)\s*((?:\s*(?:\.[A-Za-z_][\w-]*|\[\s*['"][^'"]+['"]\s*\]|\[\s*\d+\s*\]))+)/);
+    if (x2j) {
+      const steps = [];
+      for (const m of x2j[2].matchAll(/\.([A-Za-z_][\w-]*)|\[\s*['"]([^'"]+)['"]\s*\]|\[\s*(\d+)\s*\]/g)) {
+        const name = m[1] || m[2];
+        if (name === undefined) {
+          if (steps.length) steps[steps.length - 1] += `[${+m[3] + 1}]`;   // xml2js arrays are 0-based, XPath 1-based
+          continue;
+        }
+        if (name === '$' || name === '_') break;                          // attributes / text node of xml2js
+        steps.push(name.split(':').pop());                                   // "soapenv:Envelope" → Envelope
+      }
+      if (steps.length) return '/' + steps.join('/');
+    }
     // Cheerio: $("selector") — convert to rough xpath comment
     const cheerioMatch = source.match(/\$\s*\(\s*["']([^"']+)["']\s*\)/);
     if (cheerioMatch) return `//${cheerioMatch[1].replace(/\s+/g, '/')}`;

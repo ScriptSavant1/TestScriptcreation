@@ -6,6 +6,21 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
+#### Changed — A new Home page
+
+- Clients and colleagues found the Home page heavy and tutorial-like. The new Home follows the design the team chose:
+  - **Welcome** band across the page — "Welcome to PerfX Studio", "Turn real-world performance scenarios into
+    actionable insights", *Get started* and *Which tool do I need?*, and a picture of what goes in (browser recording,
+    Postman / Bruno, JMeter test plan, LRE results) and what comes out (VuGen script, performance insights, reports).
+  - **Quick actions** — the five tools as cards (Open Recorder, Open Converter, Open JMeter Converter, Open Script
+    Studio, Open Results Analyser); the whole card opens the tool; *View all tools* opens Help.
+  - **Your workflow** — record → correlate → run in LRE → analyse, each with its tool, plus a line to the converters.
+  - **Need help?** — Quick Start, Documentation, FAQ, and the privacy note "Your files are never stored".
+- Removed: the long explanations (they stay in Help & guides), the "Which tool" accordion and the CDP Recorder card
+  (its download is on the Recorder page and in quick search, its live state in the sidebar).
+- Layout follows the window: 5 cards in a row on a laptop and wider, 3 + 2 on a tablet, one column on a phone; the
+  picture shows from laptop width. Design audit clean in both themes; every button checked.
+
 #### Added — usage statistics for the Recorder and the Results Analyser; a clearer admin report
 
 - The Recorder (one event per recording turned into a script) and the Results Analyser (one event per analysis, and
@@ -595,6 +610,38 @@ Implementation:
 
 ### Script generation — JWT, DPoP and VuGen runtime
 
+#### Fixed — Postman / Bruno / JMeter converter: scripts that did not run (BUG-097 … BUG-104, BUG-108)
+
+Found by running the converter's outputs with the real VuGen and DevWeb engines through a test proxy, old and new
+side by side.
+
+- **VuGen sent `Bearer {access_token}` literally in the first iteration** (BUG-098): `Authorization` was an auto
+  header set before the token existed. It is now added to each request that sends it; the token request sends none,
+  as in Postman. DevWeb no longer sends an empty `Authorization` on the token request.
+- **DPoP proofs are accepted** (BUG-097): one proof right before each request, for the URL actually sent (VuGen used
+  to sign the literal `{base_url}/…`), with `ath` for the token the request presents; works from the second
+  iteration on (BUG-092).
+- **A URL ending in a line break** no longer breaks VuGen compilation (BUG-099).
+- **DevWeb**: form-data bodies are real `load.MultipartBody` entries instead of a syntax error (BUG-101); rts.yml
+  values such as `{{vault:key}}` are quoted so DevWeb loads them (BUG-100); a variable declared with an empty value
+  sends nothing instead of a literal `{{site}}` that stopped the Vuser (BUG-102).
+- Result on the sample collections: every DevWeb `main.js` parses (6 of 69 did not); the Salesforce and Bruno YAML
+  scripts now compile in VuGen and run in DevWeb (74 requests, before 0).
+- **XML responses**: a value a script reads with Postman's `xml2Json(...)` is an XPath extractor in both formats
+  (was a broken JSON path); namespaced XML (Salesforce Bulk API) works in both engines (BUG-103, BUG-104).
+- **Windows sign-in set on the collection** is used (it was ignored, BUG-108); VuGen `web_set_user` is in Action.
+
+#### Fixed — VuGen: JavaScript helpers lost from the second iteration; DPoP in the Recorder and Script Studio (BUG-091 … BUG-096)
+
+- With **Simulate a new user on each iteration**, VuGen empties its JavaScript engine, so DPoP / PKCE / JWT
+  functions were "not defined" from iteration 2. Action now loads `lre-utils.js` again at its top (all tools)
+  (BUG-092).
+- **DPoP** (Script Studio, Recorder DevWeb): one proof per request for the URL as sent, with the right `ath`;
+  the Recorder's DevWeb header was the literal text `load.global.dpop_proof` (BUG-093, BUG-094).
+- **Script Studio DevWeb**: Basic-auth scripts no longer stop at once (BUG-095); recorded Negotiate / NTLM tickets
+  are no longer replayed (BUG-096).
+- Long VuGen bodies are split only between whole escape sequences — a github.com recording compiles (BUG-091).
+
 #### Fixed — JWT stored under the signing library's name (BUG-081)
 
 - A pre-request script that first keeps the downloaded signing library (`pm.globals.set('jsrsasign', …)`) and
@@ -777,6 +824,86 @@ Files changed: `src/generators/devweb/scriptGenerator.js`,
 `tests/unit/devwebDpopInit.test.js` (new)
 
 ### Recorder and Script Studio — generated scripts
+
+#### Changed — Servers: named by role, DevWeb override, only the servers used, renamable in Script Studio; prefetches and ad pixels left out (BUG-105 … BUG-107, BUG-109)
+
+- **Default server names say what the server does** (all four tools, both formats): the recorded application is
+  `App_Server`; `api.` / `login.` (`auth.`, `sso.` …) / `cdn.` (`static.` …) servers are `Api_Server`, `Auth_Server`,
+  `Static_Server`; well-known services by purpose — `Recaptcha_Server`, `Google_Fonts`, `Okta_Server`,
+  `Microsoft_Login`, `Cloudfront_Cdn` …; another server of the application `<Subdomain>_Server`, any other
+  `<Organisation>_Server`; the application on another port `App_Server_8443`. Was `Host_<domain>`. Same requests on
+  the wire in VuGen and DevWeb (only the names changed).
+- **Script Studio Domains list**: analytics / ads servers are folded under "Analytics / ads — always left out"
+  instead of looking ticked (BUG-109).
+
+- **DevWeb runs against another environment without editing**, like VuGen's Runtime Settings attribute:
+  `const App_Server = load.config.user.args["App_Server"] || 'shop.example.com';` — a user argument with the
+  parameter's name (rts.yml `userArguments`, or `-userArgs`) wins. Recorder, Script Studio and the converters.
+  Checked with DevWeb: without the argument the recorded server, with it the new one.
+- **Only the servers the script uses are declared** (VuGen `set_server`, DevWeb `const`) — a server seen only in a
+  header of a page resource no longer gets a parameter (BUG-105).
+- **Script Studio: rename a server** — "Parameterization details" lists the servers with their parameters; Rename
+  checks the name (letters, numbers, underscores; not already used), updates vuser_init, every step and main.js,
+  and offers Undo. Names chosen in the Recorder still carry over when a recording is opened in Script Studio.
+- **Browser prefetches** of a page that is then opened are left out ("browser prefetch") — the page was loaded twice
+  (BUG-107). **Google ad pixels** (`www.google.com/ads/…`, `/pagead/…`) are analytics / ads; Script Studio
+  uses the same analytics / ads list as the Recorder (BUG-106).
+- DevWeb header names are written in lower case everywhere (recordings mixed `Referer` and `referer`).
+
+#### Changed — Generated VuGen scripts laid out the way a performance engineer would (Recorder, Script Studio, converters)
+
+The same rules in all four tools; checked by running old and new scripts with VuGen and DevWeb through a test proxy
+(the requests on the wire are the same apart from the fixes listed above).
+
+- **vuser_init** sets, once per Vuser: the servers (`set_server`), the SSL setting (`web_set_sockets_option`) and
+  the headers **every** request sends with one value (`web_add_auto_header`). Action starts with one comment saying so.
+- **Servers**: `set_server("App_Server", "shop.example.com")` — an attribute with the same name in **Runtime
+  Settings › Additional attributes** wins, so one script runs against each environment without editing it. Script
+  Studio and the converters now name servers like the Recorder (by role, see above; was `SERVER_HOST` / `ServerHost1`),
+  replace the longest name first, and declare only the servers the script calls (the converters used to declare an
+  unused `ServerHost`).
+- **Headers**: a header is global only when every request sends it with one value (was: 70 % of requests, so the
+  others got it too), and never `Authorization`, cookies, DPoP, `Origin` or CSRF headers. In a script made from a
+  recording the browser's User-Agent goes to the run-time settings (Browser emulation). `web_set_user` stays in Action.
+- **Think time** between steps, none after the last one (the converters added it twice between folders); DevWeb
+  uses `load.thinkTime`, which follows the run-time settings, instead of `load.sleep`. Recorder / Studio: 3 s,
+  in one `think_time` variable.
+- **Mode=HTML** only on page loads; API calls use `Mode=HTTP` (all converter requests).
+- Converter VuGen scripts use one indentation (4 spaces) and no runs of blank lines.
+- Help: "Server names" updated, new "How the generated VuGen script is laid out".
+
+#### Changed — Recorder: server names in vuser_init, renamable, used everywhere; one row of type buttons; left-out requests hidden (BUG-087 … BUG-090)
+
+- **Server names.** Every server the script calls gets one parameter, named after its domain
+  (first `Host_<domain>`; now by role — `App_Server`, `Api_Server` …, see the entry above), the
+  same name in VuGen and DevWeb. VuGen sets them once per Vuser in `vuser_init.c` (`set_server`, see the entry above), DevWeb as
+  a `const` at the top of `main.js`; Action.c says where they are. They are used in every URL, `Referer` /
+  `Origin` / other header, `EXTRARES` / `resources[]` line, form value and body — also `https:\/\/host`
+  (JSON) and `https%3A%2F%2Fhost` (`redirect_uri`), the DPoP proof URL, `web_set_user` and
+  `setUserCredentials`. Before, only the busiest server and servers named in a header were parameters
+  (`ServerHost`, `ServerHost1` …), set at the start of Action.
+- The **main application** is the server of the first page of the journey (BUG-087).
+- **Rename**: the Domains list shows each server's parameter with a Rename link; the new name is used
+  everywhere, in both formats, also after a format change; names the script already uses are refused; Undo.
+  The value stays the server name only (no `https://`), so encoded and scheme-less uses are covered too.
+- **One row of type buttons** — Doc, Fetch/XHR, JS, CSS, Img, Font, Media, Other, each with its count —
+  replaces the "Static assets" tick box plus the "Types in the script" chips, which could show CSS as on while
+  "Static assets" still left it out. JS, CSS, Img and Font start off: by default exactly the same requests as
+  before are in the script. JSONP or a pixel answering HTML count as Fetch/XHR / Other, so they stay in.
+- **Left-out requests are hidden**: each transaction ends with one line — "+ 56 requests left out — 31 analytics
+  / ads, 9 CSS …" — with Show; **Show left-out** draws them all, faded, as before (remembered).
+  **Collapse all**, **Select mode** and **Show left-out** sit together in the Requests header (they act on the
+  list), so the filter row stays one line; the request list hides with an icon, like the other panes.
+- **Domains**: the ones in the script first, each with its parameter; the others folded under "Not in the
+  script". Leaving out a domain the script seems to need (a page of the journey, a redirect to it, sign-in,
+  cookies) asks first.
+- **Analytics / ads** also leaves out Google's ad-consent, ad-quality and ad-tag servers and common ad exchanges
+  and verification servers (fundingchoicesmessages, adtrafficquality, googleadservices, googletagservices,
+  2mdn, casalemedia, criteo, …) — on a recording of a site with ads, 15 requests are now in the script instead of 65.
+- Script generation is about 15 % faster on a 20,000-request recording (compiled server patterns are reused).
+- A transaction whose START is missing from the recording (END only) now starts where the previous one ended,
+  instead of an unmatched `lr_end_transaction` (VuGen) or a lost transaction (DevWeb) (BUG-090).
+- Script Studio and the converters name servers the same way (see the entry above).
 
 #### Fixed — Resources missing from every page after the first (BUG-058)
 

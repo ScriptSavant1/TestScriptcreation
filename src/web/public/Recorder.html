@@ -183,43 +183,36 @@
     <button class="rc-mini rc-fold rc-keep" type="button" id="btn-fold" aria-expanded="true" aria-controls="rc-filters" title="Fold the filters to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>Filters</button>
     <span class="rc-fsum" id="f-sum"></span>
     <span class="rc-fset">
-      <span class="rc-flabel">Leave out</span>
-      <div class="rc-fgroup">
-        <label class="rc-chip tog" title="Ticked = images, CSS, JS and fonts are left out of the script (only images and stylesheets named in the page HTML download on replay). Untick for JavaScript-based apps or realistic page load."><input type="checkbox" id="f-static" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Static assets</label>
-        <button class="rc-chip info" type="button" id="btn-res-help" aria-expanded="false" aria-controls="res-help" title="Should I include static assets?" aria-label="Should I include static assets?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
-        <label class="rc-chip tog" title="Ticked = analytics and ad requests are left out of the script."><input type="checkbox" id="f-noise" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Analytics / ads</label>
-        <label class="rc-chip tog" title="Ticked = OPTIONS (pre-flight) requests are left out of the script."><input type="checkbox" id="f-opts" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>OPTIONS</label>
+      <span class="rc-flabel" title="Each type is either in the script or left out. The number is how many requests of that type it covers.">In the script</span>
+      <div class="rc-fgroup" id="rec-rt-bar" role="group" aria-label="Request types in the script">
+        <button class="rc-chip" type="button" data-key="document" style="--k:#e8a838" aria-pressed="true"><i class="dot"></i>Doc<span class="n"></span></button>
+        <button class="rc-chip" type="button" data-key="fetch" style="--k:#4f8ef7" aria-pressed="true"><i class="dot"></i>Fetch/XHR<span class="n"></span></button>
+        <button class="rc-chip" type="button" data-key="script" style="--k:#f39c12" aria-pressed="false"><i class="dot"></i>JS<span class="n"></span></button>
+        <button class="rc-chip" type="button" data-key="stylesheet" style="--k:#9b59b6" aria-pressed="false"><i class="dot"></i>CSS<span class="n"></span></button>
+        <button class="rc-chip" type="button" data-key="image" style="--k:#27ae60" aria-pressed="false"><i class="dot"></i>Img<span class="n"></span></button>
+        <button class="rc-chip" type="button" data-key="font" style="--k:#16a085" aria-pressed="false"><i class="dot"></i>Font<span class="n"></span></button>
+        <button class="rc-chip" type="button" data-key="media" style="--k:#e74c3c" aria-pressed="true"><i class="dot"></i>Media<span class="n"></span></button>
+        <button class="rc-chip" type="button" data-key="other" style="--k:#7f8c8d" aria-pressed="true"><i class="dot"></i>Other<span class="n"></span></button>
+        <button class="rc-chip info" type="button" id="btn-res-help" aria-expanded="false" aria-controls="res-help" title="Should I put JS, CSS, images and fonts in the script?" aria-label="Should I put JS, CSS, images and fonts in the script?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
       </div>
     </span>
     <span class="rc-sep"></span>
     <span class="rc-fset">
-      <span class="rc-flabel" title="Turn a type off to leave those requests out of the script. Several types can be on at once; All turns every type back on.">Types in the script</span>
-      <div class="rc-fgroup" id="rec-rt-bar" role="group" aria-label="Request types in the script">
-        <button class="rc-chip" type="button" data-key="__all__" aria-pressed="true" title="All types">All</button>
-        <button class="rc-chip" type="button" data-key="fetch" style="--k:#4f8ef7" aria-pressed="true" title="Fetch/XHR"><i class="dot"></i>Fetch/XHR</button>
-        <button class="rc-chip" type="button" data-key="document" style="--k:#e8a838" aria-pressed="true" title="Document"><i class="dot"></i>Doc</button>
-        <button class="rc-chip" type="button" data-key="stylesheet" style="--k:#9b59b6" aria-pressed="true" title="CSS"><i class="dot"></i>CSS</button>
-        <button class="rc-chip" type="button" data-key="script" style="--k:#f39c12" aria-pressed="true" title="JavaScript"><i class="dot"></i>JS</button>
-        <button class="rc-chip" type="button" data-key="font" style="--k:#16a085" aria-pressed="true" title="Font"><i class="dot"></i>Font</button>
-        <button class="rc-chip" type="button" data-key="image" style="--k:#27ae60" aria-pressed="true" title="Image"><i class="dot"></i>Img</button>
-        <button class="rc-chip" type="button" data-key="media" style="--k:#e74c3c" aria-pressed="true" title="Media"><i class="dot"></i>Media</button>
-        <button class="rc-chip" type="button" data-key="other" style="--k:#7f8c8d" aria-pressed="true" title="Other"><i class="dot"></i>Other</button>
+      <span class="rc-flabel">Leave out</span>
+      <div class="rc-fgroup">
+        <label class="rc-chip tog" title="Ticked = analytics and ad requests are left out of the script."><input type="checkbox" id="f-noise" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Analytics / ads</label>
+        <label class="rc-chip tog" title="Ticked = OPTIONS (pre-flight) requests are left out of the script."><input type="checkbox" id="f-opts" class="vh" checked><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>OPTIONS</label>
       </div>
-    </span>
-    <span class="grow rc-keep"></span>
-    <span class="rc-factions rc-keep">
-      <button class="ds-btn ds-btn-sm rc-keep" type="button" id="btn-collapse-all" hidden>Collapse all</button>
-      <button class="ds-btn ds-btn-sm rc-keep" type="button" id="btn-sel" aria-pressed="false" title="Select requests to group them into a new transaction"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>Select mode</button>
     </span>
   </div>
 
   <div class="rc-help ds-note" id="res-help" hidden>
     <svg class="rc-help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
     <div class="rc-help-body">
-    <b>Static assets (images, CSS, JS, fonts) — should I include them?</b>
+    <b>JS, CSS, images and fonts (static assets) — should I put them in the script?</b>
     <ul>
-      <li><b>Leave them excluded</b> (default) for server / API load. On replay only the images and stylesheets named in the page HTML are downloaded (VuGen <code>Mode=HTML</code>, DevWeb <code>downloadHtmlStaticResources</code>).</li>
-      <li><b>Include them</b> (untick <em>Static assets</em>) for realistic page load, and always for <b>JavaScript-based apps</b> (React, Angular, Vue…): script files, and files that JavaScript or CSS requests — lazy-loaded code, fonts, images on later screens, analytics — are not downloaded from the HTML, so they are only downloaded if they are in the script.</li>
+      <li><b>Leave them off</b> (default) for server / API load. On replay only the images and stylesheets named in the page HTML are downloaded (VuGen <code>Mode=HTML</code>, DevWeb <code>downloadHtmlStaticResources</code>).</li>
+      <li><b>Turn them on</b> (the <em>JS</em>, <em>CSS</em>, <em>Img</em> and <em>Font</em> buttons) for realistic page load, and always for <b>JavaScript-based apps</b> (React, Angular, Vue…): script files, and files that JavaScript or CSS requests — lazy-loaded code, fonts, images on later screens, analytics — are not downloaded from the HTML, so they are only downloaded if they are in the script. You can turn on only some of them — for example JS, for an app that loads its settings from a script file.</li>
     </ul>
     Included files are added to the page step that loaded them, not as separate requests, and are never downloaded twice — safe for any site. Each page step's comment shows how many were in the HTML and how many are listed (<code>EXTRARES</code> / <code>resources[]</code>): if many are listed, the app is JavaScript-heavy and should keep them included.
     VuGen also needs the run-time setting <b>Download non-HTML resources</b> switched on (on by default).
@@ -232,12 +225,12 @@
       <div class="rc-pane-h"><span id="dp-title">Domains</span><small id="dp-count"></small><span class="grow"></span>
         <button class="rc-mini hide-btn" type="button" data-hide="no-dom" title="Hide the domain list — the request list gets the space" aria-label="Hide the domain list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/></svg></button></div>
       <div class="rc-dsearch-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="ds-field rc-dsearch dp-search" type="search" placeholder="Search domains…" aria-label="Search domains"></div>
-      <div class="rc-dtools"><span>In the script:</span><button class="rc-mini" type="button" id="btn-dom-all" title="Put every domain in the script">All</button><button class="rc-mini" type="button" id="btn-dom-none" title="Leave every domain out">None</button></div>
+      <div class="rc-dtools"><span>All domains:</span><button class="rc-mini" type="button" id="btn-dom-all" title="Switch every domain on — put them all in the script">On</button><button class="rc-mini" type="button" id="btn-dom-none" title="Switch every domain off — leave them all out">Off</button></div>
       <div class="rc-dlist" id="dp-list"><div class="rc-empty sm">Load a HAR file</div></div>
     </div>
     <div class="rc-rs" data-rs="left" title="Drag to resize"></div>
     <div class="rc-pane reqp" id="req-pane">
-      <div class="rc-pane-h"><button class="rc-mini rc-show rc-show-dom" type="button" data-hide="no-dom" title="Show the domain list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/></svg>Domains</button><span>Requests</span><small>grouped by transaction · faded = left out of the script</small><span class="grow"></span><button class="rc-mini rc-show rc-show-code" type="button" data-hide="no-code" title="Show the script preview">Script preview<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M10 10l-2 2 2 2"/></svg></button><button class="rc-mini hide-btn" type="button" data-hide="no-req" title="Hide the request list — the script preview gets the space" aria-label="Hide the request list">Hide<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button></div>
+      <div class="rc-pane-h"><button class="rc-mini rc-show rc-show-dom" type="button" data-hide="no-dom" title="Show the domain list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/></svg>Domains</button><span>Requests</span><small id="req-note">grouped by transaction</small><span class="grow"></span><span class="rc-reqacts"><button class="rc-mini" type="button" id="btn-collapse-all" hidden title="Fold or unfold every transaction">Collapse all</button><button class="rc-mini" type="button" id="btn-sel" aria-pressed="false" title="Select requests to group them into a new transaction"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>Select mode</button><button class="rc-mini" type="button" id="btn-show-out" aria-pressed="false" title="Show the requests that are left out of the script, faded, with the reason"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Show left-out</span></button></span><button class="rc-mini rc-show rc-show-code" type="button" data-hide="no-code" title="Show the script preview">Script preview<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M10 10l-2 2 2 2"/></svg></button><button class="rc-mini hide-btn" type="button" data-hide="no-req" title="Hide the request list — the script preview gets the space" aria-label="Hide the request list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button></div>
       <div class="rc-selbar" id="sel-bar" role="region" aria-label="Selection">
         <div><b id="sel-cnt">0 selected</b><br><span>Click requests to group them into a transaction (Esc to stop)</span></div>
         <button class="ds-btn ds-btn-sm" type="button" id="btn-sel-cancel">Cancel</button>
@@ -298,9 +291,20 @@
   </form>
 </dialog>
 
+<!-- rename a server parameter -->
+<dialog class="rc-dlg narrow" id="host-dlg" aria-labelledby="host-h">
+  <form method="dialog" onsubmit="return false">
+    <div class="rc-dlg-head"><div><h3 id="host-h">Rename server parameter</h3><p id="host-sub"></p></div></div>
+    <div class="rc-dlg-body">
+    <label class="rc-field">Parameter name<input class="ds-field" id="host-inp" type="text" autocomplete="off" spellcheck="false" maxlength="40"><small>Letters, numbers and underscores, starting with a letter — for example <code>Shop_Server</code>. The same name is used in VuGen and DevWeb.</small><span class="rc-ferr" id="host-err" role="alert" hidden></span></label>
+    </div>
+    <div class="row"><button class="ds-btn ds-btn-ghost" type="button" id="host-default">Use the default name</button><span class="grow"></span><button class="ds-btn" type="button" id="host-cancel">Cancel</button><button class="ds-btn ds-btn-primary" type="button" id="host-ok">Rename</button></div>
+  </form>
+</dialog>
+
 <!-- confirmation -->
 <dialog class="rc-dlg narrow" id="confirm-dlg" aria-labelledby="confirm-h">
-  <form method="dialog"><div class="rc-dlg-head"><div><h3 id="confirm-h"></h3><p id="confirm-t"></p></div></div>
+  <form method="dialog"><div class="rc-dlg-head"><div><h3 id="confirm-h"></h3><p id="confirm-t"></p><ul class="rc-confirm-list" id="confirm-list" hidden></ul></div></div>
     <div class="row"><button class="ds-btn" value="cancel">Cancel</button><button class="ds-btn ds-btn-primary" value="ok" id="confirm-ok">OK</button></div></form>
 </dialog>
 
@@ -314,6 +318,7 @@
 <script src="VuGen-Recorder-templates.js"></script>
 <script src="VuGen-Recorder-parsers.js"></script>
 <script src="shared/page-resources.js"></script>
+<script src="shared/host-params.js"></script>
 <script src="VuGen-Recorder-generators.js"></script>
 <script src="VuGen-Recorder-usr-gen.js"></script>
 <script src="VuGen-Recorder-ui.js"></script>

@@ -347,6 +347,29 @@
       </div>
     </div>
 
+    <!-- ── RENAME SERVER PARAMETER (same rule as the Recorder's Domains list) ── -->
+    <div class="adv-modal-overlay" id="host-modal-overlay" onclick="closeHostRename()" style="display:none">
+      <div class="adv-modal" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="host-modal-h">
+        <div class="adv-modal-hdr">
+          <span id="host-modal-h">Rename server parameter</span>
+          <button class="adv-modal-close" onclick="closeHostRename()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="adv-modal-body">
+          <p class="adv-modal-hint" id="host-modal-sub" style="margin:0 0 12px"></p>
+          <label class="adv-modal-label" for="host-modal-inp">Parameter name</label>
+          <input class="adv-modal-input" id="host-modal-inp" type="text" autocomplete="off" spellcheck="false" maxlength="40" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmHostRename(false);}" />
+          <p class="adv-modal-hint" style="margin:6px 0 0">Letters, numbers and underscores, starting with a letter — for example <code>Shop_Server</code>. The same name is used in VuGen and DevWeb.</p>
+          <p class="host-modal-err" id="host-modal-err" role="alert" hidden></p>
+        </div>
+        <div class="adv-modal-footer">
+          <button class="adv-modal-cancel" id="host-modal-default" onclick="confirmHostRename(true)" hidden>Use the default name</button>
+          <span style="flex:1"></span>
+          <button class="adv-modal-cancel" onclick="closeHostRename()">Cancel</button>
+          <button class="adv-modal-submit" onclick="confirmHostRename(false)">Rename</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── PASTE & CORRELATE MODAL ── -->
     <div class="adv-modal-overlay" id="pc-modal-overlay" onclick="closePasteCorrelate()" style="display:none">
       <div class="adv-modal adv-modal-wide pc-modal" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Paste & Detect Correlation">
@@ -387,6 +410,7 @@
     <script src="VuGen-Script-Studio-constants.js"></script>
     <script src="VuGen-Script-Studio-correlation.js"></script>
     <script src="shared/page-resources.js"></script>
+    <script src="shared/host-params.js"></script>
     <script src="studio-codegen.js"></script>
     <script src="studio-advisor.js"></script>
     <script src="studio-ui.js"></script>

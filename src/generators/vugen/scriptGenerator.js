@@ -17,6 +17,7 @@ const WebHttpMandatoryFilesGenerator = require("./filesGenerator");
 const _u = require("../../core/utils");
 const _vc = require("../../core/variableClassifier");
 const _vugen = require("../../core/vugenCodegen");
+const HostParams = require("../../web/public/shared/host-params");
 
 class WebHttpScriptGenerator {
   constructor(requests, collection, options = {}) {
@@ -88,8 +89,6 @@ class WebHttpScriptGenerator {
     this.hasDpop = false;
     this.dpopVarNames = []; // variable names the pre-request script stores the proof into
     this.dpopKeyVar = null; // dpop_jwk variable name
-    this._dpopPfGenerated = false; // track if dpop-pf has been generated (should only be once)
-    this._dpopBatchActive = false; // true when batch DPoP is active (skip per-request web_js_run)
 
     // NTLM/Kerberos detection — populated by detectNtlmKerberos() during analyze()
     this.hasNtlm = false;
@@ -224,14 +223,16 @@ class WebHttpScriptGenerator {
     };
 
     for (const req of this.requests) {
-      const authType = (req.auth?.type || "").toLowerCase();
+      // the request's own auth, else the collection's (Postman / Bruno inherit it)
+      const reqAuth = req.auth && req.auth.type && req.auth.type !== "inherit" ? req.auth : this.collection?.auth || req.auth;
+      const authType = (reqAuth?.type || "").toLowerCase();
       if (authType === "kerberos" || authType === "ntlm") {
         this.hasNtlm = true;
         this.ntlmAuthType = authType;
 
         // --- Host extraction ---
-        // JMX AuthManager provides req.auth.hostport (hostname only, no port after parser fix)
-        let host = req.auth?.hostport || "";
+        // JMX AuthManager provides reqAuth.hostport (hostname only, no port after parser fix)
+        let host = reqAuth?.hostport || "";
         if (!host) {
           // Postman/Bruno: extract hostname from the request URL
           const urlStr =
@@ -247,12 +248,12 @@ class WebHttpScriptGenerator {
         this.ntlmHost = host;
 
         // --- Credential extraction ---
-        // JMX format: req.auth.username/password/domain are direct literal values
-        // Postman format: req.auth[authType] is [{key, value}] where value = '{{AuthUsername}}'
-        let rawUsername = req.auth?.username || null;
-        let rawPassword = req.auth?.password || null;
-        let rawDomain = req.auth?.domain || null;
-        const authArr = req.auth?.[authType];
+        // JMX format: reqAuth.username/password/domain are direct literal values
+        // Postman format: reqAuth[authType] is [{key, value}] where value = '{{AuthUsername}}'
+        let rawUsername = reqAuth?.username || null;
+        let rawPassword = reqAuth?.password || null;
+        let rawDomain = reqAuth?.domain || null;
+        const authArr = reqAuth?.[authType];
         if (Array.isArray(authArr)) {
           authArr.forEach((item) => {
             if (item.key === "username") rawUsername = item.value;
@@ -540,16 +541,19 @@ class WebHttpScriptGenerator {
     await this.analyze();
 
     // 2. Generate Action.c first so we can scan it for undeclared parameters
-    const actionC = this.generateActionC();
+    // no runs of blank lines (C strings never hold a raw line break, so this only touches layout)
+    const tidyC = (c) => c.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n");
+    const actionC = tidyC(this.generateActionC());
 
     // 3. Scan generated C code for {varName} references not yet in parameters map.
     //    This catches variables like {version} that appear in request URLs but were
     //    not explicitly declared in the collection's variables section.
-    this.scanForUndeclaredParams(actionC);
+    // the auto headers are written into vuser_init — scan them too
+    this.scanForUndeclaredParams(actionC + (this._autoHeaderBlock || ""));
 
     // 4. Generate remaining C source files (vuser_init uses this.parameters for logging)
-    const vuserInitC = this.generateVuserInitC();
-    const vuserEndC = this.generateVuserEndC();
+    const vuserInitC = tidyC(this.generateVuserInitC());
+    const vuserEndC = tidyC(this.generateVuserEndC());
     const globalsH = this.generateGlobalsH();
 
     // 5. Write C files
@@ -1262,10 +1266,8 @@ static void gen_hex64(const char *param_name) {
   }
 
   generateVuserInitC() {
-    // NTLM / Kerberos authentication block (unchanged)
-    const ntlmBlock = this.hasNtlm
-      ? `  web_set_user("{username}", "{password}", "${this.ntlmHost}");\n`
-      : "";
+    // NTLM / Kerberos web_set_user is in Action (see generateActionC), like the Recorder and Script Studio
+    const ntlmBlock = "";
 
     // mTLS client certificate block (unchanged — only when JWT is NOT active)
     const certBlock =
@@ -1417,10 +1419,25 @@ ${audPreStep}  web_js_run(
           ` */\n\n`
         : "";
 
-    return `${lreSetupComment}${fileScopeBlock}vuser_init()
+    // Servers — set once per Vuser; overridable in Runtime Settings > Additional attributes (same as the Recorder)
+    const usedHosts = this._usedHostVars(setupBlock);
+    const setServerFn = usedHosts.length
+      ? "// Server value: the Runtime Settings attribute with this name when there is one, else the value here\n" +
+        "void set_server(char *name, char *value_here)\n{\n" +
+        "    char *value = lr_get_attrib_string(name);\n" +
+        "    lr_save_string(value != NULL && value[0] != '\\0' ? value : value_here, name);\n}\n\n"
+      : "";
+    const serverBlock = usedHosts.length
+      ? "    // Servers — change a value here to run against another environment, or add an attribute with the same\n" +
+        "    // name in Runtime Settings > Additional attributes (it wins over the value here)\n" +
+        usedHosts.map(([h, v]) => `    set_server("${v}", "${h}");\n`).join("") + "\n"
+      : "";
+    return `${lreSetupComment}${fileScopeBlock}${setServerFn}vuser_init()
 {
-${ntlmBlock}${certBlock}${dpopInitBlock}${attribBlock}${jwtInitBlock}${setupBlock}
-  return 0;
+${serverBlock}    web_set_sockets_option("SSL_VERSION", "AUTO");
+
+${this._indent4(ntlmBlock + certBlock + dpopInitBlock + attribBlock + jwtInitBlock)}${setupBlock}${this._autoHeaderBlock ? "\n" + this._autoHeaderBlock : ""}
+    return 0;
 }
 `;
   }
@@ -1450,8 +1467,9 @@ ${teardownBlock}
    * Analyse headers across all requests and classify them for VuGen C.
    *
    * Returns { globalHeaders, perRequestKeys }:
-   *   globalHeaders  — headers present in ≥70% of requests with the same value template.
-   *                    These are set via web_add_auto_header() once at the start of Action().
+   *   globalHeaders  — headers that EVERY request sends, with one value (same rule as the Recorder and Script
+   *                    Studio), and that are never per-user or per-request (authorization, cookie, DPoP, origin,
+   *                    CSRF). These are set via web_add_auto_header() once in vuser_init().
    *   perRequestKeys — keys that vary per request or use per-request UUID vars (web_add_header each time).
    */
   analyzeCommonHeaders() {
@@ -1475,7 +1493,9 @@ ${teardownBlock}
 
     const globalHeaders = new Map(); // key → replaceParameters(value) for web_add_auto_header
     const perRequestKeys = new Set();
-    const THRESHOLD = 0.7;
+    // Never global: credentials and tokens (sent before they exist, or to requests that must not get them),
+    // cookies (VuGen keeps them), per-request proofs, CORS and CSRF values
+    const NEVER_GLOBAL = /^(authorization|proxy-authorization|cookie|dpop(-pf)?|origin|access-control-request-.*|.*(csrf|xsrf).*)$/i;
 
     headerFreq.forEach((entry, key) => {
       // Content-Type varies by body type — always per-request
@@ -1488,9 +1508,8 @@ ${teardownBlock}
       // string across every request (that's why they'd otherwise pass the ≥70%
       // "same value template" check below and get classified as global), but
       // each request needs a GENUINELY DIFFERENT signed value bound to its own
-      // htu/htm — generateDpopBatchBlock() already generates one per request
-      // into a sequence-numbered param (_dpop_proof_N) and tags it via
-      // request._dpopParamMap for generateAddHeaders() to consume. If this
+      // htu/htm — generateRequestBlock() makes one right before each request
+      // into _dpop_proof / _dpop_pf_proof for generateAddHeaders() to send. If this
       // header were classified as global, generateAddHeaders() would skip it
       // entirely (already present in globalHeaders) and the ONLY thing emitted
       // would be web_add_auto_header("DPoP", "{_dpop_proof}") — a parameter
@@ -1501,8 +1520,9 @@ ${teardownBlock}
         return;
       }
 
-      const freq = entry.count / totalRequests;
-      if (freq < THRESHOLD) {
+      // Global only when every request sends it with the same value — otherwise a request that did not send it
+      // (or sent another value) would get it from web_add_auto_header
+      if (NEVER_GLOBAL.test(key) || entry.count < totalRequests || entry.values.size !== 1) {
         perRequestKeys.add(key);
         return;
       }
@@ -1590,18 +1610,33 @@ ${teardownBlock}
               `refreshJWT(LR.getParam('${clientIdParam}'), LR.getParam('${audParam}'), ` +
               `LR.getParam('${scopeParam}'), LR.getParam('${kidParam}'), LR.getParam('${secretParam}'), '${resultParam}')`;
           }
+          // "Simulate a new user on each iteration" (Runtime Settings, on by default) also empties the JavaScript
+          // engine: from iteration 2 refreshJWT() was "not defined" and the token stopped being renewed (BUG-092,
+          // found by replaying with VuGen). The refresh call loads lre-utils.js itself — unless the DPoP set-up
+          // above already did this iteration. refreshJWT keeps its state in LR parameters, so nothing is lost.
+          const sources = this.hasDpop ? "" : `    SOURCES,\n    "File=lre-utils.js", ENDITEM,\n`;
           return `
 ${audPreStep}  web_js_run(
     "Code=${refreshCall};",
     "ResultParam=${resultParam}",
-    LAST);
+${sources}    LAST);
 
 `;
         })()
       : "";
 
-    // DPoP: init is done inline per-request (combined with proof generation)
-    const dpopSetup = "";
+    // DPoP: the JavaScript engine starts empty on every iteration — load lre-utils.js again before the proofs
+    const dpopSetup = this.hasDpop
+      ? `
+  // The JavaScript engine starts empty on every iteration — load lre-utils.js again for the DPoP proofs below
+  web_js_run(
+    "Code=initDpopKey(LR.getParam('dpop_jwk')); 'DPoP engine ready';",
+    "ResultParam=dpop_init_result",
+    SOURCES,
+    "File=lre-utils.js", ENDITEM,
+    LAST);
+`
+      : "";
 
     // Global persistent headers — applied to ALL subsequent requests automatically.
     // web_add_auto_header() persists until explicitly removed, unlike web_add_header().
@@ -1614,18 +1649,9 @@ ${audPreStep}  web_js_run(
         return `    web_add_auto_header("${tc}", "${this.applyHostVars(v).replace(/"/g, '\\"')}");`;
       })
       .join("\n");
-    const autoHeaderBlock =
-      globalHeaders.size > 0 ? `\n${autoHeaderLines}\n` : "";
-
-    const hostSaveStrings =
-      this.hostVarMap && this.hostVarMap.size > 0
-        ? Array.from(this.hostVarMap.entries())
-            .map(
-              ([host, varName]) =>
-                `    lr_save_string("${host}", "${varName}");`,
-            )
-            .join("\n") + "\n"
-        : "";
+    // set once in vuser_init (kept after a new-user reset, like the servers)
+    this._autoHeaderBlock =
+      globalHeaders.size > 0 ? `    // Headers every request sends\n${autoHeaderLines}\n\n` : "";
 
     // C89: all local variable declarations must appear at the TOP of Action()
     // before any statements. Collect them here and emit as a block.
@@ -1635,15 +1661,23 @@ ${audPreStep}  web_js_run(
       Array.from(this.perRequestVars.values()).some(
         (v) => v.generationType === "timestamp",
       );
-    if (needsTs) localDecls.push("  char _ts[32];");
+    if (needsTs) localDecls.push("    char _ts[32];");
 
     const declBlock =
       localDecls.length > 0 ? localDecls.join("\n") + "\n\n" : "";
 
+    // NTLM / Kerberos credentials — in Action, so every iteration (each a new user with "Simulate a new user")
+    // sets them for its own {username}; the server as its parameter when it is one
+    const ntlmSetup = this.hasNtlm
+      ? `    // Windows (NTLM / Kerberos) sign-in for this server\n` +
+        `    web_set_user("{username}", "{password}", "${this.applyHostVars(this.ntlmHost)}");\n\n`
+      : "";
+
     let code = `Action()
 {
-${declBlock}  web_set_sockets_option("SSL_VERSION", "AUTO");
-${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
+${declBlock}    // Set in vuser_init: ${this._actionServerNote()}
+
+${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
 
     if (this.options.useTransactions && this.options.groupByFolder) {
       code += this.generateGroupedRequests();
@@ -1652,10 +1686,41 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     }
 
     code += `
-  return 0;
+    return 0;
 }
 `;
+    this._actionCode = code;
     return code;
+  }
+
+  /** Servers that the generated script really uses ({Name} in Action, setup or teardown requests). */
+  _usedHostVars(extraText = "") {
+    if (!this.hostVarMap || !this.hostVarMap.size) return [];
+    const teardown = (this.options.teardownRequests || [])
+      .map((r) => this.applyHostVars(this.replaceParameters(typeof r.url === "string" ? r.url : r.url?.raw || "")))
+      .join("\n");
+    const text = (this._actionCode || "") + extraText + teardown;
+    return [...this.hostVarMap].filter(([, v]) => text.includes(`{${v}}`));
+  }
+
+  /** "Set in vuser_init: …" note at the top of Action. */
+  _actionServerNote() {
+    const parts = [];
+    const names = this.hostVarMap ? [...this.hostVarMap.values()] : [];
+    const usesServer = names.length > 0 && (this.requests || []).some((r) => {
+      const u = this.applyHostVars(this.replaceParameters(typeof r.url === "string" ? r.url : r.url?.raw || ""));
+      return names.some((n) => u.includes(`{${n}}`));
+    });
+    if (usesServer) parts.push("the servers");
+    parts.push("the SSL setting");
+    if (this._autoHeaderBlock) parts.push("the headers every request sends");
+    // "the servers, the SSL setting and the headers every request sends" — the order of vuser_init
+    return parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+  }
+
+  /** Blocks written with 2-space steps → the script's 4-space steps (leading spaces doubled). */
+  _indent4(block) {
+    return String(block || "").replace(/^( +)(?=\S)/gm, (m) => m + m);
   }
 
   // ─── Request Grouping ────────────────────────────────────────────────────────
@@ -1684,64 +1749,6 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
    *
    *  * All transaction names collected in this.transactionNames for .usr file.
    */
-  /**
-   * Generate a batched web_js_run block that creates all DPoP proofs needed
-   * for a group of requests in a single JS engine invocation.
-   * Optimized: No file loading since lre-utils.dat was loaded in vuser_init.c
-   */
-  generateDpopBatchBlock(requests, indent) {
-    if (!this.hasDpop) return "";
-    const bearerVar = this.findBearerTokenVar();
-    const specs = [];
-    let seqCounter = 0;
-
-    for (const req of requests) {
-      if (!this.requestUsesDpop(req)) continue;
-      const rawUrl = typeof req.url === "string" ? req.url : req.url?.raw || "";
-      const htu = this.replaceParameters(rawUrl.split("?")[0]);
-      const htm = req.method || "POST";
-      const dpopKeys = this.getDpopHeaderKeys(req);
-
-      for (const dk of dpopKeys) {
-        if (dk === "dpop-pf" && this._dpopPfGenerated) continue;
-        seqCounter++;
-        const paramName =
-          dk === "dpop-pf" ? "_dpop_pf_proof" : `_dpop_proof_${seqCounter}`;
-        // Tag the request so generateAddHeaders knows which param to use
-        if (!req._dpopParamMap) req._dpopParamMap = {};
-        req._dpopParamMap[dk] = paramName;
-        const ath = dk === "dpop" ? `\${${bearerVar}}` : "";
-        specs.push({ htu, htm, ath, paramName });
-        if (dk === "dpop-pf") this._dpopPfGenerated = true;
-      }
-    }
-
-    if (specs.length === 0) return "";
-    if (specs.length === 1) {
-      // Single proof — use direct approach (no file loading needed)
-      const s = specs[0];
-      const athArg = s.ath ? `, LR.getParam('${bearerVar}')` : "";
-      let code = `${indent}web_js_run(\n`;
-      code += `${indent}    "Code=generateDpopProof('${s.htu}', '${s.htm}'${athArg});",\n`;
-      code += `${indent}    "ResultParam=${s.paramName}",\n`;
-      code += `${indent}    LAST);\n`;
-      return code;
-    }
-
-    // Build the Code string with proper LR.getParam() calls for ath
-    const specParts = specs.map((s) => {
-      const athVal = s.ath ? `\${${bearerVar}}` : "";
-      return `{"htu":"${s.htu}","htm":"${s.htm}","ath":"${athVal}","paramName":"${s.paramName}"}`;
-    });
-    const codeStr = `generateDpopProofs('[${specParts.join(",")}]');`;
-
-    let code = `${indent}// Batch DPoP proof generation - ${specs.length} proofs (optimized: no file loading)\n`;
-    code += `${indent}web_js_run(\n`;
-    code += `${indent}    "Code=${this.escapeCString(codeStr)}",\n`;
-    code += `${indent}    "ResultParam=_dpop_batch_status",\n`;
-    code += `${indent}    LAST);\n`;
-    return code;
-  }
   generateGroupedRequests() {
     const groups = this.groupRequestsByFolder();
     let code = "";
@@ -1749,34 +1756,24 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     this.transactionNames = []; // Reset — will hold ALL per-request tx names
 
     const groupEntries = Array.from(groups.entries());
+    const total = groupEntries.reduce((n, [, reqs]) => n + reqs.length, 0);
     groupEntries.forEach(([folder, requests], groupIndex) => {
-      // Batch DPoP proof generation for all requests in this folder group
-      const dpopBatch = this.generateDpopBatchBlock(requests, "      ");
-      if (dpopBatch) {
-        code += dpopBatch + "\n";
-        this._dpopBatchActive = true;
-      }
-
       requests.forEach((request, idx) => {
         const txName = this.formatTransactionName(request.name, txCounter);
         this.transactionNames.push(txName);
         txCounter++;
 
         // Per-request transaction wrapper
-        code += `      lr_start_transaction("${txName}");\n\n`;
+        code += `    lr_start_transaction("${txName}");\n\n`;
         code += this.generateRequestBlock(request, 1);
-        code += `\n\n      lr_end_transaction("${txName}", LR_AUTO);\n`;
+        code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
 
-        if (this.options.thinkTime > 0) {
-          code += `\n      lr_think_time(${this.options.thinkTime});\n`;
+        // Think time between steps — none after the last one (the iteration pacing follows)
+        if (this.options.thinkTime > 0 && txCounter <= total) {
+          code += `\n    lr_think_time(${this.options.thinkTime});\n`;
         }
         code += "\n";
       });
-
-      // Think time between folder groups (not after last group)
-      if (groupIndex < groupEntries.length - 1 && this.options.thinkTime > 0) {
-        code += `      lr_think_time(${this.options.thinkTime});\n\n`;
-      }
     });
 
     return code;
@@ -1787,24 +1784,18 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     let txCounter = 1;
     this.transactionNames = [];
 
-    // Batch DPoP proof generation for ALL requests in one call
-    const dpopBatch = this.generateDpopBatchBlock(this.requests, "    ");
-    if (dpopBatch) {
-      code += dpopBatch + "\n";
-      this._dpopBatchActive = true;
-    }
-
     this.requests.forEach((request, idx) => {
       const txName = this.formatTransactionName(request.name, txCounter);
       this.transactionNames.push(txName);
       txCounter++;
 
-      code += `      lr_start_transaction("${txName}");\n\n`;
+      code += `    lr_start_transaction("${txName}");\n\n`;
       code += this.generateRequestBlock(request, 1);
-      code += `\n      lr_end_transaction("${txName}", LR_AUTO);\n`;
+      code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
 
-      if (this.options.thinkTime > 0) {
-        code += `\n      lr_think_time(${this.options.thinkTime});\n`;
+      // Think time between steps — none after the last one (the iteration pacing follows)
+      if (this.options.thinkTime > 0 && idx < this.requests.length - 1) {
+        code += `\n    lr_think_time(${this.options.thinkTime});\n`;
       }
       code += "\n";
     });
@@ -1836,33 +1827,28 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     // 1. Per-request dynamic variable generation (uuid / csrf / nonce / timestamp)
     code += this.generatePerRequestVarCode(request, indent);
 
-    // 1.5. DPoP proof generation — optimized to use persistent context from vuser_init
-    // No file loading needed since lre-utils.dat was loaded once in vuser_init.c
-    if (
-      this.hasDpop &&
-      this.requestUsesDpop(request) &&
-      !this._dpopBatchActive
-    ) {
+    // 1.5. DPoP proof (RFC 9449) — one fresh proof right before each request that sends one, made by
+    // lre-utils.js (loaded again at the top of Action on every iteration). Checked with VuGen against a DPoP
+    // verifier: the proof URL is the URL this request is sent to — {parameters} read with LR.getParam, since VuGen
+    // does not substitute {…} inside web_js_run code (a literal "{base_url}/token" was signed before) — and "ath"
+    // is the hash of the token this request presents (none when it presents none, e.g. the token request).
+    if (this.hasDpop && this.requestUsesDpop(request)) {
       const rawUrl =
         typeof request.url === "string" ? request.url : request.url?.raw || "";
-      const htu = this.replaceParameters(rawUrl.split("?")[0]);
-      const htm = request.method || "POST";
-      const dpopKeys = this.getDpopHeaderKeys(request);
-
-      const filteredKeys = dpopKeys.filter((dk) => {
-        if (dk === "dpop-pf" && this._dpopPfGenerated) return false;
-        return true;
-      });
-
-      for (const dk of filteredKeys) {
+      const htuC = this.applyHostVars(this.replaceParameters(rawUrl.split("?")[0].split("#")[0]));
+      const htm = (request.method || "POST").toUpperCase();
+      const authH = (request.headers || []).find(
+        (h) => h.key && !h.disabled && h.key.toLowerCase() === "authorization",
+      );
+      const authM = authH && /^(?:bearer|dpop)\s+(.+)$/i.exec(this.replaceParameters(String(authH.value || "")));
+      const tokenJs = authM ? this._cStrToJs(authM[1]) : "";
+      for (const dk of this.getDpopHeaderKeys(request)) {
         const resultParam = dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof";
-        const athArg =
-          dk === "dpop" ? `, LR.getParam('${this.findBearerTokenVar()}')` : "";
+        const js = `generateDpopProof(${this._cStrToJs(htuC)}, '${htm}'${dk === "dpop" && tokenJs ? ", " + tokenJs : ""});`;
         code += `${indent}web_js_run(\n`;
-        code += `${indent}    "Code=generateDpopProof('${htu}', '${htm}'${athArg});",\n`;
+        code += `${indent}    "Code=${this.escapeCString(js)}",\n`;
         code += `${indent}    "ResultParam=${resultParam}",\n`;
         code += `${indent}    LAST);\n`;
-        if (dk === "dpop-pf") this._dpopPfGenerated = true;
       }
     }
 
@@ -2193,6 +2179,17 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     }
   }
 
+  /**
+   * VuGen's XPath is namespace-aware: "/batchInfo/id" finds nothing in <batchInfo xmlns="…"> (Salesforce Bulk API),
+   * while DevWeb matches it. A plain element path ("/a/b", "//a/b[2]") is written with local-name() for VuGen, which
+   * matches with or without a namespace — as JMeter's XPath extractor does by default. Checked with VuGen.
+   */
+  _vugenXpath(q) {
+    const s = String(q || "");
+    if (!/^(\/\/?[A-Za-z_][\w.-]*(\[\d+\])?)+$/.test(s)) return s;
+    return s.replace(/(\/\/?)([A-Za-z_][\w.-]*)/g, (m, sl, name) => `${sl}*[local-name()='${name}']`);
+  }
+
   generateCorrelationRegistrations(request, indent) {
     const produced = this.correlations.filter(
       (c) =>
@@ -2223,7 +2220,12 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
         rawPath.startsWith("$") && rawPath.length > 1 && rawPath !== "$";
       const jsonPath = hasValidPath ? rawPath : `$.${corrBase}`;
 
-      switch (corr.type || corr.extractorType) {
+      // What the script does (XPath, regex, header, cookie, boundary) wins over the type guessed from the name —
+      // "_batchId" is typed "id" and became a JSON extractor on an XML response (BUG-103); DevWeb already did this
+      const explicitKind = /^(xpath|regex|regexp|header|cookie|boundary)$/.test(corr.extractorType || "")
+        ? corr.extractorType
+        : null;
+      switch (explicitKind || corr.type || corr.extractorType) {
         case "json":
         case "jsonpath":
         case "token":
@@ -2300,8 +2302,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
         }
 
         case "xpath": {
-          const xpathQuery = corr.xpathQuery || `//${corrBase}`;
-          code += _vugen.emitXpath(corr.name, xpathQuery, indent);
+          code += _vugen.emitXpath(corr.name, this._vugenXpath(corr.xpathQuery || `//${corrBase}`), indent);
           break;
         }
 
@@ -2369,13 +2370,9 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
           .split("-")
           .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
           .join("-");
-        // DPoP headers: replace hardcoded proof token with dynamic LR param
+        // DPoP headers: the proof made just before this request (generateRequestBlock step 1.5)
         if (this.hasDpop && /^dpop(-pf)?$/i.test(h.key)) {
-          const dk = h.key.toLowerCase();
-          // Use batch-assigned param name if available, otherwise default
-          const batchParam = request._dpopParamMap && request._dpopParamMap[dk];
-          const paramName =
-            batchParam || (dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof");
+          const paramName = h.key.toLowerCase() === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof";
           return `${indent}web_add_header("${hdrKey}", "{${paramName}}");\n`;
         }
         return `${indent}web_add_header("${hdrKey}", "${this.applyHostVars(this.replaceParameters(String(h.value)))}");\n`;
@@ -2450,7 +2447,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     code += `${indent}    "RecContentType=application/json",\n`;
     code += `${indent}    "Referer=",\n`;
     code += `${indent}    "Snapshot=${snapshot}",\n`;
-    code += `${indent}    "Mode=HTML",\n`;
+    code += `${indent}    "Mode=HTTP",\n`;
     code += `${indent}    LAST);\n`;
     return code;
   }
@@ -2472,7 +2469,7 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
     code += `${indent}    "RecContentType=application/json",\n`;
     code += `${indent}    "Referer=",\n`;
     code += `${indent}    "Snapshot=${snapshot}",\n`;
-    code += `${indent}    "Mode=HTML",\n`;
+    code += `${indent}    "Mode=HTTP",\n`;
 
     if (contentType) {
       code += `${indent}    "EncType=${contentType}",\n`;
@@ -2923,14 +2920,26 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
       (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
     );
 
+    // Names by role, the same as the Recorder and Script Studio: App_Server, Api_Server … (shared/host-params.js).
+    // Only the servers the script really uses are declared (vuser_init) — see _usedHostVars().
+    const names = HostParams.defaultNames(sorted.map(([h]) => h));
     this.hostVarMap = new Map();
-    let counter = 0;
-    for (const [host] of sorted) {
-      // VuGen LR param names: ServerHost, ServerHost1, ServerHost2, ...
-      const varName = counter === 0 ? "ServerHost" : `ServerHost${counter}`;
-      this.hostVarMap.set(host, varName);
-      counter++;
-    }
+    for (const [host] of sorted) this.hostVarMap.set(host, names[host]);
+  }
+
+  /**
+   * A C string value with {Param} parts as a JavaScript expression for web_js_run code:
+   * "{base_url}/v1/{id}" -> LR.getParam('base_url') + '/v1/' + LR.getParam('id'). VuGen does not substitute
+   * {…} parameters inside web_js_run code, so they are read with LR.getParam.
+   */
+  _cStrToJs(str) {
+    const parts = String(str).split(/\{([A-Za-z_][A-Za-z0-9_]*)\}/);
+    const js = [];
+    parts.forEach((p, i) => {
+      if (i % 2) js.push(`LR.getParam('${p}')`);
+      else if (p) js.push(`'${p.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`);
+    });
+    return js.join(" + ") || "''";
   }
 
   /**
@@ -2939,7 +2948,8 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
   applyHostVars(str) {
     if (!str || !this.hostVarMap || this.hostVarMap.size === 0) return str;
     let result = String(str);
-    for (const [host, varName] of this.hostVarMap) {
+    // longest name first, so "api.shop.com" is never half-replaced by "shop.com"
+    for (const [host, varName] of [...this.hostVarMap].sort((a, b) => b[0].length - a[0].length)) {
       result = result.split(host).join(`{${varName}}`);
     }
     return result;
@@ -3308,8 +3318,10 @@ ${hostSaveStrings}${jwtSetup}${dpopSetup}${autoHeaderBlock}`;
 
   formatTransactionName(rawName, seqNum) {
     const padded = String(seqNum).padStart(2, "0");
-    let name = rawName.replace(/-/g, "_");
-    name = name.replace(/^[Tt]\d+[-_]/i, "");
+    // a name that already starts with its own number ("T01_Login", "01 - Login", "3. Search") keeps one number:
+    // SC01_01_LOGIN, not SC01_01_01_LOGIN
+    let name = String(rawName).replace(/^\s*[Tt]?\d{1,3}\s*[-_.:)]+\s*|^\s*[Tt]?\d{1,3}\s+(?=\D)/, "");
+    name = name.replace(/-/g, "_");
     name = name
       .replace(/[^a-zA-Z0-9_]/g, "_")
       .replace(/_+/g, "_")

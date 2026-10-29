@@ -771,7 +771,7 @@ async function applyBgDecisions() {
 // advisor candidates into S.correlations. Re-runs only the code generation
 // tail — no re-parsing, no re-correlating. Fast (< 1 second).
 // =============================================================================
-function regenerateFromAdvisor() {
+function regenerateFromAdvisor(opts) {
   try {
     const isWeb = S.format === "webhttp" || S.format === "both";
     const isDev = S.format === "devweb" || S.format === "both";
@@ -807,10 +807,12 @@ function regenerateFromAdvisor() {
     const codeEl = document.getElementById("code-body");
     if (codeEl) codeEl.textContent = S.scripts[S.tab] || "// No content";
 
-    showToast(
-      "Script regenerated with " + S.correlations.length + " correlations.",
-      "success",
-    );
+    // (a server rename shows its own message)
+    if (!(opts && opts.quiet))
+      showToast(
+        "Script regenerated with " + S.correlations.length + " correlations.",
+        "success",
+      );
   } catch (err) {
     console.error("[Advisor regen]", err);
     showToast("Regeneration error: " + err.message, "error", 6000);

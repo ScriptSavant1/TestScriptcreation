@@ -52,6 +52,10 @@ class MandatoryFilesGenerator {
         for (const line of strVal.split(/\r?\n/)) {
           if (line) yaml += `    ${line}\n`;
         }
+      } else if (/^[\s{}[\]&*!|>'"%@`#,?:-]|: | #|:$|\s$/.test(strVal)) {
+        // Not a plain YAML value (e.g. "{{vault:salesforce-key}}" read as a map) — DevWeb refused the whole
+        // rts.yml. Single-quoted, so the value stays exactly as written
+        yaml += `  ${key}: '${strVal.replace(/'/g, "''")}'\n`;
       } else {
         yaml += `  ${key}: ${strVal}\n`;
       }

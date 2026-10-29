@@ -74,26 +74,31 @@ describe('VuGen analyzeCommonHeaders() — DPoP header classification', () => {
     expect(perRequestKeys.has('DPoP')).toBe(true);
   });
 
-  test('end-to-end: generateAddHeaders() emits the correct per-request DPoP param, not a stale shared one', () => {
+  test('end-to-end: each DPoP request makes its own proof right before it is sent, and sends that proof', () => {
+    // One fresh proof per request (RFC 9449): generateRequestBlock() runs generateDpopProof() into
+    // _dpop_proof immediately before the request, and generateAddHeaders() sends {_dpop_proof}.
+    // The proof URL is the request's own URL, and "ath" is only added when the request presents a token.
     const requests = [
       { name: 'GetToken', method: 'POST', url: 'https://auth.example.com/token', headers: [{ key: 'DPoP', value: '{{dpop_proof}}' }] },
-      { name: 'GetResource', method: 'GET', url: 'https://api.example.com/resource', headers: [{ key: 'DPoP', value: '{{dpop_proof}}' }] },
+      { name: 'GetResource', method: 'GET', url: 'https://api.example.com/resource',
+        headers: [{ key: 'DPoP', value: '{{dpop_proof}}' }, { key: 'Authorization', value: 'DPoP {{access_token}}' }] },
     ];
     const g = makeGenerator(requests);
     g.hasDpop = true;
 
-    // Simulate what generateDpopBatchBlock() does: tag each request with its
-    // own sequence-numbered param name.
-    requests[0]._dpopParamMap = { dpop: '_dpop_proof_1' };
-    requests[1]._dpopParamMap = { dpop: '_dpop_proof_2' };
+    const b1 = g.generateRequestBlock(requests[0], 1);
+    const b2 = g.generateRequestBlock(requests[1], 1);
 
-    const out1 = g.generateAddHeaders(requests[0], '    ');
-    const out2 = g.generateAddHeaders(requests[1], '    ');
-
-    expect(out1).toContain('web_add_header("DPoP", "{_dpop_proof_1}")');
-    expect(out2).toContain('web_add_header("DPoP", "{_dpop_proof_2}")');
-    // Must NOT collapse to the old shared/never-set generic param.
-    expect(out1).not.toContain('{_dpop_proof}"');
-    expect(out2).not.toContain('{_dpop_proof}"');
+    for (const [b, path] of [[b1, '/token'], [b2, '/resource']]) {
+      const proofAt = b.indexOf('generateDpopProof(');
+      const headerAt = b.indexOf('web_add_header("DPoP", "{_dpop_proof}")');
+      expect(proofAt).toBeGreaterThan(-1);
+      expect(headerAt).toBeGreaterThan(proofAt);
+      expect(b).toContain('"ResultParam=_dpop_proof"');
+      expect(b.slice(proofAt, headerAt)).toContain(path);
+    }
+    // the token request presents no token → no ath argument; the resource request hashes its own token
+    expect(b1).not.toMatch(/generateDpopProof\([^)]*'POST', /);
+    expect(b2).toMatch(/generateDpopProof\([^;]*'GET', [^;]*access_token/);
   });
 });

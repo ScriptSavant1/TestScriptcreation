@@ -524,7 +524,7 @@ class BrunoParser {
       folder: folderName,
       depth: folderName ? folderName.split('/').length : 0,
       method: (http.method || 'GET').toUpperCase(),
-      url: http.url || '',
+      url: String(http.url || '').trim(), // no line break (YAML block value) — see normalizeUrl()
       headers,
       body: this.normalizeBrunoYamlBody(http.body),
       auth: null, // Bruno YAML auth is at collection/folder level — handled via variables
@@ -705,15 +705,17 @@ class BrunoParser {
    * Normalize URL
    */
   normalizeUrl(url) {
+    // A URL never holds a line break or edge spaces — a collection value with a trailing newline (seen in the
+    // Salesforce collection) broke the VuGen C string (compile error) and was sent as part of the DevWeb URL
     if (typeof url === 'string') {
-      return url;
+      return url.trim();
     }
 
     if (typeof url === 'object' && url !== null) {
       // Prefer the raw URL — it preserves {{variable}} templates correctly
       // and avoids double-protocol issues (e.g. https://{{url}} where {{url}} = https://example.com)
       if (url.raw) {
-        return url.raw;
+        return String(url.raw).trim();
       }
 
       // Fallback: construct from parts

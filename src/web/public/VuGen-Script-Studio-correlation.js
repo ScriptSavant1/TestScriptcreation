@@ -287,12 +287,32 @@ function classifyHarEntry(entry) {
   return "other";
 }
 
+// Prefetches of a page that the browser then opened (same URL, a later GET that is not a prefetch) — the same rule
+// as the Recorder (portal/recorder-core.js): the real navigation is scripted, the prefetch would load the page twice
+function _studioPrefetchDuplicates(entries) {
+  const dup = new Set(), later = new Set();
+  const isPf = (e) => /prefetch|prerender/i.test((e.hdrsMap || {})["sec-purpose"] || (e.hdrsMap || {})["purpose"] || "");
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (e.isMarker || (e.method || "GET") !== "GET") continue;
+    if (isPf(e)) {
+      if (later.has(e.url)) dup.add(e);
+    } else later.add(e.url);
+  }
+  return dup;
+}
+
 function applyFilters(entries) {
+  const prefetchDup = _studioPrefetchDuplicates(entries);
   for (const e of entries) {
     if (e.isMarker) {
       e.filtered = false;
       continue;
     } // always keep transaction markers
+    if (prefetchDup.has(e)) {
+      e.filtered = true;
+      continue;
+    }
     // Filter CSP violation reports — browser auto-sends these when our bookmarklet
     // .invalid marker URLs are blocked by the app's Content Security Policy
     const reqCt = (e.hdrsMap["content-type"] || "")
@@ -341,7 +361,7 @@ function applyFilters(entries) {
       continue;
     }
     try {
-      if (NOISY.test(new URL(e.url).hostname)) {
+      if (NOISY.test(new URL(e.url).hostname) || NOISY_URL.test(e.url)) {
         e.filtered = true;
         continue;
       }

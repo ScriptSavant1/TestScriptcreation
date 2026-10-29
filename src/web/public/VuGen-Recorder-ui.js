@@ -411,66 +411,45 @@ function clearAll(){
 function esc(s){ return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escJs(s){ return(s||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\n/g,'\\n').replace(/\r/g,'\\r').replace(/\t/g,'\\t'); }
 function escTpl(s){ return(s||'').replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${'); }
-// Build hostname→variable map by scanning all scripted request header values for URLs
-function buildHdrHostMap(entries,primaryHost){
-  const map={};
-  if(primaryHost) map[primaryHost]='SERVER_HOST';
-  const seen=new Set(primaryHost?[primaryHost]:[]);
-  const extra=[];
-  for(const e of(entries||[])){
-    if(e.filtered||e.isMarker) continue;
-    for(const h of(e.reqHdrs||[])){
-      let m,re=/https?:\/\/([^/\s?#:]+)(?::[0-9]+)?/g;
-      while((m=re.exec(h.value||''))!==null){
-        if(!seen.has(m[1])){seen.add(m[1]);extra.push(m[1]);}
-      }
-    }
-  }
-  extra.forEach((hh,i)=>{map[hh]='SERVER_HOST'+(i+1);});
-  return map;
+// Server parameters (shared/host-params.js): hostVarMap is { "host[:port]": parameterName }.
+// _subHosts replaces each server that follows a scheme with a placeholder, in the three forms recordings
+// carry: https://host, https:\/\/host (JSON with escaped slashes) and https%3A%2F%2Fhost (redirect_uri=…).
+// A longer name goes first, so "api.shop.com" is never half-replaced by "shop.com".
+const _subHostsCache=new WeakMap();   // hostVarMap -> compiled patterns (one map serves a whole script)
+function _subHostsRules(hostVarMap){
+  let rules=_subHostsCache.get(hostVarMap);
+  if(rules) return rules;
+  const end='(?![A-Za-z0-9_\\-]|\\.[A-Za-z0-9])';
+  rules=Object.entries(hostVarMap).filter(([h])=>h).sort((a,b)=>b[0].length-a[0].length).map(([_h,_v])=>{
+    const esc=_h.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    return{h:_h.toLowerCase(),plain:new RegExp('(https?:(?://|\\\\/\\\\/))'+esc+'(:[0-9]+)?'+end,'gi'),
+      enc:new RegExp('(https?%3A%2F%2F)'+esc.replace(/:/g,'%3A')+end,'gi'),v:_v};
+  });
+  _subHostsCache.set(hostVarMap,rules);
+  return rules;
 }
-// Substitute known hostnames in a header string value — DevWeb (backtick template literal)
-function subHdrValMj(val,hostVarMap){
+function _subHosts(val,hostVarMap){
   let r=val,ch=false;
-  for(const[_h,_v]of Object.entries(hostVarMap).sort((a,b)=>b[0].length-a[0].length)){
-    if(!_h) continue;
-    const esc=_h.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    // Raw URL form: https://hostname/path
-    const n=r.replace(new RegExp('(https?://)'+esc+'(:[0-9]+)?(?=[/?#\\s"\'`]|$)','g'),'$1\x00HDRH_'+_v+'\x00$2');
+  if(!r) return{text:r,changed:false};
+  const low=String(r).toLowerCase();
+  for(const x of _subHostsRules(hostVarMap)){
+    if(low.indexOf(x.h.split(':')[0])<0) continue;   // quick skip: this server is not in the text
+    const n=r.replace(x.plain,'$1\x00HDRH_'+x.v+'\x00$2').replace(x.enc,'$1\x00HDRH_'+x.v+'\x00');
     if(n!==r){ch=true;r=n;}
-    // URL-encoded form: https%3A%2F%2Fhostname (common in redirect_uri= POST body params)
-    const n2=r.replace(new RegExp('(https?%3A%2F%2F)'+esc+'(?=%2F|%3F|%23|&|\\s|$)','gi'),'$1\x00HDRH_'+_v+'\x00');
-    if(n2!==r){ch=true;r=n2;}
-  }
-  if(!ch) return'"'+escJs(val)+'"';
-  return'`'+escTpl(r).replace(/\x00HDRH_([^\x00]+)\x00/g,'${$1}')+'`';
-}
-// Apply hostname substitution to raw text, returning text with \x00HDRH_VAR\x00 placeholders (for body/backtick emission)
-function subRawMj(text,hostVarMap){
-  let r=text,ch=false;
-  for(const[_h,_v]of Object.entries(hostVarMap).sort((a,b)=>b[0].length-a[0].length)){
-    if(!_h) continue;
-    const esc=_h.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    const n=r.replace(new RegExp('(https?://)'+esc+'(:[0-9]+)?(?=[/?#\\s"\'`]|$)','g'),'$1\x00HDRH_'+_v+'\x00$2');
-    if(n!==r){ch=true;r=n;}
-    const n2=r.replace(new RegExp('(https?%3A%2F%2F)'+esc+'(?=%2F|%3F|%23|&|\\s|$)','gi'),'$1\x00HDRH_'+_v+'\x00');
-    if(n2!==r){ch=true;r=n2;}
   }
   return{text:r,changed:ch};
 }
-// Substitute known hostnames in a header string value — Web HTTP/HTML C ({LrParam} notation)
+// DevWeb value: a "string", or a `template` with ${Server} where a server was replaced
+function subHdrValMj(val,hostVarMap){
+  const s=_subHosts(val,hostVarMap);
+  if(!s.changed) return'"'+escJs(val)+'"';
+  return'`'+escTpl(s.text).replace(/\x00HDRH_([^\x00]+)\x00/g,'${$1}')+'`';
+}
+// Raw text with \x00HDRH_Name\x00 placeholders (DevWeb bodies are emitted by the caller)
+function subRawMj(text,hostVarMap){ return _subHosts(text,hostVarMap); }
+// Web HTTP/HTML (C): {Server} parameter notation
 function subHdrValC(val,hostVarMap){
-  let r=val;
-  for(const[_h,_v]of Object.entries(hostVarMap).sort((a,b)=>b[0].length-a[0].length)){
-    if(!_h) continue;
-    const esc=_h.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    const lrP=_v==='SERVER_HOST'?'ServerHost':'ServerHost'+_v.replace('SERVER_HOST','');
-    // Raw URL form: https://hostname/path
-    r=r.replace(new RegExp('(https?://)'+esc+'(:[0-9]+)?(?=[/?#\\s"\'`]|$)','g'),'$1{'+lrP+'}$2');
-    // URL-encoded form: https%3A%2F%2Fhostname (common in redirect_uri= POST body params)
-    r=r.replace(new RegExp('(https?%3A%2F%2F)'+esc+'(?=%2F|%3F|%23|&|\\s|$)','gi'),'$1{'+lrP+'}');
-  }
-  return r;
+  return _subHosts(val,hostVarMap).text.replace(/\x00HDRH_([^\x00]+)\x00/g,'{$1}');
 }
 // Returns true if body text requires BodyBinary= (non-printable chars outside \t \n \r range)
 function needsBinary(text){

@@ -56,8 +56,16 @@ const STATIC_CT = new Set([
 ]);
 const STATIC_EXT =
   /\.(png|jpe?g|gif|ico|svg|webp|woff2?|ttf|eot|otf|css|js\.map|map)(\?|$)/i;
-const NOISY =
-  /google-analytics|googletagmanager|doubleclick|googlesyndication|facebook\.net|hotjar|segment\.io|mixpanel|amplitude|clarity\.ms|adnxs|scorecardresearch|outbrain|taboola|adsrvr|pubmatic/i;
+// Analytics / ads servers — the same list as the Recorder (VuGen-Recorder-state.js); keep both in step
+const NOISY = new RegExp(
+  [
+    "google-analytics|googletagmanager|doubleclick|googlesyndication|facebook\\.net|hotjar|segment\\.io|mixpanel|amplitude|clarity\\.ms|adnxs|scorecardresearch|outbrain|taboola|adsrvr|pubmatic",
+    "googleadservices|googletagservices|adservice\\.google|fundingchoicesmessages\\.google|adtrafficquality\\.google|2mdn\\.net|casalemedia|amazon-adsystem|criteo|rubiconproject|openx\\.net|adsafeprotected|moatads|doubleverify|quantserve|quantcount|demdex\\.net|omtrdc\\.net|bat\\.bing\\.com|nr-data\\.net|krxd\\.net|bluekai|rlcdn\\.com|serving-sys|3lift\\.com|indexww\\.com|id5-sync|smartadserver|adform\\.net|teads\\.tv|yieldmo|sharethrough|lijit|gumgum|everesttech\\.net",
+  ].join("|"),
+  "i",
+);
+// Ad pixels on a server that is not only for ads (www.google.com also serves reCAPTCHA, maps …): matched by path
+const NOISY_URL = /^https?:\/\/(?:www\.)?google\.[a-z.]+\/(?:ads|pagead)\//i;
 const SKIP_HDRS = new Set([
   // Connection-level — managed by DevWeb HTTP engine
   "host",

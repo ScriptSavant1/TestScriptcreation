@@ -17,130 +17,113 @@ function escJs(s) {
 function escTpl(s) {
   return String(s).replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
-function buildHdrHostMap(entries, primaryHost) {
-  const map = {};
-  if (primaryHost) map[primaryHost] = "SERVER_HOST";
-  const seen = new Set(primaryHost ? [primaryHost] : []);
-  const extra = [];
-  for (const e of entries || []) {
-    if (e.filtered || e.isMarker) continue;
-    for (const h of e.reqHdrs || []) {
-      let m,
-        re = /https?:\/\/([^/\s?#:]+)(?::[0-9]+)?/g;
-      while ((m = re.exec(h.value || "")) !== null) {
-        if (!seen.has(m[1])) {
-          seen.add(m[1]);
-          extra.push(m[1]);
-        }
-      }
-    }
-  }
-  extra.forEach((hh, i) => {
-    map[hh] = "SERVER_HOST" + (i + 1);
+// DevWeb: a URL with Studio's substitution markers -> the inside of a template literal
+function _mjUrlTpl(s) {
+  return escTpl(s)
+    .replace(/\x00DYNSTART_([^]+?)\x00DYNEND/g, "${load.global.$1}")
+    .replace(/\x00DYNRND_([^]+?)\x00DYNEND/g, (_, nm) => `\${(load.global.${nm}||[]).length?load.global.${nm}[Math.floor(Math.random()*load.global.${nm}.length)]:''}`)
+    .replace(/\x00PARAM_([^]+?)\x00PARAMEND/g, "${load.params.$1}")
+    .replace(/\x00SRVHOST_([^\x00]+)\x00/g, "${$1}");
+}
+
+// A page the browser opened (navigation or form post), as opposed to a call made by the page's JavaScript
+function _isNavigation(e) {
+  const rt = (e._resourceType || "").toLowerCase();
+  if (rt) return rt === "document";
+  const mode = (e.hdrsMap || {})["sec-fetch-mode"];
+  if (mode) return mode === "navigate";
+  return /^(text\/html|application\/xhtml)/i.test(e.ct || "");
+}
+
+// A VuGen URL with {Param} parts as a JavaScript expression for web_js_run: "https://{Api_Server}/a/{Id}" ->
+// 'https://' + LR.getParam('Api_Server') + '/a/' + LR.getParam('Id')
+function _cUrlToJs(cUrl) {
+  const parts = String(cUrl).split(/\{([A-Za-z_][A-Za-z0-9_]*)\}/);
+  const js = [];
+  parts.forEach((p, i) => {
+    if (i % 2) js.push(`LR.getParam('${p}')`);
+    else if (p) js.push(`'${p.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`);
   });
-  return map;
+  return js.join(" + ") || "''";
 }
-function subHdrValMj(val, hostVarMap) {
-  let r = val,
-    ch = false;
-  for (const [_h, _v] of Object.entries(hostVarMap).sort(
-    (a, b) => b[0].length - a[0].length,
-  )) {
-    if (!_h) continue;
-    const esc = _h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Raw URL form: https://hostname/path
-    const n = r.replace(
-      new RegExp(
-        "(https?://)" + esc + "(:[0-9]+)?(?=[/?#\\s\"'`]|$)",
-        "g",
-      ),
-      "$1\x00HDRH_" + _v + "\x00$2",
-    );
-    if (n !== r) {
-      ch = true;
-      r = n;
-    }
-    // URL-encoded form: https%3A%2F%2Fhostname (common in redirect_uri= POST body params)
-    const n2 = r.replace(
-      new RegExp(
-        "(https?%3A%2F%2F)" + esc + "(?=%2F|%3F|%23|&|\\s|$)",
-        "gi",
-      ),
-      "$1\x00HDRH_" + _v + "\x00",
-    );
-    if (n2 !== r) {
-      ch = true;
-      r = n2;
-    }
+
+// Split an escaped C string into chunks of about `size` characters, never inside an escape sequence
+// (\" \\ \n \xHH …) — a chunk ending in the first half of "\\" made the next quote part of the string (BUG-091).
+function _cChunks(s, size) {
+  const out = [];
+  let cur = "", i = 0;
+  while (i < s.length) {
+    let len = 1;
+    if (s[i] === "\\") len = s[i + 1] === "x" ? 4 : 2;
+    if (cur.length + len > size && cur.length) { out.push(cur); cur = ""; }
+    cur += s.substr(i, len);
+    i += len;
   }
-  if (!ch) return '"' + escJs(val) + '"';
-  return (
-    "`" + escTpl(r).replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}") + "`"
-  );
+  if (cur.length) out.push(cur);
+  return out;
 }
-// Apply hostname substitution to raw text, returning text with \x00HDRH_VAR\x00 placeholders (for body/backtick emission)
-function subRawMj(text, hostVarMap) {
-  let r = text,
-    ch = false;
-  for (const [_h, _v] of Object.entries(hostVarMap).sort(
-    (a, b) => b[0].length - a[0].length,
-  )) {
-    if (!_h) continue;
-    const esc = _h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const n = r.replace(
-      new RegExp(
-        "(https?://)" + esc + "(:[0-9]+)?(?=[/?#\\s\"'`]|$)",
-        "g",
-      ),
-      "$1\x00HDRH_" + _v + "\x00$2",
-    );
-    if (n !== r) {
-      ch = true;
-      r = n;
-    }
-    const n2 = r.replace(
-      new RegExp(
-        "(https?%3A%2F%2F)" + esc + "(?=%2F|%3F|%23|&|\\s|$)",
-        "gi",
-      ),
-      "$1\x00HDRH_" + _v + "\x00",
-    );
-    if (n2 !== r) {
-      ch = true;
-      r = n2;
-    }
+
+// Server parameters (shared/host-params.js, same as the Recorder): every server of the script gets one parameter named
+// by its role (App_Server, Api_Server …), set once per Vuser — VuGen: set_server() in vuser_init; DevWeb: a const in
+// main.js — and used in every URL, header and body that carries it. S.hostParams = { main, keys, map: {host: name} }.
+function _stPlanHosts(entries) {
+  S.hostParams = HostParams.plan(
+    entries || [],
+    (e) => !e.filtered && !e.isMarker && shouldIncludeEntry(e, S.bgDecisions),
+    S.hostNames || {},
+    [S.dpopTokenVar || "AccessToken"].concat((S.correlations || []).map((c) => c.name), (S.params || []).map((p) => p.csvKey)),
+  );
+  S.serverHost = S.hostParams.main ? { host: S.hostParams.main } : null;
+  return S.hostParams.map;
+}
+
+// Replace each server that follows a scheme with a placeholder, in the three forms recordings carry: https://host,
+// https:\/\/host (JSON with escaped slashes) and https%3A%2F%2Fhost (redirect_uri=…). A longer name goes first, so
+// "api.shop.com" is never half-replaced by "shop.com". Compiled patterns are kept per map (one map per script).
+const _subHostsCache = new WeakMap();
+function _subHostsRules(hostVarMap) {
+  let rules = _subHostsCache.get(hostVarMap);
+  if (rules) return rules;
+  const end = "(?![A-Za-z0-9_\\-]|\\.[A-Za-z0-9])";
+  rules = Object.entries(hostVarMap)
+    .filter(([h]) => h)
+    .sort((a, b) => b[0].length - a[0].length)
+    .map(([_h, _v]) => {
+      const esc = _h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return {
+        h: _h.toLowerCase().split(":")[0],
+        plain: new RegExp("(https?:(?://|\\\\/\\\\/))" + esc + "(:[0-9]+)?" + end, "gi"),
+        enc: new RegExp("(https?%3A%2F%2F)" + esc.replace(/:/g, "%3A") + end, "gi"),
+        v: _v,
+      };
+    });
+  _subHostsCache.set(hostVarMap, rules);
+  return rules;
+}
+function _subHosts(val, hostVarMap) {
+  let r = val, ch = false;
+  if (!r) return { text: r, changed: false };
+  const low = String(r).toLowerCase();
+  for (const x of _subHostsRules(hostVarMap)) {
+    if (low.indexOf(x.h) < 0) continue;   // quick skip: this server is not in the text
+    const n = r.replace(x.plain, "$1\x00HDRH_" + x.v + "\x00$2").replace(x.enc, "$1\x00HDRH_" + x.v + "\x00");
+    if (n !== r) { ch = true; r = n; }
   }
   return { text: r, changed: ch };
 }
+// DevWeb value: a "string", or a `template` with ${Server} where a server was replaced
+function subHdrValMj(val, hostVarMap) {
+  const s = _subHosts(val, hostVarMap);
+  if (!s.changed) return '"' + escJs(val) + '"';
+  return "`" + escTpl(s.text).replace(/\x00HDRH_([^\x00]+)\x00/g, "${$1}") + "`";
+}
+// Raw text with \x00HDRH_Name\x00 placeholders (DevWeb bodies are emitted by the caller)
+function subRawMj(text, hostVarMap) {
+  return _subHosts(text, hostVarMap);
+}
+// Web HTTP/HTML (C): {Server} parameter notation
 function subHdrValC(val, hostVarMap) {
-  let r = val;
-  for (const [_h, _v] of Object.entries(hostVarMap).sort(
-    (a, b) => b[0].length - a[0].length,
-  )) {
-    if (!_h) continue;
-    const esc = _h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const lrP =
-      _v === "SERVER_HOST"
-        ? "ServerHost"
-        : "ServerHost" + _v.replace("SERVER_HOST", "");
-    // Raw URL form: https://hostname/path
-    r = r.replace(
-      new RegExp(
-        "(https?://)" + esc + "(:[0-9]+)?(?=[/?#\\s\"'`]|$)",
-        "g",
-      ),
-      "$1{" + lrP + "}$2",
-    );
-    // URL-encoded form: https%3A%2F%2Fhostname (common in redirect_uri= POST body params)
-    r = r.replace(
-      new RegExp(
-        "(https?%3A%2F%2F)" + esc + "(?=%2F|%3F|%23|&|\\s|$)",
-        "gi",
-      ),
-      "$1{" + lrP + "}",
-    );
-  }
-  return r;
+  return _subHosts(val, hostVarMap).text.replace(/\x00HDRH_([^\x00]+)\x00/g, "{$1}");
 }
 function esc(s) {
   return String(s)
@@ -1195,7 +1178,6 @@ function buildConcurrentGroups(entries, autoFollowSet, excludeSet, skipSet) {
 function genMainJS(entries, correlations) {
   let o = "";
   let rid = 1;
-  let _dpopPfUsedMJ = false;
   const nc = {};
 
   // Build lookup maps
@@ -1255,13 +1237,32 @@ function genMainJS(entries, correlations) {
     }
   }
 
-  // Default headers from first visible request
-  const firstE = entries.find(
-    (e, i) => !e.filtered && !e.isMarker && !mjAutoFollowSet.has(i),
-  );
-  const defHdrs = firstE
-    ? filtHdrs(firstE)
-    : { "accept-language": "en-US,en;q=0.9" };
+  // Default headers: the ones EVERY request of the script sent with the same value (the browser's user agent and
+  // language: one value on the requests that recorded them) — the same rule as web_add_auto_header in VuGen. Any other
+  // header goes on the requests that sent it (it used to be the first request's headers, sent with every request).
+  const defHdrs = {};
+  {
+    const _absorbed = PageResources.groupPageResources(entries, mjAutoFollowSet, (x) => shouldIncludeEntry(x, S.bgDecisions),
+      new Set([...corrSources.keys(), ...corrUsages.keys()])).absorbed;
+    const _steps = entries.filter((e, i) => !e.filtered && !e.isMarker && !mjAutoFollowSet.has(i) && !_absorbed.has(i) && shouldIncludeEntry(e, S.bgDecisions));
+    const _NEVER = /^(authorization|proxy-authorization|cookie2?|dpop(-pf)?|origin|access-control-request-(method|headers)|referer|content-type)$|csrf|xsrf/i;
+    const _vals = {}, _cnt = {}, _names = {};
+    for (const e of _steps) {
+      const here = new Set();
+      for (const [name, v] of Object.entries(filtHdrs(e))) {
+        const k = name.toLowerCase();
+        if (here.has(k) || _NEVER.test(k)) continue;
+        here.add(k);
+        if (!(k in _vals)) { _vals[k] = v; _names[k] = name; }
+        else if (_vals[k] !== v) _vals[k] = null;
+        _cnt[k] = (_cnt[k] || 0) + 1;
+      }
+    }
+    for (const k in _vals)
+      if (_vals[k] !== null && (_cnt[k] === _steps.length || k === "user-agent" || k === "accept-language")) defHdrs[_names[k]] = _vals[k];
+  }
+  const _defLc = {};
+  for (const k in defHdrs) _defLc[k.toLowerCase()] = defHdrs[k];
   // Build set of header keys that are dynamic (correlated or unresolved) — exclude from global defaults
   const dynHdrKeysMj = new Set();
   for (const corr of correlations) {
@@ -1283,8 +1284,8 @@ function genMainJS(entries, correlations) {
   if (_basicAuth) dynHdrKeysMj.delete("authorization");
 
   // ── module-level declarations ─────────────────────────────────────────────
-  const _shHostMj = S.serverHost ? S.serverHost.host : "";
-  const mjHostVarMap = buildHdrHostMap(entries, _shHostMj);
+  const mjHostVarMap = _stPlanHosts(entries);
+  const _shMainMj = S.hostParams.main;
 
   // DPoP helper require (module-level)
   if (S.hasDpop) {
@@ -1298,18 +1299,15 @@ function genMainJS(entries, correlations) {
   }
   if (S.hasDpop || hasCorrFile) o += "\n";
 
-  // Host variables
-  o += `let SERVER_HOST = '${_shHostMj}';\n`;
-  Object.entries(mjHostVarMap)
-    .filter(([, v]) => v !== "SERVER_HOST")
-    .forEach(([h, v]) => {
-      o += `let ${v} = '${h}';\n`;
-    });
-  o += "\nlet think_time = 1;\n\n";
+  // Servers
+  o += _stDwServerBlock(mjHostVarMap, _shMainMj);
+  o += "// Think time between transactions (seconds) — Runtime Settings > Think Time decides how it is used, as in VuGen\n";
+  o += "let think_time = 3;\n\n";
 
-  // Basic auth credentials — btoa computed once per VUser from parameterised username:password
+  // Basic auth credentials — set at the start of each iteration (below): load.params only exists inside
+  // initialize / action, so computing them here stopped the script before it started
   if (_basicAuth) {
-    o += `const encodedCredentials = btoa(\`\${load.params.${_basicAuth.userKey}}:\${load.params.${_basicAuth.passKey}}\`);\n\n`;
+    o += `let encodedCredentials = '';   // Basic sign-in: username:password from the parameters, set in Action\n\n`;
   }
 
   // Default request options (module-level)
@@ -1497,6 +1495,9 @@ function genMainJS(entries, correlations) {
   // ── action ────────────────────────────────────────────────────────────────
   o += 'load.action("Action", async function() {\n';
   o += '    load.log("Starting action - Iteration " + load.config.runtime.iteration, load.LogLevel.debug);\n';
+  if (_basicAuth) {
+    o += `    encodedCredentials = btoa(\`\${load.params.${_basicAuth.userKey}}:\${load.params.${_basicAuth.passKey}}\`);\n`;
+  }
   if (S.hasPkce) {
     o += "    // PKCE — generate fresh code_verifier + code_challenge for this iteration\n";
     o += "    {\n";
@@ -1540,7 +1541,8 @@ function genMainJS(entries, correlations) {
       } else {
         if (currentTxn) {
           o += `    TS${currentTxn.tsNum}.stop();\n`;
-          o += `    load.sleep(think_time);\n\n`;
+          // think time between transactions, not after the last one (Runtime Settings > Think Time applies)
+          o += entries.some((x, j) => j > idx && x.isMarker && x.markerType === "end") ? `    load.thinkTime(think_time);\n\n` : "\n";
           currentTxn = null;
         }
       }
@@ -1639,18 +1641,18 @@ function genMainJS(entries, correlations) {
           ? `${subPfx}\${load.global.${hdrUsage.name}}`
           : `\${load.global.${hdrUsage.name}}`;
         extraHdrs[k] = { dynamic: true, expr };
-      } else if (k === "accept" && v === "*/*") {
+      } else if (k.toLowerCase() === "accept" && v === "*/*") {
         // DevWeb default — never needed
       } else if (
-        k === "authorization" &&
+        k.toLowerCase() === "authorization" &&
         S.auth &&
         ["kerberos", "ntlm", "negotiate"].includes(S.auth.type) &&
         /^(negotiate|ntlm)\s/i.test(v)
       ) {
         // Negotiate/NTLM challenge — handled by load.setUserCredentials, never emit as static header
       } else if (
-        defHdrs[k] === undefined ||
-        defHdrs[k] !== v ||
+        _defLc[k.toLowerCase()] === undefined ||
+        _defLc[k.toLowerCase()] !== v ||
         dynHdrKeysMj.has(k)
       ) {
         // Check if this header value is an unresolved candidate — never emit static dynamic values
@@ -1969,7 +1971,7 @@ function genMainJS(entries, correlations) {
       }
     }
 
-    // ServerHost URL substitution — apply all known host variables (SERVER_HOST, SERVER_HOST1, …)
+    // Server parameters — every server becomes its parameter name (shared/host-params.js)
     for (const [_uh, _uv] of Object.entries(mjHostVarMap).sort(
       (a, b) => b[0].length - a[0].length,
     )) {
@@ -2030,37 +2032,28 @@ function genMainJS(entries, correlations) {
         (_pr.skipped.length ? `; ${_pr.skipped.length} failed or repeated not scripted` : "") + `\n`;
     }
 
-    // DPoP proof generation — fresh proof per request (DPoP entries are always sequential)
+    // DPoP proof generation — a fresh proof per request (DPoP entries are always sequential). A DPoP proof names the
+    // URL this request is sent to (correlated parts included); a DPoP-PF proof keeps the URL it was recorded for.
+    // "ath" (hash of the access token) only when the request presents a token — the token this request sends.
     if (S.hasDpop) {
       const dpopHdrs = (e.reqHdrs || []).filter((h) =>
         /^dpop(-pf)?$/i.test(h.name),
       );
+      const authU = reqUsages.find((u) => u.location === "header" && /^authorization$/i.test(u.key || ""));
+      const authH = (e.reqHdrs || []).find((h) => /^authorization$/i.test(h.name));
+      const authM = authH && /^(?:bearer|dpop)\s+(.+)$/i.exec(authH.value || "");
+      const tokenJs = authU ? `load.global.${authU.name}` : authM ? `'${authM[1].replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'` : "";
       for (const dh of dpopHdrs) {
         const dk = dh.name.toLowerCase();
-        if (dk === "dpop-pf" && _dpopPfUsedMJ) continue;
         const varName = dk === "dpop-pf" ? "dpop_pf_proof" : "dpop_proof";
-        let htu = e.url;
-        try {
-          const pu = new URL(e.url);
-          htu = pu.origin + pu.pathname;
-        } catch {}
-        try {
-          const pl = JSON.parse(
-            atob(
-              dh.value
-                .split(".")[1]
-                .replace(/-/g, "+")
-                .replace(/_/g, "/"),
-            ),
-          );
-          if (pl.htu) htu = pl.htu;
-        } catch {}
-        if (dk === "dpop") {
-          o += `        load.global.${varName} = getDpopProof('${htu}', '${e.method}', load.global.dpop_jwk, load.global.${S.dpopTokenVar});\n`;
-        } else {
-          o += `        load.global.${varName} = getDpopProof('${htu}', '${e.method}', load.global.dpop_jwk);\n`;
-          _dpopPfUsedMJ = true;
+        let htuJs = urlBaseDyn ? "`" + _mjUrlTpl(urlBaseOut) + "`" : subHdrValMj(e.url.split("?")[0].split("#")[0], mjHostVarMap);
+        if (dk === "dpop-pf") {
+          try {
+            const pl = JSON.parse(atob(dh.value.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+            if (pl.htu) htuJs = subHdrValMj(String(pl.htu), mjHostVarMap);
+          } catch {}
         }
+        o += `        load.global.${varName} = getDpopProof(${htuJs}, '${e.method}', load.global.dpop_jwk${dk === "dpop" && tokenJs ? ", " + tokenJs : ""});\n`;
       }
     }
 
@@ -2107,21 +2100,7 @@ function genMainJS(entries, correlations) {
     o += `${pi}id: ${rid},\n`;
     // Base URL
     if (urlBaseDyn) {
-      let urlEsc = escTpl(urlBaseOut);
-      urlEsc = urlEsc.replace(
-        /\x00DYNSTART_([^]+?)\x00DYNEND/g,
-        "${load.global.$1}",
-      );
-      urlEsc = urlEsc.replace(
-        /\x00DYNRND_([^]+?)\x00DYNEND/g,
-        (_, nm) => `\${(load.global.${nm}||[]).length?load.global.${nm}[Math.floor(Math.random()*load.global.${nm}.length)]:''}`
-      );
-      urlEsc = urlEsc.replace(
-        /\x00PARAM_([^]+?)\x00PARAMEND/g,
-        "${load.params.$1}",
-      );
-      urlEsc = urlEsc.replace(/\x00SRVHOST_([^\x00]+)\x00/g, "${$1}");
-      o += `${pi}url: \`${urlEsc}\`,\n`;
+      o += `${pi}url: \`${_mjUrlTpl(urlBaseOut)}\`,\n`;
     } else {
       o += `${pi}url: ${subHdrValMj(e.url.split("?")[0], mjHostVarMap)},\n`;
     }
@@ -2466,8 +2445,7 @@ function genMainJS(entries, correlations) {
 
   // Close TS01 and the action block (only when no transaction markers defined)
   if (!hasMarkers) {
-    o += "    TS01.stop();\n";
-    o += "    load.sleep(think_time);\n\n";
+    o += "    TS01.stop();\n\n";
   }
   o += '    load.log("Action complete", load.LogLevel.debug);\n';
   o += "});\n\n";
@@ -2478,6 +2456,35 @@ function genMainJS(entries, correlations) {
   o += "    // Cleanup code here if needed\n";
   o += '    load.log("Finalization complete", load.LogLevel.debug);\n';
   o += "});\n";
+  return _stDwDropUnusedServers(o, mjHostVarMap);
+}
+
+// DevWeb servers — the same rule as VuGen's set_server(): a user argument with the parameter's name wins (rts.yml
+// userArguments, or -userArgs), else the recorded server. Same as the Recorder (VuGen-Recorder-generators.js).
+function _stDwServerBlock(map, main) {
+  const e = Object.entries(map || {});
+  if (!e.length) return "";
+  let o =
+    "// Servers — change a value here to run against another environment, or set a user argument with the same\n" +
+    "// name (rts.yml userArguments, or -userArgs) — it wins over the value here\n";
+  for (const [h, v] of e) o += `const ${v} = load.config.user.args["${v}"] || '${h}';${h === main ? "   // main application" : ""}\n`;
+  return o + "\n";
+}
+// A server that ended up in no URL, header or body of the script is not declared
+function _stDwDropUnusedServers(o, map) {
+  const e = Object.entries(map || {});
+  let dropped = 0;
+  for (const [h, v] of e) {
+    const decl = `const ${v} = load.config.user.args["${v}"] || '${h}';`;
+    const i = o.indexOf(decl);
+    if (i < 0) continue;
+    const eol = o.indexOf("\n", i);
+    if (!(o.slice(0, i) + o.slice(eol)).includes("${" + v + "}")) {
+      o = o.slice(0, i) + o.slice(eol + 1);
+      dropped++;
+    }
+  }
+  if (e.length && dropped === e.length) o = o.replace(/\/\/ Servers — change a value here[^\n]*\n\/\/ name \(rts\.yml[^\n]*\n\n/, "");
   return o;
 }
 
@@ -2618,35 +2625,18 @@ function genActionC(entries, correlations) {
       }
     }
   }
-  // Global headers: key appears on ≥80% of entries → use most common value as web_add_auto_header
+  // Set once per Vuser in vuser_init (web_add_auto_header): headers EVERY step sent with the same value, so each
+  // request — page resources included — gets exactly what the browser sent; any other header goes on the steps that
+  // sent it. The browser's user agent and language: one value on the steps that recorded them is enough (entries
+  // DevTools served from its cache are saved without them). Never once per Vuser: sign-in and CSRF tokens (fetched
+  // during the iteration), cookies, DPoP proofs, Origin and CORS pre-flight headers. (Same rule as the Recorder.)
+  const NEVER_GLOBAL = /^(authorization|proxy-authorization|cookie2?|dpop(-pf)?|origin|access-control-request-(method|headers))$|csrf|xsrf/i;
   const autoHdrs = {};
-  const aThresh = Math.max(1, Math.ceil(visEntries.length * 0.8));
   for (const [k, valMap] of Object.entries(hdrFreq)) {
-    if ((hdrKeyFreq[k] || 0) >= aThresh) {
-      const [bestVal] = [...valMap.entries()].sort(
-        (a, b) => b[1] - a[1],
-      )[0];
-      autoHdrs[k] = bestVal;
-    }
+    if (NEVER_GLOBAL.test(k) || valMap.size !== 1) continue;
+    if ((hdrKeyFreq[k] || 0) === visEntries.length || k === "user-agent" || k === "accept-language")
+      autoHdrs[k] = [...valMap.keys()][0];
   }
-  // Force-global: User-Agent and Accept-Language are always session-wide constants
-  for (const fk of ["user-agent", "accept-language"]) {
-    if (hdrFreq[fk] && autoHdrs[fk] === undefined) {
-      const [bestVal] = [...hdrFreq[fk].entries()].sort(
-        (a, b) => b[1] - a[1],
-      )[0];
-      autoHdrs[fk] = bestVal;
-    }
-  }
-  // Suppress Authorization header only when value is a Negotiate/NTLM challenge — setUserCredentials handles those.
-  // Bearer tokens must remain so they appear on every API request after SSO login.
-  if (
-    S.auth &&
-    ["kerberos", "ntlm", "negotiate"].includes(S.auth.type) &&
-    autoHdrs["authorization"] &&
-    /^(negotiate|ntlm)\s/i.test(autoHdrs["authorization"])
-  )
-    delete autoHdrs["authorization"];
   // Remove headers managed by correlations — those need per-request dynamic substitution
   for (const corr of correlations) {
     for (const u of corr.usages) {
@@ -2663,6 +2653,9 @@ function genActionC(entries, correlations) {
       }
     }
   }
+  // the browser's user agent goes to Runtime Settings (default.cfg), as VuGen records it; the rest to vuser_init
+  S.recordedUA = autoHdrs["user-agent"] || null;
+  S._stInitHdrs = Object.assign({}, autoHdrs);
 
   // Build helper functions for generate-type correlations.
   // Each function generates a fresh token value and adds the header for ONE request only.
@@ -2680,10 +2673,7 @@ function genActionC(entries, correlations) {
     helperFns += `}\n\n`;
   }
   // Build host variable map for header value substitution
-  const acHostVarMap = buildHdrHostMap(
-    entries,
-    S.serverHost ? S.serverHost.host : "",
-  );
+  const acHostVarMap = _stPlanHosts(entries);
 
   // Page step's resources: the ones in its HTML download automatically (Mode=HTML);
   // the rest (script files, files loaded by CSS/JavaScript) are listed under EXTRARES on the same step,
@@ -2710,122 +2700,41 @@ function genActionC(entries, correlations) {
     return s;
   }
 
-  let _dpopPfUsedAC = false;
-  // Pre-scan: collect DPoP proof specs per transaction group for batch generation
-  // Split into "safe" (can batch) vs "deferred" (needs token from this txn)
-  const _dpopBatchByTxn = new Map(); // txnName → [{idx,htu,htm,dk,paramName}]
-  const _dpopDeferredSet = new Set(); // entry indices that must use per-request web_js_run
-  if (S.hasDpop) {
-    let curTxn = "_notxn_";
-    let pfUsed = false;
-    // First pass: find which txn extracts AccessToken (correlation source)
-    const corrSourceTxns = new Set();
-    {
-      let ct = "_notxn_";
-      for (const e of entries) {
-        if (e.isMarker) {
-          if (e.markerType === "start") ct = e.txnName;
-          continue;
-        }
-        if (e.filtered) continue;
-        // Check if this entry produces a correlation (AccessToken etc)
-        if (corrSourcesRemap.has(entries.indexOf(e)))
-          corrSourceTxns.add(ct);
-      }
-    }
-    // Second pass: classify proofs
-    for (let i = 0; i < entries.length; i++) {
-      const e = entries[i];
-      if (e.isMarker) {
-        if (e.markerType === "start") curTxn = e.txnName;
-        else curTxn = "_after_" + e.txnName;
-        continue;
-      }
-      if (e.filtered || acAutoFollowSet.has(i)) continue;
-      const dpH = (e.reqHdrs || []).filter((h) =>
-        /^dpop(-pf)?$/i.test(h.name),
-      );
-      for (const dh of dpH) {
-        const dk = dh.name.toLowerCase();
-        if (dk === "dpop-pf" && pfUsed) continue;
-        const needsAth = dk === "dpop"; // dpop proofs need ath (access token hash)
-        const tokenExtractedInThisTxn = corrSourceTxns.has(curTxn);
-        // If this proof needs ath AND the token is extracted in THIS transaction,
-        // it can't be batched (token doesn't exist yet at txn start)
-        if (needsAth && tokenExtractedInThisTxn) {
-          _dpopDeferredSet.add(i);
-          if (dk === "dpop-pf") pfUsed = true;
-          continue;
-        }
-        if (!_dpopBatchByTxn.has(curTxn)) _dpopBatchByTxn.set(curTxn, []);
-        let htu = e.url;
+  // DPoP (RFC 9449): one fresh proof right before each request that sends one — its own jti and time, the URL and
+  // method the script sends, and "ath" (hash of the access token) only when the request presents a token.
+  // (Proofs made in a batch at the start of a transaction were not written at all without transaction markers —
+  // the literal "{_dpop_proof_1}" was sent — and their ath carried the parameter's name, not the token.)
+  // The proof URL is built from the URL as the script sends it, so correlated parts and server names match.
+  function dpopProofCalls(e, cUrl, reqUsages) {
+    let s = "";
+    const authU = (reqUsages || []).find((u) => u.location === "header" && /^authorization$/i.test(u.key || ""));
+    const authH = (e.reqHdrs || []).find((h) => /^authorization$/i.test(h.name));
+    const authM = authH && /^(?:bearer|dpop)\s+(.+)$/i.exec(authH.value || "");
+    const tokenJs = authU ? `LR.getParam('${authU.name}')` : authM ? `'${authM[1].replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'` : "";
+    for (const dh of (e.reqHdrs || []).filter((h) => /^dpop(-pf)?$/i.test(h.name))) {
+      const dk = dh.name.toLowerCase();
+      const resultParam = dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof";
+      let htuC = cUrl.split("?")[0].split("#")[0];
+      if (dk === "dpop-pf") {
         try {
-          const pu = new URL(e.url);
-          htu = pu.origin + pu.pathname;
+          const pl = JSON.parse(atob(dh.value.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+          if (pl.htu) htuC = subHdrValC(String(pl.htu), acHostVarMap);
         } catch {}
-        try {
-          const pl = JSON.parse(
-            atob(
-              dh.value
-                .split(".")[1]
-                .replace(/-/g, "+")
-                .replace(/_/g, "/"),
-            ),
-          );
-          if (pl.htu) htu = pl.htu;
-        } catch {}
-        const seqN = _dpopBatchByTxn.get(curTxn).length + 1;
-        const pn =
-          dk === "dpop-pf"
-            ? `_dpop_pf_proof_${seqN}`
-            : `_dpop_proof_${seqN}`;
-        _dpopBatchByTxn
-          .get(curTxn)
-          .push({ idx: i, htu, htm: e.method, dk, paramName: pn });
-        if (dk === "dpop-pf") pfUsed = true;
       }
+      const athArg = dk === "dpop" && tokenJs ? ", " + tokenJs : "";
+      s += `\tweb_js_run(\n\t\t"Code=generateDpopProof(${escJs(_cUrlToJs(htuC) + ", '" + e.method + "'" + athArg)});",\n\t\t"ResultParam=${resultParam}",\n\t\tLAST);\n`;
     }
-  }
-  const _dpopParamForEntry = new Map();
-  for (const [, specs] of _dpopBatchByTxn) {
-    for (const s of specs) {
-      if (!_dpopParamForEntry.has(s.idx))
-        _dpopParamForEntry.set(s.idx, {});
-      _dpopParamForEntry.get(s.idx)[s.dk] = s.paramName;
-    }
-  }
-  function emitDpopBatch(txnName) {
-    const specs = _dpopBatchByTxn.get(txnName);
-    if (!specs || specs.length === 0) return "";
-    const kp = S.dpopKeyVar || "dpop_jwk",
-      bv = S.dpopTokenVar || "AccessToken";
-    if (specs.length === 1) {
-      const s = specs[0];
-      const sa = s.dk === "dpop" ? `, LR.getParam('` + bv + `')` : "";
-      return `\t// DPoP proof (1 proof)\n\tweb_js_run(\n\t\t"Code=generateDpopProof('${escJs(s.htu)}', '${s.htm}'${sa});",\n\t\t"ResultParam=${s.paramName}",\n\t\tLAST);\n\n`;
-    }
-    const s = specs.map((s) => {
-      const av = s.dk === "dpop" ? `'` + bv + `'` : "";
-      return `\\\"htu\\\":\\\"${escJs(s.htu)}\\\",\\\"htm\\\":\\\"${s.htm}\\\",\\\"ath\\\":\\\"${av}\\\",\\\"paramName\\\":\\\"${s.paramName}\\\"`;
-    });
-    return `\t// Batch DPoP \u2014 ${specs.length} proofs in one JS engine call\n\tweb_js_run(\n\t\t"Code=generateDpopProofs('[${s.join(",")}]');",\n\t\t"ResultParam=_dpop_batch_status",\n\t\tLAST);\n\n`;
+    return s;
   }
 
   let o =
     helperFns +
-    'Action()\n{\n\n\tweb_set_sockets_option("SSL_VERSION", "AUTO");\n\n';
-  // Server configuration
-  if (S.serverHost) {
-    o += `\t// Server configuration — update "ServerHost" value to target different environments\n`;
-    o += `\t// e.g. test: ${S.serverHost.host}  prod: prod-server.company.com\n`;
-    o += `\tlr_save_string("${S.serverHost.host}", "ServerHost");\n`;
-    // Extra hostnames found in headers
-    Object.entries(acHostVarMap).forEach(([hh, hv]) => {
-      if (hv === "SERVER_HOST") return;
-      const lrP = "ServerHost" + hv.replace("SERVER_HOST", "");
-      o += `\tlr_save_string("${hh}", "${lrP}");\n`;
-    });
-    o += "\n";
+    "Action()\n{\n\n";
+  // Set once per Vuser in vuser_init (genVuserInit): servers, the SSL setting, headers every step sends
+  {
+    const _hpNames = Object.values(acHostVarMap);
+    const _initHdrCount = Object.keys(autoHdrs).filter((k) => k !== "user-agent").length;
+    o += `\t// Set in vuser_init: ${_hpNames.length ? "the servers (" + _hpNames.slice(0, 2).map((n) => "{" + n + "}").join(", ") + (_hpNames.length > 2 ? ", …" : "") + "), " : ""}the SSL setting${_initHdrCount ? " and the headers every request sends" : ""}\n\n`;
   }
   // Authentication
   const AUTH_LABELS_C = {
@@ -2847,27 +2756,38 @@ function genActionC(entries, correlations) {
       o += `\t//   [x] Enable Integrated Authentication\n`;
     }
     const ntlmHost = S.auth.host || "server";
-    o += `\tweb_set_user("{username}", "{password}", "${ntlmHost}");\n\n`;
+    const ntlmParam = acHostVarMap[ntlmHost];
+    o += `\tweb_set_user("{username}", "{password}", "${ntlmParam ? "{" + ntlmParam + "}" : ntlmHost}");\n\n`;
   }
-  // Global headers (same value on every request) — set once with web_add_auto_header
-  for (const [k, v] of Object.entries(autoHdrs)) {
-    o += `\tweb_add_auto_header("${hdrTitleCase(k)}", "${escJs(subHdrValC(v, acHostVarMap))}");\n`;
-  }
-  if (Object.keys(autoHdrs).length) o += "\n";
 
+  // "Simulate a new user on each iteration" (Runtime Settings, on by default) also empties the JavaScript engine, so
+  // lre-utils.js loaded in vuser_init is gone from iteration 2 (BUG-092, found by replaying with VuGen): load it again
+  // once per iteration before the DPoP proofs / PKCE values below.
+  if (S.hasDpop) {
+    o += "\t// The JavaScript engine starts empty on every iteration — load lre-utils.js again for the DPoP proofs below\n";
+    o += "\tweb_js_run(\n";
+    o += "\t\t\"Code=initDpopKey(LR.getParam('dpop_jwk')); 'DPoP engine ready';\",\n";
+    o += '\t\t"ResultParam=dpop_init_result",\n';
+    o += "\t\tSOURCES,\n";
+    o += '\t\t"File=lre-utils.js", ENDITEM,\n';
+    o += "\t\tLAST);\n\n";
+  }
   // PKCE (RFC 7636) — generate code_verifier + code_challenge at start of each iteration.
-  // generatePkce() is defined in lre-utils.dat (loaded once in vuser_init).
-  // It calls LR.setParam so {pkce_verifier} and {pkce_challenge} are available for this iteration.
+  // generatePkce() is in lre-utils.js; it calls LR.setParam so {pkce_verifier} and {pkce_challenge} are available.
   if (S.hasPkce) {
     o += "\t// PKCE — generate fresh code_verifier and code_challenge for this iteration\n";
     o += "\tweb_js_run(\n";
     o += '\t\t"Code=generatePkce();",\n';
     o += '\t\t"ResultParam=pkce_verifier",\n';
+    if (!S.hasDpop) o += "\t\tSOURCES,\n" + '\t\t"File=lre-utils.js", ENDITEM,\n';
     o += "\t\tLAST);\n\n";
   }
 
   let snap = 1;
   const hasMarkers = entries.some((e) => e.isMarker);
+  // think time between transactions, not after the last one
+  let lastEnd = -1;
+  entries.forEach((x, i) => { if (x.isMarker && x.markerType === "end") lastEnd = i; });
 
   // Fallback single transaction when no markers present
   if (!hasMarkers)
@@ -2891,11 +2811,9 @@ function genActionC(entries, correlations) {
       const acSc = `SC01_${acSeq}_${e.txnName.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
       if (e.markerType === "start") {
         o += `\tlr_start_transaction("${acSc}");\n\n`;
-        if (S.hasDpop && _dpopBatchByTxn.has(e.txnName))
-          o += emitDpopBatch(e.txnName);
       } else {
         o += `\tlr_end_transaction("${acSc}", LR_AUTO);\n\n`;
-        o += `\tlr_think_time(3);\n\n`;
+        if (idx !== lastEnd) o += `\tlr_think_time(3);\n\n`;
       }
       continue;
     }
@@ -2936,38 +2854,10 @@ function genActionC(entries, correlations) {
         ref = ref.replace(pu.originalValue, `{${c.name}}`);
     }
     const sn = `t${snap++}.inf`;
+    // Mode=HTML for pages the browser opened (VuGen parses them for their images and stylesheets) and for steps
+    // with EXTRARES; Mode=HTTP for calls made by the page's JavaScript — the browser never parsed those answers
+    const mode = _isNavigation(e) || acPageRes.byPage.has(idx) ? "HTML" : "HTTP";
     const reqUsages = corrUsages.get(idx) || [];
-
-    // DPoP proofs: batched at txn start, or per-request if token not yet available
-    if (S.hasDpop && _dpopDeferredSet.has(idx)) {
-      const dpopHdrs = (e.reqHdrs || []).filter((h) =>
-        /^dpop(-pf)?$/i.test(h.name),
-      );
-      for (const dh of dpopHdrs) {
-        const dk = dh.name.toLowerCase();
-        const resultParam =
-          dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof";
-        let htu = e.url;
-        try {
-          const pu = new URL(e.url);
-          htu = pu.origin + pu.pathname;
-        } catch {}
-        try {
-          const pl = JSON.parse(
-            atob(
-              dh.value
-                .split(".")[1]
-                .replace(/-/g, "+")
-                .replace(/_/g, "/"),
-            ),
-          );
-          if (pl.htu) htu = pl.htu;
-        } catch {}
-        const athArg =
-          dk === "dpop" ? `, LR.getParam('${S.dpopTokenVar}')` : "";
-        o += ` \tweb_js_run(\n\t\t"Code=generateDpopProof('${escJs(htu)}', '${e.method}'${athArg});",\n\t\t"ResultParam=${resultParam}",\n\t\tLAST);\n`;
-      }
-    }
 
     // Prepare extractors for THIS request's response.
     // Emitted inside each branch AFTER all web_js_run calls per VuGen ordering rule:
@@ -3016,9 +2906,10 @@ function genActionC(entries, correlations) {
         }
       }
     }
-    // ServerHost URL substitution — apply all known host variables (ServerHost, ServerHost1, …)
+    // Server parameters — every server becomes its {name} parameter (shared/host-params.js)
     urlOut = subHdrValC(urlOut, acHostVarMap);
     if (ref) ref = subHdrValC(ref, acHostVarMap);
+    if (S.hasDpop) o += dpopProofCalls(e, urlOut, reqUsages);
 
     // Build header injections for this request.
     // Buffered into hdrOut — flushed to o AFTER any pre-request web_js_run calls so that
@@ -3035,22 +2926,11 @@ function genActionC(entries, correlations) {
       const replVal = u.prefix ? `${u.prefix}{${_hdrCorrName}}` : `{${_hdrCorrName}}`;
       hdrOut += `\tweb_add_header("${hdrTitleCase(u.key)}", "${replVal}");\n`;
     }
-    // DPoP headers — batch-assigned or per-request param names
+    // DPoP headers — the proof made just above for this request
     if (S.hasDpop) {
-      if (_dpopParamForEntry.has(idx)) {
-        const dpopParams = _dpopParamForEntry.get(idx);
-        for (const [dk, paramName] of Object.entries(dpopParams)) {
-          hdrOut += `\tweb_add_header("${hdrTitleCase(dk)}", "{${paramName}}");\n`;
-        }
-      } else if (_dpopDeferredSet.has(idx)) {
-        const dpopHdrs = (e.reqHdrs || []).filter((h) =>
-          /^dpop(-pf)?$/i.test(h.name),
-        );
-        for (const dh of dpopHdrs) {
-          const dk = dh.name.toLowerCase();
-          const rp = dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof";
-          hdrOut += `\tweb_add_header("${hdrTitleCase(dk)}", "{${rp}}");\n`;
-        }
+      for (const dh of (e.reqHdrs || []).filter((h) => /^dpop(-pf)?$/i.test(h.name))) {
+        const dk = dh.name.toLowerCase();
+        hdrOut += `\tweb_add_header("${hdrTitleCase(dk)}", "{${dk === "dpop-pf" ? "_dpop_pf_proof" : "_dpop_proof"}}");\n`;
       }
     }
     const corrHdrKeys = new Set(
@@ -3059,7 +2939,8 @@ function genActionC(entries, correlations) {
     for (const h of e.reqHdrs || []) {
       const k = h.name.toLowerCase();
       if (SKIP_HDR_AC.has(k) || k.startsWith(":")) continue;
-      if (autoHdrs[k] === h.value) continue;
+      if (autoHdrs[k] === h.value) continue; // set once in vuser_init with this exact value
+      if (k === "user-agent" && h.value === S.recordedUA) continue; // in Runtime Settings (default.cfg)
       if (k === "accept" && h.value === "*/*") continue;
       if (
         k === "authorization" &&
@@ -3160,7 +3041,7 @@ function genActionC(entries, correlations) {
       o += hdrOut; // flush headers immediately before web_url
       o += `\tweb_url("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Resource=0",\n`;
       o += `\t\t"RecContentType=${ct}",\n\t\t"Referer=${ref}",\n`;
-      o += `\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n` + extraResC(idx) + `\t\tLAST);\n\n`;
+      o += `\t\t"Snapshot=${sn}",\n\t\t"Mode=${mode}",\n` + extraResC(idx) + `\t\tLAST);\n\n`;
     } else {
       let encType = "application/x-www-form-urlencoded";
       let rawBodyText = "";
@@ -3646,40 +3527,17 @@ function genActionC(entries, correlations) {
         o += hdrOut; // flush headers AFTER all web_js_run calls, immediately before the HTTP request
         o += `\tweb_custom_request("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Method=${e.method}",\n`;
         o += `\t\t"Resource=0",\n\t\t"RecContentType=${ct}",\n`;
-        o += `\t\t"Referer=${ref}",\n\t\t"Snapshot=${sn}",\n\t\t"Mode=HTML",\n`;
+        o += `\t\t"Referer=${ref}",\n\t\t"Snapshot=${sn}",\n\t\t"Mode=${mode}",\n`;
         o += `\t\t"EncType=${encType}",\n`;
         if (body) {
-          // Smart chunking — never break inside an escape sequence (\xHH, \X).
-          // Splitting mid-escape produces invalid C hex literals e.g. "\xC""3..." → wrong byte.
+          // Split long bodies over several C strings, never inside an escape sequence (_cChunks, BUG-091):
+          // splitting mid-escape produced "\" + quote (the string never ended) or "\xC""3…" (a wrong byte)
           const bodyAttr = isBinary ? "BodyBinary" : "Body";
           const CHUNK = 200;
           if (body.length <= CHUNK) {
             o += `\t\t"${bodyAttr}=${body}",\n`;
           } else {
-            const chunks = [];
-            let pos = 0;
-            while (pos < body.length) {
-              let end = Math.min(pos + CHUNK, body.length);
-              if (end < body.length) {
-                // Back up to avoid splitting inside a \xHH or \X escape sequence
-                if (body[end - 1] === "\\")
-                  end--; // lone '\'
-                else if (
-                  end >= 2 &&
-                  body[end - 2] === "\\" &&
-                  body[end - 1] === "x"
-                )
-                  end -= 2; // '\x'
-                else if (
-                  end >= 3 &&
-                  body[end - 3] === "\\" &&
-                  body[end - 2] === "x"
-                )
-                  end -= 3; // '\xH'
-              }
-              chunks.push(body.substring(pos, end));
-              pos = end;
-            }
+            const chunks = _cChunks(body, CHUNK);
             // Output: attr= on first chunk, comma only on last chunk, no comma on middle chunks
             o += `\t\t"${bodyAttr}=${chunks[0]}"\n`;
             for (let i = 1; i < chunks.length; i++) {
@@ -3698,6 +3556,7 @@ function genActionC(entries, correlations) {
   if (!hasMarkers)
     o += '\tlr_end_transaction("SC01_01_Transaction", LR_AUTO);\n\n';
   o += "\treturn 0;\n}\n";
+  S._stActionC = o; // genVuserInit() sets only the servers this Action uses
   return o;
 }
 
@@ -3730,16 +3589,47 @@ function genVuserInit() {
       const _se = _setupEntriesVi[_i];
       const _sn = `setup_${String(_i + 1).padStart(2, '0')}`;
       _viSetup += `\tweb_custom_request("${_sn}",\n`;
-      _viSetup += `\t\t"URL=${escJs(_se.url || '')}",\n`;
+      _viSetup += `\t\t"URL=${subHdrValC(escJs(_se.url || ''), (S.hostParams && S.hostParams.map) || {})}",\n`;
       _viSetup += `\t\t"Method=${(_se.method || 'GET').toUpperCase()}",\n`;
       _viSetup += `\t\tLAST);\n\n`;
     }
   }
 
+  // Set once per Vuser — kept for every iteration ("Simulate a new user" returns to the state at the end of
+  // vuser_init): the servers, the SSL setting and the headers every step sent with the same value (genActionC).
+  const _hp = S.hostParams;
+  const _ih = Object.keys(S._stInitHdrs || {}).filter((k) => k !== "user-agent" && !(k === "accept" && S._stInitHdrs[k] === "*/*"));
+  const _ihLines = _ih.map((k) => `\tweb_add_auto_header("${k.split("-").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join("-")}", "${escJs(subHdrValC(S._stInitHdrs[k], _hp ? _hp.map : {}))}");\n`).join("");
+  // Only the servers the script really uses (Action.c is generated first; plus these headers and the setup requests)
+  const _usedHosts = _hp && _hp.keys && _hp.keys.length ? HostParams.usedKeys(_hp, (S._stActionC || "") + _ihLines + _viSetup) : [];
+  const _hasHosts = _usedHosts.length > 0;
+  let _viInit = "";
+  if (_hasHosts) {
+    _viInit += "\t// Servers — change a value here to run against another environment, or add an attribute with the same\n";
+    _viInit += "\t// name in Runtime Settings > Additional attributes (it wins over the value here)\n";
+    for (const k of _usedHosts) _viInit += `\tset_server("${_hp.map[k]}", "${k}");${k === _hp.main ? "\t// main application" : ""}\n`;
+    _viInit += "\n";
+  }
+  _viInit += '\tweb_set_sockets_option("SSL_VERSION", "AUTO");\n\n';
+  if (_ih.length) {
+    _viInit += "\t// Headers every request of the recording sent with the same value (the user agent is in Runtime Settings)\n";
+    _viInit += _ihLines;
+    _viInit += "\n";
+  }
+  // set_server(): defined above vuser_init() when the script uses servers
+  const _setServerFn = _hasHosts
+    ? "// Server value: the Runtime Settings attribute with this name when there is one, else the recorded value\n" +
+      "void set_server(char *name, char *recorded)\n{\n" +
+      "\tchar *value = lr_get_attrib_string(name);\n" +
+      "\tlr_save_string(value != NULL && value[0] != '\\0' ? value : recorded, name);\n}\n\n"
+    : "";
+
   if (S.hasDpop) {
     return (
       _LRE_SETUP_COMMENT +
+      _setServerFn +
       "vuser_init()\n{\n\n" +
+      _viInit +
       "\t// Load lre-utils.dat ONCE and initialize DPoP engine\n" +
       "\tweb_js_run(\n" +
       "\t\t\"Code=initDpopKey(LR.getParam('dpop_jwk')); 'DPoP engine initialized successfully';\",\n" +
@@ -3755,8 +3645,10 @@ function genVuserInit() {
   if (S.hasPkce) {
     return (
       _LRE_SETUP_COMMENT +
+      _setServerFn +
       "vuser_init()\n{\n\n" +
-      "\t// Load lre-utils.dat ONCE — provides generatePkce() for all Action() iterations\n" +
+      _viInit +
+      "\t// Load lre-utils.dat — provides generatePkce() (Action loads it again on every iteration)\n" +
       "\tweb_js_run(\n" +
       '\t\t"Code=\'lre-utils loaded\';",\n' +
       '\t\t"ResultParam=_lre_init",\n' +
@@ -3767,10 +3659,7 @@ function genVuserInit() {
       "\treturn 0;\n}\n\n"
     );
   }
-  if (_viSetup) {
-    return "vuser_init()\n{\n\n" + _viSetup + "\treturn 0;\n}\n\n";
-  }
-  return "vuser_init()\n{\n\treturn 0;\n}\n\n";
+  return _setServerFn + "vuser_init()\n{\n\n" + _viInit + _viSetup + "\treturn 0;\n}\n\n";
 }
 function genVuserEnd() {
   return "vuser_end()\n{\n\treturn 0;\n}\n";
@@ -4052,6 +3941,11 @@ function detectAuth(entries) {
 
 function genDefaultCfg(auth) {
   const overrides = {};
+  // The recorded browser's user agent, as VuGen records it (Runtime Settings > Browser Emulation)
+  if (S.recordedUA && !/[\r\n]/.test(S.recordedUA)) {
+    overrides["UseCustomAgent"] = "1";
+    overrides["CustomUserAgent"] = S.recordedUA;
+  }
   // Enable VuGen JavaScript engine whenever web_js_run will be emitted:
   // DPoP proof generation, PKCE, array reconstruction, and JSON-in-JSON body escaping.
   const _needsJs = S.hasDpop || S.hasPkce ||

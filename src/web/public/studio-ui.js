@@ -342,11 +342,25 @@ function studioRenderDomains(search) {
     list.innerHTML = `<div class="studio-dp-empty">No match</div>`;
     return;
   }
-  const total = hosts.length;
-  const active = Object.values(S.filterDomains).filter(Boolean).length;
+  // Analytics / ads servers are always left out (applyFilters) — shown apart, not ticked, so the list says what
+  // really goes into the script (they used to look included)
+  const isAds = (h) => typeof NOISY !== "undefined" && NOISY.test(h);
+  const ads = filtered.filter(isAds);
+  const real = filtered.filter((h) => !isAds(h));
+  const scriptable = hosts.filter((h) => !isAds(h));
+  const total = scriptable.length;
+  const active = scriptable.filter((h) => S.filterDomains[h] !== false).length;
   const searchEl = document.getElementById("studio-dp-search");
-  if (searchEl) searchEl.placeholder = `Search domains… (${active}/${total})`;
-  list.innerHTML = filtered
+  if (searchEl) searchEl.placeholder = `Search domains… (${active}/${total} selected)`;
+  const adsHtml = ads.length
+    ? `<details class="studio-dp-ads"${q ? " open" : ""}><summary>Analytics / ads — always left out <span class="studio-dp-cnt">(${ads.length})</span></summary>` +
+      ads.map((h) => `<div class="studio-dp-row sdp-off sdp-ads" title="Analytics / ads server — never put in the script">
+      <input type="checkbox" disabled aria-label="${h} — analytics / ads, left out">
+      <span class="studio-dp-name">${h}</span>
+      <span class="studio-dp-cnt">${S.domainStats[h].count}req</span>
+    </div>`).join("") + "</details>"
+    : "";
+  list.innerHTML = real
     .map((h) => {
       const on = S.filterDomains[h] !== false;
       const hEsc = h.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -356,7 +370,7 @@ function studioRenderDomains(search) {
       <span class="studio-dp-cnt">${S.domainStats[h].count}req</span>
     </div>`;
     })
-    .join("");
+    .join("") + adsHtml;
 }
 
 function studioToggleDomain(host, state) {
@@ -500,10 +514,40 @@ function renderCorrelations() {
   list.innerHTML = html;
 }
 
+// The servers the generated scripts use, each with its parameter (S.hostParams, set by the generators)
+function _studioUsedServers() {
+  const hp = S.hostParams;
+  if (!hp || !hp.keys || !hp.keys.length || typeof HostParams === "undefined") return [];
+  const text = Object.values(S.scripts || {}).filter((v) => typeof v === "string").join("\n");
+  return HostParams.usedKeys(hp, text).map((k) => ({ key: k, name: hp.map[k], main: k === hp.main, renamed: !!(S.hostNames || {})[k] }));
+}
+
+function _studioServersHtml(servers) {
+  if (!servers.length) return "";
+  let html = `<div style="font-size:11px;color:var(--muted);padding:4px 0 8px">
+    <b>Servers</b> — each server is one parameter, set once in <b>vuser_init</b> (VuGen) or at the top of <b>main.js</b> (DevWeb)
+    and used in every URL, header and body. Named by role (App_Server, Api_Server …) — rename it if you prefer; the script follows everywhere.</div>`;
+  html += servers
+    .map((s) => {
+      const k = s.key.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      return `<div class="corr-item">
+<span class="corr-badge boundary">Server</span>
+<div class="corr-detail">
+  <div class="corr-name">${esc(s.name)}${s.main ? ' <span class="host-main">main</span>' : ""}</div>
+  <div class="corr-src">${esc(s.key)}${s.renamed ? " · renamed" : ""}</div>
+</div>
+<button class="ds-btn ds-btn-sm host-rename" type="button" data-rename="${esc(s.key)}" onclick="openHostRename('${k}')" aria-label="Rename the parameter of ${esc(s.key)}">Rename</button>
+    </div>`;
+    })
+    .join("");
+  return html;
+}
+
 function renderParams() {
   const panel = document.getElementById("param-panel");
   const list = document.getElementById("param-list");
-  if (!S.params || S.params.length === 0) {
+  const servers = _studioUsedServers();
+  if ((!S.params || S.params.length === 0) && !servers.length) {
     panel.style.display = "none";
     return;
   }
@@ -512,7 +556,11 @@ function renderParams() {
   list.style.display = "";
   const icon = document.getElementById("param-toggle-icon");
   if (icon) icon.textContent = "▼";
-  let html = "";
+  let html = _studioServersHtml(servers);
+  if (!S.params || S.params.length === 0) {
+    list.innerHTML = html;
+    return;
+  }
   html += `<div style="font-size:11px;color:var(--muted);padding:4px 0 8px">
     These values were detected as user-entered test data. They will be parameterized using <b>load.params.*</b> (DevWeb)
     and <b>{ParamName}</b> (Web HTTP/HTML) with a CSV data file for data-driven testing.</div>`;
@@ -533,6 +581,70 @@ function renderParams() {
     })
     .join("");
   list.innerHTML = html;
+}
+
+// ── rename a server parameter (S.hostNames, the same as the Recorder; the generators use the name everywhere) ──
+var _hostRenameKey = null;
+function openHostRename(key) {
+  const hp = S.hostParams;
+  const ov = document.getElementById("host-modal-overlay");
+  if (!hp || !hp.map[key] || !ov) return;
+  _hostRenameKey = key;
+  const inp = document.getElementById("host-modal-inp");
+  inp.value = hp.map[key];
+  inp.removeAttribute("aria-invalid");
+  document.getElementById("host-modal-err").hidden = true;
+  document.getElementById("host-modal-sub").textContent =
+    key + (key === hp.main ? " (main application)" : "") +
+    ". Every URL, header and body that calls this server uses the new name — in vuser_init and in every step, in both formats.";
+  document.getElementById("host-modal-default").hidden = !(S.hostNames || {})[key];
+  ov.style.display = "flex";
+  setTimeout(() => { inp.focus(); inp.select(); }, 30);
+}
+function closeHostRename() {
+  const ov = document.getElementById("host-modal-overlay");
+  if (ov) ov.style.display = "none";
+}
+function confirmHostRename(useDefault) {
+  const key = _hostRenameKey, hp = S.hostParams;
+  if (!key || !hp) return;
+  const inp = document.getElementById("host-modal-inp");
+  const name = inp.value.trim(), from = hp.map[key];
+  if (!useDefault) {
+    const taken = {};
+    Object.keys(hp.map).forEach((k) => { if (k !== key) taken[k] = hp.map[k]; });
+    const reserved = [S.dpopTokenVar || "AccessToken"].concat((S.correlations || []).map((c) => c.name), (S.params || []).map((p) => p.csvKey));
+    const err = HostParams.validName(name, key, taken, reserved);
+    if (err) {
+      const el = document.getElementById("host-modal-err");
+      el.textContent = err;
+      el.hidden = false;
+      inp.setAttribute("aria-invalid", "true");
+      inp.focus();
+      return;
+    }
+    if (name === from) { closeHostRename(); return; }
+  }
+  const before = Object.assign({}, S.hostNames || {});
+  S.hostNames = Object.assign({}, S.hostNames || {});
+  if (useDefault) delete S.hostNames[key];
+  else S.hostNames[key] = name;
+  closeHostRename();
+  regenerateFromAdvisor({ quiet: true });
+  renderParams();
+  const to = S.hostParams.map[key];
+  showToast((useDefault ? esc(key) + " uses the default name " + esc(to) + " again" : "Renamed " + esc(from) + " to " + esc(to)) +
+    ' — updated everywhere in the script. <button type="button" class="toast-undo" onclick="undoHostRename()">Undo</button>', "success", 8000);
+  _hostRenameUndo = before;
+}
+var _hostRenameUndo = null;
+function undoHostRename() {
+  if (!_hostRenameUndo) return;
+  S.hostNames = _hostRenameUndo;
+  _hostRenameUndo = null;
+  regenerateFromAdvisor({ quiet: true });
+  renderParams();
+  showToast("Server name restored.", "info");
 }
 
 function renderTabs() {

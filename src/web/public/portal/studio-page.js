@@ -36,6 +36,7 @@
   var DIALOGS = [
     { overlay: "adv-modal-overlay", open: "openAdvisorModal", close: "closeAdvisorModal", first: "adv-src-filter" },
     { overlay: "pc-modal-overlay", open: "openPasteCorrelate", close: "closePasteCorrelate", first: "pc-response-body" },
+    { overlay: "host-modal-overlay", open: "openHostRename", close: "closeHostRename", first: "host-modal-inp" },
   ];
   function isOpen(d) { var o = document.getElementById(d.overlay); return o && o.style.display !== "none"; }
   DIALOGS.forEach(function (d) {

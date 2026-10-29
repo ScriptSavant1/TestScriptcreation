@@ -57,9 +57,9 @@ Do NOT recreate it — all its functions exist in the three split files above.
 | File | Purpose |
 |------|---------|
 | `src/web/views/partials/shell.ejs` | Collapsible sidebar + top bar markup (included by index.ejs with the icon map `I`) |
-| `src/web/views/partials/home.ejs` | Task-based Home page |
+| `src/web/views/partials/home.ejs` | Home v6 — welcome band (headline, tagline, inputs → outputs picture), Quick actions (5 tool cards), "Your workflow" (record → correlate → run in LRE → analyse), "Need help?" + privacy note, footer line. Explanations belong in Help, not here (clients found the old Home heavy). Quick search's "Get CDP Recorder" links to the download directly (palette.js) |
 | `src/web/public/portal/shell.js` | Page switching WITHOUT touching the address bar (always …/converter/; old #/x links open once and are cleaned), wraps switchPortalTab / openConverterTab / switchTab, collapse (localStorage `perfx-sidebar`), drawer, rail tooltips, CDP Recorder probe (`window.PerfxRecorder`, event `perfx:recorder`) |
-| `src/web/public/portal/home.js` | Home buttons (`data-go`, `data-help`, `data-scroll`), PORTAL_CONFIG flags (`data-tab`) |
+| `src/web/public/portal/home.js` | Home buttons (`data-go`, `data-help`, `data-scroll`), PORTAL_CONFIG flags (`data-tab`) — nothing else |
 | `src/web/public/portal/{shell,home}.css` | Styles; tool colours `--c-convert/-jmeter/-record/-studio/-results/-help` |
 
 | `src/web/public/portal/track.js` | `PerfxTrack.send({...})` — usage ping of the browser tools (Recorder, Results Analyser) to …/analytics/track; Script Studio pings from studio-app.js |
@@ -87,12 +87,15 @@ All share global state object `S` (defined in `studio-app.js`).
 | File | Purpose |
 |------|---------|
 | `src/web/public/Recorder.html` | New Recorder page (start page + workspace). Loads the classic engine files below UNCHANGED, in the same order, then the two files below |
-| `src/web/public/portal/recorder-core.js` | VERBATIM copies of the engine functions the classic page keeps inline (detectMarkers, _recInjectPagerefMarkers, _makeRecMarker, classifyHarEntry, applyFilters, refresh). `tests/unit/recorderCoreParity.test.js` fails if they drift — change both together |
-| `src/web/public/portal/recorder-ui.js` | Replaces the display functions of VuGen-Recorder-ui.js / the inline script with the SAME global names and the same effect on `S` (renderTable, renderStats, showToast, confirmFmt, confirmTxn …). Extras: why-left-out, rename/ungroup + undo, txn replay after format change, hide/show panes (localStorage `perfx-recorder-ui`), Studio hand-off |
+| `src/web/public/portal/recorder-core.js` | VERBATIM copies of the engine functions the classic page keeps inline (detectMarkers, _recInjectPagerefMarkers, _makeRecMarker, classifyHarEntry, refresh) — `tests/unit/recorderCoreParity.test.js` fails if they drift, change both together. Own (since the type buttons): `applyFilters`, `recLeftOut(e, flags)` (reason code per request → `e.leftOut`), `recTypeKey(e)` (static file → JS/CSS/Img/Font by content, else browser type, unknown → other), `recFilterFlags()` |
+| `src/web/public/portal/recorder-ui.js` | Replaces the display functions of VuGen-Recorder-ui.js / the inline script with the SAME global names and the same effect on `S` (renderTable, renderStats, showToast, confirmFmt, confirmTxn …). Extras: why-left-out, left-out requests hidden behind one summary line per transaction (`_openOut`, "Show left-out" = pref `showOut`), type buttons with counts (`S.typeOff`), Domains in two parts with each server's parameter + Rename dialog (`S.hostNames`, Undo) and a warning before leaving out a needed domain (`_domainNeeds`), rename/ungroup + undo, txn replay after format change, hide/show panes (localStorage `perfx-recorder-ui`), Studio hand-off |
 | `src/web/public/portal/recorder.css` | Styles (portal tokens, `.rc-*`) |
+| `src/web/public/shared/host-params.js` | Server parameters (UMD `HostParams`, loaded by both Recorder pages, both Studio pages and required by both converters): `plan(entries, scripted, renames, reserved)` → `{main, keys, map, list}` — every server of the scripted requests (+ non-cookie header values), main = first page load, names by role (`App_Server`, `Api_Server`, `Auth_Server`, `Static_Server`, known services `KNOWN`, else `<Org>_Server`; `defaultNames(keys, {paths})`); `validName`, `hostKey`. The generators read `S.hostParams` (set in `buildScripts`): VuGen `set_server` in vuser_init, DevWeb `const`, `_subHosts` (VuGen-Recorder-ui.js) substitutes `https://`, `https:\/\/` and `https%3A%2F%2F` forms |
 
 Rule: engine behaviour must stay byte-identical to the classic page — check with the golden harness
-(scratchpad `recorder-golden/harness.js` + `compare.js`, baseline from `/recorder-classic`).
+(scratchpad `recorder-golden/harness.js` + `compare.js`, baseline from `/recorder-classic`). Deliberate exceptions (BUG-087..089):
+server parameters and the type buttons — `harness-hosts.js` (type-button steps) + `compare-hosts.js` (server names normalised)
+compare against the baseline `pre-hosts` / `pre-real`.
 The classic pages (`VuGen-Recorder.html`, `VuGen-Script-Studio.html`) have no route any more (one address for the
 whole app); they stay on disk only as the reference for the parity tests. The address bar must only ever show …/converter/.
 
@@ -168,9 +171,34 @@ Model rule: the model is plain JSON; the stats store is a NON-enumerable `model.
 ### Converters (less active)
 | File | Purpose |
 |------|---------|
-| `src/generators/advancedScriptGenerator.js` | DevWeb script generation from Bruno/Postman |
-| `src/generators/webHttpScriptGenerator.js` | VuGen C script generation from Bruno/Postman |
+| `src/generators/devweb/scriptGenerator.js` | DevWeb script generation from Bruno/Postman/JMX (`advancedScriptGenerator.js` is a shim) |
+| `src/generators/vugen/scriptGenerator.js` | VuGen C script generation from Bruno/Postman/JMX (`webHttpScriptGenerator.js` is a shim) |
 | `src/web/public/shared/vugen-codegen.js` | Shared VuGen codegen (UMD, works browser+Node) |
+
+### Generated script layout — same rules in Recorder, Script Studio and both converters
+- vuser_init: `set_server(name, value)` for the servers the script USES (Runtime Settings attribute with that name wins),
+  `web_set_sockets_option("SSL_VERSION","AUTO")`, `web_add_auto_header` for headers on EVERY request with ONE value.
+  Never global: authorization, proxy-authorization, cookie, dpop(-pf), origin, access-control-request-*, *csrf*/*xsrf*.
+  `web_set_user` is in Action in all tools (converter NTLM / Kerberos too; collection-level auth is inherited).
+  Only servers the finished script writes are declared (`HostParams.usedKeys`; Studio reads `S._stActionC`).
+- Action: a pointer comment, `lre-utils.js` reloaded at the top when DPoP/PKCE/JWT is used (VuGen empties its JS
+  engine every new-user iteration — BUG-092), one DPoP proof right before each request (htu = URL as sent, via
+  `LR.getParam`; `ath` only when the request presents a token), think time between steps but not after the last,
+  `Mode=HTTP` except page loads, 4-space indentation. DevWeb: `const App_Server = load.config.user.args["App_Server"] || 'host';`
+  (user argument wins — checked with DevWeb, module level is fine), lower-case header names, `load.thinkTime`.
+- Left out in Recorder + Studio: browser prefetch of a page later opened (`recPrefetchDuplicates`), analytics / ads by
+  server (`NOISY`, the SAME list in `VuGen-Recorder-state.js` and `VuGen-Script-Studio-constants.js`) and by path
+  (`NOISY_URL`: Google `/ads/`, `/pagead/`).
+- Studio: server rename in "Parameterization details" (`openHostRename` / `confirmHostRename` in studio-ui.js,
+  dialog `#host-modal-overlay` in Studio.html, registered in portal/studio-page.js) → `S.hostNames` → `regenerateFromAdvisor({quiet:true})`.
+- XPath: converter correlations from `xml2Json(...)` are XPath; DevWeb gets plain names (`/a/b` — no `local-name()`
+  support), VuGen gets `local-name()` (namespace-aware) via `_vugenXpath`. A script's explicit extractor kind wins over
+  the name-guessed type in VuGen.
+- Converter VuGen: auto headers live in `this._autoHeaderBlock` (written into vuser_init) — `generate()` scans it for
+  undeclared `{params}` too; `tidyC` collapses blank-line runs.
+- Proof: scratchpad `vugen-run/` — `mockproxy.js` (TLS test proxy, HAR replay, DPoP verifier), `runvugen.js` /
+  `rundevweb.js` (real engines), `wirediff.js`, `withkeys.js` (throwaway key + cert for the sample collections),
+  `convwire.sh` / `recwire.sh` / `studiowire.sh`. Compare old vs new on the wire before changing generated code.
 
 ## Global State Object `S` (studio-app.js)
 ```
@@ -310,6 +338,7 @@ The admin pages use it too: `src/web/views/admin.ejs` links `portal/ds.css` (pre
 (`adminLoginHtml()` in server.js) carries the same tokens inline. Admin reports: `src/analytics/exporters/{xlsx,docx}.js`.
 Portal design rules (checked by the design audit — scratchpad `audit/audit.js`, every section, both themes):
 - One text font (system: Segoe UI on Windows) + one code font (Cascadia Code / Consolas); no web-font requests.
+  One agreed exception: the Home picture caption uses Windows' handwriting font (Segoe Print — installed, not downloaded).
 - Font weights 400 / 600 / 700 ONLY. Segoe UI has no 500/650/750/800/850 face — 750+ renders as Segoe UI Black (blocky).
   `b, strong { font-weight: 700 }` everywhere (the default "bolder" turns bold-in-bold into 900). Controls inherit the font.
 - Text contrast ≥ 4.5:1 in both themes (muted text: dark #8191ab, light #56677f; light-theme blue #2563eb;

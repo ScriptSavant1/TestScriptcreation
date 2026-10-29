@@ -17,8 +17,12 @@ const S = {
   domainStats: {},    // hostname -> {count, size}
   collapsed: {},      // txnName -> true (collapsed) | false (expanded)
   auth: null,         // detected auth {type, host, port, hostport, realm?, username?}
-  serverHost: null,   // detected primary server {host, proto, prefix, count}
-  resourceTypeFilter: null  // null = all; Set<string> = whitelist of Chrome DevTools resource types
+  serverHost: null,   // main server {host} — the server of the first page load (shared/host-params.js)
+  hostParams: null,   // server parameters {main, keys, map: {host: name}, list} — set by buildScripts()
+  hostNames: {},      // host -> parameter name chosen by the user (kept for this recording, also after a format change)
+  // Request types left out of the script ("In the script" buttons; keys of recTypeKey()).
+  // JS, CSS, images and fonts start off — what the "Static assets" tick box left out.
+  typeOff: new Set(['script','stylesheet','image','font'])
 };
 
 const COLORS = [
@@ -45,7 +49,12 @@ const STATIC_CT=new Set([
   'text/css','application/javascript','text/javascript','application/x-javascript'
 ]);
 const STATIC_EXT=/\.(png|jpe?g|gif|ico|svg|webp|woff2?|ttf|eot|otf|css|js\.map|map)(\?|$)/i;
-const NOISY=/google-analytics|googletagmanager|doubleclick|googlesyndication|facebook\.net|hotjar|segment\.io|mixpanel|amplitude|clarity\.ms|adnxs|scorecardresearch|outbrain|taboola|adsrvr|pubmatic/i;
+// Analytics / ads servers. The second line (Google ad consent / ad quality / ad tags, ad exchanges, ad
+// verification, tag managers' data collection) was added after a recording where they became steps of the script.
+const NOISY=new RegExp(['google-analytics|googletagmanager|doubleclick|googlesyndication|facebook\\.net|hotjar|segment\\.io|mixpanel|amplitude|clarity\\.ms|adnxs|scorecardresearch|outbrain|taboola|adsrvr|pubmatic',
+  'googleadservices|googletagservices|adservice\\.google|fundingchoicesmessages\\.google|adtrafficquality\\.google|2mdn\\.net|casalemedia|amazon-adsystem|criteo|rubiconproject|openx\\.net|adsafeprotected|moatads|doubleverify|quantserve|quantcount|demdex\\.net|omtrdc\\.net|bat\\.bing\\.com|nr-data\\.net|krxd\\.net|bluekai|rlcdn\\.com|serving-sys|3lift\\.com|indexww\\.com|id5-sync|smartadserver|adform\\.net|teads\\.tv|yieldmo|sharethrough|lijit|gumgum|everesttech\\.net'].join('|'),'i');
+// Ad pixels on a server that is not only for ads (www.google.com also serves reCAPTCHA, maps …): matched by path
+const NOISY_URL=/^https?:\/\/(?:www\.)?google\.[a-z.]+\/(?:ads|pagead)\//i;
 
 // ===========================================================================
 // GENERATOR CONSTANTS — used by genActionC and genMainJS

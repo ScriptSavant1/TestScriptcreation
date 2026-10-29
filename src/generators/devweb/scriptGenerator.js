@@ -11,6 +11,7 @@ const CustomScriptParser = require("../../analyzers/customScriptParser");
 const MandatoryFilesGenerator = require("./filesGenerator");
 const _u = require("../../core/utils");
 const _vc = require("../../core/variableClassifier");
+const HostParams = require("../../web/public/shared/host-params");
 
 class AdvancedScriptGenerator {
   constructor(requests, collection, options = {}) {
@@ -79,7 +80,6 @@ class AdvancedScriptGenerator {
     this.hasDpop = false;
     this.dpopVarNames = []; // dpop_proof variable names set by DPoP pre-request scripts
     this.dpopKeyVar = null; // dpop_jwk variable name
-    this.dpopPfUsed = false; // track if dpop-pf has been used (should only be used once)
 
     // NTLM/Kerberos detection — populated by detectNtlmKerberos() during analyze()
     this.hasNtlm = false;
@@ -238,14 +238,16 @@ class AdvancedScriptGenerator {
     };
 
     for (const req of this.requests) {
-      const authType = (req.auth?.type || "").toLowerCase();
+      // the request's own auth, else the collection's (Postman / Bruno inherit it)
+      const reqAuth = req.auth && req.auth.type && req.auth.type !== "inherit" ? req.auth : this.collection?.auth || req.auth;
+      const authType = (reqAuth?.type || "").toLowerCase();
       if (authType === "kerberos" || authType === "ntlm") {
         this.hasNtlm = true;
         this.ntlmAuthType = authType;
 
         // --- Host extraction ---
-        // JMX AuthManager provides req.auth.hostport (hostname only, no port after parser fix)
-        let host = req.auth?.hostport || "";
+        // JMX AuthManager provides reqAuth.hostport (hostname only, no port after parser fix)
+        let host = reqAuth?.hostport || "";
         if (!host) {
           // Postman/Bruno: extract hostname from the request URL
           const urlStr =
@@ -261,12 +263,12 @@ class AdvancedScriptGenerator {
         this.ntlmHost = host;
 
         // --- Credential extraction ---
-        // JMX format: req.auth.username/password/domain are direct literal values
-        // Postman format: req.auth[authType] is [{key, value}] where value = '{{AuthUsername}}'
-        let rawUsername = req.auth?.username || null;
-        let rawPassword = req.auth?.password || null;
-        let rawDomain = req.auth?.domain || null;
-        const authArr = req.auth?.[authType];
+        // JMX format: reqAuth.username/password/domain are direct literal values
+        // Postman format: reqAuth[authType] is [{key, value}] where value = '{{AuthUsername}}'
+        let rawUsername = reqAuth?.username || null;
+        let rawPassword = reqAuth?.password || null;
+        let rawDomain = reqAuth?.domain || null;
+        const authArr = reqAuth?.[authType];
         if (Array.isArray(authArr)) {
           authArr.forEach((item) => {
             if (item.key === "username") rawUsername = item.value;
@@ -941,8 +943,20 @@ ${actionSection}
 ${finalizeSection}
 `;
 
+    // Declare only the servers the script really uses (a URL found in a body, e.g. an XML namespace, is not one)
+    let scriptOut = fullScript;
+    let dropped = 0;
+    for (const [host, varName] of this.hostVarMap || []) {
+      if (!scriptOut.includes("${" + varName + "}")) {
+        scriptOut = scriptOut.replace(this._hostDecl(host, varName) + "\n", "");
+        dropped++;
+      }
+    }
+    if (this.hostVarMap && this.hostVarMap.size && dropped === this.hostVarMap.size) {
+      scriptOut = scriptOut.replace(/\/\/ Servers — change a value here[^\n]*\n\/\/ name \(rts\.yml[^\n]*\n\n?/, "");
+    }
     const result = {
-      script: fullScript,
+      script: scriptOut,
       analysis: this.getAnalysisReport(),
     };
 
@@ -1244,8 +1258,8 @@ ${finalizeSection}
    * Analyse headers across all requests and classify them.
    *
    * Returns { staticGlobal, authGlobal, perRequestKeys }:
-   *   staticGlobal  — static-value headers present in ≥70% of requests (put in module-level defaults)
-   *   authGlobal    — dynamic-token headers present in ≥70% of requests (put at start of action())
+   *   staticGlobal  — static-value headers that EVERY request sends with one value (module-level defaults)
+   *   authGlobal    — dynamic-token headers that every request sends with one value (start of action())
    *   perRequestKeys — headers that vary per request or contain per-request UUID vars
    *
    * Rules:
@@ -1275,11 +1289,10 @@ ${finalizeSection}
     const authGlobal = new Map(); // key → replaceParameters(value) expression
     const perRequestKeys = new Set(); // keys that are per-request
 
-    const THRESHOLD = 0.7;
-
     headerFreq.forEach((entry, key) => {
-      const freq = entry.count / totalRequests;
-      if (freq < THRESHOLD) return; // not common enough — per-request
+      // Global only when every request sends it with the same value (same rule as the Recorder and Script
+      // Studio) — otherwise a request that did not send it, or sent another value, would get it from the defaults
+      if (entry.count < totalRequests || entry.values.size !== 1) return; // per-request
 
       // Find the dominant value (most-used)
       let dominantRaw = "";
@@ -1290,12 +1303,6 @@ ${finalizeSection}
           dominantCount = cnt;
         }
       });
-
-      // Only promote to global if the dominant value itself convers >= 70% of requests.
-      // A header key that appears in 100% of requests but with 5 different values
-      // should NOT be global - each request needs its own value.
-      const dominantFreq = dominantCount / totalRequests;
-      if (dominantFreq < THRESHOLD) return;
 
       // Check if this header uses a per-request dynamic var (UUID/nonce)
       const isPerRequestVar =
@@ -1431,10 +1438,14 @@ ${finalizeSection}
     // Pre-computed in analyze() — nothing to reassign here.
 
     // Server host variable declarations — update these to target different environments
+    // Same rule as VuGen's set_server(): a user argument with the parameter's name wins (rts.yml userArguments,
+    // or -userArgs), else the value here
     const hostVarDecls =
       this.hostVarMap && this.hostVarMap.size > 0
-        ? Array.from(this.hostVarMap.entries())
-            .map(([host, varName]) => `let ${varName} = '${host}';`)
+        ? "// Servers — change a value here to run against another environment, or set a user argument with the same\n" +
+          "// name (rts.yml userArguments, or -userArgs) — it wins over the value here\n" +
+          Array.from(this.hostVarMap.entries())
+            .map(([host, varName]) => this._hostDecl(host, varName))
             .join("\n") + "\n\n"
         : "";
 
@@ -2178,8 +2189,11 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     // Transactions are already declared at module level (in generateHeader via requestTxMap).
     // Here we only emit .start() and .stop() — no inline "let T01 = new load.Transaction()" declarations.
     const groupEntries = Object.entries(grouped);
+    const total = groupEntries.reduce((n, [, reqs]) => n + reqs.length, 0);
+    let done = 0;
     groupEntries.forEach(([folder, requests], groupIndex) => {
       requests.forEach((request, reqIndex) => {
+        done++;
         const tx = this.requestTxMap.get(request.name);
         const txVar = tx ? tx.txVar : null;
 
@@ -2188,15 +2202,12 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
         if (txVar)
           code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
 
-        if (this.options.thinkTime > 0) {
-          code += `\n    load.sleep(${this.options.thinkTime});`;
+        // Think time between steps — none after the last one; load.thinkTime follows the Runtime Settings
+        if (this.options.thinkTime > 0 && done < total) {
+          code += `\n    load.thinkTime(${this.options.thinkTime});`;
         }
         code += "\n\n";
       });
-
-      if (groupIndex < groupEntries.length - 1 && this.options.thinkTime > 0) {
-        code += `    load.sleep(${this.options.thinkTime});\n\n`;
-      }
     });
 
     return code;
@@ -2351,8 +2362,9 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
       code += this.generateRequestCode(request, 1);
       if (txVar) code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
 
-      if (this.options.thinkTime > 0) {
-        code += `\n    load.sleep(${this.options.thinkTime});`;
+      // Think time between steps — none after the last one; load.thinkTime follows the Runtime Settings
+      if (this.options.thinkTime > 0 && index < this.requests.length - 1) {
+        code += `\n    load.thinkTime(${this.options.thinkTime});`;
       }
       code += `\n\n`;
     });
@@ -2392,25 +2404,22 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
       }
     });
 
-    // Generate DPoP proof(s) if this request uses DPoP headers
+    // DPoP proof(s) (RFC 9449) — a fresh proof right before each request that sends one. Checked with DevWeb
+    // against a DPoP verifier: the proof URL is a template literal, so ${…} parts are the values this request is
+    // sent to (in single quotes the text "${load.config.user.args[…]}" was signed); "ath" is the hash of the
+    // token this request presents — none when it presents none (the token request got the previous token's).
     if (this.hasDpop && this.requestUsesDpop(request)) {
       const htu = this.extractDpopHtu(request);
-      const htm = request.method || "POST";
-      const dpopKeys = this.getDpopHeaderKeys(request);
-      for (const dk of dpopKeys) {
-        // dpop-pf should only be used once per script execution
-        if (dk === "dpop-pf" && this.dpopPfUsed) {
-          continue; // skip dpop-pf if already used
-        }
-
+      const htm = (request.method || "POST").toUpperCase();
+      const authH = (request.headers || []).find(
+        (h) => h.key && !h.disabled && h.key.toLowerCase() === "authorization",
+      );
+      const authM = authH && /^(?:bearer|dpop)\s+(.+)$/i.exec(this.replaceParameters(String(authH.value || "")));
+      const tokenExpr = authM ? "`" + authM[1].replace(/`/g, "\\`") + "`" : "";
+      for (const dk of this.getDpopHeaderKeys(request)) {
         const varName = dk === "dpop-pf" ? "dpop_pf_proof" : "dpop_proof";
-        const athExpr =
-          dk === "dpop" ? `, load.global.${this.findBearerTokenVar()}` : "";
-        code += `\n${this.indent(`load.global.${varName} = getDpopProof('${htu}', '${htm}', load.global.${this.dpopKeyVar || "dpop_jwk"}${athExpr});`, indentLevel)}`;
-        // Mark dpop-pf as used
-        if (dk === "dpop-pf") {
-          this.dpopPfUsed = true; // mark dpop-pf as used to avoid regenerating it for subsequent requests
-        }
+        const athExpr = dk === "dpop" && tokenExpr ? `, ${tokenExpr}` : "";
+        code += `\n${this.indent(`load.global.${varName} = getDpopProof(\`${String(htu).replace(/`/g, "\\`")}\`, '${htm}', load.global.${this.dpopKeyVar || "dpop_jwk"}${athExpr});`, indentLevel)}`;
       }
     }
 
@@ -2928,9 +2937,29 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
           });
         return formData;
 
-      case "formdata":
-        // For multipart, return special indicator
-        return "{{MULTIPART}}";
+      case "formdata": {
+        // multipart/form-data → new load.MultipartBody([...entries]). A marker here; formatOptionsObject puts the
+        // code in (it was a literal "[...]" before — a syntax error that stopped the whole script)
+        const q = (v) => {
+          const e = this.applyHostVars(this.replaceParameters(String(v ?? "")));
+          return e.includes("${") ? "`" + e.replace(/`/g, "\\`") + "`" : JSON.stringify(e);
+        };
+        const entries = (body.formdata || [])
+          .filter((item) => item && item.key && !item.disabled)
+          .map((item) => {
+            if (item.type === "file") {
+              // the file goes next to main.js (DevWeb reads it from the script folder)
+              const src = Array.isArray(item.src) ? item.src[0] : item.src;
+              const file = String(src || item.key).split(/[\\/]/).pop();
+              const ct = item.contentType ? ", " + JSON.stringify(item.contentType) : "";
+              return `new load.MultipartBody.FileEntry(${JSON.stringify(item.key)}, ${JSON.stringify("./" + file)}${ct})`;
+            }
+            return `new load.MultipartBody.StringEntry(${JSON.stringify(item.key)}, ${q(item.value)})`;
+          });
+        if (!this._multipartBodies) this._multipartBodies = [];
+        this._multipartBodies.push(`new load.MultipartBody([${entries.join(", ")}])`);
+        return `{{MULTIPART:${this._multipartBodies.length - 1}}}`;
+      }
 
       default:
         return body.raw || null;
@@ -3204,8 +3233,24 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
         if (value !== "" && value !== null && value !== undefined) {
           return String(value);
         }
-        return match; // Keep as-is for manual review
+        // Declared with an empty value: Postman / Bruno send nothing for it. Keeping "{{name}}" made the URL
+        // invalid and DevWeb stopped the Vuser (Salesforce collection: {{url}}{{site}}/services/…)
+        return "";
       }
+
+      // Declared in the collection / environment with an empty value (skipped by the variable map): Postman and
+      // Bruno send nothing for it. Kept as "{{name}}", the URL was invalid and DevWeb stopped the Vuser
+      // (Salesforce collection: {{url}}{{site}}/services/…, site = "")
+      if (!this._emptyDeclaredVars) {
+        this._emptyDeclaredVars = new Set();
+        for (const v of this.collection?.variable || []) {
+          if (v && v.key && (v.value === "" || v.value === undefined || v.value === null)) this._emptyDeclaredVars.add(v.key);
+        }
+        for (const [k, v] of Object.entries(this.collection?.environment || {})) {
+          if (v === "" || v === undefined || v === null) this._emptyDeclaredVars.add(k);
+        }
+      }
+      if (this._emptyDeclaredVars.has(trimmedName)) return "";
 
       // Not found — keep original for manual review
       console.warn(
@@ -3315,23 +3360,27 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
       (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
     );
 
+    // Names by role, the same as the Recorder and Script Studio: App_Server, Api_Server … (shared/host-params.js).
+    // Only the servers the script really uses are declared — see generate().
+    const names = HostParams.defaultNames(sorted.map(([h]) => h));
     this.hostVarMap = new Map();
-    let counter = 0;
-    for (const [host] of sorted) {
-      const varName = counter === 0 ? "SERVER_HOST" : `SERVER_HOST${counter}`;
-      this.hostVarMap.set(host, varName);
-      counter++;
-    }
+    for (const [host] of sorted) this.hostVarMap.set(host, names[host]);
   }
 
   /**
    * Replace known hostnames in a string with ${SERVER_HOST} JS template variable references.
    * formatOptionsObject() will automatically convert strings containing ${...} to backtick literals.
    */
+  /** One server declaration: the user argument with this name, else the recorded server. */
+  _hostDecl(host, varName) {
+    return `const ${varName} = load.config.user.args["${varName}"] || '${host}';`;
+  }
+
   applyHostVars(str) {
     if (!str || !this.hostVarMap || this.hostVarMap.size === 0) return str;
     let result = String(str);
-    for (const [host, varName] of this.hostVarMap) {
+    // longest name first, so "api.shop.com" is never half-replaced by "shop.com"
+    for (const [host, varName] of [...this.hostVarMap].sort((a, b) => b[0].length - a[0].length)) {
       result = result.split(host).join(`\${${varName}}`);
     }
     return result;
@@ -3382,7 +3431,7 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     str = str.replace(/`\$\{([^`}]*)\}`/g, "$1");
 
     // Replace "{{MULTIPART}}" with actual multipart code
-    str = str.replace('"{{MULTIPART}}"', "new load.MultipartBody([...])");
+    str = str.replace(/"\{\{MULTIPART:(\d+)\}\}"/g, (m, i) => (this._multipartBodies || [])[+i] || m);
 
     // Strip quotes from extractor code (new load.XXXExtractor(...))
     // JSON.stringify double-escapes inner backslashes (\" → \\\" in JSON text).
@@ -3532,8 +3581,10 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
   formatTransactionName(rawName, seqNum) {
     const padded = String(seqNum).padStart(2, "0");
-    let name = rawName.replace(/-/g, "_");
-    name = name.replace(/^[Tt]\d+[-_]/i, "");
+    // a name that already starts with its own number ("T01_Login", "01 - Login", "3. Search") keeps one number:
+    // SC01_01_LOGIN, not SC01_01_01_LOGIN (same rule as the VuGen converter)
+    let name = String(rawName).replace(/^\s*[Tt]?\d{1,3}\s*[-_.:)]+\s*|^\s*[Tt]?\d{1,3}\s+(?=\D)/, "");
+    name = name.replace(/-/g, "_");
     name = name
       .replace(/[^a-zA-Z0-9_]/g, "_")
       .replace(/_+/g, "_")
