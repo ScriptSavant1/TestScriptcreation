@@ -209,7 +209,7 @@ describe('HAR Explorer — Correlate this', () => {
     expect(c.vugen).toContain('web_reg_save_param_json(');
     expect(c.vugen).toContain('"QueryString=$.session.sessionId"');
     expect(c.devweb).toBe('new load.JsonPathExtractor("sessionId", "$.session.sessionId")');
-    expect(c.studioIdx).toBe(1);   // request #2 is Studio's entries1[1]
+    expect(c.studioId).toBe(2);    // request #2 is Studio's request id 2
   });
 
   test('an HTML field → Studio\'s HTML extractor (selector in single quotes, as Studio writes it)', () => {
@@ -256,10 +256,11 @@ describe('Script Studio — a correlation handed over by the HAR Explorer', () =
     w.load(har);
     const c = w.find(CSRF).corr;
     X.S.entries1 = X.parseHar(har); X.S.advisorCandidates = [];
-    const cand = X.advisorAddManual(c.studioIdx, 'boundary', '', c.name, CSRF);
+    const srcIdx = X.S.entries1.findIndex((e) => e.id === c.studioId);
+    const cand = X.advisorAddManual(srcIdx, 'boundary', '', c.name, CSRF);
     cand._explorer = { extractorType: c.extractorType, extractorConfig: c.extractorConfig };
     const corr = X.advisorToCorrelation(cand);
-    expect([corr.extractorType, corr.extractorConfig, corr.sourceIdx]).toEqual([c.extractorType, c.extractorConfig, c.studioIdx]);
+    expect([corr.extractorType, corr.extractorConfig, corr.sourceIdx]).toEqual([c.extractorType, c.extractorConfig, srcIdx]);
     expect(X.webHttpCorrCode(corr, '\t')).toBe(c.vugen);                    // the script gets exactly what the Explorer showed
     expect(X.devwebExtractorDecl(corr)).toBe(c.devweb);
     expect(corr.usages.length).toBeGreaterThan(0);                           // Studio found where it is sent back

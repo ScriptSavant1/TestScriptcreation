@@ -461,7 +461,7 @@
       var name = String(($("#hx-cn") || {}).value || inv.corr.name).trim().replace(/[^A-Za-z0-9_]/g, "_");
       if (!/^[A-Za-z]/.test(name)) { toast("The parameter name must start with a letter."); return; }
       if (M.added.some(function (a) { return a.name === name; })) { toast("“" + name + "” is already used by another value — choose another name."); return; }
-      M.added.push({ value: inv.value, name: name, extractorType: inv.corr.extractorType, extractorConfig: inv.corr.extractorConfig, si: inv.corr.studioIdx, n: inv.src.n, uses: inv.corr.uses || [] });
+      M.added.push({ value: inv.value, name: name, extractorType: inv.corr.extractorType, extractorConfig: inv.corr.extractorConfig, studioId: inv.corr.studioId, n: inv.src.n, uses: inv.corr.uses || [] });
       M.corrName = ""; addedButton(); renderFind(); toast("“" + name + "” added — continue in Script Studio to build the script with it."); return;
     }
     if (e.target.closest("[data-remove]")) { M.added = M.added.filter(function (a) { return a.value !== inv.value; }); addedButton(); renderFind(); return; }
@@ -509,13 +509,17 @@
             var bg = w.document.getElementById("bgReviewPanel");
             return w.document.getElementById("ph-res").classList.contains("active") && !(bg && bg.style.display !== "none" && bg.offsetParent !== null) && st().entries1 && st().entries1.length;
           }, function () {
+            // Studio's list has transaction markers in it (CDP pages, a repaired START): find each request by its id
+            var at = function (id) { var es = st().entries1; for (var i = 0; i < es.length; i++) if (!es[i].isMarker && es[i].id === id) return i; return -1; };
             list.forEach(function (a) {
-              var cand = w.advisorAddManual(a.si, "boundary", "", a.name, a.value);
+              var src = at(a.studioId); if (src < 0) return;
+              var cand = w.advisorAddManual(src, "boundary", "", a.name, a.value);
               cand._explorer = { extractorType: a.extractorType, extractorConfig: a.extractorConfig };
               // the uses the Explorer found that Studio's own search did not (e.g. a URL-encoded form value)
               a.uses.forEach(function (u) {
-                var known = cand.usages.some(function (k) { return k.entryIdx === u.si && k.location === u.location && (k.jsonPath || null) === u.jsonPath; });
-                if (!known) cand.usages.push({ entryIdx: u.si, url: "", location: u.location, jsonPath: u.jsonPath });
+                var ui = at(u.id); if (ui < 0) return;
+                var known = cand.usages.some(function (k) { return k.entryIdx === ui && k.location === u.location && (k.jsonPath || null) === u.jsonPath; });
+                if (!known) cand.usages.push({ entryIdx: ui, url: "", location: u.location, jsonPath: u.jsonPath });
               });
             });
             if (typeof w.renderAdvisorPanel === "function") w.renderAdvisorPanel();

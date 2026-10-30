@@ -39,6 +39,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - With nothing added, the button says "Open in Script Studio" (Studio opens the file; you click Analyse there) and Studio
   says where the file came from; "Its source is not in this recording" explains why there is nothing to correlate.
 - Fixed BUG-112: servers renamed in the Recorder now reach Script Studio ("Correlate in Script Studio").
+- Fixed BUG-113: Script Studio starts a transaction whose START bookmark is missing from the recording (it ended it
+  without starting it — VuGen "Failed to end Transaction"), the same way as the Recorder. The HAR Explorer hands
+  requests to Studio by Studio's request id, so correlations land on the right request also when Studio inserts
+  transaction markers.
 - The Recorder's repair of an END bookmark without its START moved, unchanged, into the shared engine file so both
   tools use the same code (Recorder output byte for byte the same).
 

@@ -222,15 +222,15 @@ function correlation(v, src, later) {
   // where it is sent back, in Script Studio's usage form (Studio's own search misses encoded form values, for example)
   var uses = later.map(function (u) {
     var y = E[u.n - 1], m;
-    if ((m = /^form field (.+)$/.exec(u.where))) return { si: y.si, location: "body_form", jsonPath: m[1] };
-    if ((m = /^JSON body (.+)$/.exec(u.where))) return { si: y.si, location: "body_json", jsonPath: m[1] };
-    if ((m = /^query parameter (.+)$/.exec(u.where))) return { si: y.si, location: "query", jsonPath: m[1] };
-    if ((m = /^header (.+)$/.exec(u.where))) return { si: y.si, location: "header", jsonPath: m[1] };
-    if (u.where === "address") return { si: y.si, location: "url_path", jsonPath: null };
+    if ((m = /^form field (.+)$/.exec(u.where))) return { id: y.si + 1, location: "body_form", jsonPath: m[1] };
+    if ((m = /^JSON body (.+)$/.exec(u.where))) return { id: y.si + 1, location: "body_json", jsonPath: m[1] };
+    if ((m = /^query parameter (.+)$/.exec(u.where))) return { id: y.si + 1, location: "query", jsonPath: m[1] };
+    if ((m = /^header (.+)$/.exec(u.where))) return { id: y.si + 1, location: "header", jsonPath: m[1] };
+    if (u.where === "address") return { id: y.si + 1, location: "url_path", jsonPath: null };
     return null;   // cookies: VuGen and DevWeb send them by themselves
   }).filter(Boolean);
   return {
-    name: name, extractorType: type, extractorConfig: cfg, label: label, warn: warn, studioIdx: x.si, uses: uses,
+    name: name, extractorType: type, extractorConfig: cfg, label: label, warn: warn, studioId: x.si + 1, uses: uses,   // Script Studio's request id (parseHar) — never shifts
     vugen: webHttpCorrCode(c, "\t"), devweb: devwebExtractorDecl(c),
   };
 }
@@ -343,7 +343,7 @@ onmessage = function (ev) {
       }).map(function (x, i) {
         // a page / API answer the HAR kept no body of (served from the browser's cache, or not kept)
         var rs = (har.log.entries[i] || {}).response || {};
-        // the request's index in Script Studio's list (Studio skips entries without a request)
+        // Script Studio's request id is this + 1 (parseHar numbers the entries that have a request)
         x.si = withReq; if (har.log.entries[i] && har.log.entries[i].request) withReq++;
         x.noBody = !x.resBody && rs.status === 200 && x.method !== "HEAD" && /html|json|xml|javascript|text\/plain/i.test(x.mime);
         return x;

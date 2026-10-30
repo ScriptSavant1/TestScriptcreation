@@ -421,6 +421,9 @@ function detectMarkers(entries) {
     _injectPagerefMarkers(entries, S.harPages);
   }
 
+  // An END bookmark without its START (the START fired before DevTools was recording) — BUG-113
+  repairOrphanEnds(entries);
+
   // Assign txn membership to requests between markers
   let active = null;
   for (const e of entries) {
@@ -474,6 +477,33 @@ function _injectPagerefMarkers(entries, harPages) {
   // Replace contents of entries in-place (preserves S.entries1 reference)
   entries.length = 0;
   for (const e of result) entries.push(e);
+}
+
+// A transaction whose START is missing from the recording (an END without a START) starts where the previous
+// transaction ended, or at the beginning — the same rule as the Recorder's _repairOrphanEnds (portal/recorder-core.js).
+// Without it the script ended a transaction it never started (VuGen: "Failed to end Transaction"). BUG-113.
+// Runs inside detectMarkers(), before any correlation is computed, so every stored index already counts the marker.
+// Returns the number of STARTs added.
+function repairOrphanEnds(entries) {
+  let open = [], from = 0, added = 0;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (!e.isMarker) continue;
+    if (e.markerType === "start") { open.push(e.txnName); from = i + 1; continue; }
+    const k = open.lastIndexOf(e.txnName);
+    if (k >= 0) { open.splice(k); from = i + 1; continue; }
+    entries.splice(from, 0, _makeStudioMarker("start", e.txnName));
+    i++;
+    from = i + 1; added++;
+  }
+  if (!added) return 0;
+  // the transaction list in the order the transactions start (it numbers them SC01_01 …)
+  const seen = {}, list = [];
+  for (const x of entries) {
+    if (x.isMarker && x.markerType === "start" && !seen[x.txnName]) { seen[x.txnName] = true; list.push({ name: x.txnName }); }
+  }
+  S.txns = list;
+  return added;
 }
 
 function _makeStudioMarker(markerType, txnName, pagerefSynthetic) {
