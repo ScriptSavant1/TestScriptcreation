@@ -43,6 +43,7 @@
   --c-record: #3cc479;
   --c-studio: #a78bfa;
   --c-results: #22b8cf;
+  --c-explore: #f06aa8;
   --c-help: #e3b341;
   /* code / syntax (shared by every script preview) */
   --ds-code-bg: #0b1019;
@@ -89,6 +90,7 @@
   --c-record: #16a34a;
   --c-studio: #7c5ce6;
   --c-results: #0e9fb5;
+  --c-explore: #d02f7a;
   --c-help: #c08a00;
   --ds-code-bg: #f7f9fc;
   --ds-code-text: #1e293b;

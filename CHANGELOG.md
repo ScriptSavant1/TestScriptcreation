@@ -6,6 +6,27 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
+#### Added — HAR Explorer (in progress: steps 1–4 of 6)
+
+- A new tool under Create scripts, between Recorder and Script Studio: the "investigate" step of correlation —
+  where every dynamic value comes from and where it goes. Step 1: the page (header band, start page), its address
+  (…/converter/har-explorer, shown inside the portal only), the sidebar entry and its colour. Home is unchanged.
+- Steps 2–3: open a .har file (read in the browser, nothing uploaded) and see every request, grouped by transaction
+  exactly as the Recorder groups them (bookmark START / END, CDP Recorder pages, a missing START repaired the same
+  way) with the Recorder's left-out requests folded per transaction; filter by address and type; click a request for
+  Headers, Payload (query, form, JSON), Response, Preview, Cookies and Timing; Hide secrets; Copy URL / cURL.
+  A 40 MB recording with 20,000 requests opens in under a second (only the rows on screen are drawn).
+- Step 4, Find a value: type a value, pick a suggestion, or select it in any request — the Explorer shows where the
+  server first sent it, every request in the script that sends it back (also URL-encoded, JSON-escaped, Base64 or as
+  HTML entities), and what to do: correlate it, nothing to do (cookies only, a followed redirect, only sent to
+  left-out requests), a parameter (typed), generate it (made by the browser), or "its source is not in this
+  recording" (earlier responses without a body). The value is marked in every request. Suggestions: Script Studio's
+  own findings (marked Studio) and the values Studio does not find by itself — on the WebTours sample `userSession`.
+  The search runs in the background; Studio's analysis in a second worker, so a 20,000-request file never waits.
+  The page preview no longer loads images or styles from the recorded site (nothing leaves the PC).
+- The Recorder's repair of an END bookmark without its START moved, unchanged, into the shared engine file so both
+  tools use the same code (Recorder output byte for byte the same).
+
 #### Changed — Every tool in the Home page's look
 
 - Cross-check of every page (measured, both themes, 1366–2560): the header band is identical on every tool — title

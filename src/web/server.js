@@ -282,6 +282,9 @@ class WebServer {
     this.app.get(["/studio", "/converter/studio"], (req, res) => {
       res.sendFile(path.join(__dirname, "public", "Studio.html"));
     });
+    this.app.get(["/har-explorer", "/converter/har-explorer"], (req, res) => {
+      res.sendFile(path.join(__dirname, "public", "HarExplorer.html"));
+    });
     this.app.get(["/results-analyser", "/converter/results-analyser"], (req, res) => {
       res.sendFile(path.join(__dirname, "..", "..", "lre-results-analyser", "web", "index.html"));
     });

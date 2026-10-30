@@ -17,6 +17,7 @@
     postman: { hash: "#/convert/postman", tab: "converter", sub: "bruno", group: "Create scripts", name: "Postman / Bruno converter", c: "--c-convert", help: "hacc-converter" },
     jmeter:  { hash: "#/convert/jmeter",  tab: "converter", sub: "jmx",   group: "Create scripts", name: "JMeter converter",          c: "--c-jmeter",  help: "hacc-jmeter" },
     record:  { hash: "#/record",          tab: "recorder",  group: "Create scripts", name: "Recorder",                c: "--c-record",  help: "hacc-recorder" },
+    explore: { hash: "#/explore",         tab: "explorer",  group: "Create scripts", name: "HAR Explorer",            c: "--c-explore", help: null },
     studio:  { hash: "#/studio",          tab: "studio",    group: "Create scripts", name: "Script Studio",           c: "--c-studio",  help: "hacc-studio" },
     results: { hash: "#/results",         tab: "analyser",  group: "Analyse",        name: "Results Analyser",        c: "--c-results", help: "hacc-analyser" },
     help:    { hash: "#/help",            tab: "help",      group: "Learn",          name: "Help & guides",           c: "--c-help",    help: null },

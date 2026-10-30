@@ -1479,6 +1479,7 @@ code {
     record: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
     chart: '<path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M12 16V8"/><path d="M17 16v-9"/>',
+    explore: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M8 11h6M11 8v6"/>',
     book: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>',
     check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
     spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
@@ -1515,6 +1516,13 @@ code {
     <span class="iframe-tool-badge">Recorded Traffic → VuGen</span>
   </div>
   <iframe id="iframe-recorder" src="" title="VuGen HAR Script Generator"></iframe>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- PORTAL: HAR EXPLORER PANEL (iframe, lazy-loaded)                       -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="portal-explorer" class="portal-iframe-panel">
+  <iframe id="iframe-explorer" src="" title="HAR Explorer"></iframe>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
@@ -1555,7 +1563,7 @@ function toggleTheme() {
   html.setAttribute('data-theme', next);
   localStorage.setItem('lr-theme', next);
   // Sync theme to any loaded iframe tools
-  ['recorder','studio','analyser'].forEach(function(t) {
+  ['recorder','explorer','studio','analyser'].forEach(function(t) {
     const f = document.getElementById('iframe-' + t);
     if (f && f.contentWindow && f.contentWindow.lreSetTheme) {
       f.contentWindow.lreSetTheme(next);
@@ -1588,11 +1596,12 @@ const PORTAL_CONFIG = {
     home:      { enabled: true  },
     converter: { enabled: true  },
     recorder:  { enabled: true  },
+    explorer:  { enabled: true  },
     studio:    { enabled: true  },
     analyser:  { enabled: true  },
     help:      { enabled: true  }
   },
-  iframes: { recorder: BASE_PATH + '/recorder', studio: BASE_PATH + '/studio', analyser: BASE_PATH + '/results-analyser' }
+  iframes: { recorder: BASE_PATH + '/recorder', explorer: BASE_PATH + '/har-explorer', studio: BASE_PATH + '/studio', analyser: BASE_PATH + '/results-analyser' }
 };
 
 /* ── Portal tab switching ───────────────────────────────────────────────── */

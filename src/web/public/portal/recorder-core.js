@@ -219,6 +219,36 @@ function applyFilters(){
   }
 }
 
+// (Moved here from portal/recorder-ui.js unchanged, so the HAR Explorer repairs a recording exactly like the Recorder.)
+// A transaction whose START is missing from the recording (an END without a START — the START bookmark fired
+// before DevTools was recording) starts where the previous transaction ended, or at the beginning. Without this,
+// VuGen got lr_end_transaction for a transaction never started and DevWeb dropped the transaction.
+function _repairOrphanEnds() {
+  var open = [], from = 0, added = 0;
+  for (var i = 0; i < S.entries.length; i++) {
+    var e = S.entries[i];
+    if (!e.isMarker) continue;
+    if (e.markerType === 'start') { open.push(e.txnName); from = i + 1; continue; }
+    var k = open.lastIndexOf(e.txnName);
+    if (k >= 0) { open.splice(k); from = i + 1; continue; }
+    S.entries.splice(from, 0, _makeRecMarker('start', e.txnName));
+    i++;
+    for (var j = from + 1; j < i; j++) { var r = S.entries[j]; if (!r.isMarker && !r.txn) r.txn = e.txnName; }
+    from = i + 1; added++;
+  }
+  if (!added) return 0;
+  // transaction list (numbering SC01_01 …) in the order the transactions start
+  var byName = {}, seen = {}, list = [];
+  S.txns.forEach(function (t) { byName[t.name] = t; });
+  S.entries.forEach(function (x) { if (x.isMarker && x.markerType === 'start' && !seen[x.txnName]) { seen[x.txnName] = 1; list.push(x.txnName); } });
+  S.txns = list.map(function (n, ix) {
+    var t = byName[n] || { name: n, color: COLORS[ix % COLORS.length] };
+    S.colorMap[n] = t.color;
+    return t;
+  });
+  return added;
+}
+
 function refresh(){
   applyFilters(); buildScripts(); renderTable(); renderStats(); showScript();
 }
