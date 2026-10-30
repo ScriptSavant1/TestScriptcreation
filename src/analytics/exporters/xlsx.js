@@ -12,6 +12,7 @@ const FONT = "Calibri";
 
 const TOOL_LABELS = {
   recorder:  "Recorder",
+  explorer:  "HAR Explorer",
   studio:    "Script Studio",
   converter: "Postman / Bruno Converter",
   jmx:       "JMeter Converter",

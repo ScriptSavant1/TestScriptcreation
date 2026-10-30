@@ -4,13 +4,14 @@ const db = require("./db");
 
 const TOOL_LABELS = {
   recorder:  "Recorder",
+  explorer:  "HAR Explorer",
   studio:    "Script Studio",
   converter: "Postman / Bruno Converter",
   jmx:       "JMeter Converter",
   analyser:  "Results Analyser",
 };
 // the order the tools are shown in everywhere (sidebar order)
-const TOOL_ORDER = ["recorder", "studio", "converter", "jmx", "analyser"];
+const TOOL_ORDER = ["recorder", "explorer", "studio", "converter", "jmx", "analyser"];
 
 const ERROR_LABELS = {
   timeout: "Took too long (time-out)",
@@ -192,6 +193,7 @@ function generateInsights(s) {
       converter: "indicating collection-based scripting is the most common workflow",
       jmx:       "indicating JMeter migration is an active workstream",
       recorder:  "indicating browser-capture recording is frequently used",
+      explorer:  "indicating recordings are investigated value by value before scripting",
       analyser:  "indicating test-result analysis is the main activity",
     };
     insights.push(`${top.label} is the most used tool at ${top.pct}% of uses (${top.count.toLocaleString()} total), ${notes[top.tool] || ""}.`);

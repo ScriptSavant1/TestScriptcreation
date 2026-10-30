@@ -6,7 +6,7 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
-#### Added — HAR Explorer (in progress: steps 1–5 of 6)
+#### Added — HAR Explorer
 
 - A new tool under Create scripts, between Recorder and Script Studio: the "investigate" step of correlation —
   where every dynamic value comes from and where it goes. Step 1: the page (header band, start page), its address
@@ -32,6 +32,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
   "From HAR Explorer" — with the uses the Explorer found (Studio's own search misses URL-encoded form values).
   Proof: the WebTours sample, `userSession` + `outboundFlight` added here, replayed in the real VuGen and DevWeb
   engines through the test proxy — both values captured and sent back.
+- Step 6: a Help section (Tools → HAR Explorer — the steps, every answer Find a value gives, and the hand-over to
+  Script Studio; "How it works" on the page opens it; a row in the Overview table), quick search finds it, and the
+  usage statistics count it (tool "HAR Explorer": one record per opened file — file name, size, number of requests;
+  never the recording) in the admin dashboard and its Excel / Word reports.
 - With nothing added, the button says "Open in Script Studio" (Studio opens the file; you click Analyse there) and Studio
   says where the file came from; "Its source is not in this recording" explains why there is nothing to correlate.
 - Fixed BUG-112: servers renamed in the Recorder now reach Script Studio ("Correlate in Script Studio").

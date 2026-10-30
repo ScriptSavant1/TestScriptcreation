@@ -677,7 +677,7 @@ class WebServer {
     // The browser tools (Script Studio, Recorder, Results Analyser) work client-side, so they report a finished
     // job here: { tool, protocol, filename, sizeKb, mode, requestCount, correlationsFound, correlationsAccepted,
     // result, errorCode, duration }. Input is untrusted — every field is checked and trimmed.
-    const BROWSER_TOOLS = new Set(["studio", "recorder", "analyser"]);
+    const BROWSER_TOOLS = new Set(["studio", "recorder", "explorer", "analyser"]);
     const _studioTrackHandler = express.json({ limit: "2kb" });
     const _studioTrackRoute   = (req, res) => {
       res.status(204).end(); // respond immediately, work happens below

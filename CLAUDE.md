@@ -62,9 +62,9 @@ Do NOT recreate it — all its functions exist in the three split files above.
 | `src/web/public/portal/home.js` | Home buttons (`data-go`, `data-help`, `data-scroll`), PORTAL_CONFIG flags (`data-tab`) — nothing else |
 | `src/web/public/portal/{shell,home}.css` | Styles; tool colours `--c-convert/-jmeter/-record/-studio/-results/-help` |
 
-| `src/web/public/portal/track.js` | `PerfxTrack.send({...})` — usage ping of the browser tools (Recorder, Results Analyser) to …/analytics/track; Script Studio pings from studio-app.js |
+| `src/web/public/portal/track.js` | `PerfxTrack.send({...})` — usage ping of the browser tools (Recorder, HAR Explorer, Results Analyser) to …/analytics/track; Script Studio pings from studio-app.js |
 
-Usage statistics: tools `recorder`, `studio`, `converter`, `jmx`, `analyser`. Machine = reverse DNS of `req.ip`, else the IP (anonymous IIS authentication — no user names).
+Usage statistics: tools `recorder`, `explorer`, `studio`, `converter`, `jmx`, `analyser` (each list: server.js BROWSER_TOOLS, analytics/reports.js, exporters/{xlsx,docx}.js, views/admin.ejs). Machine = reverse DNS of `req.ip`, else the IP (anonymous IIS authentication — no user names).
 Remembered options (localStorage): `perfx-cv-prefs` (converter.js), `perfx-rec-format` (recorder-ui.js), `perfx-studio-fmt` (studio-page.js) — restored through the pages' own setters.
 Rule: the old switchers in index.ejs stay the source of truth; the shell only wraps them. Tool panels (Converter, Recorder, Studio, Analyser, Help) are redesigned one at a time — keep every piece of Help text.
 
@@ -102,7 +102,7 @@ whole app); they stay on disk only as the reference for the parity tests. The ad
 ### Help & guides (portal v3 redesign)
 | File | Purpose |
 |------|---------|
-| `src/web/views/partials/help.ejs` | Help markup + its inline functions (haccToggle, haccJump, hTocToggle, hTocSetCur, hfaqToggle) — keep every word; 13 sections hacc-* |
+| `src/web/views/partials/help.ejs` | Help markup + its inline functions (haccToggle, haccJump, hTocToggle, hTocSetCur, hfaqToggle) — keep every word; 14 sections hacc-* |
 | `src/web/public/portal/help.js` | Search ("/" shortcut), section list built into the portal sidebar (`#sb-help-nav` in shell.ejs; fold = click Help again, localStorage `perfx-help-nav`) + where-you-are by scroll position, sticky bar height → `--help-sticky-h`; reading mode: ONE section at a time (class `help-reader`, current section `.cur`, Previous / Next, last section in localStorage `perfx-help-section`), search lists all matches (`help-searching`) |
 | `src/web/public/portal/help.css` | Styles, scoped to `body.has-shell #portal-help` |
 
@@ -132,13 +132,13 @@ Rule: `tests/unit/studioPageParity.test.js` must pass; check output parity with 
 (scratchpad `studio-golden/harness.js` + `compare.js`, baseline from the classic `/studio`).
 The server blocks direct `.html` URLs on purpose — pages are reached through routes only.
 
-### HAR Explorer (new tool, being built — plan: Docs/HAR-EXPLORER-PLAN.md, mock-up: Docs/mockups/har-explorer.html)
+### HAR Explorer (Create scripts, between Recorder and Script Studio — plan: Docs/HAR-EXPLORER-PLAN.md, illustrated guide: Docs/guides/har-explorer-guide.html)
 | File | Purpose |
 |------|---------|
 | `src/web/public/HarExplorer.html` | The page (`data-portal-tool="explore"`), route `/har-explorer` + `/converter/har-explorer`; portal tab `explorer`, shell page `explore`, colour `--c-explore`, theme key `hx-theme` |
 | `src/web/public/portal/har-explorer-model.js` | `hxBuild(har)` → `{groups, items, source}`: the Recorder's own reading — the page loads `VuGen-Recorder-state.js`, `VuGen-Recorder-parsers.js`, `portal/recorder-core.js` UNCHANGED, calls `processHAR()` + `_repairOrphanEnds()` (its drawing steps are no-ops here). `tests/unit/harExplorerModel.test.js` checks groups / left-out = the Recorder's |
 | `src/web/public/portal/har-explorer-worker.js` | Find a value, in a Web Worker (importScripts the Studio engine UNCHANGED: constants, correlation, studio-advisor — they cannot share the page with the Recorder engine, same global names). Messages: `load {text, out}` → `ready` (own suggestions), `find {id, value}` → `found` (verdict kinds: correlate, cookie, redirect, outonly, unused, input, generated, missing, none; trail; forms for highlighting); a SECOND copy gets `studio {text}` → Studio's findings → page forwards `studioList` → `ready` with Studio's first. Referer / Origin and left-out requests are not uses. Also loads `shared/vugen-codegen.js` + `studio-codegen.js`: `correlation()` builds `{name, extractorType, extractorConfig}` (jsonpath / html / cookie / boundary_header / boundary — boundaries widened until the FIRST match is the value) and the code via Studio's `webHttpCorrCode` / `devwebExtractorDecl`; `uses` in Studio's usage form. `tests/unit/harExplorerFind.test.js` (incl. agreement + round trip through Studio) |
-| `src/web/public/portal/har-explorer.{js,css}` | Start page, workspace (file bar, filters, request list — only the rows on screen are drawn — and details: Headers, Payload, Response, Preview, Cookies, Timing; Hide secrets, Copy URL / cURL), theme hooks, prefs localStorage `hx-ui` (listW, showOut). Steps 1–3 of the plan done |
+| `src/web/public/portal/har-explorer.{js,css}` | Start page, workspace (file bar, filters, request list — only the rows on screen are drawn — and details: Headers, Payload, Response, Preview, Cookies, Timing; Hide secrets, Copy URL / cURL), theme hooks, prefs localStorage `hx-ui` (listW, showOut). All 6 steps of the plan done; Help section `hacc-explorer`; usage ping `tool: "explorer"` (portal/track.js) per opened file |
 
 Hand-off "Continue in Script Studio" (har-explorer.js): `clearAll` → `setFmt` → `loadFile` → `analyze()` → (after the background review, if any) `advisorAddManual` per value with `cand._explorer = {extractorType, extractorConfig}` + the Explorer's uses → `advisorApplyAndRegen()`. `studio-advisor.js advisorToCorrelation` honours `_explorer` (else unchanged); `studio-ui.js` labels it "From HAR Explorer".
 Rule: reuse, never copy — transactions / left-out from `portal/recorder-core.js`, suggestions and boundaries from `studio-advisor.js` (Advisor agreement test planned).

@@ -108,6 +108,7 @@ body.has-shell #portal-help .help-badge-orange .help-ico { color: var(--c-jmeter
 body.has-shell #portal-help .help-badge-green .help-ico { color: var(--c-record); }
 body.has-shell #portal-help #hacc-studio .help-badge-purple .help-ico { color: var(--c-studio); }
 body.has-shell #portal-help #hacc-analyser .help-badge-purple .help-ico { color: var(--c-results); }
+body.has-shell #portal-help #hacc-explorer .help-badge-purple .help-ico { color: var(--c-explore); }
 body.has-shell #portal-help .help-h3 { margin: 24px 0 8px; font-size: var(--ds-fs-md); font-weight: 600; letter-spacing: 0; color: var(--ds-text); }
 body.has-shell #portal-help .help-h3-first, body.has-shell #portal-help .help-acc-inner > .help-h3:first-child { margin-top: 0; }
 body.has-shell #portal-help :is(.help-p, .help-faq-a) { max-width: 110ch; margin: 0 0 12px; font-size: var(--ds-fs); line-height: 1.7; color: var(--ds-text-2); }

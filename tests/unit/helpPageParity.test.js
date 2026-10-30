@@ -16,7 +16,7 @@ const help = read('partials/help.ejs');
 const home = read('partials/home.ejs');
 const shellJs = fs.readFileSync(path.resolve(__dirname, '../../src/web/public/portal/shell.js'), 'utf-8');
 
-const SECTIONS = ['hacc-quickstart', 'hacc-overview', 'hacc-formats', 'hacc-converter', 'hacc-jmeter', 'hacc-recorder',
+const SECTIONS = ['hacc-quickstart', 'hacc-overview', 'hacc-formats', 'hacc-converter', 'hacc-jmeter', 'hacc-recorder', 'hacc-explorer',
   'hacc-studio', 'hacc-analyser', 'hacc-capabilities', 'hacc-privacy', 'hacc-glossary', 'hacc-new', 'hacc-faq'];
 
 describe('Help — sections and jumps', () => {

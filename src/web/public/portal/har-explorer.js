@@ -67,20 +67,32 @@
   // ── state ──
   var M = null;   // { name, size, model, rows, sel, tab, closed, types, q, showOut, mask, full }
 
+  // ── usage statistics (portal/track.js): one record per opened file — the figures only, never the recording ──
+  function track(file, t0, result, extra) {
+    if (!window.PerfxTrack) return;
+    var p = { tool: "explorer", filename: file.name, sizeKb: Math.round(file.size / 1024), result: result, duration: Date.now() - t0 };
+    Object.keys(extra || {}).forEach(function (k) { p[k] = extra[k]; });
+    window.PerfxTrack.send(p);
+  }
+
   // ── loading ──
   var input = $("#hx-file"), pick = $("#hx-pick"), drop = $("#hx-drop");
   function take(file) {
     if (!file) return;
-    if (!/\.(har|json)$/i.test(file.name)) { toast(file.name + " is not a .har file."); return; }
+    var t0 = Date.now();
+    if (!/\.(har|json)$/i.test(file.name)) { toast(file.name + " is not a .har file."); track(file, t0, "failed", { errorCode: "unsupported_file_type" }); return; }
     $("#hx-drop-busy").textContent = "Reading " + file.name + " …"; drop.classList.add("busy");
     var rd = new FileReader();
     rd.onerror = function () { drop.classList.remove("busy"); toast("The file could not be read."); };
     rd.onload = function () {
       setTimeout(function () {   // let "Reading …" show before the work starts
         var har;
-        try { har = JSON.parse(rd.result); } catch (e) { drop.classList.remove("busy"); toast(file.name + " is not a valid HAR file (it is not JSON)."); return; }
-        if (!har || !har.log || !Array.isArray(har.log.entries)) { drop.classList.remove("busy"); toast(file.name + " is not a HAR file — it has no list of requests (log.entries)."); return; }
-        try { open(file.name, file.size, har, rd.result); M.file = file; } catch (e) { toast("The file could not be opened: " + e.message); }
+        try { har = JSON.parse(rd.result); } catch (e) { drop.classList.remove("busy"); toast(file.name + " is not a valid HAR file (it is not JSON)."); track(file, t0, "failed", { errorCode: "parse_error" }); return; }
+        if (!har || !har.log || !Array.isArray(har.log.entries)) { drop.classList.remove("busy"); toast(file.name + " is not a HAR file — it has no list of requests (log.entries)."); track(file, t0, "failed", { errorCode: "not_a_har" }); return; }
+        try {
+          open(file.name, file.size, har, rd.result); M.file = file;
+          track(file, t0, "success", { requestCount: M.model.items.length, mode: M.model.source });
+        } catch (e) { toast("The file could not be opened: " + e.message); track(file, t0, "failed", { errorCode: "unreadable_recording" }); }
         drop.classList.remove("busy");
       }, 30);
     };

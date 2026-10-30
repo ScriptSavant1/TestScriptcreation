@@ -200,8 +200,8 @@ svg { flex: none; }
   <!-- KPIs -->
   <%
     var problemsTotal = stats.failCount + stats.timeoutCount;
-    var TOOL_C = { recorder: '--c-record', studio: '--c-studio', converter: '--c-convert', jmx: '--c-jmeter', analyser: '--c-results' };
-    var TOOL_SHORT = { recorder: 'Recorder', studio: 'Script Studio', converter: 'Postman / Bruno', jmx: 'JMeter', analyser: 'Results Analyser' };
+    var TOOL_C = { recorder: '--c-record', explorer: '--c-explore', studio: '--c-studio', converter: '--c-convert', jmx: '--c-jmeter', analyser: '--c-results' };
+    var TOOL_SHORT = { recorder: 'Recorder', explorer: 'HAR Explorer', studio: 'Script Studio', converter: 'Postman / Bruno', jmx: 'JMeter', analyser: 'Results Analyser' };
   %>
   <section class="ad-kpis" aria-label="Key figures">
     <div class="ad-kpi">
@@ -366,6 +366,7 @@ svg { flex: none; }
         <option value="studio">Script Studio</option>
         <option value="converter">Postman / Bruno</option>
         <option value="jmx">JMeter</option>
+        <option value="explorer">HAR Explorer</option>
         <option value="analyser">Results Analyser</option>
       </select>
       <select class="ds-field" id="fResult" onchange="loadEvents()" aria-label="Result">
@@ -420,7 +421,7 @@ function drawCharts() {
   if (!dailyTools.days.length || !dailyTools.series.length) { empty(box, 'No use in this period'); return; }
   var text2 = tok('--ds-text-2'), text3 = tok('--ds-text-3'), grid = tok('--ds-border');
   Chart.defaults.color = text2; Chart.defaults.font.family = tok('--ds-font') || 'Segoe UI, sans-serif'; Chart.defaults.font.size = 12;
-  var TOOL_C = { recorder: tok('--c-record'), studio: tok('--c-studio'), converter: tok('--c-convert'), jmx: tok('--c-jmeter'), analyser: tok('--c-results') };
+  var TOOL_C = { recorder: tok('--c-record'), explorer: tok('--c-explore'), studio: tok('--c-studio'), converter: tok('--c-convert'), jmx: tok('--c-jmeter'), analyser: tok('--c-results') };
   charts.push(new Chart(document.getElementById('chartTrend'), {
     type: 'bar',
     data: { labels: dailyTools.days, datasets: dailyTools.series.map(function (s) { return { label: s.label, data: s.counts, backgroundColor: TOOL_C[s.tool] || text3, borderRadius: 3, maxBarThickness: 28 }; }) },
@@ -442,7 +443,7 @@ function drawCharts() {
 drawCharts();
 
 // ── event log ──
-var TOOL_LABELS = { converter: 'Postman / Bruno', jmx: 'JMeter', recorder: 'Recorder', studio: 'Script Studio', analyser: 'Results Analyser' };
+var TOOL_LABELS = { converter: 'Postman / Bruno', jmx: 'JMeter', recorder: 'Recorder', explorer: 'HAR Explorer', studio: 'Script Studio', analyser: 'Results Analyser' };
 var RESULT_CHIP = { success: 'ok', failed: 'bad', timeout: 'warn' };
 var RESULT_LABEL = { success: 'Success', failed: 'Failed', timeout: 'Timed out' };
 var OUTPUT_LABEL = { devweb: 'DevWeb', vugen: 'VuGen', 'web-http': 'VuGen', webhttp: 'VuGen', both: 'Both' };
