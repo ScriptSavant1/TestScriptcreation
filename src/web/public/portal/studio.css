@@ -263,7 +263,7 @@ html .bg-dec.active[data-val] { background: var(--ds-surface); color: var(--ds-t
 #ph-res .corr-panel-hdr > span:first-child, .adv-panel-hdr-left { display: inline-flex; align-items: center; gap: 10px; }
 #ph-res .corr-panel-hdr svg, .adv-panel-icon svg { width: 18px; height: 18px; color: var(--c-studio); }
 .adv-panel-icon { display: grid; font-size: 16px; }
-.adv-panel-title { font-size: var(--ds-fs); font-weight: 600; white-space: nowrap; }
+.adv-panel-title { font-size: var(--ds-fs-md); font-weight: 700; white-space: nowrap; }
 .adv-panel-hdr-right { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .adv-badge { height: 22px; padding: 0 9px; border-radius: var(--ds-r-pill); font-size: var(--ds-fs-xs); font-weight: 600; background: var(--ds-surface-2); color: var(--ds-text-2); border: 1px solid var(--ds-border); white-space: nowrap; }
 .adv-badge.adv-badge-all-done { background: var(--ds-ok-soft); color: var(--ds-ok); border-color: transparent; }

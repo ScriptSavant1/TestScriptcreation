@@ -215,12 +215,12 @@ function updateUploadState() {
   if (S.har1) {
     btn.disabled = false;
     if (S.har2) {
-      btn.textContent = "Analyze & Generate (Diff Mode — 2 HARs)";
+      btn.textContent = "Analyse & generate (diff mode — 2 HARs)";
       badge.innerHTML =
         'Mode: <b style="color:var(--success)">Diff</b> (2 HARs — deterministic)';
       S.mode = "two";
     } else {
-      btn.textContent = "Analyze & Generate (Pattern Mode — 1 HAR)";
+      btn.textContent = "Analyse & generate (pattern mode — 1 HAR)";
       badge.innerHTML =
         'Mode: <b style="color:var(--warn)">Pattern</b> (1 HAR — heuristic)';
       S.mode = "single";
@@ -427,7 +427,7 @@ function renderCorrelations() {
   // HAR quality warning
   if (S.harWarning) {
     html += `<div style="background:var(--warn-bg);border:1px solid var(--warn);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--warn)">
-<b>&#x26A0; Recording Warning:</b> ${esc(S.harWarning)}
+<b>&#x26A0; Recording warning:</b> ${esc(S.harWarning)}
     </div>`;
   }
 
@@ -683,7 +683,7 @@ function renderDlBar() {
   if (isDev)
     html += `<button class="btn btn-primary" onclick="dlZip('devweb')">⬇ DevWeb ZIP</button>`;
   if (isWeb && isDev)
-    html += `<button class="btn btn-both" onclick="dlZip('both')">⬇ Download Both</button>`;
+    html += `<button class="btn btn-both" onclick="dlZip('both')">⬇ Download both</button>`;
   bar.innerHTML = html;
 }
 

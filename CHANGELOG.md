@@ -8,6 +8,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Changed — Every tool in the Home page's look
 
+- Cross-check of every page (measured, both themes, 1366–2560): the header band is identical on every tool — title
+  28px, tagline 17px, the picture panel in the same place, the note card one width, 22px to the first card; Home's
+  welcome text starts on the same line as the cards on wide screens. Labels in sentence case (converter result,
+  buttons, How it works, Studio's Start over / Recording warning / Download both) and one spelling: Analyse
+  (Studio's button, the converter steps, three Help mentions). Generated scripts unchanged (only these labels differ
+  in the golden harnesses).
+
 - A shared header band for every tool page (in the design system): soft blue across the page, the tool's icon,
   a large title, one line about the tool, and a three-step picture (e.g. Browser recording → Recorder → VuGen / DevWeb
   script) with a handwritten note. On a phone it becomes a card. Final layout (as agreed on Script Studio): tool name

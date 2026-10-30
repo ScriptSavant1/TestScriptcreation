@@ -18,7 +18,8 @@ body.has-shell #portal-help .help-h1 { display: block; }
 /* index.ejs still styles .help-page-title / .help-intro for the page outside the portal — undo that here */
 body.has-shell #portal-help .help-page-title.ds-band { padding: 26px var(--ds-page-x) 22px; }
 @media (max-width: 640px) { body.has-shell #portal-help .help-page-title.ds-band { padding: 22px 18px; } }
-body.has-shell #portal-help .help-intro { margin: 2px 0 0; max-width: 52em; font-size: clamp(15px, 1.15vw, 17px); line-height: 1.35; color: var(--ds-text); }
+body.has-shell #portal-help .help-intro { margin: 2px 0 0; max-width: 52em; font-size: 17px; line-height: 1.35; color: var(--ds-text); }
+@media (max-width: 640px) { body.has-shell #portal-help .help-intro { font-size: 15px; } }
 /* the band picture: the window width includes the sidebar here, so narrow it by the Help width (container hp) */
 @container hp (max-width: 1180px) { body.has-shell #portal-help .help-page-title .ds-hand { display: none; } }
 @container hp (max-width: 860px) { body.has-shell #portal-help .help-page-title { grid-template-columns: minmax(0, 1fr); } body.has-shell #portal-help .help-page-title .ds-flow { display: none; } }

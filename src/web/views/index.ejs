@@ -1748,7 +1748,7 @@ function setProto(p) {
   const btn = document.getElementById('btn-cvt');
   btn.className = 'btn-convert ' + (p === 'devweb' ? 'devweb' : 'vugen');
   document.getElementById('btn-lbl').textContent = p === 'devweb'
-    ? 'Convert to DevWeb Script' : 'Convert to VuGen Web HTTP/HTML';
+    ? 'Convert to DevWeb script' : 'Convert to VuGen Web HTTP/HTML';
 }
 
 function setJmxProto(p) {
@@ -1758,7 +1758,7 @@ function setJmxProto(p) {
   const btn = document.getElementById('btn-jmx');
   btn.className = 'btn-convert ' + (p === 'devweb' ? 'devweb' : 'vugen');
   document.getElementById('jbtn-lbl').textContent = p === 'devweb'
-    ? 'Convert JMeter to DevWeb Script' : 'Convert JMeter to VuGen Web HTTP/HTML';
+    ? 'Convert JMeter to DevWeb script' : 'Convert JMeter to VuGen Web HTTP/HTML';
 }
 
 /* ── Option pickers ─────────────────────────────────────────────────────── */
@@ -2027,7 +2027,7 @@ function resetBtn() {
   document.getElementById('btn-cvt').disabled = false;
   document.getElementById('spinner').style.display = 'none';
   document.getElementById('btn-lbl').textContent = S.proto === 'devweb'
-    ? 'Convert to DevWeb Script' : 'Convert to VuGen Web HTTP/HTML';
+    ? 'Convert to DevWeb script' : 'Convert to VuGen Web HTTP/HTML';
 }
 
 /* ── JMeter convert ─────────────────────────────────────────────────────── */
@@ -2072,7 +2072,7 @@ function resetJmxBtn() {
   document.getElementById('btn-jmx').disabled = false;
   document.getElementById('jspinner').style.display = 'none';
   document.getElementById('jbtn-lbl').textContent = JX.proto === 'devweb'
-    ? 'Convert JMeter to DevWeb Script' : 'Convert JMeter to VuGen Web HTTP/HTML';
+    ? 'Convert JMeter to DevWeb script' : 'Convert JMeter to VuGen Web HTTP/HTML';
 }
 
 /* ── Result renderers ───────────────────────────────────────────────────── */

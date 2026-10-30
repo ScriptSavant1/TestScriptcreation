@@ -84,7 +84,7 @@
 <div class="cv-panel" id="panel-bruno" style="--c:var(--c-convert)">
   <%- band('api', 'Postman / Bruno', 'Turn an API collection into a load test script',
       'Upload a Postman or Bruno collection — and, if you have one, its environment file. You get a ready-to-run VuGen script — Web HTTP/HTML or DevWeb protocol — as a ZIP, with correlation, parameters and authentication handled.',
-      [['doc', 'Postman / Bruno collection'], ['sliders', 'Convert &amp; Correlate'], ['code', 'VuGen script']],
+      [['doc', 'API collection'], ['sliders', 'Convert &amp; Correlate'], ['code', 'VuGen script']],
       'From API collection<br>to a script that replays',
       'A Postman or Bruno collection, then convert and correlate, then a VuGen script in the Web HTTP/HTML or DevWeb protocol') %>
  <div class="cv-cols">
@@ -166,7 +166,7 @@
       <span class="opt-label" id="cv-l-mode">Script mode</span>
       <div class="seg-btns" role="group" aria-labelledby="cv-l-mode">
         <button class="seg-btn active" id="m-single" onclick="setMode('single')">Single</button>
-        <button class="seg-btn"        id="m-multi"  onclick="setMode('multi')">Multi-Script</button>
+        <button class="seg-btn"        id="m-multi"  onclick="setMode('multi')">Multi-script</button>
       </div>
     </div>
     <div class="opt-group">
@@ -228,7 +228,7 @@
     <div class="prog-wrap" id="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
     <button class="btn-convert devweb" id="btn-cvt" onclick="doConvert()">
       <div class="spinner" id="spinner"></div>
-      <span id="btn-lbl">Convert to DevWeb Script</span>
+      <span id="btn-lbl">Convert to DevWeb script</span>
     </button>
   </div>
   </div><!-- /.cv-side-body -->
@@ -317,8 +317,8 @@
     <div class="opt-group">
       <span class="opt-label" id="cv-l-jmode">Script generation mode</span>
       <div class="seg-btns" role="group" aria-labelledby="cv-l-jmode">
-        <button class="seg-btn active" id="jmode-single" onclick="setJmxMode('single')">Single Script</button>
-        <button class="seg-btn"        id="jmode-multi"  onclick="setJmxMode('multi')">Per Thread Group</button>
+        <button class="seg-btn active" id="jmode-single" onclick="setJmxMode('single')">Single script</button>
+        <button class="seg-btn"        id="jmode-multi"  onclick="setJmxMode('multi')">Per thread group</button>
       </div>
     </div>
     <div class="opt-group">
@@ -343,7 +343,7 @@
     <div class="prog-wrap" id="jprog-wrap"><div class="prog-fill" id="jprog-fill"></div></div>
     <button class="btn-convert devweb" id="btn-jmx" onclick="doConvertJmx()">
       <div class="spinner" id="jspinner"></div>
-      <span id="jbtn-lbl">Convert JMeter to DevWeb Script</span>
+      <span id="jbtn-lbl">Convert JMeter to DevWeb script</span>
     </button>
   </div>
   </div><!-- /.cv-side-body -->
@@ -356,7 +356,7 @@
   <div class="res-head">
     <div class="res-icon res-icon-ok"><%- svg(IC.check) %></div>
     <div>
-      <div class="res-title">Script Generated Successfully</div>
+      <div class="res-title">Script generated successfully</div>
       <div class="res-sub" id="res-sub"></div>
     </div>
   </div>
@@ -366,8 +366,8 @@
   <!-- Dependency report (shown when CSV files are referenced) -->
   <div id="res-dep-report" class="cv-res-sec" style="display:none"></div>
   <div class="res-actions">
-    <a id="btn-dl" class="btn-dl" href="#" download><%- svg(IC.down) %> Download Script (.zip)</a>
-    <button class="btn-reset" onclick="resetResult()"><%- svg(IC.back) %> Convert Another</button>
+    <a id="btn-dl" class="btn-dl" href="#" download><%- svg(IC.down) %> Download script (.zip)</a>
+    <button class="btn-reset" onclick="resetResult()"><%- svg(IC.back) %> Convert another</button>
   </div>
 </div>
 
@@ -375,16 +375,16 @@
   <div class="res-head">
     <div class="res-icon res-icon-err"><%- svg(IC.x) %></div>
     <div>
-      <div class="res-title">Conversion Failed</div>
+      <div class="res-title">Conversion failed</div>
       <div class="res-sub" id="err-msg"></div>
     </div>
   </div>
-  <button class="btn-reset" onclick="resetResult()"><%- svg(IC.back) %> Try Again</button>
+  <button class="btn-reset" onclick="resetResult()"><%- svg(IC.back) %> Try again</button>
 </div>
 
 <!-- ── How it works (can be folded away — remembered) ──────────────────── -->
 <details class="cv-how" id="cv-how" open>
-  <summary class="section-label"><span class="cv-how-chev"><%- svg(IC.chevron) %></span>How It Works</summary>
+  <summary class="section-label"><span class="cv-how-chev"><%- svg(IC.chevron) %></span>How it works</summary>
   <div class="steps-grid">
     <div class="step">
       <div class="step-icon"><%- svg(IC.upload) %></div>
@@ -393,7 +393,7 @@
     </div>
     <div class="step">
       <div class="step-icon"><%- svg(IC.search) %></div>
-      <div class="step-ttl">Analyze</div>
+      <div class="step-ttl">Analyse</div>
       <div class="step-txt">Detects correlations, JWT, auth, proxy, headers and classifies all variables into 3 tiers.</div>
     </div>
     <div class="step">

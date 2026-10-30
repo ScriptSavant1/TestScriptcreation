@@ -34,7 +34,7 @@
   new MutationObserver(syncChecked).observe(root, { subtree: true, attributes: true, attributeFilter: ["class"] });
   syncChecked();
 
-  // "Try Again" / "Convert Another" hide the result box that holds the focused button: bring the form back
+  // "Try again" / "Convert another" hide the result box that holds the focused button: bring the form back
   // into view and put the focus on its Convert button, so keyboard users continue where the form is
   const origReset = window.resetResult;
   if (typeof origReset === "function") {

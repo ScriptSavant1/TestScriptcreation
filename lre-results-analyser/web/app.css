@@ -63,7 +63,7 @@ input.in-sla { width: 72px; height: 30px; padding: 0 8px; border-radius: var(--d
 /* header band (portal/ds.css .ds-band-panel) runs edge to edge: --band-top = main's top padding */
 main { --band-top: 24px; }
 @media (max-width: 700px) { main { --band-top: 16px; } }
-.ra-band { margin-bottom: 24px; }
+.ra-band { margin-bottom: 22px; }
 .ra-band code { font-size: 12.5px; }
 .start-main .drop { border: 2px dashed color-mix(in srgb, var(--ds-accent) 35%, var(--ds-border)); background: color-mix(in srgb, var(--ds-accent) 4%, var(--ds-surface)); }
 .start-main .drop:hover, .start-main .drop.over { border-color: var(--ds-accent); background: var(--ds-accent-soft); }

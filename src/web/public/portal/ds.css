@@ -250,8 +250,8 @@ html[data-theme="light"] .ds-hand { color: #1a4fbf; }
    the brand blue); the handwritten note in a tilted card at the far right with its arrow under it; anything else
    in the band (e.g. a step bar) runs along the bottom. */
 .ds-band.ds-band-panel { padding-top: 26px; padding-bottom: 22px; row-gap: 18px; }
-.ds-band-panel h1 { font-size: clamp(22px, 1.9vw, 28px); }
-.ds-band-panel .ds-band-tag { margin-top: 2px; font-size: clamp(15px, 1.15vw, 17px); font-weight: 600; }
+.ds-band-panel h1 { font-size: 28px; }   /* fixed: tools in a frame see a narrower window, vw sizes would differ */
+.ds-band-panel .ds-band-tag { margin-top: 2px; font-size: 17px; font-weight: 600; }
 .ds-band-panel .ds-band-lead { margin-top: 12px; max-width: 52em; line-height: 1.6; }
 .ds-band-panel .ds-flow { display: none; align-items: center; gap: 18px; justify-self: end; }
 .ds-band-panel .ds-flow ol { padding: 14px 22px 12px; border-radius: 20px; background: color-mix(in srgb, var(--ds-surface) 55%, transparent); border: 1px solid color-mix(in srgb, var(--ds-accent) 14%, var(--ds-border)); }
@@ -259,9 +259,9 @@ html[data-theme="light"] .ds-hand { color: #1a4fbf; }
 .ds-band-panel .ds-flow li + li::before { top: 28px; right: calc(50% + 40px); width: calc(100% - 80px); }
 .ds-band-panel .ds-flow li + li::after { top: 24px; right: calc(50% + 38px); }
 .ds-band-panel .ds-flow li > span, .ds-band-panel .ds-flow li.is-tool > span { color: var(--ds-accent-text); background: var(--ds-surface); border-color: var(--ds-border); box-shadow: 0 6px 18px -8px rgba(15, 23, 42, .25); }
-.ds-band-panel .ds-hand { margin: 0; flex-direction: column; align-items: flex-start; gap: 4px; transform: none; }
+.ds-band-panel .ds-hand { flex: 0 0 214px; margin: 0; flex-direction: column; align-items: flex-start; gap: 4px; transform: none; }
 .ds-band-panel .ds-hand span { padding: 10px 16px; border-radius: 16px; background: color-mix(in srgb, var(--ds-surface) 45%, transparent); border: 1px solid color-mix(in srgb, var(--ds-accent) 22%, var(--ds-border)); transform: rotate(-8deg); white-space: nowrap; }
 .ds-band-panel .ds-hand svg { width: 40px; height: 30px; margin: 6px 0 0 -26px; stroke-width: 1.8; }
 @media (min-width: 980px) { .ds-band.ds-band-panel { grid-template-columns: minmax(0, 1fr) auto; } .ds-band-panel .ds-flow { display: flex; } }
 @media (max-width: 1240px) { .ds-band-panel .ds-hand { display: none; } }
-@media (max-width: 640px) { .ds-band.ds-band-panel { padding: 22px 18px; } }
+@media (max-width: 640px) { .ds-band.ds-band-panel { padding: 22px 18px; } .ds-band-panel h1 { font-size: 24px; } .ds-band-panel .ds-band-tag { font-size: 15px; } }

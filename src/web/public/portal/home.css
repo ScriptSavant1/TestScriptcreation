@@ -69,7 +69,7 @@ body.has-shell #portal-home.hm { width: 100%; max-width: var(--ds-page-max); mar
   .hm-hero { grid-template-columns: minmax(0, 1fr) minmax(520px, .95fr); gap: 28px; padding: 52px var(--ds-page-x) 46px; }
   .hm-map-wrap { display: block; }
 }
-@container hm (min-width: 1400px) { .hm-hero { padding: 60px calc(var(--ds-page-x) + 24px) 52px; } }
+@container hm (min-width: 1400px) { .hm-hero { padding: 60px var(--ds-page-x) 52px; } }
 
 /* ── section heads ── */
 .hm-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
