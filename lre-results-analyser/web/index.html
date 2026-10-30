@@ -27,17 +27,24 @@
   <main>
     <!-- ── START ─────────────────────────────────────────────────────────── -->
     <section id="view-start" class="view active">
+      <!-- header band (portal/ds.css .ds-band-panel) — the same look as the other tool pages -->
+      <header class="ds-band ds-band-panel ra-band" style="--c: var(--c-results)">
+        <div class="ds-band-text">
+          <div class="ds-band-title"><span class="ds-band-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4"/></svg></span><div><h1>Results Analyser</h1><p class="ds-band-tag">Analyse a LoadRunner Enterprise run</p></div></div>
+          <p class="ds-band-lead">Pick the run's <b>raw results</b> folder or ZIP. Statistics, steady state, workload, errors and insights
+            come from <code>RawData.eve</code> and the scenario files — independently of LRE Analysis — ready for Excel, Word and PDF.</p>
+        </div>
+        <figure class="ds-flow" aria-label="LRE raw results, then analyse, then a report in Excel, Word or PDF">
+          <ol>
+            <li><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><b>LRE raw results</b></li>
+            <li><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4"/></svg></span><b>Analyse</b></li>
+            <li><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span><b>Report</b></li>
+          </ol>
+          <figcaption class="ds-hand"><span>From raw results<br>to a report you can share</span><svg viewBox="0 0 40 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 27c12 0 22-6 30-19"/><path d="m26 9 7-2 1 7"/></svg></figcaption>
+        </figure>
+      </header>
       <div class="start-card ds-card">
        <div class="start-main">
-        <div class="start-head">
-          <span class="ds-ico start-ico" style="--c: var(--c-results)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18M6 16v-5M10 16V7M14 16v-8M18 16V4"/></svg></span>
-          <div class="hero">
-            <h1>Analyse a LoadRunner Enterprise run</h1>
-            <p>Pick the run's <b>raw results</b> folder or ZIP. Transaction statistics, steady state, workload, errors and
-              insights are computed from <code>RawData.eve</code> and the scenario files — independently of LRE Analysis — and can be
-              exported to Excel, Word and PDF.</p>
-          </div>
-        </div>
 
         <div class="drop ds-drop" id="drop">
           <span class="drop-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></span>

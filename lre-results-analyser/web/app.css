@@ -60,16 +60,17 @@ input.in-sla { width: 72px; height: 30px; padding: 0 8px; border-radius: var(--d
 .start-main { min-width: 0; display: flex; flex-direction: column; }
 .start-main .drop { flex: 1; min-height: 300px; }
 @media (max-width: 1100px) { .start-card { grid-template-columns: minmax(0, 1fr); } }
-.start-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 24px; }
-.start-ico { width: 44px; height: 44px; border-radius: var(--ds-r-tile); }
-.start-ico svg { width: 22px; height: 22px; }
-.hero h1 { font-size: var(--ds-fs-xl); font-weight: 700; line-height: 1.25; margin: 2px 0 6px; }
-.hero p { color: var(--ds-text-2); margin: 0; }
-.hero code { font-size: 12.5px; }
+/* header band (portal/ds.css .ds-band-panel) runs edge to edge: --band-top = main's top padding */
+main { --band-top: 24px; }
+@media (max-width: 700px) { main { --band-top: 16px; } }
+.ra-band { margin-bottom: 24px; }
+.ra-band code { font-size: 12.5px; }
+.start-main .drop { border: 2px dashed color-mix(in srgb, var(--ds-accent) 35%, var(--ds-border)); background: color-mix(in srgb, var(--ds-accent) 4%, var(--ds-surface)); }
+.start-main .drop:hover, .start-main .drop.over { border-color: var(--ds-accent); background: var(--ds-accent-soft); }
 .drop { flex-direction: column; justify-content: center; text-align: center; gap: 6px; padding: 40px 24px 28px; cursor: default; }
 .drop-ico { display: grid; place-items: center; width: 52px; height: 52px; border-radius: var(--ds-r-tile); background: var(--ds-accent-soft); color: var(--ds-accent-text); margin-bottom: 6px; }
 .drop-ico svg { width: 24px; height: 24px; }
-.drop-title { font-size: var(--ds-fs-md); font-weight: 600; color: var(--ds-text); }
+.drop-title { font-size: var(--ds-fs-md); font-weight: 700; color: var(--ds-text); }
 .drop-sub { font-size: var(--ds-fs-sm); color: var(--ds-text-3); }
 .pick-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 14px; }
 .pick-card { cursor: pointer; }
@@ -84,7 +85,7 @@ input.in-sla { width: 72px; height: 30px; padding: 0 8px; border-radius: var(--d
 .info + .info { padding-top: 24px; border-top: 1px solid var(--ds-border); }
 @media (max-width: 1100px) { .info-grid { padding: 24px 0 0; border-left: 0; border-top: 1px solid var(--ds-border); } }
 @media (min-width: 1100px) and (max-width: 1500px) { .start-main .drop { min-height: 260px; } }
-.info h3 { margin: 0 0 8px; font-size: var(--ds-fs); color: var(--ds-text); }
+.info h3 { margin: 0 0 8px; font-size: var(--ds-fs-md); font-weight: 700; color: var(--ds-text); }
 .info ul { margin: 0; padding-left: 18px; color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
 .info li { margin: 3px 0; }
 .info p { color: var(--ds-text-2); margin: 0 0 10px; font-size: var(--ds-fs-sm); }

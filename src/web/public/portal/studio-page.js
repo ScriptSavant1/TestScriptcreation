@@ -140,7 +140,7 @@
   function loaded(n) { var dz = document.getElementById("dz" + n); return !!dz && dz.classList.contains("loaded"); }
   window.PerfxDrop.attach({
     when: function () { return !!upload && upload.offsetParent !== null; },
-    label: function () { return ["Drop to load", "One or two .har / NetLog .json recordings"]; },
+    label: function () { return ["Drop to load", "One or two .har recordings"]; },
     route: function (files, ext) {
       var recs = files.filter(function (f) { return ext(f) === ".har" || ext(f) === ".json"; }).slice(0, 2);
       var free = [1, 2].filter(function (n) { return !loaded(n); });
@@ -163,4 +163,39 @@
     try { if (OK.indexOf(f) !== -1) localStorage.setItem(KEY, f); } catch (e) { /* storage blocked */ }
     return r;
   };
+})();
+
+// Step bar (Add recordings · Configure · Analyse · Download): shows where the user is — display only, it changes
+// nothing. Setup screen: step 1 until recording 1 is loaded, then step 2. Results: step 3, step 4 once a download
+// button was used. The bar sits under the header band on the setup screen and at the top of the results screen.
+(function () {
+  "use strict";
+  var bar = document.getElementById("ss-steps");
+  var up = document.getElementById("ph-upload"), res = document.getElementById("ph-res");
+  if (!bar || !up || !res) return;
+  var home = { parent: bar.parentNode, next: bar.nextSibling };
+  var downloaded = false;
+  function active(el) { return el.classList.contains("active"); }
+  function update() {
+    var dz1 = document.getElementById("dz1");
+    var cur;
+    if (active(res)) cur = downloaded ? 4 : 3;
+    else { downloaded = false; cur = dz1 && dz1.classList.contains("loaded") ? 2 : 1; }
+    if (active(res) && bar.parentNode !== res) res.insertBefore(bar, res.firstChild);
+    if (!active(res) && bar.parentNode !== home.parent) home.parent.insertBefore(bar, home.next);
+    Array.prototype.forEach.call(bar.querySelectorAll("li"), function (li) {
+      var n = +li.getAttribute("data-step");
+      li.classList.toggle("is-done", n < cur || (n === 4 && downloaded));
+      li.classList.toggle("is-cur", n === cur && !(n === 4 && downloaded));
+      if (n === cur) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+    });
+  }
+  var mo = new MutationObserver(update);
+  [up, res, document.getElementById("ph-proc"), document.getElementById("dz1")].forEach(function (el) {
+    if (el) mo.observe(el, { attributes: true, attributeFilter: ["class"] });
+  });
+  res.addEventListener("click", function (e) {
+    if (e.target.closest("#dl-bar button")) { downloaded = true; setTimeout(update, 0); }
+  });
+  update();
 })();

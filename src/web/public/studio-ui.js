@@ -63,7 +63,7 @@ function onDrop(e, slot) {
   if (f && (nm.endsWith(".har") || nm.endsWith(".json"))) loadFile(f, slot);
   else
     showToast(
-      "Please drop a .har file or a chrome://net-export/ NetLog .json file",
+      "Please drop a .har file",
       "warning",
     );
 }
@@ -82,7 +82,7 @@ function loadFile(file, slot) {
       const parsed = JSON.parse(ev.target.result);
       const netlog = isNetLog(parsed);
       if (!netlog && !(parsed && parsed.log && Array.isArray(parsed.log.entries))) {
-        showToast("This file is not a HAR recording (it has no log.entries). Choose the .har file exported from DevTools or saved by the CDP Recorder, or a chrome://net-export/ .json file.", "error", 7000);
+        showToast("This file is not a HAR recording (it has no log.entries). Choose the .har file saved by the CDP Recorder or exported from DevTools.", "error", 7000);
         const _inp = document.getElementById("dz" + slot) && document.getElementById("dz" + slot).querySelector("input[type=file]");
         if (_inp) _inp.value = "";
         return;

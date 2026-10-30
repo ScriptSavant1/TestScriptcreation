@@ -49,17 +49,28 @@
       <!-- ═══════════════ PHASE 1: LOAD + SETTINGS ═══════════════ -->
       <div id="ph-upload" class="phase active">
         <div class="ss-wrap">
-          <div class="ss-head">
-            <div>
-              <h1 class="ss-h1">Turn a recording into a script that replays for many users</h1>
-              <p class="ss-lead">Load the HAR recording of your user journey. Script Studio finds the values that change every time — session ids, tokens, order numbers — and captures them, so the generated VuGen or DevWeb script replays correctly.</p>
+          <header class="ds-band ds-band-panel ss-band" style="--c:var(--c-studio)">
+            <div class="ds-band-text">
+              <div class="ds-band-title"><span class="ds-band-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span><div><h1 class="ss-h1">Script Studio</h1><p class="ds-band-tag">Turn a recording into a script that replays for many users</p></div></div>
+              <p class="ds-band-lead ss-lead">Load one or two HAR recordings. Script Studio finds the values that change every time — session ids, tokens, order numbers — and generates a VuGen script (Web HTTP/HTML or DevWeb) that replays correctly.</p>
             </div>
-            <div class="ss-feats" aria-label="What Script Studio does">
-              <span class="ds-chip ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>2-HAR diff-based correlation</span>
-              <span class="ds-chip ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Auth detection &amp; injection</span>
-              <span class="ds-chip ss-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>DevWeb &amp; Web HTTP/HTML output</span>
-            </div>
-          </div>
+            <figure class="ds-flow" aria-label="HAR recording, then analyse and correlate, then a VuGen script in the Web HTTP/HTML or DevWeb protocol">
+              <ol>
+                <li style="--c:var(--c-record)"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span><b>HAR recording</b></li>
+                <li class="is-tool" style="--c:var(--c-studio)"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span><b>Analyse &amp; Correlate</b></li>
+                <li style="--c:var(--c-convert)"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m10 13-2 2 2 2"/><path d="m14 13 2 2-2 2"/></svg></span><b>VuGen script</b></li>
+              </ol>
+              <figcaption class="ds-hand"><span>From real traffic<br>to a script that replays</span><svg viewBox="0 0 40 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 27c12 0 22-6 30-19"/><path d="m26 9 7-2 1 7"/></svg></figcaption>
+            </figure>
+            <nav class="ss-steps" id="ss-steps" aria-label="Progress">
+              <ol>
+                <li data-step="1"><i><span>1</span><svg class="ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></i><span class="ss-steps-t"><b>Add recordings</b><small>Load one or two HAR files</small></span></li>
+                <li data-step="2"><i><span>2</span><svg class="ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></i><span class="ss-steps-t"><b>Configure</b><small>Choose format and filters</small></span></li>
+                <li data-step="3"><i><span>3</span><svg class="ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></i><span class="ss-steps-t"><b>Analyse</b><small>Correlate and review</small></span></li>
+                <li data-step="4"><i><span>4</span><svg class="ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></i><span class="ss-steps-t"><b>Download</b><small>Download your script</small></span></li>
+              </ol>
+            </nav>
+          </header>
 
           <div class="ss-grid">
             <!-- left: recordings, format, analyse -->
@@ -67,11 +78,11 @@
               <h3 id="ss-rec-h"><i>1</i> HAR recordings</h3>
               <div class="drop-zone" id="dz1"
                 ondrop="onDrop(event,1)" ondragover="onDragOver(event,1)" ondragleave="onDragLeave(1)">
-                <input type="file" title="" accept=".har,.json" onchange="onFilePick(event,1)" aria-label="Recording 1 — choose a .har or NetLog .json file" />
+                <input type="file" title="" accept=".har,.json" onchange="onFilePick(event,1)" aria-label="Recording 1 — choose a .har file" />
                 <span class="dz-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span>
                 <div class="dz-body">
                   <div class="dz-title" id="dz1-title">Recording 1</div>
-                  <div class="dz-sub" id="dz1-sub">Required &nbsp;&middot;&nbsp; .har or chrome://net-export/ .json</div>
+                  <div class="dz-sub" id="dz1-sub">Required &nbsp;&middot;&nbsp; .har file</div>
                   <div class="dz-name" id="dz1-name" style="display:none"></div>
                 </div>
                 <button id="dz1-clear" class="dz-clear-btn"
@@ -79,7 +90,7 @@
               </div>
               <div class="drop-zone dz-optional-zone" id="dz2"
                 ondrop="onDrop(event,2)" ondragover="onDragOver(event,2)" ondragleave="onDragLeave(2)">
-                <input type="file" title="" accept=".har,.json" onchange="onFilePick(event,2)" aria-label="Recording 2 (optional) — choose a .har or NetLog .json file" />
+                <input type="file" title="" accept=".har,.json" onchange="onFilePick(event,2)" aria-label="Recording 2 (optional) — choose a .har file" />
                 <span class="dz-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span>
                 <div class="dz-body">
                   <div class="dz-title" id="dz2-title">Recording 2 <span class="dz-opt-badge">Optional</span></div>
@@ -114,7 +125,7 @@
             <section class="ss-card ss-filters" aria-label="Request filters">
               <div class="filter-empty-state" id="filter-empty-state">
                 <div class="fes-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg></div>
-                <div class="fes-title">Request Filters</div>
+                <div class="fes-title">Request filters</div>
                 <div class="fes-sub">Load a HAR recording on the left to configure filters. Filters are applied before analysis, removing noise so your generated script only contains real application traffic.</div>
                 <div class="fes-list">
                   <div class="fes-item"><span class="fes-dot" style="background:#4f8ef7"></span>Resource type &mdash; Fetch/XHR, Document, CSS, JS, Images&hellip;</div>
@@ -129,7 +140,7 @@
               </div>
               <div id="filter-section" style="display:none">
                 <div class="filter-panel-hdr">
-                  <div class="filter-panel-title"><i class="ss-step-n">3</i> Request Filters</div>
+                  <div class="filter-panel-title"><i class="ss-step-n">3</i> Request filters</div>
                   <div class="filter-panel-hint">Applied before analysis &mdash; filters run before correlation engine</div>
                 </div>
                 <div class="filter-group">
@@ -179,7 +190,7 @@
         <div class="proc-steps">
           <div class="proc-step-item" id="pstep-1">
             <span class="proc-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>
-            <span class="proc-step-label">Parse HAR / NetLog</span>
+            <span class="proc-step-label">Parse HAR</span>
             <span class="proc-step-status"></span>
           </div>
           <div class="proc-step-item" id="pstep-2">
@@ -198,7 +209,7 @@
       <!-- ═══════════════ PHASE 3: RESULTS ═══════════════ -->
       <div id="ph-res" class="phase">
         <div class="res-header">
-          <h2><span class="ss-ok" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Generated Scripts</h2>
+          <h2><span class="ss-ok" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Generated scripts</h2>
           <span class="ss-grow"></span>
           <div class="ss-view ds-seg" role="group" aria-label="Show or hide panels">
             <button type="button" id="btn-hide-review" aria-pressed="true" title="Show or hide the review panels (advisor, correlations, parameters)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>Review</button>
@@ -283,14 +294,14 @@
             </div>
             <div class="corr-panel" id="corr-panel">
               <div class="corr-panel-hdr" onclick="toggleCorrPanel()">
-                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Correlation Details</span>
+                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Correlation details</span>
                 <span class="corr-toggle-icon" id="corr-toggle-icon">&#x25BE;</span>
               </div>
               <div class="corr-list" id="corr-list"></div>
             </div>
             <div class="corr-panel" id="param-panel" style="display: none">
               <div class="corr-panel-hdr" onclick="toggleParamPanel()">
-                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v14H3z"/><path d="M3 10h18M9 10v9"/></svg>Parameterization Details</span>
+                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v14H3z"/><path d="M3 10h18M9 10v9"/></svg>Parameterization details</span>
                 <span class="corr-toggle-icon" id="param-toggle-icon">&#x25BE;</span>
               </div>
               <div class="corr-list" id="param-list"></div>

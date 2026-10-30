@@ -125,7 +125,7 @@ harness sends a different `X-Forwarded-For` per run).
 |------|---------|
 | `src/web/public/Studio.html` | New Studio page. Loads the classic Studio scripts UNCHANGED, in the same order, and `VuGen-Script-Studio.css` under `portal/studio.css`; keeps every element id the scripts use |
 | `src/web/public/portal/studio.css` | Maps the classic colour tokens onto the portal palette (both themes) and lays out the new page |
-| `src/web/public/portal/studio-page.js` | Layout behaviour only: Review / Script show-hide (localStorage `perfx-studio-ui`), dialog focus (in, trapped, returned; Escape closes), keyboard for script-drawn chips / tabs / headers, drop-zone focus ring |
+| `src/web/public/portal/studio-page.js` | Layout behaviour only: Review / Script show-hide (localStorage `perfx-studio-ui`), dialog focus (in, trapped, returned; Escape closes), keyboard for script-drawn chips / tabs / headers, drop-zone focus ring; step bar `#ss-steps` (display only: step from the active phase + `#dz1.loaded` + a click in `#dl-bar`; moved into `#ph-res` on results) |
 | `src/web/public/portal/frame-guard.js` | One address: a tool page (`<html data-portal-tool=record|studio|results>`) opened on its own goes to …/converter/ and the shell opens that tool (sessionStorage `perfx-open`); skipped for automated test browsers (`navigator.webdriver`) |
 
 Rule: `tests/unit/studioPageParity.test.js` must pass; check output parity with the golden harness
@@ -330,7 +330,11 @@ lre-utils.js lre-utils.dat` should always be empty.
 ## CSS / Design System
 **`src/web/public/portal/ds.css` is the design system (v4)** — tokens `--ds-*` for both themes and shared
 components `ds-btn`, `ds-card`, `ds-chip`, `ds-tile`, `ds-seg`, `ds-tabs`, `ds-panel`, `ds-table`, `ds-code`,
-`ds-drop`, `ds-note`. Loaded first by index.ejs, Recorder.html, Studio.html and the Results Analyser page; the
+`ds-drop`, `ds-note`, and (v5) the tool header band `ds-band` (soft blue, edge to edge; `ds-band-title` icon tile + h1,
+`ds-band-lead`, `ds-flow` three-step picture with `is-tool`, `ds-hand` handwritten caption; the page sets `--band-top` = its top
+padding) — the Home page's look on every tool page. Every tool uses the panel layout `ds-band-panel` (tool name + `ds-band-tag`
+tagline, short lead, the picture in a soft panel, the note in a tilted card; in the portal, converter.css / help.css narrow the
+breakpoints with their container width because the window width includes the sidebar). Loaded first by index.ejs, Recorder.html, Studio.html and the Results Analyser page; the
 portal's older tokens (`--bg`, `--text`, `--glass` …) are mapped onto it in shell.css. Rules: one brand blue for
 actions (one primary button per area), tool colours only on icons, sentence case, pages use the full width
 beside the sidebar (`--ds-page-max: 100%`), no emoji in the interface (SVG line icons).

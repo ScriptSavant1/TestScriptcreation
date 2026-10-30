@@ -172,9 +172,9 @@ html.sb-collapsed .sb-note { justify-content: center; padding: 7px 0; }
 
 /* ── Converter inside the shell: the sidebar picks Postman / JMeter and the top bar names the page,
       so the converter's own banner and tab bar are not shown (both still exist for scripts) ── */
-.cv-intro { display: none; }
+.cv-band { display: none; }
 body.has-shell #portal-converter > .hero, body.has-shell #portal-converter > .tab-bar { display: none !important; }
-body.has-shell #portal-converter .cv-intro { display: block; margin: 0 0 22px; font-size: var(--ds-fs-md); line-height: 1.6; color: var(--ds-text-2); }
+body.has-shell #portal-converter .cv-band { display: grid; margin-bottom: 24px; }
 /* Help: the sticky bar sits right under the top bar; a jumped-to section is not hidden under it */
 body.has-shell .help-topnav-wrap { top: var(--tb-h); }
 body.has-shell .help-acc-item { scroll-margin-top: calc(var(--tb-h) + 70px); }

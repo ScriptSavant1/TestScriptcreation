@@ -22,7 +22,13 @@ body.has-shell #portal-converter > .cv-foot {
 
 /* ── page: intro + two columns ── */
 body.has-shell #portal-converter .cv-panel { width: 100%; scroll-margin-top: calc(var(--tb-h) + 16px); }
-body.has-shell #portal-converter .cv-intro { margin: 0 0 20px; max-width: none; font-size: var(--ds-fs-md); line-height: 1.6; color: var(--ds-text-2); }
+/* header band (ds.css .ds-band-panel): its breakpoints use the window width, which here includes the sidebar,
+   so the converter narrows them by its own width (container cv) */
+@container cv (max-width: 1180px) { body.has-shell #portal-converter .cv-band .ds-hand { display: none; } }
+@container cv (max-width: 860px) {
+  body.has-shell #portal-converter .cv-band { grid-template-columns: minmax(0, 1fr); }
+  body.has-shell #portal-converter .cv-band .ds-flow { display: none; }
+}
 body.has-shell #portal-converter .cv-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-gap); align-items: start; }
 @container cv (min-width: 1080px) {
   body.has-shell #portal-converter .cv-cols { grid-template-columns: minmax(0, 1fr) 360px; }
@@ -281,3 +287,14 @@ body.has-shell #portal-converter .fmt-chip { display: inline-flex; align-items: 
   body.has-shell #portal-converter .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.has-shell #portal-converter .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
+
+/* ── the Home / Script Studio look: step numbers in the tool colour, stronger step titles, tinted drop areas ── */
+body.has-shell #portal-converter .section-num { color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); border-color: color-mix(in srgb, var(--c) 30%, transparent); }
+body.has-shell #portal-converter .cv-step-h { font-size: var(--ds-fs-lg); font-weight: 700; }
+body.has-shell #portal-converter .cv-side-title { font-size: var(--ds-fs-lg); font-weight: 700; }
+body.has-shell #portal-converter .drop-zone { border: 2px dashed color-mix(in srgb, var(--ds-accent) 35%, var(--ds-border)); background: color-mix(in srgb, var(--ds-accent) 4%, var(--ds-surface)); }
+body.has-shell #portal-converter .drop-zone:hover, body.has-shell #portal-converter .drop-zone.drag-over { border-color: var(--ds-accent); background: var(--ds-accent-soft); }
+body.has-shell #portal-converter .drop-zone.loaded { border-style: solid; border-color: color-mix(in srgb, var(--ds-ok) 55%, var(--ds-border)); background: var(--ds-ok-soft); }
+body.has-shell #portal-converter .dz-icon-wrap { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--ds-accent-soft); color: var(--ds-accent-text); }
+body.has-shell #portal-converter .drop-zone:hover .dz-icon-wrap, body.has-shell #portal-converter .drop-zone.drag-over .dz-icon-wrap { border: 0; background: var(--ds-surface); }
+body.has-shell #portal-converter .drop-zone .dz-label { font-weight: 700; color: var(--ds-text); }

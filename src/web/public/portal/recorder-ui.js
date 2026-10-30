@@ -152,7 +152,7 @@ function onDrop(e) {
   var f = e.dataTransfer.files[0];
   var nm = (f && f.name.toLowerCase()) || '';
   if (f && (nm.endsWith('.har') || nm.endsWith('.json'))) readFile(f);
-  else showToast('Please drop a .har file or a chrome://net-export/ NetLog .json file', 'error');
+  else showToast('Please drop a .har file', 'error');
 }
 function onDragOver(e) { e.preventDefault(); document.getElementById('dz').classList.add('over'); }
 function onDragLeave() { document.getElementById('dz').classList.remove('over'); }
@@ -1288,7 +1288,7 @@ function _initResizers() {
 (function () {
   if (!window.PerfxDrop) return;
   window.PerfxDrop.attach({
-    label: function () { return ['Drop to load the recording', '.har or NetLog .json']; },
+    label: function () { return ['Drop to load the recording', '.har file']; },
     route: function (files, ext) {
       var rec = files.filter(function (f) { return ext(f) === '.har' || ext(f) === '.json'; });
       return [{ input: document.getElementById('hf'), files: rec.slice(0, 1) }];

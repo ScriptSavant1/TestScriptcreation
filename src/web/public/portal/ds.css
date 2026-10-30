@@ -103,9 +103,14 @@ button, input, select, textarea { font-family: inherit; }
 ::selection { background: color-mix(in srgb, var(--ds-accent) 35%, transparent); }
 
 /* ── scroll bars: thin, theme-coloured, everywhere ── */
-* { scrollbar-width: thin; scrollbar-color: var(--ds-border-2) transparent; }
-::-webkit-scrollbar { width: 12px; height: 12px; }
-::-webkit-scrollbar-track { background: transparent; }
+/* slim scrollbars without arrow buttons. Chrome / Edge: the ::-webkit rules (the standard scrollbar-width / -color
+   would take over there and, on Windows, draw arrow buttons that the panes' rounded corners cut off). Other
+   browsers: the standard properties. The track keeps clear of rounded corners. */
+@supports not selector(::-webkit-scrollbar) { * { scrollbar-width: thin; scrollbar-color: var(--ds-border-2) transparent; } }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-track { background: transparent; margin: 8px 0; }
+::-webkit-scrollbar-track:horizontal { margin: 0 8px; }
 ::-webkit-scrollbar-thumb { background: var(--ds-border-2); border-radius: 99px; border: 3px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--ds-text-3); }
 ::-webkit-scrollbar-corner { background: transparent; }
@@ -200,3 +205,63 @@ button, input, select, textarea { font-family: inherit; }
 .ds-dropall b { font-size: var(--ds-fs-md); font-weight: 700; color: var(--ds-text); }
 .ds-dropall span { font-size: var(--ds-fs-sm); color: var(--ds-text-3); }
 .ds-dropall span:empty { display: none; }
+
+/* ── tool header band (v5) — the Home page's look on every tool page ────────────────────────────────────────
+   <header class="ds-band" style="--c:var(--c-record)">
+     <div class="ds-band-text"><div class="ds-band-title"><span class="ds-band-ico">svg</span><h1>…</h1></div><p class="ds-band-lead">…</p></div>
+     <figure class="ds-flow"><ol><li><span>svg</span><b>…</b></li>…</ol><figcaption class="ds-hand">…</figcaption></figure>
+   </header>
+   Runs edge to edge: the page sets --band-top (its own top padding) and uses --ds-page-x for the sides. */
+.ds-band {
+  position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: center;
+  margin: calc(-1 * var(--band-top, 28px)) calc(-1 * var(--ds-page-x)) 0; padding: 30px var(--ds-page-x) 28px;
+  /* the same background as the Home welcome band (home.css .hm-hero) */
+  background:
+    radial-gradient(55% 90% at 82% 30%, color-mix(in srgb, var(--ds-accent) 14%, transparent) 0%, transparent 70%),
+    linear-gradient(100deg, color-mix(in srgb, var(--ds-accent) 7%, var(--ds-bg)) 0%, color-mix(in srgb, var(--ds-accent) 11%, var(--ds-bg)) 55%, color-mix(in srgb, var(--ds-accent) 5%, var(--ds-bg)) 100%);
+  border-bottom: 1px solid color-mix(in srgb, var(--ds-accent) 12%, var(--ds-border));
+}
+.ds-band-title { display: flex; align-items: center; gap: 16px; }
+.ds-band-ico { width: 52px; height: 52px; flex: none; border-radius: 14px; display: grid; place-items: center; color: var(--c, var(--ds-accent-text)); background: color-mix(in srgb, var(--c, var(--ds-accent)) 15%, var(--ds-surface)); border: 1px solid color-mix(in srgb, var(--c, var(--ds-accent)) 25%, transparent); box-shadow: var(--ds-shadow-1); }
+.ds-band-ico svg { width: 26px; height: 26px; }
+.ds-band h1 { margin: 0; font-size: clamp(22px, 2.4vw, 32px); font-weight: 700; line-height: 1.2; letter-spacing: -.02em; color: var(--ds-text); }
+.ds-band-tag { margin: 4px 0 0; font-size: clamp(16px, 1.3vw, 19px); font-weight: 400; line-height: 1.35; color: var(--ds-text); }   /* the line under a tool's name */
+.ds-band-lead { margin: 12px 0 0; max-width: 46em; font-size: var(--ds-fs-md); line-height: 1.65; color: var(--ds-text-2); }
+.ds-flow { display: none; margin: 0; justify-self: center; }
+.ds-flow ol { list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; }
+.ds-flow li { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 108px; text-align: center; }
+.ds-flow li + li { position: relative; }
+.ds-flow li + li::before { content: ""; position: absolute; top: 27px; right: calc(50% + 34px); width: calc(100% - 68px); border-top: 2px dotted color-mix(in srgb, var(--ds-accent) 55%, transparent); }
+.ds-flow li + li::after { content: ""; position: absolute; top: 23px; right: calc(50% + 32px); border-left: 6px solid color-mix(in srgb, var(--ds-accent) 70%, transparent); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.ds-flow li > span { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; color: var(--c, var(--ds-accent-text)); background: var(--ds-surface); border: 1px solid var(--ds-border); box-shadow: 0 6px 18px -8px rgba(15, 23, 42, .25); }
+.ds-flow li > span svg { width: 26px; height: 26px; }
+.ds-flow li.is-tool > span { color: #fff; background: linear-gradient(150deg, color-mix(in srgb, var(--c) 75%, #fff) 0%, var(--c) 70%); border-color: transparent; box-shadow: 0 10px 24px -10px var(--c); }
+.ds-flow b { font-size: var(--ds-fs-sm); font-weight: 600; line-height: 1.3; color: var(--ds-text); }
+.ds-flow li small { margin-top: -6px; font-size: var(--ds-fs-xs); line-height: 1.3; color: var(--ds-text-2); }
+/* the one handwritten touch (Windows' own handwriting font — nothing is downloaded) */
+.ds-hand { margin-top: 14px; display: flex; justify-content: center; align-items: flex-start; gap: 8px; font-family: "Segoe Print", "Ink Free", "Bradley Hand", "Comic Sans MS", cursive; font-size: 14px; font-weight: 400; line-height: 1.4; color: var(--ds-accent-text); transform: rotate(-3deg); transform-origin: center; }
+.ds-hand svg { width: 26px; height: 26px; margin-top: -10px; stroke-width: 1.6; }
+html[data-theme="light"] .ds-hand { color: #1a4fbf; }
+/* tool pages run in their own frame, so the window width is the tool's width */
+@media (min-width: 980px) { .ds-band { grid-template-columns: minmax(0, 1fr) minmax(380px, .62fr); gap: 32px; padding: 34px var(--ds-page-x) 30px; } .ds-flow { display: block; } }
+@media (max-width: 640px) { .ds-band { margin: 0; border: 1px solid var(--ds-border); border-radius: var(--ds-r-card); padding: 22px 18px; } }
+/* Panel layout (agreed with the team for every tool page, first on Script Studio): add .ds-band-panel to the band.
+   Title + tagline + a short lead on the left; the three-step picture in its own soft panel (all tiles white, icons in
+   the brand blue); the handwritten note in a tilted card at the far right with its arrow under it; anything else
+   in the band (e.g. a step bar) runs along the bottom. */
+.ds-band.ds-band-panel { padding-top: 26px; padding-bottom: 22px; row-gap: 18px; }
+.ds-band-panel h1 { font-size: clamp(22px, 1.9vw, 28px); }
+.ds-band-panel .ds-band-tag { margin-top: 2px; font-size: clamp(15px, 1.15vw, 17px); font-weight: 600; }
+.ds-band-panel .ds-band-lead { margin-top: 12px; max-width: 52em; line-height: 1.6; }
+.ds-band-panel .ds-flow { display: none; align-items: center; gap: 18px; justify-self: end; }
+.ds-band-panel .ds-flow ol { padding: 14px 22px 12px; border-radius: 20px; background: color-mix(in srgb, var(--ds-surface) 55%, transparent); border: 1px solid color-mix(in srgb, var(--ds-accent) 14%, var(--ds-border)); }
+.ds-band-panel .ds-flow li { width: 128px; }
+.ds-band-panel .ds-flow li + li::before { top: 28px; right: calc(50% + 40px); width: calc(100% - 80px); }
+.ds-band-panel .ds-flow li + li::after { top: 24px; right: calc(50% + 38px); }
+.ds-band-panel .ds-flow li > span, .ds-band-panel .ds-flow li.is-tool > span { color: var(--ds-accent-text); background: var(--ds-surface); border-color: var(--ds-border); box-shadow: 0 6px 18px -8px rgba(15, 23, 42, .25); }
+.ds-band-panel .ds-hand { margin: 0; flex-direction: column; align-items: flex-start; gap: 4px; transform: none; }
+.ds-band-panel .ds-hand span { padding: 10px 16px; border-radius: 16px; background: color-mix(in srgb, var(--ds-surface) 45%, transparent); border: 1px solid color-mix(in srgb, var(--ds-accent) 22%, var(--ds-border)); transform: rotate(-8deg); white-space: nowrap; }
+.ds-band-panel .ds-hand svg { width: 40px; height: 30px; margin: 6px 0 0 -26px; stroke-width: 1.8; }
+@media (min-width: 980px) { .ds-band.ds-band-panel { grid-template-columns: minmax(0, 1fr) auto; } .ds-band-panel .ds-flow { display: flex; } }
+@media (max-width: 1240px) { .ds-band-panel .ds-hand { display: none; } }
+@media (max-width: 640px) { .ds-band.ds-band-panel { padding: 22px 18px; } }

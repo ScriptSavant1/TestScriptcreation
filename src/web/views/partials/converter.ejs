@@ -2,7 +2,7 @@
   Postman / Bruno and JMeter converter panels (design system v4, see portal/ds.css). Behaviour lives in
   index.ejs (setProto, setMode, onPick, doConvert, doConvertJmx …) and public/portal/converter.js; styles in
   public/portal/converter.css (scoped to #portal-converter).
-  Layout (both panels the same): intro sentence · steps card (1 Choose output, 2 Upload files) · Options card
+  Layout (both panels the same): header band (band() below) · steps card (1 Choose output, 2 Upload files) · Options card
   (segmented options, Advanced settings, the one Convert button) — side by side on wide screens, the Options
   card sticky. Every element id, handler and class the converter functions use is kept — the converter golden
   harness checks that the requests sent and the results are identical.
@@ -38,7 +38,20 @@
       </div>
       <span class="proto-check" aria-hidden="true">${svg(IC.check)}</span>
     </div>`;
-  const stepHead = (n, title, sub) => `<div class="section-label"><span class="section-num">${n}</span><span class="cv-step-t"><span class="cv-step-h">${title}</span>${sub ? `<span class="cv-step-sub">${sub}</span>` : ''}</span></div>`;
+  // tool header band (ds.css .ds-band-panel): icon + title + tagline, lead, three-step picture, handwritten note
+  IC.doc = '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>';
+  IC.code = '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m10 13-2 2 2 2"/><path d="m14 13 2 2-2 2"/>';
+  const band = (ico, title, tag, lead, steps, note, flowLabel) => `<header class="ds-band ds-band-panel cv-band">
+    <div class="ds-band-text">
+      <div class="ds-band-title"><span class="ds-band-ico">${svg(IC[ico])}</span><div><h1>${title}</h1><p class="ds-band-tag">${tag}</p></div></div>
+      <p class="ds-band-lead">${lead}</p>
+    </div>
+    <figure class="ds-flow" aria-label="${flowLabel}">
+      <ol>${steps.map(([i, t]) => `<li><span>${svg(IC[i])}</span><b>${t}</b></li>`).join('')}</ol>
+      <figcaption class="ds-hand"><span>${note}</span><svg viewBox="0 0 40 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 27c12 0 22-6 30-19"/><path d="m26 9 7-2 1 7"/></svg></figcaption>
+    </figure>
+  </header>`;
+  const stepHead =(n, title, sub) => `<div class="section-label"><span class="section-num">${n}</span><span class="cv-step-t"><span class="cv-step-h">${title}</span>${sub ? `<span class="cv-step-sub">${sub}</span>` : ''}</span></div>`;
 %>
 <div id="portal-converter" style="display:none" class="portal-content-panel">
 
@@ -69,7 +82,11 @@
 <!-- Panel: Postman / Bruno                                                 -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="cv-panel" id="panel-bruno" style="--c:var(--c-convert)">
-  <p class="cv-intro">Upload a Postman or Bruno collection — and, if you have one, its environment file. You get a ready-to-run DevWeb or VuGen Web HTTP/HTML script as a ZIP, with correlation, parameters and authentication handled.</p>
+  <%- band('api', 'Postman / Bruno', 'Turn an API collection into a load test script',
+      'Upload a Postman or Bruno collection — and, if you have one, its environment file. You get a ready-to-run VuGen script — Web HTTP/HTML or DevWeb protocol — as a ZIP, with correlation, parameters and authentication handled.',
+      [['doc', 'Postman / Bruno collection'], ['sliders', 'Convert &amp; Correlate'], ['code', 'VuGen script']],
+      'From API collection<br>to a script that replays',
+      'A Postman or Bruno collection, then convert and correlate, then a VuGen script in the Web HTTP/HTML or DevWeb protocol') %>
  <div class="cv-cols">
  <section class="cv-main" aria-label="Output and files">
 
@@ -223,7 +240,11 @@
 <!-- Panel: JMeter                                                          -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="cv-panel" id="panel-jmx" style="display:none;--c:var(--c-jmeter)">
-  <p class="cv-intro">Upload a JMeter test plan (.jmx), plus any CSV data files and certificates it uses. You get a DevWeb or VuGen Web HTTP/HTML script — one per thread group if you choose — and a Workload Model Excel, as a ZIP.</p>
+  <%- band('migrate', 'JMeter', 'Move a JMeter test plan to LoadRunner',
+      'Upload a JMeter test plan (.jmx), plus any CSV data files and certificates it uses. You get a VuGen script — Web HTTP/HTML or DevWeb protocol, one per thread group if you choose — and a Workload Model Excel, as a ZIP.',
+      [['doc', 'JMeter test plan'], ['sliders', 'Convert &amp; Correlate'], ['code', 'VuGen script']],
+      'Keep your test logic,<br>change the tool',
+      'A JMeter test plan, then convert and correlate, then a VuGen script in the Web HTTP/HTML or DevWeb protocol') %>
  <div class="cv-cols">
  <section class="cv-main" aria-label="Output and files">
 

@@ -6,6 +6,33 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
+#### Changed — Every tool in the Home page's look
+
+- A shared header band for every tool page (in the design system): soft blue across the page, the tool's icon,
+  a large title, one line about the tool, and a three-step picture (e.g. Browser recording → Recorder → VuGen / DevWeb
+  script) with a handwritten note. On a phone it becomes a card. Final layout (as agreed on Script Studio): tool name
+  with its tagline, a short lead, the picture in its own soft panel, the note in a tilted card at the far right.
+- Every tool page now has it: Recorder ("Recorder — Turn a browser recording into a LoadRunner script"), Script
+  Studio, Postman / Bruno ("Turn an API collection into a load test script"), JMeter ("Move a JMeter test plan to
+  LoadRunner"), Results Analyser ("Analyse a LoadRunner Enterprise run") and Help (title and intro unchanged; the
+  picture shows Quick start → Tool guides → Reference & FAQ, the note "Press / to search any time").
+- Converters: step numbers in the tool's colour, stronger step titles, tinted drop areas. Results Analyser: tinted
+  drop area, stronger headings. Output unchanged — converter golden harness (the only differences are the server
+  names by role from the script-layout change), Help text capture (every word kept, 13/13 jumps), design audit clean.
+- Recorder: the header band; a larger, tinted drop area; step numbers in the Recorder's colour; in the workspace the
+  file bar in the band style and stronger pane titles. Nothing else changed — the generated scripts are byte for byte
+  the same on every recording checked; design audit clean in both themes.
+- Script Studio: the header band ("Script Studio — Turn a recording into a script that replays for many users";
+  HAR recording → Analyse & Correlate → VuGen script in a soft panel, the note in a tilted card) and a four-step bar
+  along the bottom of the band — Add recordings, Configure,
+  Analyse, Download — that follows where you are (current step highlighted, finished steps ticked; on the results
+  screen it sits at the top). Display only: it changes nothing. Tinted drop areas, stronger headings, sentence-case
+  titles. Generated scripts byte for byte the same (Studio golden harness, real and synthetic recordings).
+- NetLog (chrome://net-export/) is no longer offered: the Recorder and Script Studio drop areas, steps, file boxes,
+  drop hints and Help talk about .har files only. (A NetLog file still loads if someone has one; its own notes remain.)
+- Recorder: the request list no longer shrinks to a sliver on smaller or zoomed screens (BUG-110); slim scrollbars
+  without arrow buttons everywhere (the panes' rounded corners cut the arrows off).
+
 #### Changed — A new Home page
 
 - Clients and colleagues found the Home page heavy and tutorial-like. The new Home follows the design the team chose:
