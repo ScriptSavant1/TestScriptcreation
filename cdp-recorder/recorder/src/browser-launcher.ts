@@ -33,6 +33,10 @@ export const DEFAULT_PORT = 0;
 // Corporate machines: antivirus scans a fresh profile on first start — 15 s was
 // not always enough.
 const LAUNCH_TIMEOUT_MS = 30_000;
+// When the registry says remote debugging is switched off the browser is still
+// tried (BUG-111), but a browser that really enforces it never opens the port —
+// don't make the user wait the full 30 s for that.
+const POLICY_TIMEOUT_MS = 12_000;
 // Chromium's DevTools server listens on the IPv4 loopback only; "localhost" can
 // resolve to ::1 first on some machines.
 const CDP_HOST = "127.0.0.1";
@@ -214,16 +218,13 @@ export async function launchAndWaitForPort(
   userDataDir: string,
   requestedPort: number,
 ): Promise<LaunchedBrowser> {
-  // RemoteDebuggingAllowed = 0 always wins over the command line: the window
-  // would open and the port never would. Say so at once instead of after the
-  // 30-second wait.
-  const hardBlock = await findBlockingPolicies(browserPath, ["RemoteDebuggingAllowed"]);
-  if (hardBlock.length) {
-    throw new Error(
-      `${browserName(browserPath)} does not allow remote debugging on this machine (policy ${hardBlock.join("; ")}) — ` +
-        `ask IT to allow it, or use the other browser (--browser chrome / --browser edge)`,
-    );
-  }
+  // A RemoteDebuggingAllowed = 0 value in the registry is NOT proof that the
+  // browser refuses: on machines built from the same image it blocked one user
+  // and not the others (BUG-111), and refusing on the registry value alone
+  // stopped a recorder that would have worked. So always try; the value only
+  // shortens the wait and explains a real failure below.
+  const policyBlock = await findBlockingPolicies(browserPath, ["RemoteDebuggingAllowed"]);
+  const timeoutMs = policyBlock.length ? POLICY_TIMEOUT_MS : LAUNCH_TIMEOUT_MS;
   // A persistent or real profile can hold a DevToolsActivePort file from an
   // earlier run, pointing at a port that is long gone.
   if (requestedPort === 0) {
@@ -264,7 +265,7 @@ export async function launchAndWaitForPort(
     exitedAt = Date.now();
   });
 
-  const deadline = Date.now() + LAUNCH_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
   let lastErr = requestedPort === 0 ? "the browser never reported its debug port" : "";
   // stop waiting shortly after the browser process has gone — its port will not open any more
   while (Date.now() < deadline && !(exitedAt && Date.now() - exitedAt > 3000)) {
@@ -286,7 +287,7 @@ export async function launchAndWaitForPort(
 
   const policies = await findBlockingPolicies(browserPath);
   const hint = policies.length
-    ? `blocked by browser policy (${policies.join("; ")}) — ask IT to allow remote debugging for ${browserName(browserPath)}, or try --browser chrome / --browser edge`
+    ? `most likely blocked by browser policy (${policies.join("; ")}) — ask IT to allow remote debugging for ${browserName(browserPath)}, or install the other browser (Chrome / Edge): the recorder tries it by itself`
     : requestedPort
       ? `port ${requestedPort} may be in use or reserved (netsh int ipv4 show excludedportrange protocol=tcp) — leave out --cdp-port to let the browser pick a free one`
       : "no blocking browser policy found in the registry — security software may be blocking the browser's local debug port";

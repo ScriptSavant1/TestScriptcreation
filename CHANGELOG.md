@@ -488,6 +488,12 @@ Files changed: `jwt-helper.js`, `lre-utils.dat`, `lre-utils.js`,
 
 ### CDP Recorder and the retired browser extension
 
+#### Fixed — CDP Recorder no longer gives up on a registry value alone (BUG-111)
+
+- The recorder always tries the browser, even when the registry has `RemoteDebuggingAllowed = 0`; the value only
+  shortens the wait (12 s) and explains a real failure. Before, it stopped at once with "does not allow remote
+  debugging on this machine" without trying.
+
 #### Fixed — CDP Recorder would not start on some machines (BUG-086)
 
 - The recording browser picks a free debug port itself (it was always 9333, which fails silently where that port is
