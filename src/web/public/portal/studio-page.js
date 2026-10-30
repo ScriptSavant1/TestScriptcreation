@@ -199,3 +199,7 @@
   });
   update();
 })();
+
+// Studio's state object S is declared with const, so other pages in the portal (the Recorder's and the HAR
+// Explorer's "continue in Script Studio") cannot reach it as window.S — this is the one way in.
+window.PerfxStudio = { state: function () { return S; } };

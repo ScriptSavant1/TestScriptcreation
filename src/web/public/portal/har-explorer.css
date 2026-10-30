@@ -71,6 +71,7 @@ html.embedded.hx-has-file .hx-page { height: 100%; }
 .hx-fb-name { min-width: 0; }
 .hx-fb-name b { display: block; font-size: var(--ds-fs-md); overflow-wrap: anywhere; }
 .hx-fb-name small { display: block; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.hx-fb-act { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }   /* the two buttons stay together, on the right */
 .hx-pill { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 99px; background: var(--ds-surface); border: 1px solid var(--ds-border); font-size: var(--ds-fs-xs); color: var(--ds-text-2); white-space: nowrap; }
 .hx-pill b { color: var(--ds-text); }
 .hx-pill.src { color: var(--ds-ok); background: var(--ds-ok-soft); border-color: color-mix(in srgb, var(--ds-ok) 35%, var(--ds-border)); font-weight: 600; }
@@ -227,8 +228,35 @@ html.embedded.hx-has-file .hx-page { height: 100%; }
 .hx-badge.src { background: var(--ds-ok-soft); color: var(--ds-ok); } .hx-badge.use { background: var(--ds-accent-soft); color: var(--ds-accent-text); } .hx-badge.enc { background: var(--ds-warn-soft); color: var(--ds-warn); }
 [data-theme="light"] .hx-badge.src { color: #11652f; } [data-theme="light"] .hx-badge.enc { color: #8a4a00; }
 .hx-also { margin: 10px 0 0; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+/* Correlate this */
+.hx-corr { margin-top: 16px; border: 1px solid color-mix(in srgb, var(--ds-ok) 35%, var(--ds-border)); border-radius: var(--ds-r-tile); overflow: hidden; }
+.hx-corr-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; background: var(--ds-ok-soft); }
+.hx-corr-h h3 { margin: 0; font-size: var(--ds-fs-md); font-weight: 700; }
+.hx-corr-h .hx-fmt { margin-left: auto; }
+.hx-corr-b { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.hx-cn { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; font-size: var(--ds-fs-sm); font-weight: 600; color: var(--ds-text-2); }
+.hx-cn input { width: 240px; max-width: 100%; height: 34px; padding: 0 10px; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-border-2); background: var(--ds-inset); font-family: var(--ds-mono); font-size: 12.5px; }
+.hx-cn input:focus { outline: 0; border-color: var(--ds-focus); box-shadow: 0 0 0 3px var(--ds-accent-soft); }
+.hx-cn input:disabled { opacity: .75; }
+.hx-corr-from { margin: 0; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.hx-corr-from a { color: var(--ds-accent-text); font-weight: 600; text-decoration: none; }
+.hx-corr-code { max-height: none; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-border); }
+.hx-corr-uses { margin: 0; padding-left: 18px; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.hx-corr-uses li { margin: 3px 0; }
+.hx-corr-uses a { color: var(--ds-accent-text); font-weight: 600; text-decoration: none; }
+.hx-corr-uses code { font-family: var(--ds-mono); color: var(--ds-text); }
+.hx-corr-warn { margin: 0; color: var(--ds-text-2); }
+.hx-corr-act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.hx-corr-act svg { width: 16px; height: 16px; }
+.hx-added { display: inline-flex; align-items: center; gap: 6px; font-size: var(--ds-fs-sm); font-weight: 600; color: var(--ds-ok); }
+[data-theme="light"] .hx-added { color: #11652f; }
+.hx-count-badge { margin-left: 2px; padding: 1px 8px; border-radius: 99px; background: rgba(255, 255, 255, .22); font-size: var(--ds-fs-xs); font-weight: 700; }
+
 .hx-selbtn { position: fixed; z-index: 60; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: var(--ds-r-sm); background: var(--ds-text); color: var(--ds-bg); font-size: var(--ds-fs-xs); font-weight: 600; cursor: pointer; box-shadow: 0 8px 20px -6px rgba(0, 0, 0, .35); }
 .hx-selbtn svg { width: 14px; height: 14px; }
+
+/* the file bar stays one line on narrower screens: the recorded duration is the least needed pill */
+@media (max-width: 1500px) { #hx-fb-dur { display: none; } }
 
 @media (max-width: 1000px) {
   html.hx-has-file .hx-page { height: auto; }

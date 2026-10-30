@@ -845,7 +845,9 @@ function _advCardHtml(c) {
         : "")
     : '<span style="color:var(--text-3)">No request body usage found</span>';
 
-  var manualTag = c._manual
+  var manualTag = c._explorer
+    ? '<span class="adv-manual-tag">From HAR Explorer</span>'
+    : c._manual
     ? '<span class="adv-manual-tag">Manual</span>'
     : c._arrayReconstruct
       ? '<span class="adv-manual-tag adv-tag-array-reconstr">&#x2735; Array Reconstruct</span>'

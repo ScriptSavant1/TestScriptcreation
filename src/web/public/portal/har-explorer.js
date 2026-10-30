@@ -80,7 +80,7 @@
         var har;
         try { har = JSON.parse(rd.result); } catch (e) { drop.classList.remove("busy"); toast(file.name + " is not a valid HAR file (it is not JSON)."); return; }
         if (!har || !har.log || !Array.isArray(har.log.entries)) { drop.classList.remove("busy"); toast(file.name + " is not a HAR file — it has no list of requests (log.entries)."); return; }
-        try { open(file.name, file.size, har, rd.result); } catch (e) { toast("The file could not be opened: " + e.message); }
+        try { open(file.name, file.size, har, rd.result); M.file = file; } catch (e) { toast("The file could not be opened: " + e.message); }
         drop.classList.remove("busy");
       }, 30);
     };
@@ -96,7 +96,12 @@
     var model = hxBuild(har);
     clearTimeout(toastTimer); toastEl.classList.remove("on");   // an earlier message is about another file
     M = { name: name, size: bytes, model: model, sel: null, tab: "headers", closed: {}, types: {}, q: "", showOut: !!prefs.showOut, mask: false, full: {},
-      view: "req", find: "", inv: null, hits: null, sugg: null, studioCount: 0, byN: {} };
+      view: "req", find: "", inv: null, hits: null, sugg: null, studioCount: 0, byN: {},
+      // "Correlate this": the script format (Script Studio's remembered choice, else DevWeb — Studio's default),
+      // the name typed for the value on screen, and the correlations to hand to Studio
+      fmt: (function () { try { return localStorage.getItem("perfx-studio-fmt") === "webhttp" ? "webhttp" : "devweb"; } catch (e) { return "devweb"; } })(),
+      corrName: "", added: [] };
+    addedButton();
     model.items.forEach(function (it) { M.byN[it.n] = it; });
     findButton();   // a new file opens on its requests, not on "Find a value"
     startWorker(text);
@@ -106,7 +111,8 @@
     var inScript = model.items.filter(function (it) { return !it.out; }).length, tx = model.groups.filter(function (g) { return g.txn; }).length;
     $("#hx-fb-name").textContent = name;
     $("#hx-fb-sub").textContent = size(bytes) + " · " + (model.creator.name || "unknown tool") + (model.creator.version ? " " + model.creator.version : "");
-    $("#hx-fb-src").textContent = { bookmarks: "Transactions from the bookmarks (START / END)", cdp: "Recorded with the PerfX CDP Recorder", pages: "Transactions from the recording's pages", none: "No transactions in this file" }[model.source];
+    $("#hx-fb-src").textContent = { bookmarks: "Bookmark transactions (START / END)", cdp: "PerfX CDP Recorder transactions", pages: "Transactions from the page loads", none: "No transactions in this file" }[model.source];
+    $("#hx-fb-src").title = { bookmarks: "Transactions from the START / END bookmarks in the recording — grouped as the Recorder groups them", cdp: "Recorded with the PerfX CDP Recorder — its transactions, as the Recorder shows them", pages: "The recording's page loads (pages in the HAR), as the Recorder uses them", none: "This recording has no bookmarks and no pages" }[model.source];
     $("#hx-fb-src").classList.toggle("none", model.source === "none");
     $("#hx-fb-n").innerHTML = "<b>" + inScript + "</b>&nbsp;of " + model.items.length + " requests in the script";
     $("#hx-fb-tx").innerHTML = "<b>" + tx + "</b>&nbsp;transaction" + (tx === 1 ? "" : "s");
@@ -398,8 +404,119 @@
     worker.onerror = function () { toast("Find a value is not available in this browser."); worker = null; };
     worker.postMessage({ type: "load", text: text, out: M.model.items.filter(function (it) { return it.out; }).map(function (it) { return it.n; }) });
   }
+  // ── "Correlate this": the extractor Script Studio would write, and the hand-over ──
+  function codeFor(corr, name) {
+    var code = M.fmt === "devweb" ? corr.devweb : corr.vugen.replace(/^\t/gm, "");
+    if (!code) return "";
+    // the name the user typed (the worker wrote the code with the suggested one)
+    return name === corr.name ? code : code.split('"' + corr.name + '"').join('"' + name + '"').split("ParamName=" + corr.name + '"').join("ParamName=" + name + '"');
+  }
+  function corrName(inv) { var a = addedFor(inv.value); return a ? a.name : M.corrName || inv.corr.name; }
+  function addedFor(value) { return M.added.filter(function (a) { return a.value === value; })[0] || null; }
+  function corrPanel(inv) {
+    var c = inv.corr;
+    if (c.error) return '<div class="hx-corr"><div class="hx-corr-h"><h3>Correlate this</h3></div><p class="hx-corr-b ds-note warn">' + esc(c.error) + "</p></div>";
+    var name = corrName(inv), added = addedFor(inv.value), src = M.byN[inv.src.n];
+    var ref = function (n) { return M.fmt === "devweb" ? "${" + n + "}" : "{" + n + "}"; };
+    return '<div class="hx-corr"><div class="hx-corr-h"><h3>Correlate this</h3>' +
+      '<div class="ds-seg hx-fmt" role="group" aria-label="Script format"><button type="button" data-fmt="webhttp" aria-pressed="' + (M.fmt === "webhttp") + '">VuGen Web HTTP/HTML</button><button type="button" data-fmt="devweb" aria-pressed="' + (M.fmt === "devweb") + '">DevWeb</button></div></div>' +
+      '<div class="hx-corr-b">' +
+      '<label class="hx-cn"><span>Parameter name</span><input id="hx-cn" value="' + esc(name) + '" spellcheck="false" autocomplete="off"' + (added ? " disabled" : "") + "></label>" +
+      '<p class="hx-corr-from">Captured from ' + esc(c.label) + " in " + trailLink(inv.src) + (M.fmt === "devweb" ? " — the extractor goes on that request" : " — registered just before that request") + ".</p>" +
+      '<pre class="hx-code hx-corr-code" id="hx-corr-code">' + esc(codeFor(c, name)) + "</pre>" +
+      '<p class="hx-corr-from">Then used in:</p><ul class="hx-corr-uses">' + inv.later.map(function (u) { return "<li>" + trailLink(u) + " — " + esc(u.where) + " → <code>" + esc(ref(name)) + "</code></li>"; }).join("") + "</ul>" +
+      c.warn.map(function (w) { return '<p class="ds-note warn hx-corr-warn">' + esc(w) + "</p>"; }).join("") +
+      '<div class="hx-corr-act">' + (added
+        ? '<span class="hx-added">' + ICON_CHECK + "Added — Script Studio gets it when you continue there</span>" + '<button type="button" class="ds-btn ds-btn-sm" data-remove>Remove</button>'
+        : '<button type="button" class="ds-btn ds-btn-primary" data-add>' + ICON_CHECK + "Add to Script Studio</button>") +
+      '<button type="button" class="ds-btn" data-copycode>' + ICON_COPY + "Copy code</button></div>" +
+      "</div></div>";
+  }
+  var ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+  function addedButton() {
+    var n = M ? M.added.length : 0, b = $("#hx-studio");
+    // nothing added: Studio only opens with this file (you analyse there); with correlations it analyses and applies them
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>' +
+      (n ? 'Continue in Script Studio <span class="hx-count-badge">' + n + " correlation" + (n === 1 ? "" : "s") + "</span>" : "Open in Script Studio");
+    b.title = n ? "Script Studio opens this file, analyses it and applies the " + n + " correlation" + (n === 1 ? "" : "s") + " you added here"
+      : "Script Studio opens this file — choose the filters there and click Analyse. (Add correlations with Find a value → Correlate this, and Studio applies them for you.)";
+  }
+  $("#hx-det").addEventListener("click", function (e) {
+    if (!M || !M.inv || !M.inv.corr) return;
+    var inv = M.inv;
+    var f = e.target.closest("[data-fmt]"); if (f) { M.fmt = f.dataset.fmt; renderFind(); return; }
+    if (e.target.closest("[data-add]")) {
+      var name = String(($("#hx-cn") || {}).value || inv.corr.name).trim().replace(/[^A-Za-z0-9_]/g, "_");
+      if (!/^[A-Za-z]/.test(name)) { toast("The parameter name must start with a letter."); return; }
+      if (M.added.some(function (a) { return a.name === name; })) { toast("“" + name + "” is already used by another value — choose another name."); return; }
+      M.added.push({ value: inv.value, name: name, extractorType: inv.corr.extractorType, extractorConfig: inv.corr.extractorConfig, si: inv.corr.studioIdx, n: inv.src.n, uses: inv.corr.uses || [] });
+      M.corrName = ""; addedButton(); renderFind(); toast("“" + name + "” added — continue in Script Studio to build the script with it."); return;
+    }
+    if (e.target.closest("[data-remove]")) { M.added = M.added.filter(function (a) { return a.value !== inv.value; }); addedButton(); renderFind(); return; }
+    if (e.target.closest("[data-copycode]")) {
+      var txt = $("#hx-corr-code").textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { toast("Code copied"); }, function () { toast("Copying is not allowed here."); });
+      else toast("Copying is not allowed here.");
+    }
+  });
+  $("#hx-det").addEventListener("input", function (e) {
+    if (e.target.id !== "hx-cn" || !M.inv || !M.inv.corr) return;
+    M.corrName = e.target.value.trim().replace(/[^A-Za-z0-9_]/g, "_");
+    var name = M.corrName || M.inv.corr.name;
+    $("#hx-corr-code").textContent = codeFor(M.inv.corr, name);
+    var ref = M.fmt === "devweb" ? "${" + name + "}" : "{" + name + "}";
+    Array.prototype.forEach.call(document.querySelectorAll(".hx-corr-uses code"), function (c) { c.textContent = ref; });
+  });
+
+  // Continue in Script Studio: the same file, the format chosen here, and the correlations added here — accepted
+  // (Studio's own advisorAddManual + advisorApplyAndRegen), marked "From HAR Explorer"
+  $("#hx-studio").addEventListener("click", function () {
+    var shell = null;
+    try { shell = window.parent !== window && window.parent.PerfxShell ? window.parent : null; } catch (e) { shell = null; }
+    if (!shell || !M.file) { toast("Open the HAR Explorer from the portal to continue in Script Studio."); return; }
+    var file = M.file, list = M.added.slice(), fmt = M.fmt;
+    shell.PerfxShell.go("studio");
+    var w = null;
+    function frame() { var f = shell.document.getElementById("iframe-studio"); return f && f.contentWindow; }
+    function st() { return w.PerfxStudio.state(); }   // Studio's S (a const there — published by studio-page.js)
+    function later(test, then, max) {
+      var t = 0; (function poll() { var ok = false; try { ok = test(); } catch (e) { ok = false; } if (ok) then(); else if (++t < (max || 150)) setTimeout(poll, 100); })();
+    }
+    later(function () { w = frame(); return w && w.document.readyState === "complete" && typeof w.loadFile === "function" && w.PerfxStudio && w.document.getElementById("dz1"); }, function () {
+      try { if (typeof w.clearAll === "function") w.clearAll(); if (typeof w.goBack === "function") w.goBack(); } catch (e) { /* a fresh Studio */ }
+      try { if (typeof w.setFmt === "function") w.setFmt(fmt); } catch (e) { /* Studio keeps its own format */ }
+      w.loadFile(file, 1);
+      if (!list.length) {
+        if (typeof w.showToast === "function") w.showToast(file.name + " opened from the HAR Explorer — choose the format and filters, then click Analyse.", "info");
+        return;
+      }
+      later(function () { return st().har1; }, function () {
+        Promise.resolve(w.analyze()).then(function () {
+          // a recording with background traffic stops at Studio's review first — add the correlations after it
+          later(function () {
+            var bg = w.document.getElementById("bgReviewPanel");
+            return w.document.getElementById("ph-res").classList.contains("active") && !(bg && bg.style.display !== "none" && bg.offsetParent !== null) && st().entries1 && st().entries1.length;
+          }, function () {
+            list.forEach(function (a) {
+              var cand = w.advisorAddManual(a.si, "boundary", "", a.name, a.value);
+              cand._explorer = { extractorType: a.extractorType, extractorConfig: a.extractorConfig };
+              // the uses the Explorer found that Studio's own search did not (e.g. a URL-encoded form value)
+              a.uses.forEach(function (u) {
+                var known = cand.usages.some(function (k) { return k.entryIdx === u.si && k.location === u.location && (k.jsonPath || null) === u.jsonPath; });
+                if (!known) cand.usages.push({ entryIdx: u.si, url: "", location: u.location, jsonPath: u.jsonPath });
+              });
+            });
+            if (typeof w.renderAdvisorPanel === "function") w.renderAdvisorPanel();
+            w.advisorApplyAndRegen();
+            if (typeof w.showToast === "function") w.showToast(list.length + " correlation" + (list.length === 1 ? "" : "s") + " from the HAR Explorer added and applied.", "success");
+          }, 6000);
+        });
+      }, 300);
+    }, 300);
+  });
+
   function find(value) {
-    M.find = (value || "").trim(); M.view = "find";
+    M.find = (value || "").trim(); M.view = "find"; M.corrName = "";
     if (!M.find) { findSeq++; M.inv = null; M.hits = null; build(); renderFind(); return; }
     if (!worker) { toast("Find a value is not available in this browser."); return; }
     worker.postMessage({ type: "find", id: ++findSeq, value: M.find });
@@ -418,7 +535,7 @@
     redirect: ["plain", "Nothing to do — a redirect the script follows", function (i) { return "#" + i.src.n + " redirects to it and the next request only follows that redirect, as VuGen and DevWeb do by themselves."; }],
     outonly: ["plain", "Nothing to do — only sent to requests left out of the script", function (i) { return "Every request that sends it back is left out of the script (analytics, static files …), so the script never needs it."; }],
     unused: ["plain", "Never sent back", function (i) { return i.src ? "The server returns it, but no later request sends it — nothing to correlate." : "It is in the recording, but no request sends it."; }],
-    missing: ["warn", "Its source is not in this recording", function (i) { return "No response in this HAR contains it — but <b>" + i.missing + "</b> earlier response" + (i.missing === 1 ? " has" : "s have") + " no body in the file (the browser kept no copy, for example because it served the page from its cache), so it probably comes from one of those. Record the journey again with DevTools “Disable cache” ticked, or with the PerfX CDP Recorder, to see where it comes from."; }],
+    missing: ["warn", "Its source is not in this recording", function (i) { return "No response in this HAR contains it — but <b>" + i.missing + "</b> earlier response" + (i.missing === 1 ? " has" : "s have") + " no body in the file (the browser kept no copy, for example because it served the page from its cache), so it probably comes from one of those. Without that response there is nothing to capture it from, so <b>Correlate this</b> cannot be offered. Record the journey again with DevTools “Disable cache” ticked, or with the PerfX CDP Recorder, and look it up again."; }],
     input: ["param", "A value typed in the journey — make it a parameter", function () { return "It never comes back from the server before it is sent: the user typed or chose it (a user name, a search term …). Give it a parameter with test data, so each virtual user can use a different one."; }],
     generated: ["param", "Made by the browser — generate it in the script", function () { return "It never comes from the server and looks like a time stamp or a GUID created by the page's JavaScript. Generate a new one in the script (VuGen: lr_save_timestamp / lr_generate_uuid; DevWeb: Date.now() / a uuid function)."; }],
     none: ["plain", "Not found in this recording", function () { return "Check the spelling, or try a shorter part of the value."; }],
@@ -456,6 +573,7 @@
       if (inv.referer) aside.push("in the Referer / Origin header of " + inv.referer + " request" + (inv.referer === 1 ? "" : "s") + " — the page address, which the script copies as it is");
       if (aside.length) body += '<p class="hx-also">Also ' + aside.join("; and ") + ". Not counted above.</p>";
       if (inv.also.length) body += '<p class="hx-also">Also returned later by ' + inv.also.map(function (o) { return trailLink(o).replace(/>#(\d+)[^<]*</, ">#$1<") + " (" + esc(o.where) + ")"; }).join(", ") + " — the first one is the one to capture.</p>";
+      if (inv.corr) body += corrPanel(inv);
     }
     d.innerHTML = '<div class="hx-dh hx-fh"><h2>Find a value</h2>' +
       "<p>Where it first came from, every request that sends it back, and what to do in the script. URL-encoded, JSON-escaped, Base64 and HTML-entity forms are found too.</p>" +

@@ -1017,7 +1017,8 @@ function _openInStudio() {
     var ready = w && w.document && w.document.readyState === 'complete' && typeof w.loadFile === 'function' && w.document.getElementById('dz1');
     if (ready) {
       // the server names renamed here are used by Script Studio too (the same names in both tools)
-      try { if (w.S) w.S.hostNames = Object.assign({}, S.hostNames || {}); } catch (e) { /* different page version */ }
+      // (Studio's S is a const — not window.S; studio-page.js publishes it as PerfxStudio.state(). BUG-112)
+      try { var ws = w.PerfxStudio && w.PerfxStudio.state(); if (ws) ws.hostNames = Object.assign({}, S.hostNames || {}); } catch (e) { /* different page version */ }
       try { w.loadFile(file, 1); } catch (e) { /* Studio shows its own message */ }
       return;
     }

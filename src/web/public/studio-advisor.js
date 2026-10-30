@@ -1055,7 +1055,11 @@ function advisorToCorrelation(candidate) {
 
   // Determine extractor type and config
   let extractorType, extractorConfig;
-  if (candidate._manual) {
+  if (candidate._manual && candidate._explorer && candidate._explorer.extractorType) {
+    // Handed over by the HAR Explorer: the exact extractor it built (same types and config as Studio's own)
+    extractorType = candidate._explorer.extractorType;
+    extractorConfig = candidate._explorer.extractorConfig;
+  } else if (candidate._manual) {
     // User explicitly chose the extract method via the modal
     const et = candidate._extractType || 'jsonpath';
     if (et === 'jsonpath') {

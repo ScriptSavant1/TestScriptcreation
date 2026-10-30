@@ -6,7 +6,7 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal and user interface
 
-#### Added — HAR Explorer (in progress: steps 1–4 of 6)
+#### Added — HAR Explorer (in progress: steps 1–5 of 6)
 
 - A new tool under Create scripts, between Recorder and Script Studio: the "investigate" step of correlation —
   where every dynamic value comes from and where it goes. Step 1: the page (header band, start page), its address
@@ -24,6 +24,17 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
   own findings (marked Studio) and the values Studio does not find by itself — on the WebTours sample `userSession`.
   The search runs in the background; Studio's analysis in a second worker, so a 20,000-request file never waits.
   The page preview no longer loads images or styles from the recorded site (nothing leaves the PC).
+- Step 5, Correlate this: for a value to correlate, the extractor Script Studio would write — VuGen Web HTTP/HTML or
+  DevWeb, made by Studio's own code writers (JSON field, HTML field, header, cookie, or left / right boundaries that
+  capture exactly the value as the first match), the parameter name, the requests that use it, and warnings (sent
+  URL-encoded, a long boundary for a field listed more than once). "Add to Script Studio", then "Continue in Script
+  Studio": Studio opens the same file in the format chosen here, analyses it and applies the correlations, marked
+  "From HAR Explorer" — with the uses the Explorer found (Studio's own search misses URL-encoded form values).
+  Proof: the WebTours sample, `userSession` + `outboundFlight` added here, replayed in the real VuGen and DevWeb
+  engines through the test proxy — both values captured and sent back.
+- With nothing added, the button says "Open in Script Studio" (Studio opens the file; you click Analyse there) and Studio
+  says where the file came from; "Its source is not in this recording" explains why there is nothing to correlate.
+- Fixed BUG-112: servers renamed in the Recorder now reach Script Studio ("Correlate in Script Studio").
 - The Recorder's repair of an END bookmark without its START moved, unchanged, into the shared engine file so both
   tools use the same code (Recorder output byte for byte the same).
 

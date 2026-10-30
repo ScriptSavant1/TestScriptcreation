@@ -13,7 +13,9 @@
  *               { type: "error", message }
  * Requests are named by their number in the file (n = index + 1), the same numbers the page shows. */
 "use strict";
-importScripts("../VuGen-Script-Studio-constants.js", "../VuGen-Script-Studio-correlation.js", "../studio-advisor.js");
+// In Studio's order; studio-codegen.js and shared/vugen-codegen.js write the extractor code exactly as Studio writes it
+importScripts("../shared/vugen-codegen.js", "../VuGen-Script-Studio-constants.js", "../VuGen-Script-Studio-correlation.js",
+  "../studio-advisor.js", "../studio-codegen.js");
 
 var E = [];   // per request: { n, url, method, query, reqH, reqBody, params, resH, resBody, mime }
 
@@ -114,7 +116,7 @@ function locate(v) {
       if (x.resBody && x.resBody.indexOf(s) >= 0) {
         var jp2 = !f.form && jsonPath(x.resBody, v);
         var hid = !jp2 && /html/i.test(x.mime) && new RegExp("name=[\"']([^\"']+)[\"'][^>]*value=[\"']" + escRe(s)).exec(x.resBody);
-        push("res", jp2 ? "JSON " + jp2 : hid ? "HTML hidden field " + hid[1] : "response body", jp2 ? "json" : "text", f, jp2 ? { path: jp2 } : hid ? { field: hid[1] } : null);
+        push("res", jp2 ? "JSON " + jp2 : hid ? "HTML field " + hid[1] : "response body", jp2 ? "json" : "text", f, jp2 ? { path: jp2 } : hid ? { field: hid[1] } : null);
       }
     });
   });
@@ -150,9 +152,87 @@ function investigate(v) {
   else kind = later.length ? "correlate" : aside.outside.length ? "outonly" : "unused";
   var also = back.filter(function (b) { return b !== src && (!src || b.n > src.n); }).slice(0, 8);
   return { value: v, kind: kind, src: src, later: later, uses: uses, also: also, missing: missing,
+    corr: kind === "correlate" ? correlation(v, src, later) : null,
     referer: aside.referer, outside: aside.outside.slice(0, 20), outsideCount: aside.outside.length,
     hitNs: (src ? [src] : []).concat(src ? later : uses).map(function (h) { return h.n; }), studio: !!STUDIO[v],   // marked in the list
     forms: variants(v).map(function (f) { return f.s; }) };
+}
+
+// ── "Correlate this": the extractor, in Script Studio's own correlation shape {name, extractorType, extractorConfig},
+//    written by Studio's own code writers (webHttpCorrCode / devwebExtractorDecl) ──
+// The value between the first `lb` and the next `rb` — what a boundary extractor (first match, Ord=1) captures
+function firstMatch(text, lb, rb) {
+  var a = text.indexOf(lb); if (a < 0) return null;
+  a += lb.length; var b = rb ? text.indexOf(rb, a) : -1;
+  return b < 0 ? null : text.slice(a, b);
+}
+// Boundaries around the value at `at` that capture exactly it as the FIRST match: start from `lb0`, or the text just
+// before the value, and widen to the left (same line) until the first match is the value itself
+function safeBoundaries(text, at, s, lb0, rb0) {
+  var after = text.slice(at + s.length, at + s.length + 12);
+  var rb = rb0 || ((/^["'&;,<\s}\])]/.exec(after) || [after.charAt(0)])[0] || "");
+  if (!rb) return null;
+  var lineStart = text.lastIndexOf("\n", at - 1) + 1;
+  var minLen = lb0 && text.slice(at - lb0.length, at) === lb0 ? lb0.length : Math.min(6, at - lineStart);
+  for (var len = Math.max(1, minLen); at - len >= Math.max(0, lineStart - 0) && len <= 120; len++) {
+    var lb = text.slice(at - len, at);
+    if (firstMatch(text, lb, rb) === s) return { lb: lb, rb: rb };
+  }
+  return null;
+}
+function safeName(n) { n = String(n || "value").replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+|_+$/g, ""); return /^[A-Za-z]/.test(n) ? n : "c_" + (n || "value"); }
+function correlation(v, src, later) {
+  var x = E[src.n - 1]; if (!x) return null;
+  var s = (variants(v).filter(function (f) { return f.form === src.enc; })[0] || { s: v }).s;   // the value as it is in the response
+  var type, cfg, name, label, warn = [];
+  if (src.kind === "json" && src.path) {
+    type = "jsonpath"; cfg = { path: src.path }; name = _advSuggestName(src.path, null, v); label = "JSON field " + src.path;
+  } else if (src.kind === "setcookie") {
+    var cn = src.where.split(" ")[1];
+    type = "cookie"; cfg = { cookieName: cn }; name = _advSuggestName(null, cn, v); label = "the " + cn + " cookie (Set-Cookie)";
+  } else if (src.header) {
+    var h = x.resH.filter(function (y) { return y.name === src.header && String(y.value).indexOf(s) >= 0; })[0];
+    var hv = String(h.value), at = hv.indexOf(s), suffix = hv.slice(at + s.length);
+    type = "boundary_header"; cfg = { lb: h.name + ": " + hv.slice(0, at), rb: "\r\n" };
+    name = src.kind === "location" ? _advSuggestName(null, null, v) : _advSuggestName(null, h.name, v);
+    label = "the " + h.name + " header";
+    if (suffix) warn.push("The value is followed by more text in the " + h.name + " header (“" + suffix.slice(0, 30) + "”) — the extractor reads to the end of the line; check the captured value.");
+  } else {
+    var text = x.resBody, at2 = text.indexOf(s), b = null;
+    if (src.field && text.indexOf('name="' + src.field + '" value="' + s + '"') >= 0 && firstMatch(text, 'name="' + src.field + '" value="', '"') === s) {
+      type = "html"; cfg = { selector: "input[name='" + src.field + "']", attr: "value" }; label = "the HTML field " + src.field;   // Studio's own selector form
+    } else {
+      var ctx = advPasteDetect(text, s) || {};
+      if (ctx.extType === "jsonpath" && ctx.path && !src.enc) { type = "jsonpath"; cfg = { path: ctx.path }; label = "JSON field " + ctx.path; }
+      else {
+        b = safeBoundaries(text, at2, s, ctx.extType === "boundary" && ctx.contextType !== "generic" ? ctx.lb : null, ctx.extType === "boundary" && ctx.contextType !== "generic" ? ctx.rb : null);
+        if (!b) return { error: "No left / right boundary in this response captures exactly this value — use Paste & Detect in Script Studio." };
+        type = "boundary"; cfg = { lb: b.lb, rb: b.rb }; label = ctx.contextLabel && ctx.contextType !== "generic" ? ctx.contextLabel : "the response body";
+      }
+      name = ctx.varName || _advSuggestName(null, null, v);
+      if (b && b.lb.length > 40) warn.push("The left boundary is long because the page has the same field more than once (for example a list of options) — it captures the one in the same place as in the recording. For a choice from a list, a random pick may suit a load test better.");
+    }
+    if (src.field) name = src.field;   // an HTML field: its own name says most
+  }
+  if (src.enc) warn.push("In the response the value is " + src.enc + " — the captured text is in that form.");
+  var enc = later.filter(function (u) { return u.enc; });
+  if (enc.length) warn.push("It is sent " + enc[0].enc + " in " + enc.map(function (u) { return "#" + u.n; }).join(", ") + " — check that the script encodes the captured value there.");
+  name = safeName(name);
+  var c = { name: name, extractorType: type, extractorConfig: cfg };
+  // where it is sent back, in Script Studio's usage form (Studio's own search misses encoded form values, for example)
+  var uses = later.map(function (u) {
+    var y = E[u.n - 1], m;
+    if ((m = /^form field (.+)$/.exec(u.where))) return { si: y.si, location: "body_form", jsonPath: m[1] };
+    if ((m = /^JSON body (.+)$/.exec(u.where))) return { si: y.si, location: "body_json", jsonPath: m[1] };
+    if ((m = /^query parameter (.+)$/.exec(u.where))) return { si: y.si, location: "query", jsonPath: m[1] };
+    if ((m = /^header (.+)$/.exec(u.where))) return { si: y.si, location: "header", jsonPath: m[1] };
+    if (u.where === "address") return { si: y.si, location: "url_path", jsonPath: null };
+    return null;   // cookies: VuGen and DevWeb send them by themselves
+  }).filter(Boolean);
+  return {
+    name: name, extractorType: type, extractorConfig: cfg, label: label, warn: warn, studioIdx: x.si, uses: uses,
+    vugen: webHttpCorrCode(c, "\t"), devweb: devwebExtractorDecl(c),
+  };
 }
 
 // sent back after request `after` by a request in the script — not as a cookie, not in the Referer / Origin copy of
@@ -248,7 +328,7 @@ onmessage = function (ev) {
       return;
     }
     if (d.type === "load") {
-      var har = JSON.parse(d.text);
+      var har = JSON.parse(d.text), withReq = 0;
       OUT = {}; (d.out || []).forEach(function (n) { OUT[n] = true; });
       SENT = null;
       E = ((har.log && har.log.entries) || []).map(function (e, i) {
@@ -263,6 +343,8 @@ onmessage = function (ev) {
       }).map(function (x, i) {
         // a page / API answer the HAR kept no body of (served from the browser's cache, or not kept)
         var rs = (har.log.entries[i] || {}).response || {};
+        // the request's index in Script Studio's list (Studio skips entries without a request)
+        x.si = withReq; if (har.log.entries[i] && har.log.entries[i].request) withReq++;
         x.noBody = !x.resBody && rs.status === 200 && x.method !== "HEAD" && /html|json|xml|javascript|text\/plain/i.test(x.mime);
         return x;
       });

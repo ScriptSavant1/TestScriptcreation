@@ -18,7 +18,8 @@ const PUB = path.resolve(__dirname, '../../src/web/public');
 const read = (f) => fs.readFileSync(path.join(PUB, f), 'utf-8').replace(/^﻿/, '');
 
 function loadWorker() {
-  const studio = ['VuGen-Script-Studio-constants.js', 'VuGen-Script-Studio-correlation.js', 'studio-advisor.js'].map(read).join('\n');
+  // the worker's importScripts, in its order
+  const studio = ['shared/vugen-codegen.js', 'VuGen-Script-Studio-constants.js', 'VuGen-Script-Studio-correlation.js', 'studio-advisor.js', 'studio-codegen.js'].map(read).join('\n');
   const out = [];
   // eslint-disable-next-line no-new-func
   const f = new Function('importScripts', 'postMessage', 'onmessage', studio + '\n' + read('portal/har-explorer-worker.js') + '\nreturn function (m) { onmessage({ data: m }); };');
@@ -89,10 +90,10 @@ describe('HAR Explorer — Find a value', () => {
     expect(r.later.map((u) => `${u.n} ${u.where}`)).toEqual(['3 header X-Session-Id', '5 cookie SESSION', '6 cookie SESSION', '7 cookie SESSION']);
   });
 
-  test('an HTML hidden field (CSRF): captured from the field, sent back in a header, a cookie and a form field', () => {
+  test('an HTML field (CSRF): captured from the field, sent back in a header, a cookie and a form field', () => {
     const r = w.find(CSRF);
     expect(r.kind).toBe('correlate');
-    expect([r.src.n, r.src.where]).toEqual([1, 'HTML hidden field _csrf']);
+    expect([r.src.n, r.src.where]).toEqual([1, 'HTML field _csrf']);
     expect(r.later.map((u) => u.where)).toEqual(['header X-XSRF-TOKEN', 'cookie XSRF-TOKEN', 'form field _csrf']);
   });
 
@@ -194,5 +195,79 @@ describe('HAR Explorer — agrees with Script Studio', () => {
       expect(r.studio).toBe(true);
       expect(r.src && r.src.n).toBe(st.n);
     });
+  });
+});
+
+describe('HAR Explorer — Correlate this', () => {
+  const w = loadWorker();
+  w.load(shop());
+  const parsesAsJs = (code) => { expect(() => new Function('load', 'return [' + code + '];')).not.toThrow(); };   // eslint-disable-line no-new-func
+
+  test('a JSON field → Studio\'s JSON extractor, written by Studio\'s own code writers', () => {
+    const c = w.find(SID).corr;
+    expect([c.name, c.extractorType, c.extractorConfig]).toEqual(['sessionId', 'jsonpath', { path: '$.session.sessionId' }]);
+    expect(c.vugen).toContain('web_reg_save_param_json(');
+    expect(c.vugen).toContain('"QueryString=$.session.sessionId"');
+    expect(c.devweb).toBe('new load.JsonPathExtractor("sessionId", "$.session.sessionId")');
+    expect(c.studioIdx).toBe(1);   // request #2 is Studio's entries1[1]
+  });
+
+  test('an HTML field → Studio\'s HTML extractor (selector in single quotes, as Studio writes it)', () => {
+    const c = w.find(CSRF).corr;
+    expect([c.name, c.extractorType, c.extractorConfig]).toEqual(['csrf', 'html', { selector: "input[name='_csrf']", attr: 'value' }]);
+    expect(c.vugen).toContain('"LB=name=\\"_csrf\\" value=\\""');
+    parsesAsJs(c.devweb);
+  });
+
+  test('a URL-encoded use is flagged; a redirect value gets a header extractor', () => {
+    const cur = w.find(CUR).corr;
+    expect(cur.extractorType).toBe('jsonpath');
+    expect(cur.warn.join(' ')).toMatch(/sent URL-encoded in #4/);
+    const order = w.find('O-55102').corr;
+    expect([order.extractorType, order.extractorConfig]).toEqual(['boundary_header', { lb: 'Location: /order/', rb: '\r\n' }]);
+    parsesAsJs(order.devweb);
+  });
+
+  test('boundaries capture exactly the value as the FIRST match — widened when the same field is on the page twice', () => {
+    const r = loadWorker();
+    r.load({ log: { entries: [
+      entry('https://a.example.com/flights', { rt: 'Document', mime: 'text/html',
+        text: '<tr><td><input type="radio" name="flight" value="101;437;02/27/2026"></td></tr>\n<tr class="b"><td><input type="radio" name="flight" value="201;437;02/27/2026"></td></tr>' }),
+      entry('https://a.example.com/book', { method: 'POST', rt: 'Document', bodyMime: 'application/x-www-form-urlencoded', body: 'flight=201;437;02/27/2026', params: [{ name: 'flight', value: '201;437;02/27/2026' }] }),
+    ] } });
+    const c = r.find('201;437;02/27/2026').corr;
+    expect(c.extractorType).toBe('boundary');
+    const text = '<tr><td><input type="radio" name="flight" value="101;437;02/27/2026"></td></tr>\n<tr class="b"><td><input type="radio" name="flight" value="201;437;02/27/2026"></td></tr>';
+    const a = text.indexOf(c.extractorConfig.lb) + c.extractorConfig.lb.length;
+    expect(text.slice(a, text.indexOf(c.extractorConfig.rb, a))).toBe('201;437;02/27/2026');   // what VuGen / DevWeb capture (Ord=1)
+    expect(c.name).toBe('flight');
+    parsesAsJs(c.devweb);
+  });
+});
+
+describe('Script Studio — a correlation handed over by the HAR Explorer', () => {
+  function studio() {
+    const src = ['shared/vugen-codegen.js', 'VuGen-Script-Studio-constants.js', 'VuGen-Script-Studio-correlation.js', 'studio-advisor.js', 'studio-codegen.js'].map(read).join('\n');
+    // eslint-disable-next-line no-new-func
+    return new Function(src + '\nreturn { S, parseHar, advisorAddManual, advisorToCorrelation, webHttpCorrCode, devwebExtractorDecl };')();
+  }
+  test('keeps the exact extractor (advisorAddManual + _explorer → advisorToCorrelation) and finds the uses', () => {
+    const X = studio(), w = loadWorker(), har = shop();
+    w.load(har);
+    const c = w.find(CSRF).corr;
+    X.S.entries1 = X.parseHar(har); X.S.advisorCandidates = [];
+    const cand = X.advisorAddManual(c.studioIdx, 'boundary', '', c.name, CSRF);
+    cand._explorer = { extractorType: c.extractorType, extractorConfig: c.extractorConfig };
+    const corr = X.advisorToCorrelation(cand);
+    expect([corr.extractorType, corr.extractorConfig, corr.sourceIdx]).toEqual([c.extractorType, c.extractorConfig, c.studioIdx]);
+    expect(X.webHttpCorrCode(corr, '\t')).toBe(c.vugen);                    // the script gets exactly what the Explorer showed
+    expect(X.devwebExtractorDecl(corr)).toBe(c.devweb);
+    expect(corr.usages.length).toBeGreaterThan(0);                           // Studio found where it is sent back
+  });
+  test('Studio\'s own manual correlations are unchanged (no _explorer)', () => {
+    const X = studio();
+    X.S.entries1 = X.parseHar(shop()); X.S.advisorCandidates = [];
+    const corr = X.advisorToCorrelation(X.advisorAddManual(1, 'boundary', 'value="', 'v1', CSRF));
+    expect([corr.extractorType, corr.extractorConfig]).toEqual(['boundary', { lb: 'value="', rb: '' }]);
   });
 });
