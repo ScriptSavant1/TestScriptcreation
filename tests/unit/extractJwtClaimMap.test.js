@@ -24,6 +24,8 @@
  * (see scriptGenerator.js's `_primaryOut`).
  */
 
+const fs = require('fs');
+const path = require('path');
 const CustomScriptParser = require('../../src/analyzers/customScriptParser.js');
 
 describe('CustomScriptParser.extractJwtClaimMap() — output variable detection', () => {
@@ -94,8 +96,10 @@ describe('CustomScriptParser.extractJwtClaimMap() — output variable detection'
     expect(map.output).toBe('jwt_token');
   });
 
-  test('the bundled PS256 example collection stores its JWT as jwt_token (BUG-081)', () => {
-    const col = require('../../collection-examples/jwt_ps256_20api_collection.json');
+  // collection-examples/ is local only, so a fresh clone skips this one; the test above covers the same pattern
+  const PS256_EXAMPLE = path.join(__dirname, '../../collection-examples/jwt_ps256_20api_collection.json');
+  (fs.existsSync(PS256_EXAMPLE) ? test : test.skip)('the PS256 example collection stores its JWT as jwt_token (BUG-081)', () => {
+    const col = require(PS256_EXAMPLE);
     const scripts = [];
     (function walk(items) {
       for (const it of items || []) {

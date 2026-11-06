@@ -144,6 +144,7 @@ Versions up to v2.10.13 are in [BUGS-ARCHIVE.md](BUGS-ARCHIVE.md).
 | GOV-001 | Unit tests | Created 3 new unit test suites in `tests/unit/`: `harBuilder.test.js` (56 tests — HarBuilder lifecycle, build(), field stripping, transaction→pages), `advisorCsrfScan.test.js` (33 tests — _advCsrfScan() CSRF field detection, backward scan, deduplication), `studioCodegenDates.test.js` (46 tests — detectDateSubstitution() ISO/epoch/RFC1123 date patterns). Total test suite: 165 tests across 5 files, all passing. |
 | GOV-002 | DECISIONS.md | Created `Docs/DECISIONS.md` with 7 ADRs: ADR-001 studio-advisor independence rule, ADR-002 bookmarklet approach, ADR-003 CDP via debugger API, ADR-004 in-memory FS privacy model, ADR-005 Phase 4B monolith split, ADR-006 extension distribution via ZIP (incl. corporate browser policy finding), ADR-007 `new Function()` test loading strategy. |
 | GOV-003 | regression-tests/ | Created `regression-tests/` folder structure: `README.md` (prioritised capture list: OAuth2+JWT, Bruno YAML Event Storage Rule, JMX multi-thread-group, HAR CSRF, DPoP, array correlation), `run-all.sh` (shell runner skeleton), `postman/` + `har-studio/` + `jmx/` placeholder subdirectories. No test fixtures yet — see README for next steps. |
+| GOV-004 | Unit tests | `extractJwtClaimMap.test.js`: the test that reads the local-only `collection-examples` file now skips when the file is absent, so a fresh clone has no failing test. Where the file exists it still runs. The inline BUG-081 test keeps the same pattern covered everywhere. |
 
 ## Adding a bug
 
