@@ -1,0 +1,240 @@
+/* Script Studio page (portal design) — layout behaviour only. The Studio scripts (studio-ui.js,
+ * studio-app.js …) are loaded unchanged and do all the work; this file adds:
+ *  - show / hide the Review column and the Script column on the results page (one always stays,
+ *    remembered per browser — localStorage "perfx-studio-ui")
+ *  - Escape closes the "Add Custom Correlation" and "Paste & Detect" dialogs
+ *  - keyboard focus ring on the drop zones (the file input inside them is the focus target) */
+(function () {
+  "use strict";
+  var KEY = "perfx-studio-ui";
+  var prefs = {};
+  try { prefs = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { prefs = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch (e) { /* private window */ } }
+
+  var ws = document.getElementById("ss-ws");
+  var bReview = document.getElementById("btn-hide-review");
+  var bScript = document.getElementById("btn-hide-script");
+  function apply() {
+    ws.classList.toggle("no-review", !!prefs.noReview);
+    ws.classList.toggle("no-script", !!prefs.noScript);
+    bReview.setAttribute("aria-pressed", String(!prefs.noReview));
+    bScript.setAttribute("aria-pressed", String(!prefs.noScript));
+  }
+  bReview.addEventListener("click", function () {
+    prefs.noReview = !prefs.noReview;
+    if (prefs.noReview) prefs.noScript = false;   // never hide both
+    save(); apply();
+  });
+  bScript.addEventListener("click", function () {
+    prefs.noScript = !prefs.noScript;
+    if (prefs.noScript) prefs.noReview = false;
+    save(); apply();
+  });
+  apply();
+
+  // ── dialogs: focus moves in on open, Tab stays inside, Escape closes, focus returns on close ──
+  var DIALOGS = [
+    { overlay: "adv-modal-overlay", open: "openAdvisorModal", close: "closeAdvisorModal", first: "adv-src-filter" },
+    { overlay: "pc-modal-overlay", open: "openPasteCorrelate", close: "closePasteCorrelate", first: "pc-response-body" },
+    { overlay: "host-modal-overlay", open: "openHostRename", close: "closeHostRename", first: "host-modal-inp" },
+  ];
+  function isOpen(d) { var o = document.getElementById(d.overlay); return o && o.style.display !== "none"; }
+  DIALOGS.forEach(function (d) {
+    var open = window[d.open], close = window[d.close];
+    if (typeof open !== "function" || typeof close !== "function") return;
+    window[d.open] = function () {
+      d.back = document.activeElement;
+      var r = open.apply(this, arguments);
+      setTimeout(function () { var f = document.getElementById(d.first); if (f && isOpen(d)) f.focus(); }, 30);
+      return r;
+    };
+    window[d.close] = function () {
+      var r = close.apply(this, arguments);
+      if (d.back && document.contains(d.back)) d.back.focus();
+      d.back = null;
+      return r;
+    };
+  });
+  document.addEventListener("keydown", function (e) {
+    var d = DIALOGS.filter(isOpen)[0];
+    if (!d) return;
+    if (e.key === "Escape") { window[d.close](); return; }
+    if (e.key !== "Tab") return;
+    var box = document.querySelector("#" + d.overlay + " .adv-modal");
+    var items = Array.prototype.filter.call(box.querySelectorAll("button, input, select, textarea, [tabindex]:not([tabindex='-1'])"),
+      function (el) { return !el.disabled && el.offsetParent !== null; });
+    if (!items.length) return;
+    var first = items[0], last = items[items.length - 1];
+    if (!box.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  // ── keyboard for controls the Studio scripts draw as plain divs (filter chips, code tabs, panel
+  //    headers): reachable with Tab, Enter / Space clicks them ──
+  var KB = ".rt-filter-row, .code-tab, .adv-panel-hdr, .adv-inspector-hdr, .corr-panel-hdr";
+  function markKeyboard(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll(KB), function (el) {
+      if (!el.hasAttribute("tabindex")) { el.setAttribute("tabindex", "0"); el.setAttribute("role", "button"); }
+    });
+  }
+  markKeyboard();
+  new MutationObserver(function () { markKeyboard(); }).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var el = e.target.closest && e.target.closest(KB);
+    if (!el || e.target !== el) return;
+    e.preventDefault();
+    el.click();
+  });
+
+  // ── light syntax colouring of the script preview (same as the Recorder): the Studio scripts write plain
+  //    text into #code-body; this only wraps tokens in spans, so textContent stays the exact script ──
+  var HL = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\[\s\S])*`)|(#\w+)|\b(return|const|let|var|async|await|new|function|if|else|for|while|try|catch|throw|typeof|null|true|false|int|char|void|LAST|ENDITEM|ITEMDATA|EXTRARES)\b|\b([A-Za-z_$][\w$]*)(?=\s*\()/g;
+  // built from text nodes, not HTML, so the text is kept byte for byte (HTML parsing would turn \r\n into \n,
+  // and Copy reads textContent)
+  function colour(text) {
+    var frag = document.createDocumentFragment(), last = 0, m, n = 0;
+    HL.lastIndex = 0;
+    while ((m = HL.exec(text))) {
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var span = document.createElement("span");
+      span.className = m[1] ? "c" : m[2] ? "s" : (m[3] || m[4]) ? "k" : "f";
+      span.textContent = m[0];
+      frag.appendChild(span); n++;
+      last = HL.lastIndex;
+    }
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    return n ? frag : null;
+  }
+  var code = document.getElementById("code-body");
+  if (code) {
+    var painted = null;
+    var paint = function () {
+      if (code.firstElementChild) return;              // already coloured (or not plain text)
+      var t = code.textContent;
+      if (!t || t.length >= 400000 || t === painted) return;
+      painted = t;                                      // a file with nothing to colour is not repainted (no loop)
+      var frag = colour(t);
+      if (frag) { code.textContent = ""; code.appendChild(frag); }
+    };
+    new MutationObserver(paint).observe(code, { childList: true, characterData: true, subtree: true });
+    paint();
+  }
+
+  ["dz1", "dz2"].forEach(function (id) {
+    var dz = document.getElementById(id), inp = dz && dz.querySelector("input[type=file]");
+    if (!inp) return;
+    inp.addEventListener("focus", function () { dz.classList.add("kb-focus"); });
+    inp.addEventListener("blur", function () { dz.classList.remove("kb-focus"); });
+  });
+})();
+
+// Drop .har / NetLog .json files anywhere on the start page: the first free recording slot (1, then 2) gets
+// each file, through the slot's own file input — the same as choosing it in the box.
+(function () {
+  "use strict";
+  if (!window.PerfxDrop) return;
+  var upload = document.getElementById("ph-upload");
+  function slotInput(n) { var dz = document.getElementById("dz" + n); return dz && dz.querySelector("input[type=file]"); }
+  function loaded(n) { var dz = document.getElementById("dz" + n); return !!dz && dz.classList.contains("loaded"); }
+  window.PerfxDrop.attach({
+    when: function () { return !!upload && upload.offsetParent !== null; },
+    label: function () { return ["Drop to load", "One or two .har recordings"]; },
+    route: function (files, ext) {
+      var recs = files.filter(function (f) { return ext(f) === ".har" || ext(f) === ".json"; }).slice(0, 2);
+      var free = [1, 2].filter(function (n) { return !loaded(n); });
+      if (!free.length) free = [1, 2];
+      return recs.map(function (f, i) { return { input: slotInput(free[i] || free[0]), files: [f] }; });
+    },
+  });
+})();
+
+// Remember the output format per browser (localStorage "perfx-studio-fmt"): restored through setFmt(), so it is
+// exactly like clicking the button; nothing saved = the usual default (DevWeb).
+(function () {
+  "use strict";
+  var KEY = "perfx-studio-fmt", OK = ["webhttp", "devweb"];
+  var orig = window.setFmt;
+  if (typeof orig !== "function") return;
+  try { var f = localStorage.getItem(KEY); if (OK.indexOf(f) !== -1) orig(f); } catch (e) { /* storage blocked */ }
+  window.setFmt = function (f) {
+    var r = orig.apply(this, arguments);
+    try { if (OK.indexOf(f) !== -1) localStorage.setItem(KEY, f); } catch (e) { /* storage blocked */ }
+    return r;
+  };
+})();
+
+// Step bar (Add recordings · Configure · Analyse · Download): shows where the user is — display only, it changes
+// nothing. Setup screen: step 1 until recording 1 is loaded, then step 2. Results: step 3, step 4 once a download
+// button was used. The bar sits under the header band on the setup screen and at the top of the results screen.
+(function () {
+  "use strict";
+  var bar = document.getElementById("ss-steps");
+  var up = document.getElementById("ph-upload"), res = document.getElementById("ph-res");
+  if (!bar || !up || !res) return;
+  var home = { parent: bar.parentNode, next: bar.nextSibling };
+  var downloaded = false;
+  function active(el) { return el.classList.contains("active"); }
+  function update() {
+    var dz1 = document.getElementById("dz1");
+    var cur;
+    if (active(res)) cur = downloaded ? 4 : 3;
+    else { downloaded = false; cur = dz1 && dz1.classList.contains("loaded") ? 2 : 1; }
+    if (active(res) && bar.parentNode !== res) res.insertBefore(bar, res.firstChild);
+    if (!active(res) && bar.parentNode !== home.parent) home.parent.insertBefore(bar, home.next);
+    Array.prototype.forEach.call(bar.querySelectorAll("li"), function (li) {
+      var n = +li.getAttribute("data-step");
+      li.classList.toggle("is-done", n < cur || (n === 4 && downloaded));
+      li.classList.toggle("is-cur", n === cur && !(n === 4 && downloaded));
+      if (n === cur) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+    });
+  }
+  var mo = new MutationObserver(update);
+  [up, res, document.getElementById("ph-proc"), document.getElementById("dz1")].forEach(function (el) {
+    if (el) mo.observe(el, { attributes: true, attributeFilter: ["class"] });
+  });
+  res.addEventListener("click", function (e) {
+    if (e.target.closest("#dl-bar button")) { downloaded = true; setTimeout(update, 0); }
+  });
+  update();
+})();
+
+// Studio's state object S is declared with const, so other pages in the portal (the Recorder's and the HAR
+// Explorer's "continue in Script Studio") cannot reach it as window.S — this is the one way in.
+window.PerfxStudio = { state: function () { return S; } };
+
+// "Start recording" (portal/record-live.js draws the window and the live view): the live view takes the place of the
+// set-up cards while recording; the saved recording loads into Recording 1, or Recording 2 when 1 is already loaded
+// (record the same journey twice for diff mode) — through loadFile(), as a dropped file. Analyse stays the user's click.
+(function () {
+  var btn = document.getElementById("ss-rec-btn");
+  if (!btn || !window.PerfxRecordLive) return;
+  var up = document.getElementById("ph-upload"), grid = up && up.querySelector(".ss-grid");
+  var sub = document.getElementById("ss-rec-sub");
+  function loaded(n) { var dz = document.getElementById("dz" + n); return !!dz && dz.classList.contains("loaded"); }
+  function slot() { return loaded(1) && !loaded(2) ? 2 : 1; }
+  function label() {
+    sub.textContent = slot() === 2
+      ? "Record the same journey again with different data — it loads as Recording 2 (diff mode)."
+      : loaded(1) ? "Both recordings are loaded — a new recording replaces Recording 1."
+      : "Edge or Chrome opens on your desktop — the recording loads here as Recording 1.";
+  }
+  var target = 1;
+  window.PerfxRecordLive.mount({
+    host: grid.parentNode,
+    chips: document.getElementById("ss-rec-chips"),
+    subtitle: "Choose what to open and how. The recording loads in Script Studio when you stop.",
+    isIdle: function () { return up.classList.contains("active") && !grid.hidden; },
+    before: function () { grid.hidden = true; },
+    after: function () { grid.hidden = false; },
+    onSaved: function (file) {
+      if (typeof loadFile !== "function") return;
+      loadFile(file, target);
+      if (typeof showToast === "function") setTimeout(function () { showToast("Loaded as Recording " + target + " — choose the format and click Analyse.", "success", 6000); }, 600);
+    },
+  });
+  btn.addEventListener("click", function () { target = slot(); window.PerfxRecordLive.open(); });
+  ["dz1", "dz2"].forEach(function (id) { var dz = document.getElementById(id); if (dz) new MutationObserver(label).observe(dz, { attributes: true, attributeFilter: ["class"] }); });
+  label();
+})();

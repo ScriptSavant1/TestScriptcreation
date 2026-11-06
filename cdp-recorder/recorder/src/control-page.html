@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDP Recorder</title>
+<style>
+:root {
+  --bg: #ffffff; --bg-subtle: #f5f7fa; --bg-card: #ffffff; --border: #dde1e8;
+  --text: #1a1d24; --text-muted: #6b7280; --accent: #0070f3; --accent-hover: #005cc5;
+  --success: #16a34a; --warning: #d97706; --danger: #dc2626;
+  --tx-color: #7c3aed; --tx-hover: #6d28d9; --radius-sm: 4px; --radius-md: 8px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1117; --bg-subtle: #1a1d24; --bg-card: #1e2230; --border: #2e3347;
+    --text: #e8eaf0; --text-muted: #8892a4; --accent: #3b9eff; --accent-hover: #66b3ff;
+    --success: #34d26a; --warning: #f5a623; --danger: #f05252;
+    --tx-color: #a78bfa; --tx-hover: #c4b5fd;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12.5px; line-height: 1.4; background: var(--bg); color: var(--text);
+  margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  height: 100vh; overflow-y: auto;
+}
+.hidden { display: none !important; }
+.ask-site { font-family: 'Cascadia Code', Consolas, monospace; font-size: 12px; font-weight: 700; word-break: break-all;
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-subtle); }
+/* Transaction trail is the one thing that grows unboundedly (one chip per
+   recorded transaction) — it must scroll within its own bounded area, not
+   push the Stop/Transaction buttons below out of the visible toolbar. A
+   recording with 20 transactions previously pushed those buttons entirely
+   off-screen; confirmed with a Playwright screenshot before fixing this.
+   Everything else gets flex-shrink:0 so the flex layout's automatic
+   shrink-to-fit only ever squeezes the trail, not the fixed chrome around
+   it — without this, the browser shrinks whichever flex item has the
+   weakest minimum size when content overflows, which turned out to be the
+   chip list itself (collapsing to 0px), not the header/buttons as intended. */
+.header, #errorBanner, #warningBanner, #countCard, #namingCard, #harReadyCard, #actionArea, .notice, .footer {
+  flex-shrink: 0;
+}
+/* min-height keeps the label + one row of chips visible; previously min-height:0
+   let the card shrink below its own content when the toolbar was full (e.g. a
+   warning banner + "Recording complete"), so the chips spilled out of the card. */
+#trailCard { display: flex; flex-direction: column; min-height: 78px; flex: 0 1 auto; }
+.trail-chips { overflow-y: auto; max-height: 110px; min-height: 36px; padding-right: 2px; flex-shrink: 1; }
+.header { display: flex; align-items: center; gap: 8px; }
+.header-title { font-weight: 600; font-size: 13px; flex: 1; }
+.status-badge { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--bg-subtle); color: var(--text-muted); }
+.status-badge.recording { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.status-badge.tx { background: color-mix(in srgb, var(--tx-color) 18%, transparent); color: var(--tx-color); }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status-badge.recording .status-dot { animation: pulse 1.4s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; box-shadow: var(--shadow-sm); }
+.count-row { display: flex; gap: 16px; }
+.count-item { text-align: center; flex: 1; }
+.count-value { font-size: 20px; font-weight: 700; }
+.count-label { font-size: 9.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 1px; }
+.settled-pill { margin-top: 6px; text-align: center; font-size: 11px; color: var(--success); font-weight: 600; }
+
+.naming-area { display: flex; flex-direction: column; gap: 5px; }
+.naming-label { font-size: 11px; color: var(--text-muted); }
+.naming-input { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text); font-size: 12.5px; }
+.naming-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.trail-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+/* flex-start: without it, wrapped rows stretch to fill min-height and chips render oversized. */
+.trail-chips { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; align-items: flex-start; }
+.trail-chip { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px; font-size: 11px; }
+
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+/* pinned over the top of the toolbar, so its buttons are always inside this small window */
+#askCard { position: fixed; top: 44px; left: 10px; right: 10px; z-index: 10; border-color: var(--accent); box-shadow: 0 10px 30px rgba(15, 23, 42, .28); }
+body.asking > :not(#askCard):not(.header) { opacity: .35; pointer-events: none; }
+#askText { font-size: 12.5px; color: var(--text); font-weight: 600; }
+.ask-note { font-size: 11px; color: var(--text-muted); line-height: 1.45; }
+.ask-row { margin-top: 10px; }
+#askText { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.saved-countdown { margin-top: 8px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.btn { flex: 1; min-width: 90px; padding: 8px 10px; border: none; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-tx { background: var(--tx-color); color: white; }
+.btn-tx:hover:not(:disabled) { background: var(--tx-hover); }
+.btn-tx-end { background: var(--bg-subtle); color: var(--tx-color); border: 1px solid var(--tx-color); }
+.btn-secondary { background: var(--bg-subtle); color: var(--text); border: 1px solid var(--border); }
+
+.har-ready-title { font-weight: 600; margin-bottom: 4px; font-size: 12.5px; }
+.har-summary { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; word-break: break-all; }
+
+.error-banner { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); padding: 10px 12px; border-radius: var(--radius-sm); font-size: 13px; }
+.warning-banner { background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; padding: 8px 10px; border-radius: var(--radius-sm); font-size: 11.5px; }
+.notice { font-size: 10.5px; color: var(--text-muted); background: var(--bg-subtle); border-radius: var(--radius-sm); padding: 7px 9px; }
+.footer { text-align: center; font-size: 10px; color: var(--text-muted); padding-top: 2px; }
+.footer a { color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <span class="header-title">CDP Recorder</span>
+    <div id="statusBadge" class="status-badge">
+      <span class="status-dot"></span>
+      <span id="statusText">Idle</span>
+    </div>
+  </div>
+
+  <div id="errorBanner" class="error-banner hidden"></div>
+  <div id="warningBanner" class="warning-banner hidden"></div>
+
+  <div id="countCard" class="card hidden">
+    <div class="count-row">
+      <div class="count-item"><div id="countActive" class="count-value">0</div><div class="count-label">Active</div></div>
+      <div class="count-item"><div id="countBackground" class="count-value">0</div><div class="count-label">Background</div></div>
+    </div>
+    <div id="settledPill" class="settled-pill hidden">Settled — safe to start a transaction</div>
+  </div>
+
+  <div id="namingCard" class="card hidden">
+    <div class="naming-area">
+      <label class="naming-label" for="txNameInput">Transaction name</label>
+      <input id="txNameInput" class="naming-input" type="text" placeholder="e.g. Login, Search, Checkout" maxlength="60" autocomplete="off">
+    </div>
+  </div>
+
+  <div id="trailCard" class="card hidden">
+    <div class="trail-label">Completed transactions</div>
+    <div id="trailChips" class="trail-chips"></div>
+  </div>
+
+  <div id="harReadyCard" class="card hidden">
+    <div class="har-ready-title">Recording complete</div>
+    <div id="harSummary" class="har-summary"></div>
+    <div class="btn-row">
+      <button id="btnDownload" class="btn btn-primary">Download HAR</button>
+      <button id="btnNewRecording" class="btn btn-secondary">New Recording</button>
+    </div>
+  </div>
+
+  <!-- a recording started from PerfX Studio: already in Downloads and opened there; the windows close after a countdown -->
+  <div id="savedCard" class="card hidden">
+    <div class="har-ready-title">Saved to your Downloads folder</div>
+    <div id="savedSummary" class="har-summary"></div>
+    <div class="ask-note">It is open in PerfX Studio now. Start the next recording there.</div>
+    <div id="savedCountdown" class="saved-countdown"></div>
+    <div class="btn-row ask-row">
+      <button id="btnCloseNow" class="btn btn-primary">Close windows</button>
+      <button id="btnKeepOpen" class="btn btn-secondary">Keep open</button>
+    </div>
+  </div>
+
+  <!-- questions asked inside the toolbar: the browser's own prompt / confirm boxes are wider than this window,
+       so their OK / Cancel buttons were cut off -->
+  <div id="askCard" class="card hidden" role="dialog" aria-labelledby="askText">
+    <div class="naming-area">
+      <label id="askText" class="naming-label" for="askInput"></label>
+      <div id="askSite" class="ask-site hidden"></div>
+      <input id="askInput" class="naming-input hidden" type="text" maxlength="120" autocomplete="off" spellcheck="false">
+      <div id="askNote" class="ask-note hidden"></div>
+    </div>
+    <div class="btn-row ask-row">
+      <button id="askOk" class="btn btn-primary">OK</button>
+      <button id="askCancel" class="btn btn-secondary">Cancel</button>
+    </div>
+  </div>
+
+  <div id="actionArea" class="btn-row">
+    <button id="btnStart" class="btn btn-primary">Start Recording</button>
+    <button id="btnStop" class="btn btn-danger hidden">Stop Recording</button>
+    <button id="btnStartTx" class="btn btn-tx hidden">Start Transaction</button>
+    <button id="btnEndTx" class="btn btn-tx-end hidden">End Transaction</button>
+  </div>
+
+  <div id="notice" class="notice">
+    A separate browser window titled <b>"This is the RECORDING window"</b> has opened. Do all your browsing there — your usual browser is <b>not</b> recorded. This toolbar is not recorded either.
+  </div>
+
+  <div class="footer">
+    <button id="btnQuit" class="btn btn-secondary" style="max-width:140px;margin:0 auto;">Quit</button>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let polling = null;
+let lastState = null;
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+function setError(msg) {
+  $("errorBanner").textContent = msg;
+  $("errorBanner").classList.toggle("hidden", !msg);
+}
+
+function render(s) {
+  lastState = s;
+  const badge = $("statusBadge");
+  badge.classList.toggle("recording", s.recording && !s.activeTransaction);
+  badge.classList.toggle("tx", !!s.activeTransaction);
+  $("statusText").textContent = s.activeTransaction ? `Recording — ${s.activeTransaction}` : (s.recording ? "Recording" : "Idle");
+
+  $("countCard").classList.toggle("hidden", !s.recording);
+  $("countActive").textContent = s.active;
+  $("countBackground").textContent = s.background;
+  // Only relevant when Start Transaction is actually an option — showing
+  // "safe to start a transaction" while one is already running is confusing
+  // (there's nothing to start; End Transaction is the only action available).
+  $("settledPill").classList.toggle("hidden", !(s.recording && s.settled && !s.activeTransaction));
+
+  $("trailCard").classList.toggle("hidden", s.transactions.length === 0);
+  $("trailChips").innerHTML = s.transactions.map(t => `<span class="trail-chip">${escapeHtml(t)}</span>`).join("");
+
+  $("btnStart").classList.toggle("hidden", s.recording);
+  $("btnStop").classList.toggle("hidden", !s.recording);
+  $("namingCard").classList.toggle("hidden", !(s.recording && !s.activeTransaction));
+  $("btnStartTx").classList.toggle("hidden", !(s.recording && !s.activeTransaction));
+  $("btnStartTx").disabled = !s.settled;
+  $("btnEndTx").classList.toggle("hidden", !s.activeTransaction);
+
+  // started from PerfX Studio: the file is already in Downloads and open there — no Download / New Recording,
+  // a countdown before the windows close instead, and the next recording is started from PerfX Studio
+  const portalSaved = !!(s.savedFromPortal && s.lastHarPath && !s.recording);
+  $("savedCard").classList.toggle("hidden", !portalSaved);
+  if (portalSaved) {
+    $("savedSummary").textContent = `${s.lastHarEntryCount} entries — ${s.lastHarPath.split(/[\\/]/).pop()}`;
+    $("savedSummary").title = s.lastHarPath;
+    $("savedCountdown").textContent = s.closingIn === null || s.closingIn === undefined
+      ? "These windows stay open until you close them."
+      : `These windows close in ${s.closingIn} s.`;
+    $("btnKeepOpen").classList.toggle("hidden", s.closingIn === null || s.closingIn === undefined);
+  }
+  if (s.mode === "portal" && !s.recording) $("btnStart").classList.add("hidden");
+
+  $("harReadyCard").classList.toggle("hidden", !s.lastHarPath || s.recording || portalSaved);
+  if (s.lastHarPath) {
+    // Show just the filename in the narrow toolbar — the full path wraps
+    // awkwardly at 300px wide; it's still available on hover.
+    const fileName = s.lastHarPath.split(/[\\/]/).pop();
+    $("harSummary").textContent = `${s.lastHarEntryCount} entries — ${fileName}`;
+    $("harSummary").title = s.lastHarPath;
+  }
+
+  // One-time orientation text — only useful before the first recording;
+  // hiding it once active frees real vertical space for the transaction
+  // trail below, which is what actually needs the room by then.
+  // (no recording window yet when it opened only to ask about a page)
+  $("notice").classList.toggle("hidden", s.recording || portalSaved || s.connected === false);
+
+  pageAsks(s.askingPortal || null);
+
+  setError(s.error);
+  $("warningBanner").textContent = s.warning || "";
+  $("warningBanner").classList.toggle("hidden", !s.warning);
+}
+
+// A PerfX Studio page asks to start recordings (the recorder was started by hand, so the page's link could not
+// hand it over). Nothing is allowed until Allow is clicked here; an allowed page is remembered on this computer.
+let askingFor = null;
+function pageAsks(portal) {
+  if (portal === askingFor) return;
+  if (askingFor) { // the question lapsed (or another one replaced it)
+    askingFor = null;
+    if (askDone) askDone(undefined);
+  }
+  if (!portal || document.body.classList.contains("asking")) return; // another question is open — next poll
+  askingFor = portal;
+  ask("Allow this page to start recordings?", {
+    site: portal, ok: "Allow", cancel: "Don't allow",
+    note: "A PerfX Studio page asks to use this recorder. Allow it only if you just clicked Start recording there. It is remembered on this computer.",
+  }).then(async (yes) => {
+    if (askingFor !== portal) return;
+    askingFor = null;
+    try { await api("POST", "/api/ask/answer", { portal, allow: yes === true }); } catch (err) { setError(err.message); }
+    poll();
+  });
+  window.focus();
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function poll() {
+  try {
+    const s = await api("GET", "/api/status?toolbar=1"); // ?toolbar: the recorder knows its toolbar is open
+    render(s);
+  } catch (err) {
+    setError("Lost connection to the recorder process: " + err.message);
+  }
+}
+
+$("btnStart").addEventListener("click", async () => {
+  $("btnStart").disabled = true;
+  try { await api("POST", "/api/start"); await poll(); }
+  catch (err) { setError(err.message); }
+  finally { $("btnStart").disabled = false; }
+});
+
+let askDone = null; // closes the open question (resolves it with undefined)
+
+// A question inside the toolbar (text, optional input) → the typed value, true, or null when cancelled.
+// While it is open the rest of the toolbar is dimmed and cannot be clicked (body.asking).
+function ask(text, opts = {}) {
+  const card = $("askCard"), input = $("askInput");
+  $("askText").textContent = text;
+  $("askNote").textContent = opts.note || "";
+  $("askNote").classList.toggle("hidden", !opts.note);
+  input.classList.toggle("hidden", opts.value === undefined);
+  input.value = opts.value || "";
+  $("askOk").textContent = opts.ok || "OK";
+  $("askCancel").textContent = opts.cancel || "Cancel";
+  $("askSite").textContent = opts.site || "";
+  $("askSite").classList.toggle("hidden", !opts.site);
+  card.classList.remove("hidden");
+  document.body.classList.add("asking");
+  (opts.value === undefined ? $("askOk") : input).focus();
+  if (opts.value !== undefined) input.select();
+  return new Promise((resolve) => {
+    const done = (v) => {
+      askDone = null;
+      card.classList.add("hidden");
+      document.body.classList.remove("asking");
+      $("askOk").onclick = $("askCancel").onclick = input.onkeydown = card.onkeydown = null;
+      resolve(v);
+    };
+    askDone = done;
+    const ok = () => done(opts.value === undefined ? true : input.value.trim() || null);
+    $("askOk").onclick = ok;
+    $("askCancel").onclick = () => done(null);
+    card.onkeydown = (e) => {
+      if (e.key === "Escape") done(null);
+      else if (e.key === "Enter") { e.preventDefault(); ok(); }
+    };
+  });
+}
+
+$("btnStop").addEventListener("click", async () => {
+  // a recording started from PerfX Studio already has its name, and goes to Downloads — nothing to ask
+  const fromPortal = !!(lastState && lastState.session);
+  const fileName = fromPortal ? "recording.har" : await ask("File name for the recording", {
+    value: "recording.har", ok: "Save",
+    note: "Saved in the folder cdp-recorder.exe runs from.",
+  });
+  if (!fileName) return;
+  $("btnStop").disabled = true;
+  try { await api("POST", "/api/stop", { fileName }); await poll(); }
+  catch (err) { setError(err.message); }
+  finally { $("btnStop").disabled = false; }
+});
+
+$("btnStartTx").addEventListener("click", async () => {
+  const name = $("txNameInput").value.trim() || "Transaction";
+  try { await api("POST", "/api/tx/start", { name }); $("txNameInput").value = ""; await poll(); }
+  catch (err) { setError(err.message); }
+});
+
+$("btnEndTx").addEventListener("click", async () => {
+  try { await api("POST", "/api/tx/end"); await poll(); }
+  catch (err) { setError(err.message); }
+});
+
+$("txNameInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("btnStartTx").click();
+});
+
+$("btnDownload").addEventListener("click", () => {
+  window.location.href = "/api/download";
+});
+
+$("btnCloseNow").addEventListener("click", async () => {
+  $("btnCloseNow").disabled = true;
+  try { await api("POST", "/api/windows", { action: "close" }); } catch {}
+});
+$("btnKeepOpen").addEventListener("click", async () => {
+  try { await api("POST", "/api/windows", { action: "keep" }); await poll(); } catch (err) { setError(err.message); }
+});
+
+$("btnNewRecording").addEventListener("click", () => {
+  $("harReadyCard").classList.add("hidden");
+});
+
+$("btnQuit").addEventListener("click", async () => {
+  const running = !!(lastState && lastState.recording);
+  const sure = await ask("Quit the recorder and close its browser windows?", {
+    ok: "Quit",
+    note: running ? "The recording that is running is saved first." : "",
+  });
+  if (!sure) return;
+  try { await api("POST", "/api/quit"); } catch {}
+  $("statusText").textContent = "Stopped";
+  clearInterval(polling);
+  document.body.innerHTML = "<div class=\"card\">Recorder stopped. You can close this tab.</div>";
+});
+
+poll();
+polling = setInterval(poll, 1000);
+</script>
+</body>
+</html>

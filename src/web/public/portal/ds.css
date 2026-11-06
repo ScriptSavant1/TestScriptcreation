@@ -1,0 +1,269 @@
+/* ══════════════════════════════════════════════════════════════════════════
+ * PerfX Studio — design system (v4). Loaded by every page: the portal (index.ejs),
+ * Recorder.html, Studio.html and the Results Analyser, BEFORE the page's own CSS.
+ *
+ *  · Flat surfaces, one neutral palette, ONE brand blue for actions. Tool colours are identity
+ *    marks only (icon tiles, the active menu item, a page's icon) — never for buttons or big areas.
+ *  · Type: one text font + one code font; weights 400 / 600 / 700 only; sentence case
+ *    (small capitals only for the sidebar group labels).
+ *  · Shapes: cards 16 · tiles 12 · buttons / fields 10 · small controls 9 · chips pill.
+ *  · Contrast ≥ 4.5:1 for all text in both themes (checked by the design audit).
+ * Theme: <html data-theme="dark|light"> (dark is the default).
+ * ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: dark;
+  /* surfaces */
+  --ds-bg: #0c111b;            /* page */
+  --ds-surface: #121926;       /* cards, panels, sidebar */
+  --ds-surface-2: #172031;     /* raised: card headers, hover rows, tiles */
+  --ds-inset: #0e1420;         /* code, fields, wells */
+  --ds-overlay: rgba(4, 8, 16, .62);
+  --ds-border: #233047;
+  --ds-border-2: #31405a;      /* strong: field borders, dividers that must read */
+  /* text */
+  --ds-text: #e8edf5;
+  --ds-text-2: #aab5c7;
+  --ds-text-3: #8693a8;        /* ≥ 4.5:1 on every surface above */
+  /* brand */
+  --ds-accent: #2563eb;        /* button fill (white text 5.2:1) */
+  --ds-accent-hover: #1d4ed8;
+  --ds-accent-text: #75a7ff;   /* links / accent text on dark surfaces */
+  --ds-accent-soft: rgba(91, 141, 239, .14);
+  --ds-accent-line: rgba(117, 167, 255, .45);
+  --ds-focus: #75a7ff;
+  /* status (text colours ≥ 4.5:1 on surfaces; *-soft = tinted background) */
+  --ds-ok: #4cc38a;    --ds-ok-soft: rgba(76, 195, 138, .13);
+  --ds-warn: #e8b04b;  --ds-warn-soft: rgba(232, 176, 75, .13);
+  --ds-bad: #f27a7a;   --ds-bad-soft: rgba(242, 122, 122, .13);
+  --ds-info: #75a7ff;  --ds-info-soft: rgba(117, 167, 255, .13);
+  /* tool identity colours (icons and marks only) */
+  --c-home: #94a3b8;
+  --c-convert: #5b8def;
+  --c-jmeter: #f0883e;
+  --c-record: #3cc479;
+  --c-studio: #a78bfa;
+  --c-results: #22b8cf;
+  --c-explore: #f06aa8;
+  --c-help: #e3b341;
+  /* code / syntax (shared by every script preview) */
+  --ds-code-bg: #0b1019;
+  --ds-code-text: #d7dfeb;
+  --ds-syn-key: #c4a2ff; --ds-syn-str: #8bd5a0; --ds-syn-num: #f5b97a; --ds-syn-com: #7d8aa0; --ds-syn-fn: #7fb4ff;
+  /* type */
+  --ds-font: "Segoe UI", -apple-system, system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ds-mono: "Cascadia Code", Consolas, "SFMono-Regular", Menlo, "Courier New", monospace;
+  --ds-fs-xs: 12px; --ds-fs-sm: 13px; --ds-fs: 14px; --ds-fs-md: 15px; --ds-fs-lg: 18px; --ds-fs-xl: 22px; --ds-fs-2xl: 28px;
+  /* shape + space */
+  --ds-r-card: 16px; --ds-r-tile: 12px; --ds-r-btn: 10px; --ds-r-sm: 9px; --ds-r-pill: 999px;
+  --ds-gap: 16px; --ds-pad: 20px; --ds-page-x: 28px;
+  --ds-page-max: 100%;         /* pages use the full width beside the sidebar — no centred column, no empty side bands */
+  /* elevation */
+  --ds-shadow-1: 0 1px 2px rgba(0, 0, 0, .35);
+  --ds-shadow-2: 0 10px 30px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .3);
+  --ds-ease: cubic-bezier(.4, 0, .2, 1);
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --ds-bg: #f3f5f9;
+  --ds-surface: #ffffff;
+  --ds-surface-2: #f7f9fc;
+  --ds-inset: #f5f7fa;
+  --ds-overlay: rgba(15, 23, 42, .38);
+  --ds-border: #e1e6ee;
+  --ds-border-2: #cbd3df;
+  --ds-text: #0f172a;
+  --ds-text-2: #3a495f;
+  --ds-text-3: #58687f;
+  --ds-accent: #2563eb;
+  --ds-accent-hover: #1d4ed8;
+  --ds-accent-text: #1d5bd8;
+  --ds-accent-soft: rgba(37, 99, 235, .08);
+  --ds-accent-line: rgba(37, 99, 235, .35);
+  --ds-focus: #2563eb;
+  --ds-ok: #15803d;    --ds-ok-soft: rgba(22, 163, 74, .09);
+  --ds-warn: #a85b06;  --ds-warn-soft: rgba(217, 119, 6, .1);
+  --ds-bad: #c42727;   --ds-bad-soft: rgba(220, 38, 38, .08);
+  --ds-info: #1d5bd8;  --ds-info-soft: rgba(37, 99, 235, .08);
+  --c-home: #64748b;
+  --c-convert: #2f6fe4;
+  --c-jmeter: #e0711f;
+  --c-record: #16a34a;
+  --c-studio: #7c5ce6;
+  --c-results: #0e9fb5;
+  --c-explore: #d02f7a;
+  --c-help: #c08a00;
+  --ds-code-bg: #f7f9fc;
+  --ds-code-text: #1e293b;
+  --ds-syn-key: #7c3aed; --ds-syn-str: #15803d; --ds-syn-num: #b45309; --ds-syn-com: #5a6a80; --ds-syn-fn: #1d4ed8;
+  --ds-shadow-1: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .04);
+  --ds-shadow-2: 0 12px 32px rgba(15, 23, 42, .14), 0 2px 6px rgba(15, 23, 42, .06);
+}
+
+/* ── base ── */
+b, strong { font-weight: 700; }
+button, input, select, textarea { font-family: inherit; }
+::selection { background: color-mix(in srgb, var(--ds-accent) 35%, transparent); }
+
+/* ── scroll bars: thin, theme-coloured, everywhere ── */
+/* slim scrollbars without arrow buttons. Chrome / Edge: the ::-webkit rules (the standard scrollbar-width / -color
+   would take over there and, on Windows, draw arrow buttons that the panes' rounded corners cut off). Other
+   browsers: the standard properties. The track keeps clear of rounded corners. */
+@supports not selector(::-webkit-scrollbar) { * { scrollbar-width: thin; scrollbar-color: var(--ds-border-2) transparent; } }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-track { background: transparent; margin: 8px 0; }
+::-webkit-scrollbar-track:horizontal { margin: 0 8px; }
+::-webkit-scrollbar-thumb { background: var(--ds-border-2); border-radius: 99px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--ds-text-3); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── components (prefix ds- so they never clash with the tools' own class names) ── */
+.ds-card { background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-r-card); box-shadow: var(--ds-shadow-1); }
+.ds-card-head { display: flex; align-items: center; gap: 12px; padding: 14px var(--ds-pad); border-bottom: 1px solid var(--ds-border); }
+.ds-card-body { padding: var(--ds-pad); }
+.ds-title { font-size: var(--ds-fs-md); font-weight: 600; color: var(--ds-text); }
+.ds-sub { font-size: var(--ds-fs-sm); color: var(--ds-text-3); }
+
+.ds-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 16px;
+  border-radius: var(--ds-r-btn); border: 1px solid var(--ds-border-2); background: var(--ds-surface); color: var(--ds-text);
+  font: inherit; font-size: var(--ds-fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; text-decoration: none;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+.ds-btn:hover { background: var(--ds-surface-2); border-color: var(--ds-text-3); }
+.ds-btn svg { width: 16px; height: 16px; flex: none; }
+.ds-btn-primary { background: var(--ds-accent); border-color: var(--ds-accent); color: #fff; }
+.ds-btn-primary:hover { background: var(--ds-accent-hover); border-color: var(--ds-accent-hover); color: #fff; }
+.ds-btn-ghost { background: transparent; border-color: transparent; color: var(--ds-text-2); }
+.ds-btn-ghost:hover { background: var(--ds-surface-2); border-color: transparent; color: var(--ds-text); }
+.ds-btn-sm { height: 32px; padding: 0 12px; border-radius: var(--ds-r-sm); font-size: var(--ds-fs-xs); }
+.ds-btn-lg { height: 46px; padding: 0 22px; border-radius: var(--ds-r-tile); font-size: var(--ds-fs-md); }
+.ds-btn:disabled, .ds-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+
+.ds-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-border); background: var(--ds-surface-2); color: var(--ds-text-2); font-size: var(--ds-fs-xs); font-weight: 600; white-space: nowrap; }
+.ds-chip.ok { color: var(--ds-ok); background: var(--ds-ok-soft); border-color: transparent; }
+.ds-chip.warn { color: var(--ds-warn); background: var(--ds-warn-soft); border-color: transparent; }
+.ds-chip.bad { color: var(--ds-bad); background: var(--ds-bad-soft); border-color: transparent; }
+.ds-chip.info { color: var(--ds-info); background: var(--ds-info-soft); border-color: transparent; }
+
+.ds-tile { background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-r-tile); padding: 14px 16px; }
+.ds-tile-label { font-size: var(--ds-fs-xs); color: var(--ds-text-3); font-weight: 600; }
+.ds-tile-value { font-size: var(--ds-fs-xl); font-weight: 700; color: var(--ds-text); line-height: 1.2; font-variant-numeric: tabular-nums; }
+
+.ds-ico { display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 10px; color: var(--c, var(--ds-accent-text)); background: color-mix(in srgb, var(--c, var(--ds-accent)) 14%, transparent); }
+.ds-ico svg { width: 19px; height: 19px; }
+
+.ds-field { height: 38px; padding: 0 12px; border-radius: var(--ds-r-btn); border: 1px solid var(--ds-border-2); background: var(--ds-inset); color: var(--ds-text); font: inherit; font-size: var(--ds-fs-sm); }
+.ds-field:hover { border-color: var(--ds-text-3); }
+.ds-field:focus { outline: none; border-color: var(--ds-focus); box-shadow: 0 0 0 3px var(--ds-accent-soft); }
+
+.ds-note { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--ds-r-tile); font-size: var(--ds-fs-sm); line-height: 1.55; background: var(--ds-info-soft); color: var(--ds-text-2); }
+.ds-note.warn { background: var(--ds-warn-soft); }
+.ds-note.bad { background: var(--ds-bad-soft); }
+.ds-note.ok { background: var(--ds-ok-soft); }
+
+/* segmented control (one choice of a few) */
+.ds-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--ds-r-btn); background: var(--ds-inset); border: 1px solid var(--ds-border); }
+.ds-seg > * { height: 30px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--ds-text-2); font: inherit; font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer; }
+.ds-seg > *:hover { color: var(--ds-text); }
+.ds-seg > .on, .ds-seg > [aria-pressed="true"], .ds-seg > [aria-checked="true"], .ds-seg > [aria-selected="true"] { background: var(--ds-surface); color: var(--ds-text); box-shadow: var(--ds-shadow-1); }
+
+/* tabs (underline) */
+.ds-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--ds-border); overflow-x: auto; }
+.ds-tabs > * { position: relative; height: 40px; padding: 0 12px; border: 0; background: none; color: var(--ds-text-2); font: inherit; font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ds-tabs > *:hover { color: var(--ds-text); }
+.ds-tabs > .on, .ds-tabs > [aria-selected="true"] { color: var(--ds-text); }
+.ds-tabs > .on::after, .ds-tabs > [aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--ds-accent-text); }
+
+/* workspace panel: header bar + scrolling body */
+.ds-panel { display: flex; flex-direction: column; min-height: 0; background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-r-card); overflow: hidden; }
+.ds-panel-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px 0 16px; border-bottom: 1px solid var(--ds-border); font-size: var(--ds-fs); font-weight: 600; }
+.ds-panel-body { flex: 1; min-height: 0; overflow: auto; }
+
+/* data table */
+.ds-table { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-sm); }
+.ds-table th { position: sticky; top: 0; z-index: 1; text-align: left; font-size: var(--ds-fs-xs); font-weight: 600; color: var(--ds-text-3); background: var(--ds-surface-2); padding: 9px 12px; border-bottom: 1px solid var(--ds-border); white-space: nowrap; }
+.ds-table td { padding: 9px 12px; border-bottom: 1px solid var(--ds-border); color: var(--ds-text); vertical-align: middle; }
+.ds-table tbody tr:hover td { background: var(--ds-surface-2); }
+.ds-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* code view */
+.ds-code { margin: 0; padding: 14px 16px; background: var(--ds-code-bg); color: var(--ds-code-text); font-family: var(--ds-mono); font-size: 12.5px; line-height: 1.6; overflow: auto; tab-size: 4; }
+
+/* drop zone */
+.ds-drop { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1.5px dashed var(--ds-border-2); border-radius: var(--ds-r-tile); background: var(--ds-surface-2); color: var(--ds-text-2); cursor: pointer; transition: border-color .15s, background .15s; }
+.ds-drop:hover, .ds-drop.over { border-color: var(--ds-accent-text); background: var(--ds-accent-soft); }
+
+/* one focus ring for everything keyboard-reachable */
+:where(a, button, input, select, textarea, summary, [tabindex], [role="button"], [role="tab"]):focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+
+/* drop a file anywhere on a tool page (portal/drop-anywhere.js) — a hint over the page while dragging */
+.ds-dropall { position: fixed; inset: 12px; z-index: 800; display: grid; place-items: center; pointer-events: none; border: 2px dashed var(--ds-accent-text); border-radius: var(--ds-r-card); background: color-mix(in srgb, var(--ds-bg) 72%, transparent); }
+.ds-dropall[hidden] { display: none; }
+.ds-dropall > div { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 32px; border-radius: var(--ds-r-card); background: var(--ds-surface); border: 1px solid var(--ds-border); box-shadow: var(--ds-shadow-2); text-align: center; }
+.ds-dropall svg { width: 28px; height: 28px; color: var(--ds-accent-text); }
+.ds-dropall b { font-size: var(--ds-fs-md); font-weight: 700; color: var(--ds-text); }
+.ds-dropall span { font-size: var(--ds-fs-sm); color: var(--ds-text-3); }
+.ds-dropall span:empty { display: none; }
+
+/* ── tool header band (v5) — the Home page's look on every tool page ────────────────────────────────────────
+   <header class="ds-band" style="--c:var(--c-record)">
+     <div class="ds-band-text"><div class="ds-band-title"><span class="ds-band-ico">svg</span><h1>…</h1></div><p class="ds-band-lead">…</p></div>
+     <figure class="ds-flow"><ol><li><span>svg</span><b>…</b></li>…</ol><figcaption class="ds-hand">…</figcaption></figure>
+   </header>
+   Runs edge to edge: the page sets --band-top (its own top padding) and uses --ds-page-x for the sides. */
+.ds-band {
+  position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: center;
+  margin: calc(-1 * var(--band-top, 28px)) calc(-1 * var(--ds-page-x)) 0; padding: 30px var(--ds-page-x) 28px;
+  /* the same background as the Home welcome band (home.css .hm-hero) */
+  background:
+    radial-gradient(55% 90% at 82% 30%, color-mix(in srgb, var(--ds-accent) 14%, transparent) 0%, transparent 70%),
+    linear-gradient(100deg, color-mix(in srgb, var(--ds-accent) 7%, var(--ds-bg)) 0%, color-mix(in srgb, var(--ds-accent) 11%, var(--ds-bg)) 55%, color-mix(in srgb, var(--ds-accent) 5%, var(--ds-bg)) 100%);
+  border-bottom: 1px solid color-mix(in srgb, var(--ds-accent) 12%, var(--ds-border));
+}
+.ds-band-title { display: flex; align-items: center; gap: 16px; }
+.ds-band-ico { width: 52px; height: 52px; flex: none; border-radius: 14px; display: grid; place-items: center; color: var(--c, var(--ds-accent-text)); background: color-mix(in srgb, var(--c, var(--ds-accent)) 15%, var(--ds-surface)); border: 1px solid color-mix(in srgb, var(--c, var(--ds-accent)) 25%, transparent); box-shadow: var(--ds-shadow-1); }
+.ds-band-ico svg { width: 26px; height: 26px; }
+.ds-band h1 { margin: 0; font-size: clamp(22px, 2.4vw, 32px); font-weight: 700; line-height: 1.2; letter-spacing: -.02em; color: var(--ds-text); }
+.ds-band-tag { margin: 4px 0 0; font-size: clamp(16px, 1.3vw, 19px); font-weight: 400; line-height: 1.35; color: var(--ds-text); }   /* the line under a tool's name */
+.ds-band-lead { margin: 12px 0 0; max-width: 46em; font-size: var(--ds-fs-md); line-height: 1.65; color: var(--ds-text-2); }
+.ds-flow { display: none; margin: 0; justify-self: center; }
+.ds-flow ol { list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; }
+.ds-flow li { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 108px; text-align: center; }
+.ds-flow li + li { position: relative; }
+.ds-flow li + li::before { content: ""; position: absolute; top: 27px; right: calc(50% + 34px); width: calc(100% - 68px); border-top: 2px dotted color-mix(in srgb, var(--ds-accent) 55%, transparent); }
+.ds-flow li + li::after { content: ""; position: absolute; top: 23px; right: calc(50% + 32px); border-left: 6px solid color-mix(in srgb, var(--ds-accent) 70%, transparent); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.ds-flow li > span { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; color: var(--c, var(--ds-accent-text)); background: var(--ds-surface); border: 1px solid var(--ds-border); box-shadow: 0 6px 18px -8px rgba(15, 23, 42, .25); }
+.ds-flow li > span svg { width: 26px; height: 26px; }
+.ds-flow li.is-tool > span { color: #fff; background: linear-gradient(150deg, color-mix(in srgb, var(--c) 75%, #fff) 0%, var(--c) 70%); border-color: transparent; box-shadow: 0 10px 24px -10px var(--c); }
+.ds-flow b { font-size: var(--ds-fs-sm); font-weight: 600; line-height: 1.3; color: var(--ds-text); }
+.ds-flow li small { margin-top: -6px; font-size: var(--ds-fs-xs); line-height: 1.3; color: var(--ds-text-2); }
+/* the one handwritten touch (Windows' own handwriting font — nothing is downloaded) */
+.ds-hand { margin-top: 14px; display: flex; justify-content: center; align-items: flex-start; gap: 8px; font-family: "Segoe Print", "Ink Free", "Bradley Hand", "Comic Sans MS", cursive; font-size: 14px; font-weight: 400; line-height: 1.4; color: var(--ds-accent-text); transform: rotate(-3deg); transform-origin: center; }
+.ds-hand svg { width: 26px; height: 26px; margin-top: -10px; stroke-width: 1.6; }
+html[data-theme="light"] .ds-hand { color: #1a4fbf; }
+/* tool pages run in their own frame, so the window width is the tool's width */
+@media (min-width: 980px) { .ds-band { grid-template-columns: minmax(0, 1fr) minmax(380px, .62fr); gap: 32px; padding: 34px var(--ds-page-x) 30px; } .ds-flow { display: block; } }
+@media (max-width: 640px) { .ds-band { margin: 0; border: 1px solid var(--ds-border); border-radius: var(--ds-r-card); padding: 22px 18px; } }
+/* Panel layout (agreed with the team for every tool page, first on Script Studio): add .ds-band-panel to the band.
+   Title + tagline + a short lead on the left; the three-step picture in its own soft panel (all tiles white, icons in
+   the brand blue); the handwritten note in a tilted card at the far right with its arrow under it; anything else
+   in the band (e.g. a step bar) runs along the bottom. */
+.ds-band.ds-band-panel { padding-top: 26px; padding-bottom: 22px; row-gap: 18px; }
+.ds-band-panel h1 { font-size: 28px; }   /* fixed: tools in a frame see a narrower window, vw sizes would differ */
+.ds-band-panel .ds-band-tag { margin-top: 2px; font-size: 17px; font-weight: 600; }
+.ds-band-panel .ds-band-lead { margin-top: 12px; max-width: 52em; line-height: 1.6; }
+.ds-band-panel .ds-flow { display: none; align-items: center; gap: 18px; justify-self: end; }
+.ds-band-panel .ds-flow ol { padding: 14px 22px 12px; border-radius: 20px; background: color-mix(in srgb, var(--ds-surface) 55%, transparent); border: 1px solid color-mix(in srgb, var(--ds-accent) 14%, var(--ds-border)); }
+.ds-band-panel .ds-flow li { width: 128px; }
+.ds-band-panel .ds-flow li + li::before { top: 28px; right: calc(50% + 40px); width: calc(100% - 80px); }
+.ds-band-panel .ds-flow li + li::after { top: 24px; right: calc(50% + 38px); }
+.ds-band-panel .ds-flow li > span, .ds-band-panel .ds-flow li.is-tool > span { color: var(--ds-accent-text); background: var(--ds-surface); border-color: var(--ds-border); box-shadow: 0 6px 18px -8px rgba(15, 23, 42, .25); }
+.ds-band-panel .ds-hand { flex: 0 0 214px; margin: 0; flex-direction: column; align-items: flex-start; gap: 4px; transform: none; }
+.ds-band-panel .ds-hand span { padding: 10px 16px; border-radius: 16px; background: color-mix(in srgb, var(--ds-surface) 45%, transparent); border: 1px solid color-mix(in srgb, var(--ds-accent) 22%, var(--ds-border)); transform: rotate(-8deg); white-space: nowrap; }
+.ds-band-panel .ds-hand svg { width: 40px; height: 30px; margin: 6px 0 0 -26px; stroke-width: 1.8; }
+@media (min-width: 980px) { .ds-band.ds-band-panel { grid-template-columns: minmax(0, 1fr) auto; } .ds-band-panel .ds-flow { display: flex; } }
+@media (max-width: 1240px) { .ds-band-panel .ds-hand { display: none; } }
+@media (max-width: 640px) { .ds-band.ds-band-panel { padding: 22px 18px; } .ds-band-panel h1 { font-size: 24px; } .ds-band-panel .ds-band-tag { font-size: 15px; } }

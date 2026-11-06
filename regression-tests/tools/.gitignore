@@ -1,0 +1,7 @@
+# Only the tools themselves are kept: baselines, runs, fixtures, inputs and test keys stay local.
+*
+!*/
+!.gitignore
+!README.md
+!*.js
+!*.sh

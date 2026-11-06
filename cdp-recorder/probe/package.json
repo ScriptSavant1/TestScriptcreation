@@ -1,0 +1,23 @@
+{
+  "name": "cdp-recorder-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Feasibility probe: can a standalone CDP recorder connect to the browser on this machine?",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/probe.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "chrome-remote-interface": "^0.33.2"
+  },
+  "devDependencies": {
+    "@types/chrome-remote-interface": "^0.34.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

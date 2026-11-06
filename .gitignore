@@ -1,0 +1,58 @@
+Salesforce_Platform_APIs.postman_collection.json
+BUGFIX-parameters.yml.md
+HOTFIX_v2.0.3.md
+INSTALL_COMPARISON.md
+# Analytics database — operational data, never committed to git
+data/
+node_modules/@babel/helpers/LICENSE
+.claude/settings.local.json
+postman_collection.json
+postman_environment.json
+transport.pem
+/output/
+JMeter for ThingWorx Comphrensive Guide.pdf
+jmeter_quick_guide.pdf
+JMeter-Tutorial.pdf
+collection-examples/Salesforce Platform APIs.yml
+error1.png
+image 2.png
+image 3.png
+image 6.png
+recorder.png
+DevWeb JavaScript SDK.pdf
+main.js
+Docs/STUDIO-MULTI-ACTION-PLAN.md
+main_EQ.js
+main_LRE.js
+image_studio.png
+image_studio1.png
+JWT_TOKEN_LIB_SPECIFICATION.txt
+Action.c
+demo.jpeg
+PerfX-Studio-Demo.pptx
+Docs/FUNCTIONAL-SPEC.md
+Docs/FUNCTIONAL-SPEC.md
+node_modules/
+# Local environment config — never commit tokens or secrets
+.env
+.env.local
+logs/
+.idea/
+collection-examples/
+enterprise_browser_performance_recorder_plan.md
+Docs/DEVWEB-VUGEN-CROSSCONVERT-PLAN.md
+DevWeb JavaScript SDK263.pdf
+
+# Local-only documentation — removed from GitHub history; never commit
+/Docs/
+
+# Local-only prompts — removed from GitHub history; never commit
+/devweb-prompts/
+
+# Forum deck — local only (removed from GitHub history)
+/PerfX-Studio-Forum.pptx
+/RawResults_59
+
+# Local-only notes from real test runs
+lre-results-analyser/docs/SPEC-FINDINGS-vs-LRE.md
+lre-results-analyser/docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md

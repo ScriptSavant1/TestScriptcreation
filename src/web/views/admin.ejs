@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usage analytics — PerfX Studio</title>
+<%
+  /* same design system and theme as the portal (portal/ds.css, localStorage "lr-theme") */
+  var portalBase = adminBase.replace(/\/admin$/, '');
+  var q = 'period=' + encodeURIComponent(preset) + '&from=' + encodeURIComponent(from || '') + '&to=' + encodeURIComponent(to || '');
+  var ICONS = {
+    bolt: '<path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z" fill="currentColor" stroke="none"/>',
+    layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
+    check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+    alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    bulb: '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/>',
+    table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+    doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>',
+    csv: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 15h6"/>',
+    print: '<path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/>',
+    logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    refresh: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    chart: '<path d="M3 3v18h18"/><path d="M7 15v-4M11 15V8M15 15v-6M19 15V5"/>',
+    file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+    list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  };
+  function ico(n) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[n] + '</svg>'; }
+  function pct(n) { return stats.total > 0 ? Math.round(n / stats.total * 100) : 0; }
+  var fails = stats.failCount + stats.timeoutCount;
+  var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var hmMax = 0; stats.heatmap.forEach(function (r) { r.forEach(function (v) { if (v > hmMax) hmMax = v; }); });
+%>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M7 21l6-7 5 4 7-9' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>(function(){try{var t=localStorage.getItem('lr-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<link rel="stylesheet" href="<%=portalBase%>/portal/ds.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--ds-bg); color: var(--ds-text); font-family: var(--ds-font); font-size: var(--ds-fs); line-height: 1.5; min-height: 100vh; }
+svg { flex: none; }
+
+/* ── top bar ── */
+.ad-top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; height: 60px; padding: 0 var(--ds-page-x); background: var(--ds-surface); border-bottom: 1px solid var(--ds-border); }
+.ad-brand { display: flex; align-items: center; gap: 11px; min-width: 0; flex: 1; }
+.ad-logo { width: 32px; height: 32px; flex: none; border-radius: 9px; display: grid; place-items: center; background: var(--ds-accent); color: #fff; }
+.ad-logo svg { width: 18px; height: 18px; }
+.ad-brand b { display: block; font-size: var(--ds-fs-md); font-weight: 700; white-space: nowrap; }
+.ad-brand small { display: block; font-size: var(--ds-fs-xs); color: var(--ds-text-3); white-space: nowrap; }
+.ad-top .ds-btn { height: 36px; }
+.ds-btn.icon { width: 36px; padding: 0; }
+[data-theme="dark"] .i-moon, [data-theme="light"] .i-sun { display: none; }
+
+.ad-page { padding: 24px var(--ds-page-x) 48px; display: flex; flex-direction: column; gap: var(--ds-gap); }
+
+/* ── period + exports ── */
+.ad-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; }
+.ad-bar .ds-seg a { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; color: var(--ds-text-2); font-size: var(--ds-fs-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.ad-bar .ds-seg a:hover { color: var(--ds-text); }
+.ad-bar .ds-seg a.on { background: var(--ds-surface); color: var(--ds-text); box-shadow: var(--ds-shadow-1); }
+.ad-range { font-size: var(--ds-fs-sm); color: var(--ds-text-3); font-variant-numeric: tabular-nums; }
+.ad-exports { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+
+/* ── KPI tiles ── */
+.ad-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--ds-gap); }
+.ad-kpi { display: flex; flex-direction: column; gap: 6px; padding: 18px; background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-r-tile); }
+.ad-kpi-head { display: flex; align-items: center; gap: 10px; font-size: var(--ds-fs-sm); color: var(--ds-text-2); font-weight: 600; }
+.ad-kpi-head .ds-ico { width: 30px; height: 30px; border-radius: 8px; }
+.ad-kpi-head .ds-ico svg { width: 16px; height: 16px; }
+.ad-kpi-val { font-size: 30px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.ad-kpi-val.ok { color: var(--ds-ok); } .ad-kpi-val.bad { color: var(--ds-bad); }
+.ad-kpi-sub { font-size: var(--ds-fs-xs); color: var(--ds-text-3); }
+
+/* ── cards ── */
+.ad-card { background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-r-card); box-shadow: var(--ds-shadow-1); min-width: 0; }
+.ad-card-head { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 18px; border-bottom: 1px solid var(--ds-border); }
+.ad-card-head h2 { font-size: var(--ds-fs-md); font-weight: 600; }
+.ad-card-head .ds-ico { width: 28px; height: 28px; border-radius: 8px; }
+.ad-card-head .ds-ico svg { width: 15px; height: 15px; }
+.ad-card-head .ds-chip { margin-left: auto; }
+.ad-card-body { padding: 18px; }
+.ad-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ds-gap); }
+.ad-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-gap); }
+@media (max-width: 1200px) { .ad-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ad-grid-3 > :last-child { grid-column: 1 / -1; } }
+@media (max-width: 1000px) { .ad-grid-2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .ad-grid-3 { grid-template-columns: minmax(0, 1fr); } }
+.chart-box { position: relative; height: 240px; }
+.chart-box.tall { height: 280px; }
+.ad-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 160px; color: var(--ds-text-3); font-size: var(--ds-fs-sm); text-align: center; padding: 24px; }
+.ad-empty svg { width: 26px; height: 26px; opacity: .6; }
+
+/* ── insights ── */
+.ad-insights { list-style: none; display: grid; gap: 10px; }
+.ad-insights li { display: flex; gap: 10px; font-size: var(--ds-fs-sm); line-height: 1.6; color: var(--ds-text-2); }
+.ad-insights li::before { content: ""; flex: none; width: 6px; height: 6px; margin-top: 8px; border-radius: 50%; background: var(--ds-accent-text); }
+
+/* ── heatmap: days × hours ── */
+.hm { display: grid; grid-template-columns: 44px repeat(24, minmax(14px, 1fr)); gap: 3px; min-width: 520px; }
+.hm-scroll { overflow-x: auto; }
+.hm span { font-size: 11px; color: var(--ds-text-3); text-align: center; font-variant-numeric: tabular-nums; }
+.hm span.day { text-align: left; align-self: center; font-weight: 600; }
+.hm i { display: block; height: 22px; border-radius: 4px; background: var(--ds-surface-2); }
+.hm-legend { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: var(--ds-fs-xs); color: var(--ds-text-3); }
+.hm-legend i { width: 16px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* ── tables ── */
+.tbl-scroll { overflow: auto; }
+.tbl-scroll.events { max-height: min(70vh, 720px); }
+.ds-table td.num, .ds-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ds-table td.mono { font-family: var(--ds-mono); font-size: 12px; color: var(--ds-text-2); white-space: nowrap; }
+.ds-table td.rank { width: 40px; color: var(--ds-text-3); font-variant-numeric: tabular-nums; }
+.ds-table td.trunc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-table td b { font-weight: 600; }
+.share { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.share-bar { flex: 1; height: 6px; border-radius: 99px; background: var(--ds-surface-2); overflow: hidden; }
+.share-bar i { display: block; height: 100%; border-radius: 99px; background: var(--ds-accent); }
+.share small { width: 36px; text-align: right; font-size: var(--ds-fs-xs); color: var(--ds-text-3); font-variant-numeric: tabular-nums; }
+.err-code { display: block; margin-top: 3px; font-family: var(--ds-mono); font-size: 11px; color: var(--ds-bad); }
+
+/* ── event log filters + pages ── */
+.ad-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--ds-border); background: var(--ds-surface-2); }
+.ad-filters .ds-field { height: 34px; font-size: var(--ds-fs-sm); }
+.ad-search { position: relative; flex: 1 1 220px; max-width: 360px; }
+.ad-search svg { position: absolute; left: 10px; top: 50%; width: 15px; height: 15px; transform: translateY(-50%); color: var(--ds-text-3); pointer-events: none; }
+.ad-search .ds-field { width: 100%; padding-left: 32px; }
+.ad-filters .push { margin-left: auto; }
+.ad-pages { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--ds-border); }
+.ad-pages span { flex: 1; text-align: center; font-size: var(--ds-fs-sm); color: var(--ds-text-3); }
+
+@media (max-width: 760px) {
+  .ad-bar .ds-seg { max-width: 100%; overflow-x: auto; }   /* the five periods scroll sideways on a phone */
+  .ad-brand small { display: none; }
+  .ad-top .lbl { display: none; }
+  .ad-exports { margin-left: 0; }
+}
+
+/* ── v2 report sections ── */
+.ad-kpi-val.small { font-size: 22px; line-height: 1.5; }
+.tool-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--c); vertical-align: middle; }
+.ds-table td.muted, .muted { color: var(--ds-text-3); }
+.tools-cell { white-space: nowrap; }
+.tools-cell .tool-dot { margin-right: 4px; }
+.tools-cell small { margin-left: 4px; font-size: var(--ds-fs-xs); color: var(--ds-text-3); }
+.ds-table td.num, .ds-table td.mono { white-space: nowrap; }
+.tbl-scroll.events td { white-space: nowrap; }
+.ad-inline-note { margin: 12px 18px 0; }
+.tbl-scroll.files { max-height: 420px; }
+.hm-legend .push { margin-left: auto; }
+
+/* ── print / Save as PDF: light, no controls ── */
+@media print {
+  @page { margin: 14mm 12mm; }
+  :root, [data-theme] { --ds-bg: #fff; --ds-surface: #fff; --ds-surface-2: #f5f7fa; --ds-border: #dfe4ec; --ds-text: #0f172a; --ds-text-2: #334155; --ds-text-3: #55657c; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .no-print { display: none !important; }
+  .ad-top { position: static; border-bottom: 2px solid #0f172a; }
+  .ad-page { padding: 12px 0; }
+  .ad-card, .ad-kpi { box-shadow: none; break-inside: avoid; }
+  .tbl-scroll, .tbl-scroll.events { max-height: none; overflow: visible; }
+  .ds-table th { position: static; }
+}
+</style>
+</head>
+<body>
+
+<header class="ad-top">
+  <div class="ad-brand">
+    <span class="ad-logo"><%- ico('bolt') %></span>
+    <div><b>PerfX Studio</b><small>Usage analytics</small></div>
+  </div>
+  <button class="ds-btn ds-btn-ghost icon no-print" id="btn-theme" type="button" title="Light / dark theme" aria-label="Switch between light and dark theme">
+    <span class="i-sun"><%- ico('sun') %></span><span class="i-moon"><%- ico('moon') %></span>
+  </button>
+  <a class="ds-btn no-print" href="<%=adminBase%>/logout" title="Sign out of the admin area"><%- ico('logout') %><span class="lbl">Sign out</span></a>
+</header>
+
+<main class="ad-page">
+
+  <!-- period + exports -->
+  <div class="ad-bar">
+    <nav class="ds-seg no-print" aria-label="Period">
+      <% [['7d','7 days'],['30d','30 days'],['90d','90 days'],['mtd','This month'],['all','All time']].forEach(function(p){ %>
+      <a href="<%=adminBase%>?period=<%=p[0]%>" class="<%=preset===p[0]?'on':''%>"<%- preset===p[0]?' aria-current="page"':'' %>><%=p[1]%></a>
+      <% }) %>
+    </nav>
+    <span class="ad-range"><%= from && to ? from + ' → ' + to : 'All time' %></span>
+    <div class="ad-exports no-print" role="group" aria-label="Download the report">
+      <a class="ds-btn" href="<%=adminBase%>/download/xlsx?<%=q%>" title="Excel workbook — summary, breakdowns and every event"><%- ico('table') %>Excel</a>
+      <a class="ds-btn" href="<%=adminBase%>/download/docx?<%=q%>" title="Word report for management"><%- ico('doc') %>Word</a>
+      <a class="ds-btn" href="<%=adminBase%>/download/csv?<%=q%>" title="Every event as CSV"><%- ico('csv') %>CSV</a>
+      <button class="ds-btn" type="button" onclick="window.print()" title="Print, or choose Save as PDF"><%- ico('print') %>Print / PDF</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <%
+    var problemsTotal = stats.failCount + stats.timeoutCount;
+    var TOOL_C = { recorder: '--c-record', explorer: '--c-explore', studio: '--c-studio', converter: '--c-convert', jmx: '--c-jmeter', analyser: '--c-results' };
+    var TOOL_SHORT = { recorder: 'Recorder', explorer: 'HAR Explorer', studio: 'Script Studio', converter: 'Postman / Bruno', jmx: 'JMeter', analyser: 'Results Analyser' };
+  %>
+  <section class="ad-kpis" aria-label="Key figures">
+    <div class="ad-kpi">
+      <div class="ad-kpi-head"><span class="ds-ico" style="--c:var(--ds-accent)"><%- ico('layers') %></span>Uses</div>
+      <div class="ad-kpi-val"><%=stats.total.toLocaleString()%></div>
+      <div class="ad-kpi-sub">all six tools</div>
+    </div>
+    <div class="ad-kpi">
+      <div class="ad-kpi-head"><span class="ds-ico" style="--c:var(--c-results)"><%- ico('monitor') %></span>Machines</div>
+      <div class="ad-kpi-val"><%=stats.uniquePeople.toLocaleString()%></div>
+      <div class="ad-kpi-sub">by host name, or IP address</div>
+    </div>
+    <div class="ad-kpi">
+      <div class="ad-kpi-head"><span class="ds-ico" style="--c:var(--ds-ok)"><%- ico('check') %></span>Success rate</div>
+      <div class="ad-kpi-val <%=stats.total ? (stats.successRate >= 95 ? 'ok' : stats.successRate < 75 ? 'bad' : '') : ''%>"><%=stats.successRate%>%</div>
+      <div class="ad-kpi-sub"><%=stats.successCount.toLocaleString()%> of <%=stats.total.toLocaleString()%> succeeded</div>
+    </div>
+    <div class="ad-kpi">
+      <div class="ad-kpi-head"><span class="ds-ico" style="--c:var(--ds-bad)"><%- ico('alert') %></span>Problems</div>
+      <div class="ad-kpi-val <%=problemsTotal > 0 ? 'bad' : ''%>"><%=problemsTotal.toLocaleString()%></div>
+      <div class="ad-kpi-sub"><%=stats.failCount%> failed · <%=stats.timeoutCount%> timed out</div>
+    </div>
+    <div class="ad-kpi">
+      <div class="ad-kpi-head"><span class="ds-ico" style="--c:var(<%= stats.busiestTool ? (TOOL_C[stats.busiestTool.tool] || '--ds-accent') : '--ds-accent' %>)"><%- ico('star') %></span>Most used tool</div>
+      <div class="ad-kpi-val small"><%= stats.busiestTool ? (TOOL_SHORT[stats.busiestTool.tool] || stats.busiestTool.label) : '—' %></div>
+      <div class="ad-kpi-sub"><%= stats.busiestTool ? stats.busiestTool.count.toLocaleString() + ' uses · ' + stats.busiestTool.pct + '%' : 'no use in this period' %></div>
+    </div>
+  </section>
+
+  <!-- insights -->
+  <% if (stats.insights && stats.insights.length) { %>
+  <section class="ad-card" aria-labelledby="h-ins">
+    <div class="ad-card-head"><span class="ds-ico" style="--c:var(--ds-accent)"><%- ico('bulb') %></span><h2 id="h-ins">Insights</h2><span class="ds-chip">worked out from this period's figures</span></div>
+    <div class="ad-card-body"><ul class="ad-insights"><% stats.insights.forEach(function (ins) { %><li><%=ins%></li><% }) %></ul></div>
+  </section>
+  <% } %>
+
+  <!-- uses per day, by tool -->
+  <section class="ad-card" aria-labelledby="h-trend">
+    <div class="ad-card-head"><span class="ds-ico" style="--c:var(--ds-accent)"><%- ico('chart') %></span><h2 id="h-trend">Uses per day</h2><span class="ds-chip">by tool</span></div>
+    <div class="ad-card-body"><div class="chart-box tall" data-chart="trend"><canvas id="chartTrend" role="img" aria-label="Uses per day, by tool"></canvas></div></div>
+  </section>
+
+  <!-- tools -->
+  <section class="ad-card" aria-labelledby="h-tools">
+    <div class="ad-card-head"><span class="ds-ico" style="--c:var(--c-studio)"><%- ico('layers') %></span><h2 id="h-tools">Tools</h2></div>
+    <div class="tbl-scroll">
+      <table class="ds-table">
+        <thead><tr><th>Tool</th><th class="num">Uses</th><th>Share</th><th class="num">Machines</th><th>Success</th><th class="num">Problems</th><th class="num">Average time</th><th>Output</th></tr></thead>
+        <tbody>
+          <% stats.toolSummaryRows.forEach(function (t) { %>
+          <tr>
+            <td><span class="tool-dot" style="--c:var(<%=TOOL_C[t.tool] || '--ds-text-3'%>)"></span><b><%=t.label%></b></td>
+            <td class="num"><b><%=t.count.toLocaleString()%></b></td>
+            <td><div class="share"><div class="share-bar"><i style="width:<%=t.pct%>%;background:var(<%=TOOL_C[t.tool] || '--ds-accent'%>)"></i></div><small><%=t.pct%>%</small></div></td>
+            <td class="num"><%=t.people.toLocaleString()%></td>
+            <td><span class="ds-chip <%=t.successRate >= 95 ? 'ok' : t.successRate >= 75 ? 'warn' : 'bad'%>"><%=t.successRate%>%</span></td>
+            <td class="num"><%=t.problems ? t.problems.toLocaleString() : '—'%></td>
+            <td class="num"><%=t.avgDurationLabel%></td>
+            <td class="muted"><%=t.outputLabel%></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <% if (!stats.toolSummaryRows.length) { %><div class="ad-empty"><%- ico('layers') %>No use in this period</div><% } %>
+    </div>
+  </section>
+
+  <!-- people + problems -->
+  <div class="ad-grid-2">
+    <section class="ad-card" aria-labelledby="h-people">
+      <div class="ad-card-head"><span class="ds-ico" style="--c:var(--c-results)"><%- ico('monitor') %></span><h2 id="h-people">Who uses it</h2><span class="ds-chip">Top <%=stats.peopleRows.length%></span></div>
+      <div class="tbl-scroll">
+        <table class="ds-table">
+          <thead><tr><th>#</th><th>Machine</th><th>IP address</th><th class="num">Uses</th><th>Tools</th><th>Success</th><th>Last seen</th></tr></thead>
+          <tbody>
+            <% stats.peopleRows.forEach(function (p, i) { %>
+            <tr>
+              <td class="rank"><%=i + 1%></td>
+              <td class="trunc"><b><%=p.machine || '—'%></b></td>
+              <td class="mono"><%=p.ip_address || '—'%></td>
+              <td class="num"><b><%=p.count.toLocaleString()%></b></td>
+              <td class="tools-cell"><% p.tools.forEach(function (t) { var key = Object.keys(TOOL_SHORT).filter(function (k) { return t.indexOf(TOOL_SHORT[k]) === 0; })[0]; %><span class="tool-dot" style="--c:var(<%=TOOL_C[key] || '--ds-text-3'%>)" title="<%=t%>" role="img" aria-label="<%=t%>"></span><% }) %><small><%=p.tools.length%></small></td>
+              <td><span class="ds-chip <%=p.successRate >= 95 ? 'ok' : p.successRate >= 75 ? 'warn' : 'bad'%>"><%=p.successRate%>%</span></td>
+              <td class="mono"><%=p.lastSeen || '—'%></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% if (!stats.peopleRows.length) { %><div class="ad-empty"><%- ico('monitor') %>No use in this period</div><% } %>
+      </div>
+    </section>
+    <section class="ad-card" aria-labelledby="h-prob">
+      <div class="ad-card-head"><span class="ds-ico" style="--c:var(--ds-bad)"><%- ico('alert') %></span><h2 id="h-prob">Problems</h2><span class="ds-chip"><%=problemsTotal.toLocaleString()%> in this period</span></div>
+      <div class="tbl-scroll">
+        <table class="ds-table">
+          <thead><tr><th>What went wrong</th><th>Tools</th><th class="num">Times</th><th class="num">Machines</th><th>Last seen</th></tr></thead>
+          <tbody>
+            <% stats.problemRows.forEach(function (e) { %>
+            <tr>
+              <td><b><%=e.label%></b><span class="err-code"><%=e.code%></span></td>
+              <td class="tools-cell"><% e.tools.forEach(function (k) { %><span class="tool-dot" style="--c:var(<%=TOOL_C[k] || '--ds-text-3'%>)" title="<%=TOOL_SHORT[k] || k%>" role="img" aria-label="<%=TOOL_SHORT[k] || k%>"></span><% }) %></td>
+              <td class="num"><b><%=e.count.toLocaleString()%></b></td>
+              <td class="num"><%=e.people.toLocaleString()%></td>
+              <td class="mono"><%=e.lastSeen || '—'%></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% if (!stats.problemRows.length) { %><div class="ad-empty"><%- ico('check') %>No failures or time-outs in this period</div><% } %>
+      </div>
+    </section>
+  </div>
+
+  <!-- when + files -->
+  <div class="ad-grid-2">
+    <section class="ad-card" aria-labelledby="h-hm">
+      <div class="ad-card-head"><span class="ds-ico" style="--c:var(--ds-accent)"><%- ico('clock') %></span><h2 id="h-hm">When it is used</h2><span class="ds-chip">day × hour</span></div>
+      <div class="ad-card-body">
+        <div class="hm-scroll">
+          <div class="hm" role="table" aria-label="Uses by day and hour">
+            <span></span><% for (var h = 0; h < 24; h++) { %><span><%= h % 3 === 0 ? String(h).padStart(2, '0') : '' %></span><% } %>
+            <% for (var d = 0; d < 7; d++) { %>
+            <span class="day"><%=DAYS[d]%></span><% for (var h2 = 0; h2 < 24; h2++) { var v = stats.heatmap[h2][d]; var a = hmMax ? (v ? 0.15 + 0.85 * v / hmMax : 0) : 0; %><i title="<%=DAYS[d]%> <%=String(h2).padStart(2,'0')%>:00 — <%=v%> use<%=v===1?'':'s'%>"<%- a ? ' style="background:color-mix(in srgb, var(--ds-accent) ' + Math.round(a * 100) + '%, var(--ds-surface-2))"' : '' %>></i><% } %>
+            <% } %>
+          </div>
+        </div>
+        <div class="hm-legend"><span>Fewer</span><% [0, .25, .5, .75, 1].forEach(function (s) { %><i style="background:<%= s ? 'color-mix(in srgb, var(--ds-accent) ' + Math.round((0.15 + 0.85 * s) * 100) + '%, var(--ds-surface-2))' : 'var(--ds-surface-2)' %>"></i><% }) %><span>More</span><% if (stats.peakDayLabel) { %><span class="push">Busiest: <%=stats.peakDayLabel%> <%=String(stats.peakHour).padStart(2,'0')%>:00</span><% } %></div>
+      </div>
+    </section>
+    <section class="ad-card" aria-labelledby="h-files">
+      <div class="ad-card-head"><span class="ds-ico" style="--c:var(--c-studio)"><%- ico('file') %></span><h2 id="h-files">Most used files</h2><span class="ds-chip">Top <%=stats.fileRows.length%></span></div>
+      <div class="tbl-scroll files">
+        <table class="ds-table">
+          <thead><tr><th>#</th><th>File</th><th>Type</th><th class="num">Uses</th><th class="num">Average size</th><th class="num">Average time</th></tr></thead>
+          <tbody>
+            <% stats.fileRows.forEach(function (f, i) { %>
+            <tr>
+              <td class="rank"><%=i + 1%></td>
+              <td class="trunc" title="<%=f.filename%>"><%=f.filename%></td>
+              <td><span class="ds-chip"><%=(f.ext || '?').replace(/^\./, '')%></span></td>
+              <td class="num"><b><%=f.count.toLocaleString()%></b></td>
+              <td class="num"><%=f.avg_size_label%></td>
+              <td class="num"><%=f.avg_duration_s ? f.avg_duration_s + ' s' : '—'%></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% if (!stats.fileRows.length) { %><div class="ad-empty"><%- ico('file') %>No files in this period</div><% } %>
+      </div>
+    </section>
+  </div>
+
+  <!-- event log -->
+  <section class="ad-card" aria-labelledby="h-evt">
+    <div class="ad-card-head"><span class="ds-ico" style="--c:var(--ds-accent)"><%- ico('list') %></span><h2 id="h-evt">Event log</h2><span class="ds-chip" id="evtCount" aria-live="polite">Loading…</span></div>
+    <div class="ad-filters no-print">
+      <label class="ad-search"><%- ico('search') %><input class="ds-field" id="fSearch" type="search" placeholder="Search machine, IP or file" aria-label="Search machine, IP or file" oninput="debounceLoad()"></label>
+      <select class="ds-field" id="fTool" onchange="loadEvents()" aria-label="Tool">
+        <option value="">All tools</option>
+        <option value="recorder">Recorder</option>
+        <option value="studio">Script Studio</option>
+        <option value="converter">Postman / Bruno</option>
+        <option value="jmx">JMeter</option>
+        <option value="explorer">HAR Explorer</option>
+        <option value="analyser">Results Analyser</option>
+      </select>
+      <select class="ds-field" id="fResult" onchange="loadEvents()" aria-label="Result">
+        <option value="">All results</option>
+        <option value="success">Success</option>
+        <option value="failed">Failed</option>
+        <option value="timeout">Timed out</option>
+      </select>
+      <input class="ds-field" id="fFrom" type="date" value="<%=from || ''%>" onchange="loadEvents()" aria-label="From date">
+      <input class="ds-field" id="fTo" type="date" value="<%=to || ''%>" onchange="loadEvents()" aria-label="To date">
+      <button class="ds-btn ds-btn-ghost ds-btn-sm" type="button" onclick="clearFilters()">Clear</button>
+      <button class="ds-btn ds-btn-sm push" type="button" onclick="loadEvents()"><%- ico('refresh') %>Refresh</button>
+    </div>
+    <div class="tbl-scroll events">
+      <table class="ds-table">
+        <thead><tr><th>Time</th><th>Machine</th><th>IP</th><th>Tool</th><th>Output</th><th>File</th><th class="num">Size</th><th class="num">Items</th><th class="num">Correlations</th><th class="num">Duration</th><th>Result</th><th>Browser / OS</th></tr></thead>
+        <tbody id="evtBody"><tr><td colspan="12"><div class="ad-empty">Loading…</div></td></tr></tbody>
+      </table>
+    </div>
+    <div class="ad-pages no-print">
+      <button class="ds-btn ds-btn-sm" id="btnPrev" type="button" onclick="prevPage()" disabled>← Previous</button>
+      <span id="pageInfo">Page 1</span>
+      <button class="ds-btn ds-btn-sm" id="btnNext" type="button" onclick="nextPage()">Next →</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="<%=adminBase%>/vendor/chart.js"></script>
+<script>
+var ADMIN_BASE = "<%=adminBase%>";
+var evtOffset = 0, evtTotal = 0, PAGE_SIZE = 50, _debTimer = null;
+var dailyTools = <%- JSON.stringify(stats.dailyTools) %>;
+var EMPTY_ICON = '<%- ico("chart").replace(/'/g, "\\'") %>';
+
+// ── theme: the same toggle and key as the portal ──
+document.getElementById('btn-theme').addEventListener('click', function () {
+  var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('lr-theme', next); } catch (e) { /* storage blocked */ }
+  drawCharts();
+});
+
+// ── uses per day, stacked by tool; colours from the design tokens, redrawn when the theme changes ──
+var charts = [];
+function tok(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function empty(box, text) { box.innerHTML = '<div class="ad-empty">' + EMPTY_ICON + text + '</div>'; }
+function drawCharts() {
+  var box = document.querySelector('[data-chart="trend"]');
+  if (typeof Chart === 'undefined') { empty(box, 'The chart could not be loaded'); return; }
+  charts.forEach(function (c) { c.destroy(); }); charts = [];
+  if (!dailyTools.days.length || !dailyTools.series.length) { empty(box, 'No use in this period'); return; }
+  var text2 = tok('--ds-text-2'), text3 = tok('--ds-text-3'), grid = tok('--ds-border');
+  Chart.defaults.color = text2; Chart.defaults.font.family = tok('--ds-font') || 'Segoe UI, sans-serif'; Chart.defaults.font.size = 12;
+  var TOOL_C = { recorder: tok('--c-record'), explorer: tok('--c-explore'), studio: tok('--c-studio'), converter: tok('--c-convert'), jmx: tok('--c-jmeter'), analyser: tok('--c-results') };
+  charts.push(new Chart(document.getElementById('chartTrend'), {
+    type: 'bar',
+    data: { labels: dailyTools.days, datasets: dailyTools.series.map(function (s) { return { label: s.label, data: s.counts, backgroundColor: TOOL_C[s.tool] || text3, borderRadius: 3, maxBarThickness: 28 }; }) },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', align: 'end', labels: { color: text2, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 14 } },
+        tooltip: { backgroundColor: tok('--ds-surface-2'), titleColor: tok('--ds-text'), bodyColor: text2, borderColor: grid, borderWidth: 1, padding: 10, cornerRadius: 8,
+          filter: function (i) { return i.raw > 0; },
+          callbacks: { footer: function (items) { var n = items.reduce(function (a, i) { return a + i.raw; }, 0); return n + ' use' + (n === 1 ? '' : 's'); } } }
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false }, border: { color: grid }, ticks: { color: text3, maxTicksLimit: 12 } },
+        y: { stacked: true, grid: { color: grid }, border: { display: false }, ticks: { color: text3, precision: 0 }, beginAtZero: true }
+      }
+    }
+  }));
+}
+drawCharts();
+
+// ── event log ──
+var TOOL_LABELS = { converter: 'Postman / Bruno', jmx: 'JMeter', recorder: 'Recorder', explorer: 'HAR Explorer', studio: 'Script Studio', analyser: 'Results Analyser' };
+var RESULT_CHIP = { success: 'ok', failed: 'bad', timeout: 'warn' };
+var RESULT_LABEL = { success: 'Success', failed: 'Failed', timeout: 'Timed out' };
+var OUTPUT_LABEL = { devweb: 'DevWeb', vugen: 'VuGen', 'web-http': 'VuGen', webhttp: 'VuGen', both: 'Both' };
+function fmtSize(kb) { if (kb == null) return '—'; return kb < 1024 ? kb + ' KB' : kb < 1048576 ? (kb / 1024).toFixed(1) + ' MB' : (kb / 1048576).toFixed(2) + ' GB'; }
+function fmtDur(ms)  { if (!ms) return '—'; return ms < 1000 ? ms + ' ms' : ms < 60000 ? (ms / 1000).toFixed(1) + ' s' : Math.round(ms / 60000) + ' min'; }
+function fmtItems(r) {
+  if (r.request_count == null) return '—';
+  return r.request_count.toLocaleString() + (r.tool === 'analyser' ? ' transactions' : ' requests');
+}
+function fmtCorr(found, accepted) {
+  if (!found && !accepted) return '—';
+  if (accepted != null && found != null) return accepted + ' / ' + found;
+  return (accepted || found || 0).toString();
+}
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function emptyRow(text) { return '<tr><td colspan="12"><div class="ad-empty">' + text + '</div></td></tr>'; }
+
+function clearFilters() {
+  document.getElementById('fSearch').value = '';
+  document.getElementById('fTool').value = '';
+  document.getElementById('fResult').value = '';
+  loadEvents();
+}
+function buildUrl() {
+  var parts = ['limit=' + PAGE_SIZE, 'offset=' + evtOffset];
+  [['tool', 'fTool'], ['result', 'fResult'], ['search', 'fSearch'], ['from', 'fFrom'], ['to', 'fTo']].forEach(function (p) {
+    var v = document.getElementById(p[1]).value; if (v) parts.push(p[0] + '=' + encodeURIComponent(v));
+  });
+  return ADMIN_BASE + '/api/events?' + parts.join('&');
+}
+function loadEvents()   { evtOffset = 0; fetchEvents(); }
+function debounceLoad() { clearTimeout(_debTimer); _debTimer = setTimeout(loadEvents, 350); }
+function prevPage()     { evtOffset = Math.max(0, evtOffset - PAGE_SIZE); fetchEvents(); }
+function nextPage()     { evtOffset += PAGE_SIZE; fetchEvents(); }
+
+function fetchEvents() {
+  fetch(buildUrl())
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      evtTotal = data.total;
+      var rows = data.rows || [];
+      document.getElementById('evtCount').textContent = evtTotal.toLocaleString() + ' event' + (evtTotal === 1 ? '' : 's');
+      var page = Math.floor(evtOffset / PAGE_SIZE) + 1, pages = Math.ceil(evtTotal / PAGE_SIZE) || 1;
+      document.getElementById('pageInfo').textContent = 'Page ' + page + ' of ' + pages;
+      document.getElementById('btnPrev').disabled = evtOffset <= 0;
+      document.getElementById('btnNext').disabled = evtOffset + PAGE_SIZE >= evtTotal;
+      if (!rows.length) { document.getElementById('evtBody').innerHTML = emptyRow('No events match the filters'); return; }
+      document.getElementById('evtBody').innerHTML = rows.map(function (r) {
+        var ts = r.started_at ? r.started_at.slice(0, 16).replace('T', ' ') : '—';
+        var ua = escHtml([r.browser, r.os].filter(Boolean).join(' / ') || '—');
+        var fname = r.filename ? '<span title="' + escHtml(r.filename) + '">' + escHtml(r.filename.length > 32 ? '…' + r.filename.slice(-30) : r.filename) + '</span>' : '—';
+        var err = r.error_code ? '<span class="err-code">' + escHtml(r.error_code) + '</span>' : '';
+        return '<tr>'
+          + '<td class="mono">' + ts + '</td>'
+          + '<td>' + escHtml(r.hostname || r.ip_address || '—') + '</td>'
+          + '<td class="mono">' + escHtml(r.ip_address || '—') + '</td>'
+          + '<td><span class="ds-chip">' + escHtml(TOOL_LABELS[r.tool] || r.tool || '—') + '</span></td>'
+          + '<td>' + escHtml(OUTPUT_LABEL[r.protocol] || r.protocol || '—') + '</td>'
+          + '<td class="trunc mono">' + fname + '</td>'
+          + '<td class="num">' + fmtSize(r.file_size_kb) + '</td>'
+          + '<td class="num">' + fmtItems(r) + '</td>'
+          + '<td class="num">' + fmtCorr(r.correlations_found, r.correlations_accepted) + '</td>'
+          + '<td class="num">' + fmtDur(r.duration_ms) + '</td>'
+          + '<td><span class="ds-chip ' + (RESULT_CHIP[r.result] || '') + '">' + escHtml(RESULT_LABEL[r.result] || r.result || '—') + '</span>' + err + '</td>'
+          + '<td class="trunc muted" title="' + ua + '">' + ua + '</td>'
+          + '</tr>';
+      }).join('');
+    })
+    .catch(function () { document.getElementById('evtBody').innerHTML = emptyRow('The events could not be loaded — refresh to try again'); });
+}
+loadEvents();
+</script>
+</body>
+</html>

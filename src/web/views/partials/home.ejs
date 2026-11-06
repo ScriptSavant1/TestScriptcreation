@@ -1,0 +1,145 @@
+<%#
+  Home page (v6) — modelled on the agreed design: welcome band (headline, tagline, inputs → outputs picture),
+  Quick actions (the six tools, icons as in the sidebar), "Your workflow" (record → correlate → run in LRE → analyse, each with its tool) and
+  "Need help?" with the privacy note, then a footer line. Explanations live in Help & guides.
+  Behaviour in public/portal/home.js, styles in public/portal/home.css. Locals: I (icons), basePath.
+  Kept for other code: data-go / data-help / data-scroll / data-tab.
+%>
+<%
+  /* icons only the Home page uses */
+  const X = {
+    bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/>',
+    fileCode: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m10 13-2 2 2 2"/><path d="m14 13 2 2-2 2"/>',
+    fileZip: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M10 7h1M10 10h1M10 13h1"/><rect x="9" y="15" width="3" height="3" rx=".5"/>',
+    report: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 17v-3"/><path d="M12 17v-5"/><path d="M15 17v-2"/>',
+    insights: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>',
+    rocket: '<path d="M5 15c-1.5 1.5-2 4-2 6 2 0 4.5-.5 6-2"/><path d="M9 15 15 9"/><path d="M14.5 4.5C17 2 20 2 22 2c0 2 0 5-2.5 7.5L13 16l-5-5z"/><path d="M8 11H4l3-4h4"/><path d="M13 16v4l4-3v-4"/>',
+    faq: '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.5 8.5a2.5 2.5 0 1 1 3.3 2.4c-.5.2-.8.6-.8 1.1"/><path d="M12 14.5h.01"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5"/><path d="m9.5 13.5 2.5-2.5 2.5 2.5"/>',
+    curve: '<path d="M21 21c-9 0-15-5-16-15"/><path d="m2 9 3-4 3 4"/>',
+    route: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+    play: '<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>',
+  };
+  const ico = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[name] || X[name]}</svg>`;
+  const tools = [
+    { go: 'record',  tab: 'recorder',  c: '--c-record',  icon: 'record',  name: 'Recorder',         open: 'Open Recorder',         what: 'Record a user journey in your browser and generate LoadRunner scripts.' },
+    { go: 'explore', tab: 'explorer',  c: '--c-explore', icon: 'explore', name: 'HAR Explorer',     open: 'Open HAR Explorer',     what: 'See every request of a recording and where each dynamic value comes from.' },
+    { go: 'studio',  tab: 'studio',    c: '--c-studio',  icon: 'link',    name: 'Script Studio',    open: 'Open Script Studio',    what: 'Create and enhance VuGen scripts with automatic correlation.' },
+    { go: 'postman', tab: 'converter', c: '--c-convert', icon: 'api',     name: 'Postman / Bruno',  open: 'Open Converter',        what: 'Convert your API collection to a ready-to-run VuGen script.' },
+    { go: 'jmeter',  tab: 'converter', c: '--c-jmeter',  icon: 'migrate', name: 'JMeter',           open: 'Open JMeter Converter', what: 'Convert JMeter test plans (.jmx) to VuGen scripts.' },
+    { go: 'results', tab: 'analyser',  c: '--c-results', icon: 'chart',   name: 'Results Analyser', open: 'Open Results Analyser', what: 'Understand your LoadRunner results and generate reports.' },
+  ];
+  const ins = [
+    { icon: 'globe',   c: '--c-record',  t: 'Browser recording' },
+    { icon: 'api',     c: '--c-convert', t: 'Postman / Bruno' },
+    { icon: 'migrate', c: '--c-jmeter',  t: 'JMeter test plan' },
+    { icon: 'chart',   c: '--c-results', t: 'LRE results' },
+  ];
+  const outs = [
+    { icon: 'fileCode', c: '--c-convert', t: 'VuGen script' },
+    { icon: 'insights', c: '--c-results', t: 'Performance insights' },
+    { icon: 'report',   c: '--ds-bad',    t: 'Reports (Excel / PDF)' },
+  ];
+  /* "Your workflow": a typical performance test, from recording to report */
+  const steps = [
+    { go: 'record',  tab: 'recorder', c: '--c-record',  icon: 'record', t: 'Record a user journey',    s: 'Recorder — in your browser',      act: 'Open' },
+    { go: 'studio',  tab: 'studio',   c: '--c-studio',  icon: 'link',   t: 'Correlate dynamic values', s: 'Script Studio — automatic',      act: 'Open' },
+    { go: null,      tab: null,       c: '--ds-text-3', icon: 'play',   t: 'Run the load test',        s: 'In LoadRunner Enterprise, as usual', act: null },
+    { go: 'results', tab: 'analyser', c: '--c-results', icon: 'chart',  t: 'Analyse the results',      s: 'Results Analyser — reports to share', act: 'Analyse' },
+  ];
+%>
+<div id="portal-home" class="hm">
+
+  <!-- Welcome -->
+  <header class="hm-hero">
+    <div class="hm-hero-text">
+      <h1>Welcome to <span>PerfX Studio</span></h1>
+      <p class="hm-tagline">Turn real-world performance scenarios into actionable insights.</p>
+      <p class="hm-lead">Create LoadRunner scripts from browser recordings, API collections or JMeter plans, and analyse your performance test results — all in one place.</p>
+      <div class="hm-hero-actions">
+        <button class="ds-btn ds-btn-primary ds-btn-lg" type="button" data-scroll="hm-tools">Get started <%- ico('arrowRight') %></button>
+        <button class="ds-btn ds-btn-lg hm-btn-soft" type="button" data-scroll="hm-flow"><%- ico('help') %> Which tool do I need?</button>
+      </div>
+    </div>
+
+    <figure class="hm-map-wrap">
+      <div class="hm-map" role="img" aria-label="Browser recording, Postman or Bruno, JMeter test plan and LRE results go in; VuGen scripts, performance insights and reports come out">
+        <ul class="hm-map-in">
+          <% ins.forEach(x => { %><li style="--c:var(<%= x.c %>)"><span class="hm-chip-ico"><%- ico(x.icon) %></span><%= x.t %></li><% }) %>
+        </ul>
+        <svg class="hm-map-wire" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <% [12.5, 37.5, 62.5, 87.5].forEach(y => { %><path d="M0 <%= y %> C 50 <%= y %>, 50 50, 96 50"/><% }) %>
+        </svg>
+        <div class="hm-map-hub"><span><%- ico('bolt') %></span></div>
+        <svg class="hm-map-wire hm-map-wire-out" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 50 L 92 50"/>
+        </svg>
+        <ul class="hm-map-out">
+          <% outs.forEach(x => { %><li style="--c:var(<%= x.c %>)"><span class="hm-chip-ico"><%- ico(x.icon) %></span><%= x.t %></li><% }) %>
+        </ul>
+      </div>
+      <figcaption><%- ico('curve') %><span>From recording<br>to results — effortlessly</span></figcaption>
+    </figure>
+  </header>
+
+  <!-- Quick actions -->
+  <section id="hm-tools" aria-labelledby="hm-tools-h">
+    <div class="hm-head">
+      <div><h2 id="hm-tools-h">Quick actions</h2><p>Pick a tool to get started. No installation required.</p></div>
+      <button class="hm-link" type="button" data-help="hacc-overview">View all tools <%- ico('arrowRight') %></button>
+    </div>
+    <div class="hm-tools">
+      <% tools.forEach(t => { %>
+      <button class="hm-tool" type="button" data-go="<%= t.go %>" data-tab="<%= t.tab %>" style="--c:var(<%= t.c %>)">
+        <span class="hm-tool-ico"><%- ico(t.icon) %></span>
+        <span class="hm-tool-name"><%= t.name %></span>
+        <span class="hm-tool-what"><%= t.what %></span>
+        <span class="hm-tool-open"><%= t.open %> <%- ico('arrowRight') %></span>
+      </button>
+      <% }) %>
+    </div>
+  </section>
+
+  <!-- Open a file · Need help? -->
+  <div class="hm-row">
+    <section class="hm-panel hm-flow" id="hm-flow" aria-labelledby="hm-flow-h">
+      <div class="hm-panel-head">
+        <span class="hm-panel-ico"><%- ico('route') %></span>
+        <div><h2 id="hm-flow-h">Your workflow</h2><p>From recording to report — the tool for each step.</p></div>
+        <button class="hm-link" type="button" data-help="hacc-quickstart">Quick start <%- ico('arrowRight') %></button>
+      </div>
+      <ol class="hm-step-list">
+        <% steps.forEach((x, i) => { %>
+        <li<%- x.tab ? ' data-tab="' + x.tab + '"' : '' %> style="--c:var(<%= x.c %>)">
+          <span class="hm-step-ico"><%- ico(x.icon) %><i><%= i + 1 %></i></span>
+          <span class="hm-step-t"><b><%= x.t %></b><small><%= x.s %></small></span>
+          <% if (x.go) { %><button class="hm-pill" type="button" data-go="<%= x.go %>"><%= x.act %> <%- ico('arrowRight') %></button><% } else { %><span class="hm-pill hm-pill-off">In LRE</span><% } %>
+        </li>
+        <% }) %>
+      </ol>
+      <p class="hm-flow-alt">Have an API collection or a JMeter plan? Convert it directly —
+        <button class="hm-inline" type="button" data-go="postman" data-tab="converter">Postman / Bruno</button> or
+        <button class="hm-inline" type="button" data-go="jmeter" data-tab="converter">JMeter</button>.</p>
+    </section>
+
+    <section class="hm-panel hm-help" aria-labelledby="hm-help-h">
+      <div class="hm-panel-head">
+        <span class="hm-panel-ico"><%- ico('book') %></span>
+        <div><h2 id="hm-help-h">Need help?</h2><p>Learn, explore and get the most out of PerfX Studio.</p></div>
+      </div>
+      <div class="hm-help-tiles">
+        <button type="button" data-help="hacc-quickstart" style="--c:var(--c-studio)"><span class="hm-tile-ico"><%- ico('rocket') %></span><span><b>Quick Start</b><small>Get up and running in minutes.</small><%- ico('arrowRight') %></span></button>
+        <button type="button" data-go="help" style="--c:var(--c-convert)"><span class="hm-tile-ico"><%- ico('book') %></span><span><b>Documentation</b><small>Step-by-step guides and examples.</small><%- ico('arrowRight') %></span></button>
+        <button type="button" data-help="hacc-faq" style="--c:var(--c-results)"><span class="hm-tile-ico"><%- ico('faq') %></span><span><b>FAQ</b><small>Answers to common questions.</small><%- ico('arrowRight') %></span></button>
+      </div>
+      <div class="hm-private">
+        <span class="hm-private-ico"><%- ico('shield') %></span>
+        <div><b>Your files are never stored</b><p>Recorder, Script Studio and Results Analyser run in your browser — nothing is uploaded. Files you upload to a converter are deleted when the conversion ends.</p></div>
+        <button class="hm-link" type="button" data-help="hacc-privacy">Learn more <%- ico('arrowRight') %></button>
+      </div>
+    </section>
+  </div>
+
+  <div class="hm-foot"><span><b>PerfX Studio</b><i>|</i>Performance engineering, simplified.</span><span>Build better. Perform faster.</span></div>
+</div>
