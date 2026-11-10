@@ -84,7 +84,7 @@ class AdvancedScriptGenerator {
     // NTLM/Kerberos detection — populated by detectNtlmKerberos() during analyze()
     this.hasNtlm = false;
     this.ntlmAuthType = null; // 'ntlm' | 'kerberos'
-    this.ntlmHost = ""; // hostname without port for load.setUserCredentials()
+    this.ntlmHost = ""; // host for load.setUserCredentials(): host:port only on a port other than 80 / 443
 
     // mTLS cert detection — populated by detectMtlsCert() during analyze()
     // Each entry: { certFile, keyFile, format: 'PEM'|'PFX' }
@@ -246,7 +246,7 @@ class AdvancedScriptGenerator {
         this.ntlmAuthType = authType;
 
         // --- Host extraction ---
-        // JMX AuthManager provides reqAuth.hostport (hostname only, no port after parser fix)
+        // JMX AuthManager provides reqAuth.hostport (host:port on a port other than 80 / 443, else the host name)
         let host = reqAuth?.hostport || "";
         if (!host) {
           // Postman/Bruno: extract hostname from the request URL
@@ -254,10 +254,11 @@ class AdvancedScriptGenerator {
             typeof req.url === "string" ? req.url : req.url?.raw || "";
           try {
             const u = new URL(urlStr.replace(/\{\{[^}]+\}\}/g, "placeholder"));
-            host = u.hostname;
+            // host:port on a port other than 80 / 443, the host name alone on those — what VuGen and DevWeb match (BUG-130)
+            host = HostParams.hostKey(u.href);
           } catch {
-            const m = urlStr.match(/^https?:\/\/([^/:?#]+)/i);
-            host = m ? m[1] : "";
+            const m = urlStr.match(/^https?:\/\/[^/?#]+/i);
+            host = m ? HostParams.hostKey(m[0]) : "";
           }
         }
         this.ntlmHost = host;

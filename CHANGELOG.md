@@ -6,6 +6,14 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Script generation
 
+#### Sign-in (NTLM, Kerberos, Basic)
+
+##### Fixed
+
+- Credentials reach a server on a port other than 80 / 443: the host in `web_set_user` / `load.setUserCredentials` is `host:port` there, and the host name alone on 80 / 443 (BUG-130). Checked on VuGen and DevWeb 26.3.
+- VuGen NTLM scripts sign in as the script's user, not as the Windows account the engine runs under: `OverrideNTLMCreds` is no longer turned on (BUG-131).
+- Converter VuGen scripts sign in with NTLM at all: `default.cfg` now has `WebRecorderVersion=10`, without which VuGen answered NTLM with Basic (BUG-132).
+
 #### LoadRunner 26.3
 
 ##### Fixed

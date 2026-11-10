@@ -241,7 +241,8 @@ function genActionC(){
       o+=`\t// Runtime Settings: Internet Protocol -> Preferences -> Authentication\n`;
       o+=`\t//   [x] Enable Integrated Authentication\n`;
     }
-    const ntlmHost=S.auth.host||'server';
+    // host:port on a port other than 80 / 443, the host name alone on those — what VuGen and DevWeb match (BUG-130)
+    const ntlmHost=S.auth.hostKey||S.auth.host||'server';
     const ntlmParam=acHostVarMap[ntlmHost];
     o+=`\tweb_set_user("{username}", "{password}", "${ntlmParam?'{'+ntlmParam+'}':ntlmHost}");\n\n`;
   }
@@ -546,7 +547,7 @@ function genMainJS(){
     } else if(S.auth.type==='ntlm'){
       o+=`    // Runtime Settings: Replay -> enableIntegratedAuthentication: true\n`;
     }
-    const hostArg=(S.auth.type==='basic'||S.auth.type==='digest')?'"*"':(mjHostVarMap[S.auth.host]||`"${S.auth.host||'server'}"`);
+    const hostArg=(S.auth.type==='basic'||S.auth.type==='digest')?'"*"':(mjHostVarMap[S.auth.hostKey||S.auth.host]||`"${S.auth.hostKey||S.auth.host||'server'}"`);
     const isWinAuth=S.auth.type==='kerberos'||S.auth.type==='ntlm'||S.auth.type==='negotiate';
     o+=`    load.setUserCredentials({\n`;
     o+=`        username: load.params['username'],\n`;
@@ -876,7 +877,7 @@ function detectAuth(entries){
     try{
       const u=new URL(url);
       const port=u.port||(u.protocol==='https:'?'443':'80');
-      return{host:u.hostname,port,hostport:u.hostname+':'+port};
+      return{host:u.hostname,port,hostport:u.hostname+':'+port,hostKey:HostParams.hostKey(url)};
     }catch{return{host:'',port:'443',hostport:''};}
   }
   const PRIO={kerberos:7,ntlm:6,negotiate:5,digest:4,basic:3,bearer:2,saml:1};
@@ -943,7 +944,7 @@ function detectCorporateAuth(entries, currentAuth){
     if(!PUB.test(h)||AZURE.test(h)){
       try{
         const u=new URL(e.url),port=u.port||(u.protocol==='https:'?'443':'80'),hp=u.hostname+':'+port;
-        return{type:'negotiate',host:u.hostname,port,hostport:hp,realm:hp};
+        return{type:'negotiate',host:u.hostname,port,hostport:hp,realm:hp,hostKey:HostParams.hostKey(e.url)};
       }catch{}
     }
   }
@@ -962,7 +963,7 @@ function genDefaultCfg(auth){
     } else {
       overrides['IntegratedAuthentication']='1';
       overrides['UseNativeNTLM']='1';
-      overrides['OverrideNTLMCreds']='1';
+      // never OverrideNTLMCreds=1: with UseNativeNTLM=1 VuGen signs in as the Windows account, not web_set_user (BUG-131)
     }
   }
   if(!Object.keys(overrides).length) return WEB_DEFAULT_CFG;

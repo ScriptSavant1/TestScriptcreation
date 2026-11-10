@@ -70,10 +70,9 @@ const TOOLS = {
   },
 };
 
-// Keys of the template a tool leaves out on purpose — "<tool>|<file>|<key>": reason
-const DECIDED = {
-  'Converter|qtweb/default.cfg|WEB/WebRecorderVersion': 'records which recorder made the script; the converter records nothing',
-};
+// Keys of the template a tool leaves out on purpose — "<tool>|<file>|<key>": reason. Empty: leaving out
+// WebRecorderVersion looked harmless, but without it VuGen answers an NTLM challenge with Basic (BUG-132).
+const DECIDED = {};
 
 function missing(refKeys, got, tool, file) {
   return Object.keys(refKeys).filter((k) => !(k in got) && !DECIDED[`${tool}|${file}|${k}`]);

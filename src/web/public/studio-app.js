@@ -507,6 +507,7 @@ async function analyze() {
             host: ssoRealm,
             realm: ssoRealm,
             hostport: ssoRealm,
+            hostKey: (() => { try { return HostParams.hostKey(ssoRedirects[0].url) || ssoRealm; } catch { return ssoRealm; } })(),
           };
           ssoWindowsAuth = true;
           // username/password/domain params: the main block above ran before SSO detection,

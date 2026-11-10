@@ -361,6 +361,7 @@ PrintTimeStamp=0
 
 [WEB]
 SearchForImages=1
+WebRecorderVersion=10
 HttpVer=1.1
 KeepAlive=1
 EnableChecks=0
@@ -429,7 +430,7 @@ PrefetchPrerenderCallBackTimerIntervalMS=500
 Retry401ThinkTime=0
 DisableNTLM2SS=0
 UseNativeNTLM=${hasNtlm ? 1 : 0}
-OverrideNTLMCreds=${hasNtlm ? 1 : 0}
+OverrideNTLMCreds=0
 IntegratedAuthentication=${hasNtlm ? 1 : 0}
 HeavyKDCLoad=0
 SPNCNameLookup=0

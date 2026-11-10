@@ -1500,7 +1500,7 @@ function genMainJS(entries, correlations) {
     const hostArg =
       S.auth.type === "basic" || S.auth.type === "digest"
         ? '"*"'
-        : `"${S.auth.host || "server"}"`;
+        : `"${S.auth.hostKey || S.auth.host || "server"}"`;
     const isWinAuth =
       S.auth.type === "kerberos" ||
       S.auth.type === "ntlm" ||
@@ -2786,7 +2786,8 @@ function genActionC(entries, correlations) {
       o += `\t// Runtime Settings: Internet Protocol -> Preferences -> Authentication\n`;
       o += `\t//   [x] Enable Integrated Authentication\n`;
     }
-    const ntlmHost = S.auth.host || "server";
+    // host:port on a port other than 80 / 443, the host name alone on those — what VuGen and DevWeb match (BUG-130)
+    const ntlmHost = S.auth.hostKey || S.auth.host || "server";
     const ntlmParam = acHostVarMap[ntlmHost];
     o += `\tweb_set_user("{username}", "{password}", "${ntlmParam ? "{" + ntlmParam + "}" : ntlmHost}");\n\n`;
   }
@@ -3897,6 +3898,7 @@ function detectAuth(entries) {
         host: u.hostname,
         port,
         hostport: u.hostname + ":" + port,
+        hostKey: HostParams.hostKey(url),
       };
     } catch {
       return { host: "", port: "443", hostport: "" };
@@ -3991,7 +3993,7 @@ function genDefaultCfg(auth) {
     } else {
       overrides["IntegratedAuthentication"] = "1";
       overrides["UseNativeNTLM"] = "1";
-      overrides["OverrideNTLMCreds"] = "1";
+      // never OverrideNTLMCreds=1: with UseNativeNTLM=1 VuGen signs in as the Windows account, not web_set_user (BUG-131)
     }
   }
   if (!Object.keys(overrides).length) return WEB_DEFAULT_CFG;
@@ -4038,6 +4040,7 @@ function detectCorporateAuth(entries, currentAuth) {
           port,
           hostport: hp,
           realm: hp,
+          hostKey: HostParams.hostKey(e.url),
         };
       } catch {}
     }

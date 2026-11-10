@@ -203,6 +203,10 @@ DevWeb 26.3 (DevWeb.exe run directly) refuses an rts.yml without `network.ipVers
   `web_set_sockets_option("SSL_VERSION","AUTO")`, `web_add_auto_header` for headers on EVERY request with ONE value.
   Never global: authorization, proxy-authorization, cookie, dpop(-pf), origin, access-control-request-*, *csrf*/*xsrf*.
   `web_set_user` is in Action in all tools (converter NTLM / Kerberos too; collection-level auth is inherited).
+  Its host (and DevWeb `setUserCredentials`' host) is the server key `HostParams.hostKey`: `host:port` only on a port other than
+  80 / 443 (VuGen and DevWeb 26.3 match nothing else; DevWeb never matches `host:443`) — BUG-130. VuGen NTLM: never
+  `OverrideNTLMCreds=1` (with `UseNativeNTLM=1` the engine signs in as its Windows account — BUG-131); `WebRecorderVersion`
+  must be in `default.cfg` (without it VuGen answers NTLM with Basic — BUG-132). The user for VuGen NTLM is `DOMAIN\user`.
   Only servers the finished script writes are declared (`HostParams.usedKeys`; Studio reads `S._stActionC`).
 - Action: a pointer comment, `lre-utils.js` reloaded at the top when DPoP/PKCE/JWT is used (VuGen empties its JS
   engine every new-user iteration — BUG-092), one DPoP proof right before each request (htu = URL as sent, via

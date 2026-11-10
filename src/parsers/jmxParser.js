@@ -269,7 +269,8 @@ function parseAuthManager(nodeChildren) {
 }
 
 function extractHostPort(urlStr) {
-  try { const u = new URL(urlStr || ''); return u.hostname || urlStr; }
+  // host:port on a port other than the scheme's default (URL drops 80 / 443), the host name alone otherwise (BUG-130)
+  try { const u = new URL(urlStr || ''); return u.hostname ? (u.port ? u.hostname + ':' + u.port : u.hostname) : urlStr; }
   catch { return urlStr || ''; }
 }
 
