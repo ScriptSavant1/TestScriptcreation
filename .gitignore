@@ -55,3 +55,6 @@ DevWeb JavaScript SDK263.pdf
 # Local-only notes from real test runs
 lre-results-analyser/docs/SPEC-FINDINGS-vs-LRE.md
 lre-results-analyser/docs/SPEC-RawData-eve-REVERSE-ENGINEERED.md
+
+# VuGen templates (vugen-reference/README.md): keep every file, including main.js and action.c
+!vugen-reference/**

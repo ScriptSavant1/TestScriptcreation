@@ -551,6 +551,9 @@ const DEVWEB_RTS_YML = `httpConnection:
   requestTimeout: 120
   canonicalHeaderEntries: true
 
+network:
+  ipVersion: any
+
 dns:
   bypassSystem: false
   ttl: 600

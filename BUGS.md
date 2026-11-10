@@ -6,6 +6,8 @@ Every bug found in PerfX Studio, newest first. Open bugs are at the top; fixed b
 
 | Bug | Severity | Description |
 |-----|----------|-------------|
+| BUG-131 | High | **Converter VuGen scripts with NTLM / Kerberos sign in as the Windows account the engine runs under, not the script's user.** The converter writes `UseNativeNTLM=1` and `OverrideNTLMCreds=1` in `default.cfg`; together (not each alone) they make VuGen 26.3 ignore `web_set_user`. The Recorder and Script Studio write 0 and send the script's user. Found with a local NTLM test server. Whether a Kerberos script should use the load generator's account is the owner's decision. |
+| BUG-130 | High | **Credentials (`web_set_user` / `load.setUserCredentials`) are not sent when the server uses a port other than 80 / 443.** Every tool writes the host name alone; on another port VuGen and DevWeb 26.3 send nothing for it (Basic and NTLM checked). On 80 / 443 the host name alone is right, and DevWeb sends nothing for `host:80` / `host:443`. Fix: write `host:port` only for other ports (the same form as the server parameters' keys). |
 
 ## Known limitations
 
@@ -22,6 +24,7 @@ Behaviour that is deliberate or deferred, recorded so it is not reported again a
 
 | ID | Severity | Description |
 |----|----------|-------------|
+| BUG-129 | Critical | **DevWeb 26.3 refused every generated rts.yml when DevWeb.exe ran the script directly**: "network ip version setting is not valid". 26.3 requires `network.ipVersion`, which no tool wrote; VuGen's 25.1 and 26.1 rts.yml fail the same way. Through VuGen's driver (mdrv.exe) the scripts ran. Fix: the converter, Recorder and Script Studio write `network: ipVersion: any` where VuGen 26.3 writes it; the Recorder and Script Studio `.usr` files say 26.3 like the converters; every DevWebSdk.d.ts copy is the 26.3 one (comment changes only). Checked on DevWeb 26.3 (direct and through mdrv.exe), DevWeb 25.1 (ignores the setting) and VuGen 26.3. `tests/unit/vugenReference.test.js` compares every tool, both protocols, with the VuGen templates in `vugen-reference/`. |
 
 ## Fixed in released versions
 

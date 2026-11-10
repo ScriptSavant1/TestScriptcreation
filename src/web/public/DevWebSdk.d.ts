@@ -1,4 +1,4 @@
-// Type definitions for [DevWeb SDK] [26.1.0]
+// Type definitions for [DevWeb SDK] [26.3.0]
 // Project: [DevWeb]
 // Definitions by: [DevWeb Team]
 
@@ -321,7 +321,8 @@ declare namespace load {
          */
         charset?: string,
         /**
-         * When `true`, the _resources_ property of the _WebRequest_ will include only resources that isn't included in the response html body. Otherwise, the _resources_ property of the _WebRequest_ will include all the resources from the response.
+         * When `true`, the _resources_ property of the _WebRequest_ includes only resources that are not referenced in the response HTML body.
+         * Otherwise, the _resources_ property includes all resources from the response.
          */
         downloadHtmlStaticResources?: boolean,
         /**
@@ -330,7 +331,7 @@ declare namespace load {
          * */
         saveResponseBodyToFile?: string,
         /**
-         * When `true`, the query string in the url is encoded. `false` will send url as-is.
+         * When `true`, the query string in the URL is encoded. When `false`, the URL is sent as-is.
          *
          * Default: `true`
          */
@@ -421,7 +422,7 @@ declare namespace load {
          */
         size: number;
         /**
-         * The UNIX timestamp in milliseconds of the engine time on which the request round-trip has started.
+         * The UNIX timestamp (in milliseconds, engine time) at which the request round-trip started.
          */
         startTime: number;
         /**
@@ -1018,7 +1019,7 @@ declare namespace load {
      */
     export class Transaction {
         /**
-         * Always set (none empty string). The name of the transaction as it was passed to the constructor
+         * Always set (non-empty string). The transaction name as passed to the constructor.
          */
         readonly name: string;
         /**
@@ -1859,7 +1860,7 @@ declare namespace load {
          */
         path?: string;
         /**
-         * Indicates whether the cookies is secure or not.
+         * Indicates whether the cookie is secure.
          */
         isSecure?: boolean;
         /**
@@ -2122,7 +2123,7 @@ declare namespace load {
          * @param {string} secret - The key to use with the hash algorithm
          * @param {string} input - The input string to hash
          * @param {string} outputEncoding - The encoding of the output
-         * @returns {string} - he given input hashed with the given algorithm and encoded with the given encoding protected by the given secret
+         * @returns {string} - The given input hashed with the selected algorithm and output encoding, protected by the given secret.
          * @memberof utils
          */
         export function hmac(algorithm: load.HashAlgorithm, secret: string, input: string, outputEncoding?: load.HashOutputEncoding): string
@@ -2247,32 +2248,30 @@ declare namespace load {
             token: string,
         }
         /**
-         * Returns key-vault token (string) which represents a key vault client, in order to use
-         * other azure functions.
+         * Returns a Key Vault access token string to be used with other Azure functions.
          *
-         * @param {string} vaultName - the azure key-vault uri.
-         * @param {string} tenantId - the azure tenant id.
-         * @param {string} clientId - The azure client id.
-         * @param {string} clientSecret - The azure client secret.
+         * @param {string} vaultName - The Azure Key Vault URI.
+         * @param {string} tenantId - The Azure tenant ID.
+         * @param {string} clientId - The Azure client ID.
+         * @param {string} clientSecret - The Azure client secret.
          */
          export function getToken(vaultName: string, tenantId: string, clientId: string, clientSecret: string): string
 
         /**
-         * Same as above receiving object.
+         * Same as above, with an options object.
          */
         export function getToken(options: KeyVaultTokenOptions): string
 
          /**
-         * Returns kay vault secret value which represents a key vault client, in order to use 
-         * other azure functions.
+         * Returns an Azure Key Vault secret value.
          *
-         * @param {string} secret - the azure secret name.
-         * @param {string} token - the azure token id.
+         * @param {string} secret - The Azure secret name.
+         * @param {string} token - The Azure token ID.
          */
         export function getSecret(secret: string, token: string): string
 
         /**
-         * Same as above receiving object.
+         * Same as above, with an options object.
          */
         export function getSecret(options: KeyVaultSecretOptions): string
     }
@@ -2611,8 +2610,8 @@ declare namespace load {
         /**
          * Starts a timer that will call the _callback_ when the time (in milliseconds) has passed.
          *
-         * Each call to _timer.startTimeout()_ must we followed by _timer.wait()_, or there may be undefined behavior when the timer delay has elapsed.
-         * For example, the iteration might end before the timer fired.
+         * Each call to _timer.startTimeout()_ must be followed by _timer.wait()_, or there may be undefined behavior when the timer delay has elapsed.
+         * For example, the iteration might end before the timer fires.
          */
         startTimeout(): Timer;
 
@@ -2705,7 +2704,7 @@ declare namespace load {
         command: string
 
         /**
-         * If set to `true` a `Promise` will be returned. The `Promise` is resolved with the _ExecutionResult_ when the process exists.
+         * If set to `true`, a `Promise` is returned. The `Promise` resolves with _ExecutionResult_ when the process exits.
          */
         isAsync?: boolean
 

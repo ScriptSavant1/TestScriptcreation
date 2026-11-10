@@ -8,6 +8,8 @@ const path = require("path");
 const _u = require("../../core/utils");
 
 const PROJECT_ROOT = path.join(__dirname, "..", "..", "..");
+// The one DevWebSdk.d.ts of the project: the server also serves it to the Recorder and Script Studio
+const SDK_FILE = path.join(PROJECT_ROOT, "src", "web", "public", "DevWebSdk.d.ts");
 
 class MandatoryFilesGenerator {
   constructor(options = {}) {
@@ -120,6 +122,8 @@ class MandatoryFilesGenerator {
   abruptClose: false
   requestTimeout: 120
   canonicalHeaderEntries: true
+network:
+  ipVersion: any
 dns:
   bypassSystem: false
   ttl: 600
@@ -318,21 +322,31 @@ tearDown: 0      #Not used
 
   /**
    * Copy a file from the project root to the output directory.
-   * jwt-helper.js, dpop-helper.js, DevWebSdk.d.ts, and transport.pem all live
-   * in the project root — place them there before running the converter.
+   * jwt-helper.js, dpop-helper.js and transport.pem live in the project root —
+   * place them there before running the converter.
    * Returns true on success, false if source not found (logs warning, does NOT generate a stub).
    */
   copyFromProjectRoot(outputDir, filename) {
-    const src = path.join(PROJECT_ROOT, filename);
+    return this._copyInto(path.join(PROJECT_ROOT, filename), outputDir, filename,
+      `in project root (${PROJECT_ROOT}). Place it there and re-run.`);
+  }
+
+  /**
+   * Copy src/web/public/DevWebSdk.d.ts (the same file the browser tools use) to the output directory.
+   * Returns true on success, false with a warning when the file is missing (no stub is written).
+   */
+  copySdk(outputDir) {
+    return this._copyInto(SDK_FILE, outputDir, "DevWebSdk.d.ts", `(${SDK_FILE}). The script is written without it.`);
+  }
+
+  _copyInto(src, outputDir, filename, notFound) {
     const dest = path.join(outputDir, filename);
     try {
       if (fs.existsSync(src)) {
         fs.copyFileSync(src, dest);
         return true;
       }
-      console.warn(
-        `  ⚠  ${filename} not found in project root (${PROJECT_ROOT}). Place it there and re-run.`,
-      );
+      console.warn(`  ⚠  ${filename} not found ${notFound}`);
       return false;
     } catch (err) {
       console.error(`  ✗  Failed to copy ${filename}: ${err.message}`);
@@ -758,9 +772,8 @@ ${extarEntries}    <FileEntry Name="Action.c" Filter="1" />
     );
     console.log("✓ Generated ScriptUploadMetadata.xml");
 
-    // 9. Copy DevWebSdk.d.ts from project root (canonical source — do NOT generate a stub)
-    this.copyFromProjectRoot(outputDir, "DevWebSdk.d.ts");
-    console.log("✓ Copied DevWebSdk.d.ts");
+    // 9. Copy DevWebSdk.d.ts from src/web/public (the one copy — do NOT generate a stub)
+    if (this.copySdk(outputDir)) console.log("✓ Copied DevWebSdk.d.ts");
 
     // 10. Copy jwt-helper.js + transport.pem from project root when JWT is used.
     //     These files MUST be placed in the project root by the user.

@@ -1,0 +1,30 @@
+[General]
+Type=@@TestType@@
+DefaultCfg=default.cfg
+MajorVersion=12
+MinorVersion=57
+ParameterFile=
+GlobalParameterFile=
+RunType=DevWeb
+NewFunctionHeader=1
+ActionLogicExt=action_logic
+LastActiveAction=Main
+ScriptLanguage=JavaScript
+Encoding=UTF8
+
+[ExtraFiles]
+rts.yml=rts.yml
+parameters.yml=parameters.yml
+
+[Actions]
+Main=main.js
+
+[Recorded Actions]
+Main=0
+
+[Interpreters]
+Main=DevWeb
+
+[RunLogicFiles]
+Default Profile=default.usp
+

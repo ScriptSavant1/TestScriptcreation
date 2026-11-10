@@ -4,7 +4,24 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ## Not released yet
 
-Nothing yet.
+### Script generation
+
+#### LoadRunner 26.3
+
+##### Fixed
+
+- DevWeb scripts from every tool now run when DevWeb 26.3 starts them directly: `rts.yml` has the new `network.ipVersion` setting, which 26.3 requires (BUG-129). Older engines ignore it.
+
+##### Changed
+
+- The Recorder and Script Studio write version 26.3 into the `.usr` file, as the converters already did.
+- `DevWebSdk.d.ts` in every tool is the 26.3 file; only its comments changed.
+- One `DevWebSdk.d.ts` for the whole project, `src/web/public/DevWebSdk.d.ts`: the converters copy it from there instead of the project root, and the Recorder fetches it from the server like Script Studio instead of carrying its own copy. The copy in the project root is no longer used.
+- The Recorder and Script Studio show a warning when `DevWebSdk.d.ts` cannot be loaded; before, Script Studio left it out of the ZIP without a word. The rest of the ZIP is written as before.
+
+##### Added
+
+- `vugen-reference/`: the VuGen 26.3 project templates for both protocols, a compare tool for the next version (`node vugen-reference/compare.js <old> <new>`), and a test that checks every tool against them.
 
 ## Released versions
 

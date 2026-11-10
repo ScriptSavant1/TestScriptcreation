@@ -184,6 +184,20 @@ Model rule: the model is plain JSON; the stats store is a NON-enumerable `model.
 | `src/generators/vugen/scriptGenerator.js` | VuGen C script generation from Bruno/Postman/JMX (`webHttpScriptGenerator.js` is a shim) |
 | `src/web/public/shared/vugen-codegen.js` | Shared VuGen codegen (UMD, works browser+Node) |
 
+### VuGen version — project files every tool writes (both protocols)
+| File | Purpose |
+|------|---------|
+| `vugen-reference/<version>/DevWeb/`, `/qtweb/` | VuGen's own templates, copied UNCHANGED from `<VuGen install>\template\` (never recorded scripts: they hold browser data) |
+| `vugen-reference/version.json` | `current` (e.g. 26.3) and `usrVersion` (26.3.0.0) — the version all four tools write into `.usr` |
+| `vugen-reference/compare.js` | `node vugen-reference/compare.js <old> <new>` lists added / removed / changed settings per file; its helpers are used by the test |
+| `tests/unit/vugenReference.test.js` | Every tool (DevWeb + VuGen converters, Recorder, Script Studio) against the reference: every template setting present in rts.yml / default.cfg / default.usp / .usr (values are the tool's choice; deliberate gaps in `DECIDED`), `.usr` version, tsconfig compiler options, and every DevWebSdk.d.ts copy equal to the reference |
+
+Where the version-dependent text lives (change all together; the test fails otherwise):
+rts.yml — `src/generators/devweb/filesGenerator.js` (`generateRtsYml`), `VuGen-Recorder-templates.js` and `VuGen-Script-Studio-constants.js` (`DEVWEB_RTS_YML`).
+`.usr` — both converter `filesGenerator.js`, `VuGen-Recorder-usr-gen.js`, `studio-codegen.js` (`genUsrFile`, `genDevWebUsrFile`).
+DevWebSdk.d.ts — ONE copy, `src/web/public/DevWebSdk.d.ts`: the converters copy it (`copySdk` in the DevWeb `filesGenerator.js`), the Recorder and Script Studio fetch it from the server next to their page (a warning toast when it cannot be loaded). Never add another copy.
+DevWeb 26.3 (DevWeb.exe run directly) refuses an rts.yml without `network.ipVersion` — BUG-129.
+
 ### Generated script layout — same rules in Recorder, Script Studio and both converters
 - vuser_init: `set_server(name, value)` for the servers the script USES (Runtime Settings attribute with that name wins),
   `web_set_sockets_option("SSL_VERSION","AUTO")`, `web_add_auto_header` for headers on EVERY request with ONE value.

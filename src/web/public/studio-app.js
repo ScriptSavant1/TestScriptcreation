@@ -88,13 +88,16 @@ async function dlZip(fmt) {
     if (S.params && S.params.length > 0) {
       zip.file("collection_data.csv", S.scripts.csv || genCollectionDataCsv());
     }
-    // DevWebSdk.d.ts — fetch from local static file instead of embedding
+    // DevWebSdk.d.ts — the one copy the server serves (src/web/public); a warning when it cannot be loaded
+    let sdkAdded = false;
     try {
       const _bp = window.location.pathname.replace(/\/[^\\/]*$/, "");
       let rSdk = await fetch(_bp + "/DevWebSdk.d.ts");
       if (!rSdk.ok) rSdk = await fetch("/DevWebSdk.d.ts");
-      if (rSdk.ok) zip.file("DevWebSdk.d.ts", await rSdk.text());
+      if (rSdk.ok) { zip.file("DevWebSdk.d.ts", await rSdk.text()); sdkAdded = true; }
     } catch {}
+    if (!sdkAdded)
+      showToast("DevWebSdk.d.ts could not be loaded from the server, so the ZIP is without it (it only gives code completion in VuGen).", "warning");
     // DPoP helper for DevWeb
     if (S.hasDpop) {
       try {

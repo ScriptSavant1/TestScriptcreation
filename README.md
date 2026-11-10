@@ -173,7 +173,6 @@ The Recorder, the HAR Explorer, Script Studio and the Results Analyser run entir
 ├── web.config                ← IIS + iisnode configuration
 ├── pm2.config.js             ← alternative deployment
 │
-├── DevWebSdk.d.ts            ← TypeScript definitions (included in DevWeb output)
 ├── jwt-helper.js             ← DevWeb JWT signing helper (included in output)
 ├── dpop-helper.js            ← DevWeb DPoP helper
 ├── lre-utils.js              ← VuGen crypto runtime: DPoP, PKCE, JWT (keep identical to lre-utils.dat)
@@ -200,6 +199,7 @@ The Recorder, the HAR Explorer, Script Studio and the Results Analyser run entir
 │           ├── Recorder.html ← Recorder page (loads the VuGen-Recorder-*.js engine files)
 │           ├── HarExplorer.html ← HAR Explorer page (reuses the Recorder and Studio engines)
 │           ├── Studio.html   ← Script Studio page (loads the studio-*.js files)
+│           ├── DevWebSdk.d.ts ← DevWeb TypeScript definitions, the one copy (in every DevWeb script)
 │           ├── shared/       ← vugen-codegen.js, page-resources.js, host-params.js (shared by the tools)
 │           └── VuGen-Recorder.html, VuGen-Script-Studio.html
 │                             ← classic pages, kept only as the reference for parity tests (no route)
@@ -208,6 +208,7 @@ The Recorder, the HAR Explorer, Script Studio and the Results Analyser run entir
 ├── lre-results-analyser/     ← Results Analyser (browser engine, reports, CLI)
 ├── tests/unit/               ← Jest unit tests
 ├── regression-tests/         ← old-against-new comparison tools (tools/); pipeline test skeleton
+├── vugen-reference/          ← VuGen project templates per version, checked against every tool (README inside)
 └── Docs/                     ← local-only documentation (not in the repository)
 ```
 

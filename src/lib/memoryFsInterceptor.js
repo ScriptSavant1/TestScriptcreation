@@ -114,7 +114,7 @@ function install() {
   realFs.copyFileSync = (src, dst) => {
     const store = getStore();
     if (!store) return _copyFileSync(src, dst);
-    // src is a real project-root file (DevWebSdk.d.ts, jwt-helper.js, …)
+    // src is a real file on disk (src/web/public/DevWebSdk.d.ts, jwt-helper.js in the project root, …)
     // Read it from real disk and store at dst in memory
     const content = _readFileSync(src);
     store.set(norm(dst), content);

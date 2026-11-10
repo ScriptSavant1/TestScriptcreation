@@ -16,18 +16,18 @@ NewFunctionHeader=1
 RunType=cci
 ActionLogicExt=action_logic
 LastActiveAction=Action
-MajorVersion=25
+MajorVersion=26
 MinorVersion=3
 ActiveTypes=QTWeb
 GenerateTypes=QTWeb
 AdditionalTypes=QTWeb
 DevelopTool=Vugen
-LastModifyVer=25.3.0.0
+LastModifyVer=26.3.0.0
 DFERebrandFlag=Done
 ParamLeftBrace={
 ParamRightBrace=}
 ScriptLanguage=C
-LastCodeGenerationVer=25.3.0.0
+LastCodeGenerationVer=26.3.0.0
 DisableRegenerate=0
 Encoding=ANSI
 Description=
@@ -98,7 +98,7 @@ function genDevWebUsrFile(scriptName, paramFile=''){
   return `[General]
 Type=DevWeb
 DefaultCfg=default.cfg
-MajorVersion=25
+MajorVersion=26
 MinorVersion=3
 ParameterFile=${paramFile}
 GlobalParameterFile=
@@ -109,7 +109,7 @@ LastActiveAction=Main
 ScriptLanguage=JavaScript
 Encoding=UTF8
 DevelopTool=Vugen
-LastModifyVer=25.3.0.0
+LastModifyVer=26.3.0.0
 ActiveTypes=DevWeb
 AdditionalTypes=DevWeb
 GenerateTypes=DevWeb
@@ -248,7 +248,11 @@ async function dlZip(format){
     zip.file('UserTasks.xml',  '<?xml version="1.0" encoding="utf-8"?>\n<App Name="Virtual User Generator">\n  <Tasks />\n</App>');
     zip.file('parameters.yml', _dvPrmsYml);
     if(_dvCsv) zip.file('collection_data.csv', _dvCsv);
-    zip.file('DevWebSdk.d.ts', DEVWEB_SDK_DTS);
+    // DevWebSdk.d.ts — the one copy the server serves (src/web/public), fetched as Script Studio does
+    let _sdk=null;
+    try{ const _bp=window.location.pathname.replace(/\/[^\/]*$/,''); let r=await fetch(_bp+'/DevWebSdk.d.ts'); if(!r.ok) r=await fetch('/DevWebSdk.d.ts'); if(r.ok) _sdk=await r.text(); }catch{}
+    if(_sdk) zip.file('DevWebSdk.d.ts', _sdk);
+    else showToast('DevWebSdk.d.ts could not be loaded from the server, so the ZIP is without it (it only gives code completion in VuGen).', 'warning');
     // DPoP helper for DevWeb (dpop-helper.js)
     if(S.hasDpop){
       try{ const _bp=window.location.pathname.replace(/\/[^\/]*$/,''); let r=await fetch(_bp+'/dpop-helper.js'); if(!r.ok) r=await fetch('/dpop-helper.js'); if(r.ok) zip.file('dpop-helper.js', await r.text()); }catch{}
