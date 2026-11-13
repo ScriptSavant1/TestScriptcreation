@@ -101,6 +101,10 @@ function measure() {
     await f.waitForSelector('#ph-res.active', { timeout: 60000 }); await p.waitForTimeout(800);
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1200); }
     await run('Studio results', 'studio');
+    await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
+    await run('Workload start', 'workload');
+    f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail'); await f.click('#sview [data-v="table"]').catch(() => {});
+    await run('Workload model', 'workload');
     await go('results'); await p.waitForFunction(() => { const d = document.getElementById('iframe-analyser').contentDocument; return d && d.getElementById('in-zip'); }, null, { timeout: 20000 });
     await run('Analyser start', 'analyser');
     f = await frameOf('analyser'); await f.setInputFiles('#in-zip', FX + 'qa/demo-run.zip'); await p.waitForTimeout(9000);

@@ -4,6 +4,36 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ## Not released yet
 
+### Workload Modeller
+
+#### New tool
+
+- **Workload Modeller** (sidebar group "Plan"): give each script its target — TPS, transactions per hour, Vusers, a share of the total TPS or iterations — and get the Vusers, pacing, ramp-up and ramp-down, load generators and iterations, the LRE settings to type in and an Excel workbook, with checks that say what cannot work and how it is worked out.
+- Fill from scripts: script ZIPs (Web HTTP/HTML, DevWeb; several scripts per ZIP) and HAR files. Transactions in `vuser_init` / `vuser_end` (`load.initialize` / `load.finalize`) run once per Vuser and are listed, not counted; transactions inside other transactions are listed; loops are counted once.
+- Many scripts: Cards or Table (one line per script, keys and paste like a spreadsheet), Find and status filter, Overwrite all scripts, Defaults for every script, Paste from Excel (a name that fits more than one script changes none), an Excel sheet to fill in and drop back.
+- Runs in the browser like the Results Analyser: nothing is uploaded or stored on the server; the Excel library loads only when Excel is first used. Its own module, `workload-modeller/` (engine, script reader, page, Jest tests, docs).
+- Load generators by machine type: on-premise Windows server (8 cores, 32 GB), AWS c6a.4xlarge Linux or Windows (16 vCPU, 32 GB), or another machine (enter its size). Choosing a type fills its size; changing a size makes it "Another machine".
+- Every formula on the page (How it is worked out → All the formulas, with the page's own settings) and in the user guide, `workload-modeller/docs/USER-GUIDE.md`, with a worked example.
+- Which script runs on which load generator: LG1, LG2 … with each script's Vusers per machine (a script that needs several machines gets its own, its Vusers split evenly; the others share the least-busy machine with room; TruClient on machines of its own; spares empty). The load-generator count is the machines this uses — one more than the plain total when whole scripts do not pack, and Checks says which script to split.
+- Pacing chosen by the tool is in whole seconds (308 s, not 308.7 s) whenever that keeps the TPS at most 1% above the target; a short pacing, where one second is a big step, stays at 0.1 s. The TPS never falls below the target.
+- Basic schedule by group: the scripts share the start rate (2 new Vusers per second in all by default, and the stop rate likewise); before, each script could start 2 per second, so 20 scripts started up to 40 per second together.
+- LRE setup and Excel as LRE 26.3 asks for them: by group, every group is "Start Group: Immediately" and all ramp over the same length (a quicker script starts its Vusers more slowly), so every script reaches full load together and, with any small difference added to its Duration, stops together — no "Start after" to type. Times in HH:MM:SS; columns named after LRE's fields (Start (ramp-up), Duration (steady state), Stop (ramp-down)); rows show the script name only (a script split over machines has two rows with its name); the LG column shows names only (LG1, LG2).
+- Team settings file (config/workload-settings.json): machine types with their Vusers per machine, the load-generator limits, schedule defaults and protocol assumptions — edit on the server, every user gets them on the next page load; wrong values keep the built-in ones and are named on the page.
+- Download Excel is one sheet, "LRE scenario": the test in a few lines, then one row per LRE group (Vusers, % of Vusers, response time, think time, pacing, load generators, start, ramp-up, steady state, ramp-down, expected iterations and TPS) and a total. The load generators column names the machines only (the Vusers column gives the count), on the page too. The calculation detail stays on the page.
+- Load generators: "Fill each machine" (the default) fills every machine — a script that does not fit whole runs as two groups in LRE (name_1, name_2), each with its load generators and its own ramp in LRE setup, the copy text and Excel. A 4-script, 553-Vuser plan needs 3 machines instead of 5 (6 → 4 with the extra one). "One group per script" keeps the old layout and now warns when it costs machines.
+- Load generators by the team rule: each machine type carries Vusers per machine for a script of web pages and for one of API calls (on-premise 100 / 250, AWS c6a.4xlarge 200 / 500, editable). The tool reads each script's pages and API calls (Web HTTP/HTML, DevWeb and HAR), or you set the kind on the script card; Vusers per machine is the smallest of the rule, CPU and memory, and Checks say which decided. Extra machines replace idle spares and carry Vusers. A script's own Vusers per machine (from a past run) replaces the rule. Scripts sheet: "Kind of script" and "Vusers per machine" columns.
+- Look (pilot for the whole portal): purple brand colour, every section a box with a solid border and a tinted header bar, filled column bars (Inputs, Results), the current tab and the chosen option filled, table headers filled and every other row tinted. Both themes, contrast checked. The other tools follow after review.
+- Fixed: ramp-ups and ramp-downs no longer start or stop many Vusers at once; the ramp-down is never shorter than the stop rate allows (BUG-135). Messages offer Undo only after a change (BUG-136).
+- Buttons: Copy LRE settings and Download Excel at the top of the page, always in view (no longer in the Result card); the scripts sheet is "Fill in with Excel"; every action is a bordered button with an icon, and Reset, Clear all, Expand / Collapse have icons; Copy LRE settings says when it has copied; the outputs look unavailable until the plan is complete.
+- LRE setup: pacing and think time right after the load generators, "Start" explained, and a "hide the inputs" line while columns are cut off. Scripts toolbar: the actions on a row of their own. Load generators tile: "On-premise: 2 + 1 spare".
+- One LRE setup table (Details › LRE setup): per script the Vusers, load generators, start, ramp-up, duration, ramp-down (DD:HH:MM:SS), pacing and think time; the same in Excel. It replaces the LRE settings text tab (the text stays for Copy LRE settings); Per script keeps only the calculation results; Load generators shows one row per machine.
+
+### Portal
+
+#### Changed
+
+- Home: seven tool cards (four then three on wide screens). Sidebar: new group "Plan". Help: Workload Modeller section, contents entry, tools table row and What's New line. Usage statistics and the admin reports know the tool `workload` (counted in scripts).
+
 ### Script generation
 
 #### Sign-in (NTLM, Kerberos, Basic)

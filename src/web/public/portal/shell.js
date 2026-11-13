@@ -19,6 +19,7 @@
     record:  { hash: "#/record",          tab: "recorder",  group: "Create scripts", name: "Recorder",                c: "--c-record",  help: "hacc-recorder" },
     explore: { hash: "#/explore",         tab: "explorer",  group: "Create scripts", name: "HAR Explorer",            c: "--c-explore", help: "hacc-explorer" },
     studio:  { hash: "#/studio",          tab: "studio",    group: "Create scripts", name: "Script Studio",           c: "--c-studio",  help: "hacc-studio" },
+    workload: { hash: "#/workload",       tab: "workload",  group: "Plan",           name: "Workload Modeller",       c: "--c-work",    help: "hacc-workload" },
     results: { hash: "#/results",         tab: "analyser",  group: "Analyse",        name: "Results Analyser",        c: "--c-results", help: "hacc-analyser" },
     help:    { hash: "#/help",            tab: "help",      group: "Learn",          name: "Help & guides",           c: "--c-help",    help: null },
   };

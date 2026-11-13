@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-portal-tool="workload">
+<head>
+<meta charset="utf-8">
+<!-- opened on its own in a browser tab → go to the portal (one address for the whole app) -->
+<script src="portal/frame-guard.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workload Modeller — PerfX Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Cpath fill=%22none%22 stroke=%22%2384cc16%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M4 19V5M4 19h16M7 15l4-4 3 3 5-6%22/%3E%3C/svg%3E">
+<!-- the portal design system (tokens + components), then this page's own layer -->
+<link rel="stylesheet" href="portal/ds.css">
+<link rel="stylesheet" href="wm/app.css">
+<script>/* the remembered theme before the first paint */ try { var t = localStorage.getItem("wm-theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) { /* storage blocked */ }</script>
+</head>
+<body class="simple">
+<header class="wm-top">
+  <div class="wm-brand"><span class="ds-ico" style="--c: var(--c-work)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/></svg></span>Workload Modeller <span class="ds-chip">LRE scenario design</span></div>
+  <div class="wm-top-r">
+    <span class="wm-priv">Runs in your browser — nothing is uploaded</span>
+    <div class="ds-seg" role="group" aria-label="View">
+      <button id="v-simple" aria-pressed="true" title="Only the fields most tests need">Simple</button><button id="v-detail" aria-pressed="false" title="Every field, for finer control">Detailed</button>
+    </div>
+    <button class="ds-btn ds-btn-sm" id="btn-reset-all" title="Clear every section and start again — you can undo it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Start over</button>
+    <span class="wm-top-sep" aria-hidden="true"></span>
+    <button class="ds-btn ds-btn-sm" id="btn-copy" title="The LRE settings as text — to paste where you need them"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy LRE settings</button>
+    <button class="ds-btn ds-btn-primary ds-btn-sm" id="btn-xlsx" title="The plan as an Excel workbook: summary, LRE setup, load generators, timeline, checks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download Excel</button>
+    <button class="ds-btn ds-btn-sm" id="btn-theme" aria-label="Switch light / dark theme" title="Light / dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+  </div>
+</header>
+
+<div class="wm-wrap">
+<header class="ds-band ds-band-panel wm-band" style="--c: var(--c-work)">
+  <div class="ds-band-text">
+    <div class="ds-band-title"><span class="ds-band-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/></svg></span>
+      <div><h1>Workload Modeller</h1><p class="ds-band-tag">From the load you need to an LRE scenario</p></div></div>
+    <p class="ds-band-lead">Tell it what each script must reach — transactions per second (TPS), transactions per hour, or a number of virtual users (Vusers) — and which machines run the test.
+      The modeller works out Vusers, pacing, ramp-up and ramp-down, load generators, TPS and iterations, warns when something cannot work,
+      and gives the LRE settings to copy and an Excel workbook.</p>
+  </div>
+  <figure class="ds-flow" aria-label="Targets and scripts, then the modeller, then the LRE scenario">
+    <ol>
+      <li><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span><b>Targets &amp; scripts</b></li>
+      <li class="is-tool" style="--c: var(--c-work)"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/></svg></span><b>Model</b></li>
+      <li><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg></span><b>LRE settings &amp; Excel</b></li>
+    </ol>
+    <figcaption class="ds-hand"><span>Vusers, pacing, ramp<br>and LGs worked out</span><svg viewBox="0 0 40 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 27c12 0 22-6 30-19"/><path d="m26 9 7-2 1 7"/></svg></figcaption>
+  </figure>
+</header>
+
+<main class="wm-page">
+  <!-- ============ INPUTS ============ -->
+  <div class="wm-col" id="inputs-col">
+    <button class="wm-rail" id="rail-in" aria-controls="inputs-col" aria-label="Show the inputs" title="Show the inputs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
+      <span class="wm-rail-label">Inputs</span>
+      <span class="wm-rail-v" id="rail-s"><span>—</span><small>scripts</small></span>
+      <span class="ds-chip" id="rail-n"></span>
+    </button>
+    <div class="wm-colbar"><button class="wm-chev" id="btn-hide-in" aria-controls="inputs-col" aria-label="Hide the inputs — give the results the full width" title="Hide the inputs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg></button>
+      <span class="wm-colbar-t">Inputs</span>
+      <button class="ds-btn ds-btn-sm ds-btn-ghost" data-all="inputs-col" data-open="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/></svg>Expand all</button><button class="ds-btn ds-btn-sm ds-btn-ghost" data-all="inputs-col" data-open="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 18 5-5 5 5"/><path d="m7 11 5-5 5 5"/></svg>Collapse all</button></div>
+    <section class="ds-card" aria-labelledby="h1" data-fold="test">
+      <div class="ds-card-head"><span class="wm-n">1</span><h2 id="h1">The test<span class="wm-fold-sum" id="sum-test"></span></h2>
+        <button class="ds-btn ds-btn-sm ds-btn-ghost" data-clear="test" title="Put the test settings back to the defaults"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Reset</button>
+        <button class="ds-btn ds-btn-sm" id="btn-example" title="Fill in a three-script example">Load an example</button></div>
+      <div class="ds-card-body">
+        <p class="wm-help">What kind of test is it?</p>
+        <div class="wm-seg" id="test-types" role="group" aria-label="Test type"></div>
+        <div class="wm-grid">
+          <label class="wm-f">Full-load duration<div class="wm-unit"><input class="ds-field" type="number" id="sc-steady" min="1" step="5"><span>min</span></div><small id="steady-help">how long all users run together, after the ramp-up</small></label>
+          <label class="wm-f">LRE workload type<select class="ds-field" id="sc-workload"></select><small id="wl-help"></small></label>
+          <label class="wm-f" id="f-total">Scenario total TPS<div class="wm-unit"><input class="ds-field" type="number" id="sc-total" min="0" step="0.1"><span>TPS</span></div><small>split between the scripts sized by “share”</small></label>
+          <label class="wm-f">Growth factor<input class="ds-field" type="number" id="sc-growth" min="0.1" step="0.1"><small>1 = today's peak · 1.5 = 50% more TPS (Vusers and iteration targets stay as entered)</small></label>
+          <label class="wm-f adv">Licence limit<div class="wm-unit"><input class="ds-field" type="number" id="sc-licence" min="0" placeholder="no limit"><span>Vusers</span></div><small>the most your licence allows — empty: no limit</small></label>
+          <label class="wm-f adv" id="f-levels">Steps (stress / capacity)<input class="ds-field" type="text" id="sc-levels"><small>% of the target at each step</small></label>
+          <label class="wm-f adv" id="f-hold">Hold at each step<div class="wm-unit"><input class="ds-field" type="number" id="sc-hold" min="1" placeholder="auto"><span>min</span></div><small>empty: the tool chooses</small></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="ds-card" aria-labelledby="h2" data-fold="scripts" id="scripts-card">
+      <div class="ds-card-head"><span class="wm-n">2</span><h2 id="h2">Scripts<span class="wm-fold-sum" id="sum-scripts"></span></h2>
+        <button class="ds-btn ds-btn-sm ds-btn-ghost" data-clear="scripts" title="Remove every script card — you can undo it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>Clear all</button>
+        <label class="ds-btn ds-btn-sm" id="btn-fill" tabindex="0" role="button" title="Script ZIPs (Web HTTP/HTML or DevWeb) or HAR recordings — choose several at once">
+          <input type="file" id="in-fill" multiple accept=".zip,.har,.json,.xlsx" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Fill from scripts</label></div>
+      <div class="ds-card-body">
+        <div class="wm-dropzone" id="dropzone" tabindex="0" role="button" aria-label="Fill from scripts: choose script ZIPs or HAR files">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+          <div><b>Drop all your scripts here — or click to choose them</b><span class="wm-dz-more">Script ZIPs (Web HTTP/HTML or DevWeb; one ZIP may hold several scripts), HAR recordings, or the filled-in Excel sheet.
+            Each script becomes a card with its transactions, think time and requests filled in; you add what it must reach.</span></div></div>
+        <div class="ds-note wm-import" id="import-note" hidden></div>
+        <div class="wm-bar" id="scripts-bar">
+          <div class="ds-seg" id="sview" role="group" aria-label="Show the scripts as"><button data-v="cards" aria-pressed="true">Cards</button><button data-v="table" aria-pressed="false">Table</button></div>
+          <input class="ds-field wm-find wm-many" id="find" type="search" placeholder="Find a script" aria-label="Find a script">
+          <div class="ds-seg wm-fseg wm-many" id="sfilter" role="group" aria-label="Show">
+            <button data-f="all" aria-pressed="true">All<b id="fc-all"></b></button><button data-f="need" aria-pressed="false">Needs input<b id="fc-need"></b></button><button data-f="bad" aria-pressed="false">Not possible<b id="fc-bad"></b></button><button data-f="ok" aria-pressed="false">Ready<b id="fc-ok"></b></button></div>
+          <span class="wm-shown wm-many" id="shown"></span>
+          <span class="wm-break" aria-hidden="true"></span>
+          <button class="ds-btn ds-btn-sm" id="btn-bulk" aria-expanded="false" aria-controls="bulk" title="Write one response time, pacing, think time or target into every script shown, once — replaces their own values"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span id="bulk-label">Overwrite all scripts</span></button>
+          <button class="ds-btn ds-btn-sm" id="btn-paste" aria-expanded="false" aria-controls="paste" title="Give each script its own target: copy the script names and their numbers from Excel and paste them"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Paste from Excel</button>
+          <button class="ds-btn ds-btn-sm" id="btn-xl-tpl" title="Download an Excel sheet with your scripts already in it — fill in the targets and drop it back here"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>Fill in with Excel</button>
+          <span class="wm-bar-view"><button class="ds-btn ds-btn-sm ds-btn-ghost" id="btn-unfold-all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/></svg>Expand cards</button><button class="ds-btn ds-btn-sm ds-btn-ghost" id="btn-fold-all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 18 5-5 5 5"/><path d="m7 11 5-5 5 5"/></svg>Collapse cards</button></span></div>
+        <div class="wm-panel" id="bulk" hidden>
+          <div class="wm-phead"><h3 id="bulk-title">Overwrite all scripts</h3><button class="wm-x" id="b-x" aria-label="Close" title="Close (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+          <p class="wm-muted" style="margin:0 0 10px"><b>Overwrites now, once:</b> what you fill in replaces each script's own value when you press Apply. Fields left on “keep” are not changed. You can undo it.<br>
+            For a value that should stay in force — also for scripts added later — use “Defaults for every script” below. Only some scripts? Narrow the list first with Find or the filter.</p>
+          <div class="wm-grid">
+            <label class="wm-f">Response time<div class="wm-unit"><input class="ds-field" type="number" id="b-rt" min="0" step="any" placeholder="keep"><span>s</span></div><small>average per transaction, e.g. your SLA</small></label>
+            <label class="wm-f">Pacing<select class="ds-field" id="b-pm"><option value="">keep</option></select></label>
+            <label class="wm-f" id="b-fixed-f" hidden>Every<div class="wm-unit"><input class="ds-field" type="number" id="b-fixed" min="0" step="any"><span>s</span></div></label>
+            <label class="wm-f" id="b-min-f" hidden>Shortest<div class="wm-unit"><input class="ds-field" type="number" id="b-min" min="0" step="any"><span>s</span></div></label>
+            <label class="wm-f" id="b-max-f" hidden>Longest<div class="wm-unit"><input class="ds-field" type="number" id="b-max" min="0" step="any"><span>s</span></div></label>
+            <label class="wm-f">Think time<select class="ds-field" id="b-think"><option value="">keep</option></select></label>
+            <label class="wm-f">Target TPS<div class="wm-unit"><input class="ds-field" type="number" id="b-tps" min="0" step="any" placeholder="keep"><span>TPS</span></div><small>transactions per second, for each script</small></label>
+          </div>
+          <p class="wm-pmsg" id="b-msg" role="alert"></p>
+          <div class="wm-actions"><button class="ds-btn ds-btn-primary ds-btn-sm" id="b-apply">Apply</button><button class="ds-btn ds-btn-sm ds-btn-ghost" id="b-cancel">Close</button></div>
+        </div>
+        <div class="wm-panel" id="paste" hidden>
+          <div class="wm-phead"><h3>Paste targets from Excel</h3><button class="wm-x" id="p-x" aria-label="Close" title="Close (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+          <p class="wm-muted" style="margin:0 0 10px">Gives each script its own target in one go.</p>
+          <ol class="wm-steps">
+            <li>In Excel, select two columns: the <b>script name</b> and its <b>target</b>. Copy them (Ctrl+C).</li>
+            <li>Say what the targets are:
+              <select class="ds-field" id="p-kind" aria-label="The targets are"><option value="tps">TPS — transactions per second</option><option value="volume">Transactions per hour</option><option value="vusers">Vusers — virtual users</option><option value="share">Share of the total TPS (%)</option><option value="iterations">Iterations — data rows used</option></select></li>
+            <li>Paste them here (Ctrl+V) and press Apply.</li></ol>
+          <textarea class="ds-field" id="p-text" aria-label="Script names and targets, copied from Excel" placeholder="Login&#9;2&#10;Search&#9;6&#10;Payment&#9;2"></textarea>
+          <small class="wm-muted">Names are matched to your scripts (upper / lower case does not matter); a header row is skipped. Scripts not in the list keep their target.</small>
+          <p class="wm-muted" id="p-out" style="margin:10px 0 0"></p>
+          <div class="wm-actions"><button class="ds-btn ds-btn-primary ds-btn-sm" id="p-apply">Apply</button><button class="ds-btn ds-btn-sm ds-btn-ghost" id="p-cancel">Close</button></div>
+        </div>
+        <div class="wm-common" id="common" hidden>
+          <div class="wm-ctitle">Defaults for every script <span><b>Stays in force:</b> fills only empty fields — also in scripts added later — and shows in <i>italics</i> there; a script's own value always wins</span></div>
+          <label class="wm-f">Response time<div class="wm-unit"><input class="ds-field" type="number" id="c-rt" min="0" step="any" placeholder="none"><span>s</span></div><small>average per transaction — e.g. your SLA</small></label>
+          <div class="wm-f wm-ctps"><span id="c-tps-l">Target TPS for each script</span>
+            <div class="wm-crow"><div class="ds-seg" role="group" aria-label="The common TPS is"><button data-tm="each" aria-pressed="true">Each script</button><button data-tm="total" aria-pressed="false">In total</button></div>
+              <div class="wm-unit"><input class="ds-field" type="number" id="c-tps" min="0" step="any" placeholder="none" aria-labelledby="c-tps-l"><span>TPS</span></div></div>
+            <small id="c-tps-h">for scripts with no target yet</small></div>
+        </div>
+        <div id="scripts-list">
+          <div class="wm-list-head" id="list-head" aria-hidden="true"><span></span><span>Script</span><span class="wm-wide">Protocol</span><span>Target</span><span class="wm-wide">One iteration</span><span>Response</span><span>Pacing</span><span>Plan</span><span>Status</span><span></span></div>
+          <p class="wm-empty" id="no-match" hidden>No script matches the filter. <button class="wm-goto" id="show-all">Show all</button></p>
+          <div id="scripts"></div>
+          <p class="wm-tv-more" id="tv-more" hidden>More columns to the right — scroll the table sideways, or <button class="wm-goto" id="tv-wide">hide the results</button> to see them all.</p>
+          <div class="wm-tv" id="tv" hidden></div>
+        </div>
+        <button class="ds-btn" id="btn-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add script</button>
+      </div>
+    </section>
+
+    <section class="ds-card" aria-labelledby="h3" data-fold="lg">
+      <div class="ds-card-head"><span class="wm-n">3</span><h2 id="h3">Load generators<span class="wm-fold-sum" id="sum-lg"></span></h2>
+        <button class="ds-btn ds-btn-sm ds-btn-ghost" data-clear="lg" title="Back to one pool and the starting protocol assumptions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Reset</button>
+        <button class="ds-btn ds-btn-sm" id="btn-pool" title="Add another group of machines, for example AWS next to the on-premise servers">Add a pool</button></div>
+      <div class="ds-card-body">
+        <p class="wm-help">The machines that run the Vusers (load generators). Choose the machine type — the on-premise Windows servers or AWS c6a.4xlarge (Linux or Windows); “Another machine” is for a project with its own load generators. Add a pool when a test uses two kinds, for example on-premise and AWS. Vusers per machine is the smallest of the team rule (web pages / API calls, read from each script), the machine’s CPU and its memory; a figure from a past run is better if you have one.</p>
+        <p class="wm-sub" style="margin-bottom:6px">How the Vusers go onto the machines</p>
+        <div class="wm-seg" id="lg-fill" role="group" aria-label="How the Vusers go onto the machines"></div>
+        <div id="pools"></div>
+        <p class="wm-muted" id="settings-note" style="margin:10px 0 0"></p>
+        <details class="wm-more adv"><summary>From a past run — Vusers one machine can carry</summary>
+          <p class="wm-muted" style="margin-top:0">From the Results Analyser's load-generator health: how many Vusers one machine ran and its highest CPU and memory. Keeps the machine under the safe limit.</p>
+          <div class="wm-grid">
+            <label class="wm-f">Vusers it ran<input class="ds-field" type="number" id="cal-v" value="200"></label>
+            <label class="wm-f">Highest CPU<div class="wm-unit"><input class="ds-field" type="number" id="cal-cpu" value="45"><span>%</span></div></label>
+            <label class="wm-f">Highest memory<div class="wm-unit"><input class="ds-field" type="number" id="cal-mem" value="60"><span>%</span></div></label>
+            <div class="wm-f">Can carry<div class="ds-tile-value" id="cal-out" style="font-size:20px">—</div><small>Vusers at the <span class="wm-limit">70</span>% limit</small></div>
+          </div>
+          <p class="wm-pmsg" id="cal-note" style="color:var(--ds-warn)"></p>
+        </details>
+        <details class="wm-more adv" style="margin-top:12px"><summary>Sizing assumptions per protocol</summary>
+          <p class="wm-muted" style="margin-top:0">Starting values, not vendor figures — replace them with what you measure. Used only when a pool has no “Vusers per machine” figure.</p>
+          <div class="wm-tw"><table class="ds-table" id="proto-table"></table></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="ds-card adv" aria-labelledby="h4" data-fold="tune">
+      <div class="ds-card-head"><span class="wm-n">4</span><h2 id="h4">Fine tuning<span class="wm-fold-sum" id="sum-tune"></span></h2>
+        <button class="ds-btn ds-btn-sm ds-btn-ghost" data-clear="tune" title="Put the fine tuning back to the defaults"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Reset</button></div>
+      <div class="ds-card-body"><div class="wm-grid">
+        <label class="wm-f">Headroom<div class="wm-unit"><input class="ds-field" type="number" id="sc-headroom" min="0" max="300"><span>%</span></div><small>pacing chosen this much above the iteration time</small></label>
+        <label class="wm-f">Pacing the tool chooses<select class="ds-field" id="sc-style"><option value="fixed">Fixed interval</option><option value="random">Random interval</option></select></label>
+        <label class="wm-f">Random spread<div class="wm-unit"><input class="ds-field" type="number" id="sc-random" min="0" max="80"><span>± %</span></div></label>
+        <label class="wm-f">Fastest start rate<div class="wm-unit"><input class="ds-field" type="number" id="sc-rate" min="0.1" step="0.5"><span>per s</span></div><small>new Vusers per second during ramp-up (log-ins)</small></label>
+      </div></div>
+    </section>
+  </div>
+
+  <!-- ============ RESULTS ============ -->
+  <div class="wm-col wm-sticky" id="results-col">
+    <button class="wm-rail" id="rail" aria-controls="results-col" aria-label="Show the results" title="Show the results">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
+      <span class="wm-rail-label">Result</span>
+      <span class="wm-rail-v" id="rail-v"><span>—</span><small>Vusers</small></span>
+      <span class="wm-rail-v" id="rail-t"><span>—</span><small>TPS</small></span>
+      <span class="ds-chip" id="rail-c"></span>
+    </button>
+    <div class="wm-colbar"><span class="wm-colbar-t">Results</span>
+      <button class="ds-btn ds-btn-sm ds-btn-ghost" data-all="results-col" data-open="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/></svg>Expand all</button><button class="ds-btn ds-btn-sm ds-btn-ghost" data-all="results-col" data-open="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 18 5-5 5 5"/><path d="m7 11 5-5 5 5"/></svg>Collapse all</button>
+      <button class="wm-chev" id="btn-hide-res" aria-controls="results-col" aria-label="Hide the results — give the inputs the full width" title="Hide the results"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg></button></div>
+    <section class="ds-card" aria-labelledby="hr" data-fold="result">
+      <div class="ds-card-head"><h2 id="hr">Result<span class="wm-fold-sum" id="sum-result"></span></h2>
+</div>
+      <div class="ds-card-body">
+        <div class="ds-note wm-summary" id="summary"></div>
+        <div class="wm-tiles" id="tiles"></div>
+        <svg class="wm-chart" id="chart" viewBox="0 0 640 190" role="img" aria-label="Vusers and expected TPS over the test"></svg>
+        <div class="wm-phbar" id="phbar" aria-hidden="true"></div>
+        <div class="wm-legend"><span><i style="background:var(--c-work)"></i>Vusers</span><span><i style="background:repeating-linear-gradient(90deg,var(--ds-ok) 0 6px,transparent 6px 9px)"></i>Expected TPS (right axis)</span><span id="lg-phase"></span></div>
+        <table class="wm-phases" id="phases"></table>
+      </div>
+    </section>
+    <section class="ds-card" aria-labelledby="hc" data-fold="checks">
+      <div class="ds-card-head"><h2 id="hc">Checks</h2><span class="ds-chip" id="check-count"></span></div>
+      <div class="ds-card-body"><ul class="wm-checks" id="checks"></ul></div>
+    </section>
+    <section class="ds-card" aria-labelledby="hd" data-fold="details">
+      <div class="ds-card-head"><h2 id="hd">Details<span class="wm-fold-sum">per script, LRE settings, load generators, how it is worked out</span></h2></div>
+      <div class="ds-tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="setup">LRE setup</button>
+        <button role="tab" aria-selected="false" data-tab="per">Per script</button>
+        <button role="tab" aria-selected="false" data-tab="lg">Load generators</button>
+        <button role="tab" aria-selected="false" data-tab="how">How it is worked out</button>
+      </div>
+      <div class="wm-pane on" id="tab-setup"><div id="setup"></div>
+        <details class="wm-more" id="lre-fold"><summary>The same as text — what “Copy LRE settings” copies</summary><pre class="ds-code" id="lre"></pre></details></div>
+      <div class="wm-pane" id="tab-per"></div>
+      <div class="wm-pane" id="tab-lg"></div>
+      <div class="wm-pane" id="tab-how"></div>
+    </section>
+  </div>
+</main>
+</div>
+<div class="wm-toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-t"></span>
+  <button class="ds-btn ds-btn-sm" id="toast-undo">Undo</button>
+  <button class="wm-x" id="toast-x" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+
+<!-- everything runs in this page: scripts, HAR files and Excel sheets are read here and never sent to the server -->
+<script src="wm/engine/workload-engine.js"></script>
+<script src="ra/zip.js"></script>
+<script src="wm/engine/script-reader.js"></script>
+<script src="wm/engine/settings.js"></script>
+<script src="wm/app.js"></script>
+<script src="wm/excel.js"></script>
+<script src="wm/page.js"></script>
+<script src="portal/track.js"></script>
+</body>
+</html>

@@ -238,6 +238,16 @@ class WebServer {
       this.app.use(base + "/report", express.static(path.join(RA_DIR, "report")));
       this.app.use(base, express.static(path.join(RA_DIR, "web"), { index: false }));
     }
+    // Workload Modeller (separate module): static page assets only — scripts, HAR files and Excel sheets are read in
+    // the user's browser and never reach the server. The page loads them as relative "wm/…" URLs (and "ra/…" for the
+    // Analyser's zip reader and Excel library, shared rather than copied).
+    const WM_DIR = path.join(__dirname, "..", "..", "workload-modeller");
+    for (const base of ["/wm", "/converter/wm"]) {
+      this.app.use(base + "/engine", express.static(path.join(WM_DIR, "engine")));
+      // the team settings: an admin edits the file, every user reads it afresh when the page opens (never cached)
+      this.app.use(base + "/config", express.static(path.join(WM_DIR, "config"), { index: false, setHeaders: (res) => res.setHeader("Cache-Control", "no-cache") }));
+      this.app.use(base, express.static(path.join(WM_DIR, "web"), { index: false }));
+    }
     this.app.set("view engine", "ejs");
     this.app.set("views", path.join(__dirname, "views"));
   }
@@ -298,6 +308,9 @@ class WebServer {
     });
     this.app.get(["/results-analyser", "/converter/results-analyser"], (req, res) => {
       res.sendFile(path.join(__dirname, "..", "..", "lre-results-analyser", "web", "index.html"));
+    });
+    this.app.get(["/workload-modeller", "/converter/workload-modeller"], (req, res) => {
+      res.sendFile(path.join(__dirname, "..", "..", "workload-modeller", "web", "index.html"));
     });
     // Old /tools/* links: the pages' relative script paths only resolve at /recorder and /studio
     this.app.get(["/tools/recorder", "/tools/studio"], (req, res) => res.redirect(301, "/converter/"));
@@ -688,7 +701,7 @@ class WebServer {
     // The browser tools (Script Studio, Recorder, Results Analyser) work client-side, so they report a finished
     // job here: { tool, protocol, filename, sizeKb, mode, requestCount, correlationsFound, correlationsAccepted,
     // result, errorCode, duration }. Input is untrusted — every field is checked and trimmed.
-    const BROWSER_TOOLS = new Set(["studio", "recorder", "explorer", "analyser"]);
+    const BROWSER_TOOLS = new Set(["studio", "recorder", "explorer", "analyser", "workload"]);
     const _studioTrackHandler = express.json({ limit: "2kb" });
     const _studioTrackRoute   = (req, res) => {
       res.status(204).end(); // respond immediately, work happens below

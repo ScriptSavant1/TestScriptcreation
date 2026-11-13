@@ -16,6 +16,7 @@ const TOOL_LABELS = {
   studio:    "Script Studio",
   converter: "Postman / Bruno Converter",
   jmx:       "JMeter Converter",
+  workload:  "Workload Modeller",
   analyser:  "Results Analyser",
 };
 

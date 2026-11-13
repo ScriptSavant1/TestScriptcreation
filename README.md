@@ -18,7 +18,7 @@ PerfX Studio removes most of the manual VuGen scripting effort by generating:
 
 ## The tools
 
-The portal has a collapsible left sidebar: **Home**, then **Create scripts** (Recorder, HAR Explorer, Script Studio, Postman / Bruno, JMeter), **Analyse** (Results Analyser) and **Learn** (Help & guides).
+The portal has a collapsible left sidebar: **Home**, then **Create scripts** (Recorder, HAR Explorer, Script Studio, Postman / Bruno, JMeter), **Plan** (Workload Modeller), **Analyse** (Results Analyser) and **Learn** (Help & guides).
 
 | Tool | Input | Best for |
 |---|---|---|
@@ -27,6 +27,7 @@ The portal has a collapsible left sidebar: **Home**, then **Create scripts** (Re
 | **Script Studio** | **Start recording**, or 1 or 2 HAR files | Automatic correlation (pattern mode with 1 HAR, diff mode with 2) |
 | **Postman / Bruno** converter | Postman v2.1 or Bruno collection (`.json`, `.yml`, `.yaml`, `.bru`, zipped folder), optional environment file and client certificates | Converting existing API collections |
 | **JMeter** converter | JMeter `.jmx`, optional CSV data files and certificates | Migrating JMeter tests; also produces a Workload Model Excel |
+| **Workload Modeller** | Each script's target (TPS, transactions per hour, Vusers, share, iterations), optionally filled from script ZIPs or HAR files | Vusers, pacing, ramp-up and ramp-down, load generators and checks; LRE settings to copy and an Excel workbook |
 | **Results Analyser** | LoadRunner Enterprise raw results folder or ZIP | Transaction summary, steady state, insights; Excel, Word, PDF and HTML reports |
 | **CDP Recorder** (Windows download) | Records a browser journey | Records every tab and pop-up to a HAR, with no browser extension and no administrator rights; driven by **Start recording** on the page, or by its own floating toolbar |
 
@@ -87,11 +88,12 @@ Every route answers both at the site root and under `/converter` (so it works wh
 | Route | Purpose |
 |---|---|
 | `GET /converter` | The portal (sidebar, Home and every tool) |
-| `GET /recorder`, `/har-explorer`, `/studio`, `/results-analyser` | Tool pages, loaded inside the portal |
+| `GET /recorder`, `/har-explorer`, `/studio`, `/workload-modeller`, `/results-analyser` | Tool pages, loaded inside the portal |
 | `POST /convert`, `POST /convert-jmx` | Collection and JMeter conversions (rate-limited: 60 per 5 minutes per address) |
 | `GET /converter/download/:token` | Single-use ZIP download, valid for 5 minutes |
 | `GET /downloads/cdp-recorder` | Pre-built CDP Recorder (`cdp-recorder/recorder/dist/cdp-recorder.zip`, falling back to `.exe`) |
 | `/ra`, `/ra/engine`, `/ra/report` | Static files of the Results Analyser |
+| `/wm`, `/wm/engine` | Static files of the Workload Modeller |
 | `GET /health`, `GET /status` | Health and status checks |
 | `POST /analytics/track` | Usage ping of the browser tools |
 | `/admin` | Usage-statistics dashboard (only when `ADMIN_TOKEN` is set) |
@@ -161,7 +163,7 @@ Converter files are held **in memory**. Collection, environment, JMX, CSV and ce
 
 Each request has its own isolated `AsyncLocalStorage` context — no cross-request contamination.
 
-The Recorder, the HAR Explorer, Script Studio and the Results Analyser run entirely in the user's browser: recordings and test results never reach the server. **Start recording** talks only to the CDP Recorder on the user's own PC (`127.0.0.1:8787`), never through the server. Only usage statistics (tool, file name, counts, machine name or IP address, browser details — no file contents) are recorded, in the analytics database.
+The Recorder, the HAR Explorer, Script Studio, the Workload Modeller and the Results Analyser run entirely in the user's browser: recordings, scripts and test results never reach the server. **Start recording** talks only to the CDP Recorder on the user's own PC (`127.0.0.1:8787`), never through the server. Only usage statistics (tool, file name, counts, machine name or IP address, browser details — no file contents) are recorded, in the analytics database.
 
 ## Project structure
 
@@ -206,6 +208,7 @@ The Recorder, the HAR Explorer, Script Studio and the Results Analyser run entir
 │
 ├── cdp-recorder/             ← CDP Recorder (Windows HAR recorder, replaces the extension)
 ├── lre-results-analyser/     ← Results Analyser (browser engine, reports, CLI)
+├── workload-modeller/        ← Workload Modeller (engine, script reader, page, tests, docs)
 ├── tests/unit/               ← Jest unit tests
 ├── regression-tests/         ← old-against-new comparison tools (tools/); pipeline test skeleton
 ├── vugen-reference/          ← VuGen project templates per version, checked against every tool (README inside)
@@ -261,10 +264,11 @@ const PORTAL_CONFIG = {
     recorder:  { enabled: true  },
     explorer:  { enabled: true  },
     studio:    { enabled: true  },
+    workload:  { enabled: true  },  // Workload Modeller
     analyser:  { enabled: true  },  // Results Analyser
     help:      { enabled: true  }
   },
-  iframes: { recorder: BASE_PATH + '/recorder', explorer: BASE_PATH + '/har-explorer', studio: BASE_PATH + '/studio', analyser: BASE_PATH + '/results-analyser' }
+  iframes: { recorder: BASE_PATH + '/recorder', explorer: BASE_PATH + '/har-explorer', studio: BASE_PATH + '/studio', workload: BASE_PATH + '/workload-modeller', analyser: BASE_PATH + '/results-analyser' }
 };
 ```
 
@@ -282,6 +286,7 @@ const PORTAL_CONFIG = {
 | Usage statistics | better-sqlite3 (SQLite), ua-parser-js; exports with ExcelJS and docx |
 | Client ZIP | JSZip 3.10.1 |
 | Results Analyser (browser) | ECharts, ExcelJS, docx, sql.js (bundled in `lre-results-analyser/web/vendor/`) |
+| Workload Modeller (browser) | ExcelJS and the ZIP reader, shared with the Results Analyser (loaded from `/ra`, not copied) |
 | CDP Recorder | TypeScript, chrome-remote-interface, Node Single Executable Application; local API on `127.0.0.1:8787` |
 | Deployment | IIS 10 + iisnode 0.2.26 (PM2 as the alternative) |
 
@@ -319,6 +324,7 @@ Documentation inside the repository:
 | Bug tracker | [BUGS.md](BUGS.md), older versions in [BUGS-ARCHIVE.md](BUGS-ARCHIVE.md) |
 | CDP Recorder | [cdp-recorder/README.md](cdp-recorder/README.md) |
 | Results Analyser | [lre-results-analyser/README.md](lre-results-analyser/README.md), [user guide](lre-results-analyser/docs/USER-GUIDE.md) |
+| Workload Modeller | [workload-modeller/README.md](workload-modeller/README.md), [implementation plan](workload-modeller/docs/IMPLEMENTATION-PLAN.md) |
 | Regression tests | [regression-tests/README.md](regression-tests/README.md) |
 
 The Help & guides section inside the portal is the authoritative user-facing help.
@@ -330,6 +336,7 @@ npm test                                    # all Jest tests
 npm test -- --testPathPattern=correlation   # one suite
 npm test -- --coverage                      # with coverage
 npx jest lre-results-analyser               # Results Analyser tests only
+npx jest workload-modeller                  # Workload Modeller tests only
 ```
 
 Notable suites in `tests/unit/`:

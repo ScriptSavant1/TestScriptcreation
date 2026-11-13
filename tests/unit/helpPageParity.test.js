@@ -2,7 +2,7 @@
 
 /**
  * Help & guides (src/web/views/partials/help.ejs) — guards the structure the portal relies on:
- * the 13 sections the tools' "How it works" buttons and the Home page jump to, every jump target,
+ * the 15 sections the tools' "How it works" buttons and the Home page jump to, every jump target,
  * the Help functions, and the search / contents additions. Content parity (every word) is checked
  * by the Help capture in the redesign notes; this test catches a lost section or broken jump.
  */
@@ -17,7 +17,7 @@ const home = read('partials/home.ejs');
 const shellJs = fs.readFileSync(path.resolve(__dirname, '../../src/web/public/portal/shell.js'), 'utf-8');
 
 const SECTIONS = ['hacc-quickstart', 'hacc-overview', 'hacc-formats', 'hacc-converter', 'hacc-jmeter', 'hacc-recorder', 'hacc-explorer',
-  'hacc-studio', 'hacc-analyser', 'hacc-capabilities', 'hacc-privacy', 'hacc-glossary', 'hacc-new', 'hacc-faq'];
+  'hacc-studio', 'hacc-workload', 'hacc-analyser', 'hacc-capabilities', 'hacc-privacy', 'hacc-glossary', 'hacc-new', 'hacc-faq'];
 
 describe('Help — sections and jumps', () => {
   test('index.ejs includes the Help partial once and no longer has its own copy', () => {

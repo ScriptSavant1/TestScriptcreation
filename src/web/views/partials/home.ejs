@@ -1,6 +1,6 @@
 <%#
   Home page (v6) — modelled on the agreed design: welcome band (headline, tagline, inputs → outputs picture),
-  Quick actions (the six tools, icons as in the sidebar), "Your workflow" (record → correlate → run in LRE → analyse, each with its tool) and
+  Quick actions (the seven tools, icons as in the sidebar), "Your workflow" (record → correlate → run in LRE → analyse, each with its tool) and
   "Need help?" with the privacy note, then a footer line. Explanations live in Help & guides.
   Behaviour in public/portal/home.js, styles in public/portal/home.css. Locals: I (icons), basePath.
   Kept for other code: data-go / data-help / data-scroll / data-tab.
@@ -28,6 +28,7 @@
     { go: 'studio',  tab: 'studio',    c: '--c-studio',  icon: 'link',    name: 'Script Studio',    open: 'Open Script Studio',    what: 'Create and enhance VuGen scripts with automatic correlation.' },
     { go: 'postman', tab: 'converter', c: '--c-convert', icon: 'api',     name: 'Postman / Bruno',  open: 'Open Converter',        what: 'Convert your API collection to a ready-to-run VuGen script.' },
     { go: 'jmeter',  tab: 'converter', c: '--c-jmeter',  icon: 'migrate', name: 'JMeter',           open: 'Open JMeter Converter', what: 'Convert JMeter test plans (.jmx) to VuGen scripts.' },
+    { go: 'workload', tab: 'workload', c: '--c-work',    icon: 'workload', name: 'Workload Modeller', open: 'Open Workload Modeller', what: 'Turn the load you need into Vusers, pacing and an LRE scenario.' },
     { go: 'results', tab: 'analyser',  c: '--c-results', icon: 'chart',   name: 'Results Analyser', open: 'Open Results Analyser', what: 'Understand your LoadRunner results and generate reports.' },
   ];
   const ins = [

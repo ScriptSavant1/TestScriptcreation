@@ -58,7 +58,7 @@ Do NOT recreate it — all its functions exist in the three split files above.
 | `src/web/public/portal/drop-anywhere.js` | `PerfxDrop.attach({ when, label, route })` — a page-wide drop hands files to the page's own file inputs (used by converter.js, recorder-ui.js, studio-page.js); drops on a box that handles them itself are left alone |
 | `src/web/public/portal/track.js` | `PerfxTrack.send({...})` — usage ping of the browser tools (Recorder, HAR Explorer, Results Analyser) to …/analytics/track; Script Studio pings from studio-app.js |
 
-Usage statistics: tools `recorder`, `explorer`, `studio`, `converter`, `jmx`, `analyser` (each list: server.js BROWSER_TOOLS, analytics/reports.js, exporters/{xlsx,docx}.js, views/admin.ejs). Machine = reverse DNS of `req.ip`, else the IP (anonymous IIS authentication — no user names).
+Usage statistics: tools `recorder`, `explorer`, `studio`, `converter`, `jmx`, `workload`, `analyser` (each list: server.js BROWSER_TOOLS, analytics/reports.js, exporters/{xlsx,docx}.js, views/admin.ejs). Machine = reverse DNS of `req.ip`, else the IP (anonymous IIS authentication — no user names).
 Remembered options (localStorage): `perfx-cv-prefs` (converter.js), `perfx-rec-format` (recorder-ui.js), `perfx-studio-fmt` (studio-page.js) — restored through the pages' own setters.
 Rule: the old switchers in index.ejs stay the source of truth; the shell only wraps them. Tool panels (Converter, Recorder, Studio, Analyser, Help) are redesigned one at a time — keep every piece of Help text.
 
@@ -121,7 +121,7 @@ harness sends a different `X-Forwarded-For` per run).
 | `src/web/public/Studio.html` | New Studio page. Loads the classic Studio scripts UNCHANGED, in the same order, and `VuGen-Script-Studio.css` under `portal/studio.css`; keeps every element id the scripts use |
 | `src/web/public/portal/studio.css` | Maps the classic colour tokens onto the portal palette (both themes) and lays out the new page |
 | `src/web/public/portal/studio-page.js` | `window.PerfxStudio.state()` = Studio's `S` (a const — NOT `window.S`; BUG-112) for the Recorder / HAR Explorer hand-offs. Layout behaviour only: Review / Script show-hide (localStorage `perfx-studio-ui`), dialog focus (in, trapped, returned; Escape closes), keyboard for script-drawn chips / tabs / headers, drop-zone focus ring; step bar `#ss-steps` (display only: step from the active phase + `#dz1.loaded` + a click in `#dl-bar`; moved into `#ph-res` on results) |
-| `src/web/public/portal/frame-guard.js` | One address: a tool page (`<html data-portal-tool=record|studio|results>`) opened on its own goes to …/converter/ and the shell opens that tool (sessionStorage `perfx-open`); skipped for automated test browsers (`navigator.webdriver`) |
+| `src/web/public/portal/frame-guard.js` | One address: a tool page (`<html data-portal-tool=record|explore|studio|workload|results>`) opened on its own goes to …/converter/ and the shell opens that tool (sessionStorage `perfx-open`); skipped for automated test browsers (`navigator.webdriver`) |
 
 Rule: `tests/unit/studioPageParity.test.js` must pass; check output parity with the golden harness
 (`regression-tests/tools/studio/harness.js` + `compare.js`, baseline from the classic `/studio`).
@@ -161,6 +161,21 @@ Parity check on recordings: `regression-tests/tools/audit/hx-parity.js <files>` 
 **Distribution**: `GET /downloads/cdp-recorder` (server.js) serves the pre-built `dist/cdp-recorder.zip`/`.exe`; home page banner "Get CDP Recorder".
 HAR pages[]/pageref → synthetic isMarker entries injected by `_injectPagerefMarkers` in both Studio and Recorder detectMarkers().
 The PerfX Chrome/Edge extension (`perfx-recorder-extension/`) was removed from the repo and its history — do not recreate it.
+
+### Workload Modeller (separate module — plan: workload-modeller/docs/IMPLEMENTATION-PLAN.md)
+| File | Purpose |
+|------|---------|
+| `workload-modeller/engine/workload-engine.js` | UMD `WorkloadEngine.model(input)` — every formula (TPS = Vusers × T ÷ pacing; auto pacing with headroom; ramp; schedule simulation; load generators with CPU and memory added up apart; checks with `gid` + `field`); `packPool` assigns scripts to machines → `res.machines` (LG1 …) and each group's `lgs` |
+| `workload-modeller/engine/settings.js`, `workload-modeller/config/workload-settings.json` | Team settings: the JSON file (machine types + Vusers per machine, LG limits, schedule defaults, protocol assumptions) is edited on the server, served at `wm/config/` with no-cache, checked by `WorkloadSettings.read` (wrong values keep the built-in ones and are named on the page); `DEFAULTS` must equal the shipped file (`tests/settings.test.js`) |
+| `workload-modeller/engine/script-reader.js` | UMD `ScriptReader.readFiles(files)` — script ZIPs (VuGen C, DevWeb) and HAR: transactions per iteration (init / end listed, nested listed), think time, requests; needs the Analyser's `web/zip.js` |
+| `workload-modeller/web/index.html` | Page (`data-portal-tool="workload"`), route `/workload-modeller` + `/converter/…`; loads `portal/ds.css`, `wm/app.css`, the engine, `ra/zip.js`, the reader, `wm/app.js` → `wm/excel.js` → `wm/page.js` (classic scripts sharing globals, in this order), `portal/track.js` |
+| `workload-modeller/web/app.js` | State `state.groups`, inputs (test, cards, Table view, load generators — machine types `LG_TYPES` from the team settings file (`config/workload-settings.json` — edit the file, not the code, when the machines change)), results (summary, tiles, chart, phases, checks, details); `formulas(sc)` = "All the formulas" — keep in step with the engine and `docs/USER-GUIDE.md` §6 |
+| `workload-modeller/web/excel.js` | Results workbook + scripts sheet (download / read back); ExcelJS from `ra/vendor/exceljs.min.js` on first use (`loadExcel`); usage ping `used(mode)` |
+| `workload-modeller/web/page.js` | Simple / Detailed, theme (`wm-theme`, `lrePortalInit` / `lreSetTheme`), folding, Find / filter, Overwrite all scripts, Paste from Excel (`matchScript`: never a guess), Defaults, Fill from scripts, Undo (`clearWith`, `toast(msg, canUndo)`) |
+| `workload-modeller/tests/*.test.js` | Engine, review fixes, script reader (Jest) |
+
+Server: `/workload-modeller` page + static `/wm`, `/wm/engine` (also under `/converter`). Portal tab / shell page `workload`, colour `--c-work`, Help `hacc-workload`.
+Rule: every edit goes through `setKey` + `calc` (cards and table share `state.groups`); nothing is sent to the server except the usage ping (feature + count).
 
 ### LRE Results Analyser (separate module — phases 0–5 built)
 | File | Purpose |
@@ -362,7 +377,7 @@ components `ds-btn`, `ds-card`, `ds-chip`, `ds-tile`, `ds-seg`, `ds-tabs`, `ds-p
 padding) — the Home page's look on every tool page. Every tool uses the panel layout `ds-band-panel` (tool name + `ds-band-tag`
 tagline, short lead, the picture in a soft panel, the note in a tilted card; in the portal, converter.css / help.css narrow the
 breakpoints with their container width because the window width includes the sidebar). Loaded first by index.ejs, Recorder.html, Studio.html and the Results Analyser page; the
-portal's older tokens (`--bg`, `--text`, `--glass` …) are mapped onto it in shell.css. Rules: one brand blue for
+portal's older tokens (`--bg`, `--text`, `--glass` …) are mapped onto it in shell.css. Pilot: the Workload Modeller overrides the brand to purple with solid section boxes (block at the end of `workload-modeller/web/app.css`) — the other tools follow after review; until then the rules below say blue. Rules: one brand blue for
 actions (one primary button per area), tool colours only on icons, sentence case, pages use the full width
 beside the sidebar (`--ds-page-max: 100%`), no emoji in the interface (SVG line icons).
 The admin pages use it too: `src/web/views/admin.ejs` links `portal/ds.css` (prefix from `adminBase`); the sign-in page
