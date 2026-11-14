@@ -286,20 +286,24 @@ All scripts at once: choose or drop any number of files; each script becomes (or
 - The find / filter bar shows from 4 scripts and always while a filter is on. A filter never hides silently: a script
   whose status changes (it just got its target) stays in view until the user changes the filter, an open script is
   never hidden, and "No script matches the filter — Show all" when nothing is left.
-- Excel sheet (round trip, for many scripts): "Fill in with Excel" downloads `workload-scripts.xlsx` with one row per script
-  already on the page (plus empty rows). Coloured group bands (Script · What it must do · One iteration · Pacing and think
-  time at replay · Load generators and data), tinted column heads with a red * on the needed ones, a hint row, frozen
-  heads and names, drop-down lists (protocol, size it by, pacing, think time, pool) and number checks; a second sheet
-  "How to fill it in". The filled-in sheet is dropped on the page like a script (scripts and sheet together are fine):
-  names update their cards, new names add scripts, an empty cell keeps the page's value, values that are not a list
-  choice or a number are listed and not used. Undoable.
-  The sheet mirrors a script card: the same fields (incl. response time from, 90th percentile, requests, multiply /
-  random % for think time) and the page's own words in the drop-down lists (older short words still read). Empty rows
-  already hold the page's defaults (protocol, size it by, response time from, pacing, think time, pool). "Target means"
-  is a formula that says what Target holds for the chosen "Target type" (as the card's label changes). Conditional
-  formatting: grey = does not apply to the row's choices (as the card hides the field), amber = still needed
-  (target; pacing seconds; response time when the tool chooses the pacing — left out when "Defaults for every script"
-  gives the value). Works in Excel 2007 and later.
+- Excel sheet (round trip, for many scripts): "Fill in with Excel" downloads `workload-scripts.xlsx` that asks only for
+  what the requirements (NFRs) give: a title, one line of help, the test duration once ("Test duration — steady state
+  (minutes)", row 3; read back into the steady-state minutes), then one purple header row and one row per script on the
+  page (plus at least 30 empty rows, truly empty). The columns are what a script ZIP gives plus the NFRs, so a user
+  without ZIPs fills the same facts. Eight columns: Script name *, Script type (protocol) (empty = read from the script
+  ZIP, else Web HTTP/HTML), Transactions per iteration *, Think time (s) (one whole iteration), Response time (s) *
+  (expected / SLA or a measured average), and ONE target: Transactions per hour (first: what NFRs usually give), TPS or
+  Vusers. Reading the target: one value sets that
+  target type; a rate (TPS or per hour) together with Vusers = "Vusers and TPS" (per hour ÷ 3600); TPS and per hour
+  together = the TPS, named in the "not used" report. A page script whose target the sheet has no column for (a share,
+  iterations) gets empty target cells and keeps its target. Pacing, kind of script and every other setting
+  stay on the page (read from the script ZIP or chosen by the tool); an empty cell or a missing column never overwrites
+  the page. The hint for a column shows when a cell is clicked; a drop-down list for the script type; number checks;
+  amber = still needed. Second sheet "How to fill it in": four steps and one line per column. Older sheets (the 10- and
+  23-column ones) are still read by their headings.
+  Reading back: by column name in the first 10 rows; an empty cell or a missing column keeps the page's value; names
+  update their cards, new names add scripts, values that are not a list choice or a number are listed and not used;
+  older sheets (every column, hint row, "Target means", Requests) are still read. Undoable. Works in Excel 2007 and later.
 - The same missing input on more than 3 scripts: one line ("97 scripts have no target yet") with "Show them" (the
   filter); more than 5 response-time limits: one line pointing to Details › Per script. The import note for more than
   8 scripts counts the warnings by kind and folds the full list. A ZIP with 100 scripts reads in about 2 s.

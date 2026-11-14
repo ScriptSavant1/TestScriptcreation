@@ -1,6 +1,6 @@
 # Workload Modeller — implementation plan (portal)
 
-Status: Phases 1–5b, 7–14 done · Phase 6 (Part B, the Targets Excel sheet) waits for the owner's review. Nothing committed. Updated at the end of every phase.
+Status: Phases 1–15 done (phase 15 delivers Part B of TABLE-AND-EXCEL-PLAN as a trimmed scripts sheet). Updated at the end of every phase.
 
 The Workload Modeller turns what each script must reach (TPS, transactions per hour, Vusers, a share of the total,
 iterations) into an LRE scenario: Vusers, pacing, ramp-up and ramp-down, load generators, the LRE settings to type in,
@@ -46,7 +46,7 @@ The calculation spec stays the reference for the numbers.
 | 4 | Proof: `npm test`; the draft's Playwright tests on the portal page (same results); design audit (both themes, every width); performance (load time, memory with 100 scripts, first-open size); no request leaves the browser except the page's own files and the usage ping | Done — see the measurements below |
 | 5 | Documents: CHANGELOG, CLAUDE.md file map, README, FUNCTIONAL-SPEC, module README; state notes | Done — also BUGS.md (BUG-133, BUG-134: older issues found on the way); SPEC and the table plan moved into `docs/` (one copy) |
 | 5b | After review: load generators by machine type (on-premise Windows server 8 cores / 32 GB; AWS c6a.4xlarge Linux or Windows 16 vCPU / 32 GB; another machine), "All the formulas" on the page, `docs/USER-GUIDE.md` (every formula, worked example) also in the documentation site, Getting Started / Portal Guide / Help updated, draft folder deleted | Done |
-| 6 | Part B — the small "Targets" Excel sheet (see the table-view plan) | After review of 1–5 |
+| 6 | Part B — the small "Targets" Excel sheet (see the table-view plan) | Done in phase 15 (trimmed scripts sheet) |
 | 7 | Load-generator assignment and the LRE setup table (owner's request, see below) | Done |
 | 8 | After the owner's screen review: start rate shared by scripts ramping together (by group); whole-second pacing within 1% of the TPS; LRE setup column order, "Start" explained, "hide the inputs" hint; toolbar rows; tile wording | Done |
 | 9 | Ramp steps never at once (BUG-135); buttons redesigned (outputs in the top bar, every action recognisable, "Fill in with Excel"); Undo only after a change (BUG-136); phone layout | Done |
@@ -55,6 +55,7 @@ The calculation spec stays the reference for the numbers.
 | 12 | Fill each machine (default): machines filled up, a script that does not fit whole runs as LRE groups name_1, name_2 (LRE setup one row per group, by-group schedule per group); one group per script kept as a choice, warns when it costs machines; extra machines: fewest groups | Done |
 | 13 | Team settings file (`config/workload-settings.json`, `engine/settings.js`, served no-cache) and the one-sheet Excel ("LRE scenario") | Done |
 | 14 | LRE 26.3 schedule as it is typed: every group Start Group Immediately, all ramping over the longest ramp (`fitPlan`), Duration padded so all stop together; times HH:MM:SS; LRE's field names as columns; rows by script name (no name_1 / name_2) | Done |
+| 15 | Scripts sheet ("Fill in with Excel") trimmed to the NFRs: test duration once, Script name, Script type, Transactions per iteration, Think time, Response time, ONE of per hour / TPS / Vusers; empty rows empty; hints on click (TABLE-AND-EXCEL-PLAN Part B) | Done |
 
 ## Phase 7 — which script runs on which load generator, and one LRE setup table
 

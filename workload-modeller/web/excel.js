@@ -88,12 +88,10 @@ $("#btn-copy").addEventListener("click", async () => {
 });
 
 /* ---------- the scripts as an Excel sheet ---------- */
-// One row per script, the same fields and the same words as a script card on the page. Downloaded with the page's
-// scripts in it and empty rows that already hold the page's defaults (pick from the drop-down lists to change them);
-// filled in in Excel; dropped back. Excel behaves like the card: cells that do not apply to the row's choices turn
-// grey, a value still needed turns amber, and "Target means" says what the Target number is.
-// Reading back: empty cell = keep the page's value; a name matches a card (ignoring case, a "(2)" copy suffix and
-// punctuation); a new name adds a script. The older short words (TPS, Fixed, Auto …) are still understood.
+// One row per script — only what the requirements give (see XL_COLS); empty rows are truly empty, the hint for a column
+// shows when a cell is clicked. Reading back: by column name; an empty cell or a missing column keeps the page's value; a name
+// matches a card (ignoring case, a "(2)" copy suffix and punctuation); a new name adds a script. Older sheets (every
+// column, the older short words TPS, Fixed, Auto …) are still understood.
 const XL_LISTS = {
   protocol: Object.entries(PROTOS).map(([k, v]) => [k, v.label, ({ web: ["Web HTTP/HTML", "Web HTTP", "Web"], other: ["Other"] })[k] || []]),
   method: METHODS.map(([k, l]) => [k, l, [METHODS_OLD[k]].concat(({ tps: ["TPS"], volume: ["Volume per hour", "Volume"], share: ["Share of total (%)", "Share"], vusers: ["Vusers"], vusers_tps: ["Vusers and TPS"], iterations: ["Iterations"] })[k])]),
@@ -103,172 +101,125 @@ const XL_LISTS = {
   kind: KINDS.map(([k, l]) => [k, l, ({ auto: ["Auto", "From script"], web: ["Web", "Pages"], api: ["API"] })[k]]),
 };
 const xlL = (list, key) => (XL_LISTS[list].find((x) => x[0] === key) || [])[1] || "";
-// key, header, group, width, needed, hint, kind (list name | num | text | calc)
+// The sheet asks only for what the requirements (NFRs) give: the script, its type, one iteration, the response time and
+// ONE target — TPS, transactions per hour or Vusers — plus the test duration once, above the table. Everything else
+// (think time, pacing, load generators …) is read from the script ZIP or chosen by the tool, and can be changed on the page.
+// key, header, width, needed, hint (shown when a cell is clicked), kind (list name | num | text)
+const XL_ONE = "Fill ONE of Transactions per hour, TPS or Vusers (per hour or TPS together with Vusers = those Vusers reaching that rate).";
 const XL_COLS = [
-  ["name", "Script name", 0, 30, true, "one row per script", "text"],
-  ["protocol", "Protocol", 0, 17, false, "pick from the list", "protocol"],
-  ["method", "Target type", 1, 34, true, "pick from the list", "method"],
-  ["target", "Target", 1, 12, true, "a number — see “Target means”", "num"],
-  ["unit", "Target means", 1, 24, false, "filled in by Excel", "calc"],
-  ["tps2", "Target TPS (with Vusers)", 1, 14, false, "only with “Vusers and TPS”", "num"],
-  ["txPerIter", "Transactions per iteration", 2, 14, false, "that count for the TPS", "num"],
-  ["thinkPerIter", "Think time (s)", 2, 12, false, "total, as recorded", "num"],
-  ["rtAvg", "Response time (s)", 2, 13, false, "average per transaction", "num"],
-  ["rtSource", "Response time from", 2, 28, false, "pick from the list", "rtSource"],
-  ["rt90", "90th percentile (s)", 2, 13, false, "optional — the worst case", "num"],
-  ["requestsPerIter", "Requests", 2, 11, false, "per iteration — hits per second", "num"],
-  ["pacing", "Pacing", 3, 36, false, "pick from the list", "pacing"],
-  ["pace1", "Pacing (s)", 3, 12, false, "Fixed: every · Random: shortest · After: delay", "num"],
-  ["pace2", "Longest pacing (s)", 3, 12, false, "Random only", "num"],
-  ["thinkMode", "Think time at replay", 3, 22, false, "pick from the list", "thinkMode"],
-  ["thinkFactor", "Multiply by", 3, 11, false, "with “Multiply recorded”", "num"],
-  ["thinkMinPct", "Random from (%)", 3, 12, false, "with “Random %”", "num"],
-  ["thinkMaxPct", "Random to (%)", 3, 12, false, "with “Random %”", "num"],
-  ["pool", "Runs on", 4, 18, false, "a load-generator pool", "pool"],
-  ["dataRows", "Data rows available", 4, 13, false, "optional — warns when short", "num"],
-  ["kind", "Kind of script", 4, 18, false, "for the load generators", "kind"],
-  ["perLg", "Vusers per machine", 4, 13, false, "optional — your figure, replaces the rule", "num"],
+  ["name", "Script name", 34, true, "One row per script. The same name as on the page updates that script; a new name adds one.", "text"],
+  ["protocol", "Script type (protocol)", 24, false, "Pick from the list. Empty: read from the script ZIP, else Web - HTTP/HTML.", "protocol"],
+  ["txPerIter", "Transactions per iteration", 16, true, "The transactions in one iteration of the script. Read from the script ZIP when you drop it too.", "num"],
+  ["thinkPerIter", "Think time (s)", 12, false, "The think time of one whole iteration, in seconds. Read from the script ZIP when you drop it too. Empty: the page keeps its value (10 s for a new script).", "num"],
+  ["rtAvg", "Response time (s)", 14, true, "Per transaction: the expected response time (SLA) or a measured average.", "num"],
+  ["perHour", "Transactions per hour", 15, false, "Transactions in the peak hour — what the requirements usually give. " + XL_ONE, "num"],
+  ["tps", "TPS", 11, false, "Transactions per second the script must reach. " + XL_ONE, "num"],
+  ["vusers", "Vusers", 11, false, "The Vusers to run. " + XL_ONE, "num"],
 ];
-// groups: name, band colour, header tint
-const XL_GROUPS = [["Script", "FF1E3A8A", "FFE0E7FF"], ["Target", "FF2563EB", "FFDBEAFE"], ["One iteration", "FF0F766E", "FFCCFBF1"],
-  ["Replay in LRE", "FF6D28D9", "FFEDE9FE"], ["Load generators and data", "FF475569", "FFE2E8F0"]];
-const XL_HINT = "one row per script";
-const XL_UNIT = { tps: "TPS", volume: "transactions per hour", share: "% of the scenario TPS", vusers: "Vusers", vusers_tps: "Vusers (TPS in the next column)", iterations: "iterations in full load" };
+// columns of older sheets — still read (by name), never written
+const XL_OLD = [["protocol", "Protocol"], ["kind", "Kind of script"], ["method", "Target type"], ["method", "Size it by"], ["target", "Target"],
+  ["tps2", "Target TPS (with Vusers)"], ["tps2", "TPS (Vusers and TPS)"], ["rtSource", "Response time from"], ["rt90", "90th percentile (s)"],
+  ["thinkMode", "Think time at replay"], ["pacing", "Pacing"], ["pace1", "Pacing (s)"], ["pace2", "Longest pacing (s)"], ["thinkFactor", "Multiply by"],
+  ["thinkMinPct", "Random from (%)"], ["thinkMaxPct", "Random to (%)"], ["pool", "Runs on"], ["dataRows", "Data rows available"], ["perLg", "Vusers per machine"],
+  ["requestsPerIter", "Requests"]];
+const XL_ALL = XL_COLS.map((x) => [x[0], x[1]]).concat(XL_OLD);   // [key, header]: every column the reader knows
+const XL_DUR = "Test duration — steady state (minutes)";
+const XL_HINT = "one row per script";   // the hint row of older sheets
 const xlNorm = (s) => String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9%+]+/g, "");
-const xlCol = (key) => { const i = XL_COLS.findIndex((x) => x[0] === key); return String.fromCharCode(65 + i); };   // 23 columns: A..W
+// a page script as a row; a target the sheet has no column for (a share, iterations) stays empty — the page keeps it
 function xlRow(g) {
-  const p = g.pacing || {}, m = g.method, pm = p.mode || "auto";
-  const target = { tps: g.targetTps, volume: g.volumePerHour, share: g.sharePct, vusers: g.vusers, vusers_tps: g.vusers, iterations: g.iterations }[m];
-  return { name: g.name, protocol: xlL("protocol", g.protocol), method: xlL("method", m), target, tps2: m === "vusers_tps" ? g.targetTps : null,
-    txPerIter: g.txPerIter, thinkPerIter: g.thinkPerIter, rtAvg: g.rtAvg, rtSource: xlL("rtSource", g.rtSource || "sla"), rt90: g.rt90, requestsPerIter: g.requestsPerIter,
-    pacing: xlL("pacing", pm), pace1: pm === "fixed" ? p.fixed : pm === "random" ? p.min : pm === "after" ? p.delay : null, pace2: pm === "random" ? p.max : null,
-    thinkMode: xlL("thinkMode", g.thinkMode || "recorded"), thinkFactor: g.thinkMode === "multiply" ? g.thinkFactor ?? 1 : null,
-    thinkMinPct: g.thinkMode === "random" ? g.thinkMinPct ?? 50 : null, thinkMaxPct: g.thinkMode === "random" ? g.thinkMaxPct ?? 150 : null,
-    pool: (state.pools.find((x) => x.id === g.pool) || state.pools[0] || {}).name, dataRows: g.dataRows, kind: xlL("kind", g.kind || "auto"), perLg: g.perLg, _m: m };
+  const m = g.method;
+  return { name: g.name, protocol: g.protocol ? xlL("protocol", g.protocol) : null, txPerIter: g.txPerIter, thinkPerIter: g.thinkPerIter, rtAvg: g.rtAvg,
+    tps: m === "tps" || m === "vusers_tps" ? g.targetTps : null, perHour: m === "volume" ? g.volumePerHour : null, vusers: m === "vusers" || m === "vusers_tps" ? g.vusers : null };
 }
 async function downloadSheet() {
   const wb = new ExcelJS.Workbook(); wb.creator = "Workload Modeller";
-  wb.calcProperties.fullCalcOnLoad = true;                  // "Target means" is always worked out afresh when the file opens
-  const ws = wb.addWorksheet("Scripts", { views: [{ state: "frozen", xSplit: 1, ySplit: 3, zoomScale: 90 }] });
-  const thin = { style: "thin", color: { argb: "FFCBD5E1" } }, box = { top: thin, left: thin, bottom: thin, right: thin };
+  const scripts = state.groups.filter((g) => !g.sample);
+  const cols = XL_COLS;
+  const HEAD = 4;                                          // title, one line, the test duration, then the column names
+  const ws = wb.addWorksheet("Scripts", { views: [{ state: "frozen", xSplit: 1, ySplit: HEAD, zoomScale: 100 }] });
+  const PURPLE = "FF5B21B6", line = { style: "thin", color: { argb: "FFD6D0E6" } }, box = { top: line, left: line, bottom: line, right: line };
   const fill = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb }, bgColor: { argb } });
-  const C = (k) => xlCol(k);
-  // row 1: the coloured group bands
-  let c = 1;
-  XL_GROUPS.forEach(([label, band], gi) => {
-    const n = XL_COLS.filter((x) => x[2] === gi).length; if (!n) return;
-    if (n > 1) ws.mergeCells(1, c, 1, c + n - 1);
-    const cell = ws.getCell(1, c);
-    cell.value = label; cell.fill = fill(band); cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 12 };
-    cell.alignment = { vertical: "middle", horizontal: "center" };
-    c += n;
-  });
-  ws.getRow(1).height = 26;
-  // row 2: the column names (tinted by group; needed ones marked); row 3: a short hint per column
-  XL_COLS.forEach(([key, head, gi, width, needed, hint, kind], i) => {
-    const [, band, tint] = XL_GROUPS[gi];
-    const h = ws.getCell(2, i + 1);
-    h.value = needed ? { richText: [{ text: head + " ", font: { bold: true, color: { argb: "FF0F172A" } } }, { text: "*", font: { bold: true, color: { argb: "FFDC2626" } } }] } : head;
-    if (!needed) h.font = { bold: true, color: { argb: kind === "calc" ? "FF475569" : "FF0F172A" }, italic: kind === "calc" };
-    h.fill = fill(tint); h.alignment = { vertical: "middle", wrapText: true }; h.border = { top: thin, left: thin, right: thin, bottom: { style: "medium", color: { argb: band } } };
-    const s = ws.getCell(3, i + 1);
-    s.value = hint; s.font = { italic: true, size: 9, color: { argb: "FF64748B" } }; s.fill = fill("FFF8FAFC");
-    s.alignment = { vertical: "top", wrapText: true }; s.border = box;
+  const C = (k) => { const i = cols.findIndex((x) => x[0] === k); return i < 0 ? null : (i >= 26 ? "A" : "") + String.fromCharCode(65 + (i % 26)); };
+  ws.getCell(1, 1).value = "Workload model — scripts";
+  ws.getCell(1, 1).font = { bold: true, size: 15, color: { argb: "FF4C1D95" } };
+  ws.getCell(2, 1).value = "One row per script. Columns with * are needed, and ONE of Transactions per hour, TPS or Vusers. Pacing and load generators are worked out by the tool. Click a cell to see what it wants.";
+  ws.getCell(2, 1).font = { italic: true, size: 10, color: { argb: "FF56677F" } };
+  // the test duration: once for the whole test
+  const dl = ws.getCell(3, 1), dv3 = ws.getCell(3, 2);
+  dl.value = XL_DUR; dl.font = { bold: true, color: { argb: "FF4C1D95" } }; dl.alignment = { vertical: "middle" };
+  dv3.value = state.scenario.steadyMin; dv3.font = { bold: true }; dv3.fill = fill("FFEDE9FE"); dv3.border = box; dv3.alignment = { horizontal: "left", vertical: "middle" };
+  dv3.dataValidation = { type: "decimal", operator: "greaterThan", allowBlank: true, formulae: [0], showErrorMessage: true, errorStyle: "warning", errorTitle: "Test duration",
+    error: "Enter the minutes at full load.", showInputMessage: true, promptTitle: "Test duration (minutes)", prompt: "How long the test runs at full load (the steady state), in minutes — for every script." };
+  ws.getRow(3).height = 22;
+  const h = ws.getRow(HEAD); h.height = 32;
+  cols.forEach(([key, head, width, needed], i) => {
+    const c = h.getCell(i + 1);
+    c.value = needed ? { richText: [{ text: head + " ", font: { bold: true, color: { argb: "FFFFFFFF" } } }, { text: "*", font: { bold: true, color: { argb: "FFFDE68A" } } }] } : head;
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.fill = fill(PURPLE); c.border = box;
+    c.alignment = { vertical: "middle", wrapText: true };
     ws.getColumn(i + 1).width = width;
   });
-  ws.getRow(2).height = 34; ws.getRow(3).height = 40;
-  // rows: the page's scripts (not the untouched sample), then empty rows that already hold the page's defaults
-  const rows = state.groups.filter((g) => !g.sample).map(xlRow);
-  const blank = xlRow({ name: "", protocol: "web", method: "tps", rtSource: "sla", thinkMode: "recorded", pacing: { mode: "auto" }, pool: state.pools[0] && state.pools[0].id });   // the page's defaults
-  ["name", "target", "txPerIter", "thinkPerIter", "rtAvg", "requestsPerIter"].forEach((k) => { blank[k] = null; });
-  const first = 4, lastRow = first - 1 + Math.max(rows.length + 100, 150);
-  const unitFormula = (r) => {
-    const m = `$${C("method")}${r}`;
-    return `IF(${m}="","",` + XL_LISTS.method.map(([k, l]) => `IF(${m}="${l}","${XL_UNIT[k]}",`).join("") + `"pick “Target type”"` + ")".repeat(XL_LISTS.method.length) + ")";
-  };
+  // the page's scripts, then empty rows (nothing written in them: an empty cell means "the page's default")
+  const rows = scripts.map(xlRow);
+  const first = HEAD + 1, lastRow = first - 1 + Math.max(rows.length + 30, 50);
   for (let r = first; r <= lastRow; r++) {
-    const d = rows[r - first] || blank;
-    XL_COLS.forEach(([key, , , , , , kind], i) => {
+    const d = rows[r - first] || {};
+    cols.forEach(([key], i) => {
       const cell = ws.getCell(r, i + 1);
-      if (kind === "calc") {
-        cell.value = { formula: unitFormula(r), result: d._m ? XL_UNIT[d._m] : "" };
-        cell.font = { italic: true, color: { argb: "FF475569" } }; cell.fill = fill("FFF1F5F9");
-      } else {
-        if (d[key] != null && d[key] !== "") cell.value = d[key];
-        if (r % 2) cell.fill = fill("FFF8FAFC");
-      }
+      if (d[key] != null && d[key] !== "") cell.value = d[key];
       cell.border = box;
+      if ((r - first) % 2) cell.fill = fill("FFF7F5FC");
     });
   }
-  // drop-down lists (the page's own words) and number checks
-  const listOf = (k) => `"${XL_LISTS[k].map((x) => x[1].replace(/[",]/g, " ")).join(",")}"`;
-  const lists = { protocol: listOf("protocol"), method: listOf("method"), pacing: listOf("pacing"), thinkMode: listOf("thinkMode"), rtSource: listOf("rtSource"), kind: listOf("kind"),
-    pool: `"${state.pools.map((x) => x.name.replace(/[",]/g, " ")).join(",")}"` };
-  XL_COLS.forEach(([key, head, , , , , kind], i) => {
-    if (kind === "calc" || kind === "text") return;
-    const dv = lists[kind] ? { type: "list", allowBlank: true, formulae: [lists[kind]], showErrorMessage: true, errorStyle: "warning", errorTitle: head, error: "Pick a value from the list.",
-      showInputMessage: true, promptTitle: head, prompt: "Pick from the list (the arrow on the right of the cell)." }
-      : { type: "decimal", operator: "greaterThanOrEqual", allowBlank: true, formulae: [0], showErrorMessage: true, errorStyle: "warning", errorTitle: head, error: "Enter a number (0 or more)." };
+  // drop-down list for the script type (the page's own words), number checks, and the hint when a cell is clicked
+  const lists = { protocol: `"${XL_LISTS.protocol.map((x) => x[1].replace(/[",]/g, " ")).join(",")}"` };
+  cols.forEach(([key, head, , , hint, kind], i) => {
+    const tip = { showInputMessage: true, promptTitle: head.slice(0, 32), prompt: hint.slice(0, 255) };
+    const dv = lists[kind] ? Object.assign({ type: "list", allowBlank: true, formulae: [lists[kind]], showErrorMessage: true, errorStyle: "warning", errorTitle: head, error: "Pick a value from the list." }, tip)
+      : kind === "num" ? Object.assign({ type: "decimal", operator: "greaterThanOrEqual", allowBlank: true, formulae: [0], showErrorMessage: true, errorStyle: "warning", errorTitle: head, error: "Enter a number (0 or more)." }, tip)
+      : Object.assign({ type: "textLength", operator: "lessThanOrEqual", allowBlank: true, formulae: [200] }, tip);
     for (let r = first; r <= lastRow; r++) ws.getCell(r, i + 1).dataValidation = dv;
   });
-  // Excel behaves like the card: grey = does not apply to this row's choices; amber = still needed
-  const rng = (k) => `${C(k)}${first}:${C(k)}${lastRow}`;
-  const v = (k) => `$${C(k)}${first}`;
-  const grey = { fill: fill("FFE5E7EB"), font: { color: { argb: "FF9CA3AF" } } };
+  // amber = still needed on a row with a script name. The target: not on a page script whose target the sheet has no
+  // column for (a share of the total, iterations) — the page keeps that one.
   const amber = { fill: fill("FFFEF3C7") };
-  const cf = (k, formula, style, priority) => ws.addConditionalFormatting({ ref: rng(k), rules: [{ type: "expression", priority, formulae: [formula], style }] });
-  const P = (k) => xlL("pacing", k), T = (k) => xlL("thinkMode", k);
-  cf("tps2", `${v("method")}<>"${xlL("method", "vusers_tps").replace(/[",]/g, " ")}"`, grey, 1);
-  cf("pace1", `AND(${v("pacing")}<>"${P("fixed")}",${v("pacing")}<>"${P("random")}",${v("pacing")}<>"${P("after")}")`, grey, 2);
-  cf("pace2", `${v("pacing")}<>"${P("random")}"`, grey, 3);
-  cf("thinkFactor", `${v("thinkMode")}<>"${T("multiply")}"`, grey, 4);
-  cf("thinkMinPct", `${v("thinkMode")}<>"${T("random")}"`, grey, 5);
-  cf("thinkMaxPct", `${v("thinkMode")}<>"${T("random")}"`, grey, 6);
-  // needed: the target (unless the page gives every script a TPS), the pacing seconds, the response time when the tool chooses the pacing
-  if (!(state.common.tps > 0)) cf("target", `AND(${v("name")}<>"",${v("target")}="")`, amber, 7);
-  cf("tps2", `AND(${v("name")}<>"",${v("method")}="${xlL("method", "vusers_tps")}",${v("tps2")}="")`, amber, 8);
-  cf("pace1", `AND(${v("name")}<>"",${v("pace1")}="",OR(${v("pacing")}="${P("fixed")}",${v("pacing")}="${P("random")}"))`, amber, 9);
-  cf("pace2", `AND(${v("name")}<>"",${v("pace2")}="",${v("pacing")}="${P("random")}")`, amber, 10);
-  if (!(state.common.rtAvg > 0)) cf("rtAvg", `AND(${v("name")}<>"",${v("rtAvg")}="",${v("method")}<>"${xlL("method", "vusers_tps")}",OR(${v("pacing")}="${P("auto")}",${v("pacing")}="${P("asap")}",${v("pacing")}="${P("after")}"))`, amber, 11);
+  let pri = 1;
+  // one rule per block of rows; the formula speaks of the block's first row (Excel moves it down the block)
+  const cf = (k1, k2, a, b, test) => ws.addConditionalFormatting({ ref: `${C(k1)}${a}:${C(k2)}${b}`,
+    rules: [{ type: "expression", priority: pri++, formulae: [test((k) => `$${C(k)}${a}`)], style: amber }] });
+  cf("txPerIter", "txPerIter", first, lastRow, (v) => `AND(${v("name")}<>"",${v("txPerIter")}="")`);
+  if (!(state.common.rtAvg > 0)) cf("rtAvg", "rtAvg", first, lastRow, (v) => `AND(${v("name")}<>"",${v("rtAvg")}="")`);
+  if (!(state.common.tps > 0)) {
+    const kept = new Set(scripts.map((g, i) => (["share", "iterations"].includes(g.method) ? first + i : 0)));
+    let a = null;
+    for (let r = first; r <= lastRow + 1; r++) {
+      const on = r <= lastRow && !kept.has(r);
+      if (on && a == null) a = r;
+      if (!on && a != null) { cf("perHour", "vusers", a, r - 1, (v) => `AND(${v("name")}<>"",${v("tps")}="",${v("perHour")}="",${v("vusers")}="")`); a = null; }
+    }
+  }
 
-  // second sheet: how to fill it in
+  // second sheet: how to fill it in — short
   const hw = wb.addWorksheet("How to fill it in");
-  hw.getColumn(1).width = 28; hw.getColumn(2).width = 80; hw.getColumn(3).width = 34;
-  hw.addRow(["Workload Modeller — the scripts sheet"]).font = { bold: true, size: 15, color: { argb: "FF1E3A8A" } };
+  hw.getColumn(1).width = 28; hw.getColumn(2).width = 90;
+  hw.addRow(["Workload model — the scripts sheet"]).font = { bold: true, size: 15, color: { argb: "FF4C1D95" } };
   hw.addRow([]);
-  ["1. One row per script. The name must match the script's name on the page to update it; a new name adds a script.",
-   "2. Empty rows already hold the defaults (as on the page). Change them by picking from the list — the arrow on the right of a cell.",
-   "3. Columns marked * are needed: pick “Target type”, then put that number in “Target” (“Target means” tells you what it is).",
-   "4. Grey cells do not apply to the choices in that row. Amber cells are still needed.",
-   "5. An empty cell keeps what the page has (or the tool's choice) — fill in only what you know.",
-   "6. Save, then drop the file on the page (“Drop all your scripts here”). Scripts and this sheet can be dropped together.",
+  ["1. Write the test duration (minutes at full load) once, above the table.",
+   "2. One row per script: its name, script type, the transactions and think time of one iteration (what a script ZIP gives) and the response time (SLA or a measured average).",
+   "3. Give each script ONE target from your requirements: transactions per hour, TPS, or Vusers. Amber cells are still needed.",
+   "4. Save, then drop the file on the page (“Fill in with Excel”). Drop the script ZIPs with it and the transactions, script type and think time are read from them.",
   ].forEach((x) => hw.addRow([x]));
-  const legend = hw.addRow(["Grey", "does not apply to this row"]); legend.getCell(1).fill = grey.fill; legend.getCell(1).font = grey.font;
-  const legend2 = hw.addRow(["Amber", "still needed"]); legend2.getCell(1).fill = amber.fill;
   hw.addRow([]);
-  const hh = hw.addRow(["Column", "What to write", "Example"]);
-  hh.eachCell((x) => { x.font = { bold: true, color: { argb: "FFFFFFFF" } }; x.fill = fill("FF1E3A8A"); });
-  const EX = { name: "Login", protocol: xlL("protocol", "web"), method: xlL("method", "tps"), target: 2, unit: "TPS", tps2: "", txPerIter: 3, thinkPerIter: 15, rtAvg: 1.5,
-    rtSource: xlL("rtSource", "sla"), rt90: 2.5, requestsPerIter: 12, pacing: xlL("pacing", "auto"), pace1: "", pace2: "", thinkMode: xlL("thinkMode", "recorded"),
-    thinkFactor: "", thinkMinPct: "", thinkMaxPct: "", pool: state.pools[0] ? state.pools[0].name : "On-premise", dataRows: 5000, kind: xlL("kind", "auto"), perLg: "" };
-  const WHAT = {
-    method: XL_LISTS.method.map((x) => x[1]).join(" · ") + ". With “A share of the scenario's total TPS”, set the scenario's total TPS on the page.",
-    target: "The number “Target type” asks for: TPS, transactions per hour, a percentage, Vusers or iterations",
-    unit: "Filled in by Excel from “Target type” — do not type here",
-    tps2: "Only with “Vusers and TPS”: the TPS (Target then holds the Vusers)",
-    rtAvg: "Average response time per transaction. Needed when the tool chooses the pacing (unless the page gives every script one); your SLA is fine",
-    pacing: XL_LISTS.pacing.map((x) => x[1]).join(" · "),
-    pace1: "Fixed: every N seconds · Random: the shortest · After the previous iteration: the delay",
-    thinkMode: XL_LISTS.thinkMode.map((x) => x[1]).join(" · "),
-    kind: "From the script (its pages and API calls, read when the script was dropped) · Web pages · API calls — sets the Vusers one load generator carries (the team rule on the pool)",
-  };
-  XL_COLS.forEach(([key, head, gi, , needed, hint], i) => {
-    const row = hw.addRow([head + (needed ? " *" : ""), WHAT[key] || hint, EX[key]]);
-    row.getCell(1).font = { bold: true, color: { argb: XL_GROUPS[gi][1] } };
-    row.getCell(2).alignment = { wrapText: true, vertical: "top" };
-    row.getCell(1).alignment = row.getCell(3).alignment = { vertical: "top" };
-    if (i % 2) row.eachCell((x) => { x.fill = fill("FFF8FAFC"); });
+  const hh = hw.addRow(["Column", "What to write"]);
+  hh.eachCell((x) => { x.font = { bold: true, color: { argb: "FFFFFFFF" } }; x.fill = fill(PURPLE); });
+  [[XL_DUR, "Once for the whole test: how long it runs at full load, in minutes."]].concat(cols.map(([, head, , needed, hint]) => [head + (needed ? " *" : ""), hint])).forEach(([a, b], i) => {
+    const row = hw.addRow([a, b]);
+    row.getCell(1).font = { bold: true }; row.getCell(2).alignment = { wrapText: true, vertical: "top" }; row.getCell(1).alignment = { vertical: "top", wrapText: true };
+    if (i % 2) row.eachCell((x) => { x.fill = fill("FFF7F5FC"); });
   });
+  hw.addRow([]);
+  hw.addRow(["", "Pacing, ramp-up and load generators are worked out by the tool. Change them on the page if you need to — an empty cell or a missing column never overwrites what the page has."]).getCell(2).font = { italic: true, color: { argb: "FF56677F" } };
   const buf = await wb.xlsx.writeBuffer();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -284,13 +235,19 @@ async function readSheet(file) {
   await wb.xlsx.load(await file.arrayBuffer());
   const ws = wb.getWorksheet("Scripts") || wb.worksheets[0];
   if (!ws) throw new Error("no sheet");
-  let headRow = 0; const col = {};
+  let headRow = 0, duration = null; const col = {};
   for (let r = 1; r <= Math.min(10, ws.rowCount) && !headRow; r++) {
     ws.getRow(r).eachCell((cell) => { if (xlNorm(cellText(cell.value)).replace(/\*/g, "") === "scriptname") headRow = r; });
     if (headRow) ws.getRow(r).eachCell((cell, ci) => {
       const h = xlNorm(cellText(cell.value));
-      const k = XL_COLS.find((x) => xlNorm(x[1]) === h) || (h === xlNorm("TPS (Vusers and TPS)") ? XL_COLS.find((x) => x[0] === "tps2") : h === xlNorm("Size it by") ? XL_COLS.find((x) => x[0] === "method") : null);   // older sheets
-      if (k && k[6] !== "calc") col[k[0]] = ci;
+      const k = XL_ALL.find((x) => xlNorm(x[1]) === h);
+      if (k) col[k[0]] = ci;
+    });
+    // the test duration: the first value right of its label, above the table
+    else ws.getRow(r).eachCell((cell, ci) => {
+      if (duration == null && xlNorm(cellText(cell.value)).startsWith("testduration")) {
+        for (let c = ci + 1; c <= ci + 3; c++) { const v = cellText(ws.getRow(r).getCell(c).value); if (v !== "" && v != null) { duration = v; break; } }
+      }
     });
   }
   if (!headRow) throw new Error("no “Script name” column — use the sheet from “Excel sheet”");
@@ -301,7 +258,8 @@ async function readSheet(file) {
     if (!values.name || xlNorm(values.name) === xlNorm(XL_HINT)) continue;
     rows.push({ row: r, values });
   }
-  return { rows, problems };
+  // without a "Pacing" choice column, "Pacing (s)" alone says it: a number = fixed, "auto" (or the like) = the tool chooses
+  return { rows, problems, duration, paceOnly: col.pace1 != null && col.pacing == null };
 }
 // apply one sheet to the cards; returns the line for the import note
 function applySheet(x) {
@@ -329,6 +287,15 @@ function applySheet(x) {
       if (f != null) { const key = { tps: "targetTps", volume: "volumePerHour", share: "sharePct", vusers: "vusers", vusers_tps: "vusers", iterations: "iterations" }[g.method]; g[key] = f; }
     }
     if (v.tps2 != null) { const f = num(v.tps2, r, "Target TPS"); if (f != null) g.targetTps = f; }
+    // the target: ONE of TPS, transactions per hour, Vusers; a rate together with Vusers = those Vusers reaching that rate
+    if (v.tps != null || v.perHour != null || v.vusers != null) {
+      const t = v.tps != null ? num(v.tps, r, "TPS") : null, h = v.perHour != null ? num(v.perHour, r, "Transactions per hour") : null, u = v.vusers != null ? num(v.vusers, r, "Vusers") : null;
+      if (t != null && h != null) problems.push(`row ${r}: both TPS and transactions per hour — used the TPS`);
+      if (u != null && (t != null || h != null)) { g.method = "vusers_tps"; g.vusers = u; g.targetTps = t != null ? t : h / 3600; }
+      else if (u != null) { g.method = "vusers"; g.vusers = u; }
+      else if (t != null) { g.method = "tps"; g.targetTps = t; }
+      else if (h != null) { g.method = "volume"; g.volumePerHour = h; }
+    }
     [["txPerIter", "Transactions"], ["thinkPerIter", "Think time"], ["rtAvg", "Response time"], ["rt90", "90th percentile"], ["requestsPerIter", "Requests"], ["dataRows", "Data rows"],
      ["thinkFactor", "Multiply by"], ["thinkMinPct", "Random from"], ["thinkMaxPct", "Random to"], ["perLg", "Vusers per machine"]].forEach(([k, head]) => {
       if (v[k] != null) { const f = num(v[k], r, head); if (f != null) { g[k] = f; if (k === "rtAvg" && !g.rtSource) g.rtSource = "sla"; } }
@@ -336,7 +303,10 @@ function applySheet(x) {
     if (v.rtSource != null) { const k = pick("rtSource", v.rtSource, r, "Response time from"); if (k) g.rtSource = k; }
     if (v.pacing != null) { const k = pick("pacing", v.pacing, r, "Pacing"); if (k) g.pacing = Object.assign({}, g.pacing, { mode: k }); }
     const pm = (g.pacing && g.pacing.mode) || "auto";
-    if (v.pace1 != null) { const f = num(v.pace1, r, "Pacing"); if (f != null) { g.pacing = Object.assign({}, g.pacing); g.pacing[pm === "random" ? "min" : pm === "after" ? "delay" : "fixed"] = f; } }
+    if (v.pace1 != null && x.paceOnly) {
+      if (/^(auto|tool|let|the tool)/i.test(String(v.pace1).trim())) g.pacing = Object.assign({}, g.pacing, { mode: "auto" });
+      else { const f = num(v.pace1, r, "Pacing"); if (f != null) g.pacing = Object.assign({}, g.pacing, { mode: "fixed", fixed: f }); }
+    } else if (v.pace1 != null) { const f = num(v.pace1, r, "Pacing"); if (f != null) { g.pacing = Object.assign({}, g.pacing); g.pacing[pm === "random" ? "min" : pm === "after" ? "delay" : "fixed"] = f; } }
     if (v.pace2 != null) { const f = num(v.pace2, r, "Longest pacing"); if (f != null) { g.pacing = Object.assign({}, g.pacing, { max: f }); } }
     if (v.thinkMode != null) { const k = pick("thinkMode", v.thinkMode, r, "Think time at replay"); if (k) g.thinkMode = k; }
     if (v.kind != null) { const k = pick("kind", v.kind, r, "Kind of script"); if (k) g.kind = k; }
@@ -345,7 +315,12 @@ function applySheet(x) {
       if (pool) g.pool = pool.id; else problems.push(`row ${r}: no load-generator pool called “${v.pool}” — kept`);
     }
   });
-  const did = [updated && `${updated} script${updated === 1 ? "" : "s"} updated`, added && `${added} script${added === 1 ? "" : "s"} added`].filter(Boolean).join(", ") || "no rows with a script name";
+  let dur = null;
+  if (x.duration != null) {
+    const f = num(x.duration, 3, "Test duration");
+    if (f > 0) { state.scenario.steadyMin = f; dur = `test duration ${fmt(f, f % 1 ? 1 : 0)} min`; } else if (f === 0) problems.push("row 3: a test duration of 0 minutes — kept the page's value");
+  }
+  const did = [updated && `${updated} script${updated === 1 ? "" : "s"} updated`, added && `${added} script${added === 1 ? "" : "s"} added`, dur].filter(Boolean).join(", ") || "no rows with a script name";
   return `<b>${esc(x.file)}: ${did}.</b>${
     problems.length ? `<div class="wm-skip"><b>${problems.length} value${problems.length === 1 ? " was" : "s were"} not used:</b><ul>${problems.slice(0, 15).map((y) => `<li>${esc(y)}</li>`).join("")}${problems.length > 15 ? `<li>and ${problems.length - 15} more</li>` : ""}</ul></div>` : ""}`;
 }

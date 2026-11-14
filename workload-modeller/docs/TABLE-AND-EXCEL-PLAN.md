@@ -1,6 +1,6 @@
 # Workload Modeller — Script table and a simpler Excel sheet (plan)
 
-Status: Part A in progress · Part B waiting for Part A.
+Status: Part A done · Part B done (2026-11-14, as below — a trimmed scripts sheet rather than a separate Targets sheet).
 Built into the portal module (`IMPLEMENTATION-PLAN.md`); Part B follows the portal phases.
 
 ## Why
@@ -52,16 +52,23 @@ Tests: `tests/review.test.js` (hand-worked numbers), `tests/scriptReader.test.js
 
 | Step | What | Status |
 |------|------|--------|
-| B1 | Download: one sheet "Targets", columns Script name · Target · Size it by · Response time (s) · Notes; one plain coloured header row; the names of the loaded scripts already filled in; an empty cell means "keep the page's value"; a second sheet with short help | Not started |
-| B2 | Upload fills the scripts by name (as now), with Undo and the same "not used" report; still reads the older 21-column sheet's headings | Not started |
-| B3 | Remove the 21-column writer (grey/amber rules, input prompts) once B1 is accepted; keep the results workbook as it is | Not started |
-| B4 | Tests: round trip, old sheet, names not found | Not started |
+| B1 | Download: the scripts sheet trimmed to 10 columns (Script name, Protocol, Kind of script, Target type, Target, Transactions per iteration, Think time, Response time, Think time at replay, Pacing (s)); one purple header row; the loaded scripts filled in, empty rows truly empty; hints on click; an advanced setting a script uses brings its column back; a short second sheet | Done |
+| B2 | Upload fills the scripts by name (as before), with Undo and the same "not used" report; Pacing (s) alone: a number = fixed, "auto" = the tool chooses; still reads the older full sheet's headings | Done |
+| B3 | The full-width writer replaced (group bands, hint row, prefilled empty rows, "Target means" formula gone); the results workbook is the one-sheet LRE scenario | Done |
+| B4 | Page test: 10 columns, empty rows empty, hints, round trip with edits (auto / fixed / kind / new script), advanced columns come back and survive the round trip, older full sheet read | Done |
+| B6 | The sheet = what a script ZIP gives + the NFRs (owner): Think time (s) added after Transactions per iteration; targets ordered Transactions per hour, TPS, Vusers | Done |
+| B5 | The sheet asks only for the NFRs (owner: still too much): the test duration once above the table; Script name, Script type (protocol), Transactions per iteration, Response time, and ONE of TPS / Transactions per hour / Vusers (a rate + Vusers = Vusers and TPS); think time, pacing, kind and the advanced columns no longer written (still read from older sheets); page test updated | Done |
 
 Open question for Part B: keep "Size it by" in the sheet (a small drop-down) or leave it to the page. Proposal: keep it,
 default "TPS", since a requirements sheet sometimes gives volumes per hour.
 
 ## Change log
 
+- 2026-11-14 — Part B, step B6: Think time (s) column; Transactions per hour first among the targets.
+- 2026-11-14 — Part B, step B5: the sheet trimmed to the NFRs — 7 columns plus the test duration; one target column per kind instead of Target type + Target.
+- 2026-11-14 — Part B done (owner: the sheet asked for too much): 23 columns → 10, the rest only when a script uses it;
+  empty rows empty; hints on click; older sheets still read. Page test passes; the other page tests updated for the new
+  header row.
 - 2026-11-12 — Plan written. Part A built (A1–A9): the page tests pass (100 scripts: typing, choices, keys, paste
   block / column / across with Undo, full card under a row, filter + Change several, Go there, remove + Undo, Cards ↔ Table
   remembered, both themes, phone width); older page tests and the 30 engine checks still pass (the 100-card test now

@@ -65,8 +65,13 @@ Many scripts:
 - **Defaults for every script** stay in force: they fill only empty fields, also in scripts added later.
 - **Overwrite all scripts** writes one value into every script shown, once (you can undo it).
 - **Paste from Excel**: two columns, script name and target; a name that fits more than one script changes none.
-- **Fill in with Excel**: download a sheet with your scripts in it, fill in the targets, drop it back. (The plan
-  itself is **Download Excel** at the top of the page.)
+- **Fill in with Excel**: download a sheet with your scripts in it, fill in what your requirements (NFRs) give, drop it
+  back. Above the table: the **test duration** (minutes at full load), once. Then one row per script: script name, script
+  type (protocol), transactions per iteration, think time per iteration (the same facts a script ZIP gives), response
+  time (expected or a measured average) and ONE target — **transactions per hour**, **TPS** or **Vusers**. A rate together with Vusers means "these Vusers must reach this
+  rate". Columns with * are needed; drop the script ZIPs with the sheet and the transactions, script type and think time
+  are read from them. Pacing and load generators are worked out by the tool; an empty cell keeps the
+  page's value. Click a cell to see what it wants. (The plan itself is **Download Excel** at the top of the page.)
 
 ### Load generators
 Choose the **machine type** of each pool:
