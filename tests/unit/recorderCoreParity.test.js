@@ -16,6 +16,7 @@
  *     never change the script text.
  */
 
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const path = require('path');
 
@@ -48,10 +49,13 @@ describe('Recorder redesign — engine parity with the classic page', () => {
       expect(b).toBe(a);
     });
 
-  test('Recorder.html loads the classic engine files unchanged, in the same order', () => {
+  test('Recorder.html loads the classic engine files unchanged, in the same order (after the shared filter rules)', () => {
     const scripts = (html) => [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]).filter((src) => src !== 'portal/frame-guard.js');
     const engine = scripts(classic);
-    const mine = scripts(page);
+    let mine = scripts(page);
+    // shared/request-filter.js comes first: recorder-core.js takes its rules from it (BUG-142)
+    expect(mine[0]).toBe('shared/request-filter.js');
+    mine = mine.slice(1);
     expect(mine.slice(0, engine.length)).toEqual(engine);
     expect(mine.slice(engine.length)).toEqual(['portal/recorder-core.js', 'portal/drop-anywhere.js', 'portal/track.js', 'portal/recorder-ui.js', 'portal/record-live.js', 'portal/recorder-live.js']);
   });

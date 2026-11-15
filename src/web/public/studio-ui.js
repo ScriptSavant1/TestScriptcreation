@@ -234,21 +234,20 @@ function updateUploadState() {
 // ═══════════════════════════════════════════════════════════════════════════
 // HAR REQUEST FILTERS (Chrome DevTools-style resource type + domain)
 // ═══════════════════════════════════════════════════════════════════════════
+// The Recorder's types and defaults (shared/request-filter.js — one rule set, BUG-142): a static file is JS, CSS,
+// Img or Font by its content; Media and Other stay in the script by default, as in the Recorder and the HAR Explorer.
+// (Manifest and WebSocket were types of their own here: a manifest counts as Other, a WebSocket is always left out.)
 const STUDIO_RT_TYPES = [
-  { key: "fetch", label: "Fetch/XHR", color: "#4f8ef7" },
   { key: "document", label: "Doc", color: "#e8a838" },
-  { key: "stylesheet", label: "CSS", color: "#9b59b6" },
+  { key: "fetch", label: "Fetch/XHR", color: "#4f8ef7" },
   { key: "script", label: "JS", color: "#f39c12" },
-  { key: "font", label: "Font", color: "#16a085" },
+  { key: "stylesheet", label: "CSS", color: "#9b59b6" },
   { key: "image", label: "Img", color: "#27ae60" },
+  { key: "font", label: "Font", color: "#16a085" },
   { key: "media", label: "Media", color: "#e74c3c" },
-  { key: "manifest", label: "Manifest", color: "#8e44ad" },
-  { key: "websocket", label: "WS", color: "#2980b9" },
   { key: "other", label: "Other", color: "#7f8c8d" },
 ];
-// Default: only Fetch/XHR and Document enabled — static resources (CSS/JS/images/fonts) are
-// excluded by default as they are not relevant to performance test scripting.
-const STUDIO_RT_DEFAULT = new Set(["fetch", "document"]);
+const STUDIO_RT_DEFAULT = new Set(["document", "fetch", "media", "other"]);
 
 function studioInitFilters() {
   const list = document.getElementById("rt-filter-list");
@@ -302,7 +301,7 @@ function studioToggleRt(key) {
 function studioToggleRtNone() {
   const list = document.getElementById("rt-filter-list");
   if (!list) return;
-  const firstKey = STUDIO_RT_TYPES[0].key;
+  const firstKey = "fetch";   // "None" keeps Fetch/XHR, as before
   S.filterResourceTypes = new Set([firstKey]);
   list.querySelectorAll(".rt-filter-row").forEach((r) => {
     r.classList.toggle("rt-row-on", r.dataset.key === firstKey);

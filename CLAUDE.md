@@ -30,6 +30,7 @@ Converts HAR recordings, Bruno/Postman collections, and JMX files into:
 |------|------|---------|
 | `src/web/public/VuGen-Script-Studio.html` | HTML | All HTML/modals for Studio |
 | `src/web/public/shared/vugen-codegen.js` | JS | Shared VuGen codegen (UMD, works browser+Node) — loaded first |
+| `src/web/public/shared/request-filter.js` | JS | One rule set for which recorded requests go into the script (UMD `RequestFilter`): `TYPES` (8 type buttons), `typeKey`, `leftOut` (reason: report, websocket, nonhttp, prefetch, domain, options, ads, type), `prefetchDuplicates`. Used by the Recorder engine (`recorder-core.js`), Studio `applyFilters` and the HAR Explorer (page + worker) — BUG-142; `tests/unit/requestFilter.test.js` |
 | `src/web/public/shared/page-resources.js` | JS | Groups static resources under their page step (VuGen EXTRARES / DevWeb resources[]) — shared with the Recorder (UMD) |
 | `src/web/public/VuGen-Script-Studio-constants.js` | JS | Shared constants |
 | `src/web/public/VuGen-Script-Studio-correlation.js` | JS | Correlation state management; `detectMarkers()` also runs `repairOrphanEnds()` (END bookmark without START → START inserted, the Recorder's rule — BUG-113) |
@@ -65,14 +66,16 @@ Rule: the old switchers in index.ejs stay the source of truth; the shell only wr
 ### Script Studio load order
 `src/web/public/Studio.html` (the live page, see below) and the classic `VuGen-Script-Studio.html` (reference for the parity tests) load the Studio scripts in this order:
 1. `shared/vugen-codegen.js`
-2. `VuGen-Script-Studio-constants.js`
-3. `VuGen-Script-Studio-correlation.js`
-4. `shared/page-resources.js` (also loaded by the Recorder — attaches static resources to their page step, BUG-056)
-5. `studio-codegen.js`
-6. `studio-advisor.js`
-7. `studio-ui.js`
-8. `studio-app.js` ← live orchestrator
-9. `analytics-device.js` (deferred)
+2. `shared/request-filter.js` (also loaded by the Recorder and the HAR Explorer — which requests go into the script, BUG-142)
+3. `VuGen-Script-Studio-constants.js`
+4. `VuGen-Script-Studio-correlation.js`
+5. `shared/page-resources.js` (also loaded by the Recorder — attaches static resources to their page step, BUG-056)
+6. `shared/host-params.js`
+7. `studio-codegen.js`
+8. `studio-advisor.js`
+9. `studio-ui.js`
+10. `studio-app.js` ← live orchestrator
+11. `analytics-device.js` (deferred)
 
 All share global state object `S` (defined in `studio-app.js`).
 
@@ -132,7 +135,7 @@ The server blocks direct `.html` URLs on purpose — pages are reached through r
 |------|---------|
 | `src/web/public/HarExplorer.html` | The page (`data-portal-tool="explore"`), route `/har-explorer` + `/converter/har-explorer`; portal tab `explorer`, shell page `explore`, colour `--c-explore`, theme key `hx-theme` |
 | `src/web/public/portal/har-explorer-model.js` | `hxBuild(har)` → `{groups, items, source}`: the Recorder's own reading — the page loads `VuGen-Recorder-state.js`, `VuGen-Recorder-parsers.js`, `portal/recorder-core.js` UNCHANGED, calls `processHAR()` + `_repairOrphanEnds()` (its drawing steps are no-ops here). `tests/unit/harExplorerModel.test.js` checks groups / left-out = the Recorder's |
-| `src/web/public/portal/har-explorer-worker.js` | Find a value, in a Web Worker (importScripts the Studio engine UNCHANGED: constants, correlation, studio-advisor — they cannot share the page with the Recorder engine, same global names). Messages: `load {text, out}` → `ready` (own suggestions), `find {id, value}` → `found` (verdict kinds: correlate, cookie, redirect, outonly, unused, input, generated, missing, none; trail; forms for highlighting); a SECOND copy gets `studio {text}` → Studio's findings → page forwards `studioList` → `ready` with Studio's first. Referer / Origin and left-out requests are not uses. Also loads `shared/vugen-codegen.js` + `studio-codegen.js`: `correlation()` builds `{name, extractorType, extractorConfig}` (jsonpath / html / cookie / boundary_header / boundary — boundaries widened until the FIRST match is the value — `_advFirstMatch` / `_advSafeBoundaries` in studio-advisor.js, shared with Paste & Detect) and the code via Studio's `webHttpCorrCode` / `devwebExtractorDecl`; `uses` in Studio's usage form. `tests/unit/harExplorerFind.test.js` (incl. agreement + round trip through Studio) |
+| `src/web/public/portal/har-explorer-worker.js` | Find a value, in a Web Worker (importScripts `shared/request-filter.js`, then the Studio engine UNCHANGED: constants, correlation, studio-advisor — they cannot share the page with the Recorder engine, same global names). Messages: `load {text, out}` → `ready` (own suggestions), `find {id, value}` → `found` (verdict kinds: correlate, cookie, redirect, outonly, unused, input, generated, missing, none; trail; forms for highlighting); a SECOND copy gets `studio {text}` → Studio's findings → page forwards `studioList` → `ready` with Studio's first. Referer / Origin and left-out requests are not uses. Also loads `shared/vugen-codegen.js` + `studio-codegen.js`: `correlation()` builds `{name, extractorType, extractorConfig}` (jsonpath / html / cookie / boundary_header / boundary — boundaries widened until the FIRST match is the value — `_advFirstMatch` / `_advSafeBoundaries` in studio-advisor.js, shared with Paste & Detect) and the code via Studio's `webHttpCorrCode` / `devwebExtractorDecl`; `uses` in Studio's usage form. `tests/unit/harExplorerFind.test.js` (incl. agreement + round trip through Studio) |
 | `src/web/public/portal/har-explorer.{js,css}` | Start page, workspace (file bar, filters — address, Domains (`initDomains`: host per request by splitting the address, `M.hostOn`; popover `#hx-dom-pop` closes on pointerdown outside), types —, request list — only the rows on screen are drawn — and details: Headers, Payload, Response, Preview, Cookies, Timing; Hide secrets, Copy URL / cURL), theme hooks, prefs localStorage `hx-ui` (listW, showOut). All 6 steps of the plan done; Help section `hacc-explorer`; usage ping `tool: "explorer"` (portal/track.js) per opened file |
 
 Hand-off "Continue in Script Studio" (har-explorer.js): `clearAll` → `setFmt` → `loadFile` → `analyze()` → (after the background review, if any) — requests named by Studio's request id (`parseHar` id, never shifts; resolved to the current `S.entries1` index — Studio inserts markers: CDP pages, BUG-113 repair) → `advisorAddManual` per value with `cand._explorer = {extractorType, extractorConfig}` + the Explorer's uses → `advisorApplyAndRegen()`. `studio-advisor.js advisorToCorrelation` honours `_explorer` (else unchanged); `studio-ui.js` labels it "From HAR Explorer".

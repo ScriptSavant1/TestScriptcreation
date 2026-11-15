@@ -11,6 +11,7 @@
  *    under and ignores web_set_user. No tool writes OverrideNTLMCreds=1 any more; integrated and native NTLM stay on.
  */
 
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

@@ -14,7 +14,7 @@
  * Requests are named by their number in the file (n = index + 1), the same numbers the page shows. */
 "use strict";
 // In Studio's order; studio-codegen.js and shared/vugen-codegen.js write the extractor code exactly as Studio writes it
-importScripts("../shared/vugen-codegen.js", "../VuGen-Script-Studio-constants.js", "../VuGen-Script-Studio-correlation.js",
+importScripts("../shared/request-filter.js", "../shared/vugen-codegen.js", "../VuGen-Script-Studio-constants.js", "../VuGen-Script-Studio-correlation.js",
   "../studio-advisor.js", "../studio-codegen.js");
 
 var E = [];   // per request: { n, url, method, query, reqH, reqBody, params, resH, resBody, mime }

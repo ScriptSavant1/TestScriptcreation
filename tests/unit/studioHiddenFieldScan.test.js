@@ -4,6 +4,7 @@
  * CSRF name scan (BUG-143). studio-advisor.js: _advHiddenFieldScan, _advHtmlValueExtractor, _advFormFieldsFromText,
  * advisorScan, advisorToCorrelation.
  */
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const path = require('path');
 
