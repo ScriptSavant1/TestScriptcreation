@@ -408,22 +408,9 @@ function _advCsrfScan(entries, highConfValues) {
     }
 
     // Path B: raw text body (application/x-www-form-urlencoded)
-    if (!csrfFields.length && e.body && e.body.text) {
-      const mime = (e.body.mimeType || '').toLowerCase();
-      if (mime.includes('x-www-form-urlencoded') || mime.includes('form')) {
-        try {
-          for (const part of e.body.text.split('&')) {
-            const eqIdx = part.indexOf('=');
-            if (eqIdx < 0) continue;
-            const name = decodeURIComponent(part.slice(0, eqIdx).replace(/\+/g, ' '));
-            let val;
-            try { val = decodeURIComponent(part.slice(eqIdx + 1).replace(/\+/g, ' ')); }
-            catch { val = part.slice(eqIdx + 1); }
-            if (_CSRF_FIELD_RE.test(name) && val && val.length >= ADV_MIN_LEN) {
-              csrfFields.push({ name, value: val });
-            }
-          }
-        } catch { /* malformed body — skip */ }
+    if (!csrfFields.length) {
+      for (const f of _advFormFieldsFromText(e.body)) {
+        if (_CSRF_FIELD_RE.test(f.name) && f.value && f.value.length >= ADV_MIN_LEN) csrfFields.push(f);
       }
     }
 
@@ -448,11 +435,109 @@ function _advCsrfScan(entries, highConfValues) {
           { entryIdx: i, url: _advShortUrl(e), location: 'body_form', jsonPath: cf.name },
           'high'
         );
+        // The source is HTML / text, not JSON: boundaries read from the page itself (BUG-143 — this used to
+        // become a JSON-path extractor named after the field, which finds nothing on an HTML page)
+        const ext = _advHtmlValueExtractor(srcBody, cf.value);
+        if (ext) found.get(cf.value)._extract = ext;
         break; // use the nearest (most recent) preceding response
       }
     }
   }
 
+  return Array.from(found.values());
+}
+
+// ---------------------------------------------------------------------------
+// Form fields of a URL-encoded request body ({name, value}, decoded); [] for any other body
+// ---------------------------------------------------------------------------
+function _advFormFieldsFromText(body) {
+  const out = [];
+  if (!body || !body.text) return out;
+  const mime = (body.mimeType || '').toLowerCase();
+  if (!(mime.includes('x-www-form-urlencoded') || mime.includes('form'))) return out;
+  try {
+    for (const part of body.text.split('&')) {
+      const eqIdx = part.indexOf('=');
+      if (eqIdx < 0) continue;
+      const name = decodeURIComponent(part.slice(0, eqIdx).replace(/\+/g, ' '));
+      let val;
+      try { val = decodeURIComponent(part.slice(eqIdx + 1).replace(/\+/g, ' ')); }
+      catch { val = part.slice(eqIdx + 1); }
+      out.push({ name, value: val });
+    }
+  } catch { /* malformed body — skip */ }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Boundaries for a value inside an HTML / text response, read from the text itself and widened until the
+// FIRST match is the value (a boundary extractor takes the first match). For an <input> or <meta> tag the left
+// boundary starts at its name attribute when that comes first: name="userSession" value="  …  "
+// Returns {extractorType: 'boundary', extractorConfig: {lb, rb}, field} or null.
+// ---------------------------------------------------------------------------
+function _advHtmlValueExtractor(text, value) {
+  if (!text || !value) return null;
+  const tagRe = /<(input|meta)\b[^>]*>/gi;
+  let m;
+  while ((m = tagRe.exec(text))) {
+    const tag = m[0];
+    const vm = /\b(value|content)\s*=\s*(["'])([^"']*)\2/i.exec(tag);
+    if (!vm || vm[3] !== value) continue;
+    const at = m.index + vm.index + vm[0].length - 1 - value.length;          // where the value starts in text
+    const nm = /\bname\s*=\s*(["'])([^"']*)\1/i.exec(tag);
+    const fromName = nm && nm.index < vm.index ? tag.slice(nm.index, vm.index + vm[0].length - 1 - value.length) : '';
+    const lb0 = fromName || tag.slice(vm.index, vm.index + vm[0].length - 1 - value.length);
+    const b = _advSafeBoundaries(text, at, value, lb0, vm[2]);
+    if (b) return { extractorType: 'boundary', extractorConfig: { lb: b.lb, rb: b.rb }, field: nm ? nm[2] : null };
+  }
+  const at = text.indexOf(value);
+  if (at < 0) return null;
+  const b = _advSafeBoundaries(text, at, value, '', '');
+  return b ? { extractorType: 'boundary', extractorConfig: { lb: b.lb, rb: b.rb }, field: null } : null;
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 2.6: HTML hidden-field scan (single-HAR mode) — BUG-141.
+// A server keeps state in <input type="hidden" name=… value=…>; the next form post sends it back, under any
+// field name (userSession, state, nonce …), so neither Phase 1 (JSON only) nor Phase 2.5 (CSRF names) sees it.
+// For every form field of a request, the nearest earlier response that has the value in a HIDDEN input is the
+// source. Only generated-looking values count (no spaces; a digit, or 20+ characters), so typed test data
+// echoed into a hidden field stays test data.
+// ---------------------------------------------------------------------------
+function _advHiddenFieldScan(entries, knownValues) {
+  const found = new Map();
+  const generated = (v) => !/\s/.test(v) && (/\d/.test(v) || v.length >= 20);
+  const hiddenIn = (text, v) => {
+    const re = /<input\b[^>]*>/gi; let m;
+    while ((m = re.exec(text))) {
+      if (!/\btype\s*=\s*(["']?)hidden\1/i.test(m[0])) continue;
+      const vm = /\bvalue\s*=\s*(["'])([^"']*)\1/i.exec(m[0]);
+      if (vm && vm[2] === v) return true;
+    }
+    return false;
+  };
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.filtered || e.isMarker) continue;
+    const params = (e.body && e.body.params && e.body.params.length) ? e.body.params.map((p) => ({ name: p.name || '', value: String(p.value || '') })) : _advFormFieldsFromText(e.body);
+    for (const f of params) {
+      const v = f.value;
+      if (v.length < ADV_MIN_LEN || knownValues.has(v) || ADV_SKIP_VALUES.has(v.toLowerCase()) || !generated(v)) continue;
+      const usage = { entryIdx: i, url: _advShortUrl(e), location: 'body_form', jsonPath: f.name };
+      if (found.has(v)) { _advAddUsage(found, v, null, usage, 'high'); continue; }
+      for (let j = i - 1; j >= 0; j--) {
+        const src = entries[j];
+        if (src.filtered || src.isMarker) continue;
+        const body = src.respBody || '';
+        if (body.length < v.length || body.indexOf(v) < 0 || !hiddenIn(body, v)) continue;
+        const ext = _advHtmlValueExtractor(body, v);
+        if (!ext) break;
+        _advAddUsage(found, v, { entryIdx: j, url: _advShortUrl(src), jsonPath: ext.field || f.name }, usage, 'high');
+        found.get(v)._extract = ext;
+        break;
+      }
+    }
+  }
   return Array.from(found.values());
 }
 
@@ -935,12 +1020,15 @@ function advisorScan(entries, existingCorrelations) {
   const highConfValues = new Set(highConf.map(c => c.value));
   const csrfCandidates = _advCsrfScan(entries, highConfValues);
 
-  // Phase 3 — only for values not already in Phase 2 or 2.5
-  const allHighValues = new Set([...highConfValues, ...csrfCandidates.map(c => c.value)]);
+  // Phase 2.6 — HTML hidden fields sent back by a form post, under any name (BUG-141)
+  const hiddenCandidates = _advHiddenFieldScan(entries, new Set([...highConfValues, ...csrfCandidates.map(c => c.value)]));
+
+  // Phase 3 — only for values not already in Phase 2, 2.5 or 2.6
+  const allHighValues = new Set([...highConfValues, ...csrfCandidates.map(c => c.value), ...hiddenCandidates.map(c => c.value)]);
   const medConf = _advPatternScan(entries, allHighValues);
 
-  // Merge: Phase 2 (high) → Phase 2.5 CSRF (high) → Phase 3 (medium)
-  let all = [...highConf, ...csrfCandidates, ...medConf];
+  // Merge: Phase 2 (high) → Phase 2.5 CSRF (high) → Phase 2.6 hidden fields (high) → Phase 3 (medium)
+  let all = [...highConf, ...csrfCandidates, ...hiddenCandidates, ...medConf];
 
   // Phase 4 — filter
   all = all.filter(c => {
@@ -1075,6 +1163,10 @@ function advisorToCorrelation(candidate) {
       extractorType = 'boundary';
       extractorConfig = { lb: candidate._extractValue, rb: '' };
     }
+  } else if (candidate._extract && candidate._extract.extractorType) {
+    // Found in an HTML / text response (CSRF name scan, hidden-field scan): boundaries read from that page
+    extractorType = candidate._extract.extractorType;
+    extractorConfig = candidate._extract.extractorConfig;
   } else if (candidate.source && candidate.source.jsonPath) {
     // Auto-detected via HAR response scan: use the JSON path we traced
     extractorType = 'jsonpath';

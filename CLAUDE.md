@@ -348,7 +348,9 @@ lre-utils.js lre-utils.dat` should always be empty.
 | studio-advisor.js | `advisorScan()` | Main entry — phases 1-4 |
 | studio-advisor.js | `_advExtractResponseValues()` | Phase 1: walk all response bodies |
 | studio-advisor.js | `_advCrossReference()` | Phase 2: find values in later requests |
-| studio-advisor.js | `_advCsrfScan()` | Phase 2.5: detect CSRF tokens by field NAME (`_CSRF_FIELD_RE`, 14 patterns); backward-scans all preceding responses (including HTML) |
+| studio-advisor.js | `_advCsrfScan()` | Phase 2.5: detect CSRF tokens by field NAME (`_CSRF_FIELD_RE`, 14 patterns); backward-scans all preceding responses (including HTML); the extractor is a boundary read from that page (`_extract`, BUG-143) |
+| studio-advisor.js | `_advHiddenFieldScan()` | Phase 2.6: form fields whose value the nearest earlier page sent in an HTML hidden input, under any name; generated-looking values only (BUG-141) |
+| studio-advisor.js | `_advHtmlValueExtractor()` | Boundary for a value in an HTML / text response, read from the page (`name="x" value="` … `"`) and widened until its first match is the value; used by Phases 2.5 and 2.6 |
 | studio-advisor.js | `_advPatternScan()` | Phase 3: JWT/UUID pattern detection |
 | studio-advisor.js | `_advMergeArrayCandidates()` | F1: merge array siblings → SelectAll |
 | studio-advisor.js | `_advDetectArrayGroups()` | F2: detect array reconstruction |

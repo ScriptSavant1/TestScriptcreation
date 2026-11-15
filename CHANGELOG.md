@@ -33,7 +33,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Correlation Advisor
 
-- Paste & Detect adds its correlation as a card in the Correlation Advisor ("From Paste & Detect"), applied at once, with one message saying where the value is extracted from and how many requests use it (BUG-137).
+- A value the server keeps in an HTML hidden field and a later form post sends back is found under any field name (`userSession`, `state`, `nonce` …), as a High-confidence card with a boundary read from the page — before, only JSON responses and known CSRF names were read, so such a value stayed hard-coded in the script (BUG-141). Typed test data echoed into a hidden field is left alone.
+- A CSRF token found on an HTML page gets a boundary extractor from the page (`name="authenticity_token" value="` … `"`) instead of a JSON path named after the field, which captured nothing on replay (BUG-143).- Paste & Detect adds its correlation as a card in the Correlation Advisor ("From Paste & Detect"), applied at once, with one message saying where the value is extracted from and how many requests use it (BUG-137).
 - Paste & Detect extracts from the recorded response that holds the value, not from the request before the one picked in step 3 (or the first request when none was picked); it finds the uses in query strings, form fields and URL paths too (BUG-137).
 - Paste & Detect boundaries capture the right value: widened until their first match is the value, as the HAR Explorer does — `name="visitor-hmac" content="` instead of `content="`, which took the first meta tag on the page (BUG-138).
 - Correlation names are made safe as parameter names (`visitor-hmac` → `visitor_hmac`) in Paste & Detect, Add Manual and the card name; a hyphen broke the DevWeb script (BUG-139).
