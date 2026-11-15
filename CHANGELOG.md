@@ -29,6 +29,16 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - LRE setup: pacing and think time right after the load generators, "Start" explained, and a "hide the inputs" line while columns are cut off. Scripts toolbar: the actions on a row of their own. Load generators tile: "On-premise: 2 + 1 spare".
 - One LRE setup table (Details › LRE setup): per script the Vusers, load generators, start, ramp-up, duration, ramp-down (DD:HH:MM:SS), pacing and think time; the same in Excel. It replaces the LRE settings text tab (the text stays for Copy LRE settings); Per script keeps only the calculation results; Load generators shows one row per machine.
 
+### Recorder and Script Studio
+
+#### Correlation Advisor
+
+- Paste & Detect adds its correlation as a card in the Correlation Advisor ("From Paste & Detect"), applied at once, with one message saying where the value is extracted from and how many requests use it (BUG-137).
+- Paste & Detect extracts from the recorded response that holds the value, not from the request before the one picked in step 3 (or the first request when none was picked); it finds the uses in query strings, form fields and URL paths too (BUG-137).
+- Paste & Detect boundaries capture the right value: widened until their first match is the value, as the HAR Explorer does — `name="visitor-hmac" content="` instead of `content="`, which took the first meta tag on the page (BUG-138).
+- Correlation names are made safe as parameter names (`visitor-hmac` → `visitor_hmac`) in Paste & Detect, Add Manual and the card name; a hyphen broke the DevWeb script (BUG-139).
+- The Correlation Advisor is shown whenever a recording is loaded, also when it found nothing, so Paste & Detect, Add Manual and the Request Inspector are always at hand (BUG-140).
+
 ### Portal
 
 #### Changed

@@ -160,26 +160,8 @@ function investigate(v) {
 
 // ── "Correlate this": the extractor, in Script Studio's own correlation shape {name, extractorType, extractorConfig},
 //    written by Studio's own code writers (webHttpCorrCode / devwebExtractorDecl) ──
-// The value between the first `lb` and the next `rb` — what a boundary extractor (first match, Ord=1) captures
-function firstMatch(text, lb, rb) {
-  var a = text.indexOf(lb); if (a < 0) return null;
-  a += lb.length; var b = rb ? text.indexOf(rb, a) : -1;
-  return b < 0 ? null : text.slice(a, b);
-}
-// Boundaries around the value at `at` that capture exactly it as the FIRST match: start from `lb0`, or the text just
-// before the value, and widen to the left (same line) until the first match is the value itself
-function safeBoundaries(text, at, s, lb0, rb0) {
-  var after = text.slice(at + s.length, at + s.length + 12);
-  var rb = rb0 || ((/^["'&;,<\s}\])]/.exec(after) || [after.charAt(0)])[0] || "");
-  if (!rb) return null;
-  var lineStart = text.lastIndexOf("\n", at - 1) + 1;
-  var minLen = lb0 && text.slice(at - lb0.length, at) === lb0 ? lb0.length : Math.min(6, at - lineStart);
-  for (var len = Math.max(1, minLen); at - len >= Math.max(0, lineStart - 0) && len <= 120; len++) {
-    var lb = text.slice(at - len, at);
-    if (firstMatch(text, lb, rb) === s) return { lb: lb, rb: rb };
-  }
-  return null;
-}
+// firstMatch / safeBoundaries: in studio-advisor.js (shared with Paste & Detect) — the same code, moved
+var firstMatch = _advFirstMatch, safeBoundaries = _advSafeBoundaries;
 function safeName(n) { n = String(n || "value").replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+|_+$/g, ""); return /^[A-Za-z]/.test(n) ? n : "c_" + (n || "value"); }
 function correlation(v, src, later) {
   var x = E[src.n - 1]; if (!x) return null;

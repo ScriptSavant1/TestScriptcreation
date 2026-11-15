@@ -504,7 +504,7 @@
           <li>Click <strong>Download</strong> and open the script in VuGen.</li>
         </ol>
         <h3 class="help-h3">Correlation Advisor</h3>
-        <p class="help-p">After analysis, the <strong>Correlation Advisor</strong> panel appears at the top of the results. It lists every dynamic value it found — each as a card showing confidence level, where the value came from, and where it is used. Review each card and click <strong>Accept</strong> to add it as a correlation, then click <strong>▶ Apply &amp; Regenerate</strong> to rebuild the script.</p>
+        <p class="help-p">After analysis, the <strong>Correlation Advisor</strong> panel appears at the top of the results. It lists every dynamic value it found — each as a card showing confidence level, where the value came from, and where it is used. Review each card and click <strong>Accept</strong> to add it as a correlation, then click <strong>▶ Apply &amp; Regenerate</strong> to rebuild the script. When it finds nothing, the panel stays with <strong>Paste &amp; Detect</strong>, <strong>+ Add Manual</strong> and the Request Inspector, so you can add a correlation yourself.</p>
         <p class="help-p">You can add your own correlations manually (click <strong>+ Add Manual</strong>) or use <strong>Paste &amp; Detect</strong> when you know the value but it is not visible in the HAR.</p>
         <h3 class="help-h3">Request Inspector — Traffic Light Highlighting</h3>
         <p class="help-p">Expand the <strong>Request Inspector</strong> inside the Advisor panel and select any request from the dropdown. Every field in that request is colour-coded:</p>
@@ -514,7 +514,7 @@
         </ul>
         <p class="help-p">The inspector scans request headers, JSON body, form parameters, query string, <strong>and URL path segments</strong> — so a session ID embedded in a REST URL like <code>/api/users/286522</code> is detected just like any other field.</p>
         <h3 class="help-h3">Paste &amp; Detect</h3>
-        <p class="help-p">Click <strong>Paste &amp; Detect</strong> in the Advisor header. Paste the server response body and the exact value you want to extract, then click <strong>Detect &amp; Generate</strong>. The tool automatically picks the best extractor (JSONPath for JSON, Boundary for HTML/XML, RegExp for JWT / UUID / hex tokens) and shows radio buttons or occurrence dropdowns when values appear multiple times.</p>
+        <p class="help-p">Click <strong>Paste &amp; Detect</strong> in the Advisor header. Paste the server response body and the exact value you want to extract, then click <strong>Detect &amp; Generate</strong>. The tool automatically picks the best extractor (JSONPath for JSON, Boundary for HTML/XML, RegExp for JWT / UUID / hex tokens) and shows radio buttons or occurrence dropdowns when values appear multiple times. A boundary is widened until it captures this value first (a page often has the same <code>content="</code> many times). <strong>Add Correlation</strong> adds a card to the Advisor and regenerates the script: the value is extracted from the recorded response that holds it, and every later request that sends it uses the correlation. A name like <code>visitor-hmac</code> becomes <code>visitor_hmac</code> (parameter names take letters, digits and _).</p>
         <h3 class="help-h3">Extractor types — how they are chosen</h3>
         <div class="help-table-wrap">
           <table class="help-table">

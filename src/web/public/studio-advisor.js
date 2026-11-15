@@ -1055,10 +1055,11 @@ function advisorToCorrelation(candidate) {
 
   // Determine extractor type and config
   let extractorType, extractorConfig;
-  if (candidate._manual && candidate._explorer && candidate._explorer.extractorType) {
-    // Handed over by the HAR Explorer: the exact extractor it built (same types and config as Studio's own)
-    extractorType = candidate._explorer.extractorType;
-    extractorConfig = candidate._explorer.extractorConfig;
+  const exact = candidate._explorer || candidate._paste;
+  if (candidate._manual && exact && exact.extractorType) {
+    // Handed over by the HAR Explorer, or built by Paste & Detect: the exact extractor (same types and config as Studio's own)
+    extractorType = exact.extractorType;
+    extractorConfig = exact.extractorConfig;
   } else if (candidate._manual) {
     // User explicitly chose the extract method via the modal
     const et = candidate._extractType || 'jsonpath';
@@ -1094,6 +1095,17 @@ function advisorToCorrelation(candidate) {
     usages,
     _fromAdvisor: true,
   };
+}
+
+// ---------------------------------------------------------------------------
+// A name a user typed, made safe as a parameter name: VuGen {name} and DevWeb load.global.name take letters, digits
+// and _ only ("visitor-hmac" → "visitor_hmac"); a leading digit gets "v_". Empty or only spaces → "".
+// ---------------------------------------------------------------------------
+function _advSafeVarName(name) {
+  const s = String(name == null ? '' : name).trim();
+  if (!s) return '';
+  const safe = s.replace(/[^A-Za-z0-9_]/g, '_');
+  return /^[0-9]/.test(safe) ? 'v_' + safe : safe;
 }
 
 // ---------------------------------------------------------------------------
@@ -1182,7 +1194,7 @@ function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, ac
     preview: actualValue ? (actualValue.length > 40 ? actualValue.slice(0, 40) + '…' : actualValue) : extractValue,
     valueType: 'token',
     confidence: 'high',
-    varName: varName || _advSuggestName(extractType === 'jsonpath' ? extractValue : null, extractType === 'header' ? extractValue : null, actualValue || ''),
+    varName: _advSafeVarName(varName) || _advSuggestName(extractType === 'jsonpath' ? extractValue : null, extractType === 'header' ? extractValue : null, actualValue || ''),
     source: { entryIdx: sourceEntryIdx, url: entry ? _advShortUrl(entry) : '?', jsonPath: extractType === 'jsonpath' ? extractValue : null },
     usages: autoUsages,
     status: 'accepted', // manual adds go straight to accepted
@@ -1539,6 +1551,32 @@ function advPasteDetect(responseText, targetValue) {
     occurrences: allOccurrences.length,
     confidence: best.contextType !== 'generic' ? 'high' : 'medium',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Boundaries that capture the right value. A boundary extractor (VuGen web_reg_save_param, DevWeb BoundaryExtractor)
+// takes the FIRST text between the left and the right boundary, so `content="` … `"` on a page with several meta tags
+// captures the first one, not the value. Shared by Paste & Detect (studio-ui.js) and the HAR Explorer's worker.
+// ---------------------------------------------------------------------------
+// The value between the first `lb` and the next `rb` — what a boundary extractor (first match, Ord=1) captures
+function _advFirstMatch(text, lb, rb) {
+  var a = text.indexOf(lb); if (a < 0) return null;
+  a += lb.length; var b = rb ? text.indexOf(rb, a) : -1;
+  return b < 0 ? null : text.slice(a, b);
+}
+// Boundaries around the value at `at` that capture exactly it as the FIRST match: start from `lb0`, or the text just
+// before the value, and widen to the left (same line) until the first match is the value itself
+function _advSafeBoundaries(text, at, s, lb0, rb0) {
+  var after = text.slice(at + s.length, at + s.length + 12);
+  var rb = rb0 || ((/^["'&;,<\s}\])]/.exec(after) || [after.charAt(0)])[0] || "");
+  if (!rb) return null;
+  var lineStart = text.lastIndexOf("\n", at - 1) + 1;
+  var minLen = lb0 && text.slice(at - lb0.length, at) === lb0 ? lb0.length : Math.min(6, at - lineStart);
+  for (var len = Math.max(1, minLen); at - len >= Math.max(0, lineStart - 0) && len <= 120; len++) {
+    var lb = text.slice(at - len, at);
+    if (_advFirstMatch(text, lb, rb) === s) return { lb: lb, rb: rb };
+  }
+  return null;
 }
 
 // URL query-string value decoder (+ → space, %XX → char)
