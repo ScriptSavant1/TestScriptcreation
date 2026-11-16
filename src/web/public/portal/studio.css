@@ -807,7 +807,8 @@ body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10
 
 /* Request details over the workspace: the rest is dimmed, as in the mockup (a shadow — it does not catch clicks;
    a press outside closes the sheet, a request row shows that request) */
-body:not(.ss-dock) .ss-det:not([hidden]) { box-shadow: 0 0 0 100vmax rgba(15, 23, 42, .28), var(--ds-shadow-2); }
+.ss-det-scrim { position: fixed; inset: 0; z-index: 799; background: rgba(15, 23, 42, .28); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); cursor: pointer; }
+.ss-det-scrim[hidden] { display: none; }
 
 /* ── Mockup alignment: Correlation Advisor and Test data ── */
 /* actions as a row of bordered buttons under the title; the footer (counts, Accept all high, Apply & Regenerate) stays in sight */

@@ -249,3 +249,31 @@ html.hx-has-file .hx-fb-name b { font-size: var(--ds-fs); }
 .hx-dom-pop.docked .hx-dom-row input:checked { background: var(--ds-accent); }
 .hx-dom-pop.docked .hx-dom-row input:checked::after { left: 16px; }
 .hx-dom-pop.docked .hx-dom-row input:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+
+/* ── Mockup alignment (wide screens): Domains like Script Studio's panel, every panel folds to a rail ── */
+.hx-dompane { position: relative; }
+.hx-dom-head { display: inline-flex; gap: 4px; }
+.hx-dom-head .ds-btn { height: 30px; padding: 0 10px; border: 1px solid var(--ds-border-2); background: var(--ds-surface); }
+.hx-dom-pop.docked .hx-dom-acts { margin: 6px 0 4px; }
+.hx-dom-pop.docked .hx-dom-row { padding: 6px 4px; border-bottom: 1px solid var(--ds-border); border-radius: 0; }
+.hx-dom-pop.docked .hx-dom-row label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; row-gap: 2px; padding: 4px; }
+.hx-dom-pop.docked .hx-dom-row .h { font-size: var(--ds-fs); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hx-dom-pop.docked .hx-dom-row .c { grid-column: 2; }
+.hx-dompane.is-rail > :not(.hx-rail) { display: none !important; }
+.hx-dompane.is-rail > .hx-rail, .hx-panes.no-det > .hx-det-rail { display: flex; }
+.hx-panes.no-det > #hx-det { display: none; }
+.hx-det-rail { display: none; }
+.hx-panes:not(.dock-dom) > .hx-det-rail, .hx-panes:not(.dock-dom) .hx-det-hide { display: none !important; }
+#hx-det { position: relative; }
+.hx-det-hide { position: absolute; top: 10px; right: 10px; width: 32px; padding: 0; justify-content: center; z-index: 2; background: var(--ds-surface); }
+.hx-det-hide svg { width: 16px; height: 16px; }
+.hx-panes.dock-dom #hx-det > :first-child { padding-right: 52px; }
+.hx-req-search { flex: none; padding: 8px 12px; border-bottom: 1px solid var(--ds-border); }
+.hx-req-search .hx-search { max-width: none; width: 100%; }
+.hx-lbl { font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+/* type chips as in Script Studio: a coloured dot per type */
+#hx-types .hx-chip::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--k, #7f8c8d); }
+#hx-types .hx-chip[aria-pressed="false"]::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--k, #7f8c8d); }
+#hx-types [data-type="document"] { --k: #e8a838; } #hx-types [data-type="fetch"] { --k: #4f8ef7; } #hx-types [data-type="script"] { --k: #f39c12; }
+#hx-types [data-type="stylesheet"] { --k: #9b59b6; } #hx-types [data-type="image"] { --k: #27ae60; } #hx-types [data-type="font"] { --k: #16a085; }
+#hx-types [data-type="media"] { --k: #e74c3c; } #hx-types [data-type="other"] { --k: #7f8c8d; }

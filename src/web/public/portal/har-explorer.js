@@ -165,16 +165,49 @@
   var domPane = document.createElement("section");
   domPane.className = "ds-card hx-pane hx-dompane"; domPane.id = "hx-dompane"; domPane.setAttribute("aria-label", "Domains");
   domPane.innerHTML = '<div class="hx-ph"><h2>Domains</h2></div>';
+  var ICON_HIDE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>';
+  domPane.innerHTML = '<button type="button" class="hx-rail" id="hx-dom-rail" title="Show the domains">' + ICON_HIDE + 'Domains</button>' +
+    '<div class="hx-ph"><h2>Domains</h2><span class="hx-grow"></span><span class="hx-dom-head" id="hx-dom-head"></span>' +
+    '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-hide" id="hx-dom-hide" title="Hide the domains (the requests get the room)" aria-label="Hide the domains">' + ICON_HIDE + '</button></div>';
+  // the details hide to a rail too (a separate grid item: the details pane is redrawn on every click)
+  var detRail = document.createElement("button");
+  detRail.type = "button"; detRail.className = "hx-rail hx-det-rail"; detRail.id = "hx-det-rail"; detRail.title = "Show the request details";
+  detRail.innerHTML = ICON_HIDE + "Request details";
+  $("#hx-panes").appendChild(detRail);
   var domWide = matchMedia("(min-width: 1250px)");
+  // Panel columns on wide screens: Domains | Requests | divider | details — each but the divider can fold to a rail
+  function relayout() {
+    var panes = $("#hx-panes"), wide = domWide.matches;
+    var noDom = wide && !!prefs.noDom, noDet = wide && !!prefs.noDet, noList = !!prefs.noList && !noDet;
+    panes.classList.toggle("no-list", noList); panes.classList.toggle("no-dom", noDom); panes.classList.toggle("no-det", noDet);
+    domPane.classList.toggle("is-rail", noDom);
+    if (!wide) { panes.style.gridTemplateColumns = ""; return; }
+    panes.style.gridTemplateColumns = [noDom ? "46px" : "270px", noList ? "46px" : noDet ? "minmax(0, 1fr)" : "minmax(360px, var(--hx-list-w, 42%))", "10px", noDet ? "46px" : "minmax(0, 1fr)"].join(" ");
+  }
   function dockDomains() {
     var pop = $("#hx-dom-pop"), panes = $("#hx-panes"), on = domWide.matches;
     if (on && pop.parentNode !== domPane) { domPane.appendChild(pop); panes.insertBefore(domPane, panes.firstChild); }
     else if (!on && pop.parentNode === domPane) { $("#hx-dom").appendChild(pop); domPane.remove(); }
+    // All on / All off in the panel's header, as in Script Studio (back under the search in the pop-up)
+    var all = $("#hx-dom-all"), none = $("#hx-dom-none");
+    if (on) { domPane.querySelector("#hx-dom-head").appendChild(all); domPane.querySelector("#hx-dom-head").appendChild(none); all.textContent = "All on"; none.textContent = "All off"; }
+    else { var acts = pop.querySelector(".hx-dom-acts"); acts.insertBefore(none, acts.firstChild); acts.insertBefore(all, none); all.textContent = "All"; none.textContent = "None"; }
     panes.classList.toggle("dock-dom", on); pop.classList.toggle("docked", on);
     pop.hidden = !on; $("#hx-dom-btn").hidden = on; $("#hx-dom-btn").setAttribute("aria-expanded", String(on));
+    relayout();
   }
+  domPane.querySelector("#hx-dom-hide").addEventListener("click", function () { prefs.noDom = true; savePrefs(); relayout(); $("#hx-dom-rail").focus(); });
+  domPane.querySelector("#hx-dom-rail").addEventListener("click", function () { prefs.noDom = false; savePrefs(); relayout(); });
+  detRail.addEventListener("click", function () { prefs.noDet = false; savePrefs(); relayout(); });
+  $("#hx-det").addEventListener("click", function (e) { if (e.target.closest("#hx-det-hide")) { prefs.noDet = true; savePrefs(); relayout(); detRail.focus(); } });
   if (domWide.addEventListener) domWide.addEventListener("change", dockDomains);
   dockDomains();
+  // the address filter sits at the top of the request list, as in Script Studio and the mockup
+  (function () {
+    var srch = document.querySelector(".hx-tools > .hx-search"); if (!srch) return;
+    var w = document.createElement("div"); w.className = "hx-req-search"; w.appendChild(srch);
+    $("#hx-reqpane").insertBefore(w, $("#hx-reqpane .hx-cols"));
+  })();
   function openDomains() { $("#hx-dom-pop").hidden = false; $("#hx-dom-btn").setAttribute("aria-expanded", "true"); renderDomains(); $("#hx-dom-q").focus(); }
   function closeDomains(focus) { if ($("#hx-dom-pop").classList.contains("docked")) return; $("#hx-dom-pop").hidden = true; $("#hx-dom-btn").setAttribute("aria-expanded", "false"); if (focus) $("#hx-dom-btn").focus(); }
   $("#hx-dom-btn").addEventListener("click", function () { if ($("#hx-dom-pop").hidden) openDomains(); else closeDomains(); });
@@ -282,10 +315,10 @@
     // the request list hides to a rail (remembered); one click on the rail brings it back
     var panes = $("#hx-panes");
     function listShown(on) {
-      panes.classList.toggle("no-list", !on); prefs.noList = !on; savePrefs();
+      prefs.noList = !on; if (!on) prefs.noDet = false; savePrefs(); relayout();
       if (on) { if (M) draw(true); $("#hx-list").focus(); } else $("#hx-rail").focus();
     }
-    panes.classList.toggle("no-list", !!prefs.noList);
+    relayout();
     $("#hx-hide").addEventListener("click", function () { listShown(false); });
     $("#hx-rail").addEventListener("click", function () { listShown(true); });
     $("#hx-reqpane .hx-ph").addEventListener("click", function (e) { if (e.target === e.currentTarget || e.target.tagName === "H2") listShown(false); });
@@ -316,7 +349,8 @@
   }
 
   // ── request details (portal/request-details.js) ──
-  function renderDetails() {
+  function renderDetails() { renderDetails0(); addDetHide(); }
+  function renderDetails0() {
     if (M && M.view === "find") { renderFind(); return; }
     var d = $("#hx-det"), it = M && M.sel;
     if (!it) { d.innerHTML = '<p class="hx-none hx-pick">Click a request to see its headers, payload and response.</p>'; return; }
@@ -325,6 +359,15 @@
       tab: M.tab, mask: M.mask, full: M.full, hl: hl,
       top: M.inv ? '<p class="hx-back"><mark class="hx-hl">' + esc(short(M.inv.value, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back>Back to Find a value</button></p>' : "",
     });
+  }
+  // the details' hide button (wide screens), put back after every redraw of the pane
+  function addDetHide() {
+    var d = $("#hx-det");
+    if (d.querySelector("#hx-det-hide")) return;
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "ds-btn ds-btn-sm ds-btn-ghost hx-hide hx-det-hide"; b.id = "hx-det-hide";
+    b.title = "Hide the request details (the requests get the room)"; b.setAttribute("aria-label", "Hide the request details");
+    b.innerHTML = ICON_HIDE; d.appendChild(b);
   }
   var ICON_COPY = RD.ICON_COPY;
   $("#hx-det").addEventListener("click", function (e) {
@@ -503,7 +546,8 @@
     var it = M.byN[h.n], e = it ? it.e : { method: "", url: "" };
     return '<a href="#" data-go="' + h.n + '" data-tab="' + tabFor(h) + '">#' + h.n + " " + esc(e.method) + " " + esc(split(e.url).path) + "</a>";
   }
-  function renderFind(busy) {
+  function renderFind(busy) { renderFind0(busy); addDetHide(); }
+  function renderFind0(busy) {
     var d = $("#hx-det"), inv = M.inv, v = M.find;
     var input = $("#hx-fq"), caret = input && document.activeElement === input ? input.selectionStart : null;
     var sugg = M.sugg === null ? '<p class="hx-sugg-wait">Looking for values that change…</p>'

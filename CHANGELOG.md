@@ -50,6 +50,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - Sidebar as in the mockup: the menu toggle is at the top beside the brand (Ctrl+B as before); purple brand mark and current item; Script Studio and HAR Explorer show their one-line description.
 - Correlation Advisor: Scan again, Paste & Detect, Add Manual and Find a value as one row of buttons; the footer (counts, Accept all high, Apply & Regenerate) stays in sight.
 - Test data: the choices keep their words (the table scrolls sideways in a narrow panel).
+- Request details in Script Studio: a blurred backdrop behind the details, as in the mockup; a press on it, or anywhere in the portal around Script Studio (sidebar, top bar), closes them.
+- HAR Explorer, as in the mockup: the Domains panel shows one server per row (switch, name, requests), All on / All off in its header; Domains, Requests and the details each fold to a rail with the button in their header (remembered); the address filter sits at the top of the request list; "Show" before the type chips, each with its coloured dot.
 
 #### The Recorder is part of Script Studio (redesign step 6)
 
