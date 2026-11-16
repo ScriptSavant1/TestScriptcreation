@@ -160,8 +160,23 @@
     }).join("") : '<p class="hx-dom-none">No domain contains "' + esc(q) + '".</p>';
   }
   function setDomains(fn) { M.hosts.forEach(function (h) { M.hostOn[h.host] = fn(h.host); }); renderDomains(); build(); }
+  // Wide screens: the domain list is a panel on the left of the requests, always open (as in Script Studio and the
+  // mockup); narrow screens keep it as a pop-up under the Domains button. The same element moves; nothing is drawn twice.
+  var domPane = document.createElement("section");
+  domPane.className = "ds-card hx-pane hx-dompane"; domPane.id = "hx-dompane"; domPane.setAttribute("aria-label", "Domains");
+  domPane.innerHTML = '<div class="hx-ph"><h2>Domains</h2></div>';
+  var domWide = matchMedia("(min-width: 1250px)");
+  function dockDomains() {
+    var pop = $("#hx-dom-pop"), panes = $("#hx-panes"), on = domWide.matches;
+    if (on && pop.parentNode !== domPane) { domPane.appendChild(pop); panes.insertBefore(domPane, panes.firstChild); }
+    else if (!on && pop.parentNode === domPane) { $("#hx-dom").appendChild(pop); domPane.remove(); }
+    panes.classList.toggle("dock-dom", on); pop.classList.toggle("docked", on);
+    pop.hidden = !on; $("#hx-dom-btn").hidden = on; $("#hx-dom-btn").setAttribute("aria-expanded", String(on));
+  }
+  if (domWide.addEventListener) domWide.addEventListener("change", dockDomains);
+  dockDomains();
   function openDomains() { $("#hx-dom-pop").hidden = false; $("#hx-dom-btn").setAttribute("aria-expanded", "true"); renderDomains(); $("#hx-dom-q").focus(); }
-  function closeDomains(focus) { $("#hx-dom-pop").hidden = true; $("#hx-dom-btn").setAttribute("aria-expanded", "false"); if (focus) $("#hx-dom-btn").focus(); }
+  function closeDomains(focus) { if ($("#hx-dom-pop").classList.contains("docked")) return; $("#hx-dom-pop").hidden = true; $("#hx-dom-btn").setAttribute("aria-expanded", "false"); if (focus) $("#hx-dom-btn").focus(); }
   $("#hx-dom-btn").addEventListener("click", function () { if ($("#hx-dom-pop").hidden) openDomains(); else closeDomains(); });
   $("#hx-dom-q").addEventListener("input", renderDomains);
   $("#hx-dom-all").addEventListener("click", function () { setDomains(function () { return true; }); });

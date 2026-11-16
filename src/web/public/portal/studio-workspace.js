@@ -48,7 +48,8 @@
   function renderTypes() {
     var counts = {}, r = rules();
     reqs().forEach(function (e) { var k = RequestFilter.typeKey(e, r); counts[k] = (counts[k] || 0) + 1; });
-    $("#ss-types").innerHTML = STUDIO_RT_TYPES.map(function (t) {
+    // a type with no request in this recording is not shown (as in the mockup: nothing to choose)
+    $("#ss-types").innerHTML = STUDIO_RT_TYPES.filter(function (t) { return counts[t.key] > 0; }).map(function (t) {
       return '<button class="ss-chip" type="button" data-type="' + t.key + '" aria-pressed="' + typeOn(t.key) + '" style="--k:' + t.color + '" title="' +
         (typeOn(t.key) ? "In the script — click to leave " + t.label + " out" : "Left out — click to put " + t.label + " in the script") + '">' +
         '<span class="ss-dot"></span>' + esc(t.label) + ' <span class="ss-n">' + (counts[t.key] || 0) + "</span></button>";

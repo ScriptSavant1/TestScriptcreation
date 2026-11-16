@@ -221,3 +221,31 @@ html.embedded.hx-has-file .hx-page { height: 100%; }
   .hx-rail { writing-mode: horizontal-tb; transform: none; padding: 10px 14px; justify-content: flex-start; }
   .hx-rail svg { transform: none; }
 }
+
+/* With a file open: the file bar is a band across the page, as in Script Studio and the mockup */
+html.hx-has-file .hx-page { padding-top: 0; }
+html.hx-has-file .hx-filebar { margin: 0 calc(-1 * var(--ds-page-x)); padding: 8px var(--ds-page-x); min-height: 56px; border-radius: 0; border: 0;
+  border-bottom: 1px solid var(--ds-border-2); background: linear-gradient(90deg, var(--br-head), var(--ds-surface)); gap: 8px 10px; }
+html.hx-has-file .hx-fb-ico { width: 32px; height: 32px; border-radius: 9px; background: var(--ds-accent-soft); color: var(--ds-accent-text); }
+html.hx-has-file .hx-fb-ico svg { width: 18px; height: 18px; }
+html.hx-has-file .hx-fb-name b { font-size: var(--ds-fs); }
+@media (max-width: 640px) { html.hx-has-file .hx-filebar { margin: 0 -16px; padding: 8px 16px; } }
+
+/* Domains docked as a left panel on wide screens (portal/har-explorer.js dockDomains) */
+.hx-panes.dock-dom { grid-template-columns: 250px minmax(360px, var(--hx-list-w, 42%)) 10px minmax(0, 1fr); }
+.hx-panes.dock-dom.no-list { grid-template-columns: 250px 46px 10px minmax(0, 1fr); }
+.hx-dompane { margin-right: 14px; }
+.hx-dom-pop.docked { position: static; width: auto; box-shadow: none; border: 0; border-radius: 0; padding: 10px 12px; flex: 1; min-height: 0; display: flex; flex-direction: column; background: none; }
+.hx-dom-pop.docked .hx-dom-list { max-height: none; flex: 1; min-height: 0; }
+.hx-dom-btn[hidden] { display: none; }
+.hx-dom-pop.docked > .hx-search { flex: none; }
+.hx-dom-pop.docked .hx-dom-row .h { font-family: inherit; font-size: var(--ds-fs-sm); }
+.hx-dom-pop.docked .hx-dom-acts { flex: none; }
+@media (min-width: 1500px) { .hx-panes.dock-dom { grid-template-columns: 290px minmax(360px, var(--hx-list-w, 42%)) 10px minmax(0, 1fr); } .hx-panes.dock-dom.no-list { grid-template-columns: 290px 46px 10px minmax(0, 1fr); } }
+.hx-dom-pop.docked .hx-dom-row label { align-items: flex-start; }
+.hx-dom-pop.docked .hx-dom-row .h { white-space: normal; overflow-wrap: anywhere; }
+.hx-dom-pop.docked .hx-dom-row input { appearance: none; -webkit-appearance: none; width: 34px; height: 20px; border-radius: 10px; background: var(--ds-border-2); position: relative; cursor: pointer; }
+.hx-dom-pop.docked .hx-dom-row input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: left .15s; }
+.hx-dom-pop.docked .hx-dom-row input:checked { background: var(--ds-accent); }
+.hx-dom-pop.docked .hx-dom-row input:checked::after { left: 16px; }
+.hx-dom-pop.docked .hx-dom-row input:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
