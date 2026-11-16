@@ -382,6 +382,16 @@ describe('HarBuilder — transactions and pages', () => {
     expect(pages[0].id).toMatch(/^tx_/);
   });
 
+  test('starting a transaction while one runs ends that one with its end time (onLoad was -1)', () => {
+    hb.startTransaction('T01_Launch');
+    hb.startTransaction('T02_Login');   // no endTransaction() in between: Enter on the toolbar / page
+    hb.endTransaction();
+    const { pages } = hb.build().log;
+    expect(pages.map((p) => p.title)).toEqual(['T01_Launch', 'T02_Login']);
+    expect(pages[0].pageTimings.onLoad).toBeGreaterThanOrEqual(0);
+    expect(hb.getTransactions().every((t) => t.endTime !== null)).toBe(true);
+  });
+
   test('entries recorded during a transaction carry its pageref', () => {
     const tabId = 1;
     hb.startTransaction('MyFlow');

@@ -17,7 +17,7 @@ const path = require('path');
 
 const SRC = path.resolve(__dirname, '../../cdp-recorder/recorder/src/portal-mode.js');
 const P = new Function(fs.readFileSync(SRC, 'utf-8').replace(/^export /gm, '') +
-  '\nreturn { LINK_SCHEME, originOf, parsePortalLink, linkCommand, originAccess, harFileName, expandEnv, readSession, liveRow, createAskQueue, readAllowedPages };')();
+  '\nreturn { LINK_SCHEME, originOf, parsePortalLink, linkCommand, originAccess, harFileName, expandEnv, readSession, liveRow, createAskQueue, readAllowedPages, planSteps, nextTxNumber, txName, nextPlanned };')();
 
 describe('parsePortalLink — only the portal origin travels in the link', () => {
   test('a start link gives the portal origin, path dropped', () => {
@@ -63,7 +63,7 @@ describe('originAccess — who may drive the recorder', () => {
 describe('readSession — the Start recording request', () => {
   test('defaults: Edge, private window', () => {
     expect(P.readSession({ url: 'https://app.example.com/login' }))
-      .toEqual({ ok: true, url: 'https://app.example.com/login', browser: 'edge', private: true, name: '', firstTx: '' });
+      .toEqual({ ok: true, url: 'https://app.example.com/login', browser: 'edge', private: true, name: '', firstTx: '', plan: [] });
   });
   test('Chrome, normal window, name and first transaction kept', () => {
     expect(P.readSession({ url: ' http://app/x ', browser: 'Chrome', private: false, name: ' SC01 ', firstTx: '01_Launch' }))
@@ -151,5 +151,31 @@ describe("readAllowedPages — the remembered pages file", () => {
     expect(P.readAllowedPages("")).toEqual([]);
     expect(P.readAllowedPages("{not json")).toEqual([]);
     expect(P.readAllowedPages(JSON.stringify({ pages: "https://x" }))).toEqual([]);
+  });
+});
+
+describe('transaction names — numbered for you, the same rules as the Recorder page (record-live.js)', () => {
+  test('a typed name gets the next number; the first letter is capitalised; spaces and dashes become _', () => {
+    expect(P.txName('add to cart', ['T01_Launch', 'T02_Login', 'T03_Search'])).toBe('T04_Add_to_cart');
+    expect(P.txName('Launch', [])).toBe('T01_Launch');
+    expect(P.txName('  check-out!  ', ['T01_A'])).toBe('T02_Check_out');
+    expect(P.txName('   ', [])).toBe('');
+  });
+  test('a name with its own number keeps it, and the next number follows the highest one used', () => {
+    expect(P.txName('t7-pay', ['T01_A'])).toBe('T07_pay');
+    expect(P.nextTxNumber(['T01_A', 'T07_Pay'])).toBe(8);
+    expect(P.txName('Logout', ['T01_A', 'T07_Pay'])).toBe('T08_Logout');
+    expect(P.nextTxNumber(['Login', 'Search'])).toBe(3);   // names without a number: after the count
+  });
+  test('planned steps: one per line; the next one is the first not started (matched without its number)', () => {
+    const plan = P.planSteps('Login\n\n  Search \r\nAdd to cart');
+    expect(plan).toEqual(['Login', 'Search', 'Add to cart']);
+    expect(P.nextPlanned(plan, ['T01_Launch'])).toBe('Login');
+    expect(P.nextPlanned(plan, ['T01_Launch', 'T02_Login', 'T03_Search'])).toBe('Add to cart');
+    expect(P.nextPlanned(plan, ['T01_Login', 'T02_Search', 'T03_Add_to_cart'])).toBe('');
+  });
+  test('the session request carries the plan', () => {
+    expect(P.readSession({ url: 'https://shop.example.com/', plan: 'Login\nSearch' }).plan).toEqual(['Login', 'Search']);
+    expect(P.readSession({ url: 'https://shop.example.com/' }).plan).toEqual([]);
   });
 });

@@ -86,7 +86,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
     <li><b>Once:</b> download <code>cdp-recorder.zip</code> from the PerfX Studio Recorder page, extract it to a folder that stays, and double-click <code>cdp-recorder.exe</code> once.</li>
     <li>In PerfX Studio, <b>Recorder → Start recording</b> (or <b>Script Studio → Record a new journey</b>): type your application's address, choose Edge or Chrome, click <b>Start recording</b>.</li>
     <li>Two windows open: an orange <b>recording window</b> on your application, already recording, and a small <b>toolbar</b>. Do your steps <b>in the recording window</b>.</li>
-    <li>Name each step: <b>Start Transaction</b> … <b>End Transaction</b>, on the toolbar or the page. The page shows every request as it happens.</li>
+    <li>Name each step: type a name and press <b>Enter</b> — on the toolbar or the page. The running transaction ends and the next one starts, numbered for you (<i>Login</i> becomes <code>T02_Login</code>). The page shows every request as it happens.</li>
     <li>Click <b>Stop and save</b>. The HAR is saved to your <b>Downloads</b> folder and opens in PerfX Studio by itself.</li>
   </ol>
   <p style="margin:10px 0 0">You can still start <code>cdp-recorder.exe</code> yourself and record from its toolbar — see <a href="#launch">section 4</a>.</p>
@@ -143,7 +143,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 </div></div>
 <div class="step"><div class="num">4</div><div>
 <h3>Name transactions — on the toolbar or on the page</h3>
-<p>Type a name, <b>Start Transaction</b>, do the step, <b>End Transaction</b> — the same as in <a href="#record">section 5</a>. Starting the next transaction ends the open one, and so does Stop.</p>
+<p>Type a name and press <b>Enter</b> (or click <b>Start Transaction</b>), do the step, then type the next name and press <b>Enter</b> — the same as in <a href="#record">section 5</a>. The number is added for you (<i>add to cart</i> becomes <code>T04_Add_to_cart</code>); type your own, for example <code>T07_Pay</code>, to use another number. With planned steps (More options on the page), press <b>Enter</b> on an empty box to start the next one. <b>End Transaction</b> ends the running one; Stop ends it too.</p>
 </div></div>
 <div class="step"><div class="num">5</div><div>
 <h3>Stop and save</h3>
@@ -176,7 +176,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 </div></div>
 
 <div class="step"><div class="num">2</div><div>
-<h3>Name your transaction and click Start Transaction</h3>
+<h3>Name your transaction and press Enter</h3>
 <p>Type a short name for the business step, such as <i>Login</i>, <i>Search</i> or <i>Checkout</i>. Each transaction becomes a timed transaction in your script. You can also press <kbd>Enter</kbd> instead of clicking.</p>
 <div class="shots"><figure class="toolbar"><img src="{{img:03-toolbar-ready.png}}" alt="Toolbar showing Settled, a transaction name field containing Login, and a Start Transaction button"><figcaption>Ready to start a transaction named "Login".</figcaption></figure></div>
 </div></div>
@@ -223,8 +223,8 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <p>To record again, click <b>New Recording</b> or <b>Start Recording</b>. If the toolbar gets long, scroll it.</p>
 
 <h2 id="studio">8. Open it in Script Studio</h2>
-<p>In PerfX Studio, open <b>Script Studio</b>, drop your HAR into <b>Recording 1</b>, choose <b>DevWeb</b> or <b>Web HTTP/HTML</b>, and click <b>Analyze &amp; Generate</b>.</p>
-<div class="shots"><figure><img src="{{img:09-studio-upload.png}}" alt="Script Studio with my-recording.har loaded as Recording 1"><figcaption>The HAR loaded into Script Studio.</figcaption></figure></div>
+<p>In PerfX Studio, open <b>Script Studio</b> and drop your HAR on <b>Open a recording you already have</b> (or anywhere on the page). It is read at once and the script is ready: choose <b>DevWeb</b> or <b>Web HTTP/HTML</b> in the file bar and click <b>Download ZIP</b>. A recording made with <b>Start recording</b> opens there by itself.</p>
+<div class="shots"><figure><img src="{{img:09-studio-upload.png}}" alt="Script Studio's start screen: Record in a browser, and Open a recording you already have"><figcaption>Script Studio's start screen.</figcaption></figure></div>
 <div class="shots"><figure><img src="{{img:10-studio-result.png}}" alt="Script Studio results: 6 requests, 2 transactions, and the generated main.js"><figcaption>The generated script. Your transactions appear as <code>SC01_01_LOGIN</code>, <code>SC01_02_SEARCH</code> and so on. Here the empty "Logout" transaction was correctly left out.</figcaption></figure></div>
 <div class="callout info"><strong>"Responses have empty bodies" warning</strong>Script Studio may say that some responses have empty bodies and suggest re-recording with DevTools' "Disable cache". For CDP Recorder files you can ignore this when it's about images, styles or scripts: the recorder deliberately keeps response bodies only for pages and API calls, which is what correlation needs.</div>
 

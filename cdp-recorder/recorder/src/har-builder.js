@@ -37,6 +37,8 @@ class HarBuilder {
   // ── Transaction management ─────────────────────────────────────────────────
 
   startTransaction(name) {
+    // a transaction still running ends now, with its end time (it used to be replaced without one: onLoad -1)
+    this.endTransaction();
     const id = `tx_${++this._txCounter}`;
     this.activeTransaction = { id, name, startTime: Date.now(), endTime: null };
     this.completedTransactions.push(this.activeTransaction);

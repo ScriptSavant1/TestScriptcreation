@@ -76,7 +76,7 @@ export function expandEnv(value, env) {
   });
 }
 
-/** Checks the body of POST /api/session. Returns { ok, url, browser, private, name, firstTx } or { ok: false, error }. */
+/** Checks the body of POST /api/session. Returns { ok, url, browser, private, name, firstTx, plan } or { ok: false, error }. */
 export function readSession(body) {
   const b = body || {};
   const url = String(b.url || "").trim();
@@ -84,7 +84,35 @@ export function readSession(body) {
   const browser = String(b.browser || "edge").toLowerCase();
   if (browser !== "edge" && browser !== "chrome") return { ok: false, error: "The browser must be Edge or Chrome" };
   const clean = (v, n) => String(v || "").trim().slice(0, n);
-  return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80) };
+  return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80), plan: planSteps(String(b.plan || "").slice(0, 4000)) };
+}
+
+// ── transaction names: the same rules as the Recorder page (src/web/public/portal/record-live.js fullName / nextNum —
+//    keep the two in step) ──
+const pad2 = (n) => String(n).padStart(2, "0");
+/** The planned steps typed one per line (empty lines dropped, at most 50). */
+export function planSteps(text) {
+  return (Array.isArray(text) ? text : String(text || "").split(/\r?\n/)).map((s) => String(s).trim().slice(0, 60)).filter(Boolean).slice(0, 50);
+}
+/** The next number: after the highest one used (T07_Pay is followed by T08), else after the count. */
+export function nextTxNumber(started) {
+  let hi = started.length;
+  started.forEach((t) => { const m = /^T(\d+)_/.exec(t); if (m && +m[1] > hi) hi = +m[1]; });
+  return hi + 1;
+}
+/** "add to cart" → "T04_Add_to_cart" (numbered after `started`); a name with its own number (t7-pay) keeps it → "T07_pay". "" when empty. */
+export function txName(raw, started) {
+  const s = String(raw || "").trim().replace(/[\s-]+/g, "_").replace(/[^A-Za-z0-9_]/g, "").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  if (!s) return "";
+  const own = /^[Tt](\d+)_+(.+)$/.exec(s);
+  if (own) return "T" + pad2(+own[1]) + "_" + own[2];
+  return "T" + pad2(nextTxNumber(started)) + "_" + s.charAt(0).toUpperCase() + s.slice(1);
+}
+/** The first planned step not started yet ("" when every one is done). */
+export function nextPlanned(plan, started) {
+  const key = (t) => String(t).replace(/^T\d+_/, "").toLowerCase();
+  const done = new Set(started.map(key));
+  return (plan || []).find((p) => !done.has(key(txName(p, [])))) || "";
 }
 
 /**

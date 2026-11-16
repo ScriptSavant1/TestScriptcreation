@@ -29,6 +29,15 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - LRE setup: pacing and think time right after the load generators, "Start" explained, and a "hide the inputs" line while columns are cut off. Scripts toolbar: the actions on a row of their own. Load generators tile: "On-premise: 2 + 1 spare".
 - One LRE setup table (Details › LRE setup): per script the Vusers, load generators, start, ramp-up, duration, ramp-down (DD:HH:MM:SS), pacing and think time; the same in Excel. It replaces the LRE settings text tab (the text stays for Copy LRE settings); Per script keeps only the calculation results; Load generators shows one row per machine.
 
+### CDP Recorder
+
+#### Version 0.2.2: one box on the toolbar (redesign step 5b)
+
+- The toolbar names transactions the way the page does: type a name and press **Enter** — the running transaction ends and the new one starts, numbered for you (the next number shows before the box; *add to cart* becomes `T04_Add_to_cart`; a typed `T07_Pay` keeps its number and the next one is `T08_…`). The box stays while a transaction runs; **Start next** and **End Transaction**. A name used already, or an empty box with nothing planned, is refused with the reason under the box.
+- Planned steps typed in Start recording (More options) reach the recorder: an empty Enter on the toolbar starts the next planned step, and the box shows which one is next.
+- Starting a transaction while one runs ends that one properly, with its end time (BUG-145).
+- `/api/status` reports `nextTx` (the next number and the next planned step); `/api/tx/start` takes `auto: true` (numbered by the recorder); `/api/session` takes `plan`. The pages expect 0.2.2 (`LATEST`) and offer the download to older recorders. The README in the ZIP and the user guide text describe the new box.
+
 ### Recorder and Script Studio
 
 #### Script Studio: one workspace (redesign step 2)

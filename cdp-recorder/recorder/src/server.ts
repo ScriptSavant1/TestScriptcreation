@@ -20,7 +20,7 @@ import { join, basename } from "node:path";
 import { Recorder } from "./recorder.js";
 import { scrubHar } from "./scrub-har.js";
 import { onSettled } from "./cdp-capture.js";
-import { originAccess, originOf, readSession, harFileName, createAskQueue } from "./portal-mode.js";
+import { originAccess, originOf, readSession, harFileName, createAskQueue, txName, nextTxNumber, nextPlanned } from "./portal-mode.js";
 import { VERSION } from "./version.js";
 
 /** What a recording started from the Recorder page asked for (POST /api/session). */
@@ -30,6 +30,8 @@ export interface PortalSession {
   private: boolean;
   name: string;
   firstTx: string;
+  /** Planned steps, one per transaction (optional): an empty name on Start takes the next one. */
+  plan?: string[];
 }
 
 export interface ServerOptions {
@@ -59,6 +61,7 @@ export interface ServerState {
   lastHarEntryCount: number | null;
   transactions: string[]; // completed transaction names, for the "trail" display
   activeTransaction: string | null;
+  plan: string[]; // planned steps of a page-started recording (empty: none)
   error: string | null;
   warning: string | null;
 }
@@ -121,8 +124,23 @@ export function startServer(
     lastHarEntryCount: null,
     transactions: [],
     activeTransaction: null,
+    plan: [],
     error: null,
     warning: null,
+  };
+  // the transactions started so far (finished, then the running one)
+  const startedTx = (): string[] => state.transactions.concat(state.activeTransaction ? [state.activeTransaction] : []);
+  // end the running transaction (its end time and screenshots), with the zero-request warning
+  const endActive = (): void => {
+    const ended = recorder.endTransaction(); // background screenshot, not on the critical path
+    if (ended && ended.requestCount === 0 && state.activeTransaction) {
+      state.warning =
+        `No network requests were captured during "${state.activeTransaction}". ` +
+        `Make sure you are clicking in the RECORDING browser window (the one showing the orange ` +
+        `"This is the RECORDING window" page), not your usual browser.`;
+    }
+    if (state.activeTransaction) state.transactions.push(state.activeTransaction);
+    state.activeTransaction = null;
   };
 
   const server = createServer(async (req, res) => {
@@ -196,6 +214,7 @@ export function startServer(
           settled: state.settled,
           activeTransaction: state.activeTransaction,
           transactions: state.transactions,
+          nextTx: { number: "T" + String(nextTxNumber(startedTx())).padStart(2, "0") + "_", planned: nextPlanned(state.plan, startedTx()) },
           savedFromPortal: savedFromPortal,
           // the toolbar polls without an Origin header (a same-origin GET) — "local"; portal pages never see it
           askingPortal: access === "self" || access === "local" ? asks.pending() : null,
@@ -216,7 +235,7 @@ export function startServer(
         if (starting || !options.startSession) return sendJson(res, 409, { error: "The recorder is busy starting a recording." });
         starting = true;
         try {
-          Object.assign(state, { settled: false, lastHarPath: null, lastHarEntryCount: null, transactions: [], activeTransaction: null, error: null, warning: null });
+          Object.assign(state, { settled: false, lastHarPath: null, lastHarEntryCount: null, transactions: [], activeTransaction: null, plan: (asked as PortalSession).plan || [], error: null, warning: null });
           savedFromPortal = false;
           const s0 = asked as PortalSession;
           const { outDir: dir } = await options.startSession(s0);
@@ -294,6 +313,7 @@ export function startServer(
         state.lastHarEntryCount = null;
         state.transactions = [];
         state.activeTransaction = null;
+        state.plan = [];
         state.error = null;
         state.warning = null;
         savedFromPortal = false;
@@ -304,7 +324,16 @@ export function startServer(
 
       if (req.method === "POST" && url.pathname === "/api/tx/start") {
         const body = await readJsonBody(req);
-        const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : "Transaction";
+        const typed = typeof body.name === "string" ? body.name.trim() : "";
+        let name = typed || "Transaction";
+        // auto (the toolbar): numbered for you, an empty name takes the next planned step — the page's rules
+        if (body.auto === true) {
+          name = txName(typed || nextPlanned(state.plan, startedTx()), startedTx());
+          if (!name) return sendJson(res, 400, { error: state.plan.length ? "Every planned step is done — type a name for the next transaction." : "Type a name for the transaction." });
+          if (startedTx().includes(name)) return sendJson(res, 400, { error: `${name} was used already — type another name.` });
+        }
+        // a running transaction ends first, with its end time (it used to be left without one)
+        if (state.activeTransaction) endActive();
         // Synchronous — screenshot capture happens in the background, not
         // on this request's critical path. See recorder.ts's startTransaction().
         recorder.startTransaction(name);
@@ -315,15 +344,7 @@ export function startServer(
       }
 
       if (req.method === "POST" && url.pathname === "/api/tx/end") {
-        const ended = recorder.endTransaction(); // same — background screenshot, not on the critical path
-        if (ended && ended.requestCount === 0 && state.activeTransaction) {
-          state.warning =
-            `No network requests were captured during "${state.activeTransaction}". ` +
-            `Make sure you are clicking in the RECORDING browser window (the one showing the orange ` +
-            `"This is the RECORDING window" page), not your usual browser.`;
-        }
-        if (state.activeTransaction) state.transactions.push(state.activeTransaction);
-        state.activeTransaction = null;
+        endActive();
         sendJson(res, 200, { ok: true });
         return;
       }

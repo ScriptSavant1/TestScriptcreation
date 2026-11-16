@@ -69,6 +69,13 @@ body {
 .naming-label { font-size: 11px; color: var(--text-muted); }
 .naming-input { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text); font-size: 12.5px; }
 .naming-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* one box: the number is added for you (shown before it), Enter ends the running transaction and starts this one */
+.naming-row { display: flex; align-items: stretch; }
+.tx-prefix { display: flex; align-items: center; padding: 0 6px; border: 1px solid var(--border); border-right: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: color-mix(in srgb, var(--tx-color) 16%, var(--bg-subtle)); color: var(--tx-color); font: 700 12px 'Cascadia Code', Consolas, monospace; }
+.naming-row .naming-input { flex: 1; min-width: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.naming-hint { font-size: 10.5px; color: var(--text-muted); }
+.naming-err { font-size: 11px; font-weight: 600; color: var(--danger); }
 
 .trail-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
 /* flex-start: without it, wrapped rows stretch to fill min-height and chips render oversized. */
@@ -127,8 +134,10 @@ body.asking > :not(#askCard):not(.header) { opacity: .35; pointer-events: none; 
 
   <div id="namingCard" class="card hidden">
     <div class="naming-area">
-      <label class="naming-label" for="txNameInput">Transaction name</label>
-      <input id="txNameInput" class="naming-input" type="text" placeholder="e.g. Login, Search, Checkout" maxlength="60" autocomplete="off">
+      <label class="naming-label" for="txNameInput">Next transaction</label>
+      <div class="naming-row"><span id="txPrefix" class="tx-prefix" title="Added for you — type your own (T07_Pay) to use another number">T01_</span><input id="txNameInput" class="naming-input" type="text" placeholder="e.g. Login — press Enter" maxlength="60" autocomplete="off"></div>
+      <div id="txErr" class="naming-err hidden" role="alert"></div>
+      <div class="naming-hint">Enter ends the running transaction and starts this one.</div>
     </div>
   </div>
 
@@ -231,8 +240,14 @@ function render(s) {
 
   $("btnStart").classList.toggle("hidden", s.recording);
   $("btnStop").classList.toggle("hidden", !s.recording);
-  $("namingCard").classList.toggle("hidden", !(s.recording && !s.activeTransaction));
-  $("btnStartTx").classList.toggle("hidden", !(s.recording && !s.activeTransaction));
+  // the box stays while a transaction runs: Enter (or Start) ends it and starts the next
+  $("namingCard").classList.toggle("hidden", !s.recording);
+  $("btnStartTx").classList.toggle("hidden", !s.recording);
+  $("btnStartTx").textContent = s.activeTransaction ? "Start next" : "Start Transaction";
+  if (s.nextTx) {
+    $("txPrefix").textContent = s.nextTx.number;
+    $("txNameInput").placeholder = s.nextTx.planned ? `Next planned: ${s.nextTx.planned} — press Enter` : "e.g. Login — press Enter";
+  }
   $("btnStartTx").disabled = !s.settled;
   $("btnEndTx").classList.toggle("hidden", !s.activeTransaction);
 
@@ -368,9 +383,11 @@ $("btnStop").addEventListener("click", async () => {
 });
 
 $("btnStartTx").addEventListener("click", async () => {
-  const name = $("txNameInput").value.trim() || "Transaction";
-  try { await api("POST", "/api/tx/start", { name }); $("txNameInput").value = ""; await poll(); }
-  catch (err) { setError(err.message); }
+  // numbered by the recorder (auto); an empty box takes the next planned step
+  const name = $("txNameInput").value.trim();
+  // a message about the name stays under the box (the error banner is redrawn from the recorder each second)
+  try { await api("POST", "/api/tx/start", { name, auto: true }); $("txNameInput").value = ""; $("txErr").classList.add("hidden"); await poll(); }
+  catch (err) { $("txErr").textContent = err.message; $("txErr").classList.remove("hidden"); $("txNameInput").focus(); }
 });
 
 $("btnEndTx").addEventListener("click", async () => {
@@ -378,6 +395,7 @@ $("btnEndTx").addEventListener("click", async () => {
   catch (err) { setError(err.message); }
 });
 
+$("txNameInput").addEventListener("input", () => $("txErr").classList.add("hidden"));
 $("txNameInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $("btnStartTx").click();
 });

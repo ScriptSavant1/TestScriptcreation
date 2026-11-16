@@ -20,7 +20,7 @@
   'use strict';
 
   var REC = 'http://localhost:8787';
-  var LATEST = '0.2.1';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
+  var LATEST = '0.2.2';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
   var PREF = 'perfx-rec-live';     // remembered choices: recent addresses, browser, private window, name, last transaction
   var STATIC_TYPES = { Image: 1, Stylesheet: 1, Script: 1, Font: 1, Media: 1 };
   var ROWS_PER_GROUP = 400;        // rows drawn per open transaction (the newest)
@@ -258,6 +258,7 @@
     var first = $('lv-first').value.trim();
     var req = { url: url, browser: browser(), private: $('lv-priv').checked, name: $('lv-name').value.trim(), firstTx: first ? fullNameStatic(first) : '' };
     prefs.plan = $('lv-plan').value;
+    req.plan = prefs.plan;   // the CDP Recorder 0.2.2 and newer: an empty name on its toolbar starts the next planned step
     prefs.urls = [url].concat((prefs.urls || []).filter(function (u) { return u !== url; })).slice(0, 6);
     prefs.browser = req.browser; prefs.private = req.private; prefs.name = req.name;
     savePrefs();

@@ -130,11 +130,11 @@ copyFileSync(join(harDir, "my-recording.har"), join(outDir, "my-recording.har"))
 if (studioUrl) {
   const st = await tbBrowser.newPage({ viewport: { width: 1400, height: 860 } });
   await st.goto(studioUrl);
-  await st.setInputFiles('input[type="file"] >> nth=0', join(outDir, "my-recording.har"));
-  await st.waitForSelector("#btn-analyze:not([disabled])");
+  // the start screen, then the workspace: a recording is read as soon as it is opened (no Analyse step)
+  await st.waitForSelector("#dz1");
   await shot(st, "09-studio-upload.png");
-  await st.click("#btn-analyze");
-  await st.waitForFunction(() => typeof S !== "undefined" && S.scripts && Object.keys(S.scripts).length > 0, null, { timeout: 30000 });
+  await st.setInputFiles("#dz1 input[type=file]", join(outDir, "my-recording.har"));
+  await st.waitForFunction(() => document.body.classList.contains("ss-view-ws") && !document.body.classList.contains("ss-reading") && typeof S !== "undefined" && S.scripts && Object.keys(S.scripts).length > 0, null, { timeout: 30000 });
   await st.waitForTimeout(1500);
   await shot(st, "10-studio-result.png");
 }
