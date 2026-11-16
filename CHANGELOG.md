@@ -43,6 +43,7 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Closer to the agreed mockup (redesign step 6b)
 
+- Postman / Bruno, JMeter and the Results Analyser take the purple look of Script Studio, the HAR Explorer and the Workload Modeller (accent, page background, header bars), both themes; Home and Help keep theirs.
 - HAR Explorer: the file bar is a band across the page, as in Script Studio; on wide screens (1250 px and more) the Domains list is a panel on the left of the requests, always open, with an on / off switch per server (narrow screens keep the pop-up).
 - Script Studio: the filter bar fits on one line; a request type with no request in the recording is not shown; tick boxes are always in sight on the request rows; Domains have on / off switches; the script's file tabs wrap instead of scrolling out of sight.
 - A hovered request row and a hovered transaction row keep 4.5:1 contrast in the light theme.
