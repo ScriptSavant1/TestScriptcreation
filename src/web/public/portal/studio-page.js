@@ -35,15 +35,22 @@
     if (SS.cancelAgain) SS.cancelAgain();   // a reading the page had queued is this one
     Promise.resolve().then(function () { return engineAnalyze(); }).then(finish, finish);
   }
+  // the usage ping (sent by the engine after a reading, once per opened recording) waits for the last reading of a
+  // burst — a second recording opened during the first reading is counted as the diff reading it leads to
+  var owed = false;
   function finish() {
     running = false;
-    if (again) { again = false; start(); return; }
+    if (again) { again = false; if (owed) { owed = false; S._usageSent = false; } start(); return; }
+    owed = false;
     afterAnalysis();
     var w = waiters; waiters = [];
     w.forEach(function (f) { f(); });
   }
   window.analyze = function () {
-    if (running) again = true; else start();
+    if (running) {
+      again = true;
+      if (!S._usageSent) { S._usageSent = true; owed = true; }   // held for the reading that follows
+    } else start();
     return new Promise(function (r) { waiters.push(r); });
   };
   SS.busy = function () { return running; };

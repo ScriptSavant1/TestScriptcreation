@@ -19,6 +19,7 @@
   };
 
   function newFile() {
+    if (typeof closeDet === "function" && D && D.id != null) closeDet();
     W.log = []; W.sel = new Set(); W.last = null; W.folded = {}; W.openOut = {}; W.q = ""; W.cur = null;
     S.leaveOut = { ads: true, options: true };
     var q = $("#ss-q"); if (q) q.value = "";
@@ -337,7 +338,7 @@
     W.cur = id;
     var cb = r.querySelector("input");
     if (!cb.disabled && (e.target === cb || W.sel.size || W.picking)) tick(id, e.target === cb ? cb.checked : !W.sel.has(id), e.shiftKey);
-    else draw();
+    else openDet(id);
   });
   function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
   // keyboard: arrows move, Space ticks, Enter folds a transaction
@@ -351,9 +352,11 @@
       W.cur = list[i].e.id;
       var y = list[i].y;
       if (y < box.scrollTop) box.scrollTop = y; else if (y + H.r > box.scrollTop + box.clientHeight) box.scrollTop = y + H.r - box.clientHeight;
-      draw();
+      if (D.id != null) openDet(W.cur); else draw();
     } else if (e.key === " " && i >= 0 && !list[i].e.filtered) { e.preventDefault(); tick(W.cur, !W.sel.has(W.cur), e.shiftKey); }
+    else if (e.key === "Enter" && i >= 0) { e.preventDefault(); openDet(W.cur); }
     else if (e.key === "Escape" && (W.sel.size || W.picking)) { clearSel(); }
+    else if (e.key === "Escape" && D.id != null) { closeDet(); }
   });
   function clearSel() { W.sel = new Set(); W.picking = false; W.last = null; draw(); selbar(); }
   $("#ss-sel-clear").addEventListener("click", clearSel);
@@ -415,6 +418,88 @@
     setTimeout(function () { if (t.parentNode) t.remove(); }, 8000);
   }
 
+  // ── request details (portal/request-details.js — the same view as the HAR Explorer's): a sheet over the workspace,
+  //    a panel of its own on desktops 2400 px and wider; previous / next follow the list as it is shown ──
+  var det = $("#ss-det"), detB = $("#ss-det-b");
+  var D = { id: null, tab: "headers", mask: !!prefs.mask, full: {} };
+  $("#ss-det-mask").checked = D.mask;
+  var rawList = { har: null, list: null };
+  function rawOf(e) {
+    if (S.har1 && !S.isNetLog1) {
+      if (rawList.har !== S.har1) { rawList.har = S.har1; rawList.list = ((S.har1.log && S.har1.log.entries) || []).filter(function (x) { return x && x.request; }); }
+      var r = rawList.list[e.id - 1];   // parseHar's id = position among the entries that have a request
+      if (r && r.request.url === e.url) return r;
+    }
+    // a NetLog file has no HAR entry: the details come from the parsed request
+    var rh = e.respHdrsMap || {};
+    return { request: { method: e.method, url: e.url, headers: e.reqHdrs || [], postData: e.body || undefined },
+      response: { status: e.status, headers: Object.keys(rh).map(function (k) { return { name: k, value: rh[k] }; }), content: { mimeType: e.respCt || e.ct || "", text: e.respBody || "" } } };
+  }
+  function byId(id) { var es = S.entries1 || []; for (var i = 0; i < es.length; i++) if (!es[i].isMarker && es[i].id === id) return es[i]; return null; }
+  function shownIds() { return W.rows.filter(function (r) { return r.k === "r"; }).map(function (r) { return r.e.id; }); }
+  function typeLabel(e) { var k = RequestFilter.typeKey(e, rules()); var t = STUDIO_RT_TYPES.filter(function (x) { return x.key === k; })[0]; return t ? t.label : k; }
+  function renderDet() {
+    var e = byId(D.id);
+    if (!e) { closeDet(); return; }
+    var raw = rawOf(e), rs = raw.response || {}, c = rs.content || {};
+    var ids = shownIds(), at = ids.indexOf(e.id);
+    $("#ss-det-pos").textContent = at >= 0 ? (at + 1) + " of " + ids.length : "";
+    $("#ss-det-prev").disabled = at <= 0; $("#ss-det-next").disabled = at < 0 || at >= ids.length - 1;
+    var top = '<p class="ss-det-ctx">' + (e.txn ? "Transaction <b>" + esc(e.txn) + "</b>" : "Not in a transaction") + " · " +
+      (e.filtered ? "left out of the script" : '<span class="ss-in">in the script</span>') + "</p>";
+    detB.innerHTML = RequestDetails.html({
+      n: e.id, e: { method: e.method, url: e.url, status: e.status, size: c.size >= 0 ? c.size : rs.bodySize >= 0 ? rs.bodySize : null }, raw: raw,
+      type: esc(typeLabel(e)), dur: e.dur || 0, start: e.startMs && W.span ? e.startMs - W.span.t0 : 0,
+      out: !!e.filtered, why: REASON[e.leftOut] || "left out", tab: D.tab, mask: D.mask, full: D.full, top: top,
+    });
+  }
+  function openDet(id) {
+    var first = D.id == null;
+    if (D.id !== id) D.full = {};
+    D.id = id; W.cur = id;
+    // over the workspace, below the file bar (Download ZIP and the format stay in reach)
+    var fb = $("#ss-filebar").getBoundingClientRect();
+    det.style.top = window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : "";
+    det.hidden = false;
+    document.body.classList.add("ss-det-open");
+    renderDet(); draw();
+    if (first && !document.body.classList.contains("ss-dock")) detB.scrollTop = 0;
+  }
+  function closeDet() {
+    if (D.id == null) return;
+    D.id = null; det.hidden = true;
+    document.body.classList.remove("ss-det-open");
+    draw(); box.focus();
+  }
+  function step(d) { var ids = shownIds(), at = ids.indexOf(D.id); if (at < 0 || !ids[at + d]) return; openDet(ids[at + d]); scrollTo(ids[at + d]); }
+  function scrollTo(id) { var r = W.rows.filter(function (x) { return x.k === "r" && x.e.id === id; })[0]; if (!r) return; if (r.y < box.scrollTop || r.y + H.r > box.scrollTop + box.clientHeight) box.scrollTop = Math.max(0, r.y - box.clientHeight / 2); draw(); }
+  $("#ss-det-x").addEventListener("click", closeDet);
+  $("#ss-det-prev").addEventListener("click", function () { step(-1); });
+  $("#ss-det-next").addEventListener("click", function () { step(1); });
+  $("#ss-det-mask").addEventListener("change", function () { D.mask = this.checked; prefs.mask = D.mask; SS.save(); renderDet(); });
+  detB.addEventListener("click", function (e) {
+    var t = e.target.closest(".hx-tab"); if (t) { D.tab = t.getAttribute("data-tab"); D.full = {}; renderDet(); var n = detB.querySelector('.hx-tab[data-tab="' + D.tab + '"]'); if (n) n.focus(); return; }
+    var f = e.target.closest("[data-full]"); if (f) { D.full[f.getAttribute("data-full")] = true; renderDet(); return; }
+    var c = e.target.closest("[data-copy]"); if (!c) return;
+    var en = byId(D.id); if (!en) return;
+    var kind = c.getAttribute("data-copy"), txt = RequestDetails.copy(rawOf(en), kind, D.mask, en.url);
+    var ok = function () { showToast(kind === "url" ? "Address copied." : "cURL command copied.", "success", 2500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, function () { showToast("Copying is not allowed here.", "warning"); });
+    else showToast("Copying is not allowed here.", "warning");
+  });
+  det.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { e.preventDefault(); closeDet(); return; }
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      var tb = e.target.closest(".hx-tab"); if (!tb) return;
+      var tabs = RequestDetails.TABS, i = tabs.indexOf(D.tab);
+      D.tab = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length]; D.full = {}; renderDet();
+      var n = detB.querySelector('.hx-tab[data-tab="' + D.tab + '"]'); if (n) n.focus();
+    } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && e.target.closest(".hx-tab, .ss-det-bar")) { e.preventDefault(); step(e.key === "ArrowDown" ? 1 : -1); }
+  });
+  function dock() { document.body.classList.toggle("ss-dock", window.innerWidth >= 2400); }
+  window.addEventListener("resize", dock); dock();
+
   // ── panels: hide to a rail (remembered), one click on the rail brings it back; drag the gaps to resize ──
   prefs.hide = prefs.hide || {};
   var cols = $("#ss-cols");
@@ -475,7 +560,9 @@
 
   window.SSW = {
     newFile: newFile,
-    render: function () { renderTypes(); renderDomains(); renderReqs(); },
+    render: function () { renderTypes(); renderDomains(); renderReqs(); if (D.id != null) renderDet(); },
+    openDetails: function (id) { openDet(id); },
+    closeDetails: function () { closeDet(); },
     showPane: showPane,
     state: W,
   };

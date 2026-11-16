@@ -18,7 +18,9 @@
     </script>
     <!-- design system first; the classic stylesheet styles everything the Studio scripts draw; portal/studio.css restyles it -->
     <link rel="stylesheet" href="portal/ds.css" />
+    <link rel="stylesheet" href="portal/brand.css" />
     <link rel="stylesheet" href="VuGen-Script-Studio.css" />
+    <link rel="stylesheet" href="portal/request-details.css" />
     <link rel="stylesheet" href="portal/studio.css" />
     <link rel="stylesheet" href="portal/record-live.css" />
     <script>
@@ -250,6 +252,18 @@
             <div class="ss-selbar" id="ss-selbar" hidden><b id="ss-sel-n">0 selected</b><span class="ss-muted">Esc to stop</span><button class="ds-btn ds-btn-sm" type="button" id="ss-sel-clear">Cancel</button><button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-sel-group"><svg class="i"><use href="#i-plus"/></svg>Create transaction</button></div>
           </section>
           <div class="ss-rs" data-rs="right" title="Drag to resize" aria-hidden="true"></div>
+
+          <!-- request details: a sheet over the workspace; docked as a panel on desktops 2400 px and wider (portal/request-details.js) -->
+          <aside class="ss-det" id="ss-det" role="dialog" aria-modal="false" aria-labelledby="ss-det-h" hidden>
+            <div class="ss-det-bar">
+              <h3 id="ss-det-h">Request details</h3><span class="ss-muted" id="ss-det-pos"></span><span class="ss-grow"></span>
+              <label class="ss-inl" title="Hide passwords, tokens, cookies and session values on screen and in Copy as cURL"><input type="checkbox" class="ss-cb" id="ss-det-mask" />Hide secrets</label>
+              <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-prev" title="Previous request (Up arrow)" aria-label="Previous request"><svg class="i" style="transform:rotate(180deg)"><use href="#i-chev"/></svg></button>
+              <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-next" title="Next request (Down arrow)" aria-label="Next request"><svg class="i"><use href="#i-chev"/></svg></button>
+              <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-x" title="Close (Esc)" aria-label="Close the request details"><svg class="i"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="ss-det-b" id="ss-det-b"></div>
+          </aside>
 
           <!-- Script | Correlation Advisor | Test data -->
           <section class="ss-pane" id="ss-p-right" aria-label="Script and correlation">
@@ -542,6 +556,7 @@
     <script src="portal/drop-anywhere.js"></script>
     <script src="portal/record-live.js"></script>
     <script src="portal/studio-txn.js"></script>
+    <script src="portal/request-details.js"></script>
     <script src="portal/studio-page.js"></script>
     <script src="portal/studio-workspace.js"></script>
   </body>

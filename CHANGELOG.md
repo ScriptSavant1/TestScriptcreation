@@ -43,6 +43,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The second recording (diff mode) is under "Advanced: second recording" in the Correlation Advisor tab, with "Record it now".
 - The usage statistic counts one Script Studio use per opened recording, not one per reading.
 
+#### Request details (redesign step 3)
+
+- Script Studio: click a request (or press Enter) to see its details beside the list: Headers, Payload, Response, Preview, Cookies and Timing, with Copy URL, Copy as cURL and Hide secrets. Previous / next and the arrow keys move through the list; Esc closes. On desktops 2400 px and wider the details are a fourth panel instead of a sheet.
+- One details view for the HAR Explorer and Script Studio (`portal/request-details.js`): the Explorer shows exactly what it showed before.
+- HAR Explorer: the request list hides to a rail (the details get the room) and comes back with one click; remembered. The Explorer takes the purple brand of Script Studio (`portal/brand.css`).
+- The Script Studio usage record counts the last reading of an opened recording (a second recording opened during the first reading is counted as the diff reading).
+
 #### One rule set for which requests go into the script
 
 - The Recorder and Script Studio now decide which recorded requests go into the script with the same rules, from one shared file (`shared/request-filter.js`): the same request types, the same domain switch, the same always-left-out requests (pre-flight, reports, WebSocket, analytics, browser prefetch). The same recording gives the same requests in both tools — before, for example, 15 against 16 or 11 against 8 (BUG-142, first part).
