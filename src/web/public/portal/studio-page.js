@@ -112,7 +112,7 @@
   var queued = false;
   function later() { if (queued) return; queued = true; setTimeout(function () { queued = false; refresh(); }, 0); }
   SS.refresh = later;
-  ["regenerateFromAdvisor", "renderParams", "renderAdvisorPanel", "renderCorrelations"].forEach(function (fn) {
+  ["regenerateFromAdvisor", "renderParams", "renderAdvisorPanel", "renderCorrelations", "advisorAccept", "advisorSkip"].forEach(function (fn) {
     var orig = window[fn];
     if (typeof orig !== "function") return;
     window[fn] = function () { var r = orig.apply(this, arguments); later(); return r; };

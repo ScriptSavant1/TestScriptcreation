@@ -43,6 +43,17 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The second recording (diff mode) is under "Advanced: second recording" in the Correlation Advisor tab, with "Record it now".
 - The usage statistic counts one Script Studio use per opened recording, not one per reading.
 
+#### Dynamic values tab (redesign step 4b)
+
+- Request details in Script Studio have a **Dynamic values** tab: the Request Inspector for that request. Values traced to an earlier response show their source request (a click opens it) and **Add** (a card in the Correlation Advisor); values that look dynamic but have no source offer **Paste & Detect** with the value filled in. A value the Advisor already suggests says "In the Advisor", and its source is the Advisor's (which also reads HTML pages and hidden fields), so both places give the same answer.
+- The Correlation Advisor tab points to it; the Request Inspector block is no longer in that tab. "Open the Correlation Advisor" in the tab goes straight there.
+
+#### Correlation Advisor: Source and Replaced in (redesign step 4a)
+
+- Every Advisor card names the request the value comes from (**Source**) and where the script puts the parameter (**Replaced in**) as "#18 POST /path", with the JSON path, form field, header or query name. A click on a request opens its details.
+- "+n more" opens the list of every place the value is replaced (Source first); a click on a request there opens it.
+- **Accept all high (n)** next to Apply & Regenerate accepts every High-confidence suggestion still pending.
+
 #### Request details (redesign step 3)
 
 - Script Studio: click a request (or press Enter) to see its details beside the list: Headers, Payload, Response, Preview, Cookies and Timing, with Copy URL, Copy as cURL and Hide secrets. Previous / next and the arrow keys move through the list; Esc closes. On desktops 2400 px and wider the details are a fourth panel instead of a sheet.

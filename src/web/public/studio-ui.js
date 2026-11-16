@@ -811,7 +811,7 @@ function renderAdvisorPanel() {
       ? candidates.map(_advCardHtml).join("")
       : '<div class="adv-empty" id="adv-empty"><b>No correlation found automatically.</b><br>' +
         "If a value changes on every run, add it with <b>Paste &amp; Detect</b> or <b>Add Manual</b>, " +
-        "or open the <b>Request Inspector</b> above to see the values in each request.</div>";
+        "or look at the values of a request (its <b>Dynamic values</b> tab, or the <b>Request Inspector</b>).</div>";
 
   // Re-populate inspector dropdown (entries may have changed)
   _advBuildInspectorDropdown();
@@ -832,10 +832,10 @@ function _advCardHtml(c) {
   if (c.status === "accepted") cardCls += " adv-card-accepted";
   if (c.status === "skipped") cardCls += " adv-card-skipped";
 
+  // Source = the request whose response sends the value; Replaced in = where the script puts the parameter
   var srcHtml = c.source
-    ? '<span class="adv-flow-src">&#x2190; From</span> <b>' +
-      _esc(c.source.url) +
-      "</b>" +
+    ? '<span class="adv-flow-src">&#x2190; Source</span> ' +
+      _advReqLink(c.source.entryIdx, c.source.url) +
       (c.source.jsonPath
         ? " &rarr; <b>" + _esc(c.source.jsonPath) + "</b>"
         : "")
@@ -844,16 +844,15 @@ function _advCardHtml(c) {
   var usageCount = (c.usages || []).length;
   var firstUsage = c.usages && c.usages[0];
   var useHtml = firstUsage
-    ? '<span class="adv-flow-use">&#x2192; Used in</span> <b>' +
-      _esc(firstUsage.location) +
-      "</b>" +
-      (firstUsage.url ? " &mdash; " + _esc(firstUsage.url) : "") +
+    ? '<span class="adv-flow-use">&#x2192; Replaced in</span> ' +
+      _advReqLink(firstUsage.entryIdx, firstUsage.url) +
+      ' <span class="adv-where">' + _esc(_advWhere(firstUsage)) + "</span>" +
       (usageCount > 1
-        ? ' <span style="color:var(--text-3)">+' +
+        ? ' <button type="button" class="adv-more" onclick="advisorShowUses(\'' + c.id + '\')" title="Every place this value is replaced">+' +
           (usageCount - 1) +
-          " more</span>"
+          " more</button>"
         : "")
-    : '<span style="color:var(--text-3)">No request body usage found</span>';
+    : '<span style="color:var(--text-3)">Not replaced in any request</span>';
 
   var manualTag = c._explorer
     ? '<span class="adv-manual-tag">From HAR Explorer</span>'
@@ -1008,6 +1007,69 @@ function _advCardHtml(c) {
     "</div>" +
     "</div>"
   );
+}
+
+// ---------------------------------------------------------------------------
+// Source / Replaced in: a request as "#id METHOD /path" (Studio's request id), a click opens its details
+// (Script Studio page: SSW.openDetails); "+n more" lists every place
+// ---------------------------------------------------------------------------
+var _ADV_WHERE = { body_json: "JSON body", body_form: "form field", header: "header", query: "query string", url_path: "address path", url: "address", cookie: "cookie" };
+function _advWhere(u) {
+  var w = _ADV_WHERE[u.location] || String(u.location || "").replace(/_/g, " ");
+  var f = u.jsonPath || u.key || "";
+  return w + (f ? " " + f : "");
+}
+function _advReqLabel(idx, fallbackUrl) {
+  var e = (S.entries1 || [])[idx];
+  if (!e || e.isMarker) return _esc(fallbackUrl || "");
+  var p = String(e.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "") || "/";
+  return "#" + e.id + " " + _esc(e.method) + " " + _esc(p.length > 64 ? p.slice(0, 63) + "\u2026" : p);
+}
+function _advReqLink(idx, fallbackUrl) {
+  var e = (S.entries1 || [])[idx];
+  var id = e && !e.isMarker ? e.id : -1;
+  return '<button type="button" class="adv-req-link" onclick="advisorOpenRequest(' + id + ')" title="Open this request">' + _advReqLabel(idx, fallbackUrl) + "</button>";
+}
+function advisorOpenRequest(id) {
+  if (!(id > 0) || !window.SSW || typeof SSW.openDetails !== "function") return;
+  var d = document.getElementById("adv-uses-dlg");
+  if (d && d.open) d.close();
+  SSW.openDetails(id);
+}
+function advisorShowUses(id) {
+  var c = _advFindById(id);
+  if (!c) return;
+  var d = document.getElementById("adv-uses-dlg");
+  if (!d) {
+    d = document.createElement("dialog");
+    d.id = "adv-uses-dlg";
+    d.className = "ss-dlg ss-dlg-wide adv-uses-dlg";
+    d.setAttribute("aria-labelledby", "adv-uses-h");
+    document.body.appendChild(d);
+    d.addEventListener("click", function (e) { if (e.target === d || e.target.closest("[data-close]")) d.close(); });
+  }
+  var row = function (kind, u) {
+    return "<tr><td>" + kind + "</td><td>" + _advReqLink(u.entryIdx, u.url) + "</td><td>" + _esc(u === c.source ? (u.jsonPath ? "response " + u.jsonPath : "response") : _advWhere(u)) + "</td></tr>";
+  };
+  d.innerHTML =
+    '<div class="ss-dlg-in"><div class="ss-dlg-h"><h2 id="adv-uses-h">' + _esc(c.varName) + " — every place</h2>" +
+    '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" data-close aria-label="Close">&#x2715;</button></div>' +
+    '<div class="ss-dlg-b"><p>Value <code>' + _esc(c.preview) + "</code> &middot; " + (c.usages || []).length + " place" + ((c.usages || []).length === 1 ? "" : "s") + " in the script. Click a request to see it.</p>" +
+    '<table class="adv-uses"><thead><tr><th></th><th>Request</th><th>Where</th></tr></thead><tbody>' +
+    (c.source ? row("Source", c.source) : "") +
+    (c.usages || []).map(function (u) { return row("Replaced in", u); }).join("") +
+    "</tbody></table></div></div>";
+  try { d.showModal(); } catch (e) { d.setAttribute("open", ""); }
+}
+
+// Accept every High-confidence suggestion still pending (Apply & Regenerate puts them in the script)
+function advisorAcceptAllHigh() {
+  var n = 0;
+  (S.advisorCandidates || []).forEach(function (c) {
+    if (c.status === "pending" && c.confidence === "high") { c.status = "accepted"; n++; }
+  });
+  renderAdvisorPanel();
+  if (n) showToast(n + " high-confidence suggestion" + (n === 1 ? "" : "s") + " accepted — click Apply &amp; Regenerate to put " + (n === 1 ? "it" : "them") + " in the script.", "success");
 }
 
 // ---------------------------------------------------------------------------
@@ -1483,8 +1545,22 @@ function _advUpdateFooter() {
   var pending = candidates.filter(function (c) {
     return c.status === "pending";
   }).length;
+  var pendingHigh = candidates.filter(function (c) {
+    return c.status === "pending" && c.confidence === "high";
+  }).length;
+  var allHigh = document.getElementById("adv-btn-allhigh");
+  if (!allHigh) {
+    allHigh = document.createElement("button");
+    allHigh.id = "adv-btn-allhigh";
+    allHigh.type = "button";
+    allHigh.className = "adv-btn-allhigh";
+    allHigh.onclick = function () { advisorAcceptAllHigh(); };
+    regen.parentNode.insertBefore(allHigh, regen);
+  }
+  allHigh.textContent = "Accept all high (" + pendingHigh + ")";
+  allHigh.hidden = !pendingHigh;
 
-  if (accepted === 0 && skipped === 0) {
+  if (accepted === 0 && skipped === 0 && !pendingHigh) {
     footer.style.display = "none";
     return;
   }

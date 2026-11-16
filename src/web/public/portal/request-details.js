@@ -5,7 +5,8 @@
  *   RequestDetails.html(o)   → the HTML of the view. o = {
  *       n, e: {method, url, status, size}, raw (the HAR entry), type (label), dur, start (ms from the first request),
  *       out (bool), why (text), tab, mask (Hide secrets), full ({req|res: true} = "Show all" used),
- *       hl (fn: html → html, marks a looked-up value; optional), top (html above the address; optional) }
+ *       hl (fn: html → html, marks a looked-up value; optional), top (html above the address; optional),
+ *       extra ([{key, label, count, html}]: tabs of the page's own after the six; optional) }
  *   RequestDetails.copy(raw, kind, mask, url) → the text for "url" or "curl"
  *   RequestDetails.TABS, .SECRET, .bodyText, .size, .ms, .esc, .short, .methodClass (helpers the pages share)
  * Nothing here leaves the browser: the page preview runs sandboxed with every outside request blocked (CSP). */
@@ -88,9 +89,12 @@
     var e = o.e, raw = o.raw || {}, rq = raw.request || {}, rs = raw.response || {}, content = rs.content || {}, pd = rq.postData;
     var body = bodyText(content), reqH = rq.headers || [], resH = rs.headers || [], query = queryOf(rq);
     var reqC = cookiesOf(rq.cookies, reqH, false), resC = cookiesOf(rs.cookies, resH, true);
-    var tab = TABS.indexOf(o.tab) !== -1 ? o.tab : "headers";
-    var tabs = [["headers", "Headers", reqH.length + resH.length], ["payload", "Payload", query.length + (pd ? 1 : 0)], ["response", "Response"], ["preview", "Preview"], ["cookies", "Cookies", reqC.length + resC.length], ["timing", "Timing"]];
-    var h = "", mime = content.mimeType || "";
+    // a page may add tabs of its own after these (Script Studio: Dynamic values): o.extra = [{key, label, count, html}]
+    var extra = o.extra || [], ex = extra.filter(function (x) { return x.key === o.tab; })[0];
+    var tab = TABS.indexOf(o.tab) !== -1 || ex ? o.tab : "headers";
+    var tabs = [["headers", "Headers", reqH.length + resH.length], ["payload", "Payload", query.length + (pd ? 1 : 0)], ["response", "Response"], ["preview", "Preview"], ["cookies", "Cookies", reqC.length + resC.length], ["timing", "Timing"]]
+      .concat(extra.map(function (x) { return [x.key, x.label, x.count]; }));
+    var h = ex ? ex.html : "", mime = content.mimeType || "";
     if (tab === "headers") {
       var gen = [{ name: "Request URL", value: e.url }, { name: "Request method", value: e.method }, { name: "Status code", value: (rs.status || "—") + " " + (rs.statusText || "") }, { name: "HTTP version", value: rs.httpVersion || rq.httpVersion || "" }];
       if (rs.redirectURL) gen.push({ name: "Redirects to", value: rs.redirectURL });

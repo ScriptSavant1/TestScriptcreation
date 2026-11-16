@@ -451,6 +451,7 @@
       n: e.id, e: { method: e.method, url: e.url, status: e.status, size: c.size >= 0 ? c.size : rs.bodySize >= 0 ? rs.bodySize : null }, raw: raw,
       type: esc(typeLabel(e)), dur: e.dur || 0, start: e.startMs && W.span ? e.startMs - W.span.t0 : 0,
       out: !!e.filtered, why: REASON[e.leftOut] || "left out", tab: D.tab, mask: D.mask, full: D.full, top: top,
+      extra: [dynTab(e)],
     });
   }
   function openDet(id) {
@@ -477,7 +478,60 @@
   $("#ss-det-prev").addEventListener("click", function () { step(-1); });
   $("#ss-det-next").addEventListener("click", function () { step(1); });
   $("#ss-det-mask").addEventListener("change", function () { D.mask = this.checked; prefs.mask = D.mask; SS.save(); renderDet(); });
+  // ── Dynamic values (the Request Inspector, for the request on screen): values traced to an earlier response
+  //    (+ Add → a card in the Correlation Advisor) and values that look dynamic but have no source (Paste & Detect).
+  //    The Advisor's own functions do the work (advGetRequestFields, riAddCorrFromTrace, riOpenPasteForField). ──
+  var LOC = { header: "header", query: "query string", body: "body", body_json: "JSON body", body_form: "form field", cookie: "cookie" };
+  function dynFields(e) {
+    var idx = (S.entries1 || []).indexOf(e);
+    if (idx < 0 || e.filtered || typeof advGetRequestFields !== "function") return { idx: idx, list: [] };
+    if (D.dynFor !== e) { D.dynFor = e; try { D.dyn = advGetRequestFields(idx) || []; } catch (x) { D.dyn = []; } }
+    return { idx: idx, list: D.dyn };
+  }
+  function dynTab(e) {
+    var f = dynFields(e), list = f.list;
+    // the Advisor's card for the same value (its scan also reads HTML pages and hidden fields, which the Inspector's
+    // own trace does not): its source is used, so both places give the same answer
+    var cardOf = function (x) { return (S.advisorCandidates || []).filter(function (c) { return c.value === x.value && c.status !== "skipped"; })[0] || null; };
+    var srcOf = function (x) { var c; return x.traceSource || ((c = cardOf(x)) && c.source) || null; };
+    var green = list.filter(function (x) { return !!srcOf(x); }), yellow = list.filter(function (x) { return !srcOf(x); });
+    var row = function (x) {
+      var i = list.indexOf(x), v = String(x.value || "");
+      var src = srcOf(x), srcE = src && (S.entries1 || [])[src.entryIdx], card = cardOf(x);
+      return '<tr><td><b>' + esc(x.key) + '</b><small>' + esc(LOC[x.location] || x.location || "") + "</small></td>" +
+        '<td><code title="' + esc(v) + '">' + esc(v.length > 60 ? v.slice(0, 59) + "…" : v) + "</code></td><td>" +
+        (src
+          ? (srcE ? '<button type="button" class="adv-req-link" data-open="' + srcE.id + '" title="Open the request that sends it">#' + srcE.id + " " + esc(srcE.method) + " " + esc(split(srcE.url).path.slice(0, 48)) + "</button>" + (src.jsonPath ? ' <span class="adv-where">' + esc(src.jsonPath) + "</span>" : "") : "") +
+            "</td><td>" + (card
+              ? '<span class="ss-pill ss-pill-acc" title="It has a card in the Correlation Advisor">In the Advisor</span>'
+              : '<button type="button" class="ds-btn ds-btn-xs ds-btn-primary" data-dyn-add="' + i + '" title="Add it to the Correlation Advisor"><svg class="i"><use href="#i-plus"/></svg>Add</button>')
+          : '<span class="ss-muted">source not found in the recording</span></td><td><button type="button" class="ds-btn ds-btn-xs" data-dyn-paste="' + i + '" title="Paste the server response that sends it"><svg class="i"><use href="#i-paste"/></svg>Paste &amp; Detect</button>') +
+        "</td></tr>";
+    };
+    var table = function (title, rows, dot) {
+      return rows.length ? '<details class="hx-sec" open><summary><span class="ss-dyn-dot ' + dot + '"></span>' + title + ' <span class="c">' + rows.length + '</span></summary><table class="ss-dyn"><tbody>' + rows.map(row).join("") + "</tbody></table></details>" : "";
+    };
+    var html = e.filtered
+      ? '<p class="hx-none">This request is left out of the script, so nothing in it needs correlation.</p>'
+      : list.length
+        ? table("Traced to an earlier response — correlate these", green, "g") + table("Looks dynamic, source not found", yellow, "y") +
+          '<p class="ds-note hx-hint"><b>Add</b> puts a card in the Correlation Advisor; <b>Apply &amp; Regenerate</b> there writes it into the script. <button type="button" class="ds-btn ds-btn-xs" data-go-adv>Open the Correlation Advisor</button></p>'
+        : '<p class="hx-none">No value in this request looks dynamic or comes from an earlier response.</p>';
+    return { key: "dynamic", label: "Dynamic values", count: list.length || "", html: html };
+  }
   detB.addEventListener("click", function (e) {
+    if (e.target.closest("[data-go-adv]")) { if (!document.body.classList.contains("ss-dock")) closeDet(); SS.tab("corr"); return; }
+    var op = e.target.closest("[data-open]"); if (op) { openDet(+op.getAttribute("data-open")); scrollTo(+op.getAttribute("data-open")); return; }
+    var ad = e.target.closest("[data-dyn-add], [data-dyn-paste]");
+    if (ad) {
+      var en0 = byId(D.id), f = en0 && dynFields(en0);
+      if (!f) return;
+      // the Advisor's functions read the Inspector's selection
+      window._riFields = f.list; window._riEntryIdx = f.idx;
+      if (ad.hasAttribute("data-dyn-add")) riAddCorrFromTrace(+ad.getAttribute("data-dyn-add"));
+      else riOpenPasteForField(+ad.getAttribute("data-dyn-paste"));
+      return;
+    }
     var t = e.target.closest(".hx-tab"); if (t) { D.tab = t.getAttribute("data-tab"); D.full = {}; renderDet(); var n = detB.querySelector('.hx-tab[data-tab="' + D.tab + '"]'); if (n) n.focus(); return; }
     var f = e.target.closest("[data-full]"); if (f) { D.full[f.getAttribute("data-full")] = true; renderDet(); return; }
     var c = e.target.closest("[data-copy]"); if (!c) return;
@@ -492,7 +546,7 @@
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       var tb = e.target.closest(".hx-tab"); if (!tb) return;
-      var tabs = RequestDetails.TABS, i = tabs.indexOf(D.tab);
+      var tabs = RequestDetails.TABS.concat(["dynamic"]), i = tabs.indexOf(D.tab);
       D.tab = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length]; D.full = {}; renderDet();
       var n = detB.querySelector('.hx-tab[data-tab="' + D.tab + '"]'); if (n) n.focus();
     } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && e.target.closest(".hx-tab, .ss-det-bar")) { e.preventDefault(); step(e.key === "ArrowDown" ? 1 : -1); }
@@ -560,7 +614,8 @@
 
   window.SSW = {
     newFile: newFile,
-    render: function () { renderTypes(); renderDomains(); renderReqs(); if (D.id != null) renderDet(); },
+    // (Dynamic values are worked out again after every change: an applied correlation changes them)
+    render: function () { renderTypes(); renderDomains(); renderReqs(); D.dynFor = null; if (D.id != null) renderDet(); },
     openDetails: function (id) { openDet(id); },
     closeDetails: function () { closeDet(); },
     showPane: showPane,
