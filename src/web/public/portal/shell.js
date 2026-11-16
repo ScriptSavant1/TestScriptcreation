@@ -16,13 +16,15 @@
     home:    { hash: "#/home",            tab: "home",      group: "PerfX Studio",   name: "Home",                    c: "--c-home",    help: "hacc-quickstart" },
     postman: { hash: "#/convert/postman", tab: "converter", sub: "bruno", group: "Create scripts", name: "Postman / Bruno converter", c: "--c-convert", help: "hacc-converter" },
     jmeter:  { hash: "#/convert/jmeter",  tab: "converter", sub: "jmx",   group: "Create scripts", name: "JMeter converter",          c: "--c-jmeter",  help: "hacc-jmeter" },
-    record:  { hash: "#/record",          tab: "recorder",  group: "Create scripts", name: "Recorder",                c: "--c-record",  help: "hacc-recorder" },
     explore: { hash: "#/explore",         tab: "explorer",  group: "Create scripts", name: "HAR Explorer",            c: "--c-explore", help: "hacc-explorer" },
     studio:  { hash: "#/studio",          tab: "studio",    group: "Create scripts", name: "Script Studio",           c: "--c-studio",  help: "hacc-studio" },
     workload: { hash: "#/workload",       tab: "workload",  group: "Plan",           name: "Workload Modeller",       c: "--c-work",    help: "hacc-workload" },
     results: { hash: "#/results",         tab: "analyser",  group: "Analyse",        name: "Results Analyser",        c: "--c-results", help: "hacc-analyser" },
     help:    { hash: "#/help",            tab: "help",      group: "Learn",          name: "Help & guides",           c: "--c-help",    help: null },
   };
+  // the Recorder is part of Script Studio now: old names, links and Help anchors lead there
+  const ALIAS = { record: "studio" };
+  const HASH_ALIAS = { "#/record": "#/studio", "#/help/recorder": "#/help/studio" };
   const html = document.documentElement;
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
@@ -93,6 +95,7 @@
   /** Open a page through the portal's own switchers (with a view transition where supported). */
   function go(page, opts) {
     opts = opts || {};
+    page = ALIAS[page] || page;
     const p = PAGES[page];
     if (!p) return;
     const run = () => {
@@ -111,8 +114,9 @@
     } else run();
   }
 
-  /** "#/help/recorder" → { page: "help", section: "hacc-recorder" } */
+  /** "#/help/studio" → { page: "help", section: "hacc-studio" } */
   function parseHash(h) {
+    h = HASH_ALIAS[h] || h;
     const m = /^#\/help\/([\w-]+)$/.exec(h || "");
     if (m) return { page: "help", section: "hacc-" + m[1] };
     const page = Object.keys(PAGES).find((k) => PAGES[k].hash === h);
@@ -201,7 +205,7 @@
   {
     let want = null;
     try { want = sessionStorage.getItem("perfx-open"); sessionStorage.removeItem("perfx-open"); } catch (_) { /* storage blocked */ }
-    if (want && PAGES[want]) go(want, { instant: true });
+    if (want && PAGES[ALIAS[want] || want]) go(want, { instant: true });
   }
   // the same for a "#/…" link opened while the portal is already open
   window.addEventListener("hashchange", () => {

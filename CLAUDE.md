@@ -30,8 +30,8 @@ Converts HAR recordings, Bruno/Postman collections, and JMX files into:
 |------|------|---------|
 | `src/web/public/VuGen-Script-Studio.html` | HTML | All HTML/modals for Studio |
 | `src/web/public/shared/vugen-codegen.js` | JS | Shared VuGen codegen (UMD, works browser+Node) — loaded first |
-| `src/web/public/shared/request-filter.js` | JS | One rule set for which recorded requests go into the script (UMD `RequestFilter`): `TYPES` (8 type buttons), `typeKey`, `leftOut` (reason: report, websocket, nonhttp, prefetch, domain, options, ads, type), `prefetchDuplicates`. Used by the Recorder engine (`recorder-core.js`), Studio `applyFilters` and the HAR Explorer (page + worker) — BUG-142; `tests/unit/requestFilter.test.js` |
-| `src/web/public/shared/page-resources.js` | JS | Groups static resources under their page step (VuGen EXTRARES / DevWeb resources[]) — shared with the Recorder (UMD) |
+| `src/web/public/shared/request-filter.js` | JS | One rule set for which recorded requests go into the script (UMD `RequestFilter`): `TYPES` (8 type buttons), `typeKey`, `leftOut` (reason: report, websocket, nonhttp, prefetch, domain, options, ads, type), `prefetchDuplicates`. Used by the HAR reading engine (`recorder-core.js`), Studio `applyFilters` and the HAR Explorer (page + worker) — BUG-142; `tests/unit/requestFilter.test.js` |
+| `src/web/public/shared/page-resources.js` | JS | Groups static resources under their page step (VuGen EXTRARES / DevWeb resources[]) (UMD) |
 | `src/web/public/VuGen-Script-Studio-constants.js` | JS | Shared constants |
 | `src/web/public/VuGen-Script-Studio-correlation.js` | JS | Correlation state management; `detectMarkers()` also runs `repairOrphanEnds()` (END bookmark without START → START inserted, the Recorder's rule — BUG-113) |
 | `src/web/public/studio-codegen.js` | JS (large) | Shared codegen helpers (DevWeb + VuGen body substitution) |
@@ -55,21 +55,21 @@ Do NOT recreate it — all its functions exist in the three split files above.
 | `src/web/public/portal/shell.js` | Page switching WITHOUT touching the address bar (always …/converter/; old #/x links open once and are cleaned), wraps switchPortalTab / openConverterTab / switchTab, collapse (localStorage `perfx-sidebar`), drawer, rail tooltips, CDP Recorder probe (`window.PerfxRecorder`, event `perfx:recorder`) |
 | `src/web/public/portal/home.js` | Home buttons (`data-go`, `data-help`, `data-scroll`), PORTAL_CONFIG flags (`data-tab`) — nothing else |
 | `src/web/public/portal/{shell,home}.css` | Styles; tool colours `--c-convert/-jmeter/-record/-studio/-results/-help` |
-| `src/web/public/portal/palette.js` | Quick search (Ctrl+K / ⌘K, top-bar Search): tools, Help sections + text, FAQ questions, actions (incl. "Start recording" → Recorder + `PerfxRecordLive.open()` in its iframe); read from the page; also hooks Ctrl+K inside the tool iframes |
-| `src/web/public/portal/drop-anywhere.js` | `PerfxDrop.attach({ when, label, route })` — a page-wide drop hands files to the page's own file inputs (used by converter.js, recorder-ui.js, studio-page.js); drops on a box that handles them itself are left alone |
-| `src/web/public/portal/track.js` | `PerfxTrack.send({...})` — usage ping of the browser tools (Recorder, HAR Explorer, Results Analyser) to …/analytics/track; Script Studio pings from studio-app.js |
+| `src/web/public/portal/palette.js` | Quick search (Ctrl+K / ⌘K, top-bar Search): tools, Help sections + text, FAQ questions, actions (incl. "Start recording" → Script Studio, `SS.view("home")` + `PerfxRecordLive.open()` in its iframe; a title equal to the typed words ranks first); read from the page; also hooks Ctrl+K inside the tool iframes |
+| `src/web/public/portal/drop-anywhere.js` | `PerfxDrop.attach({ when, label, route })` — a page-wide drop hands files to the page's own file inputs (used by converter.js, studio-page.js); drops on a box that handles them itself are left alone |
+| `src/web/public/portal/track.js` | `PerfxTrack.send({...})` — usage ping of the browser tools (Script Studio for recordings made with Start recording, HAR Explorer, Results Analyser) to …/analytics/track; Script Studio pings from studio-app.js |
 
 Usage statistics: tools `recorder`, `explorer`, `studio`, `converter`, `jmx`, `workload`, `analyser` (each list: server.js BROWSER_TOOLS, analytics/reports.js, exporters/{xlsx,docx}.js, views/admin.ejs). Machine = reverse DNS of `req.ip`, else the IP (anonymous IIS authentication — no user names).
-Remembered options (localStorage): `perfx-cv-prefs` (converter.js), `perfx-rec-format` (recorder-ui.js), `perfx-studio-fmt` (studio-page.js) — restored through the pages' own setters.
-Rule: the old switchers in index.ejs stay the source of truth; the shell only wraps them. Tool panels (Converter, Recorder, Studio, Analyser, Help) are redesigned one at a time — keep every piece of Help text.
+Remembered options (localStorage): `perfx-cv-prefs` (converter.js), `perfx-studio-fmt` (studio-page.js) — restored through the pages' own setters.
+Rule: the old switchers in index.ejs stay the source of truth; the shell only wraps them. Tool panels (Converter, Studio, Analyser, Help) are redesigned one at a time — keep every piece of Help text.
 
 ### Script Studio load order
 `src/web/public/Studio.html` (the live page, see below) and the classic `VuGen-Script-Studio.html` (reference for the parity tests) load the Studio scripts in this order:
 1. `shared/vugen-codegen.js`
-2. `shared/request-filter.js` (also loaded by the Recorder and the HAR Explorer — which requests go into the script, BUG-142)
+2. `shared/request-filter.js` (also loaded by the HAR Explorer — which requests go into the script, BUG-142)
 3. `VuGen-Script-Studio-constants.js`
 4. `VuGen-Script-Studio-correlation.js`
-5. `shared/page-resources.js` (also loaded by the Recorder — attaches static resources to their page step, BUG-056)
+5. `shared/page-resources.js` (attaches static resources to their page step, BUG-056)
 6. `shared/host-params.js`
 7. `studio-codegen.js`
 8. `studio-advisor.js`
@@ -77,28 +77,23 @@ Rule: the old switchers in index.ejs stay the source of truth; the shell only wr
 10. `studio-app.js` ← live orchestrator
 11. `analytics-device.js` (deferred)
 
-Then `Studio.html` loads its own page scripts: `portal/drop-anywhere.js`, `portal/record-live.js`, `portal/studio-txn.js`,
+Then `Studio.html` loads its own page scripts: `portal/track.js`, `portal/drop-anywhere.js`, `portal/record-live.js`, `portal/studio-txn.js`,
 `portal/studio-page.js`, `portal/studio-workspace.js`.
 
 All share global state object `S` (defined in `studio-app.js`).
 
-### Recorder page (portal v3 redesign) — served at /recorder
+### Recording and the HAR reading engine (the Recorder tool is part of Script Studio — step 6 of Docs/redesign/plan.md)
 | File | Purpose |
 |------|---------|
-| `src/web/public/Recorder.html` | New Recorder page (start page + workspace). Loads the classic engine files below UNCHANGED, in the same order, then the two files below |
-| `src/web/public/portal/recorder-core.js` | VERBATIM copies of the engine functions the classic page keeps inline (detectMarkers, _recInjectPagerefMarkers, _makeRecMarker, classifyHarEntry, refresh) — `tests/unit/recorderCoreParity.test.js` fails if they drift, change both together. Own (since the type buttons): `applyFilters`, `recLeftOut(e, flags)` (reason code per request → `e.leftOut`), `recTypeKey(e)` (static file → JS/CSS/Img/Font by content, else browser type, unknown → other), `recFilterFlags()`, `_repairOrphanEnds()` (moved here unchanged from recorder-ui.js so the HAR Explorer repairs END-without-START exactly like the Recorder) |
-| `src/web/public/portal/recorder-ui.js` | Replaces the display functions of VuGen-Recorder-ui.js / the inline script with the SAME global names and the same effect on `S` (renderTable, renderStats, showToast, confirmFmt, confirmTxn …). Extras: why-left-out, left-out requests hidden behind one summary line per transaction (`_openOut`, "Show left-out" = pref `showOut`), type buttons with counts (`S.typeOff`), Domains in two parts with each server's parameter + Rename dialog (`S.hostNames`, Undo) and a warning before leaving out a needed domain (`_domainNeeds`), rename/ungroup + undo, txn replay after format change, hide/show panes (localStorage `perfx-recorder-ui`), Studio hand-off |
-| `src/web/public/portal/record-live.js`, `record-live.css` | "Start recording", SHARED by the Recorder and Script Studio: `PerfxRecordLive.mount({host, chips, isIdle, before, after, onSaved, onHow, subtitle})` draws the window (`#lv-dlg`) and the live view (`#rl-live`, classes `rl-*`), `PerfxRecordLive.open()`. Drives the CDP Recorder on localhost:8787 — `perfx-recorder:` link when it is not running (or older than 0.2.1), `POST /api/ask` (Allow on its toolbar) when it runs without this page — BUG-119, `POST /api/session`, polls `/api/status` + `/api/live`, transactions (one box: `fullName` numbers a typed name with `nextNum()` — after the highest number used, shown in `#lv-prefix`; optional planned steps `#lv-plan`, pref `plan`, an empty Enter starts the next; status `transactions` = the finished ones, `activeTransaction` = the running one), Stop → `/api/download` → `readFile(new File(...))` (the dropped-file path). Prefs localStorage `perfx-rec-live`. `LATEST` = the CDP Recorder version the pages expect (keep equal to `cdp-recorder/recorder/src/version.ts`) |
-| `src/web/public/portal/recorder-live.js` | The Recorder's mount of record-live.js (card `#lv-card` / `#lv-start` / `#lv-chips`; saved file → `readFile`). Studio's mount is at the end of `portal/studio-page.js` (row `#ss-rec`; saved file → `loadFile(file, 1 or 2)`) |
-| `src/web/public/portal/recorder.css` | Styles (portal tokens, `.rc-*`) |
-| `src/web/public/shared/host-params.js` | Server parameters (UMD `HostParams`, loaded by both Recorder pages, both Studio pages and required by both converters): `plan(entries, scripted, renames, reserved)` → `{main, keys, map, list}` — every server of the scripted requests (+ non-cookie header values), main = first page load, names by role (`App_Server`, `Api_Server`, `Auth_Server`, `Static_Server`, known services `KNOWN`, else `<Org>_Server`; `defaultNames(keys, {paths})`); `validName`, `hostKey`. The generators read `S.hostParams` (set in `buildScripts`): VuGen `set_server` in vuser_init, DevWeb `const`, `_subHosts` (VuGen-Recorder-ui.js) substitutes `https://`, `https:\/\/` and `https%3A%2F%2F` forms |
+| `src/web/public/portal/record-live.js`, `record-live.css` | "Start recording" (mounted by Script Studio at the end of `portal/studio-page.js`: card `#ss-rec`; saved file → `loadFile(file, 1 or 2)`, `SS.recordSecond` for the second recording; "Not set up yet?" → `onHow` opens the How to record guide): `PerfxRecordLive.mount({host, chips, isIdle, before, after, onSaved, onHow, subtitle})` draws the window (`#lv-dlg`) and the live view (`#rl-live`, classes `rl-*`), `PerfxRecordLive.open()`. Drives the CDP Recorder on localhost:8787 — `perfx-recorder:` link when it is not running (or older than 0.2.1), `POST /api/ask` (Allow on its toolbar) when it runs without this page — BUG-119, `POST /api/session`, polls `/api/status` + `/api/live`, transactions (one box: `fullName` numbers a typed name with `nextNum()` — after the highest number used, shown in `#lv-prefix`; optional planned steps `#lv-plan`, pref `plan`, an empty Enter starts the next; status `transactions` = the finished ones, `activeTransaction` = the running one), Stop → `/api/download` → `onSaved(new File(...))` (the dropped-file path). Prefs localStorage `perfx-rec-live`. `LATEST` = the CDP Recorder version the pages expect (keep equal to `cdp-recorder/recorder/src/version.ts`) |
+| `src/web/public/portal/recorder-core.js` | The HAR reading engine's transactions and filters (detectMarkers, _recInjectPagerefMarkers, _makeRecMarker, classifyHarEntry, refresh, `applyFilters`, `recLeftOut(e, flags)` (reason code per request → `e.leftOut`), `recTypeKey(e)`, `recFilterFlags()`, `_repairOrphanEnds()`), with `VuGen-Recorder-state.js` (S, STATIC_CT, NOISY …) and `VuGen-Recorder-parsers.js` (processHAR). Used by the HAR Explorer (`portal/har-explorer-model.js`); Script Studio follows the same rules through `shared/request-filter.js` (`tests/unit/harExplorerModel.test.js`, `requestFilter.test.js`; on recordings `regression-tests/tools/audit/hx-parity.js`) |
+| `src/web/public/shared/host-params.js` | Server parameters (UMD `HostParams`, loaded by both Studio pages and required by both converters): `plan(entries, scripted, renames, reserved)` → `{main, keys, map, list}` — every server of the scripted requests (+ non-cookie header values), main = first page load, names by role (`App_Server`, `Api_Server`, `Auth_Server`, `Static_Server`, known services `KNOWN`, else `<Org>_Server`; `defaultNames(keys, {paths})`); `validName`, `hostKey`. The generators read `S.hostParams` (set in `buildScripts`): VuGen `set_server` in vuser_init, DevWeb `const`, `_subHosts` (studio-codegen.js) substitutes `https://`, `https:\/\/` and `https%3A%2F%2F` forms — in URLs, headers, form values and bodies (BUG-146) (`tests/unit/hostParams.test.js`, `studioServerParams.test.js`) |
 
-Rule: engine behaviour must stay byte-identical to the classic page — check with the golden harness
-(`regression-tests/tools/recorder/harness.js` + `compare.js`, baseline from `/recorder-classic`). Deliberate exceptions (BUG-087..089):
-server parameters and the type buttons — `harness-hosts.js` (type-button steps) + `compare-hosts.js` (server names normalised)
-compare against the baseline `pre-hosts` / `pre-real`.
-The classic pages (`VuGen-Recorder.html`, `VuGen-Script-Studio.html`) have no route any more (one address for the
-whole app); they stay on disk only as the reference for the parity tests. The address bar must only ever show …/converter/.
+The Recorder page and its generators were removed (one generator: Studio's — `tests/unit/studioServerParams.test.js` holds what the Recorder's generator tests checked). `/recorder` and `/converter/recorder` redirect (301) to Studio;
+the shell maps `record` → `studio`, `#/record` → `#/studio`, `#/help/recorder` → `#/help/studio`; `switchPortalTab('recorder')` opens Studio.
+Usage statistics keep the key `recorder`: Studio pings it once per recording made with Start recording (`mode: "cdp"`); opening a recording pings `studio`.
+The classic page `VuGen-Script-Studio.html` has no route (one address for the whole app); it stays on disk only as the
+reference for the parity tests. The address bar must only ever show …/converter/.
 
 ### Help & guides (portal v3 redesign)
 | File | Purpose |
@@ -124,7 +119,7 @@ harness sends a different `X-Forwarded-For` per run).
 ### Script Studio page (one workspace, redesign step 2 — plan: Docs/redesign/plan.md) — served at /studio
 | File | Purpose |
 |------|---------|
-| `src/web/public/Studio.html` | Start screen (`#ph-upload`: Record in a browser, Open a recording `#dz1`, format, How it works) and workspace (`#ph-res`: file bar, notices, filter bar, Domains · Requests · right panel with Script / Correlation Advisor / Test data tabs); `#ph-proc` is an overlay while a file is read. Loads the classic Studio scripts UNCHANGED, in the same order; keeps every element id they use (`#ss-engine` holds the ones with no place on the page — never shown). The second recording (`#dz2`) is in the Advisor tab, "Advanced: second recording". Dialogs: `#ss-txn-dlg` (new / rename transaction), `#ss-bg-dlg` (holds `#bgReviewPanel`), `#ss-ask`; menu `#ss-ready` |
+| `src/web/public/Studio.html` | Start screen (`#ph-upload`: Record in a browser, Open a recording `#dz1`, format, How it works, How to record your journey `#ss-guide` — the Recorder page's guide with both ways and the bookmarks, folded at first, tab pref `method`) and workspace (`#ph-res`: file bar, notices, filter bar, Domains · Requests · right panel with Script / Correlation Advisor / Test data tabs); `#ph-proc` is an overlay while a file is read. Loads the classic Studio scripts UNCHANGED, in the same order; keeps every element id they use (`#ss-engine` holds the ones with no place on the page — never shown). The second recording (`#dz2`) is in the Advisor tab, "Advanced: second recording". Dialogs: `#ss-txn-dlg` (new / rename transaction), `#ss-bg-dlg` (holds `#bgReviewPanel`), `#ss-ask`; menu `#ss-ready` |
 | `src/web/public/portal/studio.css` | Classic tokens → portal palette, the purple brand (as the Workload Modeller), the engine-drawn panels, and the start / workspace layout (panels sized by the screen; under 1100 px they stack) |
 | `src/web/public/portal/studio-page.js` | `window.SS`. A file is read as soon as it is opened (wraps `markLoaded`; no Analyse button). `analyze()` is wrapped: one reading at a time; a call during one asks for one more reading after it; every caller gets a promise that settles when the page is idle (HAR Explorer hand-off, harness). Views follow the engine phases (`body.ss-view-home` / `ss-view-ws` / `ss-reading`). File bar, format switch (regenerates, no new reading), Download ZIP + "Ready to download?" (never blocks), notices, tabs, background-requests dialog (opened when the engine stops for it; closing keeps the defaults), dialog focus / keyboard for engine-drawn controls, script colouring, prefs `perfx-studio-ui`, format `perfx-studio-fmt`, Start recording mount (`SS.recordSecond` for the second recording), drop anywhere, `window.PerfxStudio.state()` = Studio's `S` (a const — NOT `window.S`; BUG-112) |
 | `src/web/public/portal/studio-workspace.js` | `window.SSW`: filter bar (type chips with counts through the engine's `studioToggleRt` / `studioInitFilters`; Leave out `S.leaveOut = {ads, options}`; Background), Domains (in the script / left out, server parameter + Rename, a warning before leaving out a needed domain), Requests (one virtual list grouped by transaction, left-out requests behind one line per group, Show left-out, fold, address filter, tick + New transaction, Rename / Ungroup with Undo), panels hidden to rails and resized; request details `#ss-det` (`RequestDetails`): a click on a request (not while ticking) or Enter opens it, below the file bar; previous / next and the list's arrow keys move it; Esc closes; Hide secrets (pref `mask`); docked as a fourth panel at 2400 px and wider (`body.ss-dock`); the raw HAR entry is found by request id (NetLog: built from the parsed request). Its own tab **Dynamic values** (`RequestDetails.html` option `extra`): `advGetRequestFields` for that request; the source is the field's trace or else the Advisor card's for the same value; Add → `riAddCorrFromTrace`, Paste & Detect → `riOpenPasteForField` (the Inspector's functions, `_riFields` set first). The Advisor tab's `#adv-inspector` is hidden on this page (kept for the engine and the harness). Every change goes through the engine state, then `analyze()` again; it asks first when applied correlations would be lost |
@@ -141,24 +136,17 @@ through its global functions, so a step captured right after opening a file show
 Usage ping `studio`: once per opened recording (`S._usageSent`, reset by `loadFile` slot 1), not per reading; when a newer reading is queued the ping waits for it (the counts are those of the last reading).
 The server blocks direct `.html` URLs on purpose — pages are reached through routes only.
 
-### HAR Explorer (Create scripts, between Recorder and Script Studio — plan: Docs/archive/plans/HAR-EXPLORER-PLAN.md, illustrated guide: Docs/user/HAR-EXPLORER-GUIDE.html)
+### HAR Explorer (Create scripts, after Script Studio — plan: Docs/archive/plans/HAR-EXPLORER-PLAN.md, illustrated guide: Docs/user/HAR-EXPLORER-GUIDE.html)
 | File | Purpose |
 |------|---------|
 | `src/web/public/HarExplorer.html` | The page (`data-portal-tool="explore"`), route `/har-explorer` + `/converter/har-explorer`; portal tab `explorer`, shell page `explore`, colour `--c-explore`, theme key `hx-theme` |
-| `src/web/public/portal/har-explorer-model.js` | `hxBuild(har)` → `{groups, items, source}`: the Recorder's own reading — the page loads `VuGen-Recorder-state.js`, `VuGen-Recorder-parsers.js`, `portal/recorder-core.js` UNCHANGED, calls `processHAR()` + `_repairOrphanEnds()` (its drawing steps are no-ops here). `tests/unit/harExplorerModel.test.js` checks groups / left-out = the Recorder's |
-| `src/web/public/portal/har-explorer-worker.js` | Find a value, in a Web Worker (importScripts `shared/request-filter.js`, then the Studio engine UNCHANGED: constants, correlation, studio-advisor — they cannot share the page with the Recorder engine, same global names). Messages: `load {text, out}` → `ready` (own suggestions), `find {id, value}` → `found` (verdict kinds: correlate, cookie, redirect, outonly, unused, input, generated, missing, none; trail; forms for highlighting); a SECOND copy gets `studio {text}` → Studio's findings → page forwards `studioList` → `ready` with Studio's first. Referer / Origin and left-out requests are not uses. Also loads `shared/vugen-codegen.js` + `studio-codegen.js`: `correlation()` builds `{name, extractorType, extractorConfig}` (jsonpath / html / cookie / boundary_header / boundary — boundaries widened until the FIRST match is the value — `_advFirstMatch` / `_advSafeBoundaries` in studio-advisor.js, shared with Paste & Detect) and the code via Studio's `webHttpCorrCode` / `devwebExtractorDecl`; `uses` in Studio's usage form. `tests/unit/harExplorerFind.test.js` (incl. agreement + round trip through Studio) |
+| `src/web/public/portal/har-explorer-model.js` | `hxBuild(har)` → `{groups, items, source}`: the HAR reading engine — the page loads `VuGen-Recorder-state.js`, `VuGen-Recorder-parsers.js`, `portal/recorder-core.js` UNCHANGED, calls `processHAR()` + `_repairOrphanEnds()` (its drawing steps are no-ops here). `tests/unit/harExplorerModel.test.js` checks groups / left-out = the engine's |
+| `src/web/public/portal/har-explorer-worker.js` | Find a value, in a Web Worker (importScripts `shared/request-filter.js`, then the Studio engine UNCHANGED: constants, correlation, studio-advisor — they cannot share the page with the HAR reading engine, same global names). Messages: `load {text, out}` → `ready` (own suggestions), `find {id, value}` → `found` (verdict kinds: correlate, cookie, redirect, outonly, unused, input, generated, missing, none; trail; forms for highlighting); a SECOND copy gets `studio {text}` → Studio's findings → page forwards `studioList` → `ready` with Studio's first. Referer / Origin and left-out requests are not uses. Also loads `shared/vugen-codegen.js` + `studio-codegen.js`: `correlation()` builds `{name, extractorType, extractorConfig}` (jsonpath / html / cookie / boundary_header / boundary — boundaries widened until the FIRST match is the value — `_advFirstMatch` / `_advSafeBoundaries` in studio-advisor.js, shared with Paste & Detect) and the code via Studio's `webHttpCorrCode` / `devwebExtractorDecl`; `uses` in Studio's usage form. `tests/unit/harExplorerFind.test.js` (incl. agreement + round trip through Studio) |
 | `src/web/public/portal/har-explorer.{js,css}` | Details through `portal/request-details.js`; the request list hides to a rail (`#hx-hide` / `#hx-rail`, a click on its header bar too; pref `noList`). Start page, workspace (file bar, filters — address, Domains (`initDomains`: host per request by splitting the address, `M.hostOn`; popover `#hx-dom-pop` closes on pointerdown outside), types —, request list — only the rows on screen are drawn — and details: Headers, Payload, Response, Preview, Cookies, Timing; Hide secrets, Copy URL / cURL), theme hooks, prefs localStorage `hx-ui` (listW, showOut). All 6 steps of the plan done; Help section `hacc-explorer`; usage ping `tool: "explorer"` (portal/track.js) per opened file |
 
 Hand-off "Continue in Script Studio" (har-explorer.js): `clearAll` → `setFmt` → `loadFile` → `analyze()` → (after the background review, if any) — requests named by Studio's request id (`parseHar` id, never shifts; resolved to the current `S.entries1` index — Studio inserts markers: CDP pages, BUG-113 repair) → `advisorAddManual` per value with `cand._explorer = {extractorType, extractorConfig}` + the Explorer's uses → `advisorApplyAndRegen()`. `studio-advisor.js advisorToCorrelation` honours `_explorer` (else unchanged); `studio-ui.js` labels it "From HAR Explorer".
 Rule: reuse, never copy — transactions / left-out from `portal/recorder-core.js`, suggestions and boundaries from `studio-advisor.js` (Advisor agreement test planned).
-Parity check on recordings: `regression-tests/tools/audit/hx-parity.js <files>` (each file through the Recorder screen and the Explorer screen, every request's transaction + left-out compared); screen walk-through `hx-ui.js` in the same folder.
-
-### VuGen Recorder (HAR → script, browser tool)
-| File | Purpose |
-|------|---------|
-| `src/web/public/VuGen-Recorder.html` | Recorder tool HTML + UI |
-| `src/web/public/VuGen-Recorder-parsers.js` | HAR parsing for Recorder; handles extension HARs (pageref markers, null-response guard); keeps `respBody` for HTML pages only (page-resource grouping) |
-| `src/web/public/VuGen-Recorder-generators.js` | Script generation for Recorder tool — HTML-mode: form POSTs → `web_submit_data` (BUG-055), page resources via `shared/page-resources.js` (BUG-056) |
+Parity check on recordings: `regression-tests/tools/audit/hx-parity.js <files>` (each file through the Script Studio screen and the Explorer screen, every request's transaction + left-out compared); screen walk-through `hx-ui.js` in the same folder.
 
 ### CDP Recorder (browser recording — replaces the retired PerfX extension)
 | File | Purpose |
@@ -169,11 +157,11 @@ Parity check on recordings: `regression-tests/tools/audit/hx-parity.js <files>` 
 | `cdp-recorder/recorder/src/bg-detector.js` | Background-traffic classifier (CoV frequency analysis + known path patterns + burst grouping) |
 | `cdp-recorder/recorder/src/url-normalizer.js` | URL normalisation for bg-detector (cache-busters, UUIDs, numeric ids) |
 | `cdp-recorder/recorder/src/server.ts` | Local control server (127.0.0.1:8787): toolbar page + API; who may call — toolbar, local programs, portal origins from the link; other pages get the bare status (BUG-114). Portal API: `/api/session`, `/api/live`, `/api/windows` (after a page-started recording is saved: windows close after 10 s; keep / close), `/api/allow`. Toolbar (`control-page.html`): questions are in-toolbar cards (no prompt/confirm — BUG-117). A recorder started by hand: an unknown page `POST /api/ask` → toolbar Allow / Don't allow (`createAskQueue` in portal-mode.js; `/api/ask/answer` toolbar only) → remembered in `%LOCALAPPDATA%\PerfX\cdp-recorder\allowed-pages.json` (`loadAllowedPages` / `saveAllowedPages` in portal-link.ts) — BUG-119; the toolbar polls `/api/status?toolbar=1` (`toolbarOpen()`, never two toolbars) |
-| `cdp-recorder/recorder/src/app.ts` | Start-up shared by `src/main.ts` and `pkg-prototype/entry.ts`: classic (double-click) or portal mode (`--portal <perfx-recorder: link>`: waits for the Recorder page, saves to Downloads, 1 h idle exit; a link while one runs only hands its page over) |
+| `cdp-recorder/recorder/src/app.ts` | Start-up shared by `src/main.ts` and `pkg-prototype/entry.ts`: classic (double-click) or portal mode (`--portal <perfx-recorder: link>`: waits for the PerfX Studio page, saves to Downloads, 1 h idle exit; a link while one runs only hands its page over) |
 | `cdp-recorder/recorder/src/portal-link.ts`, `portal-mode.js` | HKCU `perfx-recorder` link registration (every packaged start), Downloads folder; pure helpers (`tests/unit/cdpPortalMode.test.js`), incl. the transaction names (`txName`, `nextTxNumber`, `planSteps`, `nextPlanned` — the same rules as record-live.js `fullName` / `nextNum`: keep the two in step). Server (0.2.2): `/api/tx/start` with `auto: true` numbers the name (an empty one takes the next planned step), a running transaction ends first (`endActive`, BUG-145), status `nextTx`, session `plan`. Manual tests: `tests-manual/portal-session.mjs`, `packaged-link.mjs`, `private-window-probe.mjs`, `repro-multi-tx.mjs` (port 8799), `packaged-classic.mjs` (8795) |
 
 **Distribution**: `GET /downloads/cdp-recorder` (server.js) serves the pre-built `dist/cdp-recorder.zip`/`.exe`; home page banner "Get CDP Recorder".
-HAR pages[]/pageref → synthetic isMarker entries injected by `_injectPagerefMarkers` in both Studio and Recorder detectMarkers().
+HAR pages[]/pageref → synthetic isMarker entries injected by `_injectPagerefMarkers` in both Studio and the HAR reading engine's detectMarkers().
 The PerfX Chrome/Edge extension (`perfx-recorder-extension/`) was removed from the repo and its history — do not recreate it.
 
 ### Workload Modeller (separate module — plan: workload-modeller/docs/IMPLEMENTATION-PLAN.md)
@@ -219,15 +207,15 @@ Model rule: the model is plain JSON; the stats store is a NON-enumerable `model.
 | `vugen-reference/<version>/DevWeb/`, `/qtweb/` | VuGen's own templates, copied UNCHANGED from `<VuGen install>\template\` (never recorded scripts: they hold browser data) |
 | `vugen-reference/version.json` | `current` (e.g. 26.3) and `usrVersion` (26.3.0.0) — the version all four tools write into `.usr` |
 | `vugen-reference/compare.js` | `node vugen-reference/compare.js <old> <new>` lists added / removed / changed settings per file; its helpers are used by the test |
-| `tests/unit/vugenReference.test.js` | Every tool (DevWeb + VuGen converters, Recorder, Script Studio) against the reference: every template setting present in rts.yml / default.cfg / default.usp / .usr (values are the tool's choice; deliberate gaps in `DECIDED`), `.usr` version, tsconfig compiler options, and every DevWebSdk.d.ts copy equal to the reference |
+| `tests/unit/vugenReference.test.js` | Every tool (DevWeb + VuGen converters, Script Studio) against the reference: every template setting present in rts.yml / default.cfg / default.usp / .usr (values are the tool's choice; deliberate gaps in `DECIDED`), `.usr` version, tsconfig compiler options, and every DevWebSdk.d.ts copy equal to the reference |
 
 Where the version-dependent text lives (change all together; the test fails otherwise):
-rts.yml — `src/generators/devweb/filesGenerator.js` (`generateRtsYml`), `VuGen-Recorder-templates.js` and `VuGen-Script-Studio-constants.js` (`DEVWEB_RTS_YML`).
-`.usr` — both converter `filesGenerator.js`, `VuGen-Recorder-usr-gen.js`, `studio-codegen.js` (`genUsrFile`, `genDevWebUsrFile`).
-DevWebSdk.d.ts — ONE copy, `src/web/public/DevWebSdk.d.ts`: the converters copy it (`copySdk` in the DevWeb `filesGenerator.js`), the Recorder and Script Studio fetch it from the server next to their page (a warning toast when it cannot be loaded). Never add another copy.
+rts.yml — `src/generators/devweb/filesGenerator.js` (`generateRtsYml`) and `VuGen-Script-Studio-constants.js` (`DEVWEB_RTS_YML`).
+`.usr` — both converter `filesGenerator.js`, `studio-codegen.js` (`genUsrFile`, `genDevWebUsrFile`).
+DevWebSdk.d.ts — ONE copy, `src/web/public/DevWebSdk.d.ts`: the converters copy it (`copySdk` in the DevWeb `filesGenerator.js`), Script Studio fetches it from the server next to its page (a warning toast when it cannot be loaded). Never add another copy.
 DevWeb 26.3 (DevWeb.exe run directly) refuses an rts.yml without `network.ipVersion` — BUG-129.
 
-### Generated script layout — same rules in Recorder, Script Studio and both converters
+### Generated script layout — same rules in Script Studio and both converters
 - vuser_init: `set_server(name, value)` for the servers the script USES (Runtime Settings attribute with that name wins),
   `web_set_sockets_option("SSL_VERSION","AUTO")`, `web_add_auto_header` for headers on EVERY request with ONE value.
   Never global: authorization, proxy-authorization, cookie, dpop(-pf), origin, access-control-request-*, *csrf*/*xsrf*.
@@ -242,7 +230,7 @@ DevWeb 26.3 (DevWeb.exe run directly) refuses an rts.yml without `network.ipVers
   `LR.getParam`; `ath` only when the request presents a token), think time between steps but not after the last,
   `Mode=HTTP` except page loads, 4-space indentation. DevWeb: `const App_Server = load.config.user.args["App_Server"] || 'host';`
   (user argument wins — checked with DevWeb, module level is fine), lower-case header names, `load.thinkTime`.
-- Left out in Recorder + Studio: browser prefetch of a page later opened (`recPrefetchDuplicates`), analytics / ads by
+- Left out in Studio (and the HAR Explorer): browser prefetch of a page later opened (`recPrefetchDuplicates`), analytics / ads by
   server (`NOISY`, the SAME list in `VuGen-Recorder-state.js` and `VuGen-Script-Studio-constants.js`) and by path
   (`NOISY_URL`: Google `/ads/`, `/pagead/`).
 - Studio: server rename in "Parameterization details" (`openHostRename` / `confirmHostRename` in studio-ui.js,
@@ -254,7 +242,7 @@ DevWeb 26.3 (DevWeb.exe run directly) refuses an rts.yml without `network.ipVers
   undeclared `{params}` too; `tidyC` collapses blank-line runs.
 - Proof: `regression-tests/tools/engines/` — `mockproxy.js` (TLS test proxy, HAR replay, DPoP verifier), `runvugen.js` /
   `rundevweb.js` (real engines), `wirediff.js`, `withkeys.js` (throwaway key + cert for the sample collections),
-  `convwire.sh` / `recwire.sh` / `studiowire.sh`. Compare old vs new on the wire before changing generated code.
+  `convwire.sh` / `studiowire.sh`. Compare old vs new on the wire before changing generated code.
 
 ## Global State Object `S` (studio-app.js)
 ```
@@ -394,7 +382,7 @@ components `ds-btn`, `ds-card`, `ds-chip`, `ds-tile`, `ds-seg`, `ds-tabs`, `ds-p
 `ds-band-lead`, `ds-flow` three-step picture with `is-tool`, `ds-hand` handwritten caption; the page sets `--band-top` = its top
 padding) — the Home page's look on every tool page. Every tool uses the panel layout `ds-band-panel` (tool name + `ds-band-tag`
 tagline, short lead, the picture in a soft panel, the note in a tilted card; in the portal, converter.css / help.css narrow the
-breakpoints with their container width because the window width includes the sidebar). Loaded first by index.ejs, Recorder.html, Studio.html and the Results Analyser page; the
+breakpoints with their container width because the window width includes the sidebar). Loaded first by index.ejs, Studio.html, HarExplorer.html and the Results Analyser page; the
 portal's older tokens (`--bg`, `--text`, `--glass` …) are mapped onto it in shell.css. Pilot: the Workload Modeller overrides the brand to purple with solid section boxes (block at the end of `workload-modeller/web/app.css`) — the other tools follow after review; until then the rules below say blue. Rules: one brand blue for
 actions (one primary button per area), tool colours only on icons, sentence case, pages use the full width
 beside the sidebar (`--ds-page-max: 100%`), no emoji in the interface (SVG line icons).

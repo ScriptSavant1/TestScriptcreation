@@ -66,7 +66,7 @@ export class Recorder {
 
   // capture confirmed since the last start() — openUrl() waits for it (cdp-capture's Settled signal)
   private settled = false;
-  // live list for the Recorder page: entry → its number, and whether it was last reported finished
+  // live list for the PerfX Studio page: entry → its number, and whether it was last reported finished
   private liveNo = new WeakMap<object, number>();
   private liveDone = new Map<number, boolean>();
   private liveCount = 0;
@@ -174,7 +174,7 @@ export class Recorder {
   }
 
   /**
-   * Recording started from the Recorder page: once capture is confirmed on the recording window
+   * Recording started from the PerfX Studio page: once capture is confirmed on the recording window
    * (the same Settled signal that enables Start Transaction), open the application address in it —
    * so its first request is recorded. Waits at most ~20 s, like pollUntilSettled.
    */
@@ -187,7 +187,7 @@ export class Recorder {
   }
 
   /**
-   * The requests seen so far, for the live list on the Recorder page — read-only, the HAR is not
+   * The requests seen so far, for the live list on the PerfX Studio page — read-only, the HAR is not
    * touched. Rows numbered after `since`, plus earlier rows that have finished since they were sent.
    */
   live(since: number): { rows: ReturnType<typeof liveRow>[]; last: number } {

@@ -52,9 +52,8 @@
                 <div class="htoc-grid">
                   <button class="htoc-link" onclick="haccJump('hacc-converter')"><span class="htoc-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span>Postman / Bruno</button>
                   <button class="htoc-link" onclick="haccJump('hacc-jmeter')"><span class="htoc-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg></span>JMeter</button>
-                  <button class="htoc-link" onclick="haccJump('hacc-recorder')"><span class="htoc-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span>Recorder</button>
-                  <button class="htoc-link" onclick="haccJump('hacc-explorer')"><span class="htoc-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M8 11h6M11 8v6"/></svg></span>HAR Explorer</button>
                   <button class="htoc-link" onclick="haccJump('hacc-studio')"><span class="htoc-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>Script Studio</button>
+                  <button class="htoc-link" onclick="haccJump('hacc-explorer')"><span class="htoc-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M8 11h6M11 8v6"/></svg></span>HAR Explorer</button>
                   <button class="htoc-link" onclick="haccJump('hacc-workload')"><span class="htoc-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="m7 15 4-4 3 3 5-6"/></svg></span>Workload Modeller</button>
                   <button class="htoc-link" onclick="haccJump('hacc-analyser')"><span class="htoc-link-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15v-4M11 15V8M15 15v-6M19 15V5"/></svg></span>Results Analyser</button>
                 </div>
@@ -129,19 +128,18 @@
           <div class="help-path" style="--c-tool:var(--c-record)">
             <div class="help-path-title"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg>Path C — Record in browser</div>
             <ol class="help-path-steps">
-              <li>Click <strong>Recorder</strong> in the sidebar</li>
+              <li>Click <strong>Script Studio</strong> in the sidebar</li>
               <li>Once per computer: get the CDP Recorder, extract it and double-click <code>cdp-recorder.exe</code></li>
               <li>Click <strong>Start recording</strong>, type your application's address, and use it in the recording window — naming your transactions</li>
-              <li><strong>Stop and save</strong> — the recording opens in the Recorder by itself (or drop a <code>.har</code> file exported from DevTools)</li>
-              <li>Choose the format, check the requests → <strong>Download project ZIP</strong></li>
+              <li><strong>Stop and save</strong> — the recording opens in Script Studio by itself, the script ready (or drop a <code>.har</code> file exported from DevTools)</li>
+              <li>Check the requests → <strong>Download ZIP</strong></li>
             </ol>
           </div>
           <div class="help-path" style="--c-tool:var(--c-studio)">
             <div class="help-path-title"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Path D — Deep correlation</div>
             <ol class="help-path-steps">
               <li>Click <strong>Script Studio</strong> in the sidebar</li>
-              <li>Record the same journey twice (<strong>Start recording</strong> works here too) → two HARs</li>
-              <li>Load both → <strong>Analyse</strong></li>
+              <li>Open a recording → the <strong>Correlation Advisor</strong> tab (for two recordings: <strong>Advanced: second recording</strong>)</li>
               <li>Review Advisor → Accept → <strong>Apply &amp; Regenerate</strong></li>
               <li>A value still missing? <strong>HAR Explorer</strong> → <strong>Find a value</strong> → <strong>Add to Script Studio</strong></li>
               <li>Download ZIP → open in VuGen</li>
@@ -175,7 +173,7 @@
     </button>
     <div class="help-acc-body">
       <div class="help-acc-inner">
-        <p class="help-p">PerfX Studio turns any performance testing input — Postman/Bruno collections, JMeter test plans, or browser recordings — into production-ready VuGen scripts in minutes. It handles the work that normally takes days: correlation, parameterisation, authentication, and transaction boundaries. Four tools create scripts: the two converters, the <strong>Recorder</strong> and <strong>Script Studio</strong>. The <strong>HAR Explorer</strong> shows what is inside a recording and where each dynamic value comes from. The <strong>Results Analyser</strong> turns the raw results of a LoadRunner Enterprise run into a clear report. The small <strong>CDP Recorder</strong> program records your journey in Edge or Chrome for the Recorder and Script Studio.</p>
+        <p class="help-p">PerfX Studio turns any performance testing input — Postman/Bruno collections, JMeter test plans, or browser recordings — into production-ready VuGen scripts in minutes. It handles the work that normally takes days: correlation, parameterisation, authentication, and transaction boundaries. Three tools create scripts: the two converters and <strong>Script Studio</strong> (record or open a recording, correlate, download). The <strong>HAR Explorer</strong> shows what is inside a recording and where each dynamic value comes from. The <strong>Results Analyser</strong> turns the raw results of a LoadRunner Enterprise run into a clear report. The small <strong>CDP Recorder</strong> program records your journey in Edge or Chrome for Script Studio.</p>
         <div class="help-table-wrap">
           <table class="help-table">
             <thead><tr>
@@ -187,9 +185,8 @@
             <tbody>
               <tr><td class="help-tool-name" style="--c-tool:var(--c-convert)"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg>Postman / Bruno Converter</td><td>.json / .yml / .bru collection</td><td>VuGen script ZIP</td><td>Teams already using Postman or Bruno</td></tr>
               <tr><td class="help-tool-name" style="--c-tool:var(--c-jmeter)"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>JMeter Converter</td><td>.jmx file + optional CSVs</td><td>VuGen script ZIP + Workload Excel</td><td>Migrating from JMeter to LoadRunner</td></tr>
-              <tr><td class="help-tool-name" style="--c-tool:var(--c-record)"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg>Recorder</td><td>A recording made with <strong>Start recording</strong> (CDP Recorder), or a HAR file from DevTools</td><td>VuGen script ZIP</td><td>Recording a new journey &#x2014; also on virtual desktops and Azure machines where VuGen can't record</td></tr>
+              <tr><td class="help-tool-name" style="--c-tool:var(--c-studio)"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Script Studio</td><td>A recording made with <strong>Start recording</strong> (CDP Recorder), or 1 or 2 HAR files from DevTools</td><td>VuGen script ZIP, correlated when needed, with test data</td><td>Recording a new journey &#x2014; also on virtual desktops and Azure machines where VuGen can&#x27;t record &#x2014; and any app with tokens, session IDs, or CSRF values</td></tr>
               <tr><td class="help-tool-name" style="--c-tool:var(--c-explore)"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M8 11h6M11 8v6"/></svg>HAR Explorer</td><td>Browser HAR file</td><td>Every request, where each dynamic value comes from, and the correlation for Script Studio</td><td>A value that breaks a replay, or one the Correlation Advisor missed &#x2014; also where DevTools is switched off</td></tr>
-              <tr><td class="help-tool-name" style="--c-tool:var(--c-studio)"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Script Studio</td><td>1 or 2 HAR files</td><td>Fully correlated VuGen script ZIP</td><td>Any app with tokens, session IDs, or CSRF values</td></tr>
             <tr>
               <td class="help-tool-name" style="--c-tool:var(--c-work)"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="m7 15 4-4 3 3 5-6"/></svg>Workload Modeller</td>
               <td>Script ZIPs or HAR files, and each script's target</td>
@@ -206,7 +203,7 @@
           </table>
         </div>
         <div class="help-callout help-callout-blue">
-          <strong><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Privacy first.</strong> The Recorder, HAR Explorer, Script Studio and Results Analyser work in your browser — recordings and results are not uploaded. The two converters upload your files to the server: while a conversion runs they are in its memory and its temporary folder, and they are deleted as soon as the conversion ends. Generated scripts stay in memory; nothing is kept between requests. Download links expire after 5 minutes and are single-use.
+          <strong><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Privacy first.</strong> Script Studio, the HAR Explorer and the Results Analyser work in your browser — recordings and results are not uploaded. The two converters upload your files to the server: while a conversion runs they are in its memory and its temporary folder, and they are deleted as soon as the conversion ends. Generated scripts stay in memory; nothing is kept between requests. Download links expire after 5 minutes and are single-use.
         </div>
       </div>
     </div>
@@ -304,60 +301,118 @@
     </div>
   </div>
 
-  <!-- 6. Recorder -->
-  <div id="hacc-recorder" class="help-acc-item open" style="--c-tool:var(--c-record)">
-    <button class="help-acc-hdr" onclick="haccToggle('hacc-recorder')">
+  <!-- 6. Script Studio (record, review, correlate, download — the Recorder is part of it) -->
+  <div id="hacc-studio" class="help-acc-item open" style="--c-tool:var(--c-studio)">
+    <button class="help-acc-hdr" onclick="haccToggle('hacc-studio')">
       <div class="help-acc-hdr-left">
-        <div class="help-acc-icon" style="--c-tool:var(--c-record)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></div>
+        <div class="help-acc-icon" style="--c-tool:var(--c-studio)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
         <div>
-          <div class="help-acc-title">Recorder</div>
-          <div class="help-acc-sub">Record in Edge or Chrome → VuGen script · works when VuGen recording is blocked</div>
+          <div class="help-acc-title">Script Studio</div>
+          <div class="help-acc-sub">Record in Edge or Chrome, or open a HAR → VuGen script · correlation, test data · works when VuGen recording is blocked</div>
         </div>
       </div>
       <svg class="help-acc-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
     </button>
     <div class="help-acc-body">
       <div class="help-acc-inner">
-        <div class="help-tool-badge help-badge-green"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg>Recorder</div>
-        <p class="help-p">In a standard workflow, VuGen records user journeys directly via its built-in proxy. However, on some corporate virtual desktops and Azure virtual machines, VuGen recording does not function due to security policies and incomplete installations. The Recorder addresses this: the <strong>CDP Recorder</strong> — a small Windows program, no administrator rights needed — records your journey in Edge or Chrome as a HAR file (or you export one from the browser's Developer Tools, F12), and the Recorder turns it into a structured VuGen script.</p>
+        <div class="help-tool-badge help-badge-purple"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Script Studio</div>
+        <p class="help-p">Script Studio takes you from a recording to a VuGen script in one workspace: record your journey (or open a HAR file), review the requests, correlate the dynamic values, set the test data and download the ZIP. The script is ready as soon as the recording opens &#x2014; a plain script needs nothing more; correlation is one tab away.</p>
+        <p class="help-p">In a standard workflow, VuGen records user journeys directly via its built-in proxy. However, on some corporate virtual desktops and Azure virtual machines, VuGen recording does not function due to security policies and incomplete installations. Script Studio addresses this: the <strong>CDP Recorder</strong> — a small Windows program, no administrator rights needed — records your journey in Edge or Chrome as a HAR file (or you export one from the browser's Developer Tools, F12), and Script Studio turns it into a structured VuGen script. (Script Studio includes what was the Recorder tool; old Recorder links open Script Studio.)</p>
         <h3 class="help-h3">What is a HAR file?</h3>
         <p class="help-p">A HAR (HTTP Archive) file is a recording of all the network requests your browser made during a session. Every modern browser's Developer Tools (F12) can export one. It contains all the URLs, request headers, request bodies, and responses for everything that happened during your recording.</p>
         <div class="help-callout help-callout-green">
           <strong>Three ways to record — choose what works for you:</strong><br><br>
-          <strong>Option A — Start recording on the Recorder page (recommended):</strong> once <code>cdp-recorder.exe</code> has been double-clicked one time on your computer, click <strong>Start recording</strong> on the Recorder page — type your application's address, choose Edge or Chrome and, if you like, a private window. The recording window opens on your application, already recording; the page shows every request as it happens; <strong>Stop and save</strong> saves the HAR to your Downloads folder and opens it in the Recorder. See <em>Step-by-step (Start recording)</em> below.
+          <strong>Option A — Start recording in Script Studio (recommended):</strong> once <code>cdp-recorder.exe</code> has been double-clicked one time on your computer, click <strong>Start recording</strong> on Script Studio&#x2019;s start screen — type your application's address, choose Edge or Chrome and, if you like, a private window. The recording window opens on your application, already recording; the page shows every request as it happens; <strong>Stop and save</strong> saves the HAR to your Downloads folder and opens it in Script Studio, with the script ready. See <em>Step-by-step (Start recording)</em> below.
           <a href="<%= basePath %>/downloads/cdp-recorder">Get CDP Recorder →</a><br><br>
-          <strong>Option B — the CDP Recorder on its own:</strong> double-click <code>cdp-recorder.exe</code>, click <strong>Start Recording</strong> on its floating toolbar, record your journey (new tabs and pop-ups too), name transactions there, and click <strong>Stop Recording</strong>. The HAR is saved next to <code>cdp-recorder.exe</code> — drop it on the Recorder page.<br><br>
-          <strong>Option C — Bookmarks + DevTools:</strong> nothing to install. Drag the two transaction buttons from the Recorder page to your bookmarks bar, open DevTools (F12), record your journey, export the HAR, then drop it here.
+          <strong>Option B — the CDP Recorder on its own:</strong> double-click <code>cdp-recorder.exe</code>, click <strong>Start Recording</strong> on its floating toolbar, record your journey (new tabs and pop-ups too), name transactions there, and click <strong>Stop Recording</strong>. The HAR is saved next to <code>cdp-recorder.exe</code> — drop it on Script Studio.<br><br>
+          <strong>Option C — Bookmarks + DevTools:</strong> nothing to install. Drag the two transaction buttons from Script Studio&#x2019;s <em>How to record your journey</em> to your bookmarks bar, open DevTools (F12), record your journey, export the HAR, then drop it here.
         </div>
         <h3 class="help-h3">Step-by-step (Start recording — CDP Recorder)</h3>
         <ol class="help-steps-list">
-          <li><strong>Once per computer:</strong> download <code>cdp-recorder.zip</code> from the Recorder page, right-click it → <strong>Extract All…</strong> to a folder that stays and where your computer lets you run programs (for example <code>C:\PerfX\cdp-recorder</code> — not inside your user profile folder (such as Downloads, Desktop or Documents); if Windows blocks the program there, ask your IT team), and double-click <code>cdp-recorder.exe</code> once. That connects it to the <strong>Start recording</strong> button for your Windows user — no administrator rights needed. Extracting alone is not enough. If you move the folder, double-click it again.</li>
-          <li>Open <strong>Recorder</strong> in the sidebar and click <strong>Start recording</strong>.</li>
+          <li><strong>Once per computer:</strong> download <code>cdp-recorder.zip</code> from Script Studio (<em>How to record your journey</em>), right-click it → <strong>Extract All…</strong> to a folder that stays and where your computer lets you run programs (for example <code>C:\PerfX\cdp-recorder</code> — not inside your user profile folder (such as Downloads, Desktop or Documents); if Windows blocks the program there, ask your IT team), and double-click <code>cdp-recorder.exe</code> once. That connects it to the <strong>Start recording</strong> button for your Windows user — no administrator rights needed. Extracting alone is not enough. If you move the folder, double-click it again.</li>
+          <li>Open <strong>Script Studio</strong> in the sidebar and click <strong>Start recording</strong>.</li>
           <li>Type your application's address, choose <strong>Edge</strong> or <strong>Chrome</strong>, and choose whether to <strong>Open a private window</strong> (InPrivate / Incognito) — optional: untick it if your application does not work in a private window. Either way the recording window starts signed out, in a fresh browser profile, so the login is recorded too. <em>More options</em>: a recording name (used for the file name), a first transaction that starts when the page opens (numbered for you: <em>Launch</em> becomes <code>T01_Launch</code>), and — optional — your planned steps, one per line. Click <strong>Start recording</strong>.</li>
           <li>The first time the CDP Recorder is not running, your browser asks <em>"Open cdp-recorder?"</em> — click <strong>Open</strong>. It then waits in the background and closes itself after an hour without use. If nothing answers, the window shows the set-up steps.</li>
           <li>If your computer does not let the browser start programs, start <code>cdp-recorder.exe</code> yourself first, then click <strong>Start recording</strong>: the small CDP Recorder toolbar asks <em>"Allow this page to start recordings?"</em> — click <strong>Allow</strong> and the recording starts by itself. It asks once per PerfX Studio address and remembers it. If Windows does not allow <code>cdp-recorder.exe</code> to run at all, ask your IT team to approve it.</li>
           <li>Two windows open, as with VuGen: an orange-bordered <strong>recording window</strong> on your application, already recording, and the small floating <strong>toolbar</strong>. Use your application <strong>only in the recording window</strong> — new tabs and pop-ups it opens are recorded too; your usual browser is not.</li>
           <li>Name transactions on the page: type a name and press <strong>Enter</strong> — the running transaction ends and the new one starts. The number is added for you (<em>add to cart</em> becomes <code>T04_Add_to_cart</code>); type your own, for example <code>T07_Pay</code>, to use another number, and the next one follows it. With planned steps, press <strong>Enter</strong> on an empty box to start the next one — the list shows what is done and what is next. <strong>End</strong> ends the running transaction without starting another (for a gap you do not want measured). On the toolbar: type a name, <strong>Start Transaction</strong>, do the steps, <strong>End Transaction</strong>. Starting the next transaction ends the open one, and so does Stop.</li>
           <li>The page shows the requests as they happen, grouped by transaction — the current one open, earlier ones folded; images, style sheets, scripts and fonts, and background calls, folded into one line each; requests from pop-ups and new tabs marked <em>window 2, window 3</em>; a find box; the list follows the newest request until you scroll up.</li>
-          <li>Click <strong>Stop and save</strong> (or Stop Recording on the toolbar). The HAR is saved to your <strong>Downloads</strong> folder as <code>&lt;name&gt;_&lt;date&gt;_&lt;time&gt;.har</code>, the recording windows close, and the Recorder opens the file: choose the script format and carry on as with a dropped file. The windows close after a 10-second countdown on the toolbar — click <strong>Keep open</strong> there to look at the recording window first, or <strong>Close windows</strong> to close them now. Quit on the toolbar during a recording saves it first, too.</li>
+          <li>Click <strong>Stop and save</strong> (or Stop Recording on the toolbar). The HAR is saved to your <strong>Downloads</strong> folder as <code>&lt;name&gt;_&lt;date&gt;_&lt;time&gt;.har</code>, the recording windows close, and Script Studio opens the file with the script ready, in the format you chose &#x2014; as with a dropped file. The windows close after a 10-second countdown on the toolbar — click <strong>Keep open</strong> there to look at the recording window first, or <strong>Close windows</strong> to close them now. Quit on the toolbar during a recording saves it first, too.</li>
         </ol>
         <h3 class="help-h3">Step-by-step (Bookmarks + DevTools, or a HAR file you already have)</h3>
         <ol class="help-steps-list">
-          <li>Open <strong>Recorder</strong> in the sidebar, open <em>How to record your journey</em> → <strong>Bookmarks + DevTools</strong>, and drag the <strong>START Transaction</strong> and <strong>END Transaction</strong> buttons to your bookmarks bar. You only need to do this once.</li>
+          <li>Open <strong>Script Studio</strong> in the sidebar, open <em>How to record your journey</em> → <strong>Bookmarks + DevTools</strong>, and drag the <strong>START Transaction</strong> and <strong>END Transaction</strong> buttons to your bookmarks bar. You only need to do this once.</li>
           <li>Open your browser and navigate to the application you want to test.</li>
           <li>Open <strong>DevTools</strong> (press F12) and go to the <strong>Network</strong> tab. Tick <strong>Preserve log</strong> and <strong>Disable cache</strong>, and make sure recording is on (the red circle should be active).</li>
           <li>Perform your complete user journey — log in, navigate pages, submit forms — exactly as a real user would. Click <strong>START Transaction</strong> before each transaction (type its name) and <strong>END Transaction</strong> after it.</li>
           <li>When done, in DevTools Network tab click the <strong>Export HAR</strong> button (the download icon) and save the <code>.har</code> file.</li>
-          <li>Come back to the Recorder tool and drag the <code>.har</code> file into the drop zone, or click to browse. Choose the script format — <strong>Web HTTP/HTML</strong>, <strong>DevWeb</strong> or <strong>Both</strong> — and click <strong>Continue</strong>. (A recording made with Start recording arrives at this point by itself.)</li>
-          <li>Use the <strong>Domains</strong> list to switch off domains you do not want in your script (e.g. analytics, CDNs, fonts). If the script seems to need a domain &#x2014; a page of your journey, sign-in, a redirect to it, cookies &#x2014; the Recorder asks before leaving it out.</li>
-          <li>Use the type buttons under <strong>In the script</strong> (<strong>Doc</strong>, <strong>Fetch/XHR</strong>, <strong>JS</strong>, <strong>CSS</strong>, <strong>Img</strong>, <strong>Font</strong>, <strong>Media</strong>, <strong>Other</strong>) to choose which kinds of request are in the script; each shows how many requests it covers. Requests left out are hidden: each transaction ends with one line saying how many and why &#x2014; click <strong>Show</strong> to see them, or <strong>Show left-out</strong> for all of them. Always left out: browser reports, WebSocket, and a page the browser <strong>prefetched</strong> and then opened (the page itself stays &#x2014; it would otherwise load twice).</li>
-          <li>To group requests into a new <strong>transaction</strong>, click <strong>Select mode</strong>, tick the requests and click <strong>Create transaction</strong>. Transactions can be renamed or ungrouped, with Undo.</li>
-          <li>The <strong>Script preview</strong> updates as you go; <strong>Change format</strong> switches between Web HTTP/HTML and DevWeb.</li>
-          <li>Click <strong>Download project ZIP</strong> and open it in VuGen — or <strong>Correlate in Script Studio</strong> to add correlation first.</li>
+          <li>Come back to Script Studio and drop the <code>.har</code> file anywhere on the page, or click <strong>Browse file</strong>. The script is made at once in the format you chose &#x2014; <strong>Web HTTP/HTML</strong> or <strong>DevWeb</strong> (remembered; switch it at any time in the file bar). (A recording made with Start recording arrives at this point by itself.)</li>
+          <li>Use the <strong>Domains</strong> panel to switch off domains you do not want in your script (e.g. analytics, CDNs, fonts). If the script seems to need a domain &#x2014; a page of your journey, sign-in, a redirect to it, cookies &#x2014; Script Studio asks before leaving it out.</li>
+          <li>Use the type buttons in the filter bar (<strong>Doc</strong>, <strong>Fetch/XHR</strong>, <strong>JS</strong>, <strong>CSS</strong>, <strong>Img</strong>, <strong>Font</strong>, <strong>Media</strong>, <strong>Other</strong>) to choose which kinds of request are in the script; each shows how many requests it covers. <strong>Leave out</strong> takes out analytics / ads and OPTIONS requests. Requests left out are hidden: each transaction ends with one line saying how many and why &#x2014; click it to see them, or <strong>Show left-out</strong> for all of them. Always left out: browser reports, WebSocket, and a page the browser <strong>prefetched</strong> and then opened (the page itself stays &#x2014; it would otherwise load twice).</li>
+          <li>To group requests into a new <strong>transaction</strong>, tick the requests in the <strong>Requests</strong> list and click <strong>New transaction</strong>. Transactions can be renamed or ungrouped, with Undo.</li>
+          <li>Click a request to see its <strong>Headers</strong>, <strong>Payload</strong>, <strong>Response</strong>, <strong>Preview</strong>, <strong>Cookies</strong>, <strong>Timing</strong> and <strong>Dynamic values</strong>; the arrow keys move to the previous / next request and Esc closes it. <strong>Hide secrets</strong> masks passwords, tokens and cookies for screenshots.</li>
+          <li>The <strong>Script</strong> tab updates as you go.</li>
+          <li>Click <strong>Download ZIP</strong> and open it in VuGen &#x2014; or correlate first in the <strong>Correlation Advisor</strong> tab.</li>
         </ol>
-        <div class="help-callout help-callout-blue">
-          <strong>Tip:</strong> For deeper correlation (auto-detection of dynamic values like tokens and session IDs), take your HAR file into <strong>Script Studio</strong>. Record the same journey twice and upload both HAR files to Script Studio for the most complete result.
+        <h3 class="help-h3">What is correlation and why does it matter?</h3>
+        <p class="help-p">When you log in to a web application, the server sends back a token or session ID. Every request after that must include this token. If your script has the token hard-coded from your recording session, it will fail when run again because the server issues a new token each time. Correlation solves this by extracting the token dynamically at runtime and passing it forward automatically.</p>
+        <p class="help-p">Without correlation, your script will fail on replay. Script Studio generates the extraction and substitution code for you automatically.</p>
+        <h3 class="help-h3">1 HAR vs 2 HARs</h3>
+        <div class="help-formats">
+          <div class="help-format-card help-format-purple1">
+            <div class="help-format-title">1 HAR file</div>
+            <p class="help-format-desc">Pattern-based analysis to find values that look dynamic (UUIDs, tokens, long random strings, timestamps). Fast and works well for simple applications.</p>
+            <p class="help-format-rec"><strong>Use when:</strong> you have one recording and want a quick result. Some correlations may need manual adjustment.</p>
+          </div>
+          <div class="help-format-card help-format-purple2">
+            <div class="help-format-title">2 HAR files (recommended)</div>
+            <p class="help-format-desc">Record the exact same user journey twice with different data (e.g. two different logins). Script Studio compares both and finds every value that changed — guaranteed to be dynamic. Far more complete and accurate correlation.</p>
+            <p class="help-format-rec"><strong>Use when:</strong> you want the most reliable script. Recommended for any app with login, tokens, or session management.</p>
+          </div>
         </div>
+        <h3 class="help-h3">Step-by-step (correlation)</h3>
+        <ol class="help-steps-list">
+          <li>Open the recording in Script Studio (above). The <strong>Correlation Advisor</strong> has already checked it: the number on its tab is how many values it found.</li>
+          <li>For 2-HAR mode: record the same journey twice using different test credentials or data. In the Correlation Advisor tab open <strong>Advanced: second recording</strong> and drop the second HAR file there &#x2014; or <strong>Record it now</strong>: it loads as the second recording (diff mode).</li>
+          <li>Review the cards and accept the values to correlate, then click <strong>Apply &amp; Regenerate</strong>. A value the Advisor did not list? <strong>Find a value</strong> (below), or open the same file in the <strong>HAR Explorer</strong>, <strong>Find a value</strong>, and <strong>Add to Script Studio</strong> — it comes back here marked <em>From HAR Explorer</em>.</li>
+          <li>Set the test data in the <strong>Test data</strong> tab (below).</li>
+          <li>Click <strong>Download ZIP</strong> and open the script in VuGen.</li>
+        </ol>
+        <h3 class="help-h3">Correlation Advisor</h3>
+        <p class="help-p">The <strong>Correlation Advisor</strong> tab lists every dynamic value it found — each as a card showing confidence level, its <strong>Source</strong> (the request whose response holds it) and where it is <strong>Replaced in</strong>, as request numbers you can click to open that request; <strong>+n more</strong> lists every place. Review each card and click <strong>Accept</strong> to add it as a correlation (<strong>Accept all high</strong> takes every high-confidence card at once), then click <strong>Apply &amp; Regenerate</strong> to rebuild the script. When it finds nothing, the tab stays with <strong>Paste &amp; Detect</strong> and <strong>+ Add Manual</strong>, so you can add a correlation yourself.</p>
+        <p class="help-p">You can add your own correlations manually (click <strong>+ Add Manual</strong>) or use <strong>Paste &amp; Detect</strong> when you know the value but it is not visible in the HAR.</p>
+        <h3 class="help-h3">Dynamic values of a request</h3>
+        <p class="help-p">Click any request and open its <strong>Dynamic values</strong> tab. Every field in that request that looks dynamic is listed:</p>
+        <ul class="help-steps-list">
+          <li><span class="help-light help-light-ok">● Traced to an earlier response</span> — value traced to a prior server response, with the request that produced it. Click <strong>Add</strong> to correlate it in one click.</li>
+          <li><span class="help-light help-light-warn">● Looks dynamic, source not found</span> — looks dynamic (JWT, UUID, or token pattern) but its source was not found in the HAR. Use <strong>Paste &amp; Detect</strong> to create the extractor manually.</li>
+        </ul>
+        <p class="help-p">It scans request headers, JSON body, form parameters, query string, <strong>and URL path segments</strong> — so a session ID embedded in a REST URL like <code>/api/users/286522</code> is detected just like any other field.</p>
+        <h3 class="help-h3">Find a value</h3>
+        <p class="help-p"><strong>Find a value</strong> answers where any value comes from and every request that sends it &#x2014; the same answer as in the <strong>HAR Explorer</strong> (see its <em>The answers Find a value gives</em>). When the verdict is <strong>Correlate it</strong>, <strong>Add and apply</strong> adds it to the Correlation Advisor and rebuilds the script.</p>
+        <h3 class="help-h3">Paste &amp; Detect</h3>
+        <p class="help-p">Click <strong>Paste &amp; Detect</strong> in the Advisor header. Paste the server response body and the exact value you want to extract, then click <strong>Detect &amp; Generate</strong>. The tool automatically picks the best extractor (JSONPath for JSON, Boundary for HTML/XML, RegExp for JWT / UUID / hex tokens) and shows radio buttons or occurrence dropdowns when values appear multiple times. A boundary is widened until it captures this value first (a page often has the same <code>content="</code> many times). <strong>Add Correlation</strong> adds a card to the Advisor and regenerates the script: the value is extracted from the recorded response that holds it, and every later request that sends it uses the correlation. A name like <code>visitor-hmac</code> becomes <code>visitor_hmac</code> (parameter names take letters, digits and _).</p>
+        <h3 class="help-h3">Extractor types — how they are chosen</h3>
+        <div class="help-table-wrap">
+          <table class="help-table">
+            <thead><tr>
+              <th>Extractor</th>
+              <th>When used</th>
+              <th>DevWeb function</th>
+              <th>VuGen C function</th>
+            </tr></thead>
+            <tbody>
+              <tr><td class="help-td-key">JSONPath</td><td>JSON response bodies</td><td><code>JsonPathExtractor</code></td><td><code>web_reg_save_param_json</code></td></tr>
+              <tr><td class="help-td-key">Boundary</td><td>HTML, XML, plain text</td><td><code>BoundaryExtractor</code></td><td><code>web_reg_save_param</code></td></tr>
+              <tr><td class="help-td-key">RegExp</td><td>JWT, UUID, hex, token shapes</td><td><code>RegExpExtractor</code></td><td><code>web_reg_save_param_regexp</code></td></tr>
+              <tr><td class="help-td-key">Header</td><td>Response header value</td><td><code>BoundaryExtractor</code> (Headers scope)</td><td><code>web_reg_save_param</code> (Search=Headers)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="help-h3">Test data</h3>
+        <p class="help-p">The <strong>Test data</strong> tab lists every parameter of the script (user names, search terms, form values &#x2026;) with the recorded value. Rename or remove a parameter (removed: the recorded value stays in the script), add your own, choose how each Vuser takes a value (<strong>Next row</strong>, <strong>Random</strong> or <strong>Unique</strong>; <strong>Each run</strong> or <strong>Once</strong>) and which data file it is in. Type more rows, or download the values as an Excel file, fill many rows and upload it again. The ZIP holds the data files (VuGen <code>.prm</code> / <code>.dat</code>, DevWeb <code>parameters.yml</code> and its <code>.csv</code> files). Values that are correlations are not test data and cannot be added here. Only the last change can be undone.</p>
+        <h3 class="help-h3">Request Filters</h3>
+        <p class="help-p">By default only <strong>Fetch/XHR</strong> and <strong>Document</strong> requests are included — CSS, JS, fonts, images and media are left out, which suits server / API load. Select their types for realistic page load, and always for <strong>JavaScript-based apps</strong>: files that JavaScript or CSS requests are never in the page HTML, so <code>downloadHtmlStaticResources</code> / <code>Mode=HTML</code> cannot download them on their own. Included files are added to the page step that loaded them (<code>EXTRARES</code> / <code>resources: [...]</code>), never as separate requests. Known analytics/ads domains are always left out. Every change rebuilds the script and the Correlation Advisor&#x2019;s findings.</p>
         <h3 class="help-h3">Static assets — should I include them?</h3>
         <div class="help-table-wrap">
           <table class="help-table">
@@ -378,9 +433,9 @@
           <strong>Never scripted:</strong> failed or cancelled loads, repeats of the same file on a page (counted in the comment as &#x201C;failed or repeated&#x201D;) and <code>data:</code> / <code>blob:</code> URLs. Files the browser reused from its cache on a later page are still listed on that page, as VuGen records them. Analytics beacons sent with POST stay as their own request. Iframes named in the page HTML download automatically with the page. In a transaction with no page load (single-page-app screens that only call APIs), resources are listed on the API request in progress.
         </div>
         <h3 class="help-h3">Server names — running against another environment</h3>
-        <p class="help-p">Every server the script calls gets one parameter, named by what it does: the application you recorded is <code>App_Server</code>; <code>api.</code>, <code>login.</code> / <code>auth.</code> and <code>cdn.</code> / <code>static.</code> servers are <code>Api_Server</code>, <code>Auth_Server</code> and <code>Static_Server</code>; well-known services by their purpose (<code>Recaptcha_Server</code>, <code>Google_Fonts</code>, <code>Okta_Server</code> &hellip;); any other server <code>&lt;Organisation&gt;_Server</code> (e.g. <code>Partner_Server</code>). It is set once per Vuser &#x2014; VuGen: <code>set_server(&quot;App_Server&quot;, &quot;shop.example.com&quot;)</code> in <code>vuser_init.c</code>; DevWeb: a <code>const</code> at the top of <code>main.js</code> &#x2014; and used in every URL, header, page resource, form value and body that carries that server, including encoded forms such as <code>redirect_uri=https%3A%2F%2F&hellip;</code>. To run against another environment, change the values in that one place. Only the servers the script really calls are listed. The Recorder, Script Studio and the Postman / Bruno and JMeter converters all name servers this way.</p>
+        <p class="help-p">Every server the script calls gets one parameter, named by what it does: the application you recorded is <code>App_Server</code>; <code>api.</code>, <code>login.</code> / <code>auth.</code> and <code>cdn.</code> / <code>static.</code> servers are <code>Api_Server</code>, <code>Auth_Server</code> and <code>Static_Server</code>; well-known services by their purpose (<code>Recaptcha_Server</code>, <code>Google_Fonts</code>, <code>Okta_Server</code> &hellip;); any other server <code>&lt;Organisation&gt;_Server</code> (e.g. <code>Partner_Server</code>). It is set once per Vuser &#x2014; VuGen: <code>set_server(&quot;App_Server&quot;, &quot;shop.example.com&quot;)</code> in <code>vuser_init.c</code>; DevWeb: a <code>const</code> at the top of <code>main.js</code> &#x2014; and used in every URL, header, page resource, form value and body that carries that server, including encoded forms such as <code>redirect_uri=https%3A%2F%2F&hellip;</code>. To run against another environment, change the values in that one place. Only the servers the script really calls are listed. Script Studio and the Postman / Bruno and JMeter converters all name servers this way.</p>
         <p class="help-p"><strong>Without editing the script (VuGen):</strong> add an attribute with the parameter&#x2019;s name in <strong>Runtime Settings &#x203A; Additional attributes</strong> (e.g. <code>App_Server</code> = <code>staging.example.com</code>) &#x2014; it wins over the value in <code>vuser_init.c</code>, so one script runs against each environment from its test. <strong>DevWeb</strong> works the same way with a user argument of that name (<code>userArguments</code> in <code>rts.yml</code>, or <code>-userArgs</code>): <code>const App_Server = load.config.user.args[&quot;App_Server&quot;] || &#x27;shop.example.com&#x27;;</code></p>
-        <p class="help-p"><strong>Rename in Script Studio:</strong> after the analysis, <strong>Parameterization details</strong> lists every server with its parameter &#x2014; <strong>Rename</strong> works as in the Recorder&#x2019;s Domains list (with Undo). Names chosen in the Recorder carry over when you open the recording in Script Studio.</p>
+        <p class="help-p"><strong>Rename:</strong> the <strong>Domains</strong> panel lists every server with its parameter &#x2014; click <strong>Rename</strong> (with Undo). <strong>Parameterization details</strong> in the Correlation Advisor tab lists them too, with the same Rename.</p>
         <h3 class="help-h3">How the generated VuGen script is laid out</h3>
         <ul class="help-list">
           <li><strong>vuser_init</strong> &#x2014; set once per Vuser: the servers, the SSL setting (<code>web_set_sockets_option</code>) and the headers <em>every</em> request sends with one value (<code>web_add_auto_header</code>). They stay set when <strong>Simulate a new user on each iteration</strong> is on. In a script made from a recording, the browser&#x2019;s User-Agent goes to the run-time settings (Browser emulation) instead.</li>
@@ -424,13 +479,13 @@
         <h3 class="help-h3">Step by step</h3>
         <ol class="help-steps-list">
           <li>Open <strong>HAR Explorer</strong> in the sidebar and drop the <code>.har</code> file on the page (or click <strong>Choose HAR file</strong>).</li>
-          <li>The requests appear in their transactions, exactly as the <strong>Recorder</strong> groups them &#x2014; from the START / END bookmarks, the PerfX CDP Recorder or the page loads. Requests the script leaves out (images, analytics &#x2026;) are folded into one line per transaction; <strong>Show</strong> brings them back.</li>
+          <li>The requests appear in their transactions, exactly as <strong>Script Studio</strong> groups them &#x2014; from the START / END bookmarks, the PerfX CDP Recorder or the page loads. Requests the script leaves out (images, analytics &#x2026;) are folded into one line per transaction; <strong>Show</strong> brings them back.</li>
           <li>Narrow the list with the filters above it: the address box, the <strong>Domains</strong> button (every server in the recording with its number of requests &#x2014; tick or untick a server, <strong>Only</strong> to show just that one, <strong>All</strong> / <strong>None</strong>, and a box to find a server), and the request types.</li>
           <li>Click a request to see its <strong>Headers</strong>, <strong>Payload</strong> (query, form fields, JSON body), <strong>Response</strong>, <strong>Preview</strong>, <strong>Cookies</strong> and <strong>Timing</strong>. <strong>Hide secrets</strong> masks passwords, tokens and cookies for screenshots.</li>
           <li>Click <strong>Find a value</strong>. Type or paste the value, pick a suggestion (values the server sends that a later request sends back; <em>Studio</em> marks the ones Script Studio also finds by itself), or select the value in any request and click <strong>Find where this value comes from</strong>.</li>
           <li>Read the answer: the verdict, then the trail &#x2014; <strong>Comes from</strong> (the response and the exact place) and every <strong>Sent in</strong>. Click any of them to open that request with the value marked.</li>
           <li>When the verdict is <strong>Correlate it</strong>, <strong>Correlate this</strong> shows the extractor for <strong>VuGen Web HTTP/HTML</strong> or <strong>DevWeb</strong> &#x2014; the same code Script Studio writes. Check the parameter name and click <strong>Add to Script Studio</strong>. Repeat for other values.</li>
-          <li>Click <strong>Continue in Script Studio</strong> (top right). Studio opens the same file, analyses it and applies your correlations, marked <em>From HAR Explorer</em>. With nothing added the button says <strong>Open in Script Studio</strong>: Studio only opens the file and you click <strong>Analyse</strong> there.</li>
+          <li>Click <strong>Continue in Script Studio</strong> (top right). Studio opens the same file, analyses it and applies your correlations, marked <em>From HAR Explorer</em>. With nothing added the button says <strong>Open in Script Studio</strong>: Studio only opens the file, with the script ready.</li>
         </ol>
         <h3 class="help-h3">The answers Find a value gives</h3>
         <div class="help-table-wrap">
@@ -452,88 +507,6 @@
         <div class="help-callout help-callout-blue">
           <strong>Encoded forms are found too.</strong> A value sent URL-encoded, JSON-escaped, Base64 or as HTML entities is matched to the original and named in the trail. The <code>Referer</code> / <code>Origin</code> copy of a page address and requests left out of the script are listed apart and not counted.
         </div>
-        <div class="help-callout help-callout-amber">
-          <strong>From the Recorder:</strong> the Recorder&#x2019;s own <strong>Correlate in Script Studio</strong> button hands a loaded recording to Script Studio the same way, together with the servers you renamed.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 7. Script Studio -->
-  <div id="hacc-studio" class="help-acc-item open" style="--c-tool:var(--c-studio)">
-    <button class="help-acc-hdr" onclick="haccToggle('hacc-studio')">
-      <div class="help-acc-hdr-left">
-        <div class="help-acc-icon" style="--c-tool:var(--c-studio)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
-        <div>
-          <div class="help-acc-title">Script Studio</div>
-          <div class="help-acc-sub">HAR correlation engine · tokens, sessions, CSRF auto-detected</div>
-        </div>
-      </div>
-      <svg class="help-acc-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
-    </button>
-    <div class="help-acc-body">
-      <div class="help-acc-inner">
-        <div class="help-tool-badge help-badge-purple"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Script Studio</div>
-        <p class="help-p">Script Studio takes HAR files and generates VuGen scripts with <strong>correlation</strong> already built in. Correlation means the script automatically captures dynamic values (like login tokens, session IDs, CSRF tokens, and order IDs) from server responses and reuses them in later requests — just like a real user's browser does.</p>
-        <h3 class="help-h3">What is correlation and why does it matter?</h3>
-        <p class="help-p">When you log in to a web application, the server sends back a token or session ID. Every request after that must include this token. If your script has the token hard-coded from your recording session, it will fail when run again because the server issues a new token each time. Correlation solves this by extracting the token dynamically at runtime and passing it forward automatically.</p>
-        <p class="help-p">Without correlation, your script will fail on replay. Script Studio generates the extraction and substitution code for you automatically.</p>
-        <h3 class="help-h3">1 HAR vs 2 HARs</h3>
-        <div class="help-formats">
-          <div class="help-format-card help-format-purple1">
-            <div class="help-format-title">1 HAR file</div>
-            <p class="help-format-desc">Pattern-based analysis to find values that look dynamic (UUIDs, tokens, long random strings, timestamps). Fast and works well for simple applications.</p>
-            <p class="help-format-rec"><strong>Use when:</strong> you have one recording and want a quick result. Some correlations may need manual adjustment.</p>
-          </div>
-          <div class="help-format-card help-format-purple2">
-            <div class="help-format-title">2 HAR files (recommended)</div>
-            <p class="help-format-desc">Record the exact same user journey twice with different data (e.g. two different logins). Script Studio compares both and finds every value that changed — guaranteed to be dynamic. Far more complete and accurate correlation.</p>
-            <p class="help-format-rec"><strong>Use when:</strong> you want the most reliable script. Recommended for any app with login, tokens, or session management.</p>
-          </div>
-        </div>
-        <h3 class="help-h3">Step-by-step</h3>
-        <ol class="help-steps-list">
-          <li>Use the <strong>Recorder</strong> tool (or browser DevTools directly) to create your HAR file(s).</li>
-          <li>For 2-HAR mode: record the same journey twice using different test credentials or data.</li>
-          <li>Open <strong>Script Studio</strong> from the sidebar.</li>
-          <li>Drag your first HAR file into the <strong>Recording 1</strong> drop zone. For 2-HAR mode, drag the second into <strong>Recording 2</strong>.</li>
-          <li>Or record it here: <strong>Record a new journey → Start recording</strong> works as on the Recorder page (the CDP Recorder set up once, a recording window on your application, transactions, <strong>Stop and save</strong> to Downloads). The recording loads as <strong>Recording 1</strong>; record the same journey again with different data and it loads as <strong>Recording 2</strong> (diff mode). Then choose the format and click Analyse as usual.</li>
-          <li>Choose your output format: <strong>DevWeb</strong>, <strong>Web HTTP/HTML</strong>, or <strong>Both</strong>.</li>
-          <li>Click <strong>Analyse</strong>.</li>
-          <li>Review the correlation and parameterization results shown. A value the Advisor did not list? Open the same file in the <strong>HAR Explorer</strong>, <strong>Find a value</strong>, and <strong>Add to Script Studio</strong> — it comes back here marked <em>From HAR Explorer</em>.</li>
-          <li>Click <strong>Download</strong> and open the script in VuGen.</li>
-        </ol>
-        <h3 class="help-h3">Correlation Advisor</h3>
-        <p class="help-p">After analysis, the <strong>Correlation Advisor</strong> panel appears at the top of the results. It lists every dynamic value it found — each as a card showing confidence level, where the value came from, and where it is used. Review each card and click <strong>Accept</strong> to add it as a correlation, then click <strong>▶ Apply &amp; Regenerate</strong> to rebuild the script. When it finds nothing, the panel stays with <strong>Paste &amp; Detect</strong>, <strong>+ Add Manual</strong> and the Request Inspector, so you can add a correlation yourself.</p>
-        <p class="help-p">You can add your own correlations manually (click <strong>+ Add Manual</strong>) or use <strong>Paste &amp; Detect</strong> when you know the value but it is not visible in the HAR.</p>
-        <h3 class="help-h3">Request Inspector — Traffic Light Highlighting</h3>
-        <p class="help-p">Expand the <strong>Request Inspector</strong> inside the Advisor panel and select any request from the dropdown. Every field in that request is colour-coded:</p>
-        <ul class="help-steps-list">
-          <li><span class="help-light help-light-ok">● Green</span> — value traced to a prior server response. Click <strong>Trace</strong> to see which request produced it, or <strong>+ Correlate</strong> to add it in one click.</li>
-          <li><span class="help-light help-light-warn">● Yellow</span> — looks dynamic (JWT, UUID, or token pattern) but its source was not found in the HAR. Use <strong>Paste &amp; Detect</strong> to create the extractor manually.</li>
-        </ul>
-        <p class="help-p">The inspector scans request headers, JSON body, form parameters, query string, <strong>and URL path segments</strong> — so a session ID embedded in a REST URL like <code>/api/users/286522</code> is detected just like any other field.</p>
-        <h3 class="help-h3">Paste &amp; Detect</h3>
-        <p class="help-p">Click <strong>Paste &amp; Detect</strong> in the Advisor header. Paste the server response body and the exact value you want to extract, then click <strong>Detect &amp; Generate</strong>. The tool automatically picks the best extractor (JSONPath for JSON, Boundary for HTML/XML, RegExp for JWT / UUID / hex tokens) and shows radio buttons or occurrence dropdowns when values appear multiple times. A boundary is widened until it captures this value first (a page often has the same <code>content="</code> many times). <strong>Add Correlation</strong> adds a card to the Advisor and regenerates the script: the value is extracted from the recorded response that holds it, and every later request that sends it uses the correlation. A name like <code>visitor-hmac</code> becomes <code>visitor_hmac</code> (parameter names take letters, digits and _).</p>
-        <h3 class="help-h3">Extractor types — how they are chosen</h3>
-        <div class="help-table-wrap">
-          <table class="help-table">
-            <thead><tr>
-              <th>Extractor</th>
-              <th>When used</th>
-              <th>DevWeb function</th>
-              <th>VuGen C function</th>
-            </tr></thead>
-            <tbody>
-              <tr><td class="help-td-key">JSONPath</td><td>JSON response bodies</td><td><code>JsonPathExtractor</code></td><td><code>web_reg_save_param_json</code></td></tr>
-              <tr><td class="help-td-key">Boundary</td><td>HTML, XML, plain text</td><td><code>BoundaryExtractor</code></td><td><code>web_reg_save_param</code></td></tr>
-              <tr><td class="help-td-key">RegExp</td><td>JWT, UUID, hex, token shapes</td><td><code>RegExpExtractor</code></td><td><code>web_reg_save_param_regexp</code></td></tr>
-              <tr><td class="help-td-key">Header</td><td>Response header value</td><td><code>BoundaryExtractor</code> (Headers scope)</td><td><code>web_reg_save_param</code> (Search=Headers)</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <h3 class="help-h3">Request Filters</h3>
-        <p class="help-p">Filters run <em>before</em> analysis. By default only <strong>Fetch/XHR</strong> and <strong>Document</strong> requests are included — CSS, JS, fonts, images and media are left out, which suits server / API load. Select their types (or <strong>All</strong>) for realistic page load, and always for <strong>JavaScript-based apps</strong>: files that JavaScript or CSS requests are never in the page HTML, so <code>downloadHtmlStaticResources</code> / <code>Mode=HTML</code> cannot download them on their own. Included files are added to the page step that loaded them (<code>EXTRARES</code> / <code>resources: [...]</code>), never as separate requests. Known analytics/ads domains are always left out in Script Studio. See <strong>Recorder → Static assets — should I include them?</strong> for the full guidance.</p>
       </div>
     </div>
   </div>
@@ -628,7 +601,7 @@
     </button>
     <div class="help-acc-body">
       <div class="help-acc-inner">
-        <p class="help-p">All four script tools — the two converters, the Recorder and Script Studio — can generate scripts in either of two formats (the Recorder and Script Studio can also give you both). The HAR Explorer writes its correlation code in either format too.</p>
+        <p class="help-p">All three script tools — the two converters and Script Studio — can generate scripts in either of two formats. The HAR Explorer writes its correlation code in either format too.</p>
         <div class="help-formats">
           <div class="help-format-card help-format-blue">
             <div class="help-format-title"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m10 13-2 2 2 2M14 13l2 2-2 2"/></svg>DevWeb · JavaScript</div>
@@ -684,7 +657,7 @@
         <ul class="help-list">
           <li><strong>Correlation</strong> – finds dynamic values (tokens, session IDs, CSRF tokens) in responses and extracts them for reuse in later requests</li>
           <li><strong>3-tier parameterisation</strong> – classifies variables as Dynamic (runtime), Config (environment), or Test Data (per-user)</li>
-          <li><strong>Server host detection</strong> – parameterises hostnames so you can switch environments (dev/test/prod) by changing one value — each server named by its role (<code>App_Server</code>, <code>Api_Server</code> …), see <em>Recorder → Server names</em></li>
+          <li><strong>Server host detection</strong> – parameterises hostnames so you can switch environments (dev/test/prod) by changing one value — each server named by its role (<code>App_Server</code>, <code>Api_Server</code> …), see <em>Script Studio → Server names</em></li>
           <li><strong>Page resources</strong> – images, stylesheets and scripts are added to the page step that loaded them, as VuGen's own HTML-mode recording does</li>
           <li><strong>Noise left out</strong> – analytics and ad servers, browser reports and prefetches are left out of the script, with the reason shown</li>
           <li><strong>Redirect detection</strong> – identifies HTTP 301/302/307 redirects that VuGen follows automatically and omits them from the script</li>
@@ -736,7 +709,7 @@
               <th>Answer</th>
             </tr></thead>
             <tbody>
-              <tr><td class="help-td-key">Which tools upload my file?</td><td>Only the <strong>Postman / Bruno</strong> and <strong>JMeter</strong> converters — the rows below describe what happens to those uploads. The <strong>Recorder</strong>, <strong>HAR Explorer</strong>, <strong>Script Studio</strong> and <strong>Results Analyser</strong> read your file in your browser; recordings and results never leave your PC.</td></tr>
+              <tr><td class="help-td-key">Which tools upload my file?</td><td>Only the <strong>Postman / Bruno</strong> and <strong>JMeter</strong> converters — the rows below describe what happens to those uploads. <strong>Script Studio</strong>, the <strong>HAR Explorer</strong> and the <strong>Results Analyser</strong> read your file in your browser; recordings and results never leave your PC.</td></tr>
               <tr><td class="help-td-key">What does the CDP Recorder send?</td><td>Nothing to the internet. It runs on your PC, talks only to your own browser and to this page through <code>127.0.0.1</code>, and saves recordings to your Downloads folder (or next to <code>cdp-recorder.exe</code>). Only pages you allowed can start a recording.</td></tr>
               <tr><td class="help-td-key">Is my usage recorded?</td><td>Each tool reports simple usage figures for the statistics — which tool, when, the file name and size, the number of requests, success or error, and the machine name. Never the content of a file, recording, script or result.</td></tr>
               <tr><td class="help-td-key">Is my file saved to disk?</td><td><strong>Only during the conversion.</strong> Files are received into memory (RAM). Collection, environment, JMX, CSV and certificate files are also written to the server&#x2019;s temporary folder while the conversion runs, because the parsers read from a file, and deleted when it ends, whether it succeeds or fails. Generated scripts are never written to disk.</td></tr>
@@ -840,10 +813,10 @@
         <h3 class="help-h3 help-h3-first">Latest</h3>
         <ul class="help-list">
           <li><strong>Workload Modeller</strong> – give each script its target (TPS, transactions per hour, Vusers …) and get the Vusers, pacing, ramp-up, load generators and the LRE settings to type in, with checks that say what cannot work. Fill it from your script ZIPs or HAR files; see <strong>Workload Modeller</strong> above.</li>
-          <li><strong>Start recording</strong> – record your journey straight from the Recorder or Script Studio: the CDP Recorder opens Edge or Chrome on your application, the page shows every request as it happens, and <strong>Stop and save</strong> opens the recording by itself. Where the browser may not start programs, start <code>cdp-recorder.exe</code> yourself and click <strong>Allow</strong> on its toolbar once.</li>
-          <li><strong>HAR Explorer</strong> – a new tool between the Recorder and Script Studio: every request of a recording in its transactions, <strong>Find a value</strong> to see where a dynamic value comes from and where it goes, and the correlation sent to Script Studio in one click.</li>
+          <li><strong>Start recording</strong> – record your journey straight from Script Studio: the CDP Recorder opens Edge or Chrome on your application, the page shows every request as it happens, and <strong>Stop and save</strong> opens the recording by itself. Where the browser may not start programs, start <code>cdp-recorder.exe</code> yourself and click <strong>Allow</strong> on its toolbar once.</li>
+          <li><strong>HAR Explorer</strong> – a new tool beside Script Studio: every request of a recording in its transactions, <strong>Find a value</strong> to see where a dynamic value comes from and where it goes, and the correlation sent to Script Studio in one click.</li>
           <li><strong>Results Analyser</strong> – LRE raw results to a report in your browser: transactions for the full run and the steady state, charts, errors, the workload (with a side panel per load generator), Excel, Word, HTML and PDF.</li>
-          <li><strong>Server names</strong> – every server the script calls gets one parameter named by its role (<code>App_Server</code>, <code>Api_Server</code> …), renamable in the Recorder and Script Studio, overridable from the run-time settings.</li>
+          <li><strong>Server names</strong> – every server the script calls gets one parameter named by its role (<code>App_Server</code>, <code>Api_Server</code> …), renamable in Script Studio, overridable from the run-time settings.</li>
           <li><strong>Scripts laid out like a performance engineer's</strong> – servers, SSL and common headers in <code>vuser_init</code>, page resources on their page step, think time between steps, prefetches and ad pixels left out.</li>
           <li><strong>A new portal</strong> – a sidebar with every tool, a new Home page, quick search (<kbd>Ctrl</kbd>+<kbd>K</kbd>), drop a file anywhere, remembered options, light and dark themes.</li>
         </ul>
@@ -880,7 +853,7 @@
         <div class="help-faq">
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Which tool should I use?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
-            <div class="help-faq-body"><div><p class="help-faq-a">It depends on what you already have. If you have a <strong>Postman or Bruno collection</strong>, use the Postman / Bruno Converter. If you have a <strong>JMeter .jmx file</strong>, use the JMeter Converter. If you need to record a new journey and VuGen cannot record on your machine, use the <strong>Recorder</strong>. If you have a HAR file and want deep correlation (tokens, session IDs), use <strong>Script Studio</strong>. If a replay fails on a value, or the Correlation Advisor missed one, look it up in the <strong>HAR Explorer</strong>. After a test run in LoadRunner Enterprise, use the <strong>Results Analyser</strong> for the report.</p></div></div>
+            <div class="help-faq-body"><div><p class="help-faq-a">It depends on what you already have. If you have a <strong>Postman or Bruno collection</strong>, use the Postman / Bruno Converter. If you have a <strong>JMeter .jmx file</strong>, use the JMeter Converter. If you need to record a new journey and VuGen cannot record on your machine, or you have a HAR file and want a script &#x2014; correlated when needed (tokens, session IDs) &#x2014; use <strong>Script Studio</strong>. If a replay fails on a value, or the Correlation Advisor missed one, look it up in the <strong>HAR Explorer</strong>. After a test run in LoadRunner Enterprise, use the <strong>Results Analyser</strong> for the report.</p></div></div>
           </div>
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Which output format should I choose — DevWeb or Web HTTP/HTML?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
@@ -888,7 +861,7 @@
           </div>
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Are my files stored on the server?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
-            <div class="help-faq-body"><div><p class="help-faq-a">No. The Recorder, HAR Explorer, Script Studio and Results Analyser do not upload your file at all — it is read in your browser. The converters hold it in memory and in the server&#x2019;s temporary folder only while the conversion runs, and delete it when the conversion ends. Generated scripts are never written to disk, nothing persists between requests, and no other user can see your data. Download links expire after 5 minutes and are single-use. See the <em>Privacy &amp; Security</em> section for a full breakdown.</p></div></div>
+            <div class="help-faq-body"><div><p class="help-faq-a">No. Script Studio, the HAR Explorer and the Results Analyser do not upload your file at all — it is read in your browser. The converters hold it in memory and in the server&#x2019;s temporary folder only while the conversion runs, and delete it when the conversion ends. Generated scripts are never written to disk, nothing persists between requests, and no other user can see your data. Download links expire after 5 minutes and are single-use. See the <em>Privacy &amp; Security</em> section for a full breakdown.</p></div></div>
           </div>
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My HAR file contains real session tokens and credentials — is that a security risk?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
@@ -903,8 +876,8 @@
             <div class="help-faq-body"><div><p class="help-faq-a">Use two HAR files, not one. Record the <em>exact same journey</em> twice with <em>different</em> test data (two different usernames, for example). Script Studio compares the two and identifies every value that changed — these are guaranteed dynamic values that need correlation. After analysis, review each card in the Correlation Advisor — click <strong>Trace</strong> to see where a value came from, and <strong>Accept</strong> to add it. Then click <strong>▶ Apply &amp; Regenerate</strong>.</p></div></div>
           </div>
           <div class="help-faq-item">
-            <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">What is the difference between the Recorder and Script Studio?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
-            <div class="help-faq-body"><div><p class="help-faq-a"><strong>Recorder</strong> records your journey (Start recording) or reads a HAR file and converts it into a VuGen script with your transactions, servers and page resources — use it first. <strong>Script Studio</strong> takes one or two HAR files and produces a <em>correlated</em> script — it identifies dynamic values and generates the extraction and reuse code automatically. The recommended workflow is: record with the Recorder (or browser DevTools), then feed the HAR into Script Studio for correlation.</p></div></div>
+            <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Where is the Recorder?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
+            <div class="help-faq-body"><div><p class="help-faq-a">It is part of <strong>Script Studio</strong> now. Script Studio records your journey (Start recording) or reads a HAR file and makes a VuGen script with your transactions, servers and page resources straight away &#x2014; download it as it is, or correlate it first in the Correlation Advisor tab of the same workspace. Old Recorder links and bookmarks open Script Studio.</p></div></div>
           </div>
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My download failed or the ZIP is empty. What happened?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
@@ -920,7 +893,7 @@
           </div>
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Why can't I record in VuGen on my virtual desktop or Azure machine?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
-            <div class="help-faq-body"><div><p class="help-faq-a">Corporate security policies and incomplete VuGen installations on some virtual desktops and Azure virtual machines prevent VuGen's built-in proxy recording from working. The <strong>Recorder</strong> tool is the solution — click <strong>Start recording</strong> and the CDP Recorder records your journey through the browser itself, so no proxy or certificate is needed (or use the browser's Developer Tools, F12 → Network tab, and export the HAR). The recording opens in the Recorder; download the VuGen script.</p></div></div>
+            <div class="help-faq-body"><div><p class="help-faq-a">Corporate security policies and incomplete VuGen installations on some virtual desktops and Azure virtual machines prevent VuGen's built-in proxy recording from working. <strong>Script Studio</strong> is the solution — click <strong>Start recording</strong> and the CDP Recorder records your journey through the browser itself, so no proxy or certificate is needed (or use the browser's Developer Tools, F12 → Network tab, and export the HAR). The recording opens in Script Studio; download the VuGen script.</p></div></div>
           </div>
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My application uses JWT tokens in pre-request scripts — will those be converted?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
@@ -940,7 +913,7 @@
           </div>
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Start recording says "The CDP Recorder did not start". What do I do?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
-            <div class="help-faq-body"><div><p class="help-faq-a">It means nothing answered on your computer. <strong>(1)</strong> If your browser asked <em>"Open cdp-recorder?"</em>, click <strong>Open</strong> and then <strong>Try again</strong>. <strong>(2)</strong> Not set up yet: download <code>cdp-recorder.zip</code>, extract it to a folder that stays and where your computer lets you run programs (for example <code>C:\PerfX\cdp-recorder</code>, not inside your user profile folder), double-click <code>cdp-recorder.exe</code> once, then <strong>Try again</strong>. <strong>(3)</strong> If your computer does not let the browser start programs, start <code>cdp-recorder.exe</code> yourself first, click <strong>Try again</strong>, then <strong>Allow</strong> on its small toolbar — it asks once and remembers this page. If Windows does not let <code>cdp-recorder.exe</code> run at all, use <strong>Bookmarks + DevTools</strong> on the Recorder page, or ask your IT team to approve it.</p></div></div>
+            <div class="help-faq-body"><div><p class="help-faq-a">It means nothing answered on your computer. <strong>(1)</strong> If your browser asked <em>"Open cdp-recorder?"</em>, click <strong>Open</strong> and then <strong>Try again</strong>. <strong>(2)</strong> Not set up yet: download <code>cdp-recorder.zip</code>, extract it to a folder that stays and where your computer lets you run programs (for example <code>C:\PerfX\cdp-recorder</code>, not inside your user profile folder), double-click <code>cdp-recorder.exe</code> once, then <strong>Try again</strong>. <strong>(3)</strong> If your computer does not let the browser start programs, start <code>cdp-recorder.exe</code> yourself first, click <strong>Try again</strong>, then <strong>Allow</strong> on its small toolbar — it asks once and remembers this page. If Windows does not let <code>cdp-recorder.exe</code> run at all, use <strong>Bookmarks + DevTools</strong> in Script Studio (<em>How to record your journey</em>), or ask your IT team to approve it.</p></div></div>
           </div>
           <div class="help-faq-item">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Do I need administrator rights to use the CDP Recorder?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
@@ -969,9 +942,8 @@
     'hacc-formats':      'Output Formats',
     'hacc-converter':    'Postman / Bruno',
     'hacc-jmeter':       'JMeter',
-    'hacc-recorder':     'Recorder',
-    'hacc-explorer':     'HAR Explorer',
     'hacc-studio':       'Script Studio',
+    'hacc-explorer':     'HAR Explorer',
     'hacc-workload':     'Workload Modeller',
     'hacc-analyser':     'Results Analyser',
     'hacc-capabilities': 'Capabilities',

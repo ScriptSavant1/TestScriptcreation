@@ -23,7 +23,7 @@ import { onSettled } from "./cdp-capture.js";
 import { originAccess, originOf, readSession, harFileName, createAskQueue, txName, nextTxNumber, nextPlanned } from "./portal-mode.js";
 import { VERSION } from "./version.js";
 
-/** What a recording started from the Recorder page asked for (POST /api/session). */
+/** What a recording started from the PerfX Studio page asked for (POST /api/session). */
 export interface PortalSession {
   url: string;
   browser: "edge" | "chrome";
@@ -102,7 +102,7 @@ export function startServer(
   const asks = createAskQueue(); // pages asking to be allowed on the toolbar (POST /api/ask)
   let toolbarSeen = 0; // last status poll from the floating toolbar (it polls every second)
 
-  // Stop and write the .har. A recording started from the Recorder page is saved to Downloads under its own
+  // Stop and write the .har. A recording started from the PerfX Studio page is saved to Downloads under its own
   // name, whichever Stop was pressed (page or toolbar) — and also on Quit (saveOpenRecording below).
   const save = async (askedName: string): Promise<{ file: string; entryCount: number }> => {
     const fileName = session ? harFileName(session.name || "Recording") : askedName.trim() || "recording.har";
@@ -227,7 +227,7 @@ export function startServer(
         return;
       }
 
-      // A recording started from the Recorder page: open the browser on the address, record, save to Downloads.
+      // A recording started from the PerfX Studio page: open the browser on the address, record, save to Downloads.
       if (req.method === "POST" && url.pathname === "/api/session") {
         const asked = readSession(await readJsonBody(req));
         if (!asked.ok) return sendJson(res, 400, { error: asked.error });

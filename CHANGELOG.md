@@ -37,8 +37,21 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - Planned steps typed in Start recording (More options) reach the recorder: an empty Enter on the toolbar starts the next planned step, and the box shows which one is next.
 - Starting a transaction while one runs ends that one properly, with its end time (BUG-145).
 - `/api/status` reports `nextTx` (the next number and the next planned step); `/api/tx/start` takes `auto: true` (numbered by the recorder); `/api/session` takes `plan`. The pages expect 0.2.2 (`LATEST`) and offer the download to older recorders. The README in the ZIP and the user guide text describe the new box.
+- Its messages, the README in the ZIP and the user guide name Script Studio, where recordings are started and opened now (the Recorder page is part of it); the guide's pictures are new.
 
 ### Recorder and Script Studio
+
+#### The Recorder is part of Script Studio (redesign step 6)
+
+- One tool from recording to download: **Script Studio** records (Start recording), shows the requests, writes the script at once, correlates and sets the test data. The Recorder page is removed; the sidebar, Home and quick search lead to Script Studio, and old Recorder links and bookmarks (`…/recorder`, `#/record`, the Help link) open it.
+- "How to record your journey" moved from the Recorder page to Script Studio's start screen, with every word of both ways (CDP Recorder, Bookmarks + DevTools) and the bookmark buttons; folded until opened, the chosen way remembered. "Not set up yet?" opens it.
+- One script generator for recordings: Script Studio's. Its tests now hold what the Recorder generator's tests checked (form posts, JSON bodies, page resources, server parameters in every place).
+- Quick search: Start recording opens Script Studio with the recording window; a result whose title is exactly what you typed comes first.
+- Sidebar: Script Studio first under Create scripts ("Record · correlate · download", with the Running badge of the CDP Recorder), then the HAR Explorer.
+- Help: one Script Studio section for recording, the workspace, correlation and test data (the Recorder section folded into it, the screens described as they are now); Quick start, tools table, FAQ and the HAR Explorer section updated.
+- Usage statistics keep counting recordings as `recorder` (one per recording made with Start recording) and opened recordings as `studio`.
+- Fixed: in VuGen scripts, a server name inside a request body stayed as recorded instead of its server parameter (BUG-146).
+- The HAR Explorer and Script Studio give the same transactions and left-out requests on every sample recording (BUG-142 closed).
 
 #### Script Studio: one workspace (redesign step 2)
 

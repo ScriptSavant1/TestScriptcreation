@@ -20,7 +20,7 @@ describe('Script Studio redesign — same scripts as the classic page', () => {
   test('Studio.html loads the classic scripts unchanged, in the same order, then its layout script', () => {
     const engine = scripts(classic);
     expect(scripts(page).slice(0, engine.length)).toEqual(engine);
-    expect(scripts(page).slice(engine.length)).toEqual(['portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js']);
+    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js']);
   });
 
   test('the classic stylesheet is still loaded (it styles what the scripts draw), then the new one', () => {
@@ -75,5 +75,31 @@ describe('Script Studio redesign — every element the scripts use exists', () =
       'Paste the server response body',
       'For diff-based correlation',
     ].forEach((t) => expect(mine).toContain(t));
+  });
+
+  // The Recorder tool is part of Script Studio: its "How to record your journey" guide lives on Studio's start screen
+  test('the How to record guide moved from the Recorder page is on the start screen, with both ways and the bookmarks', () => {
+    const plain = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ');
+    const mine = plain(page);
+    [
+      'How to record your journey',
+      'Set up once on this computer',
+      'Or start it yourself',
+      'Install the transaction bookmarks',
+      'Bookmarklets only work on real websites.',
+      'Required: enable "Allow to generate HAR with Sensitive Data" before recording',
+      'Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.',
+    ].forEach((t) => expect(mine).toContain(t));
+    ['id="cdp-dl"', 'id="tab-cdp"', 'id="tab-classic"', 'id="how-cdp"', 'id="how-classic"', "new Image().src='https://START-'", "new Image().src='https://END-'"].forEach((t) => expect(page).toContain(t));
+    expect(page).not.toMatch(/Select mode/);
+  });
+
+  test('old Recorder addresses and links lead to Script Studio', () => {
+    const server = fs.readFileSync(path.resolve(__dirname, '../../src/web/server.js'), 'utf-8');
+    expect(server).toMatch(/app\.get\(\["\/recorder", "\/converter\/recorder"\][^]*?res\.redirect\(301, req\.path\.replace\(\/recorder\$\/, "studio"\)\)/);
+    const shell = fs.readFileSync(path.join(PUB, 'portal/shell.js'), 'utf-8');
+    expect(shell).toContain('const ALIAS = { record: "studio" };');
+    expect(shell).toContain('"#/record": "#/studio"');
+    expect(fs.existsSync(path.join(PUB, 'Recorder.html'))).toBe(false);
   });
 });

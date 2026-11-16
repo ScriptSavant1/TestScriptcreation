@@ -1508,18 +1508,6 @@ code {
 <%- include('partials/converter') %>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- PORTAL: RECORDER PANEL (iframe, lazy-loaded)                           -->
-<!-- ══════════════════════════════════════════════════════════════════════ -->
-<div id="portal-recorder" class="portal-iframe-panel">
-  <div class="iframe-chrome">
-    <button class="iframe-back-btn" onclick="switchPortalTab('home')">← Back to Portal</button>
-    <span class="iframe-tool-title">🎙 HAR Script Generator</span>
-    <span class="iframe-tool-badge">Recorded Traffic → VuGen</span>
-  </div>
-  <iframe id="iframe-recorder" src="" title="VuGen HAR Script Generator"></iframe>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════════════════ -->
 <!-- PORTAL: HAR EXPLORER PANEL (iframe, lazy-loaded)                       -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div id="portal-explorer" class="portal-iframe-panel">
@@ -1576,7 +1564,7 @@ function toggleTheme() {
   html.setAttribute('data-theme', next);
   localStorage.setItem('lr-theme', next);
   // Sync theme to any loaded iframe tools
-  ['recorder','explorer','studio','workload','analyser'].forEach(function(t) {
+  ['explorer','studio','workload','analyser'].forEach(function(t) {
     const f = document.getElementById('iframe-' + t);
     if (f && f.contentWindow && f.contentWindow.lreSetTheme) {
       f.contentWindow.lreSetTheme(next);
@@ -1608,14 +1596,13 @@ const PORTAL_CONFIG = {
   tabs: {
     home:      { enabled: true  },
     converter: { enabled: true  },
-    recorder:  { enabled: true  },
     explorer:  { enabled: true  },
     studio:    { enabled: true  },
     workload:  { enabled: true  },
     analyser:  { enabled: true  },
     help:      { enabled: true  }
   },
-  iframes: { recorder: BASE_PATH + '/recorder', explorer: BASE_PATH + '/har-explorer', studio: BASE_PATH + '/studio', workload: BASE_PATH + '/workload-modeller', analyser: BASE_PATH + '/results-analyser' }
+  iframes: { explorer: BASE_PATH + '/har-explorer', studio: BASE_PATH + '/studio', workload: BASE_PATH + '/workload-modeller', analyser: BASE_PATH + '/results-analyser' }
 };
 
 /* ── Portal tab switching ───────────────────────────────────────────────── */
@@ -1624,13 +1611,14 @@ let   _iframeLoaded = {};
 let   _activeTab    = 'home';
 
 function switchPortalTab(tab) {
+  if (tab === 'recorder') tab = 'studio';   // the Recorder is part of Script Studio now
   if (!PORTAL_CONFIG.tabs[tab]?.enabled) return; // guard: disabled tab
 
   _activeTab = tab;
 
   // Show/hide the global Clear button — only on tool tabs
   const clearBtn = document.getElementById('btn-global-clear');
-  if (clearBtn) clearBtn.style.display = ['converter','recorder','studio'].includes(tab) ? 'flex' : 'none';
+  if (clearBtn) clearBtn.style.display = ['converter','studio'].includes(tab) ? 'flex' : 'none';
 
   // Update tab button active state
   PORTAL_PANELS.forEach(t => {
@@ -1664,7 +1652,7 @@ function switchPortalTab(tab) {
 function globalClear() {
   if (_activeTab === 'converter') {
     _clearConverter();
-  } else if (_activeTab === 'recorder' || _activeTab === 'studio') {
+  } else if (_activeTab === 'studio') {
     _clearIframeTool(_activeTab);
   }
 }

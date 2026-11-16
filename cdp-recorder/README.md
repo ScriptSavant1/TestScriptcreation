@@ -1,8 +1,8 @@
 # CDP Recorder
 
-A small Windows program that records a browser journey — including every new tab and pop-up — into a HAR file for the PerfX Studio Recorder and Script Studio. It uses the Chrome DevTools Protocol (CDP) directly, so it needs **no browser extension**. It replaces the retired PerfX Chrome / Edge extension, which corporate Group Policy blocked on several machines.
+A small Windows program that records a browser journey — including every new tab and pop-up — into a HAR file for PerfX Studio's Script Studio. It uses the Chrome DevTools Protocol (CDP) directly, so it needs **no browser extension**. It replaces the retired PerfX Chrome / Edge extension, which corporate Group Policy blocked on several machines.
 
-Users download it from the portal (**Get CDP Recorder** on Home, or the Recorder page) as `cdp-recorder.zip`, extract it, and run `cdp-recorder.exe`. The user-facing guide is the **Recorder** section of Help & guides in the portal, and the local HTML guide `Docs/user/CDP-RECORDER-USER-GUIDE.html` (rebuilt by `recorder/scripts/build-user-guide.mjs`).
+Users download it from the portal (quick search **Get CDP Recorder**, or Script Studio → *How to record your journey*) as `cdp-recorder.zip`, extract it, and run `cdp-recorder.exe`. The user-facing guide is the **Script Studio** section of Help & guides in the portal, and the local HTML guide `Docs/user/CDP-RECORDER-USER-GUIDE.html` (rebuilt by `recorder/scripts/build-user-guide.mjs`).
 
 ## Folders
 
@@ -18,9 +18,9 @@ The folder is self-contained, with its own `package.json` and `node_modules`. On
 
 - `src/web/server.js` serves the built `recorder/dist/cdp-recorder.zip` (falling back to `recorder/dist/cdp-recorder.exe`) at `GET /downloads/cdp-recorder` (also under `/converter`). If neither file is there, the route answers 404 with `cdp_recorder_not_built`.
 - `tests/unit/harBuilder.test.js` tests `recorder/src/har-builder.js`.
-- The portal (`src/web/public/portal/shell.js`) checks whether a recorder is running on the user's machine (`http://localhost:8787/api/status`) and shows a "Running" badge on the Recorder item in the sidebar.
+- The portal (`src/web/public/portal/shell.js`) checks whether a recorder is running on the user's machine (`http://localhost:8787/api/status`) and shows a "Running" badge on the Script Studio item in the sidebar.
 
-The HAR it writes is standard HAR 1.2 plus `_perfx_*` fields (transaction pages, background-traffic classification, screenshots). The Recorder and Script Studio read it with no special handling beyond those fields.
+The HAR it writes is standard HAR 1.2 plus `_perfx_*` fields (transaction pages, background-traffic classification, screenshots). Script Studio and the HAR Explorer read it with no special handling beyond those fields.
 
 ## Build and distribute
 

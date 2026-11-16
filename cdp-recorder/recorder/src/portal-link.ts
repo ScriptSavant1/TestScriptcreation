@@ -1,5 +1,5 @@
 /**
- * portal-link.ts — the Windows side of recording started from the PerfX Studio Recorder page.
+ * portal-link.ts — the Windows side of recording started from the PerfX Studio page.
  *
  *  - registerLink(): makes perfx-recorder: links start this .exe, for the current Windows user only
  *    (HKCU\Software\Classes — no administrator rights). Run on every start of the packaged .exe, so

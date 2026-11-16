@@ -145,11 +145,105 @@
           <section class="ss-card" id="ss-how">
             <div class="ss-card-h" data-fold="how"><svg class="i ss-chev"><use href="#i-chev"/></svg><h3>How it works</h3><span class="ss-sum">4 steps</span></div>
             <ol class="ss-minis">
-              <li><i>1</i><div><b>Record your journey</b><span>With Start recording, or the bookmarks and DevTools (see Help).</span></div></li>
+              <li><i>1</i><div><b>Record your journey</b><span>With Start recording, or the bookmarks and DevTools (see How to record, below).</span></div></li>
               <li><i>2</i><div><b>Open the recording</b><span>A recording made here opens by itself. The script is ready at once.</span></div></li>
               <li><i>3</i><div><b>Review and download</b><span>Format, filters, domains and transactions, then the ZIP.</span></div></li>
               <li><i>4</i><div><b>Correlate when needed</b><span>The Correlation Advisor tab, in the same workspace.</span></div></li>
             </ol>
+          </section>
+
+          <!-- How to record: the two ways (CDP Recorder, bookmarks + DevTools); folded until opened (pref fold.guide) -->
+          <section class="ss-card folded" id="ss-guide">
+            <div class="ss-card-h" data-fold="guide"><svg class="i ss-chev"><use href="#i-chev"/></svg><h3>How to record your journey</h3><span class="ss-sum">CDP Recorder, or bookmarks + DevTools</span></div>
+            <div class="ss-guide-b">
+            <p class="ss-p">Choose one way to record. Both give you a HAR file to open above. Can't install programs? Use <b>Bookmarks + DevTools</b> — nothing to install.</p>
+            <div class="ss-gtabs" role="tablist" aria-label="Recording method">
+              <button class="ss-gtab" type="button" role="tab" aria-selected="true" aria-controls="how-cdp" id="tab-cdp"><span class="ss-card-ic" style="--c:var(--c-record)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span><span><b>CDP Recorder</b><small>Pop-ups, new tabs, or DevTools / bookmarks blocked</small></span><span class="radio" aria-hidden="true"></span></button>
+              <button class="ss-gtab" type="button" role="tab" aria-selected="false" aria-controls="how-classic" id="tab-classic"><span class="ss-card-ic" style="--c:var(--c-help)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span><span><b>Bookmarks + DevTools</b><small>No install at all</small></span><span class="radio" aria-hidden="true"></span></button>
+            </div>
+
+            <!-- CDP Recorder -->
+            <div class="ss-gpanel" id="how-cdp" role="tabpanel" aria-labelledby="tab-cdp">
+              <div class="ss-gcard">
+                <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Pop-ups, new tabs, or DevTools / bookmarks blocked? Use the CDP Recorder</h4>
+                <p>A small Windows program that records your whole journey — including every new tab and pop-up window (for example a sign-in pop-up) — and names transactions from a floating toolbar. No DevTools, no bookmarks and no browser extension needed.</p>
+                <h5 class="ss-gsub">Set up once on this computer</h5>
+                <ol class="ss-gol">
+                  <li><span>Download <a id="cdp-dl" href="downloads/cdp-recorder">cdp-recorder.zip</a> (one time only — and again when this page says a newer version is available)</span></li>
+                  <li><span>Right-click the ZIP → <b>Extract All…</b> → choose a folder that stays and where your computer lets you run programs, for example <code>C:\PerfX\cdp-recorder</code> — not inside your user profile folder (such as Downloads, Desktop or Documents)</span></li>
+                  <li><span>Open the extracted folder and double-click <code>cdp-recorder.exe</code> once. This connects it to the <b>Start recording</b> button for your Windows user — no administrator rights needed. It opens a small toolbar and a browser window; you don't need to record anything in them. If you move the folder later, double-click it again</span></li>
+                </ol>
+                <h5 class="ss-gsub">Record</h5>
+                <ol class="ss-gol">
+                  <li><span>Click <b>Start recording</b> above, type your application's address, choose Edge or Chrome and, if you like, a private window, then click <b>Start recording</b>. The first time, your browser asks <i>"Open cdp-recorder?"</i> — click <b>Open</b></span></li>
+                  <li><span>Two windows open: a small <b>toolbar</b> and an orange-bordered <b>RECORDING window</b> showing your application. Use your application <b>only in the recording window</b> (and the tabs and pop-ups it opens) — your normal browser is not recorded</span></li>
+                  <li><span>Name each transaction on this page: type a name (e.g. <code>Login</code>) and press <b>Enter</b> — the running transaction ends and this one starts, numbered for you (<code>T02_Login</code>). With planned steps (More options), press <b>Enter</b> on an empty box for the next one. <b>End</b> ends the running one. On the toolbar: type a name, click <b>Start Transaction</b>, do the steps, then click <b>End Transaction</b></span></li>
+                  <li><span>Click <b>Stop and save</b> — the <code>.har</code> file is saved in your <b>Downloads</b> folder and opens here, with the script ready. The toolbar says it is saved; the recorder's windows close after 10 seconds (<b>Keep open</b> on the toolbar keeps them)</span></li>
+                </ol>
+                <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg><span>Transactions named on the toolbar are picked up automatically — no START/END bookmarks needed. Don't run <code>cdp-recorder.exe</code> from inside the ZIP: Windows would run it from a temporary folder and the button could not find it next time.</span></div>
+                <h5 class="ss-gsub">Or start it yourself</h5>
+                <ol class="ss-gol">
+                  <li><span>Double-click <code>cdp-recorder.exe</code>. Two windows open: a small <b>toolbar</b> and an orange-bordered <b>RECORDING window</b>. Use your application <b>only in the recording window</b> — your normal browser is not recorded</span></li>
+                  <li><span>On the toolbar click <b>Start Recording</b>, type a transaction name (e.g. <code>T01_Login</code>) and click <b>Start Transaction</b></span></li>
+                  <li><span>Do the steps for that transaction, then click <b>End Transaction</b>. Repeat for each transaction</span></li>
+                  <li><span>Click <b>Stop Recording</b> — the <code>.har</code> file is saved in the same folder as <code>cdp-recorder.exe</code>. Drop it in the area above</span></li>
+                </ol>
+              </div>
+            </div>
+
+            <!-- Bookmarks + DevTools -->
+            <div class="ss-gpanel" id="how-classic" role="tabpanel" aria-labelledby="tab-classic" hidden>
+              <div class="ss-ggrid">
+                <div class="ss-gcard">
+                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Install the transaction bookmarks <small>(one-time setup)</small></h4>
+                  <p>Show the Bookmarks Bar (<b>Ctrl+Shift+B</b>), then <b>drag both buttons below</b> onto it. During recording, click <b class="c-start"><svg class="ss-inl" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>START Transaction</b> before each transaction and <b class="c-end"><svg class="ss-inl" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>END Transaction</b> after. A prompt lets you type the transaction name each time.</p>
+                  <div class="ss-bm">
+                    <a class="start" title="Drag this button to your Bookmarks Bar — do not click it here."
+                       href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('Start transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n){localStorage.setItem('_vugen_txn',n);new Image().src='https://START-'+n+'.invalid/';}}}catch(e){}})();">&#x25B6; START Transaction</a>
+                    <a class="end" title="Drag this button to your Bookmarks Bar — do not click it here."
+                       href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('End transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n)new Image().src='https://END-'+n+'.invalid/';}}catch(e){}})();">&#x25A0; END Transaction</a>
+                  </div>
+                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>How it works:</b> the last used transaction name is remembered automatically — the END prompt pre-fills with the same name you used for START. Both bookmarks fire a request to a <code>.invalid</code> domain which appears in the HAR and is detected as a transaction marker by this tool.</span></div>
+                  <div class="ss-gcall ds-note warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>Bookmarklets only work on real websites.</b> They will not respond on the browser's New Tab page or any <code>chrome://</code> page — Chrome blocks them silently. Always navigate to your application URL first, then click the bookmark.</span></div>
+                </div>
+                <div class="ss-gcard">
+                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Record your application</h4>
+                  <ol class="ss-gol">
+                    <li><span><b>Navigate to your application</b> in the browser (e.g. <code>https://myapp.example.com</code>)</span></li>
+                    <li><span>Press <b>F12</b> → click the <b>Network</b> tab → enable <b>Preserve Log</b> and <b>Disable Cache</b> checkboxes → click <svg class="ss-inl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" role="img" aria-label="the clear button"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg> to clear existing entries</span></li>
+                    <li><span>Click the <b class="c-start"><svg class="ss-inl" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>START Transaction</b> bookmark — type a name (e.g. <code>T01_Login</code>) and click OK</span></li>
+                    <li><span>Perform all steps for that transaction (login, fill form, navigate, etc.)</span></li>
+                    <li><span>Click the <b class="c-end"><svg class="ss-inl" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>END Transaction</b> bookmark — the name is pre-filled from START, just click OK</span></li>
+                    <li><span>Repeat START / END for each transaction (T02_Home, T03_Search…). Navigate freely between bookmarklet clicks — markers always fire in the current page's context</span></li>
+                    <li><span>After all transactions are done: in the Network tab, click the download icon → select <b>"Export HAR (with sensitive data)"</b> — or right-click any row → <b>"Save all as HAR with content"</b></span></li>
+                    <li><span>Drop the saved <code>.har</code> file in the area above — the script is generated at once, in the format you chose</span></li>
+                  </ol>
+                </div>
+              </div>
+              <div class="ss-ggrid">
+                <div class="ss-gcard warn">
+                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> Required: enable "Allow to generate HAR with Sensitive Data" before recording</h4>
+                  <ol class="ss-gol">
+                    <li><span>Press <b>F12</b> to open DevTools → click the <b>Settings gear icon</b> (top-right corner) — or press <b>F1</b> / <b>Shift+?</b></span></li>
+                    <li><span>Scroll to the <b>Network</b> section</span></li>
+                    <li><span>Tick <b>"Allow to generate HAR with Sensitive Data"</b></span></li>
+                    <li><span>Close Settings → when downloading, choose <b>"Export HAR (with sensitive data)"</b></span></li>
+                  </ol>
+                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>This ensures Authorization headers, cookies and Bearer tokens are included. NFT environments use test data only — safe to enable.</span></div>
+                </div>
+                <div class="ss-gcard">
+                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg> DevTools settings (required before recording)</h4>
+                  <ul class="ss-gol">
+                    <li><span><b>Preserve Log</b> — keeps all network requests visible across page navigations and redirects. Without this, requests from login redirects are lost.</span></li>
+                    <li><span><b>Disable Cache</b> — forces the browser to fetch fresh responses instead of using the local cache. Without this, response bodies may be empty in the HAR, making correlation extraction impossible in Script Studio.</span></li>
+                  </ul>
+                  <p class="ss-gnote">Both checkboxes are in the Network tab toolbar at the top of the DevTools panel.</p>
+                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>Forgot markers?</b> After opening the HAR, tick the requests in the Requests list and use <b>New transaction</b> to group them into transactions.</span></div>
+                  <div class="ss-gcall ds-note warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.</span></div>
+                </div>
+              </div>
+            </div>
+            </div>
           </section>
         </div>
       </div>
@@ -589,6 +683,7 @@
     <script src="studio-app.js"></script>
     <script src="analytics-device.js" defer></script>
     <!-- this page: start screen, workspace, transactions, dialogs -->
+    <script src="portal/track.js"></script>
     <script src="portal/drop-anywhere.js"></script>
     <script src="portal/record-live.js"></script>
     <script src="portal/studio-txn.js"></script>

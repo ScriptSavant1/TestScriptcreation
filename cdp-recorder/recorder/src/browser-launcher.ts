@@ -192,7 +192,7 @@ h1{color:#c2410c;margin:0 0 12px;font-size:24px}li{margin:6px 0}</style></head><
 const RECORDING_WINDOW_LANDING_URL = "data:text/html;charset=utf-8," + encodeURIComponent(RECORDING_WINDOW_LANDING_HTML);
 
 /**
- * Landing page for a recording started from the PerfX Studio Recorder page: the recorder opens the
+ * Landing page for a recording started from the PerfX Studio page: the recorder opens the
  * application address itself as soon as capture is confirmed, so this only says what is happening.
  */
 export function portalLandingUrl(appUrl: string): string {

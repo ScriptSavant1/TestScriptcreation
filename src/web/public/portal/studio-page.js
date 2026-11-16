@@ -314,6 +314,21 @@
     h.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(e); } });
   });
 
+  // ── How to record: the two ways as tabs (remembered), the bookmarks are dragged, not clicked ──
+  var dl = document.getElementById("cdp-dl");   // works at /studio and under the IIS /converter virtual directory
+  if (dl) dl.href = (location.pathname.indexOf("/converter") === 0 ? "/converter" : "") + "/downloads/cdp-recorder";
+  $$(".ss-gtab").forEach(function (t) {
+    t.addEventListener("click", function () {
+      $$(".ss-gtab").forEach(function (x) { x.setAttribute("aria-selected", String(x === t)); });
+      $$(".ss-gpanel").forEach(function (p) { p.hidden = p.id !== t.getAttribute("aria-controls"); });
+      prefs.method = t.id; save();
+    });
+  });
+  if (prefs.method && document.getElementById(prefs.method)) document.getElementById(prefs.method).click();
+  $$(".ss-bm a").forEach(function (a) {
+    a.addEventListener("click", function (e) { e.preventDefault(); if (typeof showToast === "function") showToast("Drag this button to your Bookmarks Bar — do not click it here.", "warning"); });
+  });
+
   // ── the engine's dialogs: focus moves in on open, Tab stays inside, Escape closes, focus returns on close ──
   var DIALOGS = [
     { overlay: "adv-modal-overlay", open: "openAdvisorModal", close: "closeAdvisorModal", first: "adv-src-filter" },
@@ -431,8 +446,14 @@
   var btn = document.getElementById("ss-rec-btn");
   if (!btn || !window.PerfxRecordLive) return;
   var up = document.getElementById("ph-upload"), home = up && up.querySelector(".ss-home");
-  var cards = [document.querySelector(".ss-choices"), document.getElementById("ss-how"), document.getElementById("ss-resume"), document.getElementById("ss-hero")];
+  var cards = [document.querySelector(".ss-choices"), document.getElementById("ss-how"), document.getElementById("ss-guide"), document.getElementById("ss-resume"), document.getElementById("ss-hero")];
   var target = 1, was = [];
+  function openGuide() {
+    var g = document.getElementById("ss-guide"); if (!g) return;
+    if (g.classList.contains("folded")) g.querySelector("[data-fold]").click();
+    var t = document.getElementById("tab-cdp"); if (t) t.click();
+    g.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
   window.PerfxRecordLive.mount({
     host: home,
     chips: document.getElementById("ss-rec-chips"),
@@ -440,7 +461,10 @@
     isIdle: function () { return document.body.classList.contains("ss-view-home") && !cards[0].hidden; },
     before: function () { was = cards.map(function (c) { return c && c.hidden; }); cards.forEach(function (c) { if (c) c.hidden = true; }); },
     after: function () { cards.forEach(function (c, i) { if (c) c.hidden = was[i]; }); },
+    onHow: openGuide,
     onSaved: function (file) {
+      // a recording made here counts as Recorder usage (correlation work counts as Script Studio)
+      if (window.PerfxTrack) window.PerfxTrack.send({ tool: "recorder", protocol: null, mode: "cdp", filename: file.name || null, sizeKb: file.size ? Math.round(file.size / 1024) : null, requestCount: null, result: "success", errorCode: null, duration: null });
       if (typeof loadFile !== "function") return;
       loadFile(file, target);
       if (typeof showToast === "function") setTimeout(function () { showToast(target === 2 ? "Opened as the second recording (diff mode)." : file.name + " opened.", "success", 5000); }, 600);

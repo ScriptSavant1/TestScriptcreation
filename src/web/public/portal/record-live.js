@@ -13,7 +13,7 @@
  *  - Stop (here or on the toolbar) → the recorder saves the .har to Downloads → this page fetches it and hands it to
  *    the page (onSaved) — the same path as a dropped file.
  * The module draws its own window and live view (classes rl-*, portal/record-live.css); each page mounts it with its
- * hooks — portal/recorder-live.js (Recorder), portal/studio-page.js (Script Studio).
+ * hooks — portal/studio-page.js (Script Studio).
  * The recorder's side: cdp-recorder/recorder/src/server.ts, app.ts (portal mode).
  */
 (function () {

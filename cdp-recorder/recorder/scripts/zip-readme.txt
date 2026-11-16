@@ -13,8 +13,8 @@ SET UP ONCE ON THIS COMPUTER
    it next time.
 
 2. Open the extracted folder and double-click cdp-recorder.exe once.
-   This connects it to the "Start recording" button on the PerfX Studio
-   Recorder page, for your Windows user - no administrator rights needed.
+   This connects it to the "Start recording" button in PerfX Studio
+   (Script Studio), for your Windows user - no administrator rights needed.
    It opens a small toolbar and a browser window - you don't need to
    record anything in them.
    If you move the folder later, double-click it again.
@@ -67,7 +67,7 @@ then type the next name and press Enter - the running transaction ends and
 the next one starts. End Transaction ends the last one.
 
 Click Stop Recording. The recording (.har file) is saved in the same folder
-as cdp-recorder.exe. Load it in the PerfX Studio Recorder or Script Studio.
+as cdp-recorder.exe. Open it in PerfX Studio's Script Studio.
 Click Quit on the toolbar when you have finished - a recording still
 running is saved first.
 

@@ -6,7 +6,7 @@
  * Two ways to start:
  *  - classic — double-clicked: opens the recording window and the floating toolbar straight away
  *    (unchanged behaviour).
- *  - portal  — started by a perfx-recorder: link from the PerfX Studio Recorder page
+ *  - portal  — started by a perfx-recorder: link from PerfX Studio (Start recording)
  *    (`--portal "<link>"`): no window yet, waits for the page to ask for a recording
  *    (POST /api/session), saves it to Downloads, then waits for the next one. Closes itself after
  *    an hour without use. If a recorder is already running, the link's page is handed to it instead.
@@ -133,7 +133,7 @@ export async function run(pageHtml: string): Promise<void> {
 
   if (isPackagedExe()) {
     const reg = await registerLink();
-    if (reg === "registered") console.log("Set up: the PerfX Studio Recorder page can now start recordings on this computer.\n");
+    if (reg === "registered") console.log("Set up: PerfX Studio (Script Studio) can now start recordings on this computer.\n");
     else if (reg === "failed") console.warn("Could not register the perfx-recorder link — start recordings from this program instead.\n");
   }
 
@@ -188,12 +188,12 @@ export async function run(pageHtml: string): Promise<void> {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       if (recorder.isRecording()) return touched();
-      console.log("\nNot used for an hour — closing. The Recorder page starts it again when needed.");
+      console.log("\nNot used for an hour — closing. PerfX Studio starts it again when needed.");
       process.emit("SIGTERM");
     }, IDLE_EXIT_MS);
   };
 
-  // a recording asked for by the Recorder page (also when this one was double-clicked)
+  // a recording asked for by the PerfX Studio page (also when this one was double-clicked)
   const startSession = async (s: PortalSession) => {
     if (closing || closeTimer || recorder.isConnected()) await closeWindows(); // a fresh window for the chosen browser / private mode
     console.log(`Recording ${s.url} in ${s.browser === "chrome" ? "Chrome" : "Edge"}${s.private ? " (private window)" : ""}...`);
@@ -204,7 +204,7 @@ export async function run(pageHtml: string): Promise<void> {
     return { outDir: dl ?? (portalMode ? dirname(process.execPath) : outDir) };
   };
   const sessionSaved = () => {
-    console.log("Saved. Waiting for the next recording from the Recorder page.\n");
+    console.log("Saved. Waiting for the next recording from PerfX Studio.\n");
     // the page and the toolbar show "saved" first
     closeAt = Date.now() + CLOSE_AFTER_SAVE_MS;
     closeTimer = setTimeout(() => void closeWindows(), CLOSE_AFTER_SAVE_MS);
@@ -271,7 +271,7 @@ export async function run(pageHtml: string): Promise<void> {
 
   if (portalMode) {
     control = startServer(recorder, outDir, uiPort, pageHtml, serverOptions);
-    console.log("Waiting for the PerfX Studio Recorder page to start a recording.");
+    console.log("Waiting for PerfX Studio to start a recording.");
     console.log("Keep this window open. Close it (or press Ctrl+C) to stop the CDP Recorder.\n");
     touched();
   } else {

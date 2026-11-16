@@ -297,8 +297,9 @@ class WebServer {
     // bare-root path when the page itself was loaded at '/' (BUG-EXT-013).
     // Tool pages load inside the portal (…/converter/). Opened on their own in a browser tab they
     // send the user to the portal (public/portal/frame-guard.js) — one address for the whole app.
+    // The Recorder is part of Script Studio now: old links and bookmarks open Script Studio.
     this.app.get(["/recorder", "/converter/recorder"], (req, res) => {
-      res.sendFile(path.join(__dirname, "public", "Recorder.html"));
+      res.redirect(301, req.path.replace(/recorder$/, "studio"));
     });
     this.app.get(["/studio", "/converter/studio"], (req, res) => {
       res.sendFile(path.join(__dirname, "public", "Studio.html"));

@@ -82,11 +82,6 @@ function measure() {
     await p.setInputFiles('#fi-col', COL + 'postman_collection.json'); await p.click('#btn-cvt');
     await p.waitForSelector('#res-ok', { state: 'visible', timeout: 60000 }); await run('Postman result');
     await go('jmeter'); await run('JMeter');
-    await go('record'); await p.waitForFunction(() => { const w = document.getElementById('iframe-recorder').contentWindow; return w && w.JSZip; }, null, { timeout: 20000 });
-    await run('Recorder start', 'recorder');
-    f = await frameOf('recorder');
-    await f.setInputFiles('#hf', FX + 'studio/fixtures/rich-shop.har'); await f.click('#fmt-go'); await f.waitForSelector('#main:not([hidden])');
-    await run('Recorder workspace', 'recorder');
     await go('explore'); await p.waitForFunction(() => { const d = document.getElementById('iframe-explorer').contentDocument; return d && d.getElementById('hx-file'); }, null, { timeout: 20000 });
     await run('Explorer start', 'explorer');
     f = await frameOf('explorer'); await f.setInputFiles('#hx-file', require('path').resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/' + 'WebTours.har'); await f.waitForSelector('#hx-ws:not([hidden])');
@@ -97,6 +92,10 @@ function measure() {
     await go('studio'); await p.waitForFunction(() => { const w = document.getElementById('iframe-studio').contentWindow; return w && w.document.readyState === 'complete' && typeof w.loadFile === 'function'; }, null, { timeout: 20000 });
     await run('Studio start', 'studio');
     f = await frameOf('studio');
+    // How to record (moved from the Recorder): both ways
+    await f.click('#ss-guide [data-fold]'); await run('Studio how to record', 'studio');
+    await f.click('#tab-classic'); await run('Studio how to record bookmarks', 'studio');
+    await f.click('#tab-cdp'); await f.click('#ss-guide [data-fold]');
     // the file is read as soon as it is opened (no Analyse button)
     await f.setInputFiles('#dz1 input[type=file]', FX + 'studio/fixtures/api-tokens.har');
     await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 }); await p.waitForTimeout(800);

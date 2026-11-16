@@ -1,4 +1,4 @@
-// End-to-end test: Start recording on the Recorder page when the CDP Recorder was started BY HAND and the
+// End-to-end test: Start recording on the PerfX Studio page when the CDP Recorder was started BY HAND and the
 // browser may not start programs (the perfx-recorder: link does nothing). The page asks to be allowed, the
 // toolbar shows Allow / Don't allow, Allow is remembered (allowed-pages.json) and works after a restart.
 //
@@ -63,7 +63,7 @@ try {
   check((await call("POST", "/api/session", origin, { url: site })).status === 403, "it still cannot start a recording");
   check((await call("POST", "/api/ask", undefined)).status === 400, "a program (no Origin) cannot ask");
 
-  // 2. the toolbar (as served) and the Recorder page
+  // 2. the toolbar (as served) and the PerfX Studio page
   const bar = await browser.newPage({ viewport: { width: 300, height: 480 } });
   await bar.goto(`http://localhost:${UI}/`);
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });

@@ -2517,7 +2517,7 @@ function genMainJS(entries, correlations) {
 }
 
 // DevWeb servers — the same rule as VuGen's set_server(): a user argument with the parameter's name wins (rts.yml
-// userArguments, or -userArgs), else the recorded server. Same as the Recorder (VuGen-Recorder-generators.js).
+// userArguments, or -userArgs), else the recorded server. Same as both converters.
 function _stDwServerBlock(map, main) {
   const e = Object.entries(map || {});
   if (!e.length) return "";
@@ -3581,6 +3581,13 @@ function genActionC(entries, correlations) {
           o += `\t\t"Code=LR.setParam('${_djCorrName}_esc', JSON.stringify(LR.getParam('${_djCorrName}')).slice(1,-1));",\n`;
           o += `\t\t"ResultParam=_esc_result",\n`;
           o += `\t\tLAST);\n\n`;
+        }
+        // Servers in the body become their parameter too ({App_Server}), as in URLs and headers — after every other
+        // substitution, so a correlation or parameter value that holds a server address is still found first. In the
+        // C-escaped body a JSON-escaped slash is \\/ : turned into \/ for the server patterns and back again.
+        if (body && acHostVarMap) {
+          const _hb = _subHosts(body.replace(/\\\\\//g, "\\/"), acHostVarMap);
+          if (_hb.changed) body = _hb.text.replace(/\\\//g, "\\\\/").replace(/\x00HDRH_([^\x00]+)\x00/g, "{$1}");
         }
         o += hdrOut; // flush headers AFTER all web_js_run calls, immediately before the HTTP request
         o += `\tweb_custom_request("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Method=${e.method}",\n`;

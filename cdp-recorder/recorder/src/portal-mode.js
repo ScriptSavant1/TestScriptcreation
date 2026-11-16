@@ -1,5 +1,5 @@
 /**
- * portal-mode.js — pure helpers for recording started from the PerfX Studio Recorder page.
+ * portal-mode.js — pure helpers for recording started from the PerfX Studio page.
  *
  * The page starts the recorder through a link registered for the current Windows user
  * (perfx-recorder://start?portal=<the portal's origin>), then drives it over the local
@@ -87,7 +87,7 @@ export function readSession(body) {
   return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80), plan: planSteps(String(b.plan || "").slice(0, 4000)) };
 }
 
-// ── transaction names: the same rules as the Recorder page (src/web/public/portal/record-live.js fullName / nextNum —
+// ── transaction names: the same rules as the PerfX Studio page (src/web/public/portal/record-live.js fullName / nextNum —
 //    keep the two in step) ──
 const pad2 = (n) => String(n).padStart(2, "0");
 /** The planned steps typed one per line (empty lines dropped, at most 50). */
@@ -116,7 +116,7 @@ export function nextPlanned(plan, started) {
 }
 
 /**
- * One row of the live list on the Recorder page, from a har-builder entry (pending or finished).
+ * One row of the live list on the PerfX Studio page, from a har-builder entry (pending or finished).
  * `background` comes from bg-detector (a confirmed periodic call) — the HAR's own _perfx_class is
  * only stamped at stop.
  */

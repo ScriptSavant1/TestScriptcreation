@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════════
  * PerfX Studio — design system (v4). Loaded by every page: the portal (index.ejs),
- * Recorder.html, Studio.html and the Results Analyser, BEFORE the page's own CSS.
+ * Studio.html, HarExplorer.html and the Results Analyser, BEFORE the page's own CSS.
  *
  *  · Flat surfaces, one neutral palette, ONE brand blue for actions. Tool colours are identity
  *    marks only (icon tiles, the active menu item, a page's icon) — never for buttons or big areas.

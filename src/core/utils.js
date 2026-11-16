@@ -17,7 +17,6 @@
  *
  * Consumers (browser-side, via <script src="/shared/utils.js">):
  *   public/script-studio/studio-codegen.js
- *   public/recorder/recorder-ui.js
  */
 
 // ─── Variable name sanitisation ───────────────────────────────────────────────

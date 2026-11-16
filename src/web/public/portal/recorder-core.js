@@ -1,10 +1,9 @@
-/* Recorder engine functions that the classic page (VuGen-Recorder.html) keeps in
- * its inline script: transaction-marker detection, request classification and
- * filters. detectMarkers, _recInjectPagerefMarkers, _makeRecMarker,
- * classifyHarEntry and refresh are VERBATIM copies of VuGen-Recorder.html —
- * tests/unit/recorderCoreParity.test.js fails if they drift apart; change both
- * together. applyFilters is this page's own (type buttons instead of the
- * "Static assets" tick box — see below). */
+/* The HAR reading engine's transaction-marker detection, request classification and
+ * filters (detectMarkers, _recInjectPagerefMarkers, _makeRecMarker, classifyHarEntry,
+ * refresh, applyFilters). Used by the HAR Explorer (portal/har-explorer-model.js) with
+ * VuGen-Recorder-state.js and VuGen-Recorder-parsers.js; Script Studio follows the same
+ * rules through shared/request-filter.js. Kept unchanged from the Recorder tool, now part
+ * of Script Studio (tests/unit/harExplorerModel.test.js, requestFilter.test.js). */
 // ===========================================================================
 // TRANSACTION MARKER DETECTION
 // ===========================================================================
@@ -179,7 +178,7 @@ function applyFilters(){
   }
 }
 
-// (Moved here from portal/recorder-ui.js unchanged, so the HAR Explorer repairs a recording exactly like the Recorder.)
+// (Kept here so the HAR Explorer repairs a recording exactly like Script Studio — BUG-113.)
 // A transaction whose START is missing from the recording (an END without a START — the START bookmark fired
 // before DevTools was recording) starts where the previous transaction ended, or at the beginning. Without this,
 // VuGen got lr_end_transaction for a transaction never started and DevWeb dropped the transaction.
