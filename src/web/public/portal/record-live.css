@@ -165,3 +165,20 @@
   .rl-stop { width: 100%; justify-content: center; }
   .rl-hint { display: none; }
 }
+
+/* one box: the number before it (added for you), Enter starts the transaction; the optional planned steps */
+.rl-txbox { display: flex; align-items: stretch; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-btn); background: var(--ds-inset); overflow: hidden; }
+.rl-txbox:focus-within { border-color: var(--ds-focus); box-shadow: 0 0 0 3px var(--ds-accent-soft); }
+.rl-prefix { display: flex; align-items: center; padding: 0 4px 0 12px; font-family: var(--ds-mono); font-size: 13px; font-weight: 700; color: var(--ds-accent-text); background: var(--ds-accent-soft); white-space: nowrap; }
+.rl-txbox .ds-field { flex: 1; min-width: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.rl-txbox .ds-field:focus { outline: 0; box-shadow: none; }
+.rl-plan { list-style: none; margin: 10px 0 0; padding: 8px 10px; border-radius: var(--ds-r-tile); background: var(--ds-surface-2); border: 1px solid var(--ds-border); display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.rl-plan li { display: inline-flex; align-items: center; gap: 4px; }
+.rl-plan li.done { color: var(--ds-ok); text-decoration: line-through; }
+.rl-plan li.done svg { width: 12px; height: 12px; }
+.rl-plan li.next { color: var(--ds-text); font-weight: 700; }
+.rl-plan li.next small { padding: 0 6px; border-radius: var(--ds-r-pill); background: var(--ds-accent-soft); color: var(--ds-accent-text); font-weight: 600; }
+.rl-wide { grid-column: 1 / -1; }
+.rl-wide textarea { resize: vertical; min-height: 64px; font-family: inherit; }
+.rl-opt { font-weight: 400; color: var(--ds-text-3); }
+.rl-txbox .ds-field { height: 40px; font-family: var(--ds-mono); font-size: var(--ds-fs); padding: 0 12px 0 2px; }

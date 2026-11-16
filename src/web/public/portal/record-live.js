@@ -89,7 +89,8 @@
         '<label class="rl-toggle"><input type="checkbox" id="lv-priv" checked><span><b id="lv-priv-t">Open a private window</b><small>Optional — untick it if your application does not work in a private window. Either way the recording window starts signed out, in a fresh browser profile, so the login is recorded too.</small></span></label>' +
         '<details class="rl-more"><summary>More options</summary><div class="rl-row">' +
           '<label class="rl-field">Recording name<input class="ds-field" id="lv-name" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. SC01_Booking"><small>Used for the file name.</small></label>' +
-          '<label class="rl-field">First transaction<input class="ds-field" id="lv-first" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. T01_Launch"><small>Starts when the page opens.</small></label>' +
+          '<label class="rl-field">First transaction<input class="ds-field" id="lv-first" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. Launch"><small>Starts when the page opens; numbered for you (T01_Launch).</small></label>' +
+          '<label class="rl-field rl-wide">Planned steps <span class="rl-opt">(optional, one per line)</span><textarea class="ds-field" id="lv-plan" rows="3" spellcheck="false" placeholder="Login&#10;Search&#10;Add to cart"></textarea><small>While recording, press Enter on an empty box to start the next planned step — no typing during the journey.</small></label>' +
         '</div></details>' +
         '<div class="rl-save ds-note ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg><span>Saved automatically to your <b>Downloads</b> folder as <code id="lv-file">Recording_….har</code></span></div>' +
       '</div>' +
@@ -140,9 +141,12 @@
           '<button class="rl-mini rl-newest" type="button" id="lv-newest" hidden>Newest<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>' +
         '</section>' +
         '<section class="ds-card rl-tx" aria-labelledby="lv-tx-h">' +
-          '<h2 id="lv-tx-h">Transactions</h2><p class="rl-sub">Type the name, click Start, then do the steps in the recording window.</p>' +
-          '<label class="rl-field">Transaction name<input class="ds-field" id="lv-tx-name" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. T01_Login"><span class="rl-ferr" id="lv-tx-err" role="alert" hidden></span></label>' +
-          '<div class="rl-txbtns"><button class="ds-btn ds-btn-primary" type="button" id="lv-tx-start">Start transaction</button><button class="ds-btn" type="button" id="lv-tx-end" disabled>End transaction</button></div>' +
+          '<h2 id="lv-tx-h">Transactions</h2><p class="rl-sub">Type a name and press <b>Enter</b>: the running transaction ends and this one starts. The number is added for you.</p>' +
+          '<label class="rl-field" for="lv-tx-name">Next transaction</label>' +
+          '<div class="rl-txbox"><span class="rl-prefix" id="lv-prefix" title="Added for you — type your own (for example T07_Pay) to use another number">T01_</span><input class="ds-field" id="lv-tx-name" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. Login — press Enter" aria-describedby="lv-tx-err"></div>' +
+          '<span class="rl-ferr" id="lv-tx-err" role="alert" hidden></span>' +
+          '<div class="rl-txbtns"><button class="ds-btn ds-btn-primary" type="button" id="lv-tx-start">Start</button><button class="ds-btn" type="button" id="lv-tx-end" disabled title="End the running transaction without starting another — for a gap you do not want measured">End</button></div>' +
+          '<ol class="rl-plan" id="lv-planlist" hidden aria-label="Planned steps"></ol>' +
           '<ol class="rl-txlist" id="lv-txlist"></ol>' +
           '<div class="rl-call ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>The same buttons are on the small toolbar next to the recording window — use whichever is closer.</span></div>' +
         '</section>' +
@@ -213,6 +217,8 @@
     $('lv-priv').checked = prefs.private !== false;
     $('lv-name').value = prefs.name || '';
     $('lv-first').value = '';
+    $('lv-plan').value = prefs.plan || '';
+    if (prefs.plan) $('lv-plan').closest('details').open = true;   // a plan from last time is in sight
     $('lv-go').disabled = false; goLabel('Start recording');
     setView(true); markBrowsers(); showFileName();
     $('lv-dlg').showModal();
@@ -249,7 +255,9 @@
       $('lv-url-err').hidden = false; $('lv-url-inp').classList.add('bad'); $('lv-url-inp').focus();
       return;
     }
-    var req = { url: url, browser: browser(), private: $('lv-priv').checked, name: $('lv-name').value.trim(), firstTx: $('lv-first').value.trim() };
+    var first = $('lv-first').value.trim();
+    var req = { url: url, browser: browser(), private: $('lv-priv').checked, name: $('lv-name').value.trim(), firstTx: first ? fullNameStatic(first) : '' };
+    prefs.plan = $('lv-plan').value;
     prefs.urls = [url].concat((prefs.urls || []).filter(function (u) { return u !== url; })).slice(0, 6);
     prefs.browser = req.browser; prefs.private = req.private; prefs.name = req.name;
     savePrefs();
@@ -326,8 +334,9 @@
   }
 
   // ── the live recording ───────────────────────────────────────────────────
+  function fullNameStatic(raw) { return fullName(raw, 1); }   // the first transaction (no live recording yet)
   function startLive(sess, resumed) {
-    L = { sess: sess, rows: [], at: {}, last: 0, t0: Date.now(), tabs: {}, tabCount: 0, fold: {}, exp: {}, misses: 0, stopping: false, txActive: null, txDone: [], timer: null, poll: null, auto: false };
+    L = { plan: prefs.plan || '', sess: sess, rows: [], at: {}, last: 0, t0: Date.now(), tabs: {}, tabCount: 0, fold: {}, exp: {}, misses: 0, stopping: false, txActive: null, txDone: [], timer: null, poll: null, auto: false };
     if (P.before) P.before();
     $('rl-live').hidden = false;
     $('lv-url').textContent = sess.url || '';
@@ -337,7 +346,7 @@
     $('lv-stop').disabled = false; $('lv-stop').lastChild.textContent = 'Stop and save';
     $('lv-warn').hidden = true;
     $('lv-follow').checked = true; $('lv-newest').hidden = true;
-    $('lv-tx-name').value = sess.firstTx ? nextName(sess.firstTx) : (prefs.lastTx || 'T01_Login');
+    $('lv-tx-name').value = '';
     L.timer = setInterval(tick, 500); tick();
     pollLive();
     if (resumed) toast('The recording is still running — here it is.', 'info');
@@ -458,7 +467,37 @@
         (t.live ? 'recording… ' : '') + plural(counts[t.name] || 0, 'request') + '</span></li>';
     }).join('') : '<li class="none">No transactions yet — requests are recorded anyway; you can group them later in the Recorder.</li>';
     $('lv-tx-end').disabled = !L.txActive;
+    // the number before the box, and the next planned step as the hint (Enter on an empty box starts it)
+    $('lv-prefix').textContent = prefixFor(nextNum());
+    var np = nextPlanned();
+    $('lv-tx-name').placeholder = np ? 'Next planned: ' + np + ' — press Enter' : 'e.g. Login — press Enter';
+    var plan = planSteps(), pl = $('lv-planlist');
+    pl.hidden = !plan.length;
+    pl.innerHTML = plan.map(function (s) {
+      var done = stepDone(s), isNext = !done && s === np;
+      return '<li class="' + (done ? 'done' : isNext ? 'next' : '') + '">' + (done ? CHECK : '') + esc(s) + (isNext ? ' <small>next</small>' : '') + '</li>';
+    }).join('');
   }
+  // the transactions started so far (finished and running), in order
+  function started() { var a = (L.txDone || []).slice(); if (L.txActive && a.indexOf(L.txActive) === -1) a.push(L.txActive); return a; }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function prefixFor(n) { return 'T' + pad(n) + '_'; }
+  // the next number: after the highest one used (a typed T07_Pay is followed by T08), else the count
+  function nextNum() { var hi = started().length; started().forEach(function (t) { var m = /^T(\d+)_/.exec(t); if (m && +m[1] > hi) hi = +m[1]; }); return hi + 1; }
+  // "add to cart" → T04_Add_to_cart; a name typed with its own number (T07_Pay, t7-pay) keeps it
+  function fullName(raw, n) {
+    var s = String(raw || '').trim().replace(/[\s-]+/g, '_').replace(/[^A-Za-z0-9_]/g, '').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    if (!s) return '';
+    var own = /^[Tt](\d+)_+(.+)$/.exec(s);
+    if (own) return 'T' + pad(+own[1]) + '_' + own[2];
+    return prefixFor(n) + s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  function planSteps() { return String(L.plan || '').split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean); }
+  function stepDone(step) {
+    var key = fullName(step, 1).replace(/^T\d+_/, '').toLowerCase();
+    return started().some(function (t) { return t.replace(/^T\d+_/, '').toLowerCase() === key; });
+  }
+  function nextPlanned() { return planSteps().filter(function (s) { return !stepDone(s); })[0] || ''; }
   function nextName(name) {
     var m = /^([A-Za-z]*)(\d+)(.*)$/.exec(name || '');
     if (!m) return '';
@@ -466,10 +505,14 @@
     return m[1] + num + '_';
   }
   function txStart() {
-    var raw = $('lv-tx-name').value.trim().replace(/[\s-]+/g, '_');
+    var typed = $('lv-tx-name').value.trim() || nextPlanned();
+    var raw = fullName(typed, nextNum());
     var err = $('lv-tx-err');
-    if (!/^[A-Za-z]([A-Za-z0-9_]*[A-Za-z0-9])?$/.test(raw)) {
-      err.textContent = 'Use a letter first, then letters, numbers or underscores — for example T01_Login.'; err.hidden = false; $('lv-tx-name').focus(); return;
+    if (!raw) {
+      err.textContent = planSteps().length ? 'Every planned step is done — type a name for the next transaction.' : 'Type a name for the transaction, for example Login.'; err.hidden = false; $('lv-tx-name').focus(); return;
+    }
+    if (started().indexOf(raw) !== -1) {
+      err.textContent = raw + ' was used already — type another name.'; err.hidden = false; $('lv-tx-name').focus(); return;
     }
     err.hidden = true;
     var me = L;
@@ -480,7 +523,7 @@
       // fold the transactions before this one
       var gs = groups();
       gs.forEach(function (g, i) { if (i < gs.length - 1 && L.fold[g.key] === undefined) L.fold[g.key] = true; });
-      $('lv-tx-name').value = nextName(raw);
+      $('lv-tx-name').value = '';
       render();
     }, function (e) { toast('Could not start the transaction: ' + e.message, 'error'); });
   }

@@ -43,6 +43,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The second recording (diff mode) is under "Advanced: second recording" in the Correlation Advisor tab, with "Record it now".
 - The usage statistic counts one Script Studio use per opened recording, not one per reading.
 
+#### Recording made easy (redesign step 5)
+
+- Start recording: one box for transactions — type a name and press **Enter**: the running transaction ends and the new one starts. The number is added for you (shown before the box: *add to cart* becomes `T04_Add_to_cart`); a name typed with its own number (`T07_Pay`) keeps it and the next one follows it (`T08_…`); a name used already is refused. **End** ends the running one without starting another.
+- Optional **planned steps** (More options, remembered): press **Enter** on an empty box to start the next planned step; the list shows what is done and what is next. The first transaction is numbered too (*Launch* → `T01_Launch`).
+- Help and the recording guide describe the new box. (The toolbar of the CDP Recorder keeps its own buttons until its next version.)
+
 #### Test data table (redesign step 4d)
 
 - The **Test data** tab is a table of the parameters for values the user typed: rename (the script follows), **Take value** (next row, random, unique), **Update** (each run of Action, or once per user), **File** (the shared data file — values that belong together stay on one row — or a file of its own), the number of rows, and Remove (the recorded value stays in the script) with Undo. The choices are kept when the recording is read again.
