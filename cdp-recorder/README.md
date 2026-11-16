@@ -22,6 +22,10 @@ The folder is self-contained, with its own `package.json` and `node_modules`. On
 
 The HAR it writes is standard HAR 1.2 plus `_perfx_*` fields (transaction pages, background-traffic classification, screenshots). Script Studio and the HAR Explorer read it with no special handling beyond those fields.
 
+## Where its setup is kept
+
+Nothing in the browser: every start of the packaged `cdp-recorder.exe` registers the `perfx-recorder:` link with Windows for the current user (`HKCU\Software\Classes\perfx-recorder`, pointing to the .exe); PerfX Studio's Start recording opens that link, and the program then serves the page on `127.0.0.1:8787` only. Pages allowed on the toolbar are kept in `%LOCALAPPDATA%\PerfX\cdp-recorder\allowed-pages.json`. Details in [recorder/README.md](recorder/README.md#recording-started-from-perfx-studio).
+
 ## Build and distribute
 
 ```bash

@@ -22,7 +22,7 @@ SET UP ONCE ON THIS COMPUTER
 
 RECORD FROM PERFX STUDIO (recommended)
 
-3. Open PerfX Studio -> Recorder -> Start recording. Type your
+3. Open PerfX Studio -> Script Studio -> Start recording. Type your
    application's address, choose Edge or Chrome and, if you like, a private
    window (optional - every recording starts signed out in a fresh browser
    profile either way), then click Start recording. The first time, your browser asks
@@ -47,13 +47,32 @@ RECORD FROM PERFX STUDIO (recommended)
    for example T07_Pay, to use another number. With planned steps (More
    options on the page), press Enter on an empty box to start the next
    one. End Transaction ends the running one without starting another.
+   On the page: Tab takes the page title as the name; the pencil in the
+   list renames a transaction; Undo last mark takes back the last Start or
+   End. An optional script ID (More options, e.g. SC01) starts the file
+   name and the transaction names in the script (SC01_01_...).
 
 6. Click Stop and save on the page (or Stop Recording on the toolbar).
    The recording (.har file) is saved in your Downloads folder and opens
-   in the Recorder by itself. The toolbar says it is saved; the recorder's
+   in Script Studio by itself. The toolbar says it is saved; the recorder's
    windows close after 10 seconds - click Keep open on the toolbar to look
    at the recording window first.
 
+
+WHERE THE SETUP IS KEPT
+
+Nothing is stored in your browser. Each start of cdp-recorder.exe registers
+a "perfx-recorder:" link with Windows, for your user only (registry key
+HKEY_CURRENT_USER\Software\Classes\perfx-recorder, pointing to this .exe).
+Start recording in PerfX Studio opens that link and Windows starts the
+program; it then talks to the page on this computer only (127.0.0.1:8787).
+Clearing browser history and cookies does not change it. After moving this
+folder, double-click cdp-recorder.exe once more. Pages you allowed are in
+%LOCALAPPDATA%\PerfX\cdp-recorder\allowed-pages.json. Each recording uses
+a fresh, temporary browser profile, deleted when the recorder closes.
+To remove everything: delete this folder, the registry key above
+(reg delete HKCU\Software\Classes\perfx-recorder /f) and the folder
+%LOCALAPPDATA%\PerfX\cdp-recorder.
 
 OR START IT YOURSELF
 

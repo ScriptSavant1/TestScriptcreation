@@ -495,7 +495,7 @@
     var np = nextPlanned();
     L.sugg = np ? '' : titleName(L.pageTitle);
     if (L.sugg && started().some(function (t) { return t.replace(/^T\d+_/, '').toLowerCase() === L.sugg.toLowerCase(); })) L.sugg = '';
-    $('lv-tx-name').placeholder = np ? 'Next planned: ' + np + ' — press Enter' : L.sugg ? L.sugg + '   (from the page title · Tab)' : 'e.g. Login — press Enter';
+    $('lv-tx-name').placeholder = np ? np + '   (planned · Enter)' : L.sugg ? L.sugg + '   (page title · Tab)' : 'e.g. Login — press Enter';
     var plan = planSteps(), pl = $('lv-planlist');
     pl.hidden = !plan.length;
     pl.innerHTML = plan.map(function (s) {

@@ -130,7 +130,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 </div></div>
 <div class="step"><div class="num">2</div><div>
 <h3>Type the address, choose the browser, click Start recording</h3>
-<p><b>Open an InPrivate window</b> (Incognito in Chrome) is optional — untick it if your application does not work in a private window. Either way the recording window starts signed out, in a fresh browser profile, so the login is recorded too. Under <b>More options</b>, a recording name becomes the file name, a first transaction starts as soon as the page opens, and — optional — your planned steps, one per line. The file name in Downloads is shown at the bottom.</p>
+<p><b>Open an InPrivate window</b> (Incognito in Chrome) is optional — untick it if your application does not work in a private window. Either way the recording window starts signed out, in a fresh browser profile, so the login is recorded too. Under <b>More options</b>, a recording name becomes the file name, an optional <b>script ID</b> (for example <code>SC01</code> — just the ID; the numbers 01, 02 … are added per transaction) starts the file name and the transaction names in the script (<code>SC01_01_…</code>), a first transaction starts as soon as the page opens, and — optional — your planned steps, one per line. The file name in Downloads is shown at the bottom.</p>
 <div class="shots"><figure><img src="{{img:21-start-window.png}}" alt="Start recording window: application address, Microsoft Edge or Google Chrome, Open an InPrivate window, recording name SC01_Booking, first transaction Login, planned steps Home, Search, Checkout"><figcaption>The Start recording window.</figcaption></figure></div>
 <div class="callout info"><strong>"Open cdp-recorder?"</strong>When the CDP Recorder is not running yet, your browser asks whether this site may open it. Click <b>Open</b>. It then waits in the background, so the next recording starts straight away; it closes itself after an hour without use. If nothing answers, the window shows the set-up steps — see <a href="#get">section 2</a>.</div>
 <div class="callout info"><strong>Started it yourself? Click Allow on the toolbar</strong>Some computers do not let the browser start programs. Then start <code>cdp-recorder.exe</code> yourself first and click <b>Start recording</b> on the page: the small toolbar asks <b>Allow this page to start recordings?</b> and names the PerfX Studio address — click <b>Allow</b>, and the recording starts by itself. It asks once per address and remembers it on this computer. <b>Don't allow</b> if you did not just click Start recording.</div>
@@ -143,7 +143,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 </div></div>
 <div class="step"><div class="num">4</div><div>
 <h3>Name transactions — on the toolbar or on the page</h3>
-<p>Type a name and press <b>Enter</b> (or click <b>Start Transaction</b>), do the step, then type the next name and press <b>Enter</b> — the same as in <a href="#record">section 5</a>. The number is added for you (<i>add to cart</i> becomes <code>T04_Add_to_cart</code>); type your own, for example <code>T07_Pay</code>, to use another number. With planned steps (More options on the page), press <b>Enter</b> on an empty box to start the next one. <b>End Transaction</b> ends the running one; Stop ends it too.</p>
+<p>Type a name and press <b>Enter</b> (or click <b>Start Transaction</b>), do the step, then type the next name and press <b>Enter</b> — the same as in <a href="#record">section 5</a>. The number is added for you (<i>add to cart</i> becomes <code>T04_Add_to_cart</code>); type your own, for example <code>T07_Pay</code>, to use another number. The title of the page on screen is offered as grey text in the box — <b>Tab</b> takes it (never filled in by itself). A transaction's name can be changed with the pencil in the list, and <b>Undo last mark</b> takes back the last Start or End — the transaction before runs again. With planned steps (More options on the page), press <b>Enter</b> on an empty box to start the next one. <b>End Transaction</b> ends the running one; Stop ends it too.</p>
 </div></div>
 <div class="step"><div class="num">5</div><div>
 <h3>Stop and save</h3>
@@ -245,6 +245,16 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <p>If you then see <i>"No Chrome install found"</i>, Chrome is installed somewhere non-standard (for example under your user profile). Ask your support team, or see <a href="#options">Command-line options</a>.</p>
 
 <h2 id="data">11. Your data</h2>
+<h3>Where the setup is kept</h3>
+<p>Nothing is stored in your browser. Each time you double-click <code>cdp-recorder.exe</code> it registers a <b>link type</b>, <code>perfx-recorder:</code>, with <b>Windows</b> — the way Windows knows that <code>mailto:</code> links open your e-mail program. It is written in the Windows registry under your own user (<code>HKEY_CURRENT_USER\Software\Classes\perfx-recorder</code>, pointing to the <code>.exe</code> in your folder), so no administrator rights are needed. <b>Start recording</b> opens that link, Windows starts the program, and the program talks to the PerfX Studio page on your computer only (<code>127.0.0.1:8787</code>).</p>
+<ul>
+  <li><b>Clearing browser history and cookies</b> does not change it — it is not in the browser.</li>
+  <li><b>Moved the folder?</b> Double-click the <code>.exe</code> once more (the registry still points to the old place).</li>
+  <li><b>Pages you clicked Allow for</b> (when you started the program yourself) are kept in <code>%LOCALAPPDATA%\PerfX\cdp-recorder\allowed-pages.json</code>.</li>
+  <li><b>Your choices in the Start recording window</b> (recent addresses, browser, private window, script ID, planned steps) are kept by the browser for the PerfX Studio page; clearing the browser forgets only those choices.</li>
+  <li><b>To remove everything:</b> delete the folder, the registry key (<code>reg delete HKCU\Software\Classes\perfx-recorder /f</code>) and the folder <code>%LOCALAPPDATA%\PerfX\cdp-recorder</code>.</li>
+</ul>
+<h3>What is recorded and kept</h3>
 <ul>
   <li>Everything runs on your PC. Recordings are saved only to your disk. Nothing is uploaded to the PerfX server.</li>
   <li>Values of request fields whose names look like passwords, PINs, CVVs or secrets are replaced with a placeholder.</li>
