@@ -393,6 +393,7 @@
                     <span class="adv-badge" id="adv-badge"></span>
                   </div>
                   <div class="adv-panel-hdr-right">
+                    <button class="adv-btn-add adv-btn-rescan" type="button" onclick="event.stopPropagation();analyze()" title="Scan again: read the recording again with the current filters and domains"><svg class="i"><use href="#i-reset"/></svg>Scan again</button>
                     <button class="adv-btn-paste" onclick="event.stopPropagation();openPasteCorrelate()" title="Paste a response body and extract a value from it"><svg class="i"><use href="#i-paste"/></svg>Paste &amp; Detect</button>
                     <button class="adv-btn-add" type="button" onclick="event.stopPropagation();SSW.openFind()" title="Look up any value: where it comes from and where it goes"><svg class="i"><use href="#i-search"/></svg>Find a value</button>
                     <button class="adv-btn-add" onclick="event.stopPropagation();openAdvisorModal()" title="Add a custom correlation manually"><svg class="i"><use href="#i-plus"/></svg>Add Manual</button>

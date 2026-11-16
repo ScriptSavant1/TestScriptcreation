@@ -232,3 +232,22 @@ html.sb-collapsed .sb-subnav, html.sb-collapsed .sb-chev { display: none !import
 .pal-foot { display: flex; gap: 16px; padding: 10px 16px; border-top: 1px solid var(--ds-border); font-size: var(--ds-fs-xs); color: var(--ds-text-3); }
 .pal-foot kbd { margin-right: 3px; }
 @media (max-width: 600px) { .pal-dlg { margin-top: 8vh; } .pal-foot { display: none; } }
+
+/* ── Mockup alignment: menu toggle at the top beside the brand; purple brand mark and active item;
+      Script Studio and HAR Explorer show their one-line description ── */
+.sb-top { height: var(--tb-h); flex: none; display: flex; align-items: center; border-bottom: 1px solid var(--sb-line); padding-right: 10px; }
+.sb-top .sb-brand { flex: 1; min-width: 0; height: 100%; border-bottom: 0 !important; padding-right: 6px; }
+.sb-brand-sub { overflow: hidden; text-overflow: ellipsis; }
+.sb-collapse { flex: none; width: 34px; height: 34px; min-height: 0; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--ds-text-3); cursor: pointer; }
+.sb-collapse:hover { background: var(--sb-active); color: var(--ds-text); }
+.sb-collapse:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 1px; }
+.sb-collapse svg { width: 18px; height: 18px; transform: none !important; }
+.vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+html.sb-collapsed .sb-top { justify-content: center; padding: 0; }
+html.sb-collapsed .sb-top .sb-brand { display: none; }
+.sb-logo { background: linear-gradient(135deg, #7c3aed, #5b21b6); }
+.sb-item[aria-current="page"] { background: color-mix(in srgb, #7c3aed 12%, var(--ds-surface)); }
+.sb-item[aria-current="page"]::before { background: #7c3aed; }
+.sb-item[data-page="studio"] .sb-sub, .sb-item[data-page="explore"] .sb-sub { display: block; font-size: var(--ds-fs-xs); color: var(--ds-text-3); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.sb-collapsed .sb-item .sb-sub { display: none; }
+@media (max-width: 900px) { html.sb-collapsed .sb-top .sb-brand { display: flex; } html.sb-collapsed .sb-top { justify-content: flex-start; } }

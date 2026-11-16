@@ -46,6 +46,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - HAR Explorer: the file bar is a band across the page, as in Script Studio; on wide screens (1250 px and more) the Domains list is a panel on the left of the requests, always open, with an on / off switch per server (narrow screens keep the pop-up).
 - Script Studio: the filter bar fits on one line; a request type with no request in the recording is not shown; tick boxes are always in sight on the request rows; Domains have on / off switches; the script's file tabs wrap instead of scrolling out of sight.
 - A hovered request row and a hovered transaction row keep 4.5:1 contrast in the light theme.
+- Request details in Script Studio: the workspace behind is dimmed, and a press outside closes the details (a press on another request shows that request).
+- Sidebar as in the mockup: the menu toggle is at the top beside the brand (Ctrl+B as before); purple brand mark and current item; Script Studio and HAR Explorer show their one-line description.
+- Correlation Advisor: Scan again, Paste & Detect, Add Manual and Find a value as one row of buttons; the footer (counts, Accept all high, Apply & Regenerate) stays in sight.
+- Test data: the choices keep their words (the table scrolls sideways in a narrow panel).
 
 #### The Recorder is part of Script Studio (redesign step 6)
 

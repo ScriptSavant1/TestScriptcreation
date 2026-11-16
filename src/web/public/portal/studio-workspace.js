@@ -563,6 +563,13 @@
       var n = detB.querySelector('.hx-tab[data-tab="' + D.tab + '"]'); if (n) n.focus();
     } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && e.target.closest(".hx-tab, .ss-det-bar")) { e.preventDefault(); step(e.key === "ArrowDown" ? 1 : -1); }
   });
+  // A press outside the sheet closes it (as in the mockup) — except on a request row, which shows that request instead,
+  // and inside dialogs, menus and toasts the sheet opened. The docked panel (2400 px and wider) stays.
+  document.addEventListener("pointerdown", function (e) {
+    if (!detOpen() || document.body.classList.contains("ss-dock")) return;
+    if (e.target.closest("#ss-det, .ss-rq, dialog, .ss-pop, .ss-menu, #toast-container, .toast, .ss-undo")) return;
+    closeDet();
+  });
   function dock() { document.body.classList.toggle("ss-dock", window.innerWidth >= 2400); }
   window.addEventListener("resize", dock); dock();
 

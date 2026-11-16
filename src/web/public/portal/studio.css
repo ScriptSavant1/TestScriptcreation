@@ -804,3 +804,23 @@ body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10
 .ss-fbar .ss-chip { height: 28px; padding: 0 7px; gap: 4px; }
 .ss-fbar .ss-lbl { margin: 0 2px 0 4px; }
 .ss-fbar .ss-types-all .ds-btn { padding: 0 6px; }
+
+/* Request details over the workspace: the rest is dimmed, as in the mockup (a shadow — it does not catch clicks;
+   a press outside closes the sheet, a request row shows that request) */
+body:not(.ss-dock) .ss-det:not([hidden]) { box-shadow: 0 0 0 100vmax rgba(15, 23, 42, .28), var(--ds-shadow-2); }
+
+/* ── Mockup alignment: Correlation Advisor and Test data ── */
+/* actions as a row of bordered buttons under the title; the footer (counts, Accept all high, Apply & Regenerate) stays in sight */
+#ss-t-corr .adv-panel-hdr { flex-wrap: wrap; row-gap: 10px; }
+#ss-t-corr .adv-panel-hdr-right { flex-basis: 100%; justify-content: flex-start; flex-wrap: wrap; gap: 8px; order: 2; }
+#ss-t-corr .adv-panel-hdr-right :is(.adv-btn-add, .adv-btn-paste) { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-btn); background: var(--ds-surface); color: var(--ds-text); font: inherit; font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer; }
+#ss-t-corr .adv-panel-hdr-right :is(.adv-btn-add, .adv-btn-paste):hover { border-color: var(--ds-accent-line); background: var(--ds-accent-soft); }
+#ss-t-corr .adv-panel-hdr-right .adv-toggle-icon { display: none; }
+#ss-t-corr .adv-footer { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; margin: 12px -14px 0 !important; background: color-mix(in srgb, var(--br-head) 70%, var(--ds-surface)); border-top: 1px solid var(--ds-border-2); }
+#ss-t-corr .adv-footer-summary { flex: 1; font-size: var(--ds-fs-sm); }
+#ss-t-corr .adv-btn-regen { order: 3; flex-basis: auto; }
+/* Test data: the choices keep their words; the table scrolls sideways when the panel is narrow */
+.ss-td-wrap { overflow-x: auto; }
+.ss-td { min-width: 640px; font-size: var(--ds-fs-sm); }
+.ss-td select { min-width: 108px; }
+#ss-t-corr .adv-footer-summary { white-space: nowrap; flex: 1 1 auto; } #ss-t-corr .adv-btn-regen { margin-left: 0; }
