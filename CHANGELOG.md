@@ -37,6 +37,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - Rename a transaction (finished or running) with the pencil in the list; a name typed without a number keeps the old one's (`T02_Login` → "Sign in" → `T02_Sign_in`); a name used already is refused (`POST /api/tx/rename`).
 - **Undo last mark** takes back the last Start or End: a transaction started by mistake goes, and its requests go back to the one before, which runs again (`POST /api/tx/undo`).
 - Optional **script ID** (More options, e.g. SC01): the file is `SC01_Booking_<date>_<time>.har`, the HAR carries `log._perfx_scriptId`, and Script Studio's transactions are `SC01_01_…` (other recordings keep SC01 as before).
+- Script ID: a value that is not right is shown under the field, in the window (it was a message behind it), with what to type — `SC01_01` gives "Type just SC01 — the numbers (01, 02 …) are added for each transaction"; the line under the field shows the file and transaction names that will be made.
+- The page-title hint is not offered when that name is used already (a search on the same page keeps the page's title).
 - The pages expect 0.2.3 (`LATEST`) and offer the download to older recorders; with an older recorder, rename and Undo are not shown. Tests: `harBuilder.test.js`, `cdpPortalMode.test.js`, `studioScriptId.test.js`, manual `tests-manual/portal-extras.mjs` (real recorder and Edge).
 
 #### Version 0.2.2: one box on the toolbar (redesign step 5b)

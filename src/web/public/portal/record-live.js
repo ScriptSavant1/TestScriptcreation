@@ -89,7 +89,7 @@
         '<label class="rl-toggle"><input type="checkbox" id="lv-priv" checked><span><b id="lv-priv-t">Open a private window</b><small>Optional — untick it if your application does not work in a private window. Either way the recording window starts signed out, in a fresh browser profile, so the login is recorded too.</small></span></label>' +
         '<details class="rl-more"><summary>More options</summary><div class="rl-row">' +
           '<label class="rl-field">Recording name<input class="ds-field" id="lv-name" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. Booking"><small>Used for the file name.</small></label>' +
-          '<label class="rl-field">Script ID <span class="rl-opt">(optional)</span><input class="ds-field" id="lv-sid" type="text" autocomplete="off" spellcheck="false" maxlength="12" placeholder="e.g. SC01"><small>The file and the transactions in the script start with it (SC01_01_…).</small></label>' +
+          '<label class="rl-field">Script ID <span class="rl-opt">(optional)</span><input class="ds-field" id="lv-sid" type="text" autocomplete="off" spellcheck="false" maxlength="20" placeholder="e.g. SC01" aria-describedby="lv-sid-help lv-sid-err"><small id="lv-sid-help">Just the ID, for example SC01 — the transactions become SC01_01_Launch, SC01_02_Login …</small><span class="rl-ferr" id="lv-sid-err" role="alert" hidden></span></label>' +
           '<label class="rl-field">First transaction<input class="ds-field" id="lv-first" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. Launch"><small>Starts when the page opens; numbered for you (T01_Launch).</small></label>' +
           '<label class="rl-field rl-wide">Planned steps <span class="rl-opt">(optional, one per line)</span><textarea class="ds-field" id="lv-plan" rows="3" spellcheck="false" placeholder="Login&#10;Search&#10;Add to cart"></textarea><small>While recording, press Enter on an empty box to start the next planned step — no typing during the journey.</small></label>' +
         '</div></details>' +
@@ -219,6 +219,7 @@
     $('lv-name').value = prefs.name || '';
     $('lv-first').value = '';
     $('lv-sid').value = prefs.sid || '';
+    $('lv-sid-err').hidden = true; $('lv-sid').classList.remove('bad'); sidHelp();
     $('lv-plan').value = prefs.plan || '';
     if (prefs.plan) $('lv-plan').closest('details').open = true;   // a plan from last time is in sight
     $('lv-go').disabled = false; goLabel('Start recording');
@@ -258,9 +259,12 @@
       return;
     }
     var sid = $('lv-sid').value.trim();
-    if (sid && !/^[A-Za-z][A-Za-z0-9]{0,11}$/.test(sid)) {
-      setView(true); $('lv-dlg').querySelector('.rl-more').open = true; $('lv-sid').focus();
-      toast('The script ID takes letters and digits only, starting with a letter (for example SC01).', 'warning'); return;
+    var sidErr = sidProblem(sid);
+    if (sidErr) {
+      setView(true); $('lv-dlg').querySelector('.rl-more').open = true;
+      $('lv-sid-err').textContent = sidErr; $('lv-sid-err').hidden = false; $('lv-sid').classList.add('bad');
+      setTimeout(function () { $('lv-sid').focus(); $('lv-sid').select(); }, 0);   // after the form is shown again
+      return;
     }
     prefs.sid = sid.toUpperCase();
     var first = $('lv-first').value.trim();
@@ -490,6 +494,7 @@
     $('lv-prefix').textContent = prefixFor(nextNum());
     var np = nextPlanned();
     L.sugg = np ? '' : titleName(L.pageTitle);
+    if (L.sugg && started().some(function (t) { return t.replace(/^T\d+_/, '').toLowerCase() === L.sugg.toLowerCase(); })) L.sugg = '';
     $('lv-tx-name').placeholder = np ? 'Next planned: ' + np + ' — press Enter' : L.sugg ? L.sugg + '   (from the page title · Tab)' : 'e.g. Login — press Enter';
     var plan = planSteps(), pl = $('lv-planlist');
     pl.hidden = !plan.length;
@@ -497,6 +502,23 @@
       var done = stepDone(s), isNext = !done && s === np;
       return '<li class="' + (done ? 'done' : isNext ? 'next' : '') + '">' + (done ? CHECK : '') + esc(s) + (isNext ? ' <small>next</small>' : '') + '</li>';
     }).join('');
+  }
+  // The script ID: letters and digits, starting with a letter, up to 12 (the recorder's rule, portal-mode.js scriptIdOf).
+  // "" when fine; else what to type instead — SC01_01 is a common slip: the numbers are added per transaction.
+  function sidProblem(v) {
+    if (!v || /^[A-Za-z][A-Za-z0-9]{0,11}$/.test(v)) return '';
+    var base = /^([A-Za-z][A-Za-z0-9]{0,11})[_\s-]+\d*[_\s-]*$/.exec(v);
+    if (base) return 'Type just ' + base[1].toUpperCase() + ' — the numbers (01, 02 …) are added for each transaction.';
+    if (!/^[A-Za-z]/.test(v)) return 'Start the script ID with a letter, for example SC01.';
+    if (v.length > 12) return 'Up to 12 letters and digits, for example SC01.';
+    return 'Letters and digits only, for example SC01 (no spaces or _).';
+  }
+  // the help line under the field: what the names will look like with this ID
+  function sidHelp() {
+    var v = $('lv-sid').value.trim(), ok = !sidProblem(v), id = (v && ok ? v : 'SC01').toUpperCase();
+    $('lv-sid-help').textContent = v && ok
+      ? 'File ' + id + '_' + ($('lv-name').value.trim().replace(/[^\w.-]+/g, '_') || 'Recording') + '_<date>.har · transactions ' + id + '_01_Launch, ' + id + '_02_Login …'
+      : 'Just the ID, for example SC01 — the transactions become SC01_01_Launch, SC01_02_Login …';
   }
   // a transaction name from a page title: its first part ("Product selection | Shop" → Product_selection), letters,
   // digits and _ only, at most 40 characters ("" when there is nothing usable)
@@ -632,6 +654,14 @@
     d.addEventListener('close', function () { idlePoll(); });
     $('lv-url-inp').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
     $('lv-url-inp').addEventListener('input', function () { $('lv-url-err').hidden = true; this.classList.remove('bad'); });
+    // the script ID: the error goes as soon as it is right; the help line follows what is typed
+    $('lv-sid').addEventListener('input', function () {
+      var e = sidProblem(this.value.trim());
+      if (!e) { $('lv-sid-err').hidden = true; this.classList.remove('bad'); }
+      else if (!$('lv-sid-err').hidden) $('lv-sid-err').textContent = e;
+      sidHelp();
+    });
+    $('lv-name').addEventListener('input', sidHelp);
     $('lv-recent-chips').addEventListener('click', function (e) { var b = e.target.closest('[data-u]'); if (b) { $('lv-url-inp').value = b.getAttribute('data-u'); $('lv-url-err').hidden = true; $('lv-url-inp').classList.remove('bad'); } });
     document.querySelectorAll('input[name="lvb"]').forEach(function (r) { r.addEventListener('change', privLabel); });
     $('lv-name').addEventListener('input', showFileName);
