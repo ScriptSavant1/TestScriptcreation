@@ -14,8 +14,9 @@ describe('FindValue.html', () => {
     const e = FV.html(inv(), explorer), s = FV.html(inv(), studio);
     expect(e).toContain('The server sends it in <b>#7</b>');
     expect(s).toContain('The server sends it in <b>#5</b>');
-    expect(s).toContain('<span class="hx-badge src">Comes from</span><span><a href="#" data-go="5">#5 GET /x</a>');
-    expect(s).toContain('<span class="hx-badge use">Sent in</span><span><a href="#" data-go="7">#7 GET /x</a><span class="wh">header Authorization</span>');
+    expect(s).toMatch(/<summary>[^]*?Source<\/summary><ol class="hx-trail"><li><span class="fv-req"><a href="#" data-go="5">#5 GET \/x<\/a>/);
+    expect(s).toMatch(/Replaced in · \d+<\/summary>/);
+    expect(s).toContain('<span class="fv-req"><a href="#" data-go="7">#7 GET /x</a></span><span class="wh">header Authorization</span>');
   });
   test('the page\'s line about Script Studio and its Correlate this are added', () => {
     const h = FV.html(inv(), Object.assign({ studio: () => '<p class="hx-studio">S</p>', corr: '<div class="hx-corr">C</div>' }, studio));

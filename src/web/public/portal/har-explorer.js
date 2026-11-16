@@ -130,6 +130,31 @@
   $("#hx-out").addEventListener("change", function (e) { M.showOut = e.target.checked; prefs.showOut = M.showOut; savePrefs(); renderTypes(); build(); });
   $("#hx-mask").addEventListener("change", function (e) { M.mask = e.target.checked; renderDetails(); });
 
+  // ── As in the mockup: the filter bar folds ("Filters"), the types have All / None, "Show left-out" is the eye in the
+  //    Requests header and "Hide secrets" is in the details header. The two tick boxes stay (hidden) and do the work. ──
+  (function () {
+    var tools = document.querySelector(".hx-tools");
+    var ICON_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+    tools.insertAdjacentHTML("afterbegin", '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-ffold" id="hx-ffold" aria-expanded="true" title="Fold the filters to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>Filters</button>');
+    $("#hx-types").insertAdjacentHTML("afterend", '<span class="hx-types-all"><button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" id="hx-types-all" title="Show every type">All</button><button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" id="hx-types-none" title="Show no type">None</button></span>');
+    function setTypes(on) { if (!M) return; HX_TYPES.forEach(function (t) { M.types[t[0]] = on; }); renderTypes(); build(); }
+    $("#hx-types-all").addEventListener("click", function () { setTypes(true); });
+    $("#hx-types-none").addEventListener("click", function () { setTypes(false); });
+    function fold(f) { tools.classList.toggle("folded", f); $("#hx-ffold").setAttribute("aria-expanded", String(!f)); prefs.foldFilters = f; savePrefs(); }
+    $("#hx-ffold").addEventListener("click", function () { fold(!tools.classList.contains("folded")); });
+    if (prefs.foldFilters) fold(true);
+    $("#hx-findbtn").insertAdjacentHTML("beforebegin", '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-outbtn" id="hx-outbtn" aria-pressed="false" title="Show left-out requests (faded)" aria-label="Show left-out requests">' + ICON_EYE + "</button>");
+    var out = $("#hx-out");
+    function syncOut() { $("#hx-outbtn").setAttribute("aria-pressed", String(out.checked)); }
+    $("#hx-outbtn").addEventListener("click", function () { out.checked = !out.checked; out.dispatchEvent(new Event("change")); syncOut(); });
+    out.addEventListener("change", syncOut);
+    new MutationObserver(syncOut).observe(document.getElementById("hx-ws"), { attributes: true, attributeFilter: ["hidden"] });
+    $("#hx-det").addEventListener("click", function (e) {
+      if (!e.target.closest("#hx-maskbtn")) return;
+      var m = $("#hx-mask"); m.checked = !m.checked; m.dispatchEvent(new Event("change"));
+    });
+  })();
+
   // ── domains: show or hide the requests of each server (with the address and type filters) ──
   // The host is read from the address by splitting, never with new URL() — addresses may hold {{variables}}.
   function hostOf(url) { var m = /^[a-z][a-z0-9+.-]*:\/\/([^\/?#]+)/i.exec(url || ""); return m ? m[1].replace(/^[^@]*@/, "").toLowerCase() : "(no domain)"; }
@@ -363,6 +388,10 @@
   // the details' hide button (wide screens), put back after every redraw of the pane
   function addDetHide() {
     var d = $("#hx-det");
+    syncFindSheet();
+    if (M && M.view !== "find" && M.sel && !d.querySelector("#hx-maskbtn")) {
+      d.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ds-btn-sm hx-maskbtn" id="hx-maskbtn" aria-pressed="' + !!M.mask + '" title="Mask passwords, tokens and cookies (for screenshots)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Hide secrets</button>');
+    }
     if (d.querySelector("#hx-det-hide")) return;
     var b = document.createElement("button");
     b.type = "button"; b.className = "ds-btn ds-btn-sm ds-btn-ghost hx-hide hx-det-hide"; b.id = "hx-det-hide";
@@ -535,11 +564,26 @@
     renderFind(true);
   }
   function findButton() { $("#hx-findbtn").setAttribute("aria-pressed", String(!!M && M.view === "find")); }
+  function closeFind() { if (!M.sel) M.sel = M.model.items.filter(visible)[0] || null; M.view = "req"; draw(true); renderDetails(); findButton(); }
   $("#hx-findbtn").addEventListener("click", function () {
-    if (M.view === "find") { if (!M.sel) M.sel = M.model.items.filter(visible)[0] || null; M.view = "req"; }
-    else M.view = "find";
+    if (M.view === "find") { closeFind(); return; }
+    M.view = "find";
     draw(true); renderDetails(); findButton();
   });
+  // Find a value is a sheet over the workspace (as in the mockup and Script Studio's details): a blurred backdrop
+  // behind it; the backdrop, its close button and Esc close it
+  var findScrim = document.createElement("div");
+  findScrim.className = "hx-find-scrim"; findScrim.hidden = true;
+  document.body.appendChild(findScrim);
+  findScrim.addEventListener("pointerdown", function (e) { e.preventDefault(); closeFind(); });
+  function syncFindSheet() {
+    var d = $("#hx-det"), on = !!M && M.view === "find";
+    d.classList.toggle("hx-find-sheet", on); if (findScrim) findScrim.hidden = !on;
+    var h = d.querySelector(".hx-fh");
+    if (on && h && !h.querySelector("#hx-find-close")) h.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-find-close" id="hx-find-close" title="Close (Esc)" aria-label="Close Find a value"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>');
+  }
+  $("#hx-det").addEventListener("click", function (e) { if (e.target.closest("#hx-find-close")) closeFind(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && M && M.view === "find" && !e.defaultPrevented) closeFind(); });
 
   var FV = window.FindValue, tabFor = FV.tabFor;   // the answer of Find a value, shared with Script Studio
   function trailLink(h) {

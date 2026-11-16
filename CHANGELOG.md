@@ -43,6 +43,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Closer to the agreed mockup (redesign step 6b)
 
+- Find a value (HAR Explorer and Script Studio): the trail is two sections, **Source** and **Replaced in · n** (Sent in when the value has no source), one row per place; in the HAR Explorer, Find a value opens as a sheet over the workspace with a blurred backdrop (close button, Esc or a press on the backdrop closes it).
+- HAR Explorer: the filter bar folds (Filters), the types have All / None, "Show left-out" is the eye button in the Requests header, and Hide secrets is a button in the details header.
 - Postman / Bruno, JMeter and the Results Analyser take the purple look of Script Studio, the HAR Explorer and the Workload Modeller (accent, page background, header bars), both themes; Home and Help keep theirs.
 - HAR Explorer: the file bar is a band across the page, as in Script Studio; on wide screens (1250 px and more) the Domains list is a panel on the left of the requests, always open, with an on / off switch per server (narrow screens keep the pop-up).
 - Script Studio: the filter bar fits on one line; a request type with no request in the recording is not shown; tick boxes are always in sight on the request rows; Domains have on / off switches; the script's file tabs wrap instead of scrolling out of sight.

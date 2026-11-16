@@ -59,3 +59,14 @@
 .hx-back { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 0 0 10px; padding: 6px 6px 6px 12px; border-radius: var(--ds-r-sm); background: var(--ds-surface-2); font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
 .hx-back mark { font-family: var(--ds-mono); }
 .hx-back .ds-btn { margin-left: auto; }
+
+/* the trail as two sections (Source, Replaced in), as in the mockup */
+.fv-sec { margin-top: 14px; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-tile); overflow: hidden; background: var(--ds-surface); }
+.fv-sec > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--br-head, var(--ds-surface-2)); font-weight: 700; cursor: pointer; }
+.fv-sec > summary::-webkit-details-marker { display: none; }
+.fv-sec > summary svg { width: 16px; height: 16px; transition: transform .15s; }
+.fv-sec:not([open]) > summary svg { transform: rotate(-90deg); }
+.fv-sec .hx-trail { margin: 0; }
+.fv-sec .hx-trail li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 10px 14px; border-top: 1px solid var(--ds-border); align-items: start; }
+.fv-sec .hx-trail li::before, .fv-sec .hx-trail li + li::after { display: none; }
+.fv-sec .hx-trail .wh { display: block; font-family: var(--ds-mono); font-size: var(--ds-fs-xs); color: var(--ds-text); }

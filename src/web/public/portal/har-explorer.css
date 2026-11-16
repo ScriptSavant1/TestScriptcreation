@@ -277,3 +277,29 @@ html.hx-has-file .hx-fb-name b { font-size: var(--ds-fs); }
 #hx-types [data-type="document"] { --k: #e8a838; } #hx-types [data-type="fetch"] { --k: #4f8ef7; } #hx-types [data-type="script"] { --k: #f39c12; }
 #hx-types [data-type="stylesheet"] { --k: #9b59b6; } #hx-types [data-type="image"] { --k: #27ae60; } #hx-types [data-type="font"] { --k: #16a085; }
 #hx-types [data-type="media"] { --k: #e74c3c; } #hx-types [data-type="other"] { --k: #7f8c8d; }
+
+/* Find a value as a sheet over the workspace, as in the mockup */
+.hx-find-scrim { position: fixed; inset: 0; z-index: 899; background: rgba(15, 23, 42, .28); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); cursor: pointer; }
+.hx-find-scrim[hidden] { display: none; }
+#hx-det.hx-find-sheet { position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(720px, calc(100vw - 24px)); z-index: 900; box-shadow: var(--ds-shadow-2); display: flex !important; }
+#hx-det.hx-find-sheet .hx-det-hide { display: none !important; }
+#hx-det.hx-find-sheet .hx-fh { position: relative; padding-right: 56px; background: var(--br-head); }
+.hx-find-close { position: absolute; top: 12px; right: 12px; width: 32px; padding: 0; justify-content: center; }
+.hx-find-close svg { width: 16px; height: 16px; }
+
+/* filter bar fold, All / None, the eye in the Requests header, Hide secrets in the details header (as in the mockup) */
+.hx-tools > .hx-toggle { display: none; }
+.hx-ffold { gap: 6px; font-weight: 600; }
+.hx-ffold svg { width: 16px; height: 16px; }
+.hx-ffold svg:first-child { transition: transform .15s; }
+.hx-tools.folded .hx-ffold svg:first-child { transform: rotate(-90deg); }
+.hx-tools.folded > :not(.hx-ffold) { display: none !important; }
+.hx-types-all { display: inline-flex; gap: 2px; }
+.hx-outbtn { width: 32px; padding: 0; justify-content: center; }
+.hx-outbtn svg { width: 16px; height: 16px; }
+.hx-outbtn[aria-pressed="true"] { background: var(--ds-accent-soft); color: var(--ds-accent-text); }
+.hx-maskbtn { position: absolute; top: 10px; right: 50px; z-index: 2; gap: 6px; height: 32px; }
+.hx-panes:not(.dock-dom) .hx-maskbtn { right: 10px; }
+.hx-maskbtn svg { width: 15px; height: 15px; }
+.hx-maskbtn[aria-pressed="true"] { background: var(--ds-accent-soft); color: var(--ds-accent-text); border-color: var(--ds-accent-line); }
+.hx-panes.dock-dom #hx-det:not(.hx-find-sheet) > :first-child { padding-right: 190px; }

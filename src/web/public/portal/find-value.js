@@ -35,12 +35,15 @@
     var V = VERDICT[inv.kind];
     body += '<div class="hx-verdict ' + V[0] + '"><div><h3>' + V[1] + "</h3><p>" + V[2](inv, num) + "</p>" +
       (inv.kind === "correlate" ? (o.studio ? o.studio(inv) : "") : "") + "</div></div>";
-    var steps = [];
-    if (inv.src) steps.push('<li class="from"><span class="hx-badge src">Comes from</span><span>' + link(inv.src) + '<span class="wh">' + esc(inv.src.where) + (inv.src.enc ? ' · <span class="hx-badge enc">' + esc(inv.src.enc) + "</span>" : "") + "</span></span></li>");
-    (inv.src ? inv.later : inv.uses).forEach(function (u) {
-      steps.push('<li><span class="hx-badge use">Sent in</span><span>' + link(u) + '<span class="wh">' + esc(u.where) + (u.enc ? ' · <span class="hx-badge enc">sent ' + esc(u.enc) + "</span>" : "") + "</span></span></li>");
-    });
-    if (steps.length) body += '<ol class="hx-trail">' + steps.join("") + "</ol>";
+    // the trail as two sections, as in the mockup: Source (the response it comes from) and Replaced in (every request
+    // that sends it back; "Sent in" when it has no source in the recording) — one row per place: request | where
+    function row(x, enc) { return '<li><span class="fv-req">' + link(x) + '</span><span class="wh">' + esc(x.where) + (x.enc ? ' · <span class="hx-badge enc">' + enc + esc(x.enc) + "</span>" : "") + "</span></li>"; }
+    function section(title, cls, rows) {
+      return '<details class="fv-sec ' + cls + '" open><summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' + title + '</summary><ol class="hx-trail">' + rows.join("") + "</ol></details>";
+    }
+    var later = inv.src ? inv.later : inv.uses;
+    if (inv.src) body += section("Source", "from", [row(inv.src, "")]);
+    if (later.length) body += section((inv.src ? "Replaced in" : "Sent in") + " · " + later.length, "uses", later.map(function (u) { return row(u, "sent "); }));
     var aside = [];
     if (inv.outsideCount) aside.push("sent to " + inv.outsideCount + " request" + (inv.outsideCount === 1 ? "" : "s") + " left out of the script (" + inv.outside.slice(0, 6).map(function (x) { return link(x).replace(/>#(\d+)[^<]*</, ">#$1<"); }).join(", ") + (inv.outsideCount > 6 ? " …" : "") + ")");
     if (inv.referer) aside.push("in the Referer / Origin header of " + inv.referer + " request" + (inv.referer === 1 ? "" : "s") + " — the page address, which the script copies as it is");
