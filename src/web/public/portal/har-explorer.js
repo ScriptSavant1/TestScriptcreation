@@ -483,18 +483,7 @@
     draw(true); renderDetails(); findButton();
   });
 
-  var VERDICT = {
-    correlate: ["ok", "Correlate it", function (i) { return "The server sends it in <b>#" + i.src.n + "</b> and the journey sends it back <b>" + i.later.length + "</b> time" + (i.later.length === 1 ? "" : "s") + ". Every virtual user gets a different value — capture it at #" + i.src.n + " and use it in the requests below."; }],
-    cookie: ["plain", "Nothing to do — it travels in cookies only", function (i) { return "Set by the server in #" + i.src.n + " and only sent back as a cookie. VuGen and DevWeb keep cookies by themselves."; }],
-    redirect: ["plain", "Nothing to do — a redirect the script follows", function (i) { return "#" + i.src.n + " redirects to it and the next request only follows that redirect, as VuGen and DevWeb do by themselves."; }],
-    outonly: ["plain", "Nothing to do — only sent to requests left out of the script", function (i) { return "Every request that sends it back is left out of the script (analytics, static files …), so the script never needs it."; }],
-    unused: ["plain", "Never sent back", function (i) { return i.src ? "The server returns it, but no later request sends it — nothing to correlate." : "It is in the recording, but no request sends it."; }],
-    missing: ["warn", "Its source is not in this recording", function (i) { return "No response in this HAR contains it — but <b>" + i.missing + "</b> earlier response" + (i.missing === 1 ? " has" : "s have") + " no body in the file (the browser kept no copy, for example because it served the page from its cache), so it probably comes from one of those. Without that response there is nothing to capture it from, so <b>Correlate this</b> cannot be offered. Record the journey again with DevTools “Disable cache” ticked, or with the PerfX CDP Recorder, and look it up again."; }],
-    input: ["param", "A value typed in the journey — make it a parameter", function () { return "It never comes back from the server before it is sent: the user typed or chose it (a user name, a search term …). Give it a parameter with test data, so each virtual user can use a different one."; }],
-    generated: ["param", "Made by the browser — generate it in the script", function () { return "It never comes from the server and looks like a time stamp or a GUID created by the page's JavaScript. Generate a new one in the script (VuGen: lr_save_timestamp / lr_generate_uuid; DevWeb: Date.now() / a uuid function)."; }],
-    none: ["plain", "Not found in this recording", function () { return "Check the spelling, or try a shorter part of the value."; }],
-  };
-  function tabFor(h) { return h.side === "res" ? (h.header ? "headers" : "response") : h.kind === "body" || /^query/.test(h.where) ? "payload" : h.kind === "cookie" ? "cookies" : "headers"; }
+  var FV = window.FindValue, tabFor = FV.tabFor;   // the answer of Find a value, shared with Script Studio
   function trailLink(h) {
     var it = M.byN[h.n], e = it ? it.e : { method: "", url: "" };
     return '<a href="#" data-go="' + h.n + '" data-tab="' + tabFor(h) + '">#' + h.n + " " + esc(e.method) + " " + esc(split(e.url).path) + "</a>";
@@ -513,21 +502,10 @@
     if (!v) body = '<p class="ds-note hx-hint">Type or paste a value above, pick one the server sends (Studio marks the ones Script Studio finds by itself), or select any value in a request\'s Headers, Payload or Response.</p>';
     else if (busy || !inv || inv.value !== v) body = '<p class="hx-none">Looking for ' + esc(short(v, 60)) + " …</p>";
     else {
-      var V = VERDICT[inv.kind];
-      body += '<div class="hx-verdict ' + V[0] + '"><div><h3>' + V[1] + "</h3><p>" + V[2](inv) + "</p>" +
-        (inv.kind === "correlate" ? '<p class="hx-studio">' + (inv.studio ? "Script Studio correlates this one by itself." : "Script Studio does not find this one by itself — add it there with <b>Paste &amp; Detect</b> or <b>Add Manual</b>.") + "</p>" : "") + "</div></div>";
-      var steps = [];
-      if (inv.src) steps.push('<li class="from"><span class="hx-badge src">Comes from</span><span>' + trailLink(inv.src) + '<span class="wh">' + esc(inv.src.where) + (inv.src.enc ? ' · <span class="hx-badge enc">' + esc(inv.src.enc) + "</span>" : "") + "</span></span></li>");
-      (inv.src ? inv.later : inv.uses).forEach(function (u) {
-        steps.push('<li><span class="hx-badge use">Sent in</span><span>' + trailLink(u) + '<span class="wh">' + esc(u.where) + (u.enc ? ' · <span class="hx-badge enc">sent ' + esc(u.enc) + "</span>" : "") + "</span></span></li>");
+      body = FV.html(inv, {
+        num: function (h) { return h.n; }, link: trailLink, corr: inv.corr ? corrPanel(inv) : "",
+        studio: function (i) { return '<p class="hx-studio">' + (i.studio ? "Script Studio correlates this one by itself." : "Script Studio does not find this one by itself — add it there with <b>Paste &amp; Detect</b> or <b>Add Manual</b>.") + "</p>"; },
       });
-      if (steps.length) body += '<ol class="hx-trail">' + steps.join("") + "</ol>";
-      var aside = [];
-      if (inv.outsideCount) aside.push("sent to " + inv.outsideCount + " request" + (inv.outsideCount === 1 ? "" : "s") + " left out of the script (" + inv.outside.slice(0, 6).map(function (o) { return trailLink(o).replace(/>#(\d+)[^<]*</, ">#$1<"); }).join(", ") + (inv.outsideCount > 6 ? " …" : "") + ")");
-      if (inv.referer) aside.push("in the Referer / Origin header of " + inv.referer + " request" + (inv.referer === 1 ? "" : "s") + " — the page address, which the script copies as it is");
-      if (aside.length) body += '<p class="hx-also">Also ' + aside.join("; and ") + ". Not counted above.</p>";
-      if (inv.also.length) body += '<p class="hx-also">Also returned later by ' + inv.also.map(function (o) { return trailLink(o).replace(/>#(\d+)[^<]*</, ">#$1<") + " (" + esc(o.where) + ")"; }).join(", ") + " — the first one is the one to capture.</p>";
-      if (inv.corr) body += corrPanel(inv);
     }
     d.innerHTML = '<div class="hx-dh hx-fh"><h2>Find a value</h2>' +
       "<p>Where it first came from, every request that sends it back, and what to do in the script. URL-encoded, JSON-escaped, Base64 and HTML-entity forms are found too.</p>" +

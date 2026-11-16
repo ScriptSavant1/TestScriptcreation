@@ -19,7 +19,7 @@
   };
 
   function newFile() {
-    if (typeof closeDet === "function" && D && D.id != null) closeDet();
+    if (typeof closeDet === "function" && D && detOpen()) closeDet();
     W.log = []; W.sel = new Set(); W.last = null; W.folded = {}; W.openOut = {}; W.q = ""; W.cur = null;
     S.leaveOut = { ads: true, options: true };
     var q = $("#ss-q"); if (q) q.value = "";
@@ -356,7 +356,7 @@
     } else if (e.key === " " && i >= 0 && !list[i].e.filtered) { e.preventDefault(); tick(W.cur, !W.sel.has(W.cur), e.shiftKey); }
     else if (e.key === "Enter" && i >= 0) { e.preventDefault(); openDet(W.cur); }
     else if (e.key === "Escape" && (W.sel.size || W.picking)) { clearSel(); }
-    else if (e.key === "Escape" && D.id != null) { closeDet(); }
+    else if (e.key === "Escape" && detOpen()) { closeDet(); }
   });
   function clearSel() { W.sel = new Set(); W.picking = false; W.last = null; draw(); selbar(); }
   $("#ss-sel-clear").addEventListener("click", clearSel);
@@ -445,16 +445,21 @@
     var ids = shownIds(), at = ids.indexOf(e.id);
     $("#ss-det-pos").textContent = at >= 0 ? (at + 1) + " of " + ids.length : "";
     $("#ss-det-prev").disabled = at <= 0; $("#ss-det-next").disabled = at < 0 || at >= ids.length - 1;
-    var top = '<p class="ss-det-ctx">' + (e.txn ? "Transaction <b>" + esc(e.txn) + "</b>" : "Not in a transaction") + " · " +
+    var top = (D.fromFind != null ? '<p class="hx-back"><mark class="hx-hl">' + esc(RequestDetails.short(D.fromFind, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back-find>Back to Find a value</button></p>' : "") +
+      '<p class="ss-det-ctx">' + (e.txn ? "Transaction <b>" + esc(e.txn) + "</b>" : "Not in a transaction") + " · " +
       (e.filtered ? "left out of the script" : '<span class="ss-in">in the script</span>') + "</p>";
     detB.innerHTML = RequestDetails.html({
       n: e.id, e: { method: e.method, url: e.url, status: e.status, size: c.size >= 0 ? c.size : rs.bodySize >= 0 ? rs.bodySize : null }, raw: raw,
       type: esc(typeLabel(e)), dur: e.dur || 0, start: e.startMs && W.span ? e.startMs - W.span.t0 : 0,
       out: !!e.filtered, why: REASON[e.leftOut] || "left out", tab: D.tab, mask: D.mask, full: D.full, top: top,
-      extra: [dynTab(e)],
+      hl: markFound, extra: [dynTab(e)],
     });
   }
-  function openDet(id) {
+  // keepFind: opened from a Find a value answer (the value stays marked, with a way back)
+  function openDet(id, keepFind) {
+    if (!keepFind) D.fromFind = null;
+    if (D.view !== "req") { D.view = "req"; $("#ss-det-h").textContent = "Request details"; }
+    det.classList.remove("is-find");
     var first = D.id == null;
     if (D.id !== id) D.full = {};
     D.id = id; W.cur = id;
@@ -466,9 +471,11 @@
     renderDet(); draw();
     if (first && !document.body.classList.contains("ss-dock")) detB.scrollTop = 0;
   }
+  function detOpen() { return D.id != null || D.view === "find"; }
   function closeDet() {
-    if (D.id == null) return;
-    D.id = null; det.hidden = true;
+    if (!detOpen()) return;
+    D.id = null; D.view = "req"; D.fromFind = null; det.hidden = true;
+    $("#ss-det-h").textContent = "Request details";
     document.body.classList.remove("ss-det-open");
     draw(); box.focus();
   }
@@ -499,7 +506,7 @@
       var i = list.indexOf(x), v = String(x.value || "");
       var src = srcOf(x), srcE = src && (S.entries1 || [])[src.entryIdx], card = cardOf(x);
       return '<tr><td><b>' + esc(x.key) + '</b><small>' + esc(LOC[x.location] || x.location || "") + "</small></td>" +
-        '<td><code title="' + esc(v) + '">' + esc(v.length > 60 ? v.slice(0, 59) + "…" : v) + "</code></td><td>" +
+        '<td><button type="button" class="ss-dyn-v" data-find="' + esc(v) + '" title="Find where this value comes from and where it goes"><code>' + esc(v.length > 60 ? v.slice(0, 59) + "…" : v) + "</code></button></td><td>" +
         (src
           ? (srcE ? '<button type="button" class="adv-req-link" data-open="' + srcE.id + '" title="Open the request that sends it">#' + srcE.id + " " + esc(srcE.method) + " " + esc(split(srcE.url).path.slice(0, 48)) + "</button>" + (src.jsonPath ? ' <span class="adv-where">' + esc(src.jsonPath) + "</span>" : "") : "") +
             "</td><td>" + (card
@@ -521,6 +528,7 @@
   }
   detB.addEventListener("click", function (e) {
     if (e.target.closest("[data-go-adv]")) { if (!document.body.classList.contains("ss-dock")) closeDet(); SS.tab("corr"); return; }
+    var fv = e.target.closest("[data-find]"); if (fv && D.view !== "find") { openFind(fv.getAttribute("data-find")); return; }
     var op = e.target.closest("[data-open]"); if (op) { openDet(+op.getAttribute("data-open")); scrollTo(+op.getAttribute("data-open")); return; }
     var ad = e.target.closest("[data-dyn-add], [data-dyn-paste]");
     if (ad) {
@@ -553,6 +561,194 @@
   });
   function dock() { document.body.classList.toggle("ss-dock", window.innerWidth >= 2400); }
   window.addEventListener("resize", dock); dock();
+
+  // ── Find a value: where a value comes from and every request that sends it back, in the details sheet. The search runs
+  //    in the HAR Explorer's worker (portal/har-explorer-worker.js — Studio's engine, unchanged); the answer is
+  //    portal/find-value.js (the same as the Explorer's). Requests are named by Studio's request id; "Correlate this"
+  //    adds the extractor to the Correlation Advisor and applies it (as Paste & Detect does). ──
+  var FW = { w: null, har: null, dirty: true, seq: 0, sugg: null, studioDone: false, inv: null, map: null };
+  function maps() {
+    // the worker numbers requests by their place in the file (n); Studio by the entries that have a request (id)
+    if (FW.map && FW.map.har === S.har1) return FW.map;
+    var nToId = {}, idToN = {}, id = 0;
+    ((S.har1 && S.har1.log && S.har1.log.entries) || []).forEach(function (e, i) { if (e && e.request) { id++; nToId[i + 1] = id; idToN[id] = i + 1; } });
+    FW.map = { har: S.har1, nToId: nToId, idToN: idToN };
+    return FW.map;
+  }
+  function worker() {
+    if (!window.Worker || !S.har1 || S.isNetLog1) return false;
+    if (!FW.w || FW.har !== S.har1) {
+      if (FW.w) FW.w.terminate();
+      try { FW.w = new Worker("portal/har-explorer-worker.js"); } catch (e) { FW.w = null; return false; }
+      FW.har = S.har1; FW.dirty = true;
+      FW.w.onmessage = function (ev) {
+        var d = ev.data;
+        if (d.type === "ready") { FW.sugg = d.suggestions; FW.studioDone = !!d.studioDone; if (D.view === "find") renderFind(); }
+        else if (d.type === "found" && d.id === FW.seq) { FW.inv = d.result; if (D.view === "find") renderFind(); }
+        else if (d.type === "error") showToast("Find a value: " + d.message, "warning");
+      };
+      FW.w.onerror = function () { FW.w = null; showToast("Find a value is not available in this browser.", "warning"); };
+    }
+    if (FW.dirty) {
+      // what the script leaves out, and the Advisor's own findings (shown first, marked "Advisor")
+      var m = maps(), out = [];
+      reqs().forEach(function (e) { if (e.filtered && m.idToN[e.id]) out.push(m.idToN[e.id]); });
+      FW.sugg = null; FW.studioDone = false; FW.dirty = false;
+      FW.w.postMessage({ type: "load", text: JSON.stringify(S.har1), out: out });
+      FW.w.postMessage({ type: "studioList", list: (S.advisorCandidates || []).map(function (c) { return { value: c.value, name: c.varName || "value", by: "studio" }; }) });
+    }
+    return true;
+  }
+  function find(value) {
+    D.find = String(value || "").trim(); D.cn = "";
+    FW.inv = null;
+    if (D.find && worker()) FW.w.postMessage({ type: "find", id: ++FW.seq, value: D.find });
+    renderFind();
+  }
+  function openFind(value) {
+    if (!S.har1) return;
+    if (S.isNetLog1) { showToast("Find a value needs a HAR file (a NetLog file has no response bodies).", "warning"); return; }
+    D.view = "find"; D.id = null;
+    det.classList.add("is-find");
+    var fb = $("#ss-filebar").getBoundingClientRect();
+    det.style.top = window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : "";
+    det.hidden = false; document.body.classList.add("ss-det-open");
+    $("#ss-det-h").textContent = "Find a value";
+    worker();
+    if (value != null) find(value); else renderFind();
+    draw();
+    var inp = $("#ss-fq"); if (inp) inp.focus();
+  }
+  function fnum(h) { var m = maps(); return m.nToId[h.n] || h.n; }
+  function flink(h) {
+    var id = fnum(h), e = byId(id) || { method: "", url: "" };
+    return '<a href="#" data-go="' + id + '" data-tab="' + FindValue.tabFor(h) + '">#' + id + " " + esc(e.method) + " " + esc(split(e.url).path) + "</a>";
+  }
+  function inAdvisor(v) { return (S.advisorCandidates || []).filter(function (c) { return c.value === v && c.status !== "skipped"; })[0] || null; }
+  function corrCode(c, name) {
+    var code = S.format === "devweb" ? c.devweb : String(c.vugen || "").replace(/^\t/gm, "");
+    if (!code) return "";
+    return name === c.name ? code : code.split('"' + c.name + '"').join('"' + name + '"').split("ParamName=" + c.name + '"').join("ParamName=" + name + '"');
+  }
+  function corrPanel(inv) {
+    var c = inv.corr;
+    if (c.error) return '<div class="hx-corr"><div class="hx-corr-h"><h3>Correlate this</h3></div><p class="hx-corr-b ds-note warn">' + esc(c.error) + "</p></div>";
+    var card = inAdvisor(inv.value), name = card ? card.varName : D.cn || c.name;
+    var ref = function (n) { return S.format === "devweb" ? "${" + n + "}" : "{" + n + "}"; };
+    return '<div class="hx-corr"><div class="hx-corr-h"><h3>Correlate this</h3><span class="ss-muted">' + (S.format === "devweb" ? "DevWeb" : "Web HTTP/HTML") + "</span></div>" +
+      '<div class="hx-corr-b">' +
+      '<label class="hx-cn"><span>Parameter name</span><input id="ss-cn" value="' + esc(name) + '" spellcheck="false" autocomplete="off"' + (card ? " disabled" : "") + "></label>" +
+      '<p class="hx-corr-from">Captured from ' + esc(c.label) + " in " + flink(inv.src) + (S.format === "devweb" ? " — the extractor goes on that request" : " — registered just before that request") + ".</p>" +
+      '<pre class="hx-code hx-corr-code" id="ss-corr-code">' + esc(corrCode(c, name)) + "</pre>" +
+      '<p class="hx-corr-from">Then used in:</p><ul class="hx-corr-uses">' + inv.later.map(function (u) { return "<li>" + flink(u) + " — " + esc(u.where) + " → <code>" + esc(ref(name)) + "</code></li>"; }).join("") + "</ul>" +
+      c.warn.map(function (w) { return '<p class="ds-note warn hx-corr-warn">' + esc(w) + "</p>"; }).join("") +
+      '<div class="hx-corr-act">' + (card
+        ? '<span class="hx-added"><svg class="i"><use href="#i-ok"/></svg>' + (card._applied ? "In the script" : "In the Correlation Advisor") + "</span>" + '<button type="button" class="ds-btn ds-btn-sm" data-go-adv>Open the Correlation Advisor</button>'
+        : '<button type="button" class="ds-btn ds-btn-primary" data-corr-add><svg class="i"><use href="#i-ok"/></svg>Add and apply</button>') +
+      '<button type="button" class="ds-btn" data-corr-copy><svg class="i"><use href="#i-copy"/></svg>Copy code</button></div>' +
+      "</div></div>";
+  }
+  function renderFind() {
+    if (D.view !== "find") return;
+    var v = D.find || "", inv = FW.inv;
+    var input = $("#ss-fq"), caret = input && document.activeElement === input ? input.selectionStart : null;
+    var sugg = FW.sugg === null ? '<p class="hx-sugg-wait">Looking for values that change…</p>'
+      : FW.sugg.length ? '<div class="hx-sugg" aria-label="Values the server sends that a later request sends back">' + FW.sugg.map(function (s) {
+          return '<button type="button" data-sugg="' + esc(s.value) + '" title="' + esc(s.value) + (s.by === "studio" ? " — the Correlation Advisor suggests this one" : " — the Correlation Advisor does not find this one by itself") + '"' + (s.value === v ? ' aria-pressed="true"' : "") + ">" +
+            (s.by === "studio" ? '<span class="by">Advisor</span>' : "") + "<b>" + esc(RequestDetails.short(s.name, 24)) + "</b><code>" + esc(RequestDetails.short(s.value, 22)) + "</code></button>";
+        }).join("") + "</div>"
+      : '<p class="hx-sugg-wait">No value in this recording comes back from the server and is sent again.</p>';
+    var body;
+    if (!v) body = '<p class="ds-note hx-hint">Type or paste a value above, pick one the server sends (marked <b>Advisor</b> when the Correlation Advisor suggests it too), or select a value in a request\'s Headers, Payload or Response.</p>';
+    else if (!inv || inv.value !== v) body = '<p class="hx-none">Looking for ' + esc(RequestDetails.short(v, 60)) + " …</p>";
+    else body = FindValue.html(inv, {
+      num: fnum, link: flink, corr: inv.corr ? corrPanel(inv) : "",
+      studio: function (i) { return '<p class="hx-studio">' + (i.studio || inAdvisor(i.value) ? "The Correlation Advisor suggests this one too." : "The Correlation Advisor does not find this one by itself — use <b>Correlate this</b> below.") + "</p>"; },
+    });
+    detB.innerHTML = '<div class="hx-dh hx-fh">' +
+      "<p>Where it first came from, every request that sends it back, and what to do in the script. URL-encoded, JSON-escaped, Base64 and HTML-entity forms are found too.</p>" +
+      '<div class="hx-fin"><label class="ss-search"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-fq" type="search" value="' + esc(v) + '" placeholder="e.g. a session id, a token, an order number" aria-label="Value to find" autocomplete="off" spellcheck="false"></label>' +
+      (v ? '<button type="button" class="ds-btn ds-btn-sm" data-find-clear>Clear</button>' : "") + "</div>" + sugg + "</div>" +
+      '<div class="hx-db">' + body + "</div>";
+    $("#ss-det-pos").textContent = ""; $("#ss-det-prev").disabled = true; $("#ss-det-next").disabled = true;
+    var inp = $("#ss-fq");
+    if (caret != null && inp) { inp.focus(); inp.setSelectionRange(caret, caret); }
+  }
+  var findTimer = null;
+  detB.addEventListener("input", function (e) {
+    if (e.target.id === "ss-fq") { var v = e.target.value; clearTimeout(findTimer); findTimer = setTimeout(function () { find(v); }, 300); return; }
+    if (e.target.id === "ss-cn" && FW.inv && FW.inv.corr) {
+      D.cn = e.target.value.trim().replace(/[^A-Za-z0-9_]/g, "_");
+      var n = D.cn || FW.inv.corr.name;
+      $("#ss-corr-code").textContent = corrCode(FW.inv.corr, n);
+      $$(".hx-corr-uses code", detB).forEach(function (c) { c.textContent = S.format === "devweb" ? "${" + n + "}" : "{" + n + "}"; });
+    }
+  });
+  detB.addEventListener("keydown", function (e) { if (e.target.id === "ss-fq" && e.key === "Enter") { clearTimeout(findTimer); find(e.target.value); } });
+  // a request in the answer opens its details (with the value marked and a way back)
+  function backToFind() { var v = D.fromFind; D.fromFind = null; openFind(v); }
+  function markFound(html) {
+    var inv = D.fromFind != null && FW.inv;
+    if (!inv || !inv.forms) return html;
+    inv.forms.forEach(function (s) { var f = esc(s); if (f.length < 3) return; html = html.split(f).join("\u0001" + f + "\u0002"); });
+    return html.replace(/\u0001/g, '<mark class="hx-hl">').replace(/\u0002/g, "</mark>");
+  }
+  function addAndApply(inv) {
+    var c = inv.corr, name = (D.cn || c.name).replace(/[^A-Za-z0-9_]/g, "_");
+    if (!/^[A-Za-z]/.test(name)) { showToast("The parameter name must start with a letter.", "warning"); return; }
+    if ((S.correlations || []).some(function (x) { return x.name === name; }) || (S.advisorCandidates || []).some(function (x) { return x.varName === name && x.status !== "skipped"; })) {
+      showToast("“" + name + "” is already used — choose another name.", "warning"); return;
+    }
+    var at = function (id) { var es = S.entries1 || []; for (var i = 0; i < es.length; i++) if (!es[i].isMarker && es[i].id === id) return i; return -1; };
+    var src = at(c.studioId); if (src < 0) { showToast("That request is not in this reading of the recording.", "warning"); return; }
+    var cand = advisorAddManual(src, "boundary", "", name, inv.value);
+    cand._explorer = { extractorType: c.extractorType, extractorConfig: c.extractorConfig };
+    (c.uses || []).forEach(function (u) {
+      var ui = at(u.id); if (ui < 0) return;
+      var known = cand.usages.some(function (k) { return k.entryIdx === ui && k.location === u.location && (k.jsonPath || null) === u.jsonPath; });
+      if (!known) cand.usages.push({ entryIdx: ui, url: "", location: u.location, jsonPath: u.jsonPath });
+    });
+    renderAdvisorPanel();
+    advisorApplyAndRegen();
+    showToast("“" + name + "” added to the Correlation Advisor and applied: the script captures it at #" + c.studioId + ".", "success", 5000);
+  }
+  detB.addEventListener("click", function (e) {
+    if (D.view !== "find") {
+      if (e.target.closest("[data-back-find]")) backToFind();
+      return;
+    }
+    var sg = e.target.closest("[data-sugg]"); if (sg) { find(sg.getAttribute("data-sugg")); return; }
+    if (e.target.closest("[data-find-clear]")) { find(""); var i0 = $("#ss-fq"); if (i0) i0.focus(); return; }
+    var go = e.target.closest("[data-go]");
+    if (go) { e.preventDefault(); D.fromFind = D.find; D.tab = go.getAttribute("data-tab") || "headers"; D.full = {}; openDet(+go.getAttribute("data-go"), true); scrollTo(+go.getAttribute("data-go")); return; }
+    if (!FW.inv || !FW.inv.corr) return;
+    if (e.target.closest("[data-corr-add]")) { addAndApply(FW.inv); return; }
+    if (e.target.closest("[data-corr-copy]")) {
+      var txt = $("#ss-corr-code").textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { showToast("Code copied.", "success", 2500); }, function () { showToast("Copying is not allowed here.", "warning"); });
+    }
+  });
+  $("#ss-find").addEventListener("click", function () { openFind(D.view === "find" ? D.find : ""); });
+
+  // select a value in a request's details → "Find where this value comes from"
+  var selBtn = document.createElement("button");
+  selBtn.type = "button"; selBtn.className = "hx-selbtn"; selBtn.hidden = true;
+  selBtn.innerHTML = '<svg class="i"><use href="#i-search"/></svg>Find where this value comes from';
+  document.body.appendChild(selBtn);
+  document.addEventListener("mouseup", function (e) {
+    if (e.target === selBtn || selBtn.contains(e.target)) return;
+    setTimeout(function () {
+      var s = window.getSelection(), txt = s ? s.toString().trim() : "";
+      var db = $("#ss-det .hx-db");
+      var inDet = D.view !== "find" && D.id != null && s && s.rangeCount && db && db.contains(s.anchorNode);
+      if (!inDet || txt.length < 3 || txt.length > 2000 || /\n/.test(txt)) { selBtn.hidden = true; return; }
+      var rc = s.getRangeAt(0).getBoundingClientRect();
+      selBtn.style.left = Math.max(8, Math.min(window.innerWidth - 280, rc.left)) + "px";
+      selBtn.style.top = Math.min(window.innerHeight - 44, rc.bottom + 6) + "px";
+      selBtn.hidden = false; selBtn.dataset.v = txt;
+    }, 0);
+  });
+  selBtn.addEventListener("click", function () { selBtn.hidden = true; openFind(selBtn.dataset.v); });
 
   // ── panels: hide to a rail (remembered), one click on the rail brings it back; drag the gaps to resize ──
   prefs.hide = prefs.hide || {};
@@ -615,7 +811,14 @@
   window.SSW = {
     newFile: newFile,
     // (Dynamic values are worked out again after every change: an applied correlation changes them)
-    render: function () { renderTypes(); renderDomains(); renderReqs(); D.dynFor = null; if (D.id != null) renderDet(); },
+    // (Find a value reads the new reading too: what is left out and the Advisor's findings may have changed)
+    render: function () {
+      renderTypes(); renderDomains(); renderReqs(); D.dynFor = null;
+      var nc = (S.advisorCandidates || []).length, again = FW.forE !== S.entries1 || FW.forC !== nc;
+      if (again) { FW.dirty = true; FW.forE = S.entries1; FW.forC = nc; }
+      if (D.view === "find") { if (again) find(D.find); else renderFind(); } else if (D.id != null) renderDet();
+    },
+    openFind: function (v) { openFind(v); },
     openDetails: function (id) { openDet(id); },
     closeDetails: function () { closeDet(); },
     showPane: showPane,

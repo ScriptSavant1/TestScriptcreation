@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="portal/brand.css" />
     <link rel="stylesheet" href="VuGen-Script-Studio.css" />
     <link rel="stylesheet" href="portal/request-details.css" />
+    <link rel="stylesheet" href="portal/find-value.css" />
     <link rel="stylesheet" href="portal/studio.css" />
     <link rel="stylesheet" href="portal/record-live.css" />
     <script>
@@ -241,6 +242,7 @@
             <div class="ss-pane-h" data-hide-head="req" title="Click to hide this panel"><h3>Requests</h3><span class="ss-muted" id="ss-req-n"></span><span class="ss-grow"></span>
               <span class="ss-req-act">
                 <button class="ds-btn ds-btn-sm" type="button" id="ss-new-txn" title="Tick requests, then make them a new transaction"><svg class="i"><use href="#i-plus"/></svg><span>New transaction</span></button>
+                <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-find" title="Look up any value: where it comes from and every request that sends it back"><svg class="i"><use href="#i-search"/></svg><span class="ss-opt">Find a value</span></button>
                 <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-showout" aria-pressed="false" title="Show the requests that are left out, faded, with the reason"><svg class="i"><use href="#i-eye"/></svg><span class="ss-opt">Show left-out</span></button>
                 <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-fold-all" title="Fold or unfold every transaction"><svg class="i"><use href="#i-fold"/></svg><span class="ss-opt">Collapse all</span></button>
               </span>
@@ -298,6 +300,7 @@
                   </div>
                   <div class="adv-panel-hdr-right">
                     <button class="adv-btn-paste" onclick="event.stopPropagation();openPasteCorrelate()" title="Paste a response body and extract a value from it"><svg class="i"><use href="#i-paste"/></svg>Paste &amp; Detect</button>
+                    <button class="adv-btn-add" type="button" onclick="event.stopPropagation();SSW.openFind()" title="Look up any value: where it comes from and where it goes"><svg class="i"><use href="#i-search"/></svg>Find a value</button>
                     <button class="adv-btn-add" onclick="event.stopPropagation();openAdvisorModal()" title="Add a custom correlation manually"><svg class="i"><use href="#i-plus"/></svg>Add Manual</button>
                     <span class="adv-toggle-icon" id="adv-toggle-icon">&#x25BE;</span>
                   </div>
@@ -559,6 +562,7 @@
     <script src="portal/record-live.js"></script>
     <script src="portal/studio-txn.js"></script>
     <script src="portal/request-details.js"></script>
+    <script src="portal/find-value.js"></script>
     <script src="portal/studio-page.js"></script>
     <script src="portal/studio-workspace.js"></script>
   </body>

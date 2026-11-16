@@ -43,6 +43,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The second recording (diff mode) is under "Advanced: second recording" in the Correlation Advisor tab, with "Record it now".
 - The usage statistic counts one Script Studio use per opened recording, not one per reading.
 
+#### Find a value in Script Studio (redesign step 4c)
+
+- **Find a value** in Script Studio (Requests header, Correlation Advisor header, a value in Dynamic values, or select text in a request's details): where a value first came from, every request that sends it back, and what to do — the same answer as the HAR Explorer (one shared module, `portal/find-value.js`), with Studio's request numbers. Suggestions put the Correlation Advisor's own first (marked "Advisor").
+- **Correlate this** shows the extractor in the script's format and **Add and apply** puts it in the Correlation Advisor and the script at once; a value the Advisor already has says so. A request in the answer opens with the value marked and "Back to Find a value".
+
 #### Dynamic values tab (redesign step 4b)
 
 - Request details in Script Studio have a **Dynamic values** tab: the Request Inspector for that request. Values traced to an earlier response show their source request (a click opens it) and **Add** (a card in the Correlation Advisor); values that look dynamic but have no source offer **Paste & Detect** with the value filled in. A value the Advisor already suggests says "In the Advisor", and its source is the Advisor's (which also reads HTML pages and hidden fields), so both places give the same answer.

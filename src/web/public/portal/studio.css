@@ -713,3 +713,11 @@ body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10
 .ss-dyn code { font-family: var(--ds-mono); word-break: break-all; background: none; border: 0; padding: 0; }
 .ss-dyn-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .ss-dyn-dot.g { background: var(--ds-ok); } .ss-dyn-dot.y { background: var(--ds-warn); }
+
+/* Find a value in the details sheet (portal/find-value.js; its own styles are portal/find-value.css) */
+.ss-dyn-v { display: inline; padding: 0; border: 0; background: none; color: var(--ds-text); font: inherit; text-align: left; cursor: pointer; }
+.ss-dyn-v:hover code { color: var(--ds-accent-text); text-decoration: underline; }
+#ss-det .hx-fh { padding-bottom: 12px; }
+#ss-det .hx-fin { margin-top: 2px; }
+#ss-det .hx-fin .ss-search { flex: 1; }
+.ss-det.is-find .ss-inl, .ss-det.is-find #ss-det-prev, .ss-det.is-find #ss-det-next { display: none; }
