@@ -1,6 +1,6 @@
 {
   "name": "cdp-recorder",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Records a browser journey into a HAR file through the Chrome DevTools Protocol (no browser extension)",
   "type": "module",

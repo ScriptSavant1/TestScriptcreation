@@ -20,7 +20,7 @@
   'use strict';
 
   var REC = 'http://localhost:8787';
-  var LATEST = '0.2.2';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
+  var LATEST = '0.2.3';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
   var PREF = 'perfx-rec-live';     // remembered choices: recent addresses, browser, private window, name, last transaction
   var STATIC_TYPES = { Image: 1, Stylesheet: 1, Script: 1, Font: 1, Media: 1 };
   var ROWS_PER_GROUP = 400;        // rows drawn per open transaction (the newest)
@@ -88,7 +88,8 @@
         '</div></div>' +
         '<label class="rl-toggle"><input type="checkbox" id="lv-priv" checked><span><b id="lv-priv-t">Open a private window</b><small>Optional — untick it if your application does not work in a private window. Either way the recording window starts signed out, in a fresh browser profile, so the login is recorded too.</small></span></label>' +
         '<details class="rl-more"><summary>More options</summary><div class="rl-row">' +
-          '<label class="rl-field">Recording name<input class="ds-field" id="lv-name" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. SC01_Booking"><small>Used for the file name.</small></label>' +
+          '<label class="rl-field">Recording name<input class="ds-field" id="lv-name" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. Booking"><small>Used for the file name.</small></label>' +
+          '<label class="rl-field">Script ID <span class="rl-opt">(optional)</span><input class="ds-field" id="lv-sid" type="text" autocomplete="off" spellcheck="false" maxlength="12" placeholder="e.g. SC01"><small>The file and the transactions in the script start with it (SC01_01_…).</small></label>' +
           '<label class="rl-field">First transaction<input class="ds-field" id="lv-first" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. Launch"><small>Starts when the page opens; numbered for you (T01_Launch).</small></label>' +
           '<label class="rl-field rl-wide">Planned steps <span class="rl-opt">(optional, one per line)</span><textarea class="ds-field" id="lv-plan" rows="3" spellcheck="false" placeholder="Login&#10;Search&#10;Add to cart"></textarea><small>While recording, press Enter on an empty box to start the next planned step — no typing during the journey.</small></label>' +
         '</div></details>' +
@@ -145,7 +146,7 @@
           '<label class="rl-field" for="lv-tx-name">Next transaction</label>' +
           '<div class="rl-txbox"><span class="rl-prefix" id="lv-prefix" title="Added for you — type your own (for example T07_Pay) to use another number">T01_</span><input class="ds-field" id="lv-tx-name" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. Login — press Enter" aria-describedby="lv-tx-err"></div>' +
           '<span class="rl-ferr" id="lv-tx-err" role="alert" hidden></span>' +
-          '<div class="rl-txbtns"><button class="ds-btn ds-btn-primary" type="button" id="lv-tx-start">Start</button><button class="ds-btn" type="button" id="lv-tx-end" disabled title="End the running transaction without starting another — for a gap you do not want measured">End</button></div>' +
+          '<div class="rl-txbtns"><button class="ds-btn ds-btn-primary" type="button" id="lv-tx-start">Start</button><button class="ds-btn ds-btn-ghost" type="button" id="lv-tx-undo" disabled title="Take back the last Start or End: the transaction before runs again">Undo last mark</button><button class="ds-btn" type="button" id="lv-tx-end" disabled title="End the running transaction without starting another — for a gap you do not want measured">End</button></div>' +
           '<ol class="rl-plan" id="lv-planlist" hidden aria-label="Planned steps"></ol>' +
           '<ol class="rl-txlist" id="lv-txlist"></ol>' +
           '<div class="rl-call ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>The same buttons are on the small toolbar next to the recording window — use whichever is closer.</span></div>' +
@@ -217,6 +218,7 @@
     $('lv-priv').checked = prefs.private !== false;
     $('lv-name').value = prefs.name || '';
     $('lv-first').value = '';
+    $('lv-sid').value = prefs.sid || '';
     $('lv-plan').value = prefs.plan || '';
     if (prefs.plan) $('lv-plan').closest('details').open = true;   // a plan from last time is in sight
     $('lv-go').disabled = false; goLabel('Start recording');
@@ -255,10 +257,17 @@
       $('lv-url-err').hidden = false; $('lv-url-inp').classList.add('bad'); $('lv-url-inp').focus();
       return;
     }
+    var sid = $('lv-sid').value.trim();
+    if (sid && !/^[A-Za-z][A-Za-z0-9]{0,11}$/.test(sid)) {
+      setView(true); $('lv-dlg').querySelector('.rl-more').open = true; $('lv-sid').focus();
+      toast('The script ID takes letters and digits only, starting with a letter (for example SC01).', 'warning'); return;
+    }
+    prefs.sid = sid.toUpperCase();
     var first = $('lv-first').value.trim();
     var req = { url: url, browser: browser(), private: $('lv-priv').checked, name: $('lv-name').value.trim(), firstTx: first ? fullNameStatic(first) : '' };
     prefs.plan = $('lv-plan').value;
     req.plan = prefs.plan;   // the CDP Recorder 0.2.2 and newer: an empty name on its toolbar starts the next planned step
+    req.scriptId = prefs.sid;   // 0.2.3 and newer: the file and the HAR carry it (older ones ignore it)
     prefs.urls = [url].concat((prefs.urls || []).filter(function (u) { return u !== url; })).slice(0, 6);
     prefs.browser = req.browser; prefs.private = req.private; prefs.name = req.name;
     savePrefs();
@@ -383,6 +392,7 @@
       if (s.warning) warn(s.warning); else $('lv-warn').hidden = true;
       me.txActive = s.activeTransaction || null;
       me.txDone = s.transactions || [];
+      me.pageTitle = s.pageTitle || ''; me.version = s.version || '';
       return api('GET', '/api/live?since=' + me.last, null, 5000).then(function (r) {
         if (L !== me) return;
         (r.rows || []).forEach(function (row) {
@@ -463,21 +473,60 @@
     L.rows.forEach(function (r) { if (r.tx) counts[r.tx] = (counts[r.tx] || 0) + 1; });
     var items = L.txDone.map(function (t) { return { name: t, live: false }; });
     if (L.txActive) items.push({ name: L.txActive, live: true });
-    $('lv-txlist').innerHTML = items.length ? items.map(function (t, i) {
-      return '<li class="' + (t.live ? 'live' : '') + '"><span class="i">' + (i + 1) + '</span><b>' + esc(t.name) + '</b><span class="c">' +
-        (t.live ? 'recording… ' : '') + plural(counts[t.name] || 0, 'request') + '</span></li>';
+    var canEdit = !!(L.version && !newer(L.version, '0.2.3'));
+    // a rename being typed is not drawn over by the next poll
+    var typing = L.renaming && $('lv-txlist').querySelector('.rl-rename');
+    if (!typing) $('lv-txlist').innerHTML = items.length ? items.map(function (t, i) {
+      return '<li class="' + (t.live ? 'live' : '') + '"><span class="i">' + (i + 1) + '</span>' +
+        (L.renaming === t.name
+          ? '<input class="ds-field rl-rename" data-from="' + esc(t.name) + '" value="' + esc(t.name) + '" maxlength="60" aria-label="New name for ' + esc(t.name) + '">'
+          : '<b>' + esc(t.name) + '</b>' + (canEdit ? '<button type="button" class="rl-ren" data-ren="' + esc(t.name) + '" title="Rename ' + esc(t.name) + '" aria-label="Rename ' + esc(t.name) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>' : '')) +
+        '<span class="c">' + (t.live ? 'recording… ' : '') + plural(counts[t.name] || 0, 'request') + '</span></li>';
     }).join('') : '<li class="none">No transactions yet — requests are recorded anyway; you can group them later in the Recorder.</li>';
     $('lv-tx-end').disabled = !L.txActive;
-    // the number before the box, and the next planned step as the hint (Enter on an empty box starts it)
+    $('lv-tx-undo').hidden = !canEdit; $('lv-tx-undo').disabled = !items.length;
+    // the number before the box, and the hint: the next planned step (Enter on an empty box starts it), else a name
+    // from the page title (Tab takes it — never filled in by itself)
     $('lv-prefix').textContent = prefixFor(nextNum());
     var np = nextPlanned();
-    $('lv-tx-name').placeholder = np ? 'Next planned: ' + np + ' — press Enter' : 'e.g. Login — press Enter';
+    L.sugg = np ? '' : titleName(L.pageTitle);
+    $('lv-tx-name').placeholder = np ? 'Next planned: ' + np + ' — press Enter' : L.sugg ? L.sugg + '   (from the page title · Tab)' : 'e.g. Login — press Enter';
     var plan = planSteps(), pl = $('lv-planlist');
     pl.hidden = !plan.length;
     pl.innerHTML = plan.map(function (s) {
       var done = stepDone(s), isNext = !done && s === np;
       return '<li class="' + (done ? 'done' : isNext ? 'next' : '') + '">' + (done ? CHECK : '') + esc(s) + (isNext ? ' <small>next</small>' : '') + '</li>';
     }).join('');
+  }
+  // a transaction name from a page title: its first part ("Product selection | Shop" → Product_selection), letters,
+  // digits and _ only, at most 40 characters ("" when there is nothing usable)
+  function titleName(t) {
+    var first = String(t || '').split(/\s+[|\u2013\u2014-]\s+|\s*::\s*/)[0];
+    return first.trim().replace(/[\s-]+/g, '_').replace(/[^A-Za-z0-9_]/g, '').replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+  }
+  // rename a transaction in the list (the CDP Recorder 0.2.3 and newer)
+  function renameTx(from, to) {
+    var me = L;
+    me.renaming = null;
+    if (!to || to === from) { render(); return; }
+    api('POST', '/api/tx/rename', { from: from, to: to }).then(function (r) {
+      if (L !== me) return;
+      me.txDone = me.txDone.map(function (t) { return t === from ? r.name : t; });
+      if (me.txActive === from) me.txActive = r.name;
+      me.rows.forEach(function (row) { if (row.tx === from) row.tx = r.name; });
+      render();
+    }, function (e) { toast('Could not rename ' + from + ': ' + e.message, 'warning'); render(); });
+  }
+  function undoMark() {
+    var me = L;
+    api('POST', '/api/tx/undo').then(function (r) {
+      if (L !== me) return;
+      if (r.undone) { me.txDone = me.txDone.filter(function (t) { return t !== r.undone; }); me.rows.forEach(function (row) { if (row.tx === r.undone) row.tx = r.active; }); }
+      if (r.active) me.txDone = me.txDone.filter(function (t) { return t !== r.active; });
+      me.txActive = r.active || null;
+      toast(r.undone ? r.undone + ' taken back' + (r.active ? ' — ' + r.active + ' runs again.' : '.') : r.active + ' runs again.', 'success', 3500);
+      render();
+    }, function (e) { toast('Could not undo: ' + e.message, 'warning'); });
   }
   // the transactions started so far (finished and running), in order
   function started() { var a = (L.txDone || []).slice(); if (L.txActive && a.indexOf(L.txActive) === -1) a.push(L.txActive); return a; }
@@ -595,7 +644,25 @@
     $('lv-stop').addEventListener('click', stop);
     $('lv-tx-start').addEventListener('click', txStart);
     $('lv-tx-end').addEventListener('click', txEnd);
-    $('lv-tx-name').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); txStart(); } });
+    $('lv-tx-undo').addEventListener('click', undoMark);
+    $('lv-tx-name').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); txStart(); }
+      // Tab takes the name from the page title (grey hint) when the box is empty
+      else if (e.key === 'Tab' && !e.shiftKey && L && L.sugg && !$('lv-tx-name').value) { e.preventDefault(); $('lv-tx-name').value = L.sugg; }
+    });
+    $('lv-txlist').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-ren]'); if (!b || !L) return;
+      L.renaming = b.getAttribute('data-ren'); render();
+      var inp = $('lv-txlist').querySelector('.rl-rename'); if (inp) { inp.focus(); inp.select(); }
+    });
+    $('lv-txlist').addEventListener('keydown', function (e) {
+      var inp = e.target.closest('.rl-rename'); if (!inp) return;
+      if (e.key === 'Enter') { e.preventDefault(); renameTx(inp.getAttribute('data-from'), inp.value.trim()); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); L.renaming = null; render(); }
+    });
+    $('lv-txlist').addEventListener('focusout', function (e) {
+      var inp = e.target.closest('.rl-rename'); if (inp && L && L.renaming) renameTx(inp.getAttribute('data-from'), inp.value.trim());
+    });
     $('lv-filter').addEventListener('input', function () { if (L) render(); });
     ['lv-static', 'lv-bgshow'].forEach(function (id) { $(id).addEventListener('change', function () { if (L) render(); }); });
     $('lv-follow').addEventListener('change', function () { $('lv-newest').hidden = this.checked; if (L) render(); });

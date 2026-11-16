@@ -42,6 +42,8 @@ import {
   getAttachedSessionIds,
   captureScreenshot,
   onSettled,
+  getPageTitle,
+  refreshPageTitle,
 } from "./cdp-capture.js";
 import { liveRow } from "./portal-mode.js";
 // Ported plain-JS modules, imported as `any` — see cdp-capture.ts's header
@@ -56,6 +58,7 @@ export class Recorder {
   private child: import("node:child_process").ChildProcess | undefined;
   private profile: ResolvedProfile | undefined;
   private recording = false;
+  private titleTimer: ReturnType<typeof setInterval> | undefined;
   // transaction id (har-builder.js's `tx_N`) -> screenshots taken at its
   // start/end. Attached onto the HAR's log.pages[] entries in stop(), after
   // build() has assigned each transaction its final `id`.
@@ -139,6 +142,10 @@ export class Recorder {
     this.liveCount = 0;
     await startCapture(this.client);
     this.recording = true;
+    // the title of the page on screen, asked every 2 s while recording (a suggested transaction name on the page)
+    const client = this.client;
+    if (this.titleTimer) clearInterval(this.titleTimer);
+    this.titleTimer = setInterval(() => { if (this.recording) void refreshPageTitle(client).catch(() => { /* a window closing */ }); }, 2000);
 
     // Mirrors service-worker.js's SETTLED fallback: startSettledTimer() in
     // cdp-capture only fires when a request FINISHES, so a page that's
@@ -239,6 +246,33 @@ export class Recorder {
     return id;
   }
 
+  /** A new name for a transaction, found by its current name (the PerfX Studio page's transaction list). */
+  renameTransaction(from: string, to: string): boolean {
+    return harBuilder.renameTransaction(from, to) as boolean;
+  }
+
+  /** "Undo last mark" — see har-builder.js undoLastMark(). */
+  undoLastMark(): { undone: string | null; active: string | null } | null {
+    return harBuilder.undoLastMark() as { undone: string | null; active: string | null } | null;
+  }
+
+  /** The transactions as the builder has them: the finished names in order, and the running one. */
+  transactionState(): { done: string[]; active: string | null } {
+    const txs = harBuilder.completedTransactions as Array<{ name: string; endTime: number | null }>;
+    const active = harBuilder.activeTransaction as { name: string } | null;
+    return { done: txs.filter((t) => t !== (active as unknown)).map((t) => t.name), active: active ? active.name : null };
+  }
+
+  /** The script ID of a recording started from the PerfX Studio page (written into the HAR as _perfx_scriptId). */
+  setScriptId(id: string): void {
+    harBuilder.scriptId = id || "";
+  }
+
+  /** The title of the page last shown in the recording window (a suggested transaction name). */
+  pageTitle(): string {
+    return this.recording ? getPageTitle() : "";
+  }
+
   /**
    * Returns how many requests were tagged to the transaction being ended, so
    * the UI can warn immediately on a zero — the classic symptom of browsing
@@ -294,6 +328,7 @@ export class Recorder {
     // after which no screenshot can be taken at all.
     await this.captureEndScreenshotSync();
 
+    if (this.titleTimer) { clearInterval(this.titleTimer); this.titleTimer = undefined; }
     await stopCapture(this.client);
     resetCapture();
     this.recording = false;

@@ -84,7 +84,9 @@ export function readSession(body) {
   const browser = String(b.browser || "edge").toLowerCase();
   if (browser !== "edge" && browser !== "chrome") return { ok: false, error: "The browser must be Edge or Chrome" };
   const clean = (v, n) => String(v || "").trim().slice(0, n);
-  return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80), plan: planSteps(String(b.plan || "").slice(0, 4000)) };
+  const scriptId = scriptIdOf(b.scriptId);
+  if (scriptId === null) return { ok: false, error: "The script ID takes letters and digits only, up to 12 (for example SC01)" };
+  return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80), plan: planSteps(String(b.plan || "").slice(0, 4000)), scriptId };
 }
 
 // ── transaction names: the same rules as the PerfX Studio page (src/web/public/portal/record-live.js fullName / nextNum —
@@ -108,6 +110,31 @@ export function txName(raw, started) {
   if (own) return "T" + pad2(+own[1]) + "_" + own[2];
   return "T" + pad2(nextTxNumber(started)) + "_" + s.charAt(0).toUpperCase() + s.slice(1);
 }
+/**
+ * The optional script ID (Start recording → More options): letters and digits, starting with a letter, up to 12 —
+ * "SC01" gives SC01_Booking_<date>.har and SC01_01_… transactions in Script Studio. "" when empty, null when not valid.
+ */
+export function scriptIdOf(v) {
+  const s = String(v == null ? "" : v).trim();
+  if (!s) return "";
+  return /^[A-Za-z][A-Za-z0-9]{0,11}$/.test(s) ? s.toUpperCase() : null;
+}
+
+/**
+ * A new name for a transaction (the PerfX Studio page's transaction list): the same characters as a new one; a name
+ * typed without a number keeps the old one's (T02_Login → "Sign in" → T02_Sign_in). { name } or { error }.
+ */
+export function renamedTx(from, to, used) {
+  const own = /^T(\d+)_/.exec(String(from || ""));
+  const typed = String(to || "").trim();
+  if (!typed) return { error: "Type a name for the transaction." };
+  const withNum = own && !/^[Tt]\d+[_\s-]/.test(typed) ? "T" + own[1] + "_" + typed.charAt(0).toUpperCase() + typed.slice(1) : typed;
+  const name = txName(withNum, used);
+  if (!name) return { error: "Type a name for the transaction." };
+  if (name !== from && used.includes(name)) return { error: `${name} is used already — type another name.` };
+  return { name };
+}
+
 /** The first planned step not started yet ("" when every one is done). */
 export function nextPlanned(plan, started) {
   const key = (t) => String(t).replace(/^T\d+_/, "").toLowerCase();

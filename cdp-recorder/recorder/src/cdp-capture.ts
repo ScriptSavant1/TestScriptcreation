@@ -146,6 +146,27 @@ export function forceFireSettledRegardless(): void {
   fireSettled();
 }
 
+// The title of the page last loaded or changed in the recording browser — offered on the PerfX Studio page as a
+// suggested transaction name (grey hint text; never filled in by itself). Web pages only: not the toolbar.
+let LAST_PAGE_TITLE = "";
+export function getPageTitle(): string {
+  return LAST_PAGE_TITLE;
+}
+const OWN_TITLES = new Set(["CDP Recorder", "PerfX Recording Window"]);
+let LAST_ATTACHED_TARGET = "";   // the page (tab, pop-up) attached most recently: its title is the one on screen
+/** Ask the browser for its pages and keep the title of the one in front (the most recently attached web page). */
+export async function refreshPageTitle(client: Client): Promise<void> {
+  const r = (await client.Target.getTargets()) as { targetInfos: Array<{ type: string; targetId: string; url: string; title: string }> };
+  const pages = r.targetInfos.filter((t) => isRecordablePage(t));
+  const front = pages.find((t) => t.targetId === LAST_ATTACHED_TARGET) || pages[pages.length - 1];
+  if (front) LAST_PAGE_TITLE = String(front.title).slice(0, 200);
+}
+export function isRecordablePage(info: { type?: string; url?: string; title?: string }): boolean {
+  const url = info.url || "";
+  // the recorder's own pages (its toolbar, the recording window's welcome page) are not the application
+  return info.type === "page" && /^https?:\/\//i.test(url) && !!info.title && info.title !== url && info.title !== url.replace(/^https?:\/\//i, "") && !OWN_TITLES.has(info.title);
+}
+
 /** Currently-attached page session IDs — for recorder.ts to screenshot at transaction boundaries. */
 export function getAttachedSessionIds(): string[] {
   return [...ATTACHED_SESSIONS];
@@ -216,6 +237,8 @@ let wiredClient: Client | null = null;
  * we've turned Network capture on for it. Call once per recording session.
  */
 export async function startCapture(client: Client): Promise<void> {
+  LAST_PAGE_TITLE = "";
+  LAST_ATTACHED_TARGET = "";
   if (wiredClient !== client) {
     wireEventListeners(client);
     wiredClient = client;
@@ -245,11 +268,18 @@ export async function stopCapture(client: Client): Promise<void> {
 
 function wireEventListeners(client: Client): void {
   client.on("Target.attachedToTarget", (params: unknown) => {
+    const ti = (params as { targetInfo?: { type?: string; targetId?: string } }).targetInfo;
+    if (ti && ti.type === "page" && ti.targetId) LAST_ATTACHED_TARGET = ti.targetId;
     void handleAttached(client, params as {
       sessionId: string;
       targetInfo: { type: string; targetId: string };
       waitingForDebugger: boolean;
     });
+  });
+
+  client.on("Target.targetInfoChanged", (params: unknown) => {
+    const info = (params as { targetInfo?: { type?: string; url?: string; title?: string } }).targetInfo || {};
+    if (isRecordablePage(info)) LAST_PAGE_TITLE = String(info.title).slice(0, 200);
   });
 
   client.on("Target.detachedFromTarget", (params: unknown) => {

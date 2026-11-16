@@ -20,7 +20,7 @@ import { join, basename } from "node:path";
 import { Recorder } from "./recorder.js";
 import { scrubHar } from "./scrub-har.js";
 import { onSettled } from "./cdp-capture.js";
-import { originAccess, originOf, readSession, harFileName, createAskQueue, txName, nextTxNumber, nextPlanned } from "./portal-mode.js";
+import { originAccess, originOf, readSession, harFileName, createAskQueue, txName, nextTxNumber, nextPlanned, renamedTx } from "./portal-mode.js";
 import { VERSION } from "./version.js";
 
 /** What a recording started from the PerfX Studio page asked for (POST /api/session). */
@@ -32,6 +32,8 @@ export interface PortalSession {
   firstTx: string;
   /** Planned steps, one per transaction (optional): an empty name on Start takes the next one. */
   plan?: string[];
+  /** Script ID (optional, e.g. SC01): the file name starts with it, the HAR carries it (_perfx_scriptId). */
+  scriptId?: string;
 }
 
 export interface ServerOptions {
@@ -105,7 +107,7 @@ export function startServer(
   // Stop and write the .har. A recording started from the PerfX Studio page is saved to Downloads under its own
   // name, whichever Stop was pressed (page or toolbar) — and also on Quit (saveOpenRecording below).
   const save = async (askedName: string): Promise<{ file: string; entryCount: number }> => {
-    const fileName = session ? harFileName(session.name || "Recording") : askedName.trim() || "recording.har";
+    const fileName = session ? harFileName((session.scriptId ? session.scriptId + "_" : "") + (session.name || "Recording")) : askedName.trim() || "recording.har";
     const har = (await recorder.stop()) as { log: { entries: unknown[] } };
     scrubHar(har); // redacts password/PIN/CVV-type request-body fields only — see scrub-har.ts header
     const outFile = join(session ? session.outDir : outDir, fileName);
@@ -130,6 +132,8 @@ export function startServer(
   };
   // the transactions started so far (finished, then the running one)
   const startedTx = (): string[] => state.transactions.concat(state.activeTransaction ? [state.activeTransaction] : []);
+  // after a rename or an undo the builder's own list is the truth: finished names in order, and the running one
+  const syncTx = (): void => { const t = recorder.transactionState(); state.transactions = t.done; state.activeTransaction = t.active; };
   // end the running transaction (its end time and screenshots), with the zero-request warning
   const endActive = (): void => {
     const ended = recorder.endTransaction(); // background screenshot, not on the critical path
@@ -207,7 +211,9 @@ export function startServer(
           browsers: options.browsers ?? [],
           connected: recorder.isConnected(),
           starting,
-          session: session ? { url: session.url, browser: session.browser, private: session.private, name: session.name } : null,
+          session: session ? { url: session.url, browser: session.browser, private: session.private, name: session.name, scriptId: session.scriptId || "" } : null,
+          // the title of the page on screen in the recording window — a suggested transaction name (grey hint text)
+          pageTitle: recorder.pageTitle(),
           recording: s.recording,
           active: s.active,
           background: s.background,
@@ -239,8 +245,9 @@ export function startServer(
           savedFromPortal = false;
           const s0 = asked as PortalSession;
           const { outDir: dir } = await options.startSession(s0);
-          session = { url: s0.url, browser: s0.browser, private: s0.private, name: s0.name, firstTx: s0.firstTx, outDir: dir };
+          session = { url: s0.url, browser: s0.browser, private: s0.private, name: s0.name, firstTx: s0.firstTx, scriptId: s0.scriptId || "", outDir: dir };
           await recorder.start();
+          recorder.setScriptId(s0.scriptId || "");
           if (s0.firstTx) {
             recorder.startTransaction(s0.firstTx);
             state.activeTransaction = s0.firstTx;
@@ -340,6 +347,28 @@ export function startServer(
         state.activeTransaction = name;
         state.warning = null;
         sendJson(res, 200, { ok: true, name });
+        return;
+      }
+
+      // a new name for a transaction (finished or running) — the page's transaction list
+      if (req.method === "POST" && url.pathname === "/api/tx/rename") {
+        const body = await readJsonBody(req);
+        const from = typeof body.from === "string" ? body.from : "";
+        const r = renamedTx(from, typeof body.to === "string" ? body.to : "", startedTx()) as { name?: string; error?: string };
+        if (r.error) return sendJson(res, 400, { error: r.error });
+        if (!recorder.renameTransaction(from, r.name as string)) return sendJson(res, 404, { error: `There is no transaction ${from}.` });
+        syncTx();
+        sendJson(res, 200, { ok: true, name: r.name });
+        return;
+      }
+
+      // "Undo last mark": the last Start or End is taken back (har-builder.js undoLastMark)
+      if (req.method === "POST" && url.pathname === "/api/tx/undo") {
+        const r = recorder.undoLastMark();
+        if (!r) return sendJson(res, 400, { error: "There is nothing to undo." });
+        syncTx();
+        state.warning = null;
+        sendJson(res, 200, { ok: true, undone: r.undone, active: r.active });
         return;
       }
 

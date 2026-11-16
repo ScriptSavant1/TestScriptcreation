@@ -182,3 +182,10 @@
 .rl-wide textarea { resize: vertical; min-height: 64px; font-family: inherit; }
 .rl-opt { font-weight: 400; color: var(--ds-text-3); }
 .rl-txbox .ds-field { height: 40px; font-family: var(--ds-mono); font-size: var(--ds-fs); padding: 0 12px 0 2px; }
+
+/* rename a transaction in the list, Undo last mark (CDP Recorder 0.2.3) */
+.rl-txlist .rl-ren { border: 0; background: none; padding: 2px; margin-left: 4px; color: var(--ds-text-3); cursor: pointer; border-radius: 6px; display: inline-grid; place-items: center; }
+.rl-txlist .rl-ren:hover { color: var(--ds-accent-text); background: var(--ds-accent-soft); }
+.rl-txlist .rl-ren svg { width: 14px; height: 14px; }
+.rl-txlist .rl-rename { height: 28px; padding: 0 8px; font-family: var(--ds-mono); font-size: var(--ds-fs-xs); min-width: 0; flex: 1; }
+#lv-tx-undo[hidden] { display: none; }

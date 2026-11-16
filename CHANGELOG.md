@@ -31,6 +31,14 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### CDP Recorder
 
+#### Version 0.2.3: page title as a hint, rename, Undo last mark, script ID
+
+- While recording from Script Studio, the title of the page on screen is offered as grey text in the transaction box; **Tab** takes it (never filled in by itself). The recorder reads it from the browser every 2 s (`pageTitle` in the status); its own pages are never offered.
+- Rename a transaction (finished or running) with the pencil in the list; a name typed without a number keeps the old one's (`T02_Login` → "Sign in" → `T02_Sign_in`); a name used already is refused (`POST /api/tx/rename`).
+- **Undo last mark** takes back the last Start or End: a transaction started by mistake goes, and its requests go back to the one before, which runs again (`POST /api/tx/undo`).
+- Optional **script ID** (More options, e.g. SC01): the file is `SC01_Booking_<date>_<time>.har`, the HAR carries `log._perfx_scriptId`, and Script Studio's transactions are `SC01_01_…` (other recordings keep SC01 as before).
+- The pages expect 0.2.3 (`LATEST`) and offer the download to older recorders; with an older recorder, rename and Undo are not shown. Tests: `harBuilder.test.js`, `cdpPortalMode.test.js`, `studioScriptId.test.js`, manual `tests-manual/portal-extras.mjs` (real recorder and Edge).
+
 #### Version 0.2.2: one box on the toolbar (redesign step 5b)
 
 - The toolbar names transactions the way the page does: type a name and press **Enter** — the running transaction ends and the new one starts, numbered for you (the next number shows before the box; *add to cart* becomes `T04_Add_to_cart`; a typed `T07_Pay` keeps its number and the next one is `T08_…`). The box stays while a transaction runs; **Start next** and **End Transaction**. A name used already, or an empty box with nothing planned, is refused with the reason under the box.

@@ -81,6 +81,13 @@ function _stPlanHosts(entries) {
 // https:\/\/host (JSON with escaped slashes) and https%3A%2F%2Fhost (redirect_uri=…). A longer name goes first, so
 // "api.shop.com" is never half-replaced by "shop.com". Compiled patterns are kept per map (one map per script).
 const _subHostsCache = new WeakMap();
+// The script ID in transaction names (SC01_01_LOGIN): a recording made with Start recording and a script ID
+// carries it (log._perfx_scriptId, CDP Recorder 0.2.3); any other recording keeps SC01, as before.
+function _scId() {
+  const id = S.har1 && S.har1.log && S.har1.log._perfx_scriptId;
+  return /^[A-Z][A-Z0-9]{0,11}$/.test(id || "") ? id : "SC01";
+}
+
 function _subHostsRules(hostVarMap) {
   let rules = _subHostsCache.get(hostVarMap);
   if (rules) return rules;
@@ -1412,11 +1419,11 @@ function genMainJS(entries, correlations) {
   if (hasMarkers) {
     txnNames.forEach((nm, i) => {
       const tsNum = String(i + 1).padStart(2, "0");
-      const scName = `SC01_${tsNum}_${nm.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
+      const scName = `${_scId()}_${tsNum}_${nm.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
       o += `let TS${tsNum} = new load.Transaction("${scName}");\n`;
     });
   } else {
-    o += 'let TS01 = new load.Transaction("SC01_01_Transaction");\n';
+    o += 'let TS01 = new load.Transaction("' + _scId() + '_01_Transaction");\n';
   }
   o += "\n";
 
@@ -2849,7 +2856,7 @@ function genActionC(entries, correlations) {
 
   // Fallback single transaction when no markers present
   if (!hasMarkers)
-    o += '\tlr_start_transaction("SC01_01_Transaction");\n\n';
+    o += '\tlr_start_transaction("' + _scId() + '_01_Transaction");\n\n';
 
   // Track DYNJSON correlations whose web_js_run escape call has already been emitted.
   const _dynJsonEscEmitted = new Set();
@@ -2866,7 +2873,7 @@ function genActionC(entries, correlations) {
     if (e.isMarker) {
       const acIdx = S.txns.findIndex((t) => t.name === e.txnName);
       const acSeq = String(acIdx + 1).padStart(2, "0");
-      const acSc = `SC01_${acSeq}_${e.txnName.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
+      const acSc = `${_scId()}_${acSeq}_${e.txnName.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
       if (e.markerType === "start") {
         o += `\tlr_start_transaction("${acSc}");\n\n`;
       } else {
@@ -3619,7 +3626,7 @@ function genActionC(entries, correlations) {
   }
 
   if (!hasMarkers)
-    o += '\tlr_end_transaction("SC01_01_Transaction", LR_AUTO);\n\n';
+    o += '\tlr_end_transaction("' + _scId() + '_01_Transaction", LR_AUTO);\n\n';
   o += "\treturn 0;\n}\n";
   S._stActionC = o; // genVuserInit() sets only the servers this Action uses
   return o;
@@ -4113,4 +4120,4 @@ function detectServerHost(entries) {
   if (top.count / total < 0.35 && sorted.length > 1) return null;
   return top;
 }
-
+

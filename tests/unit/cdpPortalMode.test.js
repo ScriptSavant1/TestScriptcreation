@@ -17,7 +17,7 @@ const path = require('path');
 
 const SRC = path.resolve(__dirname, '../../cdp-recorder/recorder/src/portal-mode.js');
 const P = new Function(fs.readFileSync(SRC, 'utf-8').replace(/^export /gm, '') +
-  '\nreturn { LINK_SCHEME, originOf, parsePortalLink, linkCommand, originAccess, harFileName, expandEnv, readSession, liveRow, createAskQueue, readAllowedPages, planSteps, nextTxNumber, txName, nextPlanned };')();
+  '\nreturn { LINK_SCHEME, originOf, parsePortalLink, linkCommand, originAccess, harFileName, expandEnv, readSession, liveRow, createAskQueue, readAllowedPages, planSteps, nextTxNumber, txName, scriptIdOf, renamedTx, nextPlanned };')();
 
 describe('parsePortalLink — only the portal origin travels in the link', () => {
   test('a start link gives the portal origin, path dropped', () => {
@@ -63,7 +63,7 @@ describe('originAccess — who may drive the recorder', () => {
 describe('readSession — the Start recording request', () => {
   test('defaults: Edge, private window', () => {
     expect(P.readSession({ url: 'https://app.example.com/login' }))
-      .toEqual({ ok: true, url: 'https://app.example.com/login', browser: 'edge', private: true, name: '', firstTx: '', plan: [] });
+      .toEqual({ ok: true, url: 'https://app.example.com/login', browser: 'edge', private: true, name: '', firstTx: '', plan: [], scriptId: '' });
   });
   test('Chrome, normal window, name and first transaction kept', () => {
     expect(P.readSession({ url: ' http://app/x ', browser: 'Chrome', private: false, name: ' SC01 ', firstTx: '01_Launch' }))
@@ -177,5 +177,29 @@ describe('transaction names — numbered for you, the same rules as the Recorder
   test('the session request carries the plan', () => {
     expect(P.readSession({ url: 'https://shop.example.com/', plan: 'Login\nSearch' }).plan).toEqual(['Login', 'Search']);
     expect(P.readSession({ url: 'https://shop.example.com/' }).plan).toEqual([]);
+  });
+});
+
+describe('script ID and rename (CDP Recorder 0.2.3)', () => {
+  test('scriptIdOf: letters and digits, starting with a letter, up to 12, upper case; empty is ""; anything else null', () => {
+    expect(P.scriptIdOf('sc01')).toBe('SC01');
+    expect(P.scriptIdOf('  ')).toBe('');
+    expect(P.scriptIdOf(undefined)).toBe('');
+    expect(P.scriptIdOf('01SC')).toBeNull();
+    expect(P.scriptIdOf('SC 01')).toBeNull();
+    expect(P.scriptIdOf('ABCDEFGHIJKLM')).toBeNull();
+  });
+  test('readSession carries the script ID, refuses a bad one', () => {
+    expect(P.readSession({ url: 'https://shop.example.com', scriptId: 'sc02' }).scriptId).toBe('SC02');
+    expect(P.readSession({ url: 'https://shop.example.com' }).scriptId).toBe('');
+    expect(P.readSession({ url: 'https://shop.example.com', scriptId: 'bad id' }).ok).toBe(false);
+  });
+  test('renamedTx keeps the number when none is typed, refuses a name used already', () => {
+    const used = ['T01_Launch', 'T02_Login'];
+    expect(P.renamedTx('T02_Login', 'sign in', used)).toEqual({ name: 'T02_Sign_in' });
+    expect(P.renamedTx('T02_Login', 'T05_Pay', used)).toEqual({ name: 'T05_Pay' });
+    expect(P.renamedTx('T02_Login', 'Launch', used)).toEqual({ name: 'T02_Launch' });
+    expect(P.renamedTx('T02_Login', 'T01_Launch', used).error).toMatch(/used already/);
+    expect(P.renamedTx('T02_Login', '  ', used).error).toMatch(/Type a name/);
   });
 });
