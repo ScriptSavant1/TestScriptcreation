@@ -43,6 +43,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Closer to the agreed mockup (redesign step 6b)
 
+- Script Studio request details: **Leave out** takes this one request out of the script (the left-out line says "left out by you"); **Put back** brings it back, and the script is exactly as before. A request left out by its type, domain or a rule is changed there.
+- Fixed: after you answered the Background requests question for a recording, every change (a type, a domain, a transaction) asked it again; now it asks once per recording and keeps your answer — the Background chip changes it (BUG-147).
 - HAR Explorer: request details have the **Dynamic values** tab, as in Script Studio — the same list from Studio's own engine (traced to an earlier response, or no source found), a value opens Find a value, a source opens that request.
 - Find a value (HAR Explorer and Script Studio): the trail is two sections, **Source** and **Replaced in · n** (Sent in when the value has no source), one row per place; in the HAR Explorer, Find a value opens as a sheet over the workspace with a blurred backdrop (close button, Esc or a press on the backdrop closes it).
 - HAR Explorer: the filter bar folds (Filters), the types have All / None, "Show left-out" is the eye button in the Requests header, and Hide secrets is a button in the details header.

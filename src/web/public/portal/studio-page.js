@@ -96,6 +96,16 @@
     var bg = $("#bgReviewPanel");
     var gate = bg && bg.style.display !== "none";
     SS.bgSummary = typeof _buildPeriodicSummary === "function" ? _buildPeriodicSummary(S.entries1 || []) : [];
+    if (gate && SS.bgChoice && SS.bgFor === S.har1) {
+      // answered already for this file: a new reading (a type, a domain, a transaction ...) keeps that answer
+      renderBackgroundReview(SS.bgSummary);
+      $$(".bg-decision-toggle", bgDlg).forEach(function (g) {
+        var v = SS.bgChoice.get(g.dataset.url);
+        if (v) $$(".bg-dec", g).forEach(function (b) { b.classList.toggle("active", b.dataset.val === v); });
+      });
+      window.applyBgDecisions();
+      return;
+    }
     if (gate) openBg(true);
     refresh();
   }
@@ -278,7 +288,11 @@
   window.applyBgDecisions = function () {
     bgDlg.dataset.gate = "";
     if (bgDlg.open) bgDlg.close();
-    return Promise.resolve(engineApplyBg.apply(this, arguments)).then(function (r) { refresh(); return r; });
+    return Promise.resolve(engineApplyBg.apply(this, arguments)).then(function (r) {
+      // the answer for this file, kept for the next readings (afterAnalysis)
+      if (S.bgDecisions && S.har1) { SS.bgChoice = new Map(S.bgDecisions); SS.bgFor = S.har1; }
+      refresh(); return r;
+    });
   };
   bgDlg.addEventListener("close", function () {
     if (bgDlg.dataset.gate === "1") { bgDlg.dataset.gate = ""; window.applyBgDecisions(); }   // the defaults

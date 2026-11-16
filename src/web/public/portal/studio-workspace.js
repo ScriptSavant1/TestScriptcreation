@@ -22,7 +22,7 @@
     if (SS.testDataNewFile) SS.testDataNewFile();
     if (typeof closeDet === "function" && D && detOpen()) closeDet();
     W.log = []; W.sel = new Set(); W.last = null; W.folded = {}; W.openOut = {}; W.q = ""; W.cur = null;
-    S.leaveOut = { ads: true, options: true };
+    S.leaveOut = { ads: true, options: true }; S.leaveOutIds = new Set();
     var q = $("#ss-q"); if (q) q.value = "";
     var d = $("#ss-dq"); if (d) d.value = "";
   }
@@ -195,7 +195,7 @@
 
   // ── Requests: one list, grouped by transaction; left-out requests behind one line per group ──
   var H = { h: 40, r: 44, o: 32 };
-  var REASON = { report: "browser report", websocket: "WebSocket", nonhttp: "not HTTP", prefetch: "prefetched page opened later", domain: "domain switched off", options: "OPTIONS pre-flight", ads: "analytics / ads", type: "type left out" };
+  var REASON = { report: "browser report", websocket: "WebSocket", nonhttp: "not HTTP", prefetch: "prefetched page opened later", domain: "domain switched off", options: "OPTIONS pre-flight", ads: "analytics / ads", type: "type left out", user: "left out by you" };
   function groups() {
     var out = [], cur = null;
     (S.entries1 || []).forEach(function (e) {
@@ -449,6 +449,11 @@
     var ids = shownIds(), at = ids.indexOf(e.id);
     $("#ss-det-pos").textContent = at >= 0 ? (at + 1) + " of " + ids.length : "";
     $("#ss-det-prev").disabled = at <= 0; $("#ss-det-next").disabled = at < 0 || at >= ids.length - 1;
+    // Leave out / Put back this one request (a request left out by its type, domain or a rule is changed there)
+    var lv = $("#ss-det-leave"), mine = e.leftOut === "user";
+    lv.textContent = mine ? "Put back" : "Leave out";
+    lv.disabled = e.filtered && !mine;
+    lv.title = mine ? "Put this request back into the script" : e.filtered ? "Already left out (" + (REASON[e.leftOut] || "left out") + ") — change that in the filters or Domains" : "Leave this request out of the script";
     var top = (D.fromFind != null ? '<p class="hx-back"><mark class="hx-hl">' + esc(RequestDetails.short(D.fromFind, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back-find>Back to Find a value</button></p>' : "") +
       '<p class="ss-det-ctx">' + (e.txn ? "Transaction <b>" + esc(e.txn) + "</b>" : "Not in a transaction") + " · " +
       (e.filtered ? "left out of the script" : '<span class="ss-in">in the script</span>') + "</p>";
@@ -487,6 +492,13 @@
   function scrollTo(id) { var r = W.rows.filter(function (x) { return x.k === "r" && x.e.id === id; })[0]; if (!r) return; if (r.y < box.scrollTop || r.y + H.r > box.scrollTop + box.clientHeight) box.scrollTop = Math.max(0, r.y - box.clientHeight / 2); draw(); }
   $("#ss-det-x").addEventListener("click", closeDet);
   $("#ss-det-prev").addEventListener("click", function () { step(-1); });
+  $("#ss-det-leave").addEventListener("click", function () {
+    var id = D.id, e = byId(id); if (!e) return;
+    change(function () {
+      S.leaveOutIds = S.leaveOutIds || new Set();
+      if (S.leaveOutIds.has(id)) S.leaveOutIds.delete(id); else S.leaveOutIds.add(id);
+    });
+  });
   $("#ss-det-next").addEventListener("click", function () { step(1); });
   $("#ss-det-mask").addEventListener("change", function () { D.mask = this.checked; prefs.mask = D.mask; SS.save(); renderDet(); });
   // ── Dynamic values (the Request Inspector, for the request on screen): values traced to an earlier response

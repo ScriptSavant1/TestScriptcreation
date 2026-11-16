@@ -767,7 +767,7 @@ body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10
 #ss-det .hx-fh { padding-bottom: 12px; }
 #ss-det .hx-fin { margin-top: 2px; }
 #ss-det .hx-fin .ss-search { flex: 1; }
-.ss-det.is-find .ss-inl, .ss-det.is-find #ss-det-prev, .ss-det.is-find #ss-det-next { display: none; }
+.ss-det.is-find .ss-inl, .ss-det.is-find #ss-det-prev, .ss-det.is-find #ss-det-next, .ss-det.is-find #ss-det-leave { display: none; }
 
 /* Test data table (portal/studio-testdata.js) */
 #ss-t-data #param-panel { display: none !important; }

@@ -260,6 +260,8 @@ function applyFilters(entries) {
   for (const e of entries) {
     if (e.isMarker) { e.filtered = false; e.leftOut = null; continue; }   // always keep transaction markers
     e.leftOut = RequestFilter.leftOut(e, ctx);
+    // a request the user left out by hand (request details → Leave out); kept in S.entries1 like every left-out one
+    if (!e.leftOut && S.leaveOutIds && S.leaveOutIds.has(e.id)) e.leftOut = 'user';
     e.filtered = !!e.leftOut;
   }
 }
