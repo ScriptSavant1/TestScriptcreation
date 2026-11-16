@@ -43,6 +43,7 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Closer to the agreed mockup (redesign step 6b)
 
+- HAR Explorer: request details have the **Dynamic values** tab, as in Script Studio — the same list from Studio's own engine (traced to an earlier response, or no source found), a value opens Find a value, a source opens that request.
 - Find a value (HAR Explorer and Script Studio): the trail is two sections, **Source** and **Replaced in · n** (Sent in when the value has no source), one row per place; in the HAR Explorer, Find a value opens as a sheet over the workspace with a blurred backdrop (close button, Esc or a press on the backdrop closes it).
 - HAR Explorer: the filter bar folds (Filters), the types have All / None, "Show left-out" is the eye button in the Requests header, and Hide secrets is a button in the details header.
 - Postman / Bruno, JMeter and the Results Analyser take the purple look of Script Studio, the HAR Explorer and the Workload Modeller (accent, page background, header bars), both themes; Home and Help keep theirs.

@@ -75,7 +75,7 @@
     var model = hxBuild(har);
     clearTimeout(toastTimer); toastEl.classList.remove("on");   // an earlier message is about another file
     M = { name: name, size: bytes, model: model, sel: null, tab: "headers", closed: {}, types: {}, q: "", showOut: !!prefs.showOut, mask: false, full: {},
-      view: "req", find: "", inv: null, hits: null, sugg: null, studioCount: 0, byN: {},
+      view: "req", find: "", inv: null, hits: null, sugg: null, studioCount: 0, byN: {}, dyn: {}, dynAsked: {}, studioReady: false,
       // "Correlate this": the script format (Script Studio's remembered choice, else DevWeb — Studio's default),
       // the name typed for the value on screen, and the correlations to hand to Studio
       fmt: (function () { try { return localStorage.getItem("perfx-studio-fmt") === "webhttp" ? "webhttp" : "devweb"; } catch (e) { return "devweb"; } })(),
@@ -381,7 +381,7 @@
     if (!it) { d.innerHTML = '<p class="hx-none hx-pick">Click a request to see its headers, payload and response.</p>'; return; }
     d.innerHTML = RD.html({
       n: it.n, e: it.e, raw: it.raw, type: hxTypeLabel(it.type), dur: it.dur, start: it.start, out: it.out, why: it.out ? hxWhy(it) : "",
-      tab: M.tab, mask: M.mask, full: M.full, hl: hl,
+      tab: M.tab, mask: M.mask, full: M.full, hl: hl, extra: [dynTab(it)],
       top: M.inv ? '<p class="hx-back"><mark class="hx-hl">' + esc(short(M.inv.value, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back>Back to Find a value</button></p>' : "",
     });
   }
@@ -398,6 +398,34 @@
     b.title = "Hide the request details (the requests get the room)"; b.setAttribute("aria-label", "Hide the request details");
     b.innerHTML = ICON_HIDE; d.appendChild(b);
   }
+  // ── Dynamic values tab (as in Script Studio and the mockup): the values of this request that change, from Script
+  //    Studio's own engine (worker message "fields"); a value opens Find a value, a source opens that request ──
+  var DYN_LOC = { header: "header", query: "query string", body: "body", body_json: "JSON body", body_form: "form field", cookie: "cookie", path: "URL path" };
+  function dynTab(it) {
+    var r = M.dyn[it.n];
+    if (!r && M.studioReady && studioWorker && !M.dynAsked[it.n]) { M.dynAsked[it.n] = true; studioWorker.postMessage({ type: "fields", n: it.n }); }
+    var html;
+    if (!r) html = '<p class="hx-none">' + (M.studioReady ? "Working out the dynamic values…" : studioWorker ? "Script Studio's analysis is still running — the dynamic values follow." : "The dynamic values are not available in this browser.") + "</p>";
+    else if (r.out) html = '<p class="hx-none">This request is left out of the script, so nothing in it needs correlation.</p>';
+    else if (r.none || !r.list.length) html = '<p class="hx-none">No value in this request looks dynamic or comes from an earlier response.</p>';
+    else {
+      var row = function (x) {
+        var se = x.srcN && M.byN[x.srcN];
+        return '<tr><td><b>' + esc(x.key) + "</b><small>" + esc(DYN_LOC[x.location] || x.location || "") + '</small></td><td><button type="button" class="hx-dyn-v" data-dynfind="' + esc(x.value) + '" title="Find where this value comes from and where it goes"><code>' + esc(short(x.value, 60)) + "</code></button></td><td>" +
+          (se ? '<a href="#" data-go="' + x.srcN + '" data-tab="response">#' + x.srcN + " " + esc(se.e.method) + " " + esc(short(split(se.e.url).path, 48)) + "</a>" + (x.srcPath ? ' <span class="hx-dyn-p">' + esc(x.srcPath) + "</span>" : "") : '<span class="hx-dyn-none">source not found in the recording</span>') +
+          "</td><td>" + (x.advisor ? '<span class="hx-dyn-adv" title="Script Studio&#39;s Correlation Advisor lists it">In the Advisor</span>' : "") + "</td></tr>";
+      };
+      var sec = function (title, rows, dot) { return rows.length ? '<details class="hx-sec hx-dyn-sec" open><summary><span class="hx-dyn-dot ' + dot + '"></span>' + title + ' <span class="c">' + rows.length + '</span></summary><table class="hx-dyn"><tbody>' + rows.map(row).join("") + "</tbody></table></details>" : ""; };
+      html = sec("Traced to an earlier response — correlate these", r.list.filter(function (x) { return x.srcN; }), "g") +
+        sec("Looks dynamic, source not found", r.list.filter(function (x) { return !x.srcN; }), "y") +
+        '<p class="ds-note hx-hint">Click a value to see where it comes from and where it goes (Find a value), then <b>Correlate this</b> to add it to Script Studio.</p>';
+    }
+    return { key: "dynamic", label: "Dynamic values", count: r && r.list ? r.list.length || "" : "", html: html };
+  }
+  $("#hx-det").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-dynfind]"); if (!b) return;
+    e.preventDefault(); find(b.getAttribute("data-dynfind")); draw(true); findButton();
+  });
   var ICON_COPY = RD.ICON_COPY;
   $("#hx-det").addEventListener("click", function (e) {
     if (e.target.closest("[data-back]")) { M.view = "find"; draw(true); renderFind(); findButton(); return; }
@@ -424,7 +452,12 @@
     // Script Studio's own analysis runs in a second copy, so a very large recording never makes Find a value wait
     try {
       studioWorker = new Worker("portal/har-explorer-worker.js");
-      studioWorker.onmessage = function (ev) { if (ev.data.type === "studio" && worker) worker.postMessage({ type: "studioList", list: ev.data.list }); studioWorker.terminate(); studioWorker = null; };
+      // it stays while the file is open: it also answers the Dynamic values tab (message "fields")
+      studioWorker.onmessage = function (ev) {
+        var d = ev.data;
+        if (d.type === "studio") { if (worker) worker.postMessage({ type: "studioList", list: d.list }); if (M) { M.studioReady = true; if (M.sel && M.view !== "find") renderDetails(); } }
+        else if (d.type === "fields" && M) { M.dyn[d.n] = d.result; if (M.sel && M.sel.n === d.n && M.view !== "find") renderDetails(); }
+      };
       studioWorker.onerror = function () { if (worker) worker.postMessage({ type: "studioList", list: [] }); studioWorker = null; };
       studioWorker.postMessage({ type: "studio", text: text });
     } catch (e) { studioWorker = null; }
