@@ -1106,12 +1106,18 @@ function detectParams(entries, correlations) {
 // ═══════════════════════════════════════════════════════════════════════════
 // PARAMETER FILE GENERATORS
 // ═══════════════════════════════════════════════════════════════════════════
+// Each parameter may carry the user's choices (Script Studio's Test data table): p.take "sequential" | "random" |
+// "unique", p.update "iteration" | "once", p.file (data file name without extension; default collection_data — one
+// shared file, so values that belong together stay on one row), p.rows (the data rows; default [p.value]).
+// Without them the files are exactly as before.
+const PARAM_FILE = "collection_data";
+function _paramFile(p) { return p.file || PARAM_FILE; }
 function genParamsYml() {
   if (!S.params || S.params.length === 0) return "parameters: []\n";
   let o = "parameters:\n";
   for (const p of S.params) {
-    o += `  - name: ${p.csvKey}\n    type: csv\n    fileName: collection_data.csv\n`;
-    o += `    columnName: ${p.csvKey}\n    nextValue: iteration\n    nextRow: sequential\n    onEnd: loop\n`;
+    o += `  - name: ${p.csvKey}\n    type: csv\n    fileName: ${_paramFile(p)}.csv\n`;
+    o += `    columnName: ${p.csvKey}\n    nextValue: ${p.update === "once" ? "once" : "iteration"}\n    nextRow: ${p.take === "random" ? "random" : p.take === "unique" ? "unique" : "sequential"}\n    onEnd: loop\n`;
   }
   return o;
 }
@@ -1124,13 +1130,13 @@ function genParamFilePrm() {
     o += `[parameter:${p.csvKey}]\n`;
     o += `ColumnName="${p.csvKey}"\n`;
     o += `Delimiter=","\n`;
-    o += `GenerateNewVal="EachIteration"\n`;
+    o += `GenerateNewVal="${p.update === "once" ? "Once" : "EachIteration"}"\n`;
     o += `OriginalValue="${origVal}"\n`;
     o += `OutOfRangePolicy="ContinueWithLast"\n`;
     o += `ParamName="${p.csvKey}"\n`;
-    o += `SelectNextRow="Sequential"\n`;
+    o += `SelectNextRow="${p.take === "random" ? "Random" : p.take === "unique" ? "Unique" : "Sequential"}"\n`;
     o += `StartRow="1"\n`;
-    o += `Table="collection_data.dat"\n`;
+    o += `Table="${_paramFile(p)}.dat"\n`;
     o += `TableLocation="Local"\n`;
     o += `Type="Table"\n`;
     o += `auto_allocate_block_size="1"\n`;
@@ -1140,26 +1146,46 @@ function genParamFilePrm() {
   return o;
 }
 
+// one data file: a header of parameter names, then a row per user (p.rows, or the recorded value)
+function _paramDataText(params) {
+  if (!params.length) return "";
+  const header = params.map((p) => p.csvKey).join(",");
+  const cell = (p, v) => {
+    // If param is ONLY used in JSON/XML body and the value contains double-quotes,
+    // store the JSON-escaped form so VuGen substitutes correctly inside JSON string values.
+    // e.g. {"condition":"or"} → {\"condition\":\"or\"} avoids breaking the outer JSON body.
+    const _allJson = p.usages && p.usages.every(
+      u => u.location === 'body_json' || u.location === 'body_xml'
+    );
+    v = String(v == null ? "" : v);
+    const effectiveValue = (_allJson && v && v.includes('"'))
+      ? JSON.stringify(v).slice(1, -1)   // JSON-escaped (backslash-quote pairs)
+      : v;
+    return effectiveValue.includes(",") || effectiveValue.includes('"')
+      ? `"${effectiveValue.replace(/"/g, '""')}"`
+      : effectiveValue;
+  };
+  const rowsOf = (p) => (p.rows && p.rows.length ? p.rows : [p.value]);
+  const n = Math.max.apply(null, params.map((p) => rowsOf(p).length));
+  let o = header + "\n";
+  for (let r = 0; r < n; r++) {
+    // a parameter with fewer rows repeats its last value
+    o += params.map((p) => { const rs = rowsOf(p); return cell(p, rs[Math.min(r, rs.length - 1)]); }).join(",") + "\n";
+  }
+  return o;
+}
+// the shared data file (collection_data) — the parameters without a file of their own
 function genCollectionDataCsv() {
   if (!S.params || S.params.length === 0) return "";
-  const header = S.params.map((p) => p.csvKey).join(",");
-  const row = S.params
-    .map((p) => {
-      // If param is ONLY used in JSON/XML body and the value contains double-quotes,
-      // store the JSON-escaped form so VuGen substitutes correctly inside JSON string values.
-      // e.g. {"condition":"or"} → {\"condition\":\"or\"} avoids breaking the outer JSON body.
-      const _allJson = p.usages && p.usages.every(
-        u => u.location === 'body_json' || u.location === 'body_xml'
-      );
-      const effectiveValue = (_allJson && p.value && p.value.includes('"'))
-        ? JSON.stringify(p.value).slice(1, -1)   // JSON-escaped (backslash-quote pairs)
-        : p.value;
-      return effectiveValue.includes(",") || effectiveValue.includes('"')
-        ? `"${effectiveValue.replace(/"/g, '""')}"`
-        : effectiveValue;
-    })
-    .join(",");
-  return header + "\n" + row + "\n";
+  return _paramDataText(S.params.filter((p) => _paramFile(p) === PARAM_FILE));
+}
+// every data file: { name (without extension): text } — the shared one first
+function genParamDataFiles() {
+  const out = {};
+  (S.params || []).forEach((p) => { const f = _paramFile(p); if (!out[f]) out[f] = []; out[f].push(p); });
+  const files = {};
+  Object.keys(out).sort((a, b) => (a === PARAM_FILE ? -1 : b === PARAM_FILE ? 1 : a < b ? -1 : 1)).forEach((f) => { files[f] = _paramDataText(out[f]); });
+  return files;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3775,7 +3801,8 @@ ${txnLines}${S.hasDpop || S.hasPkce ? "\n[ManuallyExtraFiles]\nlre-utils.dat=\n"
 function genScriptUploadMetadata(scriptName) {
   const hasParams = S.params && S.params.length > 0;
   const paramEntries = hasParams
-    ? `    <FileEntry Name="ParameterFile.prm" Filter="4" />\n    <FileEntry Name="collection_data.dat" Filter="4" />\n`
+    ? `    <FileEntry Name="ParameterFile.prm" Filter="4" />\n` +
+      Object.keys(genParamDataFiles()).map((f) => `    <FileEntry Name="${f}.dat" Filter="4" />\n`).join("")
     : "";
   return `<?xml version="1.0" encoding="utf-8"?>
 <VugenScriptMetadata>

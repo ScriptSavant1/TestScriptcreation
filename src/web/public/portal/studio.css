@@ -721,3 +721,26 @@ body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10
 #ss-det .hx-fin { margin-top: 2px; }
 #ss-det .hx-fin .ss-search { flex: 1; }
 .ss-det.is-find .ss-inl, .ss-det.is-find #ss-det-prev, .ss-det.is-find #ss-det-next { display: none; }
+
+/* Test data table (portal/studio-testdata.js) */
+#ss-t-data #param-panel { display: none !important; }
+.ss-td-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ss-td-wrap { overflow: auto; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-tile); }
+.ss-td-wrap:has(> table[hidden]) { display: none; }
+.ss-td { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-xs); }
+.ss-td th { text-align: left; padding: 7px 10px; background: var(--br-head); color: var(--ds-text-2); font-weight: 600; white-space: nowrap; border-bottom: 1px solid var(--ds-border-2); }
+.ss-td td { padding: 6px 10px; border-top: 1px solid var(--ds-border); vertical-align: top; }
+.ss-td tbody tr:nth-child(even) td { background: var(--br-zebra); }
+.ss-td td:first-child { min-width: 150px; }
+.ss-td td:first-child small, .ss-td td:nth-child(2) small { display: block; margin-top: 3px; }
+.ss-td .ss-td-name { height: 30px; font-family: var(--ds-mono); font-size: 12.5px; }
+.ss-td .ss-td-val { font-family: var(--ds-mono); background: none; border: 0; padding: 0; word-break: break-all; }
+.ss-td .ss-sel { height: 30px; padding: 0 6px; min-width: 116px; }
+.ss-td-files { margin: 0; font-size: var(--ds-fs-xs); }
+.ss-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* the table fits the panel: compact choices, the value column takes the room */
+.ss-td th, .ss-td td { padding-left: 6px; padding-right: 6px; }
+.ss-td td:first-child { min-width: 112px; width: 18%; }
+.ss-td .ss-sel { min-width: 0; width: 100%; padding: 0 2px; font-size: var(--ds-fs-xs); }
+.ss-td td:nth-child(3), .ss-td td:nth-child(4), .ss-td td:nth-child(5) { width: 96px; }
+.ss-td th:nth-child(6), .ss-td td:nth-child(6) { width: 40px; }

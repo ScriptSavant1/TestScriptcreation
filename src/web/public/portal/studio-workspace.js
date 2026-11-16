@@ -19,6 +19,7 @@
   };
 
   function newFile() {
+    if (SS.testDataNewFile) SS.testDataNewFile();
     if (typeof closeDet === "function" && D && detOpen()) closeDet();
     W.log = []; W.sel = new Set(); W.last = null; W.folded = {}; W.openOut = {}; W.q = ""; W.cur = null;
     S.leaveOut = { ads: true, options: true };
@@ -410,6 +411,8 @@
   // a message with Undo (the engine's messages have no button)
   function undoToast(msg, undo) {
     var c = $("#toast-container"); if (!c) return;
+    // only the last change can be undone (an older Undo would also take back everything done after it)
+    $$("#toast-container .ss-undo").forEach(function (o) { o.remove(); });
     var t = document.createElement("div");
     t.className = "toast toast-success ss-undo";
     t.innerHTML = '<span class="toast-icon">✔</span><span class="toast-msg">' + esc(msg) + '</span><button type="button" class="ds-btn ds-btn-xs">Undo</button>';
@@ -820,6 +823,7 @@
     },
     openFind: function (v) { openFind(v); },
     openDetails: function (id) { openDet(id); },
+    undoToast: function (msg, undo) { undoToast(msg, undo); },
     closeDetails: function () { closeDet(); },
     showPane: showPane,
     state: W,

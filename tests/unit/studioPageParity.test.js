@@ -20,7 +20,7 @@ describe('Script Studio redesign — same scripts as the classic page', () => {
   test('Studio.html loads the classic scripts unchanged, in the same order, then its layout script', () => {
     const engine = scripts(classic);
     expect(scripts(page).slice(0, engine.length)).toEqual(engine);
-    expect(scripts(page).slice(engine.length)).toEqual(['portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js']);
+    expect(scripts(page).slice(engine.length)).toEqual(['portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js']);
   });
 
   test('the classic stylesheet is still loaded (it styles what the scripts draw), then the new one', () => {

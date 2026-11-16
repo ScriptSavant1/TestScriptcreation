@@ -367,6 +367,21 @@
             </div>
 
             <div class="ss-tab" id="ss-t-data" role="tabpanel" aria-labelledby="ss-tab-data" hidden>
+              <!-- the Test data table (portal/studio-testdata.js) -->
+              <div class="ss-td-bar">
+                <button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
+                <span class="ss-grow"></span>
+                <button class="ds-btn ds-btn-sm" type="button" id="ss-td-xl-down" title="One column per parameter, one row per user: fill many rows in Excel"><svg class="i"><use href="#i-down"/></svg>Download as Excel</button>
+                <button class="ds-btn ds-btn-sm" type="button" id="ss-td-xl-up" title="Read the rows back: the data files in the ZIP get them"><svg class="i"><use href="#i-up"/></svg>Upload Excel</button>
+                <input type="file" id="ss-td-xl-file" accept=".xlsx" hidden />
+              </div>
+              <p class="ss-insp-moved"><svg class="i"><use href="#i-info"/></svg><span>Values the user typed become parameters: <b>{Name}</b> (Web HTTP/HTML) and <b>load.params.Name</b> (DevWeb). By default they share <b>one file</b>, so values that belong together stay on the same row (a user and its password). Give a parameter its <b>own file</b> when it should vary on its own. The ZIP has the data files VuGen and DevWeb read (.dat / .csv).</span></p>
+              <div class="ss-td-wrap"><table class="ss-td" id="ss-td-table" hidden>
+                <thead><tr><th>Parameter</th><th>Recorded value · replaced in</th><th title="Which row each virtual user takes: the next one, a random one, or a unique one (no two users share it)">Take value</th><th title="A new value for each run of Action (each iteration), or once per virtual user">Update</th><th title="The shared data file (values that belong together stay on one row) or a file of its own">File</th><th class="ss-num">Rows</th><th><span class="ss-vh">Remove</span></th></tr></thead>
+                <tbody id="ss-td-body"></tbody>
+              </table></div>
+              <p class="ss-muted ss-td-files" id="ss-td-files"></p>
+              <!-- the engine's own list (kept for the engine; the table above replaces it on this page) -->
               <div class="corr-panel" id="param-panel" style="display: none">
                 <div class="corr-panel-hdr" onclick="toggleParamPanel()">
                   <span><svg class="i"><use href="#i-table"/></svg>Parameterization details</span>
@@ -412,6 +427,22 @@
           <small class="ss-muted">Letters, numbers and underscores, starting with a letter. The script names it SC01_nn_NAME, in journey order.</small>
         </div>
         <div class="ss-dlg-f"><button class="ds-btn" type="button" data-close>Cancel</button><button class="ds-btn ds-btn-primary" type="submit" id="ss-txn-ok">Create</button></div>
+      </form>
+    </dialog>
+
+    <!-- ── ADD A TEST DATA PARAMETER ── -->
+    <dialog class="ss-dlg" id="ss-tdp-dlg" aria-labelledby="ss-tdp-h">
+      <form method="dialog" class="ss-dlg-in" id="ss-tdp-form">
+        <div class="ss-dlg-h"><h2 id="ss-tdp-h">Add parameter</h2><button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+        <div class="ss-dlg-b">
+          <label class="ss-fld" for="ss-tdp-name">Parameter name</label>
+          <input class="ss-field" id="ss-tdp-name" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="SearchTerm" />
+          <label class="ss-fld" for="ss-tdp-val">The value, as it was typed in the journey</label>
+          <input class="ss-field" id="ss-tdp-val" type="text" autocomplete="off" spellcheck="false" placeholder="running shoes" />
+          <p class="ss-err" id="ss-tdp-err" role="alert" hidden></p>
+          <small class="ss-muted">Every form field, JSON body field and query parameter of the script that sends exactly this value uses the parameter.</small>
+        </div>
+        <div class="ss-dlg-f"><button class="ds-btn" type="button" data-close>Cancel</button><button class="ds-btn ds-btn-primary" type="submit">Add</button></div>
       </form>
     </dialog>
 
@@ -565,5 +596,6 @@
     <script src="portal/find-value.js"></script>
     <script src="portal/studio-page.js"></script>
     <script src="portal/studio-workspace.js"></script>
+    <script src="portal/studio-testdata.js"></script>
   </body>
 </html>

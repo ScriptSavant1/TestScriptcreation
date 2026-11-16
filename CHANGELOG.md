@@ -43,6 +43,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The second recording (diff mode) is under "Advanced: second recording" in the Correlation Advisor tab, with "Record it now".
 - The usage statistic counts one Script Studio use per opened recording, not one per reading.
 
+#### Test data table (redesign step 4d)
+
+- The **Test data** tab is a table of the parameters for values the user typed: rename (the script follows), **Take value** (next row, random, unique), **Update** (each run of Action, or once per user), **File** (the shared data file — values that belong together stay on one row — or a file of its own), the number of rows, and Remove (the recorded value stays in the script) with Undo. The choices are kept when the recording is read again.
+- **Add parameter**: a name and the value as it was typed; every form field, JSON body field and query parameter that sends it uses the parameter. A value the server sends (a correlation) or a value no request sends is refused with the reason.
+- **Download as Excel / Upload Excel**: one column per parameter, one row per user; the rows read back go into the data files of the ZIP (`.dat` for VuGen, `.csv` for DevWeb), with `ParameterFile.prm` / `parameters.yml` set from the choices. Without choices the files are exactly as before.
+- Only the last change can be undone: a new change removes the older Undo messages (an older Undo also took back everything done after it).
+
 #### Find a value in Script Studio (redesign step 4c)
 
 - **Find a value** in Script Studio (Requests header, Correlation Advisor header, a value in Dynamic values, or select text in a request's details): where a value first came from, every request that sends it back, and what to do — the same answer as the HAR Explorer (one shared module, `portal/find-value.js`), with Studio's request numbers. Suggestions put the Correlation Advisor's own first (marked "Advisor").
