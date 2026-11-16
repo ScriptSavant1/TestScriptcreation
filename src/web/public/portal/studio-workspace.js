@@ -160,10 +160,18 @@
         }).join("") + "</span>" : "") +
         "</div>";
     }
-    var restOpen = !!q || !!prefs.domRest;
-    $("#ss-domains").innerHTML = (used.length ? '<div class="ss-dgrp-h">In the script <span class="ss-n">' + used.length + "</span></div>" + used.map(row).join("") : "") +
-      (rest.length ? '<button type="button" class="ss-dgrp" aria-expanded="' + restOpen + '"><svg class="i ss-chev"><use href="#i-chev"/></svg>Left out <span class="ss-n">' + rest.length + "</span><small>switched off, analytics, or only left-out requests</small></button>" +
-        (restOpen ? rest.map(row).join("") : "") : "") +
+    // three groups, as in the mockup: in the script (open), not in the script, analytics / ads (both folded); each
+    // fold is remembered; a search opens them all
+    var adsRest = rest.filter(function (h) { return adsOn && isAds(h); }), notIn = rest.filter(function (h) { return !(adsOn && isAds(h)); });
+    var open = function (k, dflt) { return !!q || (prefs[k] === undefined ? dflt : !!prefs[k]); };
+    var group = function (k, dflt, title, list, note) {
+      if (!list.length) return "";
+      var o = open(k, dflt);
+      return '<button type="button" class="ss-dgrp" data-grp="' + k + '" aria-expanded="' + o + '"><svg class="i ss-chev"><use href="#i-chev"/></svg>' + title + ' <span class="ss-n">' + list.length + "</span>" + (note ? "<small>" + note + "</small>" : "") + "</button>" + (o ? list.map(row).join("") : "");
+    };
+    $("#ss-domains").innerHTML = group("domIn", true, "In the script", used, "") +
+      group("domRest", false, "Not in the script", notIn, "switched off, or only left-out requests") +
+      group("domAds", false, "Analytics / ads: always left out", adsRest, "Leave out: Analytics / ads") +
       (shown.length ? "" : '<p class="ss-empty">No domain matches “' + esc(q) + "”.</p>");
     $("#ss-dom-on").disabled = on === hosts.filter(function (h) { return !(adsOn && isAds(h)); }).length;
     $("#ss-dom-off").disabled = on === 0;
@@ -171,7 +179,7 @@
   $("#ss-dq").addEventListener("input", renderDomains);
   $("#ss-domains").addEventListener("click", function (e) {
     var g = e.target.closest(".ss-dgrp");
-    if (g) { prefs.domRest = g.getAttribute("aria-expanded") !== "true"; SS.save(); renderDomains(); return; }
+    if (g) { prefs[g.getAttribute("data-grp")] = g.getAttribute("aria-expanded") !== "true"; SS.save(); renderDomains(); return; }
     var rn = e.target.closest("[data-rename]");
     if (rn) { openHostRename(rn.getAttribute("data-rename")); return; }
     var d = e.target.closest(".ss-dom"); if (!d) return;
@@ -538,7 +546,7 @@
       ? '<p class="hx-none">This request is left out of the script, so nothing in it needs correlation.</p>'
       : list.length
         ? table("Traced to an earlier response — correlate these", green, "g") + table("Looks dynamic, source not found", yellow, "y") +
-          '<p class="ds-note hx-hint"><b>Add</b> puts a card in the Correlation Advisor; <b>Apply &amp; Regenerate</b> there writes it into the script. <button type="button" class="ds-btn ds-btn-xs" data-go-adv>Open the Correlation Advisor</button></p>'
+          '<p class="ds-note hx-hint"><span><b>Add</b> puts a card in the Correlation Advisor; <b>Apply &amp; Regenerate</b> there writes it into the script.</span> <button type="button" class="ds-btn ds-btn-xs" data-go-adv>Open the Correlation Advisor</button></p>'
         : '<p class="hx-none">No value in this request looks dynamic or comes from an earlier response.</p>';
     return { key: "dynamic", label: "Dynamic values", count: list.length || "", html: html };
   }
@@ -846,6 +854,14 @@
     },
     openFind: function (v) { openFind(v); },
     openDetails: function (id) { openDet(id); },
+    // "Show an example" in the Correlation Advisor tab (as in the mockup): a request that sends back a value the
+    // Advisor found, opened on its Dynamic values tab
+    showExample: function () {
+      var c = (S.advisorCandidates || []).filter(function (x) { return x.status !== "skipped" && x.usages && x.usages.length; })[0];
+      var u = c && c.usages[0], e = u && (S.entries1 || [])[u.entryIdx];
+      if (!e) { if (typeof showToast === "function") showToast("No dynamic value found in this recording yet.", "info", 4000); return; }
+      D.tab = "dynamic"; D.full = {}; openDet(e.id); scrollTo(e.id);
+    },
     undoToast: function (msg, undo) { undoToast(msg, undo); },
     closeDetails: function () { closeDet(); },
     showPane: showPane,

@@ -494,8 +494,8 @@ ul.ss-gol li::before { content: ""; width: 6px; height: 6px; margin: 8px 8px 0; 
 .ss-gcall { margin-top: 14px; }
 .ss-gcall > svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 .ss-gcall > span { min-width: 0; }
-.ss-inl { width: 1.05em; height: 1.05em; vertical-align: -.17em; margin-right: 3px; }
-.c-start .ss-inl { color: var(--ds-ok); } .c-end .ss-inl { color: var(--ds-bad); }
+.ss-gico { width: 1.05em; height: 1.05em; vertical-align: -.17em; margin-right: 3px; }
+.c-start .ss-gico { color: var(--ds-ok); } .c-end .ss-gico { color: var(--ds-bad); }
 .ss-bm { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0; }
 .ss-bm a { display: inline-block; height: 40px; line-height: 37px; padding: 0 16px; border-radius: var(--ds-r-btn); font-weight: 600; font-size: var(--ds-fs-sm); text-decoration: none; cursor: grab; border: 1.5px dashed var(--ds-border-2); background: var(--ds-surface); color: var(--ds-text); }
 .ss-bm a:hover { border-color: var(--ds-text-3); }
@@ -825,3 +825,5 @@ body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10
 .ss-td { min-width: 640px; font-size: var(--ds-fs-sm); }
 .ss-td select { min-width: 108px; }
 #ss-t-corr .adv-footer-summary { white-space: nowrap; flex: 1 1 auto; } #ss-t-corr .adv-btn-regen { margin-left: 0; }
+.ss-insp-moved .ss-insp-ex { margin-left: auto; flex: none; align-self: center; }
+.ss-det-bar .ss-inl, #ss-det .ss-inl { white-space: nowrap; flex: none; }

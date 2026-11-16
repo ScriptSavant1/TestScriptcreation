@@ -43,6 +43,9 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Closer to the agreed mockup (redesign step 6b)
 
+- Correlation Advisor: **Show an example** opens a request that sends a value back, on its Dynamic values tab.
+- Domains in three groups, as in the mockup: In the script, Not in the script, and Analytics / ads: always left out — each folds (remembered).
+- Fixed: the Hide secrets label in the request details was squeezed to one letter (a class name shared with the How to record guide's icons).
 - Script Studio request details: **Leave out** takes this one request out of the script (the left-out line says "left out by you"); **Put back** brings it back, and the script is exactly as before. A request left out by its type, domain or a rule is changed there.
 - Fixed: after you answered the Background requests question for a recording, every change (a type, a domain, a transaction) asked it again; now it asks once per recording and keeps your answer — the Background chip changes it (BUG-147).
 - HAR Explorer: request details have the **Dynamic values** tab, as in Script Studio — the same list from Studio's own engine (traced to an earlier response, or no source found), a value opens Find a value, a source opens that request.

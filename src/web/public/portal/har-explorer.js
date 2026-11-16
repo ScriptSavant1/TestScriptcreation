@@ -418,7 +418,7 @@
       var sec = function (title, rows, dot) { return rows.length ? '<details class="hx-sec hx-dyn-sec" open><summary><span class="hx-dyn-dot ' + dot + '"></span>' + title + ' <span class="c">' + rows.length + '</span></summary><table class="hx-dyn"><tbody>' + rows.map(row).join("") + "</tbody></table></details>" : ""; };
       html = sec("Traced to an earlier response — correlate these", r.list.filter(function (x) { return x.srcN; }), "g") +
         sec("Looks dynamic, source not found", r.list.filter(function (x) { return !x.srcN; }), "y") +
-        '<p class="ds-note hx-hint">Click a value to see where it comes from and where it goes (Find a value), then <b>Correlate this</b> to add it to Script Studio.</p>';
+        '<p class="ds-note hx-hint"><span>Click a value to see where it comes from and where it goes (Find a value), then <b>Correlate this</b> to add it to Script Studio.</span></p>';
     }
     return { key: "dynamic", label: "Dynamic values", count: r && r.list ? r.list.length || "" : "", html: html };
   }
