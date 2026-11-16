@@ -228,7 +228,7 @@
       .then((s) => {
         Object.assign(recorder, { running: true, recording: !!s.recording, active: s.active || 0, background: s.background || 0 });
         const badge = $("#sb-rec-badge");
-        if (badge) { badge.hidden = false; badge.textContent = s.recording ? "Recording" : "Running"; }
+        if (badge) { badge.hidden = false; badge.textContent = s.recording ? "REC" : "Running"; badge.classList.toggle("is-rec", !!s.recording); badge.title = s.recording ? "The CDP Recorder is recording" : "The CDP Recorder is running on this computer"; }
         document.dispatchEvent(new CustomEvent("perfx:recorder", { detail: recorder }));
       })
       .catch(() => { /* nothing running locally — normal */ });

@@ -43,6 +43,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Closer to the agreed mockup (redesign step 6b)
 
+- Correlation Advisor cards as in the mockup: the value in a box, Source and Replaced in on one line each, Accept / Skip / **Show request** (opens the request that sends the value) stacked on the right, an applied card outlined in green with **In the script**; a **Scanned** mark beside the title.
+- Sidebar: **REC** in red on Script Studio while the CDP Recorder records (Running when it only runs).
 - Correlation Advisor: **Show an example** opens a request that sends a value back, on its Dynamic values tab.
 - Domains in three groups, as in the mockup: In the script, Not in the script, and Analytics / ads: always left out — each folds (remembered).
 - Fixed: the Hide secrets label in the request details was squeezed to one letter (a class name shared with the How to record guide's icons).

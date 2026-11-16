@@ -827,3 +827,31 @@ body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10
 #ss-t-corr .adv-footer-summary { white-space: nowrap; flex: 1 1 auto; } #ss-t-corr .adv-btn-regen { margin-left: 0; }
 .ss-insp-moved .ss-insp-ex { margin-left: auto; flex: none; align-self: center; }
 .ss-det-bar .ss-inl, #ss-det .ss-inl { white-space: nowrap; flex: none; }
+
+/* ── Correlation Advisor cards as in the mockup: the value in a box, Source / Replaced in on one line each,
+      Accept / Skip / Show request stacked on the right, an applied card outlined in green with "In the script" ── */
+#ph-res .adv-card { padding: 14px 16px; background: var(--ds-surface); }
+#ph-res .adv-card::before { display: none; }
+#ph-res .adv-card.adv-card-medium { border-left: 3px solid var(--ds-warn); }
+#ph-res .adv-card.adv-card-high { border-left: 3px solid var(--ds-ok); }
+#ph-res .adv-card-value { display: block; margin: 8px 0 6px; padding: 6px 10px; border: 1px solid var(--ds-border-2); border-radius: 8px; background: var(--ds-inset); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--ds-fs-sm); }
+#ph-res .adv-card-flow { display: block; font-size: var(--ds-fs-sm); line-height: 1.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ph-res .adv-flow-src, #ph-res .adv-flow-use { color: var(--ds-text-3); margin-right: 4px; }
+#ph-res .adv-card-flow .adv-req-link { display: inline; }
+html .adv-type-badge { background: var(--ds-accent-soft); color: var(--ds-accent-text); border-color: transparent; }
+.adv-in-script { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px; border-radius: 99px; background: color-mix(in srgb, var(--ds-ok) 14%, transparent); color: var(--ds-ok); font-size: var(--ds-fs-xs); font-weight: 600; }
+#ph-res .adv-card-actions { display: flex; flex-direction: column; gap: 6px; min-width: 120px; }
+#ph-res .adv-card-actions :is(.adv-btn-accept, .adv-btn-skip, .adv-btn-show) { display: block; text-align: center; line-height: 30px; height: 32px; padding: 0 12px 0 28px; border-radius: var(--ds-r-btn); border: 1px solid var(--ds-border-2); background: var(--ds-surface); color: var(--ds-text); font: inherit; font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer; width: 100%; }
+#ph-res .adv-card-actions .adv-btn-show { border-color: transparent; background: none; color: var(--ds-accent-text); }
+#ph-res .adv-card-actions :is(.adv-btn-accept, .adv-btn-skip):hover { border-color: var(--ds-accent-line); background: var(--ds-accent-soft); }
+#ph-res .adv-card-actions .adv-btn-show:hover { text-decoration: underline; }
+#ph-res .adv-card-actions .adv-btn-accept.adv-btn-active { background: var(--ds-accent-soft); border-color: var(--ds-accent-line); color: var(--ds-accent-text); }
+#ph-res .adv-card.adv-card-accepted { border-color: color-mix(in srgb, var(--ds-ok) 55%, var(--ds-border)); }
+#ph-res .adv-card.adv-card-accepted.adv-card-high, #ph-res .adv-card.adv-card-accepted.adv-card-medium { border-left-color: var(--ds-ok); }
+.adv-scanned { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; margin-left: 6px; border-radius: 99px; border: 1px solid var(--ds-border-2); color: var(--ds-text-2); font-size: var(--ds-fs-xs); font-weight: 600; } .adv-scanned .i { width: 13px; height: 13px; color: var(--ds-ok); }
+
+/* the mockup's Source / Replaced in have no arrow: the label shows whole, no icon */
+#ph-res .adv-card-flow :is(.adv-flow-src, .adv-flow-use) { padding-left: 0; font-weight: 400; }
+.adv-card-flow :is(.adv-flow-src, .adv-flow-use)::first-letter { font-size: inherit; }
+.adv-card-flow :is(.adv-flow-src, .adv-flow-use)::after { display: none; }
+#ph-res .adv-card-actions .adv-btn-show { padding-left: 12px; }

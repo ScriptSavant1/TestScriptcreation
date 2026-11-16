@@ -834,19 +834,19 @@ function _advCardHtml(c) {
 
   // Source = the request whose response sends the value; Replaced in = where the script puts the parameter
   var srcHtml = c.source
-    ? '<span class="adv-flow-src">&#x2190; Source</span> ' +
+    ? '<span class="adv-flow-src">Source</span> ' +
       _advReqLink(c.source.entryIdx, c.source.url) +
       (c.source.jsonPath
-        ? " &rarr; <b>" + _esc(c.source.jsonPath) + "</b>"
+        ? " &middot; <b>" + _esc(c.source.jsonPath) + "</b>"
         : "")
     : '<span style="color:var(--text-3)">Source not found in HAR</span>';
 
   var usageCount = (c.usages || []).length;
   var firstUsage = c.usages && c.usages[0];
   var useHtml = firstUsage
-    ? '<span class="adv-flow-use">&#x2192; Replaced in</span> ' +
+    ? '<span class="adv-flow-use">Replaced in</span> ' +
       _advReqLink(firstUsage.entryIdx, firstUsage.url) +
-      ' <span class="adv-where">' + _esc(_advWhere(firstUsage)) + "</span>" +
+      ' <span class="adv-where">&middot; ' + _esc(_advWhere(firstUsage)) + "</span>" +
       (usageCount > 1
         ? ' <button type="button" class="adv-more" onclick="advisorShowUses(\'' + c.id + '\')" title="Every place this value is replaced">+' +
           (usageCount - 1) +
@@ -969,6 +969,8 @@ function _advCardHtml(c) {
     confLabel +
     "</span>" +
     manualTag +
+    // applied to the script (Apply & Regenerate), as in the mockup
+    (c._applied ? '<span class="adv-in-script" title="This correlation is in the script">&#x2713; In the script</span>' : "") +
     "</div>" +
     '<div class="adv-card-value">' +
     _esc(c.preview) +
@@ -1003,6 +1005,10 @@ function _advCardHtml(c) {
     '" onclick="advisorSkip(\'' +
     c.id +
     '\')" title="Dismiss this suggestion">&#x2715; Skip</button>' +
+    // the request whose response sends the value (as in the mockup)
+    (c.source && S.entries1 && S.entries1[c.source.entryIdx] && S.entries1[c.source.entryIdx].id
+      ? '<button type="button" class="adv-btn-show" onclick="advisorOpenRequest(' + S.entries1[c.source.entryIdx].id + ')" title="Open the request that sends this value">Show request</button>'
+      : "") +
     "</div>" +
     "</div>" +
     "</div>"

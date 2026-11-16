@@ -251,3 +251,4 @@ html.sb-collapsed .sb-top .sb-brand { display: none; }
 .sb-item[data-page="studio"] .sb-sub, .sb-item[data-page="explore"] .sb-sub { display: block; font-size: var(--ds-fs-xs); color: var(--ds-text-3); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.sb-collapsed .sb-item .sb-sub { display: none; }
 @media (max-width: 900px) { html.sb-collapsed .sb-top .sb-brand { display: flex; } html.sb-collapsed .sb-top { justify-content: flex-start; } }
+.sb-badge.is-rec { background: color-mix(in srgb, var(--ds-bad) 14%, transparent); color: var(--ds-bad); font-weight: 700; letter-spacing: .04em; }
