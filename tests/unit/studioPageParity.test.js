@@ -20,7 +20,7 @@ describe('Script Studio redesign — same scripts as the classic page', () => {
   test('Studio.html loads the classic scripts unchanged, in the same order, then its layout script', () => {
     const engine = scripts(classic);
     expect(scripts(page).slice(0, engine.length)).toEqual(engine);
-    expect(scripts(page).slice(engine.length)).toEqual(['portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-page.js']);
+    expect(scripts(page).slice(engine.length)).toEqual(['portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/studio-page.js', 'portal/studio-workspace.js']);
   });
 
   test('the classic stylesheet is still loaded (it styles what the scripts draw), then the new one', () => {
@@ -51,10 +51,16 @@ describe('Script Studio redesign — every element the scripts use exists', () =
     expect(missing).toEqual([]);
   });
 
+  // The classic set-up screen's domain list and its Start over button are gone: the workspace's Domains panel calls the
+  // same engine functions (studioToggleAllDomains for All on / All off) and draws its own list and search; the start
+  // screen is one click away (Open another), and nothing restarts when a choice changes.
+  const REPLACED = new Set(['studioToggleAllDomains(true)', 'studioToggleAllDomains(false)', 'studioRenderDomains(this.value)', 'goBack()']);
   test('every onclick / onchange / oninput handler of the classic page is still wired', () => {
     const handlers = (html) => new Set([...html.matchAll(/on(?:click|change|input|drop|dragover|dragleave)="([^"]+)"/g)].map((m) => m[1].replace(/\s+/g, ' ').trim()));
     const mine = handlers(page);
-    expect([...handlers(classic)].filter((h) => !mine.has(h))).toEqual([]);
+    expect([...handlers(classic)].filter((h) => !mine.has(h) && !REPLACED.has(h))).toEqual([]);
+    const ws = fs.readFileSync(path.join(PUB, 'portal/studio-workspace.js'), 'utf-8');
+    ['studioToggleAllDomains(true)', 'studioToggleAllDomains(false)'].forEach((h) => expect(ws).toContain(h));
   });
 
   test('help and instruction text of the classic page is kept', () => {
@@ -64,10 +70,9 @@ describe('Script Studio redesign — every element the scripts use exists', () =
       'Should I include Img / CSS / JS / Font?',
       'Leave them out',
       'are not downloaded from the HTML, so they are only downloaded if they are in the script.',
-      'Known analytics/ads domains are always left out here.',
+      'Known analytics/ads domains are always left out here unless you untick',
       'Shows up to 20 candidates',
       'Paste the server response body',
-      'Load a HAR recording on the left to configure filters.',
       'For diff-based correlation',
     ].forEach((t) => expect(mine).toContain(t));
   });

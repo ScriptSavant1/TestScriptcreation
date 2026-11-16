@@ -31,6 +31,18 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio: one workspace (redesign step 2)
+
+- A new Script Studio page: a start screen (Record in a browser, Open a recording, the script format) and one workspace. The file bar shows the requests in the script, the transactions, the sign-in found, a format switch, Open another and Download ZIP. Below it: the notices, a filter bar, Domains, Requests, and a panel with the Script, the Correlation Advisor and Test data tabs. The purple brand of the Workload Modeller.
+- A recording is read as soon as it is opened: no Analyse button, no processing page and no Start over. Changing the format rewrites the script at once; changing a type, a domain or a transaction reads the recording again in under a second. When correlations applied in the Advisor would be lost, the page asks first.
+- Filters in one line: the eight type buttons with their counts, Default / All / None, "Should I include Img / CSS / JS / Font?", and Leave out: Analytics / ads and OPTIONS (now a choice, on by default as before), plus Background when the page repeats requests by itself.
+- Domains: the domains in the script first, with their server parameter and Rename; the left-out ones folded; search, All on / All off, and a warning before leaving out a domain the journey needs (a page, a redirect, sign-in, cookies).
+- Requests: one list grouped by transaction, with only the rows on screen drawn, so a 30 MB recording stays smooth. Left-out requests sit behind one line per transaction with the reasons ("Show left-out" shows them all). Each transaction folds. Filter by address, tick requests and use New transaction (Shift-click ticks a range). Rename and Ungroup each come with Undo. The transactions you make are kept when the recording is read again, and the script numbers them in journey order.
+- "Ready to download?" next to Download ZIP lists what is worth a look (suggestions not reviewed, the warning, background requests, test data, server names); it never blocks the download.
+- Panels hide to a rail and come back with one click; the gaps between them can be dragged. Fits laptops (1366 × 768, 1536 × 730) and office desktops up to 3840 × 2160; under 1100 px the panels stack.
+- The second recording (diff mode) is under "Advanced: second recording" in the Correlation Advisor tab, with "Record it now".
+- The usage statistic counts one Script Studio use per opened recording, not one per reading.
+
 #### One rule set for which requests go into the script
 
 - The Recorder and Script Studio now decide which recorded requests go into the script with the same rules, from one shared file (`shared/request-filter.js`): the same request types, the same domain switch, the same always-left-out requests (pre-flight, reports, WebSocket, analytics, browser prefetch). The same recording gives the same requests in both tools — before, for example, 15 against 16 or 11 against 8 (BUG-142, first part).

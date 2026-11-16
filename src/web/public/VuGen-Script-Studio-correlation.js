@@ -243,7 +243,8 @@ function parseNetLog(netlog) {
 }
 
 // Which requests go into the script: the Recorder's rule set (shared/request-filter.js), so the same recording
-// gives the same script in every tool (BUG-142). Analytics / ads and OPTIONS are always left out here; the type
+// gives the same script in every tool (BUG-142). Analytics / ads and OPTIONS are left out unless the page switches
+// that off (S.leaveOut = { ads, options }; both on when not set, as the Recorder's tick boxes); the type
 // buttons (S.filterResourceTypes: null = all) and the domain list (S.filterDomains) are the user's choices.
 // Each request gets e.leftOut (the reason, or null) besides e.filtered.
 function applyFilters(entries) {
@@ -252,7 +253,7 @@ function applyFilters(entries) {
   const typeOff = new Set(!(sel instanceof Set) ? [] : sel.size ? RequestFilter.TYPES.filter((k) => !sel.has(k)) : ['script', 'stylesheet', 'image', 'font']);
   const ctx = {
     rules: { STATIC_CT, STATIC_EXT, NOISY, NOISY_URL },
-    noise: true, options: true, typeOff,
+    noise: !(S.leaveOut && S.leaveOut.ads === false), options: !(S.leaveOut && S.leaveOut.options === false), typeOff,
     domainOff: S.filterDomains || {},
     prefetchDup: RequestFilter.prefetchDuplicates(entries),
   };

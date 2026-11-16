@@ -95,6 +95,7 @@ function loadFile(file, slot) {
         S.har1 = parsed;
         S.isNetLog1 = netlog;
         S.har1Name = file.name;
+        S._usageSent = false;   // a new recording: one usage ping when it is first read
         markLoaded(1, file.name, netlog);
         studioBuildDomains(parsed);
         studioInitFilters();

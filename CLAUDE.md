@@ -77,6 +77,9 @@ Rule: the old switchers in index.ejs stay the source of truth; the shell only wr
 10. `studio-app.js` ← live orchestrator
 11. `analytics-device.js` (deferred)
 
+Then `Studio.html` loads its own page scripts: `portal/drop-anywhere.js`, `portal/record-live.js`, `portal/studio-txn.js`,
+`portal/studio-page.js`, `portal/studio-workspace.js`.
+
 All share global state object `S` (defined in `studio-app.js`).
 
 ### Recorder page (portal v3 redesign) — served at /recorder
@@ -118,16 +121,20 @@ Rule: `tests/unit/converterPageParity.test.js` must pass; check output parity wi
 harness (`regression-tests/tools/converter/`; the server rate-limits /convert to 60 per 5 min per address — the
 harness sends a different `X-Forwarded-For` per run).
 
-### Script Studio page (portal v3 redesign) — served at /studio
+### Script Studio page (one workspace, redesign step 2 — plan: Docs/redesign/plan.md) — served at /studio
 | File | Purpose |
 |------|---------|
-| `src/web/public/Studio.html` | New Studio page. Loads the classic Studio scripts UNCHANGED, in the same order, and `VuGen-Script-Studio.css` under `portal/studio.css`; keeps every element id the scripts use |
-| `src/web/public/portal/studio.css` | Maps the classic colour tokens onto the portal palette (both themes) and lays out the new page |
-| `src/web/public/portal/studio-page.js` | `window.PerfxStudio.state()` = Studio's `S` (a const — NOT `window.S`; BUG-112) for the Recorder / HAR Explorer hand-offs. Layout behaviour only: Review / Script show-hide (localStorage `perfx-studio-ui`), dialog focus (in, trapped, returned; Escape closes), keyboard for script-drawn chips / tabs / headers, drop-zone focus ring; step bar `#ss-steps` (display only: step from the active phase + `#dz1.loaded` + a click in `#dl-bar`; moved into `#ph-res` on results) |
+| `src/web/public/Studio.html` | Start screen (`#ph-upload`: Record in a browser, Open a recording `#dz1`, format, How it works) and workspace (`#ph-res`: file bar, notices, filter bar, Domains · Requests · right panel with Script / Correlation Advisor / Test data tabs); `#ph-proc` is an overlay while a file is read. Loads the classic Studio scripts UNCHANGED, in the same order; keeps every element id they use (`#ss-engine` holds the ones with no place on the page — never shown). The second recording (`#dz2`) is in the Advisor tab, "Advanced: second recording". Dialogs: `#ss-txn-dlg` (new / rename transaction), `#ss-bg-dlg` (holds `#bgReviewPanel`), `#ss-ask`; menu `#ss-ready` |
+| `src/web/public/portal/studio.css` | Classic tokens → portal palette, the purple brand (as the Workload Modeller), the engine-drawn panels, and the start / workspace layout (panels sized by the screen; under 1100 px they stack) |
+| `src/web/public/portal/studio-page.js` | `window.SS`. A file is read as soon as it is opened (wraps `markLoaded`; no Analyse button). `analyze()` is wrapped: one reading at a time; a call during one asks for one more reading after it; every caller gets a promise that settles when the page is idle (HAR Explorer hand-off, harness). Views follow the engine phases (`body.ss-view-home` / `ss-view-ws` / `ss-reading`). File bar, format switch (regenerates, no new reading), Download ZIP + "Ready to download?" (never blocks), notices, tabs, background-requests dialog (opened when the engine stops for it; closing keeps the defaults), dialog focus / keyboard for engine-drawn controls, script colouring, prefs `perfx-studio-ui`, format `perfx-studio-fmt`, Start recording mount (`SS.recordSecond` for the second recording), drop anywhere, `window.PerfxStudio.state()` = Studio's `S` (a const — NOT `window.S`; BUG-112) |
+| `src/web/public/portal/studio-workspace.js` | `window.SSW`: filter bar (type chips with counts through the engine's `studioToggleRt` / `studioInitFilters`; Leave out `S.leaveOut = {ads, options}`; Background), Domains (in the script / left out, server parameter + Rename, a warning before leaving out a needed domain), Requests (one virtual list grouped by transaction, left-out requests behind one line per group, Show left-out, fold, address filter, tick + New transaction, Rename / Ungroup with Undo), panels hidden to rails and resized. Every change goes through the engine state, then `analyze()` again; it asks first when applied correlations would be lost |
+| `src/web/public/portal/studio-txn.js` | UMD `StudioTxn`: the user's transactions as operations by request id (create / rename / ungroup), replayed by `studioAfterMarkers` (called by `analyze()` after `detectMarkers`); markers shaped as the engine's own; `S.txns` in journey order. `tests/unit/studioTxn.test.js` |
 | `src/web/public/portal/frame-guard.js` | One address: a tool page (`<html data-portal-tool=record|explore|studio|workload|results>`) opened on its own goes to …/converter/ and the shell opens that tool (sessionStorage `perfx-open`); skipped for automated test browsers (`navigator.webdriver`) |
 
 Rule: `tests/unit/studioPageParity.test.js` must pass; check output parity with the golden harness
-(`regression-tests/tools/studio/harness.js` + `compare.js`, baseline from the classic `/studio`).
+(`regression-tests/tools/studio/harness.js` + `compare.js`): script and ZIP files identical; the harness drives the page
+through its global functions, so a step captured right after opening a file shows the reading (`ph-proc`).
+Usage ping `studio`: once per opened recording (`S._usageSent`, reset by `loadFile` slot 1), not per reading.
 The server blocks direct `.html` URLs on purpose — pages are reached through routes only.
 
 ### HAR Explorer (Create scripts, between Recorder and Script Studio — plan: Docs/archive/plans/HAR-EXPLORER-PLAN.md, illustrated guide: Docs/user/HAR-EXPLORER-GUIDE.html)
