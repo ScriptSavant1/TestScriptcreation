@@ -18,9 +18,9 @@
     jmeter:  { hash: "#/convert/jmeter",  tab: "converter", sub: "jmx",   group: "Create scripts", name: "JMeter converter",          c: "--c-jmeter",  help: "hacc-jmeter" },
     explore: { hash: "#/explore",         tab: "explorer",  group: "Create scripts", name: "HAR Explorer",            c: "--c-explore", help: "hacc-explorer" },
     studio:  { hash: "#/studio",          tab: "studio",    group: "Create scripts", name: "Script Studio",           c: "--c-studio",  help: "hacc-studio" },
-    workload: { hash: "#/workload",       tab: "workload",  group: "Plan",           name: "Workload Modeller",       c: "--c-work",    help: "hacc-workload" },
-    results: { hash: "#/results",         tab: "analyser",  group: "Analyse",        name: "Results Analyser",        c: "--c-results", help: "hacc-analyser" },
-    help:    { hash: "#/help",            tab: "help",      group: "Learn",          name: "Help & guides",           c: "--c-help",    help: null },
+    workload: { hash: "#/workload",       tab: "workload",  group: "Plan & analyse", name: "Workload Modeller",       c: "--c-work",    help: "hacc-workload" },
+    results: { hash: "#/results",         tab: "analyser",  group: "Plan & analyse", name: "Results Analyser",        c: "--c-results", help: "hacc-analyser" },
+    help:    { hash: "#/help",            tab: "help",      group: "PerfX Studio",   name: "Help & guides",           c: "--c-help",    help: null },
   };
   // the Recorder is part of Script Studio now: old names, links and Help anchors lead there
   const ALIAS = { record: "studio" };
@@ -175,16 +175,26 @@
   const tip = document.createElement("div");
   tip.className = "sb-tip"; tip.setAttribute("role", "tooltip");
   document.body.appendChild(tip);
+  // collapsed: the name and the one-line description; open menu: the description only, after a short pause
+  let tipTimer = 0;
   function showTip(el) {
-    if (!html.classList.contains("sb-collapsed") || innerWidth <= 900) return;
+    clearTimeout(tipTimer);
+    if (innerWidth <= 900) return;
+    const open = !html.classList.contains("sb-collapsed");
+    if (open) { if (!el.querySelector(".sb-sub")) return; tipTimer = setTimeout(() => placeTip(el, true), 450); return; }
+    placeTip(el, false);
+  }
+  function placeTip(el, subOnly) {
     const label = el.querySelector(".sb-label"), sub = el.querySelector(".sb-sub");
-    tip.innerHTML = ""; tip.append(label ? label.textContent : "");
-    if (sub && sub.textContent) { const s = document.createElement("small"); s.textContent = sub.textContent; tip.append(s); }
+    tip.innerHTML = "";
+    if (subOnly) { tip.append(sub ? sub.textContent : ""); }
+    else tip.append(label ? label.textContent : "");
+    if (!subOnly && sub && sub.textContent) { const s = document.createElement("small"); s.textContent = sub.textContent; tip.append(s); }
     const r = el.getBoundingClientRect();
     tip.style.left = r.right + 10 + "px"; tip.style.top = r.top + r.height / 2 + "px";
     tip.classList.add("show");
   }
-  function hideTip() { tip.classList.remove("show"); }
+  function hideTip() { clearTimeout(tipTimer); tip.classList.remove("show"); }
   $$(".sb .sb-item").forEach((el) => {
     el.addEventListener("mouseenter", () => showTip(el)); el.addEventListener("mouseleave", hideTip);
     el.addEventListener("focus", () => showTip(el)); el.addEventListener("blur", hideTip);

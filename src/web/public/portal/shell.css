@@ -234,7 +234,7 @@ html.sb-collapsed .sb-subnav, html.sb-collapsed .sb-chev { display: none !import
 @media (max-width: 600px) { .pal-dlg { margin-top: 8vh; } .pal-foot { display: none; } }
 
 /* ── Mockup alignment: menu toggle at the top beside the brand; purple brand mark and active item;
-      Script Studio and HAR Explorer show their one-line description ── */
+      one line per tool (descriptions in the hover tooltip) ── */
 .sb-top { height: var(--tb-h); flex: none; display: flex; align-items: center; border-bottom: 1px solid var(--sb-line); padding-right: 10px; }
 .sb-top .sb-brand { flex: 1; min-width: 0; height: 100%; border-bottom: 0 !important; padding-right: 6px; }
 .sb-brand-sub { overflow: hidden; text-overflow: ellipsis; }
@@ -248,7 +248,8 @@ html.sb-collapsed .sb-top .sb-brand { display: none; }
 .sb-logo { background: linear-gradient(135deg, #7c3aed, #5b21b6); }
 .sb-item[aria-current="page"] { background: color-mix(in srgb, #7c3aed 12%, var(--ds-surface)); }
 .sb-item[aria-current="page"]::before { background: #7c3aed; }
-.sb-item[data-page="studio"] .sb-sub, .sb-item[data-page="explore"] .sb-sub { display: block; font-size: var(--ds-fs-xs); color: var(--ds-text-3); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* one line per tool: the description is the hover tooltip; Help at the bottom of the menu */
+.sb-nav > .sb-help-line { display: block !important; margin: auto 8px 8px; padding: 0; }
 html.sb-collapsed .sb-item .sb-sub { display: none; }
 @media (max-width: 900px) { html.sb-collapsed .sb-top .sb-brand { display: flex; } html.sb-collapsed .sb-top { justify-content: flex-start; } }
 .sb-badge.is-rec { background: color-mix(in srgb, var(--ds-bad) 14%, transparent); color: var(--ds-bad); font-weight: 700; letter-spacing: .04em; }
