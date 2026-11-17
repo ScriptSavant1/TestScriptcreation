@@ -52,6 +52,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Fixes found while recapturing the guides
+
+- Script Studio's file bar names the recording's transactions as the HAR Explorer does: START / END bookmarks, a CDP Recorder recording, or the page loads of another HAR (it said "CDP Recorder" for every HAR with pages) — BUG-148.
+- The HAR Explorer's "Open in Script Studio" message no longer says to click Analyse; its tooltips name Script Studio instead of the Recorder.
+- The HAR Explorer illustrated guide: all pictures retaken in the current look, the numbered marks placed from the page, text for the Domains panel, Dynamic values, Find a value over the page and Source / Replaced in; the Recorder section removed.
+
 #### Closer to the agreed mockup (redesign step 6b)
 
 - Correlation Advisor cards as in the mockup: the value in a box, Source and Replaced in on one line each, Accept / Skip / **Show request** (opens the request that sends the value) stacked on the right, an applied card outlined in green with **In the script**; a **Scanned** mark beside the title.

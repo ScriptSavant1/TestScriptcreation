@@ -130,12 +130,20 @@
 
   // ── file bar ──
   var AUTH = { kerberos: "Kerberos", ntlm: "NTLM", negotiate: "Negotiate", basic: "Basic", digest: "Digest", bearer: "Bearer", saml: "SAML" };
+  // where the transactions come from — the HAR Explorer's rule (har-explorer-model.js): START / END bookmarks first,
+  // then the pages of a PerfX CDP Recorder file, then the page loads of any other HAR
+  function sourceLabel(es, har, pages) {
+    if (es.some(function (e) { return e.isMarker && /\.invalid([/:?]|$)/i.test(e.url || ""); })) return "HAR file · bookmark transactions (START / END)";
+    if (!pages || !pages.size) return "HAR file";
+    var creator = (har && har.log && har.log.creator && har.log.creator.name) || "";
+    return /perfx/i.test(creator) ? "Recorded with the CDP Recorder (pages are transactions)" : "HAR file · the page loads are transactions";
+  }
   function fileBar() {
     var es = S.entries1 || [];
     var reqs = es.filter(function (e) { return !e.isMarker; });
     $("#ss-file-name").textContent = S.har1Name || "";
     $("#ss-file-name").title = S.har1Name || "";
-    var src = S.isNetLog1 ? "NetLog file" : (S.harPages && S.harPages.size ? "Recorded with the CDP Recorder (pages are transactions)" : "HAR file");
+    var src = S.isNetLog1 ? "NetLog file" : sourceLabel(es, S.har1, S.harPages);
     if (S.har2) src += " · second recording: " + (S.har2Name || "") + " (diff mode)";
     $("#ss-file-src").textContent = src;
     $("#ss-k-in").textContent = reqs.filter(function (e) { return !e.filtered; }).length;

@@ -92,7 +92,7 @@
     $("#hx-fb-name").textContent = name;
     $("#hx-fb-sub").textContent = size(bytes) + " · " + (model.creator.name || "unknown tool") + (model.creator.version ? " " + model.creator.version : "");
     $("#hx-fb-src").textContent = { bookmarks: "Bookmark transactions (START / END)", cdp: "PerfX CDP Recorder transactions", pages: "Transactions from the page loads", none: "No transactions in this file" }[model.source];
-    $("#hx-fb-src").title = { bookmarks: "Transactions from the START / END bookmarks in the recording — grouped as the Recorder groups them", cdp: "Recorded with the PerfX CDP Recorder — its transactions, as the Recorder shows them", pages: "The recording's page loads (pages in the HAR), as the Recorder uses them", none: "This recording has no bookmarks and no pages" }[model.source];
+    $("#hx-fb-src").title = { bookmarks: "Transactions from the START / END bookmarks in the recording — grouped as Script Studio groups them", cdp: "Recorded with the PerfX CDP Recorder — its transactions, as Script Studio shows them", pages: "The recording's page loads (pages in the HAR), as Script Studio uses them", none: "This recording has no bookmarks and no pages" }[model.source];
     $("#hx-fb-src").classList.toggle("none", model.source === "none");
     $("#hx-fb-n").innerHTML = "<b>" + inScript + "</b>&nbsp;of " + model.items.length + " requests in the script";
     $("#hx-fb-tx").innerHTML = "<b>" + tx + "</b>&nbsp;transaction" + (tx === 1 ? "" : "s");
@@ -557,7 +557,7 @@
       try { if (typeof w.setFmt === "function") w.setFmt(fmt); } catch (e) { /* Studio keeps its own format */ }
       w.loadFile(file, 1);
       if (!list.length) {
-        if (typeof w.showToast === "function") w.showToast(file.name + " opened from the HAR Explorer — choose the format and filters, then click Analyse.", "info");
+        if (typeof w.showToast === "function") w.showToast(file.name + " opened from the HAR Explorer.", "info");
         return;
       }
       later(function () { return st().har1; }, function () {
