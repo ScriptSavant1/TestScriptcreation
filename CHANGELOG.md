@@ -8,7 +8,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Clearer results and inputs
 
-- Result tiles named as testers say them: **TPS — transactions per second**, **TPH — transactions per hour**, **Iterations per hour** (with iterations per second) — all at full load — then **Total iterations — whole test** and **Total transactions — whole test**, each saying what it adds up. The summary uses the same names.
+- Result tiles in words first, abbreviation after: **Transactions per second (TPS)**, **Transactions per hour (TPH)**, **Iterations per hour** (all Vusers and per Vuser) — at full load — **One iteration takes** (response + think time, and whether it fits in the pacing), **Total test duration**, **Full load (steady state)**, **Total iterations (whole test)** (about how many per Vuser), **Total transactions (whole test)**, **Requests per second (hits)**; "How to read these numbers" under the tiles, worked out with the plan's own figures. The summary uses the same names.
+- An iteration longer than its pacing: the TPS, TPH, iterations, totals and chart now show what LRE will really reach (amber tiles), not what the pacing asks for (the tiles said 2 TPS while Checks said 1.43).
 - Scripts: notes at the top ("Before you fill in a script — what each box means") with the formulas and a worked example; the boxes say "Think time — total per iteration", "Response time — per transaction", "Transactions per iteration".
 
 #### Test length closer to LRE; clearer think-time fields

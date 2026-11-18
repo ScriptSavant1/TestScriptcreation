@@ -121,11 +121,15 @@ Choose the **machine type** of each pool:
 
 ### Results
 - **Result**: a plain-language summary, the tiles, the chart, and the phases with their times on the test clock. The
-  tiles first give the load at full load — **TPS** (transactions per second), **TPH** (transactions per hour = TPS ×
-  3,600) and **Iterations per hour** (with iterations per second = Vusers ÷ pacing) — then Load generators, Test length,
-  Steady state, and the whole test: **Total iterations** (the full-load ones + those while Vusers start and stop) and
-  **Total transactions** (total iterations × transactions per iteration — the test-data rows if each takes one), and
-  Hits per second. Example: 10 Vusers, pacing 50 s, 10 transactions → 0.2 iterations per second, 720 per hour,
+  tiles first give the load at full load — **Transactions per second (TPS)**, **Transactions per hour (TPH)** = TPS ×
+  3,600, **Iterations per hour** (all Vusers, and per Vuser) — then **One iteration takes** (transactions × response time
+  + think time, and whether it fits in the pacing: where a change of think time shows), Load generators, **Total test
+  duration** (ramp-up + full load + ramp-down and the last iterations), **Full load (steady state)** with its clock times,
+  **Total iterations (whole test)** (all Vusers, about how many per Vuser, the full-load ones + those while Vusers start
+  and stop) and **Total transactions (whole test)** (total iterations × transactions per iteration — the test-data rows
+  if each takes one), and Requests per second (hits). If one iteration is longer than its pacing, the TPS, TPH and
+  iterations show what LRE will really reach (in amber), not what the pacing asks for. **How to read these numbers**,
+  under the tiles, works the figures out with the plan's own numbers. Example: 10 Vusers, pacing 50 s, 10 transactions → 0.2 iterations per second, 720 per hour,
   7,200 TPH, 2 TPS; with a 60-min full load the whole test runs 745 iterations, 7,450 transactions.
 - **Checks**: what must be filled in, what cannot work and why, and the response-time limit of each script.
 - **Details**:

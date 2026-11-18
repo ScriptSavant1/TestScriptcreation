@@ -307,3 +307,30 @@ describe('Workload engine — my own ramp (as in an LRE test)', () => {
     expect(new Set(ends).size).toBe(1);
   });
 });
+
+describe('Workload engine — the figures on the result tiles', () => {
+  // 10 Vusers, pacing 50 s, 10 transactions: 10 ÷ 50 = 0.2 iterations per second = 720 per hour; × 10 = 2 TPS = 7,200 TPH
+  const g = (think) => [{ name: 'S', method: 'vusers', vusers: 10, txPerIter: 10, rtAvg: 1, thinkPerIter: think, pacing: { mode: 'fixed', fixed: 50 } }];
+
+  test('iterations per second and per hour, TPS and TPH at full load', () => {
+    const t = run(g(27)).totals;
+    expect([t.ips, t.itersPerHour, t.tps, t.perHour]).toEqual([0.2, 720, 2, 7200]);
+    expect(t.reachTps).toBeNull();
+  });
+
+  test('think time inside the pacing changes the iteration, not the TPS', () => {
+    const a = run(g(0)), b = run(g(27));
+    expect([a.groups[0].it.mean, b.groups[0].it.mean]).toEqual([10, 37]);
+    expect([a.totals.tps, b.totals.tps]).toEqual([2, 2]);
+  });
+
+  test('an iteration longer than the pacing: what LRE reaches — 10 × 10 ÷ 70 s = 1.43 TPS — and the summary says so', () => {
+    const r = run(g(60));
+    expect(near(r.totals.reachTps, 100 / 70, 1e-9)).toBe(true);
+    expect(near(r.totals.reachIps, 10 / 70, 1e-9)).toBe(true);
+    // the counts and the chart follow the real cycle (70 s), not the pacing: about 3,600 ÷ 70 × 10 = 514 in the hour
+    expect(Math.abs(r.totals.iters.steady - 514)).toBeLessThanOrEqual(2);
+    expect(near(Math.max(...r.timeline.map((x) => x.tps)), 100 / 70, 1e-6)).toBe(true);
+    expect(r.summary).toMatch(/1\.43 transactions per second \(TPS\).*not the 2 TPS the pacing asks for/);
+  });
+});

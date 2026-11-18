@@ -268,6 +268,8 @@
       if (pMin < it.mean - EPS) {
         out.status = "infeasible";
         const reach = V * T / Math.max(it.mean, P);
+        // what LRE will really reach: each Vuser starts its next iteration only when the last one ends
+        out.reachTps = reach; out.reachIps = V / Math.max(it.mean, P);
         const fix = sizedByTps ? ` Use at least ${Math.max(1, ceilE(lam * it.mean * (1 + h)))} Vusers` : ` Lengthen the pacing to at least ${Math.ceil(it.mean * (1 + h))} s`;
         out.checks.push({ level: "bad", code: "pacing-too-short", text: `${out.name}: one iteration takes about ${sec1(it.mean)} but the ${kind === "random" ? "shortest " : ""}pacing is ${sec1(pMin)} — iterations overrun and the TPS drops to about ${round(reach, 2)}.${fix}.` });
       } else if (pMin < it.worst - EPS) {
@@ -803,8 +805,10 @@
     const steadyTo = holdMarks.length ? holdMarks[holdMarks.length - 1].to : 0;
     const firstFull = wl === "real-world" ? steadyFrom : (marks.find((m) => m.type === "hold") || { from: 0 }).from;
     groups.forEach((g) => { g.iters = { rampUp: 0, steady: 0, rampDown: 0, total: 0 }; });
+    // a Vuser starts an iteration every pacing — or, when one iteration is longer than the pacing, every iteration
+    const cycle = (g) => (g.reachIps != null && g.it && g.it.mean != null ? Math.max(g.pacing.mean, g.it.mean) : g.pacing.mean);
     users.forEach((u) => {
-      const g = groups[u.group], P = g.pacing.mean;
+      const g = groups[u.group], P = cycle(g);
       const all = itersIn(u.start, u.stop, P, -Infinity, Infinity);
       const st = itersIn(u.start, u.stop, P, steadyFrom, steadyTo);
       const up = itersIn(u.start, u.stop, P, -Infinity, steadyFrom);
@@ -830,7 +834,7 @@
     const tl = [];
     for (let t = 0; t <= res.duration; t += bucket) tl.push({ t, vusers: 0, tps: 0 });
     users.forEach((u) => {
-      const g = groups[u.group], rate = g.T / g.pacing.mean;
+      const g = groups[u.group], rate = g.T / cycle(g);
       for (let i = Math.max(0, Math.ceil(u.start / bucket)); i < tl.length && tl[i].t < u.stop; i++) { tl[i].vusers++; tl[i].tps += rate; }
     });
     res.timeline = tl; res.bucket = bucket;
@@ -844,6 +848,9 @@
       perHour: sum((g) => g.tps) * 3600,
       // iterations at full load: per second (Vusers ÷ pacing, added up over the scripts) and per hour
       ips: sum((g) => g.ips || 0), itersPerHour: sum((g) => g.ips || 0) * 3600,
+      // when an iteration is longer than its pacing: the TPS and iterations LRE will really reach (null when all fit)
+      reachTps: groups.some((g) => g.reachTps != null) ? sum((g) => (g.reachTps != null ? g.reachTps : g.tps || 0)) : null,
+      reachIps: groups.some((g) => g.reachIps != null) ? sum((g) => (g.reachIps != null ? g.reachIps : g.ips || 0)) : null,
       iters: { rampUp: sum((g) => g.iters.rampUp), steady: sum((g) => g.iters.steady), rampDown: sum((g) => g.iters.rampDown), total: sum((g) => g.iters.total) },
       tx: { steady: sum((g) => g.tx.steady), total: sum((g) => g.tx.total) },
     };
@@ -942,7 +949,8 @@
     if (res.workload !== "basic-group" && starts > 1) s.push(`Users are added in ${starts} steps, a few at a time, with a hold after each step (see the LRE settings).`);
     else if (start && !start.all) s.push(`Start ${start.perStep} user${start.perStep === 1 ? "" : "s"} every ${words(start.every)}; all are running after ${words((Math.ceil(start.count / start.perStep) - 1) * start.every)}.`);
     else if (res.workload === "basic-group") s.push(`Each script starts its users a few at a time; all reach full load after ${words(res.firstFull)}.`);
-    s.push(`At full load: ${round(t.tps, 2)} TPS (transactions per second) = ${Math.round(t.perHour).toLocaleString("en-GB")} TPH (transactions per hour), from ${Math.round(t.itersPerHour).toLocaleString("en-GB")} iterations per hour (${round(t.ips, 3)} per second)${Math.abs(t.tpsMax - t.tpsMin) > 1e-6 ? `, between ${round(t.tpsMin, 2)} and ${round(t.tpsMax, 2)} because the pacing is random` : ""}${res.peakVusers > t.vusers ? ` at 100% of the target, and about ${round(t.tps * res.peakVusers / t.vusers, 2)} at the highest step` : ""}.`);
+    const over = t.reachTps != null, tps = over ? t.reachTps : t.tps, ips = over ? t.reachIps : t.ips;
+    s.push(`At full load: ${round(tps, 2)} transactions per second (TPS) = ${Math.round(tps * 3600).toLocaleString("en-GB")} transactions per hour (TPH), from ${Math.round(ips * 3600).toLocaleString("en-GB")} iterations per hour (${round(ips, 3)} per second)${over ? ` — not the ${round(t.tps, 2)} TPS the pacing asks for: an iteration takes longer than the pacing` : ""}${Math.abs(t.tpsMax - t.tpsMin) > 1e-6 ? `, between ${round(t.tpsMin, 2)} and ${round(t.tpsMax, 2)} because the pacing is random` : ""}${res.peakVusers > t.vusers ? ` at 100% of the target, and about ${round(t.tps * res.peakVusers / t.vusers, 2)} at the highest step` : ""}.`);
     s.push(`The whole test takes about ${words(res.duration)} and runs ${t.iters.total.toLocaleString("en-GB")} iterations in total, ramp-up and ramp-down included — the number of test-data rows used if each iteration takes a new one.`);
     return s.join(" ");
   }

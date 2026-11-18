@@ -511,7 +511,7 @@ function calc() {
     $("#summary").className = "ds-note warn wm-summary";
     $("#summary").innerHTML = `<div class="wm-empty-res"><b>Almost there — the plan appears here when these are filled in:</b><ol>${(todo.length ? todo : r.checks.filter((c) => c.level === "bad"))
       .map((c) => `<li>${esc(c.text)}${goto(c)}${c.many ? showNeed() : ""}</li>`).join("")}</ol></div>`;
-    $("#tiles").innerHTML = ""; $("#chart").innerHTML = ""; $("#chart").style.display = "none"; $(".wm-legend").style.display = "none"; $("#phbar").innerHTML = ""; $("#phases").innerHTML = ""; $("#lre").textContent = "";
+    $("#tiles").innerHTML = ""; $("#res-notes").innerHTML = ""; $("#chart").innerHTML = ""; $("#chart").style.display = "none"; $(".wm-legend").style.display = "none"; $("#phbar").innerHTML = ""; $("#phases").innerHTML = ""; $("#lre").textContent = "";
     $("#tab-per").innerHTML = perScript(r); $("#tab-lg").innerHTML = ""; $("#tab-how").innerHTML = how(r);
     $("#setup").innerHTML = `<p class="wm-muted" style="margin:0">The LRE setup appears here when the plan is complete — see Checks.</p>`;
     return;
@@ -521,22 +521,51 @@ function calc() {
   $("#summary").textContent = (bad ? "The plan has problems to fix (see Checks). As it stands: " : "") + r.summary;
   const t = r.totals, range = Math.abs(t.tpsMax - t.tpsMin) > 1e-6;
   const ph = phases(r);
-  // the load at full load first (the names a performance tester uses: TPS, TPH, iterations per hour), then the whole test
-  const T = r.groups.length === 1 ? r.groups[0].T : null;   // transactions per iteration, when there is one script
+  // Names both a tester and a manager read: "Transactions per second (TPS)". The load at full load first, then one
+  // iteration (where think time and response time show), the test, and the totals of the whole test.
+  const one = r.groups.length === 1 ? r.groups[0] : null;   // one script: its own figures in the notes
+  const T = one ? one.T : null;
+  const short = (s) => E.words(Math.round(s));
   const steadyMin = Math.round((r.steadyTo - r.steadyFrom) / 60);
+  const over = t.reachTps != null;                          // an iteration longer than its pacing: what LRE will reach
+  const tps = over ? t.reachTps : t.tps, ips = over ? t.reachIps : t.ips;
+  const perVu = (x) => (t.vusers ? x / t.vusers : 0);
+  const n1 = (x) => String(+x.toFixed(x < 10 ? 2 : 1));    // 0.2, 72, 74.5 — no padding zeros
+  const overNote = over ? ` — not ${fmt(t.tps, 2)}: an iteration takes longer than the pacing (see Checks)` : "";
   const tiles = [
-    ["Vusers", fmt(r.peakVusers), r.peakVusers > t.vusers ? `${fmt(t.vusers)} at 100%` : `${r.groups.length} script${r.groups.length > 1 ? "s" : ""}`],
-    ["TPS — transactions per second", fmt(t.tps, 2), range ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)} (random pacing) · at full load` : "at full load"],
-    ["TPH — transactions per hour", fmt(t.perHour), "at full load · TPS × 3,600"],
-    ["Iterations per hour", t.ips ? fmt(t.itersPerHour) : "—", t.ips ? `at full load · ${String(+t.ips.toFixed(3))} per second (Vusers ÷ pacing)` : "depends on the response time"],
-    ["Load generators", r.lgTotal == null ? "?" : fmt(r.lgTotal), r.lgTotal == null ? "machine size needed" : r.lg.filter((x) => x.total).map((x) => `${x.pool.name}: ${x.total}${x.extra ? ` (${x.needed} + ${x.extra} extra)` : ""}`).join(" · ")],
-    ["Test length", E.hms(r.duration), ph.lengthNote],
-    [ph.tileLabel, ph.tileValue, ph.tileNote],
-    ["Total iterations — whole test", fmt(t.iters.total), `${fmt(t.iters.steady)} in the ${steadyMin ? fmt(steadyMin) + "-min " : ""}full load + ${fmt(t.iters.total - t.iters.steady)} while Vusers start and stop`],
-    ["Total transactions — whole test", fmt(t.tx.total), `${T ? "total iterations × " + fmt(T) + " · " : ""}test-data rows if each takes one`],
+    ["Virtual users (Vusers)", fmt(r.peakVusers), r.peakVusers > t.vusers ? `${fmt(t.vusers)} at 100%` : `${r.groups.length} script${r.groups.length > 1 ? "s" : ""}`],
+    ["Transactions per second (TPS)", fmt(tps, 2), (range && !over ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)} (random pacing) · ` : "") + "at full load" + overNote, over],
+    ["Transactions per hour (TPH)", fmt(tps * 3600), "at full load · TPS × 3,600", over],
+    ["Iterations per hour", ips ? fmt(ips * 3600) : "—", ips ? `at full load, all Vusers · ${n1(perVu(ips * 3600))} per Vuser` : "depends on the response time", over],
   ];
-  if (t.hitsPerSec) tiles.push(["Hits per second", fmt(t.hitsPerSec, 1), "requests at full load"]);
-  $("#tiles").innerHTML = tiles.map(([k, v, s]) => `<div class="ds-tile"><div class="ds-tile-label">${k}</div><div class="ds-tile-value">${v}</div><small>${esc(s)}</small></div>`).join("");
+  if (one && one.it && one.it.mean != null) {
+    const it = one.it, P = one.pacing && one.pacing.mean, th = it.think.mean;
+    const parts = [`${fmt(T)} × ${n1(it.rtMean / T)} s response`].concat(th ? [`${n1(th - (it.think.wait || 0))} s think`] : []).concat(it.think.wait ? [`${n1(it.think.wait)} s fixed waits`] : []);
+    const fits = P == null || one.pacing.kind === "asap" || one.pacing.kind === "after" ? "" : it.mean <= P + 1e-9 ? ` · fits in the ${n1(P)} s pacing` : ` · longer than the ${n1(P)} s pacing`;
+    tiles.push(["One iteration takes", n1(it.mean) + " s", parts.join(" + ") + fits, P != null && it.mean > P + 1e-9]);
+  }
+  tiles.push(
+    ["Load generators", r.lgTotal == null ? "?" : fmt(r.lgTotal), r.lgTotal == null ? "machine size needed" : r.lg.filter((x) => x.total).map((x) => `${x.pool.name}: ${x.total}${x.extra ? ` (${x.needed} + ${x.extra} extra)` : ""}`).join(" · ")],
+    ["Total test duration", E.hms(r.duration), ph.lengthNote],
+    [ph.tileLabel === "Steady state" ? "Full load (steady state)" : ph.tileLabel, ph.tileValue, ph.tileNote + (ph.tileLabel === "Steady state" ? " — measure here" : "")],
+    ["Total iterations (whole test)", fmt(t.iters.total), `all Vusers · about ${n1(perVu(t.iters.total))} per Vuser · ${fmt(t.iters.steady)} at full load + ${fmt(t.iters.total - t.iters.steady)} while Vusers start and stop`],
+    ["Total transactions (whole test)", fmt(t.tx.total), `${T ? fmt(t.iters.total) + " iterations × " + fmt(T) + " · " : ""}test-data rows if each takes one`],
+  );
+  if (t.hitsPerSec) tiles.push(["Requests per second (hits)", fmt(t.hitsPerSec * (over && t.tps ? tps / t.tps : 1), 1), "at full load"]);
+  // how to read them — with this plan's own numbers
+  const howLines = [`<b>At full load</b> = while every Vuser runs (the steady state, ${steadyMin ? fmt(steadyMin) + " min" : "the held step"}): the figures to compare with your target and with LRE's results.`];
+  if (one && one.pacing && one.pacing.mean && !over) {
+    const P = one.pacing.mean;
+    howLines.push(`${fmt(one.vusers)} Vusers ÷ ${n1(P)} s pacing = <b>${n1(one.ips)} iterations per second</b> (${fmt(one.ips * 3600)} per hour) → × ${fmt(T)} transactions = <b>${fmt(one.tps, 2)} TPS</b> → × 3,600 = <b>${fmt(one.tps * 3600)} TPH</b>.`);
+    howLines.push(`Think time and response time do not change these numbers while one iteration (${n1(one.it.mean)} s) fits in the pacing (${n1(P)} s). They change the iteration time, the Checks and, a little, the test duration (the last iterations finish).`);
+  } else if (over) {
+    howLines.push(`An iteration takes longer than its pacing, so each Vuser starts its next iteration late: LRE will reach about <b>${fmt(t.reachTps, 2)} TPS</b>, not the ${fmt(t.tps, 2)} the pacing asks for. Checks says how to fix it.`);
+  } else {
+    howLines.push("For each script: Vusers ÷ pacing = iterations per second → × its transactions per iteration = its TPS; the tiles add the scripts up. Details › Per script shows each one.");
+  }
+  howLines.push(`<b>Whole test</b> totals include the ramp-up and ramp-down — use them for test data (one row per iteration or per transaction).`);
+  $("#res-notes").innerHTML = `<summary>How to read these numbers</summary><ul>${howLines.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+  $("#tiles").innerHTML = tiles.map(([k, v, s, warn]) => `<div class="ds-tile${warn ? " wm-tile-warn" : ""}"><div class="ds-tile-label">${k}</div><div class="ds-tile-value">${v}</div><small>${esc(s)}</small></div>`).join("");
   drawChart(r);
   drawPhases(ph, r);
   $("#lre").textContent = r.lre + "\n\n" + ph.analysisText;
@@ -729,7 +758,7 @@ function phases(r) {
   if (!stepped) {
     const h = holds[0] || { from: 0, to: 0 };
     out.tileLabel = "Steady state"; out.tileValue = E.hms(h.to - h.from); out.tileNote = `${E.hms(h.from)} → ${E.hms(h.to)} on the test clock`;
-    out.lengthNote = `up ${short(up)} · steady ${short(h.to - h.from)} · down ${short(r.duration - h.to)}`;
+    out.lengthNote = `ramp-up ${short(up)} + full load ${short(h.to - h.from)} + ramp-down and last iterations ${short(r.duration - h.to)}`;
     out.analysisText = `Steady state (full load) for analysis: ${E.hms(h.from)} to ${E.hms(h.to)} (${E.hms(h.to - h.from)}) after the scenario starts.`;
   } else {
     const each = holds.map((m) => m.to - m.from);
