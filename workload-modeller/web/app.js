@@ -155,10 +155,10 @@ function scriptCard(g) {
         ${num("Vusers per machine", "perLg", g.perLg, "", "your figure for this script, e.g. from a past run — replaces the rule", "adv")}
       </div></div>
       <div><p class="wm-sub">One iteration <span class="wm-subh">— one run through the script</span></p><div class="wm-grid">
-        ${num("Transactions", "txPerIter", g.txPerIter, "", g.txNames && g.txNames.length ? "in the script: " + esc(g.txNames.length > 4 ? g.txNames.slice(0, 3).join(", ") + " and " + (g.txNames.length - 3) + " more" : g.txNames.join(", ")) : "that count for the TPS")}
-        ${num("Think time", "thinkPerIter", g.thinkPerIter, "s", "all think times of one iteration added up (lr_think_time, load.thinkTime)")}
-        ${num("Fixed waits", "waitPerIter", g.waitPerIter, "s", "all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full", g.waitPerIter > 0 ? "" : "adv")}
-        ${num("Response time", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}
+        ${num("Transactions per iteration", "txPerIter", g.txPerIter, "", g.txNames && g.txNames.length ? "in the script: " + esc(g.txNames.length > 4 ? g.txNames.slice(0, 3).join(", ") + " and " + (g.txNames.length - 3) + " more" : g.txNames.join(", ")) : "that count for the TPS")}
+        ${num("Think time — total per iteration", "thinkPerIter", g.thinkPerIter, "s", "all think times of one iteration added up, not per transaction — e.g. 9 × lr_think_time(3) = 27 s")}
+        ${num("Fixed waits — total per iteration", "waitPerIter", g.waitPerIter, "s", "all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full", g.waitPerIter > 0 ? "" : "adv")}
+        ${num("Response time — per transaction", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}
         <label class="wm-f adv">Response time from<select class="ds-field" data-k="rtSource">${opt(RTSRC, g.rtSource)}</select></label>
         ${num("90th percentile", "rt90", g.rt90, "s", "optional — for the worst case", "adv")}
         ${num("Requests", "requestsPerIter", g.requestsPerIter, "", "per iteration — for hits per second", "adv")}
@@ -255,8 +255,8 @@ function tvRow(g) {
     + (open ? `<tr class="wm-tv-card" data-card-of="${g.id}"><td colspan="11"><div class="wm-tv-cardin">${scriptCard(Object.assign({}, g, { folded: false }))}</div></td></tr>` : "");
 }
 function tvTable() {
-  return `<table class="wm-tt"><thead><tr><th class="c-name">Script</th><th>Target type</th><th>Target</th><th title="Transactions per iteration">Transactions</th>
-    <th title="Think time per iteration, as recorded">Think time</th><th title="Average response time per transaction">Response time</th><th>Pacing</th><th>Think time at replay</th>
+  return `<table class="wm-tt"><thead><tr><th class="c-name">Script</th><th>Target type</th><th>Target</th><th title="Transactions per iteration">Transactions / iteration</th>
+    <th title="All think times of one iteration added up — not per transaction">Think time (total)</th><th title="Average response time of one transaction">Response time (per tx)</th><th>Pacing</th><th>Think time at replay</th>
     <th class="num" title="Worked out">Vusers</th><th class="num" title="Worked out">TPS</th><th><span class="wm-vh">Remove</span></th></tr></thead><tbody>${state.groups.map(tvRow).join("")}</tbody></table>`;
 }
 const tvWidth = () => {
@@ -521,14 +521,19 @@ function calc() {
   $("#summary").textContent = (bad ? "The plan has problems to fix (see Checks). As it stands: " : "") + r.summary;
   const t = r.totals, range = Math.abs(t.tpsMax - t.tpsMin) > 1e-6;
   const ph = phases(r);
+  // the load at full load first (the names a performance tester uses: TPS, TPH, iterations per hour), then the whole test
+  const T = r.groups.length === 1 ? r.groups[0].T : null;   // transactions per iteration, when there is one script
+  const steadyMin = Math.round((r.steadyTo - r.steadyFrom) / 60);
   const tiles = [
     ["Vusers", fmt(r.peakVusers), r.peakVusers > t.vusers ? `${fmt(t.vusers)} at 100%` : `${r.groups.length} script${r.groups.length > 1 ? "s" : ""}`],
-    ["Expected TPS", fmt(t.tps, 2), range ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)}` : `${fmt(t.perHour)} per hour`],
+    ["TPS — transactions per second", fmt(t.tps, 2), range ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)} (random pacing) · at full load` : "at full load"],
+    ["TPH — transactions per hour", fmt(t.perHour), "at full load · TPS × 3,600"],
+    ["Iterations per hour", t.ips ? fmt(t.itersPerHour) : "—", t.ips ? `at full load · ${String(+t.ips.toFixed(3))} per second (Vusers ÷ pacing)` : "depends on the response time"],
     ["Load generators", r.lgTotal == null ? "?" : fmt(r.lgTotal), r.lgTotal == null ? "machine size needed" : r.lg.filter((x) => x.total).map((x) => `${x.pool.name}: ${x.total}${x.extra ? ` (${x.needed} + ${x.extra} extra)` : ""}`).join(" · ")],
     ["Test length", E.hms(r.duration), ph.lengthNote],
     [ph.tileLabel, ph.tileValue, ph.tileNote],
-    ["Iterations", fmt(t.iters.total), `${fmt(t.iters.steady)} at full load`],
-    ["Transactions", fmt(t.tx.total), "test data if one row each"],
+    ["Total iterations — whole test", fmt(t.iters.total), `${fmt(t.iters.steady)} in the ${steadyMin ? fmt(steadyMin) + "-min " : ""}full load + ${fmt(t.iters.total - t.iters.steady)} while Vusers start and stop`],
+    ["Total transactions — whole test", fmt(t.tx.total), `${T ? "total iterations × " + fmt(T) + " · " : ""}test-data rows if each takes one`],
   ];
   if (t.hitsPerSec) tiles.push(["Hits per second", fmt(t.hitsPerSec, 1), "requests at full load"]);
   $("#tiles").innerHTML = tiles.map(([k, v, s]) => `<div class="ds-tile"><div class="ds-tile-label">${k}</div><div class="ds-tile-value">${v}</div><small>${esc(s)}</small></div>`).join("");

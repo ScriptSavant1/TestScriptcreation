@@ -91,6 +91,19 @@
           <input type="file" id="in-fill" multiple accept=".zip,.har,.json,.xlsx" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Fill from scripts</label></div>
       <div class="ds-card-body">
+        <details class="wm-more wm-notes" id="script-notes" open>
+          <summary>Before you fill in a script — what each box means</summary>
+          <ul>
+            <li><b>One iteration</b> = one run through the script's Action part. Login in vuser_init and logout in vuser_end run once per Vuser and are not counted.</li>
+            <li><b>Transactions per iteration</b>: how many transactions one iteration runs — they make the TPS.</li>
+            <li><b>Think time — total per iteration</b>: every think time of one iteration <b>added up</b>, not per transaction. 10 transactions with 3 s between them = 9 × 3 s = <b>27 s</b>. Dropping the script ZIP fills it in.</li>
+            <li><b>Response time — per transaction</b>: the average of <b>one</b> transaction (your SLA will do), not the whole iteration.</li>
+            <li><b>Pacing</b>: how often each Vuser starts a new iteration. With a fixed pacing the load is set by three numbers only:<br>
+              <span class="wm-notes-f">iterations per second = Vusers ÷ pacing</span><span class="wm-notes-f">TPS = iterations per second × transactions per iteration</span><span class="wm-notes-f">TPH = TPS × 3,600 · iterations per hour = iterations per second × 3,600</span></li>
+            <li>Think time and response time do not change those numbers — one iteration (transactions × response time + think time) only has to <b>fit inside the pacing</b>. If it does not, the iterations start late and the load drops; Checks says so.</li>
+            <li><b>Example</b>: 10 Vusers, pacing 50 s, 10 transactions → 10 ÷ 50 = 0.2 iterations per second = 720 iterations per hour → 720 × 10 = 7,200 TPH = 2 TPS. The iteration (10 × 1 s + 27 s = 37 s) fits in 50 s.</li>
+          </ul>
+        </details>
         <div class="wm-dropzone" id="dropzone" tabindex="0" role="button" aria-label="Fill from scripts: choose script ZIPs or HAR files">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
           <div><b>Drop all your scripts here — or click to choose them</b><span class="wm-dz-more">Script ZIPs (Web HTTP/HTML or DevWeb; one ZIP may hold several scripts), HAR recordings, or the filled-in Excel sheet.

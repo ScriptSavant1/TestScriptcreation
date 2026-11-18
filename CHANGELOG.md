@@ -6,6 +6,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### Clearer results and inputs
+
+- Result tiles named as testers say them: **TPS — transactions per second**, **TPH — transactions per hour**, **Iterations per hour** (with iterations per second) — all at full load — then **Total iterations — whole test** and **Total transactions — whole test**, each saying what it adds up. The summary uses the same names.
+- Scripts: notes at the top ("Before you fill in a script — what each box means") with the formulas and a worked example; the boxes say "Think time — total per iteration", "Response time — per transaction", "Transactions per iteration".
+
 #### Test length closer to LRE; clearer think-time fields
 
 - The last iterations finish within one slow iteration after the last stop, not one pacing: a Vuser waiting for its next pacing slot leaves at once (an LRE run with a 360 s pacing ended 3 s after its stop ramp). One pacing only when no response time is known.

@@ -492,6 +492,12 @@ $("#btn-reset-all").addEventListener("click", () => clearWith("Everything cleare
 }));
 
 try { view(localStorage.getItem("wm-view") !== "detail"); } catch (e) { view(true); }
+// the notes at the top of Scripts: open until the user folds them; remembered
+(() => {
+  const d = $("#script-notes"); if (!d) return;
+  try { if (localStorage.getItem("wm-notes") === "closed") d.open = false; } catch (e) { /* private window */ }
+  d.addEventListener("toggle", () => { try { localStorage.setItem("wm-notes", d.open ? "open" : "closed"); } catch (e) { /* private window */ } });
+})();
 renderTest(); renderScripts(); renderPools(); renderProtoTable(); cal(); calc();
 
 /* ---------- team settings (config/workload-settings.json on the server) ----------

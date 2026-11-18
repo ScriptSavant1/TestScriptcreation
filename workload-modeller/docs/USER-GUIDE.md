@@ -52,6 +52,9 @@ The page works out the plan as you type. A section you have not touched keeps se
 - Detailed view: the licence limit, and the steps and hold time of stepped tests.
 
 ### Scripts
+- **Before you fill in a script — what each box means**: the notes at the top of Scripts (open until you fold them)
+  explain one iteration, transactions per iteration, think time as the total of one iteration, response time per
+  transaction and pacing, with the three formulas and a worked example.
 - **Fill from scripts**: script ZIPs (Web HTTP/HTML or DevWeb; one ZIP may hold several scripts) and HAR files. The
   import note lists what was read and anything to check: transactions that run once at the start (vuser_init /
   load.initialize) or at the end (vuser_end / load.finalize) and are not counted, transactions inside other
@@ -117,8 +120,13 @@ Choose the **machine type** of each pool:
 - Disk space is not used in the sizing.
 
 ### Results
-- **Result**: a plain-language summary, the tiles (Vusers, TPS, load generators, test length, steady state,
-  iterations, transactions, hits per second), the chart, and the phases with their times on the test clock.
+- **Result**: a plain-language summary, the tiles, the chart, and the phases with their times on the test clock. The
+  tiles first give the load at full load — **TPS** (transactions per second), **TPH** (transactions per hour = TPS ×
+  3,600) and **Iterations per hour** (with iterations per second = Vusers ÷ pacing) — then Load generators, Test length,
+  Steady state, and the whole test: **Total iterations** (the full-load ones + those while Vusers start and stop) and
+  **Total transactions** (total iterations × transactions per iteration — the test-data rows if each takes one), and
+  Hits per second. Example: 10 Vusers, pacing 50 s, 10 transactions → 0.2 iterations per second, 720 per hour,
+  7,200 TPH, 2 TPS; with a 60-min full load the whole test runs 745 iterations, 7,450 transactions.
 - **Checks**: what must be filled in, what cannot work and why, and the response-time limit of each script.
 - **Details**:
   - **LRE setup** — one row per LRE group, by script name (a script split to fill the machines has one row per
