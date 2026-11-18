@@ -47,7 +47,10 @@ async function dlZip(fmt) {
     // Parameterization files
     if (S.params && S.params.length > 0) {
       zip.file("ParameterFile.prm", S.scripts.prm || genParamFilePrm());
-      zip.file("collection_data.dat", S.scripts.dat || genCollectionDataCsv());
+      // the shared data file, then a file of its own for each parameter given one (Test data table)
+      const _files = genParamDataFiles();
+      if (_files.collection_data !== undefined) zip.file("collection_data.dat", S.scripts.dat || _files.collection_data);
+      Object.keys(_files).forEach((f) => { if (f !== "collection_data") zip.file(f + ".dat", _files[f]); });
     }
     const blob = await zip.generateAsync({
       type: "blob",
@@ -86,7 +89,9 @@ async function dlZip(fmt) {
     );
     // Parameterization data file
     if (S.params && S.params.length > 0) {
-      zip.file("collection_data.csv", S.scripts.csv || genCollectionDataCsv());
+      const _files = genParamDataFiles();
+      if (_files.collection_data !== undefined) zip.file("collection_data.csv", S.scripts.csv || _files.collection_data);
+      Object.keys(_files).forEach((f) => { if (f !== "collection_data") zip.file(f + ".csv", _files[f]); });
     }
     // DevWebSdk.d.ts — the one copy the server serves (src/web/public); a warning when it cannot be loaded
     let sdkAdded = false;
@@ -193,6 +198,8 @@ async function analyze() {
     setMsg("Detecting transactions...", "Finding START/END markers in HAR");
     await tick();
     detectMarkers(S.entries1); // sets isMarker, txnName, S.txns
+    // the user's own transaction edits (portal/studio-txn.js, kept by request id), applied again on every analysis
+    if (typeof studioAfterMarkers === "function") studioAfterMarkers(S.entries1);
 
     setMsg("Applying filters...", "Removing static resources & noise");
     await tick();
@@ -557,6 +564,10 @@ async function analyze() {
       S.harWarning = S.harWarning ? S.harWarning + " | " + ssoMsg : ssoMsg;
     }
 
+    // the user's own Test data choices (Script Studio page: renamed, removed, added parameters, how values are taken),
+    // applied again on every analysis
+    if (typeof studioAfterParams === "function") studioAfterParams();
+
     // Correlation Advisor — scan request bodies for values that came from prior responses.
     // Runs AFTER all existing correlation engines so it skips already-handled values.
     // Results go to S.advisorCandidates; rendered by renderAdvisorPanel() below.
@@ -713,9 +724,10 @@ async function _generateAndRenderScripts() {
   document.getElementById("code-body").textContent =
     S.scripts[S.tab] || "// No content";
 
-  // Silently record Studio usage — fires when analysis completes (not on download).
-  // Mirrors the server-side analytics.finishEvent() used by the converter tools.
-  try {
+  // Silently record Studio usage — once per opened recording (Script Studio reads it again after each filter or
+  // transaction change; loadFile() starts a new recording). Mirrors analytics.finishEvent() of the converter tools.
+  if (!S._usageSent) try {
+    S._usageSent = true;
     const _entries = (S.entries1 || []).filter(function (e) {
       return !e.filtered && !e.isMarker;
     });

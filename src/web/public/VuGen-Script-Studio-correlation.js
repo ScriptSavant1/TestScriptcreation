@@ -1,7 +1,8 @@
 ﻿// VuGen Script Studio — HAR Processing + Correlation Engine
 // Extracted from VuGen-Script-Studio.html — Phase 3b
 // Dependencies: VuGen-Script-Studio-constants.js (S, STATIC_CT, STATIC_EXT, NOISY, SKIP_HDRS, DYNAMIC_PATTERNS,
-//               SESSION_COOKIE_NAMES, CSRF_HEADER_NAMES, CSRF_HEADER_PATTERN, AUTH_HEADER_NAMES)
+//               SESSION_COOKIE_NAMES, CSRF_HEADER_NAMES, CSRF_HEADER_PATTERN, AUTH_HEADER_NAMES),
+//               shared/request-filter.js (RequestFilter — which requests go into the script; loaded first)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HAR PROCESSING
@@ -241,143 +242,27 @@ function parseNetLog(netlog) {
   return entries;
 }
 
-// ─── Resource type classification ─────────────────────────────────────────
-// Maps a Studio/Recorder entry to a Chrome DevTools resource type string.
-// Priority: Chrome's own _resourceType field → MIME type → URL extension → method.
-function classifyHarEntry(entry) {
-  const rt = (entry._resourceType || "").toLowerCase();
-  if (rt === "fetch" || rt === "xhr") return "fetch";
-  if (rt === "document") return "document";
-  if (rt === "stylesheet") return "stylesheet";
-  if (rt === "script") return "script";
-  if (rt === "font") return "font";
-  if (rt === "image") return "image";
-  if (rt === "media") return "media";
-  if (rt === "manifest") return "manifest";
-  if (rt === "websocket") return "websocket";
-  if (rt === "wasm") return "wasm";
-  if (rt && rt !== "other") return rt;
-
-  // Fallback 1: MIME type
-  const mime = (entry.ct || "").toLowerCase();
-  if (mime === "text/css") return "stylesheet";
-  if (mime.includes("javascript") || mime === "application/x-javascript") return "script";
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("font/") || mime.includes("woff") || mime === "application/x-font-ttf") return "font";
-  if (mime.startsWith("audio/") || mime.startsWith("video/")) return "media";
-  if (mime === "application/manifest+json" || mime === "application/webmanifest") return "manifest";
-  if (mime === "application/wasm") return "wasm";
-  if (mime === "text/html" || mime === "application/xhtml+xml") return "document";
-  if (mime.includes("json") || mime.includes("xml") || mime === "text/plain") return "fetch";
-
-  // Fallback 2: URL extension
-  const urlPath = (entry.url || "").split("?")[0].toLowerCase();
-  if (/\.(js|mjs|cjs)$/.test(urlPath)) return "script";
-  if (/\.css$/.test(urlPath)) return "stylesheet";
-  if (/\.(png|jpg|jpeg|gif|svg|webp|ico|bmp|avif)$/.test(urlPath)) return "image";
-  if (/\.(woff2?|ttf|eot|otf)$/.test(urlPath)) return "font";
-  if (/\.(mp4|webm|ogg|mp3|wav|flac|aac)$/.test(urlPath)) return "media";
-  if (/\.html?$/.test(urlPath)) return "document";
-  if (/\.wasm$/.test(urlPath)) return "wasm";
-
-  // Fallback 3: HTTP method
-  const method = (entry.method || "GET").toUpperCase();
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) return "fetch";
-
-  return "other";
-}
-
-// Prefetches of a page that the browser then opened (same URL, a later GET that is not a prefetch) — the same rule
-// as the Recorder (portal/recorder-core.js): the real navigation is scripted, the prefetch would load the page twice
-function _studioPrefetchDuplicates(entries) {
-  const dup = new Set(), later = new Set();
-  const isPf = (e) => /prefetch|prerender/i.test((e.hdrsMap || {})["sec-purpose"] || (e.hdrsMap || {})["purpose"] || "");
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const e = entries[i];
-    if (e.isMarker || (e.method || "GET") !== "GET") continue;
-    if (isPf(e)) {
-      if (later.has(e.url)) dup.add(e);
-    } else later.add(e.url);
-  }
-  return dup;
-}
-
+// Which requests go into the script: the Recorder's rule set (shared/request-filter.js), so the same recording
+// gives the same script in every tool (BUG-142). Analytics / ads and OPTIONS are left out unless the page switches
+// that off (S.leaveOut = { ads, options }; both on when not set, as the Recorder's tick boxes); the type
+// buttons (S.filterResourceTypes: null = all) and the domain list (S.filterDomains) are the user's choices.
+// Each request gets e.leftOut (the reason, or null) besides e.filtered.
 function applyFilters(entries) {
-  const prefetchDup = _studioPrefetchDuplicates(entries);
+  const sel = S.filterResourceTypes;
+  // an empty selection means no type filter, static files left out (as before; the screen always keeps one type)
+  const typeOff = new Set(!(sel instanceof Set) ? [] : sel.size ? RequestFilter.TYPES.filter((k) => !sel.has(k)) : ['script', 'stylesheet', 'image', 'font']);
+  const ctx = {
+    rules: { STATIC_CT, STATIC_EXT, NOISY, NOISY_URL },
+    noise: !(S.leaveOut && S.leaveOut.ads === false), options: !(S.leaveOut && S.leaveOut.options === false), typeOff,
+    domainOff: S.filterDomains || {},
+    prefetchDup: RequestFilter.prefetchDuplicates(entries),
+  };
   for (const e of entries) {
-    if (e.isMarker) {
-      e.filtered = false;
-      continue;
-    } // always keep transaction markers
-    if (prefetchDup.has(e)) {
-      e.filtered = true;
-      continue;
-    }
-    // Filter CSP violation reports — browser auto-sends these when our bookmarklet
-    // .invalid marker URLs are blocked by the app's Content Security Policy
-    const reqCt = (e.hdrsMap["content-type"] || "")
-      .split(";")[0]
-      .trim()
-      .toLowerCase();
-    if (
-      reqCt === "application/csp-report" ||
-      reqCt === "application/reports+json"
-    ) {
-      e.filtered = true;
-      continue;
-    }
-    if (e.body && e.body.text && e.body.text.includes('"blocked-uri"')) {
-      e.filtered = true;
-      continue;
-    }
-    // Filter WebSocket upgrade requests — wss:// and ws:// cannot be replayed by VuGen
-    // Web HTTP/HTML protocol; including them causes 400 Bad Request errors
-    if (/^wss?:\/\//i.test(e.url)) {
-      e.filtered = true;
-      continue;
-    }
-    // data:, blob:, chrome-extension:, about: … — never a network request, cannot be replayed
-    if (!/^https?:\/\//i.test(e.url)) {
-      e.filtered = true;
-      continue;
-    }
-    const ct = e.ct;
-    if (e.method === "OPTIONS") {
-      e.filtered = true;
-      continue;
-    }
-    // Static files are dropped unless the user selected their resource type
-    // (null = "All" selected). Included ones are scripted as part of their page
-    // step, not as separate requests — see shared/page-resources.js.
-    const staticSelected =
-      S.filterResourceTypes === null ||
-      (S.filterResourceTypes instanceof Set && S.filterResourceTypes.has(classifyHarEntry(e)));
-    if (!staticSelected && STATIC_CT.has(ct)) {
-      e.filtered = true;
-      continue;
-    }
-    if (!staticSelected && STATIC_EXT.test(e.url.split("?")[0])) {
-      e.filtered = true;
-      continue;
-    }
-    try {
-      if (NOISY.test(new URL(e.url).hostname) || NOISY_URL.test(e.url)) {
-        e.filtered = true;
-        continue;
-      }
-    } catch {}
-    // Domain filter — user unchecked this hostname in the filter panel
-    if (S.filterDomains && Object.keys(S.filterDomains).length > 0) {
-      try {
-        const _dhost = new URL(e.url).hostname;
-        if (S.filterDomains[_dhost] === false) { e.filtered = true; continue; }
-      } catch {}
-    }
-    // Resource type filter — user selected specific Chrome DevTools categories
-    if (S.filterResourceTypes && S.filterResourceTypes.size > 0) {
-      if (!S.filterResourceTypes.has(classifyHarEntry(e))) { e.filtered = true; continue; }
-    }
-    e.filtered = false;
+    if (e.isMarker) { e.filtered = false; e.leftOut = null; continue; }   // always keep transaction markers
+    e.leftOut = RequestFilter.leftOut(e, ctx);
+    // a request the user left out by hand (request details → Leave out); kept in S.entries1 like every left-out one
+    if (!e.leftOut && S.leaveOutIds && S.leaveOutIds.has(e.id)) e.leftOut = 'user';
+    e.filtered = !!e.leftOut;
   }
 }
 

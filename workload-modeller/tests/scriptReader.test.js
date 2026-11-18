@@ -76,6 +76,71 @@ load.finalize(async function () { tOut.start(); new load.WebRequest({url:"https:
   });
 });
 
+describe('think time and fixed waits', () => {
+  // 10 transactions with a pause between each — the shape of a typical DevWeb script
+  const devSteps = (pause) => Array.from({ length: 10 }, (_, i) => `  A.start(); new load.WebRequest({url:"https://example.com/${i}"}).sendSync(); A.stop();${i < 9 ? `\n  ${pause}` : ''}`).join('\n');
+  const dev = (pause, extra) => `${extra || ''}const A = new load.Transaction("Step");\nload.initialize(async function () { load.sleep(60); });\nload.action("Action", async function () {\n${devSteps(pause)}\n});\nload.finalize(async function () { load.thinkTime(99); });`;
+
+  test('DevWeb: load.sleep(thinktime) with const thinktime = 3 → 27 s of fixed waits, no think time', () => {
+    const d = R.readDevweb('D', { 'main.js': dev('load.sleep(thinktime);', 'const thinktime = 3;\n') });
+    expect([d.thinkPerIter, d.waitPerIter, d.waitCount, d.waitUnknown]).toEqual([0, 27, 9, 0]);
+    expect(d.brief).toMatch(/0 s think · 27 s fixed waits/);
+    expect(d.notes.join('\n')).toMatch(/fixed waits \(load\.sleep\) are not think time/);
+  });
+
+  test('DevWeb: load.thinkTime and thinkTimeAsync are think time; initialize / finalize are left out', () => {
+    const d = R.readDevweb('D', { 'main.js': dev('await load.thinkTimeAsync(3);') });
+    expect([d.thinkPerIter, d.thinkPauses, d.waitPerIter]).toEqual([27, 9, 0]);
+    expect(d.thinkList).toEqual(Array(9).fill(3));
+  });
+
+  test('DevWeb: a value the reader cannot work out is counted and named', () => {
+    const d = R.readDevweb('D', { 'main.js': dev('load.thinkTime(Math.random() * 5);') });
+    expect([d.thinkPerIter, d.thinkPauses, d.thinkUnknown]).toEqual([0, 9, 9]);
+    expect(d.warnCodes).toContain('think-unknown');
+  });
+
+  test('DevWeb: a constant set twice to different values is not guessed', () => {
+    const d = R.readDevweb('D', { 'main.js': 'let t = 3;\nload.action("A", async function () { load.thinkTime(t); t = 5; });\nfunction x() { let t = 8; }' });
+    expect([d.thinkPerIter, d.thinkUnknown]).toEqual([0, 1]);
+  });
+
+  test('DevWeb rts.yml: the think-time limit (-1 = none) and type; other sections ignored', () => {
+    const js = dev('load.thinkTime(5);');
+    const on = R.readDevweb('D', { 'main.js': js, 'rts.yml': 'thinkTime:                 # think time\n  type: "asRecorded"\n  limit: 3\n  arguments: {}\ndns:\n  ttl: 600\n' });
+    expect([on.thinkMode, on.thinkLimit]).toEqual(['recorded', 3]);
+    expect(on.warnings.join('\n')).toMatch(/LRE limits each think time to 3 s: 9 of the 9 think times are longer/);
+    const off = R.readDevweb('D', { 'main.js': js, 'rts.yml': 'thinkTime:\n  type: "multiply"\n  limit: -1\n' });
+    expect([off.thinkMode, off.thinkLimit]).toEqual(['multiply', null]);
+  });
+
+  test('DevWeb: fixed waits with a think-time setting other than as recorded → a warning that the setting does not change them', () => {
+    const d = R.readDevweb('D', { 'main.js': dev('load.sleep(2);'), 'rts.yml': 'thinkTime:\n  type: ignore\n' });
+    expect(d.warnCodes).toContain('wait-fixed');
+  });
+
+  test('VuGen C: lr_think_time with a number, a #define and a variable; sleep() in milliseconds; LimitFlag / Limit', () => {
+    const v = R.readVugen('V', {
+      'globals.h': '#define THINK 4\n',
+      'Action.c': 'Action(){ int pause = 2; lr_think_time(THINK); lr_think_time(pause); lr_think_time(10); lr_think_time(atoi(lr_eval_string("{t}"))); sleep(1500); return 0; }',
+      'default.cfg': '[ThinkTime]\nOptions=RECORDED\nFactor=1\nLimitFlag=1\nLimit=5\n[Iterations]\nNumOfIterations=1\nLimit=99\n',
+    });
+    expect([v.thinkPerIter, v.thinkPauses, v.thinkUnknown, v.waitPerIter, v.thinkLimit]).toEqual([16, 4, 1, 1.5, 5]);
+    expect(v.thinkList).toEqual([4, 2, 10]);
+    expect(v.warnings.join('\n')).toMatch(/1 of the 4 think times is longer and cut to 5 s/);
+  });
+
+  test('VuGen C: LimitFlag=0 is no limit (the VuGen template default)', () => {
+    const v = R.readVugen('V', { 'Action.c': 'Action(){ lr_think_time(3); return 0; }', 'default.cfg': '[ThinkTime]\nOptions=NOTHINK\nFactor=1\nLimitFlag=0\nLimit=1\n' });
+    expect([v.thinkMode, v.thinkLimit]).toEqual(['ignore', null]);
+  });
+
+  test('VuGen C: lr_think_time is not a sleep() call, and my_sleep() is not either', () => {
+    const v = R.readVugen('V', { 'Action.c': 'Action(){ lr_think_time(3); my_sleep(5000); return 0; }' });
+    expect([v.thinkPerIter, v.waitPerIter, v.waitCount]).toEqual([3, 0, 0]);
+  });
+});
+
 describe('HAR', () => {
   test('pages are the steps; response time per step and pauses from the timings', () => {
     const t0 = Date.parse('2026-01-01T10:00:00Z');

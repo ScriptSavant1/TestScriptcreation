@@ -3,6 +3,7 @@
  * safe parameter names (studio-advisor.js _advSafeVarName, _advFirstMatch, _advSafeBoundaries; studio-ui.js
  * _pcFindSource, _pcSafeOccurrences). The page itself (card, uses, message) is checked in the browser.
  */
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const path = require('path');
 

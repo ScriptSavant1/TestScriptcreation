@@ -42,8 +42,11 @@ import {
   getAttachedSessionIds,
   captureScreenshot,
   onSettled,
+  getPageTitle,
+  refreshPageTitle,
 } from "./cdp-capture.js";
 import { liveRow } from "./portal-mode.js";
+import { barsFinal, barsHidden, resetBars } from "./page-bar-cdp.js";
 // Ported plain-JS modules, imported as `any` — see cdp-capture.ts's header
 // comment on its own imports for why.
 import { harBuilder as _harBuilder } from "./har-builder.js";
@@ -56,6 +59,9 @@ export class Recorder {
   private child: import("node:child_process").ChildProcess | undefined;
   private profile: ResolvedProfile | undefined;
   private recording = false;
+  /** When start() began capturing (epoch ms) — the floating bar's clock. */
+  startedAt = 0;
+  private titleTimer: ReturnType<typeof setInterval> | undefined;
   // transaction id (har-builder.js's `tx_N`) -> screenshots taken at its
   // start/end. Attached onto the HAR's log.pages[] entries in stop(), after
   // build() has assigned each transaction its final `id`.
@@ -66,7 +72,7 @@ export class Recorder {
 
   // capture confirmed since the last start() — openUrl() waits for it (cdp-capture's Settled signal)
   private settled = false;
-  // live list for the Recorder page: entry → its number, and whether it was last reported finished
+  // live list for the PerfX Studio page: entry → its number, and whether it was last reported finished
   private liveNo = new WeakMap<object, number>();
   private liveDone = new Map<number, boolean>();
   private liveCount = 0;
@@ -137,8 +143,14 @@ export class Recorder {
     this.liveNo = new WeakMap();
     this.liveDone.clear();
     this.liveCount = 0;
+    resetBars();
     await startCapture(this.client);
     this.recording = true;
+    this.startedAt = Date.now();
+    // the title of the page on screen, asked every 2 s while recording (a suggested transaction name on the page)
+    const client = this.client;
+    if (this.titleTimer) clearInterval(this.titleTimer);
+    this.titleTimer = setInterval(() => { if (this.recording) void refreshPageTitle(client).catch(() => { /* a window closing */ }); }, 2000);
 
     // Mirrors service-worker.js's SETTLED fallback: startSettledTimer() in
     // cdp-capture only fires when a request FINISHES, so a page that's
@@ -174,7 +186,7 @@ export class Recorder {
   }
 
   /**
-   * Recording started from the Recorder page: once capture is confirmed on the recording window
+   * Recording started from the PerfX Studio page: once capture is confirmed on the recording window
    * (the same Settled signal that enables Start Transaction), open the application address in it —
    * so its first request is recorded. Waits at most ~20 s, like pollUntilSettled.
    */
@@ -187,7 +199,7 @@ export class Recorder {
   }
 
   /**
-   * The requests seen so far, for the live list on the Recorder page — read-only, the HAR is not
+   * The requests seen so far, for the live list on the PerfX Studio page — read-only, the HAR is not
    * touched. Rows numbered after `since`, plus earlier rows that have finished since they were sent.
    */
   live(since: number): { rows: ReturnType<typeof liveRow>[]; last: number } {
@@ -214,7 +226,10 @@ export class Recorder {
     if (!this.client) return [];
     const client = this.client;
     const sessionIds = getAttachedSessionIds();
+    // the screenshots show the application, not the floating bar
+    await barsHidden(client, sessionIds, true);
     const shots = await Promise.all(sessionIds.map((sid) => captureScreenshot(client, sid)));
+    await barsHidden(client, sessionIds, false);
     return shots.filter((s): s is string => s !== null);
   }
 
@@ -239,6 +254,33 @@ export class Recorder {
     return id;
   }
 
+  /** A new name for a transaction, found by its current name (the PerfX Studio page's transaction list). */
+  renameTransaction(from: string, to: string): boolean {
+    return harBuilder.renameTransaction(from, to) as boolean;
+  }
+
+  /** "Undo last mark" — see har-builder.js undoLastMark(). */
+  undoLastMark(): { undone: string | null; active: string | null } | null {
+    return harBuilder.undoLastMark() as { undone: string | null; active: string | null } | null;
+  }
+
+  /** The transactions as the builder has them: the finished names in order, and the running one. */
+  transactionState(): { done: string[]; active: string | null } {
+    const txs = harBuilder.completedTransactions as Array<{ name: string; endTime: number | null }>;
+    const active = harBuilder.activeTransaction as { name: string } | null;
+    return { done: txs.filter((t) => t !== (active as unknown)).map((t) => t.name), active: active ? active.name : null };
+  }
+
+  /** The script ID of a recording started from the PerfX Studio page (written into the HAR as _perfx_scriptId). */
+  setScriptId(id: string): void {
+    harBuilder.scriptId = id || "";
+  }
+
+  /** The title of the page last shown in the recording window (a suggested transaction name). */
+  pageTitle(): string {
+    return this.recording ? getPageTitle() : "";
+  }
+
   /**
    * Returns how many requests were tagged to the transaction being ended, so
    * the UI can warn immediately on a zero — the classic symptom of browsing
@@ -255,6 +297,17 @@ export class Recorder {
       if (entry) entry.end = shots;
     });
     return { requestCount };
+  }
+
+  /** Requests per transaction name so far (the floating bar's list). */
+  txCounts(): Record<string, number> {
+    const names: Record<string, string> = {};
+    for (const t of harBuilder.completedTransactions as Array<{ id: string; name: string }>) names[t.id] = t.name;
+    const out: Record<string, number> = {};
+    const add = (e: { pageref?: string | null }) => { const n = e.pageref ? names[e.pageref] : undefined; if (n) out[n] = (out[n] || 0) + 1; };
+    for (const e of harBuilder.completedEntries as Array<{ pageref?: string | null }>) add(e);
+    for (const e of (harBuilder.pendingEntries as Map<string, { pageref?: string | null }>).values()) add(e);
+    return out;
   }
 
   private countRequestsForTransaction(txId: string): number {
@@ -294,6 +347,9 @@ export class Recorder {
     // after which no screenshot can be taken at all.
     await this.captureEndScreenshotSync();
 
+    if (this.titleTimer) { clearInterval(this.titleTimer); this.titleTimer = undefined; }
+    this.recording = false;          // the bars' last answer says "saving"
+    await barsFinal(this.client);
     await stopCapture(this.client);
     resetCapture();
     this.recording = false;

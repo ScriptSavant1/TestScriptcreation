@@ -23,9 +23,8 @@
   };
   const ico = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[name] || X[name]}</svg>`;
   const tools = [
-    { go: 'record',  tab: 'recorder',  c: '--c-record',  icon: 'record',  name: 'Recorder',         open: 'Open Recorder',         what: 'Record a user journey in your browser and generate LoadRunner scripts.' },
+    { go: 'studio',  tab: 'studio',    c: '--c-studio',  icon: 'link',    name: 'Script Studio',    open: 'Open Script Studio',    what: 'Record a user journey or open a HAR file, and get a LoadRunner script — correlated when needed.' },
     { go: 'explore', tab: 'explorer',  c: '--c-explore', icon: 'explore', name: 'HAR Explorer',     open: 'Open HAR Explorer',     what: 'See every request of a recording and where each dynamic value comes from.' },
-    { go: 'studio',  tab: 'studio',    c: '--c-studio',  icon: 'link',    name: 'Script Studio',    open: 'Open Script Studio',    what: 'Create and enhance VuGen scripts with automatic correlation.' },
     { go: 'postman', tab: 'converter', c: '--c-convert', icon: 'api',     name: 'Postman / Bruno',  open: 'Open Converter',        what: 'Convert your API collection to a ready-to-run VuGen script.' },
     { go: 'jmeter',  tab: 'converter', c: '--c-jmeter',  icon: 'migrate', name: 'JMeter',           open: 'Open JMeter Converter', what: 'Convert JMeter test plans (.jmx) to VuGen scripts.' },
     { go: 'workload', tab: 'workload', c: '--c-work',    icon: 'workload', name: 'Workload Modeller', open: 'Open Workload Modeller', what: 'Turn the load you need into Vusers, pacing and an LRE scenario.' },
@@ -44,7 +43,7 @@
   ];
   /* "Your workflow": a typical performance test, from recording to report */
   const steps = [
-    { go: 'record',  tab: 'recorder', c: '--c-record',  icon: 'record', t: 'Record a user journey',    s: 'Recorder — in your browser',      act: 'Open' },
+    { go: 'studio',  tab: 'studio',   c: '--c-record',  icon: 'record', t: 'Record a user journey',    s: 'Script Studio — in your browser', act: 'Open' },
     { go: 'studio',  tab: 'studio',   c: '--c-studio',  icon: 'link',   t: 'Correlate dynamic values', s: 'Script Studio — automatic',      act: 'Open' },
     { go: null,      tab: null,       c: '--ds-text-3', icon: 'play',   t: 'Run the load test',        s: 'In LoadRunner Enterprise, as usual', act: null },
     { go: 'results', tab: 'analyser', c: '--c-results', icon: 'chart',  t: 'Analyse the results',      s: 'Results Analyser — reports to share', act: 'Analyse' },
@@ -136,7 +135,7 @@
       </div>
       <div class="hm-private">
         <span class="hm-private-ico"><%- ico('shield') %></span>
-        <div><b>Your files are never stored</b><p>Recorder, Script Studio and Results Analyser run in your browser — nothing is uploaded. Files you upload to a converter are deleted when the conversion ends.</p></div>
+        <div><b>Your files are never stored</b><p>Script Studio, HAR Explorer and Results Analyser run in your browser — nothing is uploaded. Files you upload to a converter are deleted when the conversion ends.</p></div>
         <button class="hm-link" type="button" data-help="hacc-privacy">Learn more <%- ico('arrowRight') %></button>
       </div>
     </section>

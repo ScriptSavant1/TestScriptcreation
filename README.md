@@ -18,18 +18,17 @@ PerfX Studio removes most of the manual VuGen scripting effort by generating:
 
 ## The tools
 
-The portal has a collapsible left sidebar: **Home**, then **Create scripts** (Recorder, HAR Explorer, Script Studio, Postman / Bruno, JMeter), **Plan** (Workload Modeller), **Analyse** (Results Analyser) and **Learn** (Help & guides).
+The portal has a collapsible left sidebar, one line per tool: **Home**, then **Create scripts** (Script Studio, HAR Explorer, Postman / Bruno, JMeter), **Plan & analyse** (Workload Modeller, Results Analyser), and **Help & guides** at the bottom. Every page and tool uses the same purple look, light and dark.
 
 | Tool | Input | Best for |
 |---|---|---|
-| **Recorder** | **Start recording** on the page, or a browser HAR (or Chrome NetLog `.json`) | Recording journeys where VuGen proxy recording is blocked |
-| **HAR Explorer** | A HAR file | Seeing every request, finding where a dynamic value comes from, and adding it to Script Studio; works where DevTools is switched off |
-| **Script Studio** | **Start recording**, or 1 or 2 HAR files | Automatic correlation (pattern mode with 1 HAR, diff mode with 2) |
+| **HAR Explorer** | A HAR file | Seeing every request (Domains panel, request types, folding panels, Dynamic values tab), finding where a dynamic value comes from (Source / Replaced in), and adding it to Script Studio; works where DevTools is switched off |
+| **Script Studio** | **Start recording**, or 1 or 2 HAR files (or a Chrome NetLog `.json`) | Recording journeys where VuGen proxy recording is blocked, then the script straight away: domains, request types, transactions (new, rename, ungroup), leave out single requests, correlation (pattern mode with 1 HAR, diff mode with 2; Correlation Advisor with Source / Replaced in), test data. Includes what was the Recorder tool; `/recorder` opens it |
 | **Postman / Bruno** converter | Postman v2.1 or Bruno collection (`.json`, `.yml`, `.yaml`, `.bru`, zipped folder), optional environment file and client certificates | Converting existing API collections |
 | **JMeter** converter | JMeter `.jmx`, optional CSV data files and certificates | Migrating JMeter tests; also produces a Workload Model Excel |
 | **Workload Modeller** | Each script's target (TPS, transactions per hour, Vusers, share, iterations), optionally filled from script ZIPs or HAR files | Vusers, pacing, ramp-up and ramp-down, load generators and checks; LRE settings to copy and an Excel workbook |
 | **Results Analyser** | LoadRunner Enterprise raw results folder or ZIP | Transaction summary, steady state, insights; Excel, Word, PDF and HTML reports |
-| **CDP Recorder** (Windows download) | Records a browser journey | Records every tab and pop-up to a HAR, with no browser extension and no administrator rights; driven by **Start recording** on the page, or by its own floating toolbar |
+| **CDP Recorder** (Windows download) | Records a browser journey | Records every tab and pop-up to a HAR, with no browser extension and no administrator rights; driven by **Start recording** on the page. Version 0.3.0 adds a floating bar inside the recorded pages (name transactions, Undo, Stop and save — one bar, in the window you use); started by hand, its own toolbar |
 
 The PerfX Chrome / Edge browser extension has been retired and removed from the repository. The CDP Recorder replaces it.
 
@@ -64,7 +63,7 @@ node src/cli.js web --port 8080 # through the CLI
 
 ### One address for the whole app
 
-The browser address always stays at `…/converter/`. Every tool opens inside the portal; the address bar does not change when you switch tools. The routes `/recorder`, `/har-explorer`, `/studio` and `/results-analyser` exist only to load the tool pages inside the portal: opened on their own in a browser tab, they send the user back to `…/converter/` with that tool open (`src/web/public/portal/frame-guard.js`). The server also blocks direct `.html` URLs on purpose.
+The browser address always stays at `…/converter/`. Every tool opens inside the portal; the address bar does not change when you switch tools. The routes `/har-explorer`, `/studio`, `/workload-modeller` and `/results-analyser` exist only to load the tool pages inside the portal: opened on their own in a browser tab, they send the user back to `…/converter/` with that tool open (`src/web/public/portal/frame-guard.js`). The server also blocks direct `.html` URLs on purpose.
 
 ### Command line (no web server)
 
@@ -88,7 +87,8 @@ Every route answers both at the site root and under `/converter` (so it works wh
 | Route | Purpose |
 |---|---|
 | `GET /converter` | The portal (sidebar, Home and every tool) |
-| `GET /recorder`, `/har-explorer`, `/studio`, `/workload-modeller`, `/results-analyser` | Tool pages, loaded inside the portal |
+| `GET /har-explorer`, `/studio`, `/workload-modeller`, `/results-analyser` | Tool pages, loaded inside the portal |
+| `GET /recorder` | The Recorder is part of Script Studio: redirects (301) to `/studio` |
 | `POST /convert`, `POST /convert-jmx` | Collection and JMeter conversions (rate-limited: 60 per 5 minutes per address) |
 | `GET /converter/download/:token` | Single-use ZIP download, valid for 5 minutes |
 | `GET /downloads/cdp-recorder` | Pre-built CDP Recorder (`cdp-recorder/recorder/dist/cdp-recorder.zip`, falling back to `.exe`) |
@@ -196,15 +196,14 @@ The Recorder, the HAR Explorer, Script Studio, the Workload Modeller and the Res
 │       ├── server.js         ← Express app (routes listed above)
 │       ├── views/            ← index.ejs (portal), partials/{shell,home,converter,help}.ejs, admin.ejs
 │       └── public/
-│           ├── portal/       ← sidebar shell, Home, converter, Help, Recorder, HAR Explorer, Studio page scripts and styles;
+│           ├── portal/       ← sidebar shell, Home, converter, Help, HAR Explorer, Studio page scripts and styles;
 │           │                   record-live.js (Start recording), ds.css (design system)
-│           ├── Recorder.html ← Recorder page (loads the VuGen-Recorder-*.js engine files)
-│           ├── HarExplorer.html ← HAR Explorer page (reuses the Recorder and Studio engines)
+│           ├── HarExplorer.html ← HAR Explorer page (reuses the HAR reading engine — VuGen-Recorder-state.js, VuGen-Recorder-parsers.js, portal/recorder-core.js — and the Studio engine)
 │           ├── Studio.html   ← Script Studio page (loads the studio-*.js files)
 │           ├── DevWebSdk.d.ts ← DevWeb TypeScript definitions, the one copy (in every DevWeb script)
 │           ├── shared/       ← vugen-codegen.js, page-resources.js, host-params.js (shared by the tools)
-│           └── VuGen-Recorder.html, VuGen-Script-Studio.html
-│                             ← classic pages, kept only as the reference for parity tests (no route)
+│           └── VuGen-Script-Studio.html
+│                             ← classic page, kept only as the reference for parity tests (no route)
 │
 ├── cdp-recorder/             ← CDP Recorder (Windows HAR recorder, replaces the extension)
 ├── lre-results-analyser/     ← Results Analyser (browser engine, reports, CLI)
@@ -248,7 +247,7 @@ JSONPath, XPath, regular expression, boundary (left / right), header, cookie. Sc
 
 ### Static resources
 
-The Recorder and Script Studio attach images, stylesheets and scripts to the page step that loaded them (VuGen `EXTRARES`, DevWeb `resources: [...]`), never as separate requests (`src/web/public/shared/page-resources.js`).
+Script Studio attaches images, stylesheets and scripts to the page step that loaded them (VuGen `EXTRARES`, DevWeb `resources: [...]`), never as separate requests (`src/web/public/shared/page-resources.js`).
 
 ## Configuration
 
@@ -261,14 +260,13 @@ const PORTAL_CONFIG = {
   tabs: {
     home:      { enabled: true  },
     converter: { enabled: true  },  // Postman / Bruno and JMeter
-    recorder:  { enabled: true  },
     explorer:  { enabled: true  },
     studio:    { enabled: true  },
     workload:  { enabled: true  },  // Workload Modeller
     analyser:  { enabled: true  },  // Results Analyser
     help:      { enabled: true  }
   },
-  iframes: { recorder: BASE_PATH + '/recorder', explorer: BASE_PATH + '/har-explorer', studio: BASE_PATH + '/studio', workload: BASE_PATH + '/workload-modeller', analyser: BASE_PATH + '/results-analyser' }
+  iframes: { explorer: BASE_PATH + '/har-explorer', studio: BASE_PATH + '/studio', workload: BASE_PATH + '/workload-modeller', analyser: BASE_PATH + '/results-analyser' }
 };
 ```
 
@@ -343,7 +341,7 @@ Notable suites in `tests/unit/`:
 
 - `lreUtilsEs3Compat.test.js` — `lre-utils.js` / `lre-utils.dat` must parse as ES3 (run after every edit; `node --check` is not enough).
 - `recorderCoreParity.test.js`, `studioPageParity.test.js`, `converterPageParity.test.js`, `helpPageParity.test.js` — keep the redesigned portal pages in step with the classic engine, ids, handlers and Help text.
-- `harExplorerModel.test.js`, `harExplorerFind.test.js` — the HAR Explorer agrees with the Recorder and Script Studio, including a round trip through Studio.
+- `harExplorerModel.test.js`, `harExplorerFind.test.js` — the HAR Explorer agrees with Script Studio, including a round trip through Studio.
 
 ## Version history
 

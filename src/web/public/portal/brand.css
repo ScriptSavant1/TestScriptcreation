@@ -1,0 +1,26 @@
+/* The purple brand of the Create-scripts tools (Script Studio, HAR Explorer), as the Workload Modeller pilot:
+ * the ds accent tokens (portal/ds.css) for both themes, plus the structure colours: --br-head (header bars),
+ * --br-zebra (every other row), --br-sel (a selected row). Loaded right after portal/ds.css. Contrast >= 4.5:1.
+ * Tool pages (<html data-portal-tool>) take it whole; inside the portal only an element with class "ds-brand" does
+ * (the Postman / Bruno and JMeter panel); the portal page and the admin pages take it whole (<html class="ds-brand-all">). */
+:root[data-portal-tool]:not([data-theme="light"]), :root.ds-brand-all:not([data-theme="light"]), :root:not([data-theme="light"]) .ds-brand {
+  --ds-accent: #7c3aed; --ds-accent-hover: #6d28d9; --ds-accent-text: #b9a3ff;
+  --ds-accent-soft: rgba(139, 92, 246, .18); --ds-accent-line: rgba(185, 163, 255, .55); --ds-focus: #b9a3ff;
+  --ds-info: #b9a3ff; --ds-info-soft: rgba(185, 163, 255, .13);
+  --ds-bg: #0b0d17; --ds-border: #2c3350; --ds-border-2: #424b6c;
+  --br-head: #1b1d33; --br-zebra: #151a2a; --br-sel: rgba(139, 92, 246, .26);
+}
+:root[data-portal-tool][data-theme="light"], :root.ds-brand-all[data-theme="light"], :root[data-theme="light"] .ds-brand {
+  --ds-accent: #6d28d9; --ds-accent-hover: #5b21b6; --ds-accent-text: #6227c9;
+  --ds-accent-soft: rgba(109, 40, 217, .09); --ds-accent-line: rgba(109, 40, 217, .4); --ds-focus: #6d28d9;
+  --ds-info: #6227c9; --ds-info-soft: rgba(109, 40, 217, .08);
+  --ds-bg: #eeebf5; --ds-surface-2: #f7f5fc; --ds-border: #d6d0e6; --ds-border-2: #b9b0d2;
+  --ds-warn: #8a4904; --ds-bad: #b01f1f;
+  --br-head: #f0ebfb; --br-zebra: #faf8fe; --br-sel: rgba(109, 40, 217, .14);
+}
+
+/* a branded panel inside the portal paints its own page background */
+.ds-brand { background: var(--ds-bg); }
+/* the handwritten caption takes the brand accent (purple) */
+:root[data-portal-tool][data-theme="light"] .ds-hand, :root.ds-brand-all[data-theme="light"] .ds-hand, :root[data-theme="light"] .ds-brand .ds-hand { color: var(--ds-accent-text); }
+:root[data-portal-tool]:not([data-theme="light"]) .ds-hand, :root.ds-brand-all:not([data-theme="light"]) .ds-hand, :root:not([data-theme="light"]) .ds-brand .ds-hand { color: var(--ds-accent-text); }

@@ -7,6 +7,7 @@
  * real DevWeb engine. VuGen reads \r\n correctly, so the stored correlation keeps it.
  */
 
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const path = require('path');
 const CorrelationDetector = require('../../src/analyzers/correlationDetector.js');

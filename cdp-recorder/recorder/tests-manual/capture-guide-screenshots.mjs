@@ -87,7 +87,7 @@ await tb.fill("#txNameInput", "Login");
 await shot(tb, "03-toolbar-ready.png");
 
 await tb.click("#btnStartTx");
-await tb.waitForSelector("#btnEndTx:not(.hidden)");
+await tb.waitForFunction(() => /Recording — /.test(document.getElementById("statusText").textContent));
 await recPage.goto(`${base}/login`);
 await recPage.waitForLoadState("networkidle");
 await tb.waitForTimeout(1200);
@@ -96,24 +96,21 @@ await shot(recPage, "05-recording-app.png");
 await recPage.click("#signin");
 await recPage.waitForURL("**/home");
 await recPage.waitForLoadState("networkidle");
-await tb.click("#btnEndTx");
-await tb.waitForSelector("#btnStartTx:not(.hidden)");
 
 await tb.fill("#txNameInput", "Search");
 await tb.click("#btnStartTx");
-await tb.waitForSelector("#btnEndTx:not(.hidden)");
+await tb.waitForFunction(() => /Recording — /.test(document.getElementById("statusText").textContent));
 await recPage.click("#search");
 await recPage.waitForTimeout(800);
-await tb.click("#btnEndTx");
-await tb.waitForSelector("#btnStartTx:not(.hidden)");
 await tb.waitForTimeout(1200);
 await shot(tb, "06-toolbar-trail.png");
 
 await tb.fill("#txNameInput", "Logout");
 await tb.click("#btnStartTx");
-await tb.waitForSelector("#btnEndTx:not(.hidden)");
-await tb.waitForTimeout(1500); // nothing done in the recording window
-await tb.click("#btnEndTx");
+await tb.waitForFunction(() => /Recording — /.test(document.getElementById("statusText").textContent));
+await tb.waitForTimeout(1500); // nothing done in the recording window: starting the next one ends it, with the warning
+await tb.fill("#txNameInput", "Next");
+await tb.click("#btnStartTx");
 await tb.waitForSelector("#warningBanner:not(.hidden)", { timeout: 5000 });
 await shot(tb, "07-toolbar-warning.png");
 
@@ -130,11 +127,11 @@ copyFileSync(join(harDir, "my-recording.har"), join(outDir, "my-recording.har"))
 if (studioUrl) {
   const st = await tbBrowser.newPage({ viewport: { width: 1400, height: 860 } });
   await st.goto(studioUrl);
-  await st.setInputFiles('input[type="file"] >> nth=0', join(outDir, "my-recording.har"));
-  await st.waitForSelector("#btn-analyze:not([disabled])");
+  // the start screen, then the workspace: a recording is read as soon as it is opened (no Analyse step)
+  await st.waitForSelector("#dz1");
   await shot(st, "09-studio-upload.png");
-  await st.click("#btn-analyze");
-  await st.waitForFunction(() => typeof S !== "undefined" && S.scripts && Object.keys(S.scripts).length > 0, null, { timeout: 30000 });
+  await st.setInputFiles("#dz1 input[type=file]", join(outDir, "my-recording.har"));
+  await st.waitForFunction(() => document.body.classList.contains("ss-view-ws") && !document.body.classList.contains("ss-reading") && typeof S !== "undefined" && S.scripts && Object.keys(S.scripts).length > 0, null, { timeout: 30000 });
   await st.waitForTimeout(1500);
   await shot(st, "10-studio-result.png");
 }

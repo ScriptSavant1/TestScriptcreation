@@ -1,4 +1,4 @@
-// Packaged .exe + the perfx-recorder: link, the way the Recorder page uses them:
+// Packaged .exe + the perfx-recorder: link, the way the PerfX Studio page uses them:
 //  1. dist/cdp-recorder.exe started by a link registers the link for this Windows user and waits;
 //     the page named in the link may use it, other pages may not.
 //  2. A second link, opened through Windows (as the browser does), hands its page to the running one.

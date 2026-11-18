@@ -5,7 +5,11 @@
  *   - a HAR recording (also gives recorded response times)
  *
  *   const { scripts, skipped } = await ScriptReader.readFiles(fileList);
- *   scripts[i] = { name, file, protocol, txPerIter, txNames, initTx, endTx, nestedTx, thinkPerIter, requestsPerIter, pages, pageShare, thinkMode, thinkFactor, rtAvg, notes }
+ *   scripts[i] = { name, file, protocol, txPerIter, txNames, initTx, endTx, nestedTx, thinkPerIter, thinkPauses, thinkList,
+ *                  thinkUnknown, thinkLimit, waitPerIter, waitCount, waitUnknown, requestsPerIter, pages, pageShare, thinkMode,
+ *                  thinkFactor, rtAvg, notes }
+ *   thinkPerIter = think-time calls (LRE's Think Time settings apply); waitPerIter = plain waits (always in full);
+ *   thinkList = each think time's value (seconds); thinkLimit = "Limit think time to N seconds" (null = no limit).
  *
  * pages / pageShare: the requests that load a page like a browser (a page with its images, styles and scripts) against
  * API calls — for the load generators' Vusers-per-machine rule. Web HTTP/HTML and DevWeb both can hold either.
@@ -31,7 +35,6 @@
     }
     return out;
   }
-  const sumNums = (re, s) => { let t = 0, m; re.lastIndex = 0; while ((m = re.exec(s))) t += parseFloat(m[1]) || 0; return t; };
   const count = (re, s) => (s.match(re) || []).length;
   const names = (re, s) => { const out = []; let m; re.lastIndex = 0; while ((m = re.exec(s))) out.push(m[1]); return out; };
   const uniq = (a) => [...new Set(a)];
@@ -48,6 +51,47 @@
     return [...outer];
   }
   const events = (re, s, start) => { const out = []; let m; re.lastIndex = 0; while ((m = re.exec(s))) out.push({ at: m.index, start, name: m[1] }); return out; };
+
+  /* ---------- pauses: think time and fixed waits ----------
+     LRE's Think Time settings (ignore, multiply, random %, limit) act on think-time calls only — lr_think_time (VuGen C),
+     load.thinkTime / thinkTimeAsync (DevWeb). A plain wait — sleep(ms) in C, load.sleep / sleepAsync in DevWeb — always
+     waits in full. A call's value is a number as written or a constant the script defines (const t = 3; #define T 3;
+     int t = 3;); anything else (an expression, a parameter) is counted as unknown and the user enters the total. */
+  // name → number for constants defined once with a plain number (two different values → not known)
+  function constants(src) {
+    const out = new Map(), bad = new Set(); let m;
+    const put = (k, v) => { const x = parseFloat(v); if (!Number.isFinite(x)) return; if (out.has(k) && out.get(k) !== x) bad.add(k); out.set(k, x); };
+    const JS = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(\d+(?:\.\d+)?|\.\d+)\s*(?=[;,\n)])/g;
+    const DEF = /#define\s+([A-Za-z_]\w*)\s+\(?\s*(\d+(?:\.\d+)?)\s*\)?\s*(?=\n|$)/g;
+    const CV = /\b(?:int|long|float|double)\s+([A-Za-z_]\w*)\s*=\s*(\d+(?:\.\d+)?)\s*;/g;
+    for (const re of [JS, DEF, CV]) { re.lastIndex = 0; while ((m = re.exec(src))) put(m[1], m[2]); }
+    bad.forEach((k) => out.delete(k));
+    return out;
+  }
+  // every call of re (its first argument captured) in part → { total, n, unknown, list } — total and list in seconds
+  function pauses(re, part, consts, scale) {
+    const out = { total: 0, n: 0, unknown: 0, list: [] }; let m; re.lastIndex = 0;
+    while ((m = re.exec(part))) {
+      const a = m[1].trim();
+      const v = /^(\d+(?:\.\d+)?|\.\d+)$/.test(a) ? parseFloat(a) : consts.has(a) ? consts.get(a) : null;
+      out.n++;
+      if (v == null) out.unknown++; else { out.total += v * scale; out.list.push(v * scale); }
+    }
+    return out;
+  }
+  // a call's argument, to its closing bracket at the end of the statement: lr_think_time(atoi(lr_eval_string("{t}")));
+  const ARG = String.raw`\s*\(\s*([^;\n]*?)\s*\)(?=\s*(?:[;,}\n]|$))`;
+  const PAUSE = {
+    vugenThink: new RegExp(String.raw`\blr_think_time` + ARG, "g"),
+    vugenWait: new RegExp(String.raw`\bsleep` + ARG, "g"),                                    // milliseconds
+    devThink: new RegExp(String.raw`\bload\.thinkTime(?:Async)?` + ARG, "g"),
+    devWait: new RegExp(String.raw`\bload\.sleep(?:Async)?` + ARG, "g"),
+  };
+  // the card's fields from the two kinds of pause
+  function setPauses(s, think, wait) {
+    s.thinkPerIter = r1(think.total); s.thinkPauses = think.n; s.thinkUnknown = think.unknown; s.thinkList = think.list;
+    s.waitPerIter = r1(wait.total); s.waitCount = wait.n; s.waitUnknown = wait.unknown;
+  }
 
   /* ---------- Web HTTP/HTML (VuGen C) ---------- */
   const VUGEN_REQ = /\bweb_(?:url|custom_request|submit_data|submit_form|link|image|rest)\s*\(/g;
@@ -79,17 +123,23 @@
     const s = { name, protocol: "web", txPerIter: tx.length, txNames: uniq(tx),
       initTx: uniq(names(START, i)), endTx: uniq(names(START, end.join("\n"))),
       nestedTx: action.length ? uniq([].concat(...action.map((c) => containers(events(START, c, true).concat(events(END, c, false)))))) : [],
-      thinkPerIter: r1(sumNums(/\blr_think_time\s*\(\s*([\d.]+)\s*\)/g, a)),
       requestsPerIter: count(VUGEN_REQ, a), notes: [] };
+    const consts = constants(Object.keys(files).filter((f) => /\.(c|h)$/i.test(f)).map((f) => stripC(files[f])).join("\n"));
+    setPauses(s, pauses(PAUSE.vugenThink, a, consts, 1), pauses(PAUSE.vugenWait, a, consts, 1 / 1000));
     s.pages = requestCalls(VUGEN_REQ, a).filter(vugenIsPage).length; s.pageShare = share(s.pages, s.requestsPerIter);
     const cfg = Object.keys(files).find((f) => /(^|\/)default\.cfg$/i.test(f));
     if (cfg) {
-      const opt = (files[cfg].match(/^\s*Options\s*=\s*(\w+)/mi) || [])[1] || "";
-      const factor = parseFloat((files[cfg].match(/^\s*Factor\s*=\s*([\d.]+)/mi) || [])[1]);
+      // only the [ThinkTime] section: other sections have keys of the same names
+      const tt = (files[cfg].match(/^\s*\[ThinkTime\][^\n]*\n([\s\S]*?)(?=^\s*\[|(?![\s\S]))/mi) || [])[1] || files[cfg];
+      const opt = (tt.match(/^\s*Options\s*=\s*(\w+)/mi) || [])[1] || "";
+      const factor = parseFloat((tt.match(/^\s*Factor\s*=\s*([\d.]+)/mi) || [])[1]);
       if (/^NOTHINK$/i.test(opt)) s.thinkMode = "ignore";
       else if (/MULTIPLY/i.test(opt)) { s.thinkMode = "multiply"; s.thinkFactor = factor || 1; }
       else if (/RANDOM/i.test(opt)) s.thinkMode = "random";
       else if (/RECORD/i.test(opt)) s.thinkMode = "recorded";
+      // "Limit think time to N seconds": LimitFlag=1, Limit=N
+      const flag = (tt.match(/^\s*LimitFlag\s*=\s*(\d)/mi) || [])[1], lim = parseFloat((tt.match(/^\s*Limit\s*=\s*([\d.]+)/mi) || [])[1]);
+      s.thinkLimit = flag === "1" && lim > 0 ? lim : null;
       const pace = (files[cfg].match(/^\s*IterationPace\s*=\s*(\w+)/mi) || [])[1];
       if (pace) s.scriptPacing = pace;
     }
@@ -126,13 +176,18 @@
       while ((k = re.exec(part))) if (vars.has(k[1])) out.push({ at: k.index, start: verb === "start", name: vars.get(k[1]) }); return out; };
     const s = { name, protocol: "devweb", txPerIter: tx.length, txNames: uniq(tx), initTx: uniq(starts(init)), endTx: uniq(starts(end)),
       nestedTx: containers(calls(action, "start").concat(calls(action, "stop"))),   // the SDK ends a transaction with stop()
-      thinkPerIter: r1(sumNums(/\bload\.(?:thinkTime|sleep)\s*\(\s*([\d.]+)/g, action)),
       requestsPerIter: count(/new\s+load\.WebRequest\s*\(/g, action), notes: [] };
+    const consts = constants(js);
+    setPauses(s, pauses(PAUSE.devThink, action, consts, 1), pauses(PAUSE.devWait, action, consts, 1));
     s.pages = requestCalls(/new\s+load\.WebRequest\s*\(/g, action).filter(devwebIsPage).length; s.pageShare = share(s.pages, s.requestsPerIter);
     const rts = Object.keys(files).find((f) => /(^|\/)rts\.yml$/i.test(f));
     if (rts) {
-      const type = (files[rts].match(/thinkTime:\s*(?:#[^\n]*)?\n\s*type:\s*"?(\w+)/) || [])[1] || "";
+      // the indented lines under "thinkTime:" — type, and limit (-1 = no limit)
+      const blk = (files[rts].match(/^thinkTime:[^\n]*\n((?:[ \t]+[^\n]*(?:\n|$))*)/m) || [])[1] || "";
+      const type = (blk.match(/^\s*type:\s*["']?(\w+)/m) || [])[1] || "";
       s.thinkMode = ({ ignore: "ignore", asRecorded: "recorded", multiply: "multiply", randomPercentage: "random" })[type];
+      const lim = parseFloat((blk.match(/^\s*limit:\s*["']?(-?[\d.]+)/m) || [])[1]);
+      s.thinkLimit = lim > 0 ? lim : null;
     }
     return finish(s, "load.action");
   }
@@ -151,10 +206,19 @@
     if (s.initTx && s.initTx.length) warn("init-tx", `${short(s.initTx)} run${s.initTx.length === 1 ? "s" : ""} once per Vuser at the start (${where === "Action" ? "vuser_init" : "load.initialize"}), not counted`);
     if (s.endTx && s.endTx.length) warn("end-tx", `${short(s.endTx)} run${s.endTx.length === 1 ? "s" : ""} once per Vuser at the end (${where === "Action" ? "vuser_end" : "load.finalize"}), not counted`);
     if (s.nestedTx && s.nestedTx.length) warn("nested-tx", `${short(s.nestedTx)} contain${s.nestedTx.length === 1 ? "s" : ""} other transactions — all are counted (as LRE counts them), so the iteration time is on the high side and the tool may choose a longer pacing than needed`);
+    const dev = where !== "Action";
+    const thinkFn = dev ? "load.thinkTime" : "lr_think_time", waitFn = dev ? "load.sleep" : "sleep";
     if (s.thinkMode === "ignore" && s.thinkPerIter) warn("think-ignored", `the script ignores its ${s.thinkPerIter} s think time at replay — change “Think time” on the card if LRE should use it`);
+    if (s.thinkUnknown) warn("think-unknown", `${s.thinkUnknown} of ${s.thinkPauses} ${thinkFn} call${s.thinkPauses === 1 ? "" : "s"} use${s.thinkUnknown === 1 ? "s" : ""} a value the reader cannot work out (a parameter or a calculation) — enter the total think time per iteration on the card`);
+    if (s.waitUnknown) warn("wait-unknown", `${s.waitUnknown} of ${s.waitCount} ${waitFn} call${s.waitCount === 1 ? "" : "s"} use${s.waitUnknown === 1 ? "s" : ""} a value the reader cannot work out — enter the total fixed waits per iteration on the card`);
+    if (s.waitPerIter && s.thinkMode && s.thinkMode !== "recorded") warn("wait-fixed", `${waitFn} waits ${s.waitPerIter} s in full — LRE's think-time setting does not change it; use ${thinkFn} if it should`);
+    const over = s.thinkLimit && s.thinkMode !== "ignore" ? (s.thinkList || []).filter((x) => x > s.thinkLimit).length : 0;
+    if (over) warn("think-limited", `LRE limits each think time to ${s.thinkLimit} s: ${over} of the ${s.thinkPauses} think time${s.thinkPauses === 1 ? "" : "s"} ${over === 1 ? "is" : "are"} longer and cut to ${s.thinkLimit} s at replay`);
     if (!s.txPerIter) s.txPerIter = Math.max(1, s.requestsPerIter || 1);
-    s.brief = `${s.txPerIter} transaction${s.txPerIter === 1 ? "" : "s"} · ${s.thinkPerIter} s think · ${s.requestsPerIter} requests${kindText(s)}`;
+    s.brief = `${s.txPerIter} transaction${s.txPerIter === 1 ? "" : "s"} · ${s.thinkPerIter} s think${s.waitPerIter ? ` · ${s.waitPerIter} s fixed waits` : ""} · ${s.requestsPerIter} requests${kindText(s)}`;
     s.notes = [s.brief + (s.txNames.length ? ` (${short(s.txNames)})` : "")].concat(s.warnings);
+    if (s.thinkLimit) s.notes.push(`LRE limits each think time to ${s.thinkLimit} s`);
+    if (s.waitPerIter) s.notes.push(`fixed waits (${waitFn}) are not think time: LRE's think-time settings never change them`);
     if (s.scriptPacing) s.notes.push(`the script's own pacing (${s.scriptPacing}) is replaced by the plan's`);
     return s;
   }
@@ -184,10 +248,11 @@
       if (same) { last.end = Math.max(last.end, e.start + e.time); last.n++; }
       else steps.push({ page: e.page, start: e.start, end: e.start + e.time, n: 1 });
     });
-    let think = 0, rt = 0;
-    steps.forEach((s, i) => { rt += s.end - s.start; if (i) think += Math.max(0, s.start - steps[i - 1].end); });
+    let think = 0, rt = 0; const gaps = [];
+    steps.forEach((s, i) => { rt += s.end - s.start; if (i) { const g = Math.max(0, s.start - steps[i - 1].end); think += g; gaps.push(g / 1000); } });
     const s = { name, protocol: "web", txPerIter: steps.length, txNames: steps.map((x, i) => titles.get(x.page) || "Step " + (i + 1)).slice(0, 12),
-      thinkPerIter: r1(think / 1000), requestsPerIter: es.length, rtAvg: Math.round(rt / steps.length) / 1000, notes: [] };
+      thinkPerIter: r1(think / 1000), thinkPauses: gaps.length, thinkList: gaps, waitPerIter: 0,
+      requestsPerIter: es.length, rtAvg: Math.round(rt / steps.length) / 1000, notes: [] };
     s.pages = es.filter((e) => e.isPage).length; s.pageShare = share(s.pages, es.length);
     s.brief = `${steps.length} step${steps.length === 1 ? "" : "s"} · ${s.thinkPerIter} s pauses · ${es.length} requests${kindText(s)} · ${s.rtAvg} s response`;
     s.warnCodes = ["har"];

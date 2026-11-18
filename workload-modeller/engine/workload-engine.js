@@ -64,18 +64,52 @@
   const sec1 = (x) => (Math.abs(x - Math.round(x)) < 0.05 ? String(Math.round(x)) : x.toFixed(1)) + " s";
 
   /* ---------- iteration time ---------- */
-  // Think time as LRE replays it (Runtime Settings > Think Time).
+  // The pauses of one iteration as LRE replays them (Runtime Settings > Think Time).
+  // Think time (thinkPerIter — lr_think_time, load.thinkTime) follows the setting: as recorded, ignore, multiply, random %,
+  // and "Limit think time to N seconds" (thinkLimit), which cuts EACH think time. Fixed waits (waitPerIter — sleep(),
+  // load.sleep) are not think time: always waited in full. mean / worst / min = both together; think = think time alone.
   function thinkTime(g) {
     const t = nn(g.thinkPerIter) ? g.thinkPerIter : 0;
+    const w = nn(g.waitPerIter) ? g.waitPerIter : 0;
     const m = g.thinkMode || "recorded";
-    if (m === "ignore") return { mean: 0, worst: 0, min: 0 };
-    if (m === "multiply") { const f = pos(g.thinkFactor) ? g.thinkFactor : 1; return { mean: t * f, worst: t * f, min: t * f }; }
-    if (m === "random") {
-      const lo = nn(g.thinkMinPct) ? g.thinkMinPct : 50, hi = nn(g.thinkMaxPct) ? Math.max(g.thinkMaxPct, lo) : 150;
-      return { mean: t * (lo + hi) / 200, worst: t * hi / 100, min: t * lo / 100 };
+    const f = pos(g.thinkFactor) ? g.thinkFactor : 1;
+    const lo = nn(g.thinkMinPct) ? g.thinkMinPct : 50, hi = nn(g.thinkMaxPct) ? Math.max(g.thinkMaxPct, lo) : 150;
+    const L = pos(g.thinkLimit) && m !== "ignore" ? g.thinkLimit : null;
+    let th, assumed = null, uncut = null;
+    if (m === "ignore") th = { mean: 0, worst: 0, min: 0 };
+    else if (!L || !(t > 0)) {
+      if (m === "multiply") th = { mean: t * f, worst: t * f, min: t * f };
+      else if (m === "random") th = { mean: t * (lo + hi) / 200, worst: t * hi / 100, min: t * lo / 100 };
+      else th = { mean: t, worst: t, min: t };           // as recorded
+    } else {
+      // the limit works per think time: each one's value when the script gave them (and they still add up to the
+      // total), else the total in equal parts — over the number of think times, or one per transaction if not known
+      const given = Array.isArray(g.thinkList) && g.thinkList.length && Math.abs(g.thinkList.reduce((a, x) => a + x, 0) - t) < 0.051;
+      let list = given ? g.thinkList : null;
+      if (!list) {
+        const k = pos(g.thinkPauses) ? Math.max(1, Math.round(g.thinkPauses)) : txCount(g);
+        if (!pos(g.thinkPauses)) assumed = k;
+        list = new Array(k).fill(t / k);
+      }
+      const cut = (x) => Math.min(x, L);
+      // average of min(x, L) for x spread evenly over [a, b]
+      const cutMean = (a, b) => (L >= b ? (a + b) / 2 : L <= a ? L : ((L * L - a * a) / 2 + L * (b - L)) / (b - a));
+      th = { mean: 0, worst: 0, min: 0 };
+      list.forEach((p) => {
+        if (m === "multiply") { th.mean += cut(p * f); th.worst += cut(p * f); th.min += cut(p * f); }
+        else if (m === "random") { const a = p * lo / 100, b = p * hi / 100; th.mean += cutMean(a, b); th.worst += cut(b); th.min += cut(a); }
+        else { th.mean += cut(p); th.worst += cut(p); th.min += cut(p); }
+      });
+      uncut = m === "multiply" ? t * f : m === "random" ? t * (lo + hi) / 200 : t;
     }
-    return { mean: t, worst: t, min: t };                 // as recorded
+    return { mean: th.mean + w, worst: th.worst + w, min: th.min + w, think: th.mean, wait: w, limit: L, assumed,
+      cut: uncut != null && uncut - th.mean > 0.05 ? uncut : null };
   }
+  // "27 s think" or "27 s think + 9 s fixed waits" — what one iteration waits
+  const pauseWords = (th, which) => {
+    const k = which || "mean", w = th.wait || 0;
+    return w ? `${sec1(th[k] - w)} think + ${sec1(w)} fixed waits` : `${sec1(th[k])} think`;
+  };
   // Response time per iteration: average per transaction x transactions (+ 90th percentile for the worst case).
   function iterationTime(g) {
     const T = txCount(g), think = thinkTime(g);
@@ -121,6 +155,11 @@
     const FIELD = { target: ({ volume: "volumePerHour", share: "sharePct", iterations: "iterations" })[g.method] || "targetTps", vusers: "vusers", rt: "rtAvg",
       pacing: ((g.pacing && g.pacing.mode) === "random") ? "pacing.min" : "pacing.fixed" };
     const need = (what, text) => { out.status = "needs-input"; out.needs = what; out.checks.push({ level: "bad", code: "needs-" + what, text, gid: g.id, field: FIELD[what] }); return out; };
+    // "Limit think time to N seconds": say what it cuts, and when the number of think times had to be assumed
+    if (it.think.cut != null)
+      out.checks.push({ level: "info", code: "think-limited", text: `${out.name}: LRE cuts each think time to ${sec1(it.think.limit)}, so an iteration thinks ${sec1(it.think.think)} instead of ${sec1(it.think.cut)}.` });
+    if (it.think.assumed != null)
+      out.checks.push({ level: "info", code: "think-pauses-assumed", gid: g.id, field: "thinkPauses", text: `${out.name}: to apply the ${sec1(it.think.limit)} think-time limit the tool assumed ${it.think.assumed} think time${it.think.assumed === 1 ? "" : "s"} per iteration (one per transaction) — enter the number of think times for an exact figure.` });
 
     const target = targetTps(g, sc, shareTotal);
     out.target = target;
@@ -173,7 +212,7 @@
       }
       setRange(it.mean + delay);
       V = sizedByTps ? Math.max(1, ceilE(lam * P)) : g.vusers;
-      out.why.push(`No fixed pacing: an iteration starts ${delay ? `${sec1(delay)} after` : "as soon as"} the previous one ends, so one Vuser takes ≈ ${sec1(P)} per iteration (${T} × ${round(it.rtMean / T, 2)} s response + ${sec1(it.think.mean)} think${delay ? ` + ${sec1(delay)}` : ""}).`);
+      out.why.push(`No fixed pacing: an iteration starts ${delay ? `${sec1(delay)} after` : "as soon as"} the previous one ends, so one Vuser takes ≈ ${sec1(P)} per iteration (${T} × ${round(it.rtMean / T, 2)} s response + ${pauseWords(it.think)}${delay ? ` + ${sec1(delay)}` : ""}).`);
       out.why.push(sizedByTps ? `Vusers = TPS × ${sec1(P)} ÷ ${T} = ${round(target, 3)} × ${round(P, 2)} ÷ ${T}, rounded up = ${V}.` : `${V} Vusers as entered → about ${round(V * T / P, 2)} TPS.`);
       out.checks.push({ level: "warn", code: "uncontrolled", text: `${out.name}: no fixed pacing — the TPS rises and falls with the response times. Fine for a stress test; use a fixed or random pacing to prove a TPS target.` });
     } else {                                               // auto: the tool chooses the pacing
@@ -201,7 +240,7 @@
         // a short pacing where one second is a big step (4.4 s → 4 s is 10%): keep the TPS, pace to 0.1 s as before
         pick = pick || near || { v: v0, p: Math.floor((v0 / lam) * 10 + EPS) / 10, over: 0, tenths: best ? best.over : null };
         V = pick.v; setRange(pick.p); wholeRandom();
-        out.why.push(`Iteration ≈ ${sec1(it.mean)} (${T} × ${it.rtMean / T} s response + ${sec1(it.think.mean)} think). Shortest safe pacing = iteration + ${Math.round(h * 100)}% headroom → ${b} s.`);
+        out.why.push(`Iteration ≈ ${sec1(it.mean)} (${T} × ${it.rtMean / T} s response + ${pauseWords(it.think)}). Shortest safe pacing = iteration + ${Math.round(h * 100)}% headroom → ${b} s.`);
         out.why.push(`Vusers = TPS × pacing ÷ transactions → ${V}; pacing ${sec1(P)}${pick.tenths != null ? ` (to 0.1 s: a whole second would put the TPS ${round(pick.tenths * 100, 1)}% above the target)` : pick.over ? ` (whole seconds) — the TPS lands ${round(pick.over * 100, 2)}% above the target` : " (whole seconds) so the TPS is exact"}.`
           + (V > v0 ? ` (${V - v0} more than the ${v0} the shortest pacing needs, for a whole-second pacing.)` : ""));
       } else {
@@ -221,7 +260,7 @@
     // budget: the slowest average response time per transaction that keeps the pacing
     if (kind === "fixed" || kind === "random") {
       out.rtBudget = (pMin - it.think.worst) / T;
-      if (out.rtBudget <= 0) out.checks.push({ level: "bad", code: "think-exceeds-pacing", text: `${out.name}: the think time alone (${sec1(it.think.worst)}) is longer than the ${kind === "random" ? "shortest " : ""}pacing (${sec1(pMin)}). Shorten the think time or lengthen the pacing.` });
+      if (out.rtBudget <= 0) out.checks.push({ level: "bad", code: "think-exceeds-pacing", text: `${out.name}: the ${it.think.wait ? "think time and fixed waits" : "think time"} alone (${sec1(it.think.worst)}) ${it.think.wait ? "are" : "is"} longer than the ${kind === "random" ? "shortest " : ""}pacing (${sec1(pMin)}). Shorten ${it.think.wait ? "them" : "the think time"} or lengthen the pacing.` });
     }
 
     // feasibility against the iteration time
@@ -229,8 +268,20 @@
       if (pMin < it.mean - EPS) {
         out.status = "infeasible";
         const reach = V * T / Math.max(it.mean, P);
+        // what LRE will really reach: each Vuser starts its next iteration only when the last one ends
+        out.reachTps = reach; out.reachIps = V / Math.max(it.mean, P);
         const fix = sizedByTps ? ` Use at least ${Math.max(1, ceilE(lam * it.mean * (1 + h)))} Vusers` : ` Lengthen the pacing to at least ${Math.ceil(it.mean * (1 + h))} s`;
-        out.checks.push({ level: "bad", code: "pacing-too-short", text: `${out.name}: one iteration takes about ${sec1(it.mean)} but the ${kind === "random" ? "shortest " : ""}pacing is ${sec1(pMin)} — iterations overrun and the TPS drops to about ${round(reach, 2)}.${fix}.` });
+        // the ways out, worked out for the card: a pacing that fits (with the headroom), the Vusers that keep the TPS, the response time that fits
+        const safe = Math.ceil(it.mean * (1 + h) - EPS);
+        out.overrun = {
+          iter: it.mean, tx: T, rt: it.rtMean, think: it.think.think, wait: it.think.wait || 0, pacing: pMin, kind, headroomPct: Math.round(h * 100),
+          askTps: out.tps, reachTps: reach, sizedByTps,
+          pacingFit: Math.ceil(it.mean - EPS), pacingSafe: safe,
+          tpsAtSafe: sizedByTps ? out.tps : V * T / safe,
+          vusersAtSafe: Math.max(1, ceilE(out.tps * safe / T)),
+          rtFit: (pMin - it.think.mean) / T > 0 ? (pMin - it.think.mean) / T : null,
+        };
+        out.checks.push({ level: "bad", code: "pacing-too-short", gid: g.id, field: "pacing.fixed", text: `${out.name}: one iteration takes about ${sec1(it.mean)} but the ${kind === "random" ? "shortest " : ""}pacing is ${sec1(pMin)} — iterations overrun and the TPS drops to about ${round(reach, 2)}.${fix}.` });
       } else if (pMin < it.worst - EPS) {
         out.checks.push({ level: "warn", code: "pacing-tight", text: `${out.name}: slow iterations (${sec1(it.worst)} at the 90th percentile${it.think.worst > it.think.mean ? " and the longest think time" : ""}) are longer than the ${kind === "random" ? "shortest " : ""}pacing of ${sec1(pMin)}; some iterations will overrun.` });
       } else if (pMin < it.mean * (1 + h) - EPS) {
@@ -306,6 +357,16 @@
     return best || stepPlan(V, target, rate);
   }
 
+  // The ramp the user typed (scenario rampMode "own"): start startPer Vusers every startEvery s; stop stopPer every
+  // stopEvery s (empty: as the start). null when the tool chooses, or when the start is not filled in.
+  function ownRamp(sc) {
+    if (!sc || sc.rampMode !== "own" || !pos(sc.startPer) || !nn(sc.startEvery)) return null;
+    const whole = (x) => Math.max(1, Math.round(x));
+    const start = { perStep: whole(sc.startPer), every: sc.startEvery };
+    const stop = { perStep: pos(sc.stopPer) ? whole(sc.stopPer) : start.perStep, every: nn(sc.stopEvery) ? sc.stopEvery : start.every };
+    return { start, stop };
+  }
+
   /* ---------- schedule: a list of actions, simulated per Vuser ---------- */
   // actions: { type: 'start', count, perStep, every } | { type: 'hold', dur, label } | { type: 'stop', count|'all', perStep, every }
   function buildProfile(sc, groups, wl) {
@@ -316,8 +377,12 @@
     const rate = sc.maxStartRate;
     // ramp-down: half the ramp-up, but never shorter than the stop rate allows (Vusers ÷ twice the start rate) — halving
     // the ramp-up also halved that floor, so the steps had to stop many Vusers at once
-    const stopPlan = (n) => { const p = stepPlan(n, Math.max(rampTarget(n, maxPace, steadyS, false, rate * 2) / 2, pos(rate) ? n / (rate * 2) : 0), rate * 2); return { type: "stop", count: n, perStep: p.perStep, every: p.every, all: p.all }; };
-    const startPlan = (n, fast) => { const p = stepPlan(n, rampTarget(n, maxPace, steadyS, fast, rate), fast ? null : rate); return { type: "start", count: n, perStep: p.perStep, every: p.every, all: p.all }; };
+    // the user's own ramp ("Start 1 Vuser every 5 s"), as typed in LRE: used for every normal start and stop; a spike's
+    // sudden jump stays the tool's
+    const own = ownRamp(sc);
+    const ownPlan = (type, n, x) => ({ type, count: n, perStep: Math.min(x.perStep, n), every: x.every, all: x.perStep >= n || x.every === 0 });
+    const stopPlan = (n) => { if (own) return ownPlan("stop", n, own.stop); const p = stepPlan(n, Math.max(rampTarget(n, maxPace, steadyS, false, rate * 2) / 2, pos(rate) ? n / (rate * 2) : 0), rate * 2); return { type: "stop", count: n, perStep: p.perStep, every: p.every, all: p.all }; };
+    const startPlan = (n, fast) => { if (own && !fast) return ownPlan("start", n, own.start); const p = stepPlan(n, rampTarget(n, maxPace, steadyS, fast, rate), fast ? null : rate); return { type: "start", count: n, perStep: p.perStep, every: p.every, all: p.all }; };
 
     if (wl === "real-world" && (tt.levels || tt.base)) {
       const acts = [];
@@ -710,10 +775,11 @@
         return { g, gi: x.gi, share, prof: buildProfile(Object.assign({}, sc, { testType: "load", maxStartRate: share }), [g], "basic") };
       });
       const longest = Math.max(0, ...plans.map((p) => rampOf(p.prof.actions[0])));
-      // the same length for all: a slower start for the quicker groups (never faster than their share)
+      // the same length for all: a slower start for the quicker groups (never faster than their share) — not with the
+      // user's own ramp: each group starts as typed; the quicker ones then hold longer, so all still stop together
       plans.forEach((p) => {
         const a = p.prof.actions[0];
-        if (a.all || rampOf(a) >= longest) return;
+        if (ownRamp(sc) || a.all || rampOf(a) >= longest) return;
         const s = fitPlan(p.g.vusers, longest, p.share);
         p.prof.actions[0] = { type: "start", count: s.count, perStep: s.perStep, every: s.every, all: s.all };
       });
@@ -749,8 +815,10 @@
     const steadyTo = holdMarks.length ? holdMarks[holdMarks.length - 1].to : 0;
     const firstFull = wl === "real-world" ? steadyFrom : (marks.find((m) => m.type === "hold") || { from: 0 }).from;
     groups.forEach((g) => { g.iters = { rampUp: 0, steady: 0, rampDown: 0, total: 0 }; });
+    // a Vuser starts an iteration every pacing — or, when one iteration is longer than the pacing, every iteration
+    const cycle = (g) => (g.reachIps != null && g.it && g.it.mean != null ? Math.max(g.pacing.mean, g.it.mean) : g.pacing.mean);
     users.forEach((u) => {
-      const g = groups[u.group], P = g.pacing.mean;
+      const g = groups[u.group], P = cycle(g);
       const all = itersIn(u.start, u.stop, P, -Infinity, Infinity);
       const st = itersIn(u.start, u.stop, P, steadyFrom, steadyTo);
       const up = itersIn(u.start, u.stop, P, -Infinity, steadyFrom);
@@ -765,8 +833,10 @@
       }
     });
     res.firstFull = firstFull; res.steadyFrom = steadyFrom; res.steadyTo = steadyTo;
-    // running iterations finish (gradual exit): at most the longer of the pacing and a slow (90th percentile) iteration
-    res.tail = Math.max(...groups.map((g) => Math.max(g.pacing.mean, (g.it && g.it.worst) || 0)));
+    // running iterations finish (gradual exit): a Vuser stopped while it waits for its next pacing slot leaves at once; one
+    // stopped mid-iteration finishes that iteration — so at most one slow (90th percentile) iteration, not one pacing (an
+    // LRE run ended 3 s after its stop ramp with a 360 s pacing). Without a response time the iteration is not known: the pacing.
+    res.tail = Math.max(...groups.map((g) => (g.it && g.it.worst != null ? g.it.worst : g.pacing.mean || 0)));
     res.duration = end + res.tail;
 
     /* timeline (Vusers and expected TPS per bucket) */
@@ -774,7 +844,7 @@
     const tl = [];
     for (let t = 0; t <= res.duration; t += bucket) tl.push({ t, vusers: 0, tps: 0 });
     users.forEach((u) => {
-      const g = groups[u.group], rate = g.T / g.pacing.mean;
+      const g = groups[u.group], rate = g.T / cycle(g);
       for (let i = Math.max(0, Math.ceil(u.start / bucket)); i < tl.length && tl[i].t < u.stop; i++) { tl[i].vusers++; tl[i].tps += rate; }
     });
     res.timeline = tl; res.bucket = bucket;
@@ -786,6 +856,11 @@
       target: groups.every((g) => g.target) ? sum((g) => g.target) : null,
       hitsPerSec: groups.some((g) => g.hitsPerSec) ? sum((g) => g.hitsPerSec || 0) : null,
       perHour: sum((g) => g.tps) * 3600,
+      // iterations at full load: per second (Vusers ÷ pacing, added up over the scripts) and per hour
+      ips: sum((g) => g.ips || 0), itersPerHour: sum((g) => g.ips || 0) * 3600,
+      // when an iteration is longer than its pacing: the TPS and iterations LRE will really reach (null when all fit)
+      reachTps: groups.some((g) => g.reachTps != null) ? sum((g) => (g.reachTps != null ? g.reachTps : g.tps || 0)) : null,
+      reachIps: groups.some((g) => g.reachIps != null) ? sum((g) => (g.reachIps != null ? g.reachIps : g.ips || 0)) : null,
       iters: { rampUp: sum((g) => g.iters.rampUp), steady: sum((g) => g.iters.steady), rampDown: sum((g) => g.iters.rampDown), total: sum((g) => g.iters.total) },
       tx: { steady: sum((g) => g.tx.steady), total: sum((g) => g.tx.total) },
     };
@@ -799,6 +874,16 @@
     const maxPace = Math.max(...groups.map((g) => g.pacing.mean));
     if (start && start.to - start.from < maxPace && res.totals.vusers > 1 && sc.testType !== "spike")
       checks.push({ level: "warn", code: "ramp-short", text: `All Vusers start within ${words(start.to - start.from)}, shorter than one pacing (${sec1(maxPace)}): their iterations bunch together.` });
+    // the user's own ramp: not filled in, or faster than the start rate (with a by-group schedule the groups start together)
+    const own = ownRamp(sc);
+    if (sc.rampMode === "own" && !own && wl !== "goal")
+      checks.push({ level: "warn", code: "ramp-own-missing", text: "Your own ramp: enter how many Vusers start and every how many seconds — until then the tool chooses the ramp." });
+    if (own && wl !== "goal" && pos(sc.maxStartRate)) {
+      const lanes = wl === "basic-group" ? (res.lreGroups || []).filter((x) => x.vusers > 0).length || 1 : 1;
+      const perSec = own.start.every > 0 ? lanes * own.start.perStep / own.start.every : Infinity;
+      if (perSec > sc.maxStartRate + EPS)
+        checks.push({ level: "info", code: "ramp-own-fast", text: `Your ramp starts ${perSec === Infinity ? "Vusers all at once" : `${round(perSec, 2)} Vusers per second`}${lanes > 1 ? ` (${lanes} groups starting together)` : ""} — faster than the start rate the tool keeps to (${round(sc.maxStartRate, 2)} per second, Fine tuning). Fine if the system copes with that many log-ins.` });
+    }
     if (groups.some((g) => (g.it.think.mean === 0) && g.it.think.worst === 0 && g.method !== "vusers" && (g.pacing.kind === "fixed" || g.pacing.kind === "random")) && groups.some((g) => (input.groups.find((x, i) => (x.id || "g" + (i + 1)) === g.id).thinkMode) === "ignore"))
       checks.push({ level: "info", code: "think-ignored", text: "Think time is ignored at replay: the pacing alone holds the load (the iteration is all requests, then a wait)." });
 
@@ -824,9 +909,10 @@
   function thinkText(g, src) {
     const m = src.thinkMode || "recorded";
     if (m === "ignore") return "Ignore think time";
-    if (m === "multiply") return `Multiply recorded think time by ${src.thinkFactor || 1}`;
-    if (m === "random") return `Use random percentage of recorded think time: min ${src.thinkMinPct ?? 50}%, max ${src.thinkMaxPct ?? 150}%`;
-    return "Replay think time as recorded";
+    const lim = pos(src.thinkLimit) ? `; Limit think time to ${round(src.thinkLimit, 1)} seconds` : "";
+    if (m === "multiply") return `Multiply recorded think time by ${src.thinkFactor || 1}${lim}`;
+    if (m === "random") return `Use random percentage of recorded think time: min ${src.thinkMinPct ?? 50}%, max ${src.thinkMaxPct ?? 150}%${lim}`;
+    return "Replay think time as recorded" + lim;
   }
   // "LG1, LG2 (100 Vusers each)" or "LG3 (67), LG4 (66)" — at the peak (the highest step of a stepped test)
   function lgText(lgs) {
@@ -873,8 +959,9 @@
     if (res.workload !== "basic-group" && starts > 1) s.push(`Users are added in ${starts} steps, a few at a time, with a hold after each step (see the LRE settings).`);
     else if (start && !start.all) s.push(`Start ${start.perStep} user${start.perStep === 1 ? "" : "s"} every ${words(start.every)}; all are running after ${words((Math.ceil(start.count / start.perStep) - 1) * start.every)}.`);
     else if (res.workload === "basic-group") s.push(`Each script starts its users a few at a time; all reach full load after ${words(res.firstFull)}.`);
-    s.push(`Expected throughput: ${round(t.tps, 2)} transactions per second (${Math.round(t.perHour).toLocaleString("en-GB")} per hour)${Math.abs(t.tpsMax - t.tpsMin) > 1e-6 ? `, between ${round(t.tpsMin, 2)} and ${round(t.tpsMax, 2)} because the pacing is random` : ""}${res.peakVusers > t.vusers ? ` at 100% of the target, and about ${round(t.tps * res.peakVusers / t.vusers, 2)} at the highest step` : ""}.`);
-    s.push(`The whole test takes about ${words(res.duration)} and runs ${t.iters.total.toLocaleString("en-GB")} iterations — that is the number of test-data rows used if each iteration takes a new one.`);
+    const over = t.reachTps != null, tps = over ? t.reachTps : t.tps, ips = over ? t.reachIps : t.ips;
+    s.push(`At full load: ${round(tps, 2)} transactions per second (TPS) = ${Math.round(tps * 3600).toLocaleString("en-GB")} transactions per hour (TPH), from ${Math.round(ips * 3600).toLocaleString("en-GB")} iterations per hour (${round(ips, 3)} per second)${over ? ` — not the ${round(t.tps, 2)} TPS the pacing asks for: an iteration takes longer than the pacing` : ""}${Math.abs(t.tpsMax - t.tpsMin) > 1e-6 ? `, between ${round(t.tpsMin, 2)} and ${round(t.tpsMax, 2)} because the pacing is random` : ""}${res.peakVusers > t.vusers ? ` at 100% of the target, and about ${round(t.tps * res.peakVusers / t.vusers, 2)} at the highest step` : ""}.`);
+    s.push(`The whole test takes about ${words(res.duration)} and runs ${t.iters.total.toLocaleString("en-GB")} iterations in total, ramp-up and ramp-down included — the number of test-data rows used if each iteration takes a new one.`);
     return s.join(" ");
   }
 

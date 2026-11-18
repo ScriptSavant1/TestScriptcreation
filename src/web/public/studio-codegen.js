@@ -81,6 +81,13 @@ function _stPlanHosts(entries) {
 // https:\/\/host (JSON with escaped slashes) and https%3A%2F%2Fhost (redirect_uri=…). A longer name goes first, so
 // "api.shop.com" is never half-replaced by "shop.com". Compiled patterns are kept per map (one map per script).
 const _subHostsCache = new WeakMap();
+// The script ID in transaction names (SC01_01_LOGIN): a recording made with Start recording and a script ID
+// carries it (log._perfx_scriptId, CDP Recorder 0.2.3); any other recording keeps SC01, as before.
+function _scId() {
+  const id = S.har1 && S.har1.log && S.har1.log._perfx_scriptId;
+  return /^[A-Z][A-Z0-9]{0,11}$/.test(id || "") ? id : "SC01";
+}
+
 function _subHostsRules(hostVarMap) {
   let rules = _subHostsCache.get(hostVarMap);
   if (rules) return rules;
@@ -1106,12 +1113,18 @@ function detectParams(entries, correlations) {
 // ═══════════════════════════════════════════════════════════════════════════
 // PARAMETER FILE GENERATORS
 // ═══════════════════════════════════════════════════════════════════════════
+// Each parameter may carry the user's choices (Script Studio's Test data table): p.take "sequential" | "random" |
+// "unique", p.update "iteration" | "once", p.file (data file name without extension; default collection_data — one
+// shared file, so values that belong together stay on one row), p.rows (the data rows; default [p.value]).
+// Without them the files are exactly as before.
+const PARAM_FILE = "collection_data";
+function _paramFile(p) { return p.file || PARAM_FILE; }
 function genParamsYml() {
   if (!S.params || S.params.length === 0) return "parameters: []\n";
   let o = "parameters:\n";
   for (const p of S.params) {
-    o += `  - name: ${p.csvKey}\n    type: csv\n    fileName: collection_data.csv\n`;
-    o += `    columnName: ${p.csvKey}\n    nextValue: iteration\n    nextRow: sequential\n    onEnd: loop\n`;
+    o += `  - name: ${p.csvKey}\n    type: csv\n    fileName: ${_paramFile(p)}.csv\n`;
+    o += `    columnName: ${p.csvKey}\n    nextValue: ${p.update === "once" ? "once" : "iteration"}\n    nextRow: ${p.take === "random" ? "random" : p.take === "unique" ? "unique" : "sequential"}\n    onEnd: loop\n`;
   }
   return o;
 }
@@ -1124,13 +1137,13 @@ function genParamFilePrm() {
     o += `[parameter:${p.csvKey}]\n`;
     o += `ColumnName="${p.csvKey}"\n`;
     o += `Delimiter=","\n`;
-    o += `GenerateNewVal="EachIteration"\n`;
+    o += `GenerateNewVal="${p.update === "once" ? "Once" : "EachIteration"}"\n`;
     o += `OriginalValue="${origVal}"\n`;
     o += `OutOfRangePolicy="ContinueWithLast"\n`;
     o += `ParamName="${p.csvKey}"\n`;
-    o += `SelectNextRow="Sequential"\n`;
+    o += `SelectNextRow="${p.take === "random" ? "Random" : p.take === "unique" ? "Unique" : "Sequential"}"\n`;
     o += `StartRow="1"\n`;
-    o += `Table="collection_data.dat"\n`;
+    o += `Table="${_paramFile(p)}.dat"\n`;
     o += `TableLocation="Local"\n`;
     o += `Type="Table"\n`;
     o += `auto_allocate_block_size="1"\n`;
@@ -1140,26 +1153,46 @@ function genParamFilePrm() {
   return o;
 }
 
+// one data file: a header of parameter names, then a row per user (p.rows, or the recorded value)
+function _paramDataText(params) {
+  if (!params.length) return "";
+  const header = params.map((p) => p.csvKey).join(",");
+  const cell = (p, v) => {
+    // If param is ONLY used in JSON/XML body and the value contains double-quotes,
+    // store the JSON-escaped form so VuGen substitutes correctly inside JSON string values.
+    // e.g. {"condition":"or"} → {\"condition\":\"or\"} avoids breaking the outer JSON body.
+    const _allJson = p.usages && p.usages.every(
+      u => u.location === 'body_json' || u.location === 'body_xml'
+    );
+    v = String(v == null ? "" : v);
+    const effectiveValue = (_allJson && v && v.includes('"'))
+      ? JSON.stringify(v).slice(1, -1)   // JSON-escaped (backslash-quote pairs)
+      : v;
+    return effectiveValue.includes(",") || effectiveValue.includes('"')
+      ? `"${effectiveValue.replace(/"/g, '""')}"`
+      : effectiveValue;
+  };
+  const rowsOf = (p) => (p.rows && p.rows.length ? p.rows : [p.value]);
+  const n = Math.max.apply(null, params.map((p) => rowsOf(p).length));
+  let o = header + "\n";
+  for (let r = 0; r < n; r++) {
+    // a parameter with fewer rows repeats its last value
+    o += params.map((p) => { const rs = rowsOf(p); return cell(p, rs[Math.min(r, rs.length - 1)]); }).join(",") + "\n";
+  }
+  return o;
+}
+// the shared data file (collection_data) — the parameters without a file of their own
 function genCollectionDataCsv() {
   if (!S.params || S.params.length === 0) return "";
-  const header = S.params.map((p) => p.csvKey).join(",");
-  const row = S.params
-    .map((p) => {
-      // If param is ONLY used in JSON/XML body and the value contains double-quotes,
-      // store the JSON-escaped form so VuGen substitutes correctly inside JSON string values.
-      // e.g. {"condition":"or"} → {\"condition\":\"or\"} avoids breaking the outer JSON body.
-      const _allJson = p.usages && p.usages.every(
-        u => u.location === 'body_json' || u.location === 'body_xml'
-      );
-      const effectiveValue = (_allJson && p.value && p.value.includes('"'))
-        ? JSON.stringify(p.value).slice(1, -1)   // JSON-escaped (backslash-quote pairs)
-        : p.value;
-      return effectiveValue.includes(",") || effectiveValue.includes('"')
-        ? `"${effectiveValue.replace(/"/g, '""')}"`
-        : effectiveValue;
-    })
-    .join(",");
-  return header + "\n" + row + "\n";
+  return _paramDataText(S.params.filter((p) => _paramFile(p) === PARAM_FILE));
+}
+// every data file: { name (without extension): text } — the shared one first
+function genParamDataFiles() {
+  const out = {};
+  (S.params || []).forEach((p) => { const f = _paramFile(p); if (!out[f]) out[f] = []; out[f].push(p); });
+  const files = {};
+  Object.keys(out).sort((a, b) => (a === PARAM_FILE ? -1 : b === PARAM_FILE ? 1 : a < b ? -1 : 1)).forEach((f) => { files[f] = _paramDataText(out[f]); });
+  return files;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1386,11 +1419,11 @@ function genMainJS(entries, correlations) {
   if (hasMarkers) {
     txnNames.forEach((nm, i) => {
       const tsNum = String(i + 1).padStart(2, "0");
-      const scName = `SC01_${tsNum}_${nm.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
+      const scName = `${_scId()}_${tsNum}_${nm.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
       o += `let TS${tsNum} = new load.Transaction("${scName}");\n`;
     });
   } else {
-    o += 'let TS01 = new load.Transaction("SC01_01_Transaction");\n';
+    o += 'let TS01 = new load.Transaction("' + _scId() + '_01_Transaction");\n';
   }
   o += "\n";
 
@@ -2491,7 +2524,7 @@ function genMainJS(entries, correlations) {
 }
 
 // DevWeb servers — the same rule as VuGen's set_server(): a user argument with the parameter's name wins (rts.yml
-// userArguments, or -userArgs), else the recorded server. Same as the Recorder (VuGen-Recorder-generators.js).
+// userArguments, or -userArgs), else the recorded server. Same as both converters.
 function _stDwServerBlock(map, main) {
   const e = Object.entries(map || {});
   if (!e.length) return "";
@@ -2823,7 +2856,7 @@ function genActionC(entries, correlations) {
 
   // Fallback single transaction when no markers present
   if (!hasMarkers)
-    o += '\tlr_start_transaction("SC01_01_Transaction");\n\n';
+    o += '\tlr_start_transaction("' + _scId() + '_01_Transaction");\n\n';
 
   // Track DYNJSON correlations whose web_js_run escape call has already been emitted.
   const _dynJsonEscEmitted = new Set();
@@ -2840,7 +2873,7 @@ function genActionC(entries, correlations) {
     if (e.isMarker) {
       const acIdx = S.txns.findIndex((t) => t.name === e.txnName);
       const acSeq = String(acIdx + 1).padStart(2, "0");
-      const acSc = `SC01_${acSeq}_${e.txnName.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
+      const acSc = `${_scId()}_${acSeq}_${e.txnName.replace(/^[Tt]\d+[_-]/, "").toUpperCase()}`;
       if (e.markerType === "start") {
         o += `\tlr_start_transaction("${acSc}");\n\n`;
       } else {
@@ -3556,6 +3589,13 @@ function genActionC(entries, correlations) {
           o += `\t\t"ResultParam=_esc_result",\n`;
           o += `\t\tLAST);\n\n`;
         }
+        // Servers in the body become their parameter too ({App_Server}), as in URLs and headers — after every other
+        // substitution, so a correlation or parameter value that holds a server address is still found first. In the
+        // C-escaped body a JSON-escaped slash is \\/ : turned into \/ for the server patterns and back again.
+        if (body && acHostVarMap) {
+          const _hb = _subHosts(body.replace(/\\\\\//g, "\\/"), acHostVarMap);
+          if (_hb.changed) body = _hb.text.replace(/\\\//g, "\\\\/").replace(/\x00HDRH_([^\x00]+)\x00/g, "{$1}");
+        }
         o += hdrOut; // flush headers AFTER all web_js_run calls, immediately before the HTTP request
         o += `\tweb_custom_request("${n}",\n\t\t"URL=${urlOut}",\n\t\t"Method=${e.method}",\n`;
         o += `\t\t"Resource=0",\n\t\t"RecContentType=${ct}",\n`;
@@ -3586,7 +3626,7 @@ function genActionC(entries, correlations) {
   }
 
   if (!hasMarkers)
-    o += '\tlr_end_transaction("SC01_01_Transaction", LR_AUTO);\n\n';
+    o += '\tlr_end_transaction("' + _scId() + '_01_Transaction", LR_AUTO);\n\n';
   o += "\treturn 0;\n}\n";
   S._stActionC = o; // genVuserInit() sets only the servers this Action uses
   return o;
@@ -3775,7 +3815,8 @@ ${txnLines}${S.hasDpop || S.hasPkce ? "\n[ManuallyExtraFiles]\nlre-utils.dat=\n"
 function genScriptUploadMetadata(scriptName) {
   const hasParams = S.params && S.params.length > 0;
   const paramEntries = hasParams
-    ? `    <FileEntry Name="ParameterFile.prm" Filter="4" />\n    <FileEntry Name="collection_data.dat" Filter="4" />\n`
+    ? `    <FileEntry Name="ParameterFile.prm" Filter="4" />\n` +
+      Object.keys(genParamDataFiles()).map((f) => `    <FileEntry Name="${f}.dat" Filter="4" />\n`).join("")
     : "";
   return `<?xml version="1.0" encoding="utf-8"?>
 <VugenScriptMetadata>
@@ -4079,4 +4120,4 @@ function detectServerHost(entries) {
   if (top.count / total < 0.35 && sorted.length > 1) return null;
   return top;
 }
-
+

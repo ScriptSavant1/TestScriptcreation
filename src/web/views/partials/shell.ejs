@@ -3,10 +3,16 @@
   Locals: I (icon SVG paths), basePath.
 %>
 <aside class="sb" id="sb" aria-label="Main menu">
-  <button type="button" class="sb-brand" aria-label="PerfX Studio — Home">
-    <span class="sb-logo"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg></span>
-    <span class="sb-brand-text"><span class="sb-brand-name">PerfX Studio</span><span class="sb-brand-sub">Performance engineering toolkit</span></span>
-  </button>
+  <div class="sb-top">
+    <button type="button" class="sb-brand" aria-label="PerfX Studio — Home">
+      <span class="sb-logo"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg></span>
+      <span class="sb-brand-text"><span class="sb-brand-name">PerfX Studio</span></span>
+    </button>
+    <button class="sb-collapse" type="button" aria-controls="sb" title="Collapse or expand the menu (Ctrl+B)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      <span class="sb-label vh">Collapse menu</span>
+    </button>
+  </div>
 
   <nav class="sb-nav">
     <button type="button" class="sb-item" data-page="home" data-tab="home" style="--c:var(--c-home)">
@@ -15,18 +21,14 @@
     </button>
 
     <div class="sb-group">Create scripts</div><div class="sb-group-line" aria-hidden="true"></div>
-    <button type="button" class="sb-item" data-page="record" data-tab="recorder" style="--c:var(--c-record)">
-      <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- I.record %></svg></span>
-      <span class="sb-txt"><span class="sb-label">Recorder</span><span class="sb-sub">Browser recording → script</span></span>
+    <button type="button" class="sb-item" data-page="studio" data-tab="studio" style="--c:var(--c-studio)">
+      <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- I.link %></svg></span>
+      <span class="sb-txt"><span class="sb-label">Script Studio</span><span class="sb-sub">Record · correlate · download</span></span>
       <span class="sb-badge" id="sb-rec-badge" hidden>Running</span>
     </button>
     <button type="button" class="sb-item" data-page="explore" data-tab="explorer" style="--c:var(--c-explore)">
       <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- I.explore %></svg></span>
-      <span class="sb-txt"><span class="sb-label">HAR Explorer</span><span class="sb-sub">Where each value comes from</span></span>
-    </button>
-    <button type="button" class="sb-item" data-page="studio" data-tab="studio" style="--c:var(--c-studio)">
-      <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- I.link %></svg></span>
-      <span class="sb-txt"><span class="sb-label">Script Studio</span><span class="sb-sub">Automatic correlation</span></span>
+      <span class="sb-txt"><span class="sb-label">HAR Explorer</span><span class="sb-sub">Look inside a recording</span></span>
     </button>
     <button type="button" class="sb-item" data-page="postman" data-tab="converter" style="--c:var(--c-convert)">
       <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- I.api %></svg></span>
@@ -37,20 +39,20 @@
       <span class="sb-txt"><span class="sb-label">JMeter</span><span class="sb-sub">.jmx test plan → script</span></span>
     </button>
 
-    <div class="sb-group">Plan</div><div class="sb-group-line" aria-hidden="true"></div>
+    <div class="sb-group">Plan &amp; analyse</div><div class="sb-group-line" aria-hidden="true"></div>
     <button type="button" class="sb-item" data-page="workload" data-tab="workload" style="--c:var(--c-work)">
       <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- I.workload %></svg></span>
       <span class="sb-txt"><span class="sb-label">Workload Modeller</span><span class="sb-sub">Targets → LRE scenario</span></span>
     </button>
 
-    <div class="sb-group">Analyse</div><div class="sb-group-line" aria-hidden="true"></div>
     <button type="button" class="sb-item" data-page="results" data-tab="analyser" style="--c:var(--c-results)">
       <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- I.chart %></svg></span>
       <span class="sb-txt"><span class="sb-label">Results Analyser</span><span class="sb-sub">LRE run → reports</span></span>
     </button>
 
-    <div class="sb-group">Learn</div><div class="sb-group-line" aria-hidden="true"></div>
-    <button type="button" class="sb-item" data-page="help" data-tab="help" style="--c:var(--c-help)">
+    <!-- Help sits at the bottom of the menu, apart from the tools -->
+    <div class="sb-group-line sb-help-line" aria-hidden="true"></div>
+    <button type="button" class="sb-item sb-item-help" data-page="help" data-tab="help" style="--c:var(--c-help)">
       <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- I.book %></svg></span>
       <span class="sb-txt"><span class="sb-label">Help &amp; guides</span><span class="sb-sub">Step-by-step, glossary, FAQ</span></span>
       <span class="sb-chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
@@ -63,10 +65,6 @@
     <div class="sb-note" title="Server status: live. Files uploaded to a converter are deleted when the conversion ends; the other tools work in your browser.">
       <i class="sb-status-dot" aria-hidden="true"></i><span>Live · files never stored</span>
     </div>
-    <button class="sb-item sb-collapse" type="button" aria-controls="sb" title="Collapse or expand the menu (Ctrl+B)">
-      <span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></span>
-      <span class="sb-txt"><span class="sb-label">Collapse menu</span></span>
-    </button>
   </div>
 </aside>
 <div class="sb-scrim" aria-hidden="true"></div>

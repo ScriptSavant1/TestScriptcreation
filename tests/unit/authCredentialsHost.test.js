@@ -11,6 +11,7 @@
  *    under and ignores web_set_user. No tool writes OverrideNTLMCreds=1 any more; integrated and native NTLM stay on.
  */
 
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -125,12 +126,12 @@ describe('converter VuGen default.cfg for NTLM / Kerberos (BUG-131)', () => {
     const cfg = new VugenFiles({ scriptName: 'T' }).generateDefaultCfg(null, false);
     expect([ini(cfg, 'IntegratedAuthentication'), ini(cfg, 'UseNativeNTLM'), ini(cfg, 'OverrideNTLMCreds')]).toEqual(['0', '0', '0']);
   });
-  test('WebRecorderVersion is written, as by the Recorder and Script Studio — without it VuGen answers NTLM with Basic (BUG-132)', () => {
+  test('WebRecorderVersion is written, as by Script Studio — without it VuGen answers NTLM with Basic (BUG-132)', () => {
     for (const ntlm of [true, false]) expect(ini(new VugenFiles({ scriptName: 'T' }).generateDefaultCfg(null, ntlm), 'WebRecorderVersion')).toBe('10');
   });
 });
 
-// ---- Recorder and Script Studio -------------------------------------------------------------------------------------
+// ---- Script Studio (the Recorder tool was merged into it) ----------------------------------------------------------------
 let nextId = 1;
 function ent(url, o = {}) {
   return Object.assign({
@@ -141,12 +142,6 @@ function ent(url, o = {}) {
 }
 const challenge = (url, scheme) => ent(url, { status: 401, respHdrsMap: { 'www-authenticate': scheme } });
 
-function loadRecorder() {
-  // eslint-disable-next-line no-new-func
-  return new Function('PageResources', 'HostParams',
-    read('VuGen-Recorder-state.js') + '\n' + read('VuGen-Recorder-templates.js') + '\n' + read('VuGen-Recorder-ui.js') + '\n' + read('VuGen-Recorder-generators.js')
-    + '\nreturn { S, buildScripts, detectAuth, detectCorporateAuth, genDefaultCfg };')(PageResources, HostParams);
-}
 function loadStudio() {
   // eslint-disable-next-line no-new-func
   return new Function('PageResources', 'HostParams', 'VugenCodegen', 'VUGEN_TEMPLATES',
@@ -154,16 +149,9 @@ function loadStudio() {
     + '\nreturn { S, genActionC, genMainJS, genDefaultCfg, detectAuth, detectCorporateAuth };')(PageResources, HostParams, VugenCodegen, {});
 }
 
-describe.each([['Recorder', 'recorder'], ['Script Studio', 'studio']])('%s: the credentials host (BUG-130)', (tool, kind) => {
+describe('Script Studio: the credentials host (BUG-130)', () => {
   function scripts(base, scheme) {
     const entries = [challenge(base + '/', scheme), ent(base + '/'), ent(base + '/report')];
-    if (kind === 'recorder') {
-      const r = loadRecorder();
-      r.S.entries = entries;
-      r.S.format = 'both';
-      r.buildScripts();
-      return { ac: r.S.scripts.ac, vi: r.S.scripts.vi, mj: r.S.scripts.mj, auth: r.S.auth };
-    }
     const r = loadStudio();
     r.S.entries1 = entries;
     r.S.correlations = [];
@@ -197,7 +185,8 @@ describe.each([['Recorder', 'recorder'], ['Script Studio', 'studio']])('%s: the 
   });
 });
 
-describe.each([['Recorder', loadRecorder], ['Script Studio', loadStudio]])('%s default.cfg for NTLM / Kerberos (BUG-131)', (tool, load) => {
+describe('Script Studio default.cfg for NTLM / Kerberos (BUG-131)', () => {
+  const load = loadStudio;
   test('NTLM: integrated and native NTLM on, OverrideNTLMCreds off', () => {
     const cfg = load().genDefaultCfg({ type: 'ntlm', host: 'intranet.example.com' });
     expect([ini(cfg, 'IntegratedAuthentication'), ini(cfg, 'UseNativeNTLM'), ini(cfg, 'OverrideNTLMCreds')]).toEqual(['1', '1', '0']);

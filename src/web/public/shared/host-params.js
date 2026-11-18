@@ -11,7 +11,7 @@
  *                  <Organisation>_Server), the same in both formats;
  *                  the user can rename them (validName says whether a name can be used)
  *
- * UMD: browser global `HostParams` (Recorder, Script Studio), or require() in Node (converters, unit tests).
+ * UMD: browser global `HostParams` (Script Studio), or require() in Node (converters, unit tests).
  * URLs are split by hand, never with new URL(): a recording may hold {{variables}}.
  */
 (function (exports) {

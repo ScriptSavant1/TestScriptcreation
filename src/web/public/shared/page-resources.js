@@ -3,7 +3,7 @@
  * beacons) to the page that loaded them, the way VuGen's HTML mode and DevWeb's
  * resources[] model them, instead of scripting each one as its own request.
  *
- * Used by both the Recorder and Script Studio, for both Web HTTP/HTML and DevWeb.
+ * Used by Script Studio, for both Web HTTP/HTML and DevWeb.
  * Pure functions; UMD so Jest can require() it (same pattern as vugen-codegen.js).
  *
  * For each page step the resources that followed it are split into:

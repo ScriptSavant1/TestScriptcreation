@@ -6,7 +6,7 @@
  * Two ways to start:
  *  - classic — double-clicked: opens the recording window and the floating toolbar straight away
  *    (unchanged behaviour).
- *  - portal  — started by a perfx-recorder: link from the PerfX Studio Recorder page
+ *  - portal  — started by a perfx-recorder: link from PerfX Studio (Start recording)
  *    (`--portal "<link>"`): no window yet, waits for the page to ask for a recording
  *    (POST /api/session), saves it to Downloads, then waits for the next one. Closes itself after
  *    an hour without use. If a recorder is already running, the link's page is handed to it instead.
@@ -48,6 +48,8 @@ interface Args {
   portalLink: string | null;
   /** --out given: page-started recordings are saved there too, instead of Downloads */
   outGiven: boolean;
+  /** --no-bar: no floating bar inside the recorded pages (recordings started from the toolbar) */
+  noBar: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -58,6 +60,7 @@ function parseArgs(argv: string[]): Args {
   let browserChoice: BrowserChoice = "auto";
   let portalLink: string | null = null;
   let outGiven = false;
+  let noBar = false;
   // a link is passed as one argument; it must not be split at its own "=" signs
   const linkAt = argv.indexOf("--portal");
   if (linkAt >= 0) {
@@ -71,6 +74,7 @@ function parseArgs(argv: string[]): Args {
     if (a === "--real-profile") profileMode = { kind: "real" };
     else if (a === "--profile") profileMode = { kind: "custom", dir: resolve(argv[++i] ?? ".") };
     else if (a === "--cdp-port") cdpPort = Number(argv[++i]);
+    else if (a === "--no-bar") noBar = true;
     else if (a === "--ui-port") uiPort = Number(argv[++i]);
     else if (a === "--out") {
       outDir = resolve(argv[++i] ?? ".");
@@ -82,7 +86,7 @@ function parseArgs(argv: string[]): Args {
       else console.warn(`Unrecognized --browser value "${v}" — expected "edge" or "chrome". Falling back to auto-detect.`);
     }
   }
-  return { profileMode, cdpPort, uiPort, outDir, browserChoice, portalLink, outGiven };
+  return { profileMode, cdpPort, uiPort, outDir, browserChoice, portalLink, outGiven, noBar };
 }
 
 function openAsNormalTab(url: string): void {
@@ -133,7 +137,7 @@ export async function run(pageHtml: string): Promise<void> {
 
   if (isPackagedExe()) {
     const reg = await registerLink();
-    if (reg === "registered") console.log("Set up: the PerfX Studio Recorder page can now start recordings on this computer.\n");
+    if (reg === "registered") console.log("Set up: PerfX Studio (Script Studio) can now start recordings on this computer.\n");
     else if (reg === "failed") console.warn("Could not register the perfx-recorder link — start recordings from this program instead.\n");
   }
 
@@ -188,23 +192,25 @@ export async function run(pageHtml: string): Promise<void> {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       if (recorder.isRecording()) return touched();
-      console.log("\nNot used for an hour — closing. The Recorder page starts it again when needed.");
+      console.log("\nNot used for an hour — closing. PerfX Studio starts it again when needed.");
       process.emit("SIGTERM");
     }, IDLE_EXIT_MS);
   };
 
-  // a recording asked for by the Recorder page (also when this one was double-clicked)
+  // a recording asked for by the PerfX Studio page (also when this one was double-clicked)
   const startSession = async (s: PortalSession) => {
     if (closing || closeTimer || recorder.isConnected()) await closeWindows(); // a fresh window for the chosen browser / private mode
     console.log(`Recording ${s.url} in ${s.browser === "chrome" ? "Chrome" : "Edge"}${s.private ? " (private window)" : ""}...`);
     await recorder.connect({ kind: "temp" }, cdpPort, s.browser, { privateWindow: s.private, landingUrl: portalLandingUrl(s.url) });
-    await openToolbar();
+    // with the floating bar (0.3.0) inside the recorded pages, no separate toolbar window: the bar names transactions,
+    // undoes, stops; Keep open / Close now after saving are on the PerfX Studio page. Without the bar: the toolbar.
+    if (s.bar === false) await openToolbar();
     if (args.outGiven) return { outDir };
     const dl = await downloadsFolder();
     return { outDir: dl ?? (portalMode ? dirname(process.execPath) : outDir) };
   };
   const sessionSaved = () => {
-    console.log("Saved. Waiting for the next recording from the Recorder page.\n");
+    console.log("Saved. Waiting for the next recording from PerfX Studio.\n");
     // the page and the toolbar show "saved" first
     closeAt = Date.now() + CLOSE_AFTER_SAVE_MS;
     closeTimer = setTimeout(() => void closeWindows(), CLOSE_AFTER_SAVE_MS);
@@ -236,6 +242,7 @@ export async function run(pageHtml: string): Promise<void> {
   };
 
   const serverOptions = {
+    bar: !args.noBar,
     windows,
     portals: new Set<string>([...remembered, ...(link?.portal ? [link.portal] : [])]),
     remember,
@@ -271,7 +278,7 @@ export async function run(pageHtml: string): Promise<void> {
 
   if (portalMode) {
     control = startServer(recorder, outDir, uiPort, pageHtml, serverOptions);
-    console.log("Waiting for the PerfX Studio Recorder page to start a recording.");
+    console.log("Waiting for PerfX Studio to start a recording.");
     console.log("Keep this window open. Close it (or press Ctrl+C) to stop the CDP Recorder.\n");
     touched();
   } else {

@@ -78,6 +78,7 @@ async function main() {
   await toolbar.click("#btnStart");
   await toolbar.waitForSelector("#btnStartTx:not([disabled]):not(.hidden)", { timeout: 25000 });
 
+  // the toolbar numbers each name for you (0.2.2): Launch → T01_Launch, Click Next → T03_Click_Next
   async function startTx(name) {
     await toolbar.fill("#txNameInput", name);
     await toolbar.click("#btnStartTx");
@@ -112,7 +113,7 @@ async function main() {
   await endTx();
   const warning = (await toolbar.textContent("#warningBanner")) || "";
   check(await toolbar.isVisible("#warningBanner"), "warning banner visible after a transaction with zero captured requests");
-  check(/No network requests were captured during "Wrong Window"/.test(warning), "warning names the empty transaction");
+  check(/No network requests were captured during "T04_Wrong_Window"/.test(warning), "warning names the empty transaction");
 
   // ── Stop via the toolbar ───────────────────────────────────────────────
   // Quit asks inside the toolbar; Cancel keeps recording
@@ -142,10 +143,10 @@ async function main() {
     return p ? har.log.entries.filter((e) => e.pageref === p.id).length : -1;
   };
   check(har.log.pages.length === 4, "HAR has all 4 transactions as pages");
-  check(countFor("Launch") >= 3, "Launch captured page-a + its sub-requests");
-  check(countFor("role_group") >= 1, "role_group captured the new-tab page load");
-  check(countFor("Click Next") >= 1, "Click Next captured the button's fetch in the new tab");
-  check(countFor("Wrong Window") === 0, "Wrong Window has zero entries (as it genuinely should)");
+  check(countFor("T01_Launch") >= 3, "Launch captured page-a + its sub-requests");
+  check(countFor("T02_Role_group") >= 1, "role_group captured the new-tab page load");
+  check(countFor("T03_Click_Next") >= 1, "Click Next captured the button's fetch in the new tab");
+  check(countFor("T04_Wrong_Window") === 0, "Wrong Window has zero entries (as it genuinely should)");
   check(!har.log.entries.some((e) => e.request.url.startsWith("data:")), "landing page (data: URL) is not in the HAR");
   const untagged = har.log.entries.filter((e) => !e.pageref).map((e) => e.request.url.replace(base, ""));
   check(untagged.length === 0, "every captured request is tagged to a transaction" + (untagged.length ? " — untagged: " + untagged.join(", ") : ""));

@@ -30,7 +30,8 @@ The page works out the plan as you type. A section you have not touched keeps se
 | Iteration | One run through the script's Action part (vuser_init and vuser_end run only once per Vuser) |
 | Transactions per iteration (T) | The transactions in one iteration that count for the TPS |
 | Pacing | How often a Vuser starts a new iteration (for example every 24 s) |
-| Think time | The pauses written in the script between steps |
+| Think time | The pauses written in the script between steps with `lr_think_time` (VuGen C) or `load.thinkTime` (DevWeb). LRE's Think Time settings (ignore, multiply, random %, limit) change them |
+| Fixed waits | Plain waits in the script: `sleep(ms)` (VuGen C) or `load.sleep` (DevWeb). They are not think time: LRE always waits them in full, whatever the Think Time settings say |
 | Response time | How long one transaction takes, on average (your SLA is a good value to start with) |
 | Headroom | How much longer the pacing is than one iteration, so slower responses do not break the TPS (25% by default) |
 | Steady state (full load) | The part of the test where every Vuser runs — the window to analyse |
@@ -41,22 +42,44 @@ The page works out the plan as you type. A section you have not touched keeps se
 - **What kind of test**: Load (normal busy hour, held), Soak (many hours), Stress and Capacity (steps above the
   target), Spike (normal load, a burst, back).
 - **Full-load duration**: how long all users run together after the ramp-up.
+- **Ramp-up and ramp-down**: the tool chooses (recommended for a new test), or **My own, as in LRE** — Start
+  [n] Vusers every [s] s and Stop [n] Vusers every [s] s, as typed in LRE's Start Vusers / Stop Vusers (Stop empty:
+  the same as Start; 0 s: all at once). Use it to compare the plan with an LRE test that already exists. Choosing it
+  starts from the ramp the tool worked out.
 - **LRE workload type**: Basic schedule by group (recommended for load and soak), by test, Real-world (needed for
   stepped tests) or Goal-oriented.
 - **Growth factor**: 1 = today's peak; 1.5 = 50% more TPS. Scripts sized by Vusers or iterations keep their numbers.
 - Detailed view: the licence limit, and the steps and hold time of stepped tests.
 
 ### Scripts
+- **Before you fill in a script — what each box means**: the notes at the top of Scripts (open until you fold them)
+  explain one iteration, transactions per iteration, think time as the total of one iteration, response time per
+  transaction and pacing, with the three formulas and a worked example.
 - **Fill from scripts**: script ZIPs (Web HTTP/HTML or DevWeb; one ZIP may hold several scripts) and HAR files. The
   import note lists what was read and anything to check: transactions that run once at the start (vuser_init /
   load.initialize) or at the end (vuser_end / load.finalize) and are not counted, transactions inside other
-  transactions, a script that ignores its think time. Loops are counted once — correct the transaction count if a
+  transactions, a script that ignores its think time, think-time or wait calls whose value the reader cannot work out
+  (a number or a constant such as `const thinktime = 3` is read; a parameter or a calculation is not — enter the total),
+  and think times longer than the script's "Limit think time to" setting. Loops are counted once — correct the transaction count if a
   script repeats steps.
 - **Target type** and **Target**: TPS, transactions per hour, a share of the total TPS, a number of Vusers, Vusers and
   TPS together (checked against each other), or a number of iterations (data rows).
 - **Response time**: average per transaction, without think time.
+- **Think time**: all the think times of one iteration added up (9 × `load.thinkTime(3)` = 27 s). **Fixed waits**: all
+  the `sleep` / `load.sleep` of one iteration added up — shown when the script has some (Detailed view: always). Both
+  are filled from the script.
+- **How many think times** (in Replay in LRE): shown only when a think-time limit is set — the limit cuts each think
+  time, so the tool needs to know how many there are; filled from the script.
 - **Replay in LRE**: pacing (let the tool choose — recommended —, fixed, random, as soon as possible, after the
-  previous iteration + a delay) and think time (as recorded, ignore, multiply, random %).
+  previous iteration + a delay), **Think time in LRE** (LRE's Think Time setting — what LRE does with the think time
+  total: as recorded, ignore, multiply, random %; greyed out when the think time is 0; Multiply takes a factor, not
+  seconds, and shows the result — 27 s × 3 = 81 s; Random shows the range and the average) and **Limit each think time to**
+  (LRE's "Limit think time to N seconds"; read from rts.yml or default.cfg, empty = no limit; shown in the Detailed
+  view, or when a script sets a limit — leave it empty unless that box is ticked in LRE).
+- **Not possible**: when one iteration takes longer than the pacing, the card says so in figures (iteration time,
+  pacing, the TPS LRE will really reach) and lists what to change: a pacing that fits with the headroom, the Vusers
+  that keep the TPS at that pacing, or the response time per transaction that would fit. With a fixed pacing the first
+  two have a button; Undo in the message takes it back.
 
 Many scripts:
 - **Cards / Table**: the table shows one line per script and is edited like a spreadsheet (arrow keys, Enter, paste a
@@ -104,8 +127,17 @@ Choose the **machine type** of each pool:
 - Disk space is not used in the sizing.
 
 ### Results
-- **Result**: a plain-language summary, the tiles (Vusers, TPS, load generators, test length, steady state,
-  iterations, transactions, hits per second), the chart, and the phases with their times on the test clock.
+- **Result**: a plain-language summary, the tiles, the chart, and the phases with their times on the test clock. The
+  tiles first give the load at full load — **Transactions per second (TPS)**, **Transactions per hour (TPH)** = TPS ×
+  3,600, **Iterations per hour** (all Vusers, and per Vuser) — then **One iteration takes** (transactions × response time
+  + think time, and whether it fits in the pacing: where a change of think time shows), Load generators, **Total test
+  duration** (ramp-up + full load + ramp-down and the last iterations), **Full load (steady state)** with its clock times,
+  **Total iterations (whole test)** (all Vusers, about how many per Vuser, the full-load ones + those while Vusers start
+  and stop) and **Total transactions (whole test)** (total iterations × transactions per iteration — the test-data rows
+  if each takes one), and Requests per second (hits). If one iteration is longer than its pacing, the TPS, TPH and
+  iterations show what LRE will really reach (in amber), not what the pacing asks for. **How to read these numbers**,
+  under the tiles, works the figures out with the plan's own numbers. Example: 10 Vusers, pacing 50 s, 10 transactions → 0.2 iterations per second, 720 per hour,
+  7,200 TPH, 2 TPS; with a 60-min full load the whole test runs 745 iterations, 7,450 transactions.
 - **Checks**: what must be filled in, what cannot work and why, and the response-time limit of each script.
 - **Details**:
   - **LRE setup** — one row per LRE group, by script name (a script split to fill the machines has one row per
@@ -187,8 +219,13 @@ Defaults for every script: "Each script" gives the default TPS to every script w
 
 - Think time: as recorded t · ignore 0 · multiply t × factor · random % on average t × (lowest % + highest %) ÷ 200,
   at most t × highest % ÷ 100.
-- **Iteration = response time × T + think time** (averages).
-- **Slow iteration = the 90th percentile (or the average, whichever is larger) × T + the longest think time.** It adds
+- Limit each think time to L s: every think time is cut to L, after the setting above (random %: the average of the cut
+  values). The tool uses each think time as the script has it; if the total was typed by hand, the total in equal parts
+  over the number of think times (one per transaction when that is not known — a check says so). Example: think times of
+  1, 1 and 10 s with a 3 s limit give 1 + 1 + 3 = 5 s.
+- Fixed waits w (`sleep`, `load.sleep`): always waited in full, whatever the think-time setting.
+- **Iteration = response time × T + think time + w** (averages).
+- **Slow iteration = the 90th percentile (or the average, whichever is larger) × T + the longest think time + w.** It adds
   the 90th percentiles, so it errs on the long side; it is used only for warnings, the random pacing style and the
   test length.
 
@@ -211,7 +248,7 @@ Also: iterations per second = Vusers ÷ pacing; hits per second = requests per i
 
 | Check | When |
 |---|---|
-| Response-time limit | (shortest pacing − longest think time) ÷ T — the slowest average per transaction that keeps the TPS |
+| Response-time limit | (shortest pacing − longest think time − fixed waits) ÷ T — the slowest average per transaction that keeps the TPS |
 | Not possible | shortest pacing < iteration: iterations overrun and the TPS drops to about Vusers × T ÷ iteration; enough Vusers = ⌈λ × iteration × (1 + headroom)⌉ |
 | Some iterations overrun | shortest pacing < slow iteration |
 | Little headroom | shortest pacing < iteration × (1 + headroom) |
@@ -224,7 +261,13 @@ Also: iterations per second = Vusers ÷ pacing; hits per second = requests per i
   spread out evenly; the start rate protects the log-ins.
 - **"Start X Vusers every N seconds"**: the fewest Vusers per step whose interval is 1, 2, 3, 4, 5, 6, 10, 12, 15, 20,
   30, 45, 60, 90, 120, 180 or 300 s and gives a ramp within 10% of the wanted one, never faster than the start rate.
+- **Your own ramp** replaces the two rules above and below with the values typed, for every start and stop (a spike's
+  sudden jump stays the tool's). Example: 40 Vusers, start 1 every 5 s → full load after 39 × 5 s = 3:15; stop the same.
+  By group, each script starts as typed and the quicker ones hold longer, so all stop together. A check says when the
+  ramp starts more Vusers per second than the start rate (Fine tuning).
 - **Ramp-down**: half the ramp-up worked out with twice the start rate, but never shorter than Vusers ÷ the stop rate, so no step stops many Vusers at once; each Vuser finishes its current iteration.
+- **Last iterations finish**: after the last stop, at most one slow iteration — a Vuser stopped while it waits for its
+  next pacing slot leaves at once (one pacing when no response time is known).
 - **Basic schedule by group**: every group starts immediately (LRE "Start Group: Immediately") and ramps over the same
   length — the longest ramp any script needs on its own. A quicker script starts its Vusers more slowly (one Vuser
   per step whenever it fits, at any whole-second interval, ending at most 10% before that length, never after it), so every script reaches full load

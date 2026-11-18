@@ -20,16 +20,25 @@ import { join, basename } from "node:path";
 import { Recorder } from "./recorder.js";
 import { scrubHar } from "./scrub-har.js";
 import { onSettled } from "./cdp-capture.js";
-import { originAccess, originOf, readSession, harFileName, createAskQueue } from "./portal-mode.js";
+import { originAccess, originOf, readSession, harFileName, createAskQueue, txName, nextTxNumber, nextPlanned, renamedTx } from "./portal-mode.js";
 import { VERSION } from "./version.js";
+import { setBarState, setBarActions, setBarEnabled, type BarNote } from "./page-bar-cdp.js";
+import { planChips, saveAsText, barPrefsOf } from "./page-bar.js";
+import { loadBarPrefs, saveBarPrefs } from "./portal-link.js";
 
-/** What a recording started from the Recorder page asked for (POST /api/session). */
+/** What a recording started from the PerfX Studio page asked for (POST /api/session). */
 export interface PortalSession {
   url: string;
   browser: "edge" | "chrome";
   private: boolean;
   name: string;
   firstTx: string;
+  /** Planned steps, one per transaction (optional): an empty name on Start takes the next one. */
+  plan?: string[];
+  /** Script ID (optional, e.g. SC01): the file name starts with it, the HAR carries it (_perfx_scriptId). */
+  scriptId?: string;
+  /** The floating bar inside the recorded pages (0.3.0) — on unless the page turned it off. */
+  bar?: boolean;
 }
 
 export interface ServerOptions {
@@ -51,6 +60,8 @@ export interface ServerOptions {
   remember?: (portal: string) => void;
   /** Any request from the page or toolbar — keeps a waiting recorder from closing itself. */
   touched?: () => void;
+  /** The floating bar in recordings started from the toolbar (classic): off with --no-bar. */
+  bar?: boolean;
 }
 
 export interface ServerState {
@@ -59,6 +70,7 @@ export interface ServerState {
   lastHarEntryCount: number | null;
   transactions: string[]; // completed transaction names, for the "trail" display
   activeTransaction: string | null;
+  plan: string[]; // planned steps of a page-started recording (empty: none)
   error: string | null;
   warning: string | null;
 }
@@ -99,10 +111,10 @@ export function startServer(
   const asks = createAskQueue(); // pages asking to be allowed on the toolbar (POST /api/ask)
   let toolbarSeen = 0; // last status poll from the floating toolbar (it polls every second)
 
-  // Stop and write the .har. A recording started from the Recorder page is saved to Downloads under its own
+  // Stop and write the .har. A recording started from the PerfX Studio page is saved to Downloads under its own
   // name, whichever Stop was pressed (page or toolbar) — and also on Quit (saveOpenRecording below).
   const save = async (askedName: string): Promise<{ file: string; entryCount: number }> => {
-    const fileName = session ? harFileName(session.name || "Recording") : askedName.trim() || "recording.har";
+    const fileName = session ? harFileName((session.scriptId ? session.scriptId + "_" : "") + (session.name || "Recording")) : askedName.trim() || "recording.har";
     const har = (await recorder.stop()) as { log: { entries: unknown[] } };
     scrubHar(har); // redacts password/PIN/CVV-type request-body fields only — see scrub-har.ts header
     const outFile = join(session ? session.outDir : outDir, fileName);
@@ -121,9 +133,107 @@ export function startServer(
     lastHarEntryCount: null,
     transactions: [],
     activeTransaction: null,
+    plan: [],
     error: null,
     warning: null,
   };
+  // the transactions started so far (finished, then the running one)
+  const startedTx = (): string[] => state.transactions.concat(state.activeTransaction ? [state.activeTransaction] : []);
+  // after a rename or an undo the builder's own list is the truth: finished names in order, and the running one
+  const syncTx = (): void => { const t = recorder.transactionState(); state.transactions = t.done; state.activeTransaction = t.active; };
+  // end the running transaction (its end time and screenshots), with the zero-request warning
+  const endActive = (): void => {
+    const ended = recorder.endTransaction(); // background screenshot, not on the critical path
+    if (ended && ended.requestCount === 0 && state.activeTransaction) {
+      state.warning =
+        `No network requests were captured during "${state.activeTransaction}". ` +
+        `Make sure you are clicking in the RECORDING browser window (the one showing the orange ` +
+        `"This is the RECORDING window" page), not your usual browser.`;
+    }
+    if (state.activeTransaction) state.transactions.push(state.activeTransaction);
+    state.activeTransaction = null;
+  };
+
+  // Start a transaction — the toolbar, the PerfX Studio page and the floating bar all come here. auto: numbered for
+  // you, an empty name takes the next planned step (the page's rules). The running one ends first, with its end time.
+  const startTx = (typedIn: unknown, auto: boolean): { name: string; ended: string | null } | { error: string } => {
+    const typed = typeof typedIn === "string" ? typedIn.trim() : "";
+    let name = typed || "Transaction";
+    if (auto) {
+      name = txName(typed || nextPlanned(state.plan, startedTx()), startedTx());
+      if (!name) return { error: state.plan.length ? "Every planned step is done — type a name for the next transaction." : "Type a name for the transaction." };
+      if (startedTx().includes(name)) return { error: `${name} was used already — type another name.` };
+    }
+    const ended = state.activeTransaction;
+    if (state.activeTransaction) endActive();
+    // Synchronous — screenshot capture happens in the background (recorder.ts startTransaction)
+    recorder.startTransaction(name);
+    state.activeTransaction = name;
+    state.warning = null;
+    return { name, ended };
+  };
+
+  // ── the floating bar (page-bar.js): what it shows, and what its buttons do ──
+  let barPrefs = loadBarPrefs();
+  setBarEnabled(options.bar !== false);
+  setBarState(() => {
+    const counts = recorder.txCounts();
+    const all = startedTx();
+    const st = recorder.status();
+    return {
+      recording: st.recording,
+      startedAt: recorder.startedAt,
+      activeCount: st.active,
+      background: st.background,
+      settled: state.settled,
+      done: state.transactions.map((n) => ({ name: n, count: counts[n] || 0 })),
+      active: state.activeTransaction ? { name: state.activeTransaction, count: counts[state.activeTransaction] || 0 } : null,
+      next: { number: "T" + String(nextTxNumber(all)).padStart(2, "0") + "_", planned: nextPlanned(state.plan, all) },
+      plan: planChips(state.plan, all),
+      canUndo: all.length > 0,
+      warning: state.warning,
+      saveAs: saveAsText(session),
+      savedText: session ? "Saving — the recording opens in Script Studio" : "Saving the recording next to cdp-recorder.exe",
+      prefs: barPrefs,
+    };
+  });
+  setBarActions(async (a): Promise<BarNote | null> => {
+    options.touched?.();
+    if (a.act === "mark") {
+      if (!recorder.isRecording()) return { text: "The recording has stopped.", bad: true };
+      const r = startTx(a.name, true);
+      if ("error" in r) return { text: r.error, bad: true };
+      return { text: (r.ended ? r.ended + " ended · " : "") + r.name + " started", scroll: true };
+    }
+    if (a.act === "undo") {
+      const r = recorder.undoLastMark();
+      if (!r) return { text: "There is nothing to undo.", bad: true };
+      syncTx();
+      state.warning = null;
+      return { text: (r.undone || "The last mark") + " taken back" + (r.active ? " — " + r.active + " runs again" : ""), scroll: true };
+    }
+    if (a.act === "rename") {
+      const from = typeof a.from === "string" ? a.from : "";
+      const r = renamedTx(from, typeof a.to === "string" ? a.to : "", startedTx()) as { name?: string; error?: string };
+      if (r.error) return { text: r.error as string, bad: true };
+      if (!recorder.renameTransaction(from, r.name as string)) return { text: `There is no transaction ${from}.`, bad: true };
+      syncTx();
+      return { text: from + " is now " + r.name };
+    }
+    if (a.act === "prefs") {
+      barPrefs = barPrefsOf(a.prefs);
+      saveBarPrefs(barPrefs);
+      return null;
+    }
+    if (a.act === "stop") {
+      if (!recorder.isRecording()) return null;
+      const wasSession = !!session;
+      await save(session ? "" : harFileName("Recording"));
+      if (wasSession) options.sessionSaved?.();
+      return null;
+    }
+    return null;
+  });
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${uiPort}`);
@@ -189,17 +299,22 @@ export function startServer(
           browsers: options.browsers ?? [],
           connected: recorder.isConnected(),
           starting,
-          session: session ? { url: session.url, browser: session.browser, private: session.private, name: session.name } : null,
+          session: session ? { url: session.url, browser: session.browser, private: session.private, name: session.name, scriptId: session.scriptId || "" } : null,
+          // the title of the page on screen in the recording window — a suggested transaction name (grey hint text)
+          pageTitle: recorder.pageTitle(),
           recording: s.recording,
           active: s.active,
           background: s.background,
           settled: state.settled,
           activeTransaction: state.activeTransaction,
           transactions: state.transactions,
+          nextTx: { number: "T" + String(nextTxNumber(startedTx())).padStart(2, "0") + "_", planned: nextPlanned(state.plan, startedTx()) },
           savedFromPortal: savedFromPortal,
           // the toolbar polls without an Origin header (a same-origin GET) — "local"; portal pages never see it
           askingPortal: access === "self" || access === "local" ? asks.pending() : null,
           closingIn: options.windows ? options.windows.closingIn() : null,
+          // the toolbar window answered in the last few seconds (none with the floating bar, 0.3.0)
+          toolbarOpen: Date.now() - toolbarSeen < 3000,
           lastHarPath: state.lastHarPath,
           lastHarEntryCount: state.lastHarEntryCount,
           error: state.error,
@@ -208,7 +323,7 @@ export function startServer(
         return;
       }
 
-      // A recording started from the Recorder page: open the browser on the address, record, save to Downloads.
+      // A recording started from the PerfX Studio page: open the browser on the address, record, save to Downloads.
       if (req.method === "POST" && url.pathname === "/api/session") {
         const asked = readSession(await readJsonBody(req));
         if (!asked.ok) return sendJson(res, 400, { error: asked.error });
@@ -216,12 +331,14 @@ export function startServer(
         if (starting || !options.startSession) return sendJson(res, 409, { error: "The recorder is busy starting a recording." });
         starting = true;
         try {
-          Object.assign(state, { settled: false, lastHarPath: null, lastHarEntryCount: null, transactions: [], activeTransaction: null, error: null, warning: null });
+          Object.assign(state, { settled: false, lastHarPath: null, lastHarEntryCount: null, transactions: [], activeTransaction: null, plan: (asked as PortalSession).plan || [], error: null, warning: null });
           savedFromPortal = false;
           const s0 = asked as PortalSession;
+          setBarEnabled(s0.bar !== false);
           const { outDir: dir } = await options.startSession(s0);
-          session = { url: s0.url, browser: s0.browser, private: s0.private, name: s0.name, firstTx: s0.firstTx, outDir: dir };
+          session = { url: s0.url, browser: s0.browser, private: s0.private, name: s0.name, firstTx: s0.firstTx, scriptId: s0.scriptId || "", outDir: dir };
           await recorder.start();
+          recorder.setScriptId(s0.scriptId || "");
           if (s0.firstTx) {
             recorder.startTransaction(s0.firstTx);
             state.activeTransaction = s0.firstTx;
@@ -294,9 +411,11 @@ export function startServer(
         state.lastHarEntryCount = null;
         state.transactions = [];
         state.activeTransaction = null;
+        state.plan = [];
         state.error = null;
         state.warning = null;
         savedFromPortal = false;
+        setBarEnabled(options.bar !== false);
         await recorder.start();
         sendJson(res, 200, { ok: true });
         return;
@@ -304,26 +423,37 @@ export function startServer(
 
       if (req.method === "POST" && url.pathname === "/api/tx/start") {
         const body = await readJsonBody(req);
-        const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : "Transaction";
-        // Synchronous — screenshot capture happens in the background, not
-        // on this request's critical path. See recorder.ts's startTransaction().
-        recorder.startTransaction(name);
-        state.activeTransaction = name;
+        // auto (the toolbar, the page): numbered for you, an empty name takes the next planned step
+        const r = startTx(body.name, body.auto === true);
+        if ("error" in r) return sendJson(res, 400, { error: r.error });
+        sendJson(res, 200, { ok: true, name: r.name });
+        return;
+      }
+
+      // a new name for a transaction (finished or running) — the page's transaction list
+      if (req.method === "POST" && url.pathname === "/api/tx/rename") {
+        const body = await readJsonBody(req);
+        const from = typeof body.from === "string" ? body.from : "";
+        const r = renamedTx(from, typeof body.to === "string" ? body.to : "", startedTx()) as { name?: string; error?: string };
+        if (r.error) return sendJson(res, 400, { error: r.error });
+        if (!recorder.renameTransaction(from, r.name as string)) return sendJson(res, 404, { error: `There is no transaction ${from}.` });
+        syncTx();
+        sendJson(res, 200, { ok: true, name: r.name });
+        return;
+      }
+
+      // "Undo last mark": the last Start or End is taken back (har-builder.js undoLastMark)
+      if (req.method === "POST" && url.pathname === "/api/tx/undo") {
+        const r = recorder.undoLastMark();
+        if (!r) return sendJson(res, 400, { error: "There is nothing to undo." });
+        syncTx();
         state.warning = null;
-        sendJson(res, 200, { ok: true, name });
+        sendJson(res, 200, { ok: true, undone: r.undone, active: r.active });
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/api/tx/end") {
-        const ended = recorder.endTransaction(); // same — background screenshot, not on the critical path
-        if (ended && ended.requestCount === 0 && state.activeTransaction) {
-          state.warning =
-            `No network requests were captured during "${state.activeTransaction}". ` +
-            `Make sure you are clicking in the RECORDING browser window (the one showing the orange ` +
-            `"This is the RECORDING window" page), not your usual browser.`;
-        }
-        if (state.activeTransaction) state.transactions.push(state.activeTransaction);
-        state.activeTransaction = null;
+        endActive();
         sendJson(res, 200, { ok: true });
         return;
       }

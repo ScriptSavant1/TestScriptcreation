@@ -382,6 +382,16 @@ describe('HarBuilder — transactions and pages', () => {
     expect(pages[0].id).toMatch(/^tx_/);
   });
 
+  test('starting a transaction while one runs ends that one with its end time (onLoad was -1)', () => {
+    hb.startTransaction('T01_Launch');
+    hb.startTransaction('T02_Login');   // no endTransaction() in between: Enter on the toolbar / page
+    hb.endTransaction();
+    const { pages } = hb.build().log;
+    expect(pages.map((p) => p.title)).toEqual(['T01_Launch', 'T02_Login']);
+    expect(pages[0].pageTimings.onLoad).toBeGreaterThanOrEqual(0);
+    expect(hb.getTransactions().every((t) => t.endTime !== null)).toBe(true);
+  });
+
   test('entries recorded during a transaction carry its pageref', () => {
     const tabId = 1;
     hb.startTransaction('MyFlow');
@@ -460,4 +470,49 @@ describe('HarBuilder — HTTP version resolution', () => {
   test('h3 → HTTP/3', ()      => { expect(recordWithProtocol('h3')).toBe('HTTP/3'); });
   test('http/1.1 → HTTP/1.1', () => { expect(recordWithProtocol('http/1.1')).toBe('HTTP/1.1'); });
   test('null → HTTP/1.1',     () => { expect(recordWithProtocol(null)).toBe('HTTP/1.1'); });
+});
+
+// ── Rename a transaction, Undo last mark (CDP Recorder 0.2.3) ───────────────────
+
+describe('HarBuilder — rename and undo last mark', () => {
+  let hb;
+  beforeEach(() => { hb = new HarBuilder(); });
+  const req = (id) => { hb.onRequestStarted(1, makeRequestParams({ requestId: id })); hb.onResponseReceived(1, makeResponseParams(id)); hb.onLoadingFinished(1, makeFinishedParams(id), null); };
+  const refs = () => hb.build().log.entries.map((e) => e.pageref);
+
+  test('rename changes the name of a finished transaction (found by its current name)', () => {
+    hb.startTransaction('T01_Launch'); hb.startTransaction('T02_Login');
+    expect(hb.renameTransaction('T01_Launch', 'T01_Home')).toBe(true);
+    expect(hb.build().log.pages.map((p) => p.title)).toEqual(['T01_Home', 'T02_Login']);
+    expect(hb.renameTransaction('T09_None', 'X')).toBe(false);
+  });
+
+  test('undo a start that ended the one before: its requests go back and the one before runs again', () => {
+    hb.startTransaction('T01_Launch'); req('r1');
+    hb.startTransaction('T02_Login'); req('r2');
+    const r = hb.undoLastMark();
+    expect(r).toEqual({ undone: 'T02_Login', active: 'T01_Launch' });
+    const { pages } = hb.build().log;
+    expect(pages.map((p) => p.title)).toEqual(['T01_Launch']);
+    expect(refs().every((p) => p === pages[0].id)).toBe(true);
+    expect(hb.activeTransaction.name).toBe('T01_Launch');
+    expect(hb.activeTransaction.endTime).toBeNull();
+  });
+
+  test('undo a start after a gap (End, then Start later): its requests are between transactions', () => {
+    hb.startTransaction('T01_Launch'); hb.endTransaction();
+    hb.getTransactions()[0].endTime -= 5000;   // the gap
+    hb.startTransaction('T02_Login'); req('r2');
+    expect(hb.undoLastMark()).toEqual({ undone: 'T02_Login', active: null });
+    expect(refs()).toEqual([null]);
+    expect(hb.getTransactions()[0].endTime).not.toBeNull();
+  });
+
+  test('undo an End: that transaction runs again', () => {
+    hb.startTransaction('T01_Launch'); hb.endTransaction();
+    expect(hb.undoLastMark()).toEqual({ undone: null, active: 'T01_Launch' });
+    expect(hb.activeTransaction.name).toBe('T01_Launch');
+  });
+
+  test('nothing to undo', () => { expect(hb.undoLastMark()).toBeNull(); });
 });

@@ -1,4 +1,4 @@
-// End-to-end test of a recording started from the PerfX Studio Recorder page ("portal mode"),
+// End-to-end test of a recording started from the PerfX Studio page ("portal mode"),
 // driven over the control API exactly as the page does. Runs the real recorder from the sources
 // (src/main.ts --portal ...) as a separate process, against a local test site whose first page
 // opens a pop-up and a new tab.

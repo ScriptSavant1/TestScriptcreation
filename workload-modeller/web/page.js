@@ -365,7 +365,7 @@ function facts(g, r) {
     : g.method === "vusers" ? `${fmt(r.tps, r.tps < 10 ? 2 : 1)} TPS` : `${fmt(r.vusers)} Vusers`;
   const cell = (label, v, full) => `<div title="${esc(label + ": " + (full || v.replace(/<[^>]+>/g, "")))}"><span>${label}</span>${v}</div>`;
   return cell(METHOD_SHORT[g.method], tgt)
-    + cell("One iteration", `${fmt(g.txPerIter)} tx · ${fmtS(g.thinkPerIter || 0)} think${g.thinkMode === "ignore" && g.thinkPerIter ? " (ignored)" : ""}`)
+    + cell("One iteration", `${fmt(g.txPerIter)} tx · ${fmtS(g.thinkPerIter || 0)} think${g.thinkMode === "ignore" && g.thinkPerIter ? " (ignored)" : ""}${g.waitPerIter ? ` · ${fmtS(g.waitPerIter)} fixed waits` : ""}`)
     + cell("Response time", rt) + cell("Pacing", pace, pm === "auto" && r && r.pacing && r.pacing.mean ? pace + " (chosen by the tool)" : "") + cell("Plan", plan, planFull);
 }
 function poolFacts(p) {
@@ -375,7 +375,7 @@ function poolFacts(p) {
 }
 function sectionSums(r) {
   const sc = state.scenario;
-  $("#sum-test").textContent = `— ${E.TEST_TYPES[sc.testType].label.replace(/ \(.*/, "")} · ${fmt(sc.steadyMin)} min · ${E.WORKLOADS[sc.workload]}`;
+  $("#sum-test").textContent = `— ${E.TEST_TYPES[sc.testType].label.replace(/ \(.*/, "")} · ${fmt(sc.steadyMin)} min · ${E.WORKLOADS[sc.workload]}${sc.rampMode === "own" && sc.workload !== "goal" ? " · own ramp" : ""}`;
   const needs = r.groups.filter((g) => g.status === "needs-input").length;
   $("#sum-scripts").textContent = `— ${state.groups.length} script${state.groups.length === 1 ? "" : "s"}${needs ? ` · ${needs} need input` : ""}`;
   $("#sum-lg").textContent = "— " + (r.lgTotal != null ? `${r.lgTotal} machine${r.lgTotal === 1 ? "" : "s"} · ` : "") + state.pools.map((p) => p.name).join(", ");
@@ -401,9 +401,11 @@ async function fill(files) {
     let g = state.groups.find((x) => x.name.toLowerCase() === key);
     const existed = !!g && !seen.has(key);
     const fields = { protocol: s.protocol, txPerIter: s.txPerIter || 1, thinkPerIter: s.thinkPerIter, requestsPerIter: s.requestsPerIter || null,
+      waitPerIter: s.waitPerIter || null, thinkPauses: s.thinkPauses != null ? s.thinkPauses : null, thinkList: s.thinkList || null,
       pages: s.pages, pageShare: s.pageShare, txNames: s.txNames, source: s.file };
     if (s.thinkMode) fields.thinkMode = s.thinkMode;
     if (s.thinkFactor) fields.thinkFactor = s.thinkFactor;
+    if (s.thinkLimit !== undefined) fields.thinkLimit = s.thinkLimit;   // read from rts.yml / default.cfg (null = no limit)
     if (s.rtAvg != null) { fields.rtAvg = s.rtAvg; fields.rtSource = "recording"; }
     if (g) Object.assign(g, fields, { folded: true });
     else { g = newScript(Object.assign({ name: s.name, targetTps: null, pool: state.pools[0].id, folded: true }, fields)); state.groups.push(g); }
@@ -490,6 +492,12 @@ $("#btn-reset-all").addEventListener("click", () => clearWith("Everything cleare
 }));
 
 try { view(localStorage.getItem("wm-view") !== "detail"); } catch (e) { view(true); }
+// the notes at the top of Scripts: open until the user folds them; remembered
+(() => {
+  const d = $("#script-notes"); if (!d) return;
+  try { if (localStorage.getItem("wm-notes") === "closed") d.open = false; } catch (e) { /* private window */ }
+  d.addEventListener("toggle", () => { try { localStorage.setItem("wm-notes", d.open ? "open" : "closed"); } catch (e) { /* private window */ } });
+})();
 renderTest(); renderScripts(); renderPools(); renderProtoTable(); cal(); calc();
 
 /* ---------- team settings (config/workload-settings.json on the server) ----------

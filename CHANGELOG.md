@@ -6,6 +6,30 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### Clearer results and inputs
+
+- Result tiles in words first, abbreviation after: **Transactions per second (TPS)**, **Transactions per hour (TPH)**, **Iterations per hour** (all Vusers and per Vuser) — at full load — **One iteration takes** (response + think time, and whether it fits in the pacing), **Total test duration**, **Full load (steady state)**, **Total iterations (whole test)** (about how many per Vuser), **Total transactions (whole test)**, **Requests per second (hits)**; "How to read these numbers" under the tiles, worked out with the plan's own figures. The summary uses the same names.
+- An iteration longer than its pacing: the TPS, TPH, iterations, totals and chart now show what LRE will really reach (amber tiles), not what the pacing asks for (the tiles said 2 TPS while Checks said 1.43).
+- Scripts: notes at the top ("Before you fill in a script — what each box means") with the formulas and a worked example; the boxes say "Think time — total per iteration", "Response time — per transaction", "Transactions per iteration".
+- "Not possible" now says why and what to change, in the script card: the iteration time in figures against the pacing, the TPS LRE will really reach, and the ways out — a pacing that fits (with room for slower responses), the Vusers that keep the TPS, or the response time that would fit — with a button for the first two (Undo takes it back). The summary opens with the same one-line reason.
+- "Think time in LRE" (LRE's Think Time setting) says what it does with the think time above and is greyed out when there is none; "Limit each think time to" shows in the Detailed view only (or when a script sets a limit) — leave it empty unless LRE's "Limit think time to" is ticked.
+- Multiply / Random think time show what LRE will really wait, as you type: "a factor, not seconds: 27 s × 3 = 81 s think per iteration", "27 s becomes 13.5 s – 40.5 s, about 27 s on average" — so a factor is never mistaken for seconds.
+
+#### Test length closer to LRE; clearer think-time fields
+
+- The last iterations finish within one slow iteration after the last stop, not one pacing: a Vuser waiting for its next pacing slot leaves at once (an LRE run with a 360 s pacing ended 3 s after its stop ramp). One pacing only when no response time is known.
+- Script card: "Fixed waits" shows when the script has some (Detailed view: always); "How many think times" moved next to "Limit each think time to" and shows only while a limit is set.
+
+#### Your own ramp, as in LRE
+
+- "Ramp-up and ramp-down" in the test: the tool chooses (as before), or **My own, as in LRE** — Start [n] Vusers every [s] s and Stop [n] Vusers every [s] s, as typed in LRE. Used for every start and stop (a spike's jump stays the tool's), shown in the LRE settings; a check says when it is faster than the start rate. To compare a plan with an LRE test that already exists.
+
+#### Think time as LRE replays it (BUG-149)
+
+- Fill from scripts reads think time written with a constant (`load.sleep(thinktime)` with `const thinktime = 3`, `#define`, a C variable); a value it cannot work out (a parameter, a calculation) is counted and named in the import list.
+- Fixed waits (`sleep(ms)` in VuGen C, `load.sleep` in DevWeb) are no longer think time: their own field on the card ("Fixed waits"), always waited in full — LRE's think-time settings never change them.
+- "Limit each think time to" on the card — LRE's "Limit think time to N seconds", read from rts.yml or default.cfg — cuts each think time, after the replay setting; "Think times" (how many per iteration) makes it exact. The LRE settings text names the limit.
+
 #### New tool
 
 - **Workload Modeller** (sidebar group "Plan"): give each script its target — TPS, transactions per hour, Vusers, a share of the total TPS or iterations — and get the Vusers, pacing, ramp-up and ramp-down, load generators and iterations, the LRE settings to type in and an Excel workbook, with checks that say what cannot work and how it is worked out.
@@ -29,10 +53,144 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - LRE setup: pacing and think time right after the load generators, "Start" explained, and a "hide the inputs" line while columns are cut off. Scripts toolbar: the actions on a row of their own. Load generators tile: "On-premise: 2 + 1 spare".
 - One LRE setup table (Details › LRE setup): per script the Vusers, load generators, start, ramp-up, duration, ramp-down (DD:HH:MM:SS), pacing and think time; the same in Excel. It replaces the LRE settings text tab (the text stays for Copy LRE settings); Per script keeps only the calculation results; Load generators shows one row per machine.
 
+### CDP Recorder
+
+#### Version 0.3.0: the floating bar inside the recorded pages
+
+- Every page in the recording window — new tabs and pop-ups too — shows a small bar at the top: REC, the time, the running transaction, one box to name the next transaction (Enter or Mark: the running one ends and the next starts — no End on the bar), the counts and Settled, Stop and save. The arrow opens the details: every transaction with its requests, rename (pencil), Undo last mark, the planned steps. The same rules as the page and the toolbar (one `startTx` in `server.ts`).
+- Out of the application's way: drag it by its grip to the top or bottom, left, middle or right (remembered in `floating-bar.json` beside the allowed pages), minimise it to a REC dot, Alt+Shift+H hides it and brings it back. It gets slimmer in small windows (a 500 px sign-in pop-up keeps the box, Mark, Stop and the details).
+- Never in the recording: it runs in its own isolated script world and talks to the recorder over the DevTools connection (no network request); it is hidden while the transaction screenshots are taken. Built so strict pages do not block it (Content-Security-Policy, Trusted Types) and kept above the application's own pop-ups (top layer; inside an open modal dialog, which would otherwise make it unclickable). Keys typed in it never reach the application.
+- On by default; Script Studio's Start recording → More options → "Floating bar in the recording window" turns it off (or `--no-bar` when started by hand).
+- One bar on screen: a new tab, window or pop-up takes the bar as it opens, and it follows you — it shows only in the recorded window you last clicked or typed in (the others hide theirs; it goes back when a pop-up closes). It used to show in every recorded window at once.
+- The recording window opens maximised (`--start-maximized`); pop-ups keep the size the application asks for.
+- One bar, not two: with the floating bar, a recording started from Script Studio opens no separate toolbar window (seeing both was confusing). The 10-second countdown after saving, Keep open and Close now are on the Script Studio page instead. The toolbar still opens when the bar is off, when the recorder is started by hand, and for the Allow question.
+- No End anywhere: the page (Start recording live view) and the toolbar lose their End / End Transaction button, as the bar has none — the next name ends the running transaction, Stop ends the last one, Undo last mark takes a mark back (`POST /api/tx/end` stays for older pages).
+- Setting the bar up never delays a new tab or pop-up: its commands are sent without waiting (the first try did wait, and a slow new tab lost its first request — found by `portal-session.mjs`).
+- The pages expect 0.3.0 (`LATEST`). Tests: `tests/unit/cdpPageBar.test.js`; manual `tests-manual/floating-bar.mjs` (real recorder and Edge: 30 checks); `portal-ask.mjs` now starts from Script Studio's Start recording (the Recorder page is part of Script Studio).
+
+#### Version 0.2.3: page title as a hint, rename, Undo last mark, script ID
+
+- While recording from Script Studio, the title of the page on screen is offered as grey text in the transaction box; **Tab** takes it (never filled in by itself). The recorder reads it from the browser every 2 s (`pageTitle` in the status); its own pages are never offered.
+- Rename a transaction (finished or running) with the pencil in the list; a name typed without a number keeps the old one's (`T02_Login` → "Sign in" → `T02_Sign_in`); a name used already is refused (`POST /api/tx/rename`).
+- **Undo last mark** takes back the last Start or End: a transaction started by mistake goes, and its requests go back to the one before, which runs again (`POST /api/tx/undo`).
+- Optional **script ID** (More options, e.g. SC01): the file is `SC01_Booking_<date>_<time>.har`, the HAR carries `log._perfx_scriptId`, and Script Studio's transactions are `SC01_01_…` (other recordings keep SC01 as before).
+- Script ID: a value that is not right is shown under the field, in the window (it was a message behind it), with what to type — `SC01_01` gives "Type just SC01 — the numbers (01, 02 …) are added for each transaction"; the line under the field shows the file and transaction names that will be made.
+- The page-title hint is not offered when that name is used already (a search on the same page keeps the page's title). The hint reads "(planned · Enter)" or "(page title · Tab)", shorter than before.
+- Documented where the setup is kept and why clearing the browser does not affect it: one `perfx-recorder:` link in the Windows registry for the user (`HKCU\Software\Classes\perfx-recorder`), pages allowed in `%LOCALAPPDATA%\PerfX\cdp-recorder\allowed-pages.json`, only the Start recording choices in the browser, a temporary browser profile per recording, and how to remove it all — Help (new FAQ, Script Studio "How Start recording finds the CDP Recorder", privacy table), the ZIP's README, the user guide (section 11) and the READMEs. Help's HAR Explorer, Script Studio and What's New text follow the recent changes.
+- The pages expect 0.2.3 (`LATEST`) and offer the download to older recorders; with an older recorder, rename and Undo are not shown. Tests: `harBuilder.test.js`, `cdpPortalMode.test.js`, `studioScriptId.test.js`, manual `tests-manual/portal-extras.mjs` (real recorder and Edge).
+
+#### Version 0.2.2: one box on the toolbar (redesign step 5b)
+
+- The toolbar names transactions the way the page does: type a name and press **Enter** — the running transaction ends and the new one starts, numbered for you (the next number shows before the box; *add to cart* becomes `T04_Add_to_cart`; a typed `T07_Pay` keeps its number and the next one is `T08_…`). The box stays while a transaction runs; **Start next** and **End Transaction**. A name used already, or an empty box with nothing planned, is refused with the reason under the box.
+- Planned steps typed in Start recording (More options) reach the recorder: an empty Enter on the toolbar starts the next planned step, and the box shows which one is next.
+- Starting a transaction while one runs ends that one properly, with its end time (BUG-145).
+- `/api/status` reports `nextTx` (the next number and the next planned step); `/api/tx/start` takes `auto: true` (numbered by the recorder); `/api/session` takes `plan`. The pages expect 0.2.2 (`LATEST`) and offer the download to older recorders. The README in the ZIP and the user guide text describe the new box.
+- Its messages, the README in the ZIP and the user guide name Script Studio, where recordings are started and opened now (the Recorder page is part of it); the guide's pictures are new.
+
 ### Recorder and Script Studio
+
+#### Open another: an empty box for the next file
+
+- "Open another" now shows the start screen's drop box empty and ready (Browse file, no green file name, no close button), so the next recording can be dropped or chosen straight away. The open recording stays named in the bar above with "Back to the recording" and is replaced once the new file is read.
+
+#### Fixes found while recapturing the guides
+
+- Script Studio's file bar names the recording's transactions as the HAR Explorer does: START / END bookmarks, a CDP Recorder recording, or the page loads of another HAR (it said "CDP Recorder" for every HAR with pages) — BUG-148.
+- The HAR Explorer's "Open in Script Studio" message no longer says to click Analyse; its tooltips name Script Studio instead of the Recorder.
+- The HAR Explorer illustrated guide: all pictures retaken in the current look, the numbered marks placed from the page, text for the Domains panel, Dynamic values, Find a value over the page and Source / Replaced in; the Recorder section removed.
+
+#### Closer to the agreed mockup (redesign step 6b)
+
+- Correlation Advisor cards as in the mockup: the value in a box, Source and Replaced in on one line each, Accept / Skip / **Show request** (opens the request that sends the value) stacked on the right, an applied card outlined in green with **In the script**; a **Scanned** mark beside the title.
+- Sidebar: **REC** in red on Script Studio while the CDP Recorder records (Running when it only runs).
+- Correlation Advisor: **Show an example** opens a request that sends a value back, on its Dynamic values tab.
+- Domains in three groups, as in the mockup: In the script, Not in the script, and Analytics / ads: always left out — each folds (remembered).
+- Fixed: the Hide secrets label in the request details was squeezed to one letter (a class name shared with the How to record guide's icons).
+- Script Studio request details: **Leave out** takes this one request out of the script (the left-out line says "left out by you"); **Put back** brings it back, and the script is exactly as before. A request left out by its type, domain or a rule is changed there.
+- Fixed: after you answered the Background requests question for a recording, every change (a type, a domain, a transaction) asked it again; now it asks once per recording and keeps your answer — the Background chip changes it (BUG-147).
+- HAR Explorer: request details have the **Dynamic values** tab, as in Script Studio — the same list from Studio's own engine (traced to an earlier response, or no source found), a value opens Find a value, a source opens that request.
+- Find a value (HAR Explorer and Script Studio): the trail is two sections, **Source** and **Replaced in · n** (Sent in when the value has no source), one row per place; in the HAR Explorer, Find a value opens as a sheet over the workspace with a blurred backdrop (close button, Esc or a press on the backdrop closes it).
+- HAR Explorer: the filter bar folds (Filters), the types have All / None, "Show left-out" is the eye button in the Requests header, and Hide secrets is a button in the details header.
+- One purple look on every page: Home, Help, the sidebar and top bar, the admin pages, Postman / Bruno, JMeter and the Results Analyser take the purple of Script Studio, the HAR Explorer and the Workload Modeller (accent, page background, header bars), both themes.
+- HAR Explorer: the file bar is a band across the page, as in Script Studio; on wide screens (1250 px and more) the Domains list is a panel on the left of the requests, always open, with an on / off switch per server (narrow screens keep the pop-up).
+- Script Studio: the filter bar fits on one line; a request type with no request in the recording is not shown; tick boxes are always in sight on the request rows; Domains have on / off switches; the script's file tabs wrap instead of scrolling out of sight.
+- A hovered request row and a hovered transaction row keep 4.5:1 contrast in the light theme.
+- Request details in Script Studio: the workspace behind is dimmed, and a press outside closes the details (a press on another request shows that request).
+- Sidebar as in the mockup: the menu toggle is at the top beside the brand (Ctrl+B as before); purple brand mark and current item; Script Studio and HAR Explorer show their one-line description.
+- Correlation Advisor: Scan again, Paste & Detect, Add Manual and Find a value as one row of buttons; the footer (counts, Accept all high, Apply & Regenerate) stays in sight.
+- Test data: the choices keep their words (the table scrolls sideways in a narrow panel).
+- Request details in Script Studio: a blurred backdrop behind the details, as in the mockup; a press on it, or anywhere in the portal around Script Studio (sidebar, top bar), closes them.
+- HAR Explorer, as in the mockup: the Domains panel shows one server per row (switch, name, requests), All on / All off in its header; Domains, Requests and the details each fold to a rail with the button in their header (remembered); the address filter sits at the top of the request list; "Show" before the type chips, each with its coloured dot.
+
+#### The Recorder is part of Script Studio (redesign step 6)
+
+- One tool from recording to download: **Script Studio** records (Start recording), shows the requests, writes the script at once, correlates and sets the test data. The Recorder page is removed; the sidebar, Home and quick search lead to Script Studio, and old Recorder links and bookmarks (`…/recorder`, `#/record`, the Help link) open it.
+- "How to record your journey" moved from the Recorder page to Script Studio's start screen, with every word of both ways (CDP Recorder, Bookmarks + DevTools) and the bookmark buttons; folded until opened, the chosen way remembered. "Not set up yet?" opens it.
+- One script generator for recordings: Script Studio's. Its tests now hold what the Recorder generator's tests checked (form posts, JSON bodies, page resources, server parameters in every place).
+- Quick search: Start recording opens Script Studio with the recording window; a result whose title is exactly what you typed comes first.
+- Sidebar: Script Studio first under Create scripts ("Record · correlate · download", with the Running badge of the CDP Recorder), then the HAR Explorer.
+- Help: one Script Studio section for recording, the workspace, correlation and test data (the Recorder section folded into it, the screens described as they are now); Quick start, tools table, FAQ and the HAR Explorer section updated.
+- Usage statistics keep counting recordings as `recorder` (one per recording made with Start recording) and opened recordings as `studio`.
+- Fixed: in VuGen scripts, a server name inside a request body stayed as recorded instead of its server parameter (BUG-146).
+- The HAR Explorer and Script Studio give the same transactions and left-out requests on every sample recording (BUG-142 closed).
+
+#### Script Studio: one workspace (redesign step 2)
+
+- A new Script Studio page: a start screen (Record in a browser, Open a recording, the script format) and one workspace. The file bar shows the requests in the script, the transactions, the sign-in found, a format switch, Open another and Download ZIP. Below it: the notices, a filter bar, Domains, Requests, and a panel with the Script, the Correlation Advisor and Test data tabs. The purple brand of the Workload Modeller.
+- A recording is read as soon as it is opened: no Analyse button, no processing page and no Start over. Changing the format rewrites the script at once; changing a type, a domain or a transaction reads the recording again in under a second. When correlations applied in the Advisor would be lost, the page asks first.
+- Filters in one line: the eight type buttons with their counts, Default / All / None, "Should I include Img / CSS / JS / Font?", and Leave out: Analytics / ads and OPTIONS (now a choice, on by default as before), plus Background when the page repeats requests by itself.
+- Domains: the domains in the script first, with their server parameter and Rename; the left-out ones folded; search, All on / All off, and a warning before leaving out a domain the journey needs (a page, a redirect, sign-in, cookies).
+- Requests: one list grouped by transaction, with only the rows on screen drawn, so a 30 MB recording stays smooth. Left-out requests sit behind one line per transaction with the reasons ("Show left-out" shows them all). Each transaction folds. Filter by address, tick requests and use New transaction (Shift-click ticks a range). Rename and Ungroup each come with Undo. The transactions you make are kept when the recording is read again, and the script numbers them in journey order.
+- "Ready to download?" next to Download ZIP lists what is worth a look (suggestions not reviewed, the warning, background requests, test data, server names); it never blocks the download.
+- Panels hide to a rail and come back with one click; the gaps between them can be dragged. Fits laptops (1366 × 768, 1536 × 730) and office desktops up to 3840 × 2160; under 1100 px the panels stack.
+- The second recording (diff mode) is under "Advanced: second recording" in the Correlation Advisor tab, with "Record it now".
+- The usage statistic counts one Script Studio use per opened recording, not one per reading.
+
+#### Recording made easy (redesign step 5)
+
+- Start recording: one box for transactions — type a name and press **Enter**: the running transaction ends and the new one starts. The number is added for you (shown before the box: *add to cart* becomes `T04_Add_to_cart`); a name typed with its own number (`T07_Pay`) keeps it and the next one follows it (`T08_…`); a name used already is refused. **End** ends the running one without starting another.
+- Optional **planned steps** (More options, remembered): press **Enter** on an empty box to start the next planned step; the list shows what is done and what is next. The first transaction is numbered too (*Launch* → `T01_Launch`).
+- Help and the recording guide describe the new box. (The toolbar of the CDP Recorder keeps its own buttons until its next version.)
+
+#### Test data table (redesign step 4d)
+
+- The **Test data** tab is a table of the parameters for values the user typed: rename (the script follows), **Take value** (next row, random, unique), **Update** (each run of Action, or once per user), **File** (the shared data file — values that belong together stay on one row — or a file of its own), the number of rows, and Remove (the recorded value stays in the script) with Undo. The choices are kept when the recording is read again.
+- **Add parameter**: a name and the value as it was typed; every form field, JSON body field and query parameter that sends it uses the parameter. A value the server sends (a correlation) or a value no request sends is refused with the reason.
+- **Download as Excel / Upload Excel**: one column per parameter, one row per user; the rows read back go into the data files of the ZIP (`.dat` for VuGen, `.csv` for DevWeb), with `ParameterFile.prm` / `parameters.yml` set from the choices. Without choices the files are exactly as before.
+- Only the last change can be undone: a new change removes the older Undo messages (an older Undo also took back everything done after it).
+
+#### Find a value in Script Studio (redesign step 4c)
+
+- **Find a value** in Script Studio (Requests header, Correlation Advisor header, a value in Dynamic values, or select text in a request's details): where a value first came from, every request that sends it back, and what to do — the same answer as the HAR Explorer (one shared module, `portal/find-value.js`), with Studio's request numbers. Suggestions put the Correlation Advisor's own first (marked "Advisor").
+- **Correlate this** shows the extractor in the script's format and **Add and apply** puts it in the Correlation Advisor and the script at once; a value the Advisor already has says so. A request in the answer opens with the value marked and "Back to Find a value".
+
+#### Dynamic values tab (redesign step 4b)
+
+- Request details in Script Studio have a **Dynamic values** tab: the Request Inspector for that request. Values traced to an earlier response show their source request (a click opens it) and **Add** (a card in the Correlation Advisor); values that look dynamic but have no source offer **Paste & Detect** with the value filled in. A value the Advisor already suggests says "In the Advisor", and its source is the Advisor's (which also reads HTML pages and hidden fields), so both places give the same answer.
+- The Correlation Advisor tab points to it; the Request Inspector block is no longer in that tab. "Open the Correlation Advisor" in the tab goes straight there.
+
+#### Correlation Advisor: Source and Replaced in (redesign step 4a)
+
+- Every Advisor card names the request the value comes from (**Source**) and where the script puts the parameter (**Replaced in**) as "#18 POST /path", with the JSON path, form field, header or query name. A click on a request opens its details.
+- "+n more" opens the list of every place the value is replaced (Source first); a click on a request there opens it.
+- **Accept all high (n)** next to Apply & Regenerate accepts every High-confidence suggestion still pending.
+
+#### Request details (redesign step 3)
+
+- Script Studio: click a request (or press Enter) to see its details beside the list: Headers, Payload, Response, Preview, Cookies and Timing, with Copy URL, Copy as cURL and Hide secrets. Previous / next and the arrow keys move through the list; Esc closes. On desktops 2400 px and wider the details are a fourth panel instead of a sheet.
+- One details view for the HAR Explorer and Script Studio (`portal/request-details.js`): the Explorer shows exactly what it showed before.
+- HAR Explorer: the request list hides to a rail (the details get the room) and comes back with one click; remembered. The Explorer takes the purple brand of Script Studio (`portal/brand.css`).
+- The Script Studio usage record counts the last reading of an opened recording (a second recording opened during the first reading is counted as the diff reading).
+
+#### One rule set for which requests go into the script
+
+- The Recorder and Script Studio now decide which recorded requests go into the script with the same rules, from one shared file (`shared/request-filter.js`): the same request types, the same domain switch, the same always-left-out requests (pre-flight, reports, WebSocket, analytics, browser prefetch). The same recording gives the same requests in both tools — before, for example, 15 against 16 or 11 against 8 (BUG-142, first part).
+- Script Studio's type buttons are the Recorder's: Doc, Fetch/XHR, JS, CSS, Img, Font, Media, Other, starting with Doc, Fetch/XHR, Media and Other on. A file is typed by what it is (`.css`, `.js` or a static content type) before the browser's label, so a favicon answered as HTML is an image.
 
 #### Correlation Advisor
 
+- A value the server keeps in an HTML hidden field and a later form post sends back is found under any field name (`userSession`, `state`, `nonce` …), as a High-confidence card with a boundary read from the page — before, only JSON responses and known CSRF names were read, so such a value stayed hard-coded in the script (BUG-141). Typed test data echoed into a hidden field is left alone.
+- A CSRF token found on an HTML page gets a boundary extractor from the page (`name="authenticity_token" value="` … `"`) instead of a JSON path named after the field, which captured nothing on replay (BUG-143).
 - Paste & Detect adds its correlation as a card in the Correlation Advisor ("From Paste & Detect"), applied at once, with one message saying where the value is extracted from and how many requests use it (BUG-137).
 - Paste & Detect extracts from the recorded response that holds the value, not from the request before the one picked in step 3 (or the first request when none was picked); it finds the uses in query strings, form fields and URL paths too (BUG-137).
 - Paste & Detect boundaries capture the right value: widened until their first match is the value, as the HAR Explorer does — `name="visitor-hmac" content="` instead of `content="`, which took the first meta tag on the page (BUG-138).
@@ -42,6 +200,9 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 ### Portal
 
 #### Changed
+
+- Documentation checked against the tools as they are now: README (sidebar groups, the tools' current features, CDP Recorder 0.3.0) and the local guides — the Recorder is part of Script Studio everywhere (feature catalogue, executive summary, architecture, code structure, developer, protocol and auth guides, deployment guide, diagrams), files read at once (no "Analyse & generate"), the collapse button at the top, the Workload Modeller in the catalogue and the index; the documentation site's coverage check gained the floating bar, Undo last mark, script ID, Leave out, the Workload Modeller and where the CDP Recorder keeps its setup.
+- Sidebar: one line per tool (every row the same height; each tool's description shows when the pointer rests on it, in the open menu too), two groups — Create scripts, Plan & analyse — and Help & guides at the bottom beside the status line; the brand shows "PerfX Studio" only (its cut-off subtitle is gone). The top bar names the group "Plan & analyse".
 
 - Home: seven tool cards (four then three on wide screens). Sidebar: new group "Plan". Help: Workload Modeller section, contents entry, tools table row and What's New line. Usage statistics and the admin reports know the tool `workload` (counted in scripts).
 

@@ -1,10 +1,9 @@
-/* Recorder engine functions that the classic page (VuGen-Recorder.html) keeps in
- * its inline script: transaction-marker detection, request classification and
- * filters. detectMarkers, _recInjectPagerefMarkers, _makeRecMarker,
- * classifyHarEntry and refresh are VERBATIM copies of VuGen-Recorder.html —
- * tests/unit/recorderCoreParity.test.js fails if they drift apart; change both
- * together. applyFilters is this page's own (type buttons instead of the
- * "Static assets" tick box — see below). */
+/* The HAR reading engine's transaction-marker detection, request classification and
+ * filters (detectMarkers, _recInjectPagerefMarkers, _makeRecMarker, classifyHarEntry,
+ * refresh, applyFilters). Used by the HAR Explorer (portal/har-explorer-model.js) with
+ * VuGen-Recorder-state.js and VuGen-Recorder-parsers.js; Script Studio follows the same
+ * rules through shared/request-filter.js. Kept unchanged from the Recorder tool, now part
+ * of Script Studio (tests/unit/harExplorerModel.test.js, requestFilter.test.js). */
 // ===========================================================================
 // TRANSACTION MARKER DETECTION
 // ===========================================================================
@@ -143,25 +142,11 @@ const REC_TYPES=['document','fetch','script','stylesheet','image','font','media'
 // those four off leaves out exactly what "Static assets" left out. A request the
 // browser called a script / image … that is NOT a static file (JSONP, a pixel
 // answering HTML) goes under Fetch/XHR or Other, which stay in the script.
+// The rules live in shared/request-filter.js (one rule set for the Recorder, Script Studio and the HAR Explorer —
+// BUG-142); these names stay for the code that calls them.
+function _recRules(){ return { STATIC_CT, STATIC_EXT, NOISY, NOISY_URL: typeof NOISY_URL!=='undefined'?NOISY_URL:null }; }
 function recTypeKey(e){
-  const ct=(e.ct||'').toLowerCase();
-  const path=(e.url||'').split('?')[0];
-  if(STATIC_CT.has(e.ct)){
-    if(ct==='text/css') return 'stylesheet';
-    if(/javascript/.test(ct)) return 'script';
-    if(ct.startsWith('image/')) return 'image';
-    return 'font';
-  }
-  if(STATIC_EXT.test(path)){
-    if(/\.css$/i.test(path)) return 'stylesheet';
-    if(/\.(js\.map|map)$/i.test(path)) return 'script';
-    if(/\.(woff2?|ttf|eot|otf)$/i.test(path)) return 'font';
-    return 'image';
-  }
-  const c=classifyHarEntry(e);
-  if(c==='stylesheet'||c==='script'||c==='image'||c==='font')
-    return /json|xml|text\/plain|graphql|form-urlencoded/.test(ct)?'fetch':'other';
-  return REC_TYPES.indexOf(c)>=0?c:'other';
+  return RequestFilter.typeKey(e,_recRules());
 }
 
 function recFilterFlags(){
@@ -174,39 +159,13 @@ function recFilterFlags(){
 // Why a request is left out of the script — null when it is in the script.
 // One rule set: applyFilters() and the request list both read it.
 function recLeftOut(e,f){
-  // CSP violation reports  -  browser auto-sends these when our bookmarklet
-  // .invalid marker URLs are blocked by the app's Content Security Policy
-  const reqCt=((e.hdrsMap||{})['content-type']||'').split(';')[0].trim().toLowerCase();
-  if(reqCt==='application/csp-report'||reqCt==='application/reports+json') return 'report';
-  if(e.body&&e.body.text&&e.body.text.includes('"blocked-uri"')) return 'report';
-  // WebSocket upgrade requests  -  wss:// and ws:// cannot be replayed by VuGen
-  // Web HTTP/HTML protocol; including them causes 400 Bad Request errors
-  if(/^wss?:\/\//i.test(e.url)) return 'websocket';
-  // data:, blob:, chrome-extension:, about: … — never a network request, cannot be replayed
-  if(!/^https?:\/\//i.test(e.url)) return 'nonhttp';
-  // A page the browser fetched in advance (speculation rules / <link rel=prefetch>) and then opened: the real
-  // navigation is in the script, so the prefetch would load the page twice
-  if(S._prefetchDup&&S._prefetchDup.has(e)) return 'prefetch';
-  let host='';
-  try{ host=new URL(e.url).hostname; }catch{}
-  if(host&&S.domainFilter[host]===false) return 'domain';
-  if(f.opts&&e.method==='OPTIONS') return 'options';
-  if(f.noise&&host&&(NOISY.test(host)||(typeof NOISY_URL!=='undefined'&&NOISY_URL.test(e.url)))) return 'ads';
-  if(S.typeOff&&S.typeOff.has(recTypeKey(e))) return 'type';
-  return null;
+  return RequestFilter.leftOut(e,{ rules:_recRules(), noise:f.noise, options:f.opts, typeOff:S.typeOff,
+    domainOff:S.domainFilter, prefetchDup:S._prefetchDup });
 }
 
 // Prefetches of a page that the browser then opened (same URL, a later GET that is not a prefetch)
 function recPrefetchDuplicates(entries){
-  const dup=new Set(), isPf=e=>/prefetch|prerender/i.test(((e.hdrsMap||{})['sec-purpose']||(e.hdrsMap||{})['purpose']||''));
-  const later=new Set();
-  for(let i=entries.length-1;i>=0;i--){
-    const e=entries[i];
-    if(e.isMarker||(e.method||'GET')!=='GET') continue;
-    if(isPf(e)){ if(later.has(e.url)) dup.add(e); }
-    else later.add(e.url);
-  }
-  return dup;
+  return RequestFilter.prefetchDuplicates(entries);
 }
 
 function applyFilters(){
@@ -219,7 +178,7 @@ function applyFilters(){
   }
 }
 
-// (Moved here from portal/recorder-ui.js unchanged, so the HAR Explorer repairs a recording exactly like the Recorder.)
+// (Kept here so the HAR Explorer repairs a recording exactly like Script Studio — BUG-113.)
 // A transaction whose START is missing from the recording (an END without a START — the START bookmark fired
 // before DevTools was recording) starts where the previous transaction ended, or at the beginning. Without this,
 // VuGen got lr_end_transaction for a transaction never started and DevWeb dropped the transaction.

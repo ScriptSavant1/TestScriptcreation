@@ -95,6 +95,7 @@ function loadFile(file, slot) {
         S.har1 = parsed;
         S.isNetLog1 = netlog;
         S.har1Name = file.name;
+        S._usageSent = false;   // a new recording: one usage ping when it is first read
         markLoaded(1, file.name, netlog);
         studioBuildDomains(parsed);
         studioInitFilters();
@@ -234,21 +235,20 @@ function updateUploadState() {
 // ═══════════════════════════════════════════════════════════════════════════
 // HAR REQUEST FILTERS (Chrome DevTools-style resource type + domain)
 // ═══════════════════════════════════════════════════════════════════════════
+// The Recorder's types and defaults (shared/request-filter.js — one rule set, BUG-142): a static file is JS, CSS,
+// Img or Font by its content; Media and Other stay in the script by default, as in the Recorder and the HAR Explorer.
+// (Manifest and WebSocket were types of their own here: a manifest counts as Other, a WebSocket is always left out.)
 const STUDIO_RT_TYPES = [
-  { key: "fetch", label: "Fetch/XHR", color: "#4f8ef7" },
   { key: "document", label: "Doc", color: "#e8a838" },
-  { key: "stylesheet", label: "CSS", color: "#9b59b6" },
+  { key: "fetch", label: "Fetch/XHR", color: "#4f8ef7" },
   { key: "script", label: "JS", color: "#f39c12" },
-  { key: "font", label: "Font", color: "#16a085" },
+  { key: "stylesheet", label: "CSS", color: "#9b59b6" },
   { key: "image", label: "Img", color: "#27ae60" },
+  { key: "font", label: "Font", color: "#16a085" },
   { key: "media", label: "Media", color: "#e74c3c" },
-  { key: "manifest", label: "Manifest", color: "#8e44ad" },
-  { key: "websocket", label: "WS", color: "#2980b9" },
   { key: "other", label: "Other", color: "#7f8c8d" },
 ];
-// Default: only Fetch/XHR and Document enabled — static resources (CSS/JS/images/fonts) are
-// excluded by default as they are not relevant to performance test scripting.
-const STUDIO_RT_DEFAULT = new Set(["fetch", "document"]);
+const STUDIO_RT_DEFAULT = new Set(["document", "fetch", "media", "other"]);
 
 function studioInitFilters() {
   const list = document.getElementById("rt-filter-list");
@@ -302,7 +302,7 @@ function studioToggleRt(key) {
 function studioToggleRtNone() {
   const list = document.getElementById("rt-filter-list");
   if (!list) return;
-  const firstKey = STUDIO_RT_TYPES[0].key;
+  const firstKey = "fetch";   // "None" keeps Fetch/XHR, as before
   S.filterResourceTypes = new Set([firstKey]);
   list.querySelectorAll(".rt-filter-row").forEach((r) => {
     r.classList.toggle("rt-row-on", r.dataset.key === firstKey);
@@ -811,7 +811,7 @@ function renderAdvisorPanel() {
       ? candidates.map(_advCardHtml).join("")
       : '<div class="adv-empty" id="adv-empty"><b>No correlation found automatically.</b><br>' +
         "If a value changes on every run, add it with <b>Paste &amp; Detect</b> or <b>Add Manual</b>, " +
-        "or open the <b>Request Inspector</b> above to see the values in each request.</div>";
+        "or look at the values of a request (its <b>Dynamic values</b> tab, or the <b>Request Inspector</b>).</div>";
 
   // Re-populate inspector dropdown (entries may have changed)
   _advBuildInspectorDropdown();
@@ -832,28 +832,27 @@ function _advCardHtml(c) {
   if (c.status === "accepted") cardCls += " adv-card-accepted";
   if (c.status === "skipped") cardCls += " adv-card-skipped";
 
+  // Source = the request whose response sends the value; Replaced in = where the script puts the parameter
   var srcHtml = c.source
-    ? '<span class="adv-flow-src">&#x2190; From</span> <b>' +
-      _esc(c.source.url) +
-      "</b>" +
+    ? '<span class="adv-flow-src">Source</span> ' +
+      _advReqLink(c.source.entryIdx, c.source.url) +
       (c.source.jsonPath
-        ? " &rarr; <b>" + _esc(c.source.jsonPath) + "</b>"
+        ? " &middot; <b>" + _esc(c.source.jsonPath) + "</b>"
         : "")
     : '<span style="color:var(--text-3)">Source not found in HAR</span>';
 
   var usageCount = (c.usages || []).length;
   var firstUsage = c.usages && c.usages[0];
   var useHtml = firstUsage
-    ? '<span class="adv-flow-use">&#x2192; Used in</span> <b>' +
-      _esc(firstUsage.location) +
-      "</b>" +
-      (firstUsage.url ? " &mdash; " + _esc(firstUsage.url) : "") +
+    ? '<span class="adv-flow-use">Replaced in</span> ' +
+      _advReqLink(firstUsage.entryIdx, firstUsage.url) +
+      ' <span class="adv-where">&middot; ' + _esc(_advWhere(firstUsage)) + "</span>" +
       (usageCount > 1
-        ? ' <span style="color:var(--text-3)">+' +
+        ? ' <button type="button" class="adv-more" onclick="advisorShowUses(\'' + c.id + '\')" title="Every place this value is replaced">+' +
           (usageCount - 1) +
-          " more</span>"
+          " more</button>"
         : "")
-    : '<span style="color:var(--text-3)">No request body usage found</span>';
+    : '<span style="color:var(--text-3)">Not replaced in any request</span>';
 
   var manualTag = c._explorer
     ? '<span class="adv-manual-tag">From HAR Explorer</span>'
@@ -970,6 +969,8 @@ function _advCardHtml(c) {
     confLabel +
     "</span>" +
     manualTag +
+    // applied to the script (Apply & Regenerate), as in the mockup
+    (c._applied ? '<span class="adv-in-script" title="This correlation is in the script">&#x2713; In the script</span>' : "") +
     "</div>" +
     '<div class="adv-card-value">' +
     _esc(c.preview) +
@@ -1004,10 +1005,77 @@ function _advCardHtml(c) {
     '" onclick="advisorSkip(\'' +
     c.id +
     '\')" title="Dismiss this suggestion">&#x2715; Skip</button>' +
+    // the request whose response sends the value (as in the mockup)
+    (c.source && S.entries1 && S.entries1[c.source.entryIdx] && S.entries1[c.source.entryIdx].id
+      ? '<button type="button" class="adv-btn-show" onclick="advisorOpenRequest(' + S.entries1[c.source.entryIdx].id + ')" title="Open the request that sends this value">Show request</button>'
+      : "") +
     "</div>" +
     "</div>" +
     "</div>"
   );
+}
+
+// ---------------------------------------------------------------------------
+// Source / Replaced in: a request as "#id METHOD /path" (Studio's request id), a click opens its details
+// (Script Studio page: SSW.openDetails); "+n more" lists every place
+// ---------------------------------------------------------------------------
+var _ADV_WHERE = { body_json: "JSON body", body_form: "form field", header: "header", query: "query string", url_path: "address path", url: "address", cookie: "cookie" };
+function _advWhere(u) {
+  var w = _ADV_WHERE[u.location] || String(u.location || "").replace(/_/g, " ");
+  var f = u.jsonPath || u.key || "";
+  return w + (f ? " " + f : "");
+}
+function _advReqLabel(idx, fallbackUrl) {
+  var e = (S.entries1 || [])[idx];
+  if (!e || e.isMarker) return _esc(fallbackUrl || "");
+  var p = String(e.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "") || "/";
+  return "#" + e.id + " " + _esc(e.method) + " " + _esc(p.length > 64 ? p.slice(0, 63) + "\u2026" : p);
+}
+function _advReqLink(idx, fallbackUrl) {
+  var e = (S.entries1 || [])[idx];
+  var id = e && !e.isMarker ? e.id : -1;
+  return '<button type="button" class="adv-req-link" onclick="advisorOpenRequest(' + id + ')" title="Open this request">' + _advReqLabel(idx, fallbackUrl) + "</button>";
+}
+function advisorOpenRequest(id) {
+  if (!(id > 0) || !window.SSW || typeof SSW.openDetails !== "function") return;
+  var d = document.getElementById("adv-uses-dlg");
+  if (d && d.open) d.close();
+  SSW.openDetails(id);
+}
+function advisorShowUses(id) {
+  var c = _advFindById(id);
+  if (!c) return;
+  var d = document.getElementById("adv-uses-dlg");
+  if (!d) {
+    d = document.createElement("dialog");
+    d.id = "adv-uses-dlg";
+    d.className = "ss-dlg ss-dlg-wide adv-uses-dlg";
+    d.setAttribute("aria-labelledby", "adv-uses-h");
+    document.body.appendChild(d);
+    d.addEventListener("click", function (e) { if (e.target === d || e.target.closest("[data-close]")) d.close(); });
+  }
+  var row = function (kind, u) {
+    return "<tr><td>" + kind + "</td><td>" + _advReqLink(u.entryIdx, u.url) + "</td><td>" + _esc(u === c.source ? (u.jsonPath ? "response " + u.jsonPath : "response") : _advWhere(u)) + "</td></tr>";
+  };
+  d.innerHTML =
+    '<div class="ss-dlg-in"><div class="ss-dlg-h"><h2 id="adv-uses-h">' + _esc(c.varName) + " — every place</h2>" +
+    '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" data-close aria-label="Close">&#x2715;</button></div>' +
+    '<div class="ss-dlg-b"><p>Value <code>' + _esc(c.preview) + "</code> &middot; " + (c.usages || []).length + " place" + ((c.usages || []).length === 1 ? "" : "s") + " in the script. Click a request to see it.</p>" +
+    '<table class="adv-uses"><thead><tr><th></th><th>Request</th><th>Where</th></tr></thead><tbody>' +
+    (c.source ? row("Source", c.source) : "") +
+    (c.usages || []).map(function (u) { return row("Replaced in", u); }).join("") +
+    "</tbody></table></div></div>";
+  try { d.showModal(); } catch (e) { d.setAttribute("open", ""); }
+}
+
+// Accept every High-confidence suggestion still pending (Apply & Regenerate puts them in the script)
+function advisorAcceptAllHigh() {
+  var n = 0;
+  (S.advisorCandidates || []).forEach(function (c) {
+    if (c.status === "pending" && c.confidence === "high") { c.status = "accepted"; n++; }
+  });
+  renderAdvisorPanel();
+  if (n) showToast(n + " high-confidence suggestion" + (n === 1 ? "" : "s") + " accepted — click Apply &amp; Regenerate to put " + (n === 1 ? "it" : "them") + " in the script.", "success");
 }
 
 // ---------------------------------------------------------------------------
@@ -1483,8 +1551,22 @@ function _advUpdateFooter() {
   var pending = candidates.filter(function (c) {
     return c.status === "pending";
   }).length;
+  var pendingHigh = candidates.filter(function (c) {
+    return c.status === "pending" && c.confidence === "high";
+  }).length;
+  var allHigh = document.getElementById("adv-btn-allhigh");
+  if (!allHigh) {
+    allHigh = document.createElement("button");
+    allHigh.id = "adv-btn-allhigh";
+    allHigh.type = "button";
+    allHigh.className = "adv-btn-allhigh";
+    allHigh.onclick = function () { advisorAcceptAllHigh(); };
+    regen.parentNode.insertBefore(allHigh, regen);
+  }
+  allHigh.textContent = "Accept all high (" + pendingHigh + ")";
+  allHigh.hidden = !pendingHigh;
 
-  if (accepted === 0 && skipped === 0) {
+  if (accepted === 0 && skipped === 0 && !pendingHigh) {
     footer.style.display = "none";
     return;
   }

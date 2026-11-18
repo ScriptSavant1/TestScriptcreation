@@ -41,9 +41,20 @@ describe('Test length — the last iterations finish', () => {
     expect(r.duration).toBe(r.marks[r.marks.length - 1].to + 12);
   });
 
-  test('iteration 3 s, shorter than the 10 s pacing: one pacing after the schedule', () => {
+  test('iteration 3 s, shorter than the 10 s pacing: one iteration after the schedule (a Vuser waiting for its pacing leaves at once)', () => {
     const r = E.model({ scenario: sc(), pools: pool, groups: [{ name: 'S', method: 'vusers', vusers: 20, txPerIter: 3, rtAvg: 1, pacing: { mode: 'fixed', fixed: 10 }, pool: 'p1' }] });
+    expect(r.tail).toBe(3);
+  });
+
+  test('no response time: the iteration is not known, so one pacing', () => {
+    const r = E.model({ scenario: sc(), pools: pool, groups: [{ name: 'S', method: 'vusers', vusers: 20, txPerIter: 3, thinkPerIter: 2, pacing: { mode: 'fixed', fixed: 10 }, pool: 'p1' }] });
     expect(r.tail).toBe(10);
+  });
+
+  test('the LRE run: 40 Vusers, 1 every 5 s, pacing 360 s, 3 s + 27 s waits → 3:15 + 60:00 + 3:15 + 30 s = 1:07:00 (LRE: 1:06:33)', () => {
+    const r = E.model({ scenario: Object.assign(sc(), { steadyMin: 60, workload: 'basic-scenario', rampMode: 'own', startPer: 1, startEvery: 5 }), pools: pool,
+      groups: [{ name: 'S', method: 'vusers', vusers: 40, txPerIter: 10, rtAvg: 0.3, waitPerIter: 27, pacing: { mode: 'fixed', fixed: 360 }, pool: 'p1' }] });
+    expect(E.hms(r.duration)).toBe('01:07:00');
   });
 });
 

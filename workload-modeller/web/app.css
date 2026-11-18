@@ -28,6 +28,7 @@ html.embedded .wm-top { justify-content: flex-end; padding-top: 8px; padding-bot
 .wm-f small { font-weight: 400; color: var(--ds-text-3); font-size: var(--ds-fs-xs); line-height: 1.35; }
 .wm-f .ds-field { width: 100%; min-width: 0; }
 .wm-f.wide { grid-column: 1 / -1; }
+.wm-f[hidden] { display: none; }
 .wm-unit { position: relative; }
 .wm-unit > span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--ds-text-3); font-size: var(--ds-fs-xs); pointer-events: none; }
 .wm-unit .ds-field { padding-right: 46px; }
@@ -52,6 +53,14 @@ html.embedded .wm-top { justify-content: flex-end; padding-top: 8px; padding-bot
 [data-theme="light"] .ds-chip.ok { color: #11652f; }
 .wm-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 body.simple .adv { display: none !important; }
+/* the user's own ramp: "Start [1] Vusers every [5] s" on one line, as LRE writes it */
+.wm-ramp-own { display: grid; gap: 8px; }
+.wm-ramp-own[hidden] { display: none; }
+.wm-ramp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--ds-fs-sm); }
+.wm-ramp-row > span:first-child { min-width: 40px; font-weight: 600; }
+.wm-ramp-own .wm-ramp-row > .ds-field { width: 100px; flex: none; }
+.wm-ramp-own .wm-ramp-row .wm-unit { width: 110px; flex: none; }
+.wm-ramp-own .wm-ramp-row .wm-unit .ds-field { padding-right: 26px; }
 details.wm-more > summary { cursor: pointer; color: var(--ds-accent-text); font-size: var(--ds-fs-sm); font-weight: 600; list-style: none; }
 details.wm-more > summary::before { content: "+ "; }
 details.wm-more[open] > summary::before { content: "− "; }
@@ -145,6 +154,13 @@ details.wm-more[open] > summary { margin-bottom: 12px; }
 .wm-bar .wm-break { flex-basis: 100%; height: 0; }   /* the actions start a row of their own */
 .wm-bar .wm-bar-view { margin-left: auto; display: inline-flex; gap: 4px; }   /* Expand / Collapse cards: together, at the end */
 .wm-import { margin-bottom: 12px; }
+/* the notes at the top of Scripts: what each box means, with a worked example */
+.wm-notes { margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--ds-border); border-radius: 12px; background: var(--ds-surface-2, transparent); }
+.wm-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: var(--ds-fs-sm); color: var(--ds-text-2); line-height: 1.5; }
+.wm-tile-warn { border-color: var(--ds-warn); }
+.wm-tile-warn .ds-tile-value { color: var(--ds-warn); }
+#res-notes { margin: 12px 0 0; }
+.wm-notes-f { display: block; margin: 2px 0 0 12px; font-family: var(--ds-mono); font-size: var(--ds-fs-xs); color: var(--ds-text); }
 .wm-import[hidden] { display: none; }
 .wm-import ul { margin: 4px 0 0; padding-left: 18px; }
 .wm-import li { margin: 2px 0; }
@@ -161,6 +177,12 @@ details.wm-more[open] > summary { margin-bottom: 12px; }
 .wm-script-head .ds-field { flex: 1 1 140px; max-width: 280px; }
 .wm-script-head .wm-gres { margin-left: auto; }
 .wm-plan { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--ds-surface); border: 1px solid var(--ds-border); font-size: var(--ds-fs-sm); }
+.wm-plan.wm-plan-bad { background: var(--ds-bad-soft); border-color: var(--ds-bad); line-height: 1.5; }
+.wm-plan-fix { display: block; margin-top: 6px; font-weight: 600; }
+.wm-plan-ways { margin: 4px 0 0; padding-left: 20px; }
+.wm-plan-ways li { margin: 4px 0; }
+.wm-plan-ways .ds-btn { margin-left: 6px; vertical-align: middle; }
+.wm-f select:disabled, .wm-f input:disabled { opacity: .55; cursor: not-allowed; }
 .wm-empty-res { color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
 .wm-empty-res ol { margin: 8px 0 0; padding-left: 20px; }
 .wm-empty-res li { margin: 3px 0; }

@@ -1,5 +1,5 @@
 /**
- * portal-mode.js — pure helpers for recording started from the PerfX Studio Recorder page.
+ * portal-mode.js — pure helpers for recording started from the PerfX Studio page.
  *
  * The page starts the recorder through a link registered for the current Windows user
  * (perfx-recorder://start?portal=<the portal's origin>), then drives it over the local
@@ -76,7 +76,7 @@ export function expandEnv(value, env) {
   });
 }
 
-/** Checks the body of POST /api/session. Returns { ok, url, browser, private, name, firstTx } or { ok: false, error }. */
+/** Checks the body of POST /api/session. Returns { ok, url, browser, private, name, firstTx, plan } or { ok: false, error }. */
 export function readSession(body) {
   const b = body || {};
   const url = String(b.url || "").trim();
@@ -84,11 +84,66 @@ export function readSession(body) {
   const browser = String(b.browser || "edge").toLowerCase();
   if (browser !== "edge" && browser !== "chrome") return { ok: false, error: "The browser must be Edge or Chrome" };
   const clean = (v, n) => String(v || "").trim().slice(0, n);
-  return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80) };
+  const scriptId = scriptIdOf(b.scriptId);
+  if (scriptId === null) return { ok: false, error: "The script ID takes letters and digits only, up to 12 (for example SC01)" };
+  return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80), plan: planSteps(String(b.plan || "").slice(0, 4000)), scriptId, bar: b.bar !== false };
+}
+
+// ── transaction names: the same rules as the PerfX Studio page (src/web/public/portal/record-live.js fullName / nextNum —
+//    keep the two in step) ──
+const pad2 = (n) => String(n).padStart(2, "0");
+/** The planned steps typed one per line (empty lines dropped, at most 50). */
+export function planSteps(text) {
+  return (Array.isArray(text) ? text : String(text || "").split(/\r?\n/)).map((s) => String(s).trim().slice(0, 60)).filter(Boolean).slice(0, 50);
+}
+/** The next number: after the highest one used (T07_Pay is followed by T08), else after the count. */
+export function nextTxNumber(started) {
+  let hi = started.length;
+  started.forEach((t) => { const m = /^T(\d+)_/.exec(t); if (m && +m[1] > hi) hi = +m[1]; });
+  return hi + 1;
+}
+/** "add to cart" → "T04_Add_to_cart" (numbered after `started`); a name with its own number (t7-pay) keeps it → "T07_pay". "" when empty. */
+export function txName(raw, started) {
+  const s = String(raw || "").trim().replace(/[\s-]+/g, "_").replace(/[^A-Za-z0-9_]/g, "").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  if (!s) return "";
+  const own = /^[Tt](\d+)_+(.+)$/.exec(s);
+  if (own) return "T" + pad2(+own[1]) + "_" + own[2];
+  return "T" + pad2(nextTxNumber(started)) + "_" + s.charAt(0).toUpperCase() + s.slice(1);
+}
+/**
+ * The optional script ID (Start recording → More options): letters and digits, starting with a letter, up to 12 —
+ * "SC01" gives SC01_Booking_<date>.har and SC01_01_… transactions in Script Studio. "" when empty, null when not valid.
+ */
+export function scriptIdOf(v) {
+  const s = String(v == null ? "" : v).trim();
+  if (!s) return "";
+  return /^[A-Za-z][A-Za-z0-9]{0,11}$/.test(s) ? s.toUpperCase() : null;
 }
 
 /**
- * One row of the live list on the Recorder page, from a har-builder entry (pending or finished).
+ * A new name for a transaction (the PerfX Studio page's transaction list): the same characters as a new one; a name
+ * typed without a number keeps the old one's (T02_Login → "Sign in" → T02_Sign_in). { name } or { error }.
+ */
+export function renamedTx(from, to, used) {
+  const own = /^T(\d+)_/.exec(String(from || ""));
+  const typed = String(to || "").trim();
+  if (!typed) return { error: "Type a name for the transaction." };
+  const withNum = own && !/^[Tt]\d+[_\s-]/.test(typed) ? "T" + own[1] + "_" + typed.charAt(0).toUpperCase() + typed.slice(1) : typed;
+  const name = txName(withNum, used);
+  if (!name) return { error: "Type a name for the transaction." };
+  if (name !== from && used.includes(name)) return { error: `${name} is used already — type another name.` };
+  return { name };
+}
+
+/** The first planned step not started yet ("" when every one is done). */
+export function nextPlanned(plan, started) {
+  const key = (t) => String(t).replace(/^T\d+_/, "").toLowerCase();
+  const done = new Set(started.map(key));
+  return (plan || []).find((p) => !done.has(key(txName(p, [])))) || "";
+}
+
+/**
+ * One row of the live list on the PerfX Studio page, from a har-builder entry (pending or finished).
  * `background` comes from bg-detector (a confirmed periodic call) — the HAR's own _perfx_class is
  * only stamped at stop.
  */

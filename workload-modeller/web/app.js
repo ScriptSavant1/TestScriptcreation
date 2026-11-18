@@ -39,7 +39,8 @@ const lgType = (p) => LG_TYPES.find((t) => t.id === p.kind) || LG_TYPES[LG_TYPES
 let seq = 0;
 const newScript = (o) => Object.assign({ id: "g" + (++seq), name: "Script " + seq, protocol: "web", pool: "p1", method: "tps", targetTps: 5, txPerIter: 3, thinkPerIter: 10, rtAvg: null, rtSource: "sla", thinkMode: "recorded", pacing: { mode: "auto" } }, o || {});
 const state = {
-  scenario: { testType: "load", steadyMin: 60, workload: "basic-group", totalTps: 10, growth: 1, headroomPct: 25, pacingStyle: "fixed", randomPct: 15, maxStartRate: 2, levels: null, stepHoldMin: null, licenceVusers: null, lgFill: "fill" },
+  scenario: { testType: "load", steadyMin: 60, workload: "basic-group", totalTps: 10, growth: 1, headroomPct: 25, pacingStyle: "fixed", randomPct: 15, maxStartRate: 2, levels: null, stepHoldMin: null, licenceVusers: null, lgFill: "fill",
+    rampMode: "auto", startPer: null, startEvery: null, stopPer: null, stopEvery: null },
   groups: [newScript({ name: "Payments", targetTps: 10, txPerIter: 4, thinkPerIter: 15, rtAvg: 1, sample: true })],
   pools: [defaultPool()],
   common: { rtAvg: null, tps: null, tpsMode: "each" },     // used by every script that has no value of its own
@@ -81,6 +82,13 @@ function renderTest() {
   $("#sc-hold").value = sc.stepHoldMin ?? "";
   $("#steady-help").textContent = tt.levels || tt.base ? "used by a basic schedule; steps use “Hold at each step”" : "how long full load is held, after the ramp-up";
   $("#f-total").style.display = state.groups.some((g) => g.method === "share") ? "" : "none";
+  const own = sc.rampMode === "own";
+  $("#sc-ramp").value = own ? "own" : "auto";
+  $("#f-ramp-own").hidden = !own || sc.workload === "goal";
+  $("#sc-ramp").disabled = sc.workload === "goal";
+  $("#ramp-help").textContent = sc.workload === "goal" ? "LRE adds Vusers itself in a goal-oriented test" : own ? "used for every start and stop (a spike's sudden jump stays the tool's)" : "spread over about three pacings, never faster than the start rate";
+  $("#sc-start-per").value = sc.startPer ?? ""; $("#sc-start-every").value = sc.startEvery ?? "";
+  $("#sc-stop-per").value = sc.stopPer ?? ""; $("#sc-stop-every").value = sc.stopEvery ?? "";
 }
 $("#test-types").addEventListener("click", (e) => {
   const b = e.target.closest("[data-tt]"); if (!b) return;
@@ -90,8 +98,18 @@ $("#test-types").addEventListener("click", (e) => {
 });
 const bindNum = (id, key, nullable) => $(id).addEventListener("input", (e) => { const v = parseFloat(e.target.value); state.scenario[key] = Number.isFinite(v) ? v : (nullable ? null : 0); calc(); });
 bindNum("#sc-steady", "steadyMin"); bindNum("#sc-total", "totalTps", true); bindNum("#sc-growth", "growth"); bindNum("#sc-licence", "licenceVusers", true);
+bindNum("#sc-start-per", "startPer", true); bindNum("#sc-start-every", "startEvery", true); bindNum("#sc-stop-per", "stopPer", true); bindNum("#sc-stop-every", "stopEvery", true);
+// "My own" ramp: starts from the ramp the tool worked out, so the user only changes what differs from the LRE test
+$("#sc-ramp").addEventListener("change", (e) => {
+  const sc = state.scenario; sc.rampMode = e.target.value;
+  if (sc.rampMode === "own" && sc.startEvery == null) {
+    const r = last && (last.actions || (last.groupPlans && last.groupPlans[0] && last.groupPlans[0].actions) || []).find((a) => a.type === "start");
+    sc.startPer = r ? (r.all ? r.count : r.perStep) : 1; sc.startEvery = r ? (r.all ? 0 : r.every) : 5;
+  }
+  renderTest(); calc();
+});
 bindNum("#sc-headroom", "headroomPct"); bindNum("#sc-random", "randomPct"); bindNum("#sc-rate", "maxStartRate"); bindNum("#sc-hold", "stepHoldMin", true);
-$("#sc-workload").addEventListener("change", (e) => { state.scenario.workload = e.target.value; $("#wl-help").textContent = WL_HELP[e.target.value]; calc(); });
+$("#sc-workload").addEventListener("change", (e) => { state.scenario.workload = e.target.value; $("#wl-help").textContent = WL_HELP[e.target.value]; renderTest(); calc(); });
 $("#sc-style").addEventListener("change", (e) => { state.scenario.pacingStyle = e.target.value; calc(); });
 $("#sc-levels").addEventListener("input", (e) => { const l = e.target.value.split(/[,; ]+/).map(Number).filter((x) => x > 0); state.scenario.levels = l.length ? l : null; calc(); });
 
@@ -100,6 +118,17 @@ const opt = (list, v) => list.map(([k, l]) => `<option value="${k}"${k === v ? "
 function num(label, key, val, unit, help, cls, extra) {
   return `<label class="wm-f ${cls || ""}">${label}<div class="${unit ? "wm-unit" : ""}"><input class="ds-field" type="number" data-k="${key}" value="${val ?? ""}" min="0" step="any" ${extra || ""}>${unit ? `<span>${unit}</span>` : ""}</div>${help ? `<small>${help}</small>` : ""}</label>`;
 }
+// the replay settings act on the think time above: greyed out while there is none
+const noThink = (g) => !(g.thinkPerIter > 0);
+// Multiply / Random: the think time LRE will really wait, so a factor is never read as seconds (27 s × 3 = 81 s)
+function thinkResult(g) {
+  const t = g.thinkPerIter, f = g.thinkFactor ?? 1, lo = g.thinkMinPct ?? 50, hi = g.thinkMaxPct ?? 150;
+  if (!(t > 0)) return g.thinkMode === "multiply" ? "a factor, not seconds — enter the think time above" : "of the recorded think time";
+  const cut = g.thinkLimit > 0 ? `, before the ${fmtS(g.thinkLimit)} limit` : "";
+  if (g.thinkMode === "multiply") return Number.isFinite(f) ? `a factor, not seconds: ${fmtS(t)} × ${Number.isInteger(f) ? fmt(f) : fmt(f, 2)} = ${fmtS(t * f)} think per iteration${cut}` : "a factor, not seconds";
+  return Number.isFinite(lo) && Number.isFinite(hi) ? `${fmtS(t)} becomes ${fmtS(t * lo / 100)} – ${fmtS(t * hi / 100)}, about ${fmtS(t * (lo + hi) / 200)} on average${cut}` : "of the recorded think time";
+}
+const thinkHelp = (g) => (noThink(g) ? "no think time above — nothing to replay" : "LRE's Think Time setting — what LRE does with the think time above; “As recorded” waits it in full");
 function scriptCard(g) {
   const m = g.method, p = g.pacing || {};
   const target = {
@@ -128,7 +157,7 @@ function scriptCard(g) {
       ${`<button class="wm-x" data-del aria-label="Remove ${esc(g.name)}" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`}
     </div>
     <div class="wm-script-body" id="body-${g.id}">
-      <p class="wm-plan" id="plan-${g.id}"></p>
+      <div class="wm-plan" id="plan-${g.id}"></div>
       <div><p class="wm-sub">Target</p><div class="wm-grid">
         <label class="wm-f">Target type<select class="ds-field" data-k="method">${opt(METHODS, m)}</select></label>${target}
         <label class="wm-f">Protocol<select class="ds-field" data-k="protocol">${opt(Object.entries(PROTOS).map(([k, v]) => [k, v.label]), g.protocol)}</select></label>
@@ -137,18 +166,21 @@ function scriptCard(g) {
         ${num("Vusers per machine", "perLg", g.perLg, "", "your figure for this script, e.g. from a past run — replaces the rule", "adv")}
       </div></div>
       <div><p class="wm-sub">One iteration <span class="wm-subh">— one run through the script</span></p><div class="wm-grid">
-        ${num("Transactions", "txPerIter", g.txPerIter, "", g.txNames && g.txNames.length ? "in the script: " + esc(g.txNames.length > 4 ? g.txNames.slice(0, 3).join(", ") + " and " + (g.txNames.length - 3) + " more" : g.txNames.join(", ")) : "that count for the TPS")}
-        ${num("Think time", "thinkPerIter", g.thinkPerIter, "s", "total per iteration, as recorded")}
-        ${num("Response time", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}
+        ${num("Transactions per iteration", "txPerIter", g.txPerIter, "", g.txNames && g.txNames.length ? "in the script: " + esc(g.txNames.length > 4 ? g.txNames.slice(0, 3).join(", ") + " and " + (g.txNames.length - 3) + " more" : g.txNames.join(", ")) : "that count for the TPS")}
+        ${num("Think time — total per iteration", "thinkPerIter", g.thinkPerIter, "s", "all think times of one iteration added up, not per transaction — e.g. 9 × lr_think_time(3) = 27 s")}
+        ${num("Fixed waits — total per iteration", "waitPerIter", g.waitPerIter, "s", "all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full", g.waitPerIter > 0 ? "" : "adv")}
+        ${num("Response time — per transaction", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}
         <label class="wm-f adv">Response time from<select class="ds-field" data-k="rtSource">${opt(RTSRC, g.rtSource)}</select></label>
         ${num("90th percentile", "rt90", g.rt90, "s", "optional — for the worst case", "adv")}
         ${num("Requests", "requestsPerIter", g.requestsPerIter, "", "per iteration — for hits per second", "adv")}
         ${num("Data rows available", "dataRows", g.dataRows, "", "warns when the test needs more", "adv")}
       </div></div>
       <div><p class="wm-sub">Replay in LRE <span class="wm-subh">— runtime settings</span></p><div class="wm-grid">${pacing}
-        <label class="wm-f">Think time<select class="ds-field" data-k="thinkMode">${opt(THINK, g.thinkMode)}</select></label>
-        ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×") : ""}
-        ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%") : ""}
+        <label class="wm-f">Think time in LRE<select class="ds-field" data-k="thinkMode" data-thinkdep${noThink(g) ? " disabled" : ""}>${opt(THINK, g.thinkMode)}</select><small data-thinkhelp>${thinkHelp(g)}</small></label>
+        ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
+        ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%", "of the recorded think time") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
+        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "only if you tick LRE's “Limit think time to” — else leave empty", g.thinkLimit > 0 ? "" : "adv", `data-thinkdep${noThink(g) ? " disabled" : ""}`)}
+        ${g.thinkMode === "ignore" ? "" : num("How many think times", "thinkPauses", g.thinkPauses, "", "in one iteration, so the limit can cut each one — read from the script").replace('<label class="wm-f ', `<label data-pauses${g.thinkLimit > 0 ? "" : " hidden"} class="wm-f `)}
       </div></div>
     </div></div>`;
 }
@@ -172,6 +204,10 @@ $("#scripts-list").addEventListener("input", (e) => {
   if (el.type === "number") { v = parseFloat(v); if (!Number.isFinite(v)) v = null; }
   setKey(g, k, v); g.sample = false;
   if (k === "name") { const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }
+  // the number of think times matters only with a limit: shown while one is set (no redraw, the focus stays)
+  if (k === "thinkPerIter") { const c = el.closest("[data-id]"); c.querySelectorAll("[data-thinkdep]").forEach((x) => { x.disabled = noThink(g); }); const h = c.querySelector("[data-thinkhelp]"); if (h) h.textContent = thinkHelp(g); }
+  if (["thinkPerIter", "thinkFactor", "thinkMinPct", "thinkMaxPct", "thinkLimit"].includes(k)) { const r = el.closest("[data-id]").querySelector("[data-thinkres]"); if (r) r.textContent = thinkResult(g); }
+  if (k === "thinkLimit") { const f = el.closest("[data-id]").querySelector("[data-pauses]"); if (f) f.hidden = !(v > 0); }
   if (STRUCT.has(k)) { if (tableView()) tvRedraw(g, k); else renderScripts(); renderTest(); renderPools(); calc(); } else calcSoon();
 });
 $("#scripts").addEventListener("click", (e) => {
@@ -179,6 +215,12 @@ $("#scripts").addEventListener("click", (e) => {
   if (head && !e.target.closest("[data-del], input, select, textarea, a") && (e.target.closest("[data-fold-card]") || !e.target.closest("button"))) {
     const g = state.groups.find((x) => x.id === head.closest("[data-id]").dataset.id);
     foldCard(g, !g.folded, { only: true });
+    return;
+  }
+  const fx = e.target.closest("[data-fix]");
+  if (fx) {
+    const g = state.groups.find((x) => x.id === fx.closest("[data-id]").dataset.id), sets = JSON.parse(fx.dataset.fix);
+    clearWith(`${g.name}: ${Object.entries(sets).map(([k, v]) => (k === "vusers" ? `${v} Vusers` : `pacing ${v} s`)).join(", ")}.`, () => { Object.entries(sets).forEach(([k, v]) => setKey(g, k, v)); g.sample = false; });
     return;
   }
   if (!e.target.closest("[data-del]")) return;
@@ -232,8 +274,8 @@ function tvRow(g) {
     + (open ? `<tr class="wm-tv-card" data-card-of="${g.id}"><td colspan="11"><div class="wm-tv-cardin">${scriptCard(Object.assign({}, g, { folded: false }))}</div></td></tr>` : "");
 }
 function tvTable() {
-  return `<table class="wm-tt"><thead><tr><th class="c-name">Script</th><th>Target type</th><th>Target</th><th title="Transactions per iteration">Transactions</th>
-    <th title="Think time per iteration, as recorded">Think time</th><th title="Average response time per transaction">Response time</th><th>Pacing</th><th>Think time at replay</th>
+  return `<table class="wm-tt"><thead><tr><th class="c-name">Script</th><th>Target type</th><th>Target</th><th title="Transactions per iteration">Transactions / iteration</th>
+    <th title="All think times of one iteration added up — not per transaction">Think time (total)</th><th title="Average response time of one transaction">Response time (per tx)</th><th>Pacing</th><th>Think time at replay</th>
     <th class="num" title="Worked out">Vusers</th><th class="num" title="Worked out">TPS</th><th><span class="wm-vh">Remove</span></th></tr></thead><tbody>${state.groups.map(tvRow).join("")}</tbody></table>`;
 }
 const tvWidth = () => {
@@ -410,6 +452,21 @@ function cal() {
 ["#cal-v", "#cal-cpu", "#cal-mem"].forEach((s) => $(s).addEventListener("input", cal));
 
 /* ---------- results ---------- */
+// "Not possible": why, in plain words, and the ways out — with a button where one box changes it (Undo in the toast)
+function overrunHtml(r, g) {
+  const o = r.overrun, fixed = g && (g.pacing || {}).mode === "fixed", byV = g && g.method === "vusers";
+  const parts = [`${o.tx} × ${fmtS(o.rt / o.tx)} response`];
+  if (o.think > 0) parts.push(`${fmtS(o.think)} think`);
+  if (o.wait > 0) parts.push(`${fmtS(o.wait)} fixed waits`);
+  const btn = (label, sets) => `<button type="button" class="ds-btn ds-btn-sm" data-fix='${esc(JSON.stringify(sets))}'>${esc(label)}</button>`;
+  const pace = o.kind === "random" ? "shortest pacing" : "pacing";
+  const ways = [];
+  ways.push(`<li><b>Lengthen the ${pace}</b> to ${fmtS(o.pacingSafe)} — the iteration (${fmtS(o.iter)}) plus ${o.headroomPct}% room for slower responses${o.pacingSafe > o.pacingFit ? `; ${fmtS(o.pacingFit)} is the bare minimum` : ""}. ${o.sizedByTps ? `The tool then uses ${fmt(o.vusersAtSafe)} Vusers for the same ${fmt(o.askTps, 2)} TPS.` : `With ${fmt(r.vusers)} Vusers that gives <b>${fmt(o.tpsAtSafe, 2)} TPS</b>.`}${fixed ? " " + btn(`Use ${o.pacingSafe} s`, { "pacing.fixed": o.pacingSafe }) : ""}</li>`);
+  if (byV) ways.push(`<li><b>Keep ${fmt(o.askTps, 2)} TPS:</b> ${fmt(o.vusersAtSafe)} Vusers with a ${fmtS(o.pacingSafe)} ${pace}.${fixed ? " " + btn(`Use ${o.vusersAtSafe} Vusers, ${o.pacingSafe} s`, { vusers: o.vusersAtSafe, "pacing.fixed": o.pacingSafe }) : ""}</li>`);
+  ways.push(`<li><b>Or make one iteration shorter:</b> ${o.rtFit != null ? `the response time must stay under ${fmtS(o.rtFit)} per transaction, or ` : ""}${o.wait > 0 ? "less think time or fixed waits — " : o.think > 0 ? "less think time — " : ""}check the figures are per iteration (think time is the total, not per transaction).</li>`);
+  return `<b>Not possible as it stands.</b> One iteration takes <b>${fmtS(o.iter)}</b> (${parts.join(" + ")}), but the ${pace} starts a new one every <b>${fmtS(o.pacing)}</b>. LRE starts each iteration late, so you would get about <b>${fmt(o.reachTps, 2)} TPS</b>, not the ${fmt(o.askTps, 2)} planned.
+    <span class="wm-plan-fix">Change one of these:</span><ul class="wm-plan-ways">${ways.join("")}</ul>`;
+}
 let last = null;
 function calc() {
   const res = resolved();
@@ -427,7 +484,9 @@ function calc() {
     const pl = $("#plan-" + g.id);
     if (pl) pl.innerHTML = g.status === "needs-input" ? `<b>Needs:</b> ${esc(((g.checks.find((c) => c.code.startsWith("needs-")) || {}).text || "more input").replace(g.name + ": ", ""))}`
       : g.status === "estimate" ? `<b>Plan:</b> ${fmt(g.vusers)} Vusers — the TPS depends on the response time (see “How it is worked out”).`
+      : g.status === "infeasible" && g.overrun ? overrunHtml(g, state.groups.find((x) => x.id === g.id))
       : `<b>Plan:</b> ${fmt(g.vusers)} Vusers, a new iteration every ${g.pacing.kind === "random" ? fmtS(g.pacing.min) + " – " + fmtS(g.pacing.max) : fmtS(g.pacing.mean)}, ${fmt(g.tps, 2)} TPS${g.status === "infeasible" ? " — not possible as it stands (see Checks)" : ""}.`;
+    if (pl) pl.classList.toggle("wm-plan-bad", g.status === "infeasible");
   });
   r.groups.forEach((g, i) => { const el = $("#facts-" + g.id); if (el) el.innerHTML = facts(res.groups[i], g); });
   r.groups.forEach((g) => {   // the table: status, worked-out Vusers and TPS, the box still needed in amber
@@ -436,7 +495,7 @@ function calc() {
     const st = ({ "needs-input": "Needs input", estimate: "Estimate", infeasible: "Not possible" })[g.status] || "Ready";
     s.className = "wm-dot " + (g.status === "ok" ? "ok" : g.status === "infeasible" ? "bad" : "warn");
     s.setAttribute("aria-label", st);
-    s.title = st + (need ? " — " + need.text : g.status === "infeasible" ? " — see Checks" : "");
+    s.title = st + (need ? " — " + need.text : g.status === "infeasible" ? (g.overrun ? ` — one iteration takes ${fmtS(g.overrun.iter)} but the pacing is ${fmtS(g.overrun.pacing)}: open the card for the fixes` : " — see Checks") : "");
     $("#tv-v-" + g.id).textContent = need ? "—" : fmt(g.vusers);
     $("#tv-t-" + g.id).textContent = need ? "—" : g.status === "estimate" ? "varies" : fmt(g.tps, g.tps < 10 ? 2 : 1);
     const tr = s.closest("tr");
@@ -488,27 +547,64 @@ function calc() {
     $("#summary").className = "ds-note warn wm-summary";
     $("#summary").innerHTML = `<div class="wm-empty-res"><b>Almost there — the plan appears here when these are filled in:</b><ol>${(todo.length ? todo : r.checks.filter((c) => c.level === "bad"))
       .map((c) => `<li>${esc(c.text)}${goto(c)}${c.many ? showNeed() : ""}</li>`).join("")}</ol></div>`;
-    $("#tiles").innerHTML = ""; $("#chart").innerHTML = ""; $("#chart").style.display = "none"; $(".wm-legend").style.display = "none"; $("#phbar").innerHTML = ""; $("#phases").innerHTML = ""; $("#lre").textContent = "";
+    $("#tiles").innerHTML = ""; $("#res-notes").innerHTML = ""; $("#chart").innerHTML = ""; $("#chart").style.display = "none"; $(".wm-legend").style.display = "none"; $("#phbar").innerHTML = ""; $("#phases").innerHTML = ""; $("#lre").textContent = "";
     $("#tab-per").innerHTML = perScript(r); $("#tab-lg").innerHTML = ""; $("#tab-how").innerHTML = how(r);
     $("#setup").innerHTML = `<p class="wm-muted" style="margin:0">The LRE setup appears here when the plan is complete — see Checks.</p>`;
     return;
   }
   $("#chart").style.display = ""; $(".wm-legend").style.display = "";
   $("#summary").className = "ds-note " + (bad ? "bad" : "ok") + " wm-summary";
-  $("#summary").textContent = (bad ? "The plan has problems to fix (see Checks). As it stands: " : "") + r.summary;
+  // lead with the problem in one line: what is wrong and where the fixes are
+  const overGs = r.groups.filter((g) => g.overrun);
+  const lead = overGs.length ? overGs.map((g) => `${g.name}: one iteration takes ${fmtS(g.overrun.iter)} but the pacing starts one every ${fmtS(g.overrun.pacing)}, so it reaches ${fmt(g.overrun.reachTps, 2)} TPS, not ${fmt(g.overrun.askTps, 2)}.`).join(" ") + " Its script card shows what to change. " : "The plan has problems to fix (see Checks). ";
+  $("#summary").textContent = (bad ? lead + "As it stands: " : "") + r.summary;
   const t = r.totals, range = Math.abs(t.tpsMax - t.tpsMin) > 1e-6;
   const ph = phases(r);
+  // Names both a tester and a manager read: "Transactions per second (TPS)". The load at full load first, then one
+  // iteration (where think time and response time show), the test, and the totals of the whole test.
+  const one = r.groups.length === 1 ? r.groups[0] : null;   // one script: its own figures in the notes
+  const T = one ? one.T : null;
+  const short = (s) => E.words(Math.round(s));
+  const steadyMin = Math.round((r.steadyTo - r.steadyFrom) / 60);
+  const over = t.reachTps != null;                          // an iteration longer than its pacing: what LRE will reach
+  const tps = over ? t.reachTps : t.tps, ips = over ? t.reachIps : t.ips;
+  const perVu = (x) => (t.vusers ? x / t.vusers : 0);
+  const n1 = (x) => String(+x.toFixed(x < 10 ? 2 : 1));    // 0.2, 72, 74.5 — no padding zeros
+  const overNote = over ? ` — not ${fmt(t.tps, 2)}: an iteration takes longer than the pacing (see Checks)` : "";
   const tiles = [
-    ["Vusers", fmt(r.peakVusers), r.peakVusers > t.vusers ? `${fmt(t.vusers)} at 100%` : `${r.groups.length} script${r.groups.length > 1 ? "s" : ""}`],
-    ["Expected TPS", fmt(t.tps, 2), range ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)}` : `${fmt(t.perHour)} per hour`],
-    ["Load generators", r.lgTotal == null ? "?" : fmt(r.lgTotal), r.lgTotal == null ? "machine size needed" : r.lg.filter((x) => x.total).map((x) => `${x.pool.name}: ${x.total}${x.extra ? ` (${x.needed} + ${x.extra} extra)` : ""}`).join(" · ")],
-    ["Test length", E.hms(r.duration), ph.lengthNote],
-    [ph.tileLabel, ph.tileValue, ph.tileNote],
-    ["Iterations", fmt(t.iters.total), `${fmt(t.iters.steady)} at full load`],
-    ["Transactions", fmt(t.tx.total), "test data if one row each"],
+    ["Virtual users (Vusers)", fmt(r.peakVusers), r.peakVusers > t.vusers ? `${fmt(t.vusers)} at 100%` : `${r.groups.length} script${r.groups.length > 1 ? "s" : ""}`],
+    ["Transactions per second (TPS)", fmt(tps, 2), (range && !over ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)} (random pacing) · ` : "") + "at full load" + overNote, over],
+    ["Transactions per hour (TPH)", fmt(tps * 3600), "at full load · TPS × 3,600", over],
+    ["Iterations per hour", ips ? fmt(ips * 3600) : "—", ips ? `at full load, all Vusers · ${n1(perVu(ips * 3600))} per Vuser` : "depends on the response time", over],
   ];
-  if (t.hitsPerSec) tiles.push(["Hits per second", fmt(t.hitsPerSec, 1), "requests at full load"]);
-  $("#tiles").innerHTML = tiles.map(([k, v, s]) => `<div class="ds-tile"><div class="ds-tile-label">${k}</div><div class="ds-tile-value">${v}</div><small>${esc(s)}</small></div>`).join("");
+  if (one && one.it && one.it.mean != null) {
+    const it = one.it, P = one.pacing && one.pacing.mean, th = it.think.mean;
+    const parts = [`${fmt(T)} × ${n1(it.rtMean / T)} s response`].concat(th ? [`${n1(th - (it.think.wait || 0))} s think`] : []).concat(it.think.wait ? [`${n1(it.think.wait)} s fixed waits`] : []);
+    const fits = P == null || one.pacing.kind === "asap" || one.pacing.kind === "after" ? "" : it.mean <= P + 1e-9 ? ` · fits in the ${n1(P)} s pacing` : ` · longer than the ${n1(P)} s pacing`;
+    tiles.push(["One iteration takes", n1(it.mean) + " s", parts.join(" + ") + fits, P != null && it.mean > P + 1e-9]);
+  }
+  tiles.push(
+    ["Load generators", r.lgTotal == null ? "?" : fmt(r.lgTotal), r.lgTotal == null ? "machine size needed" : r.lg.filter((x) => x.total).map((x) => `${x.pool.name}: ${x.total}${x.extra ? ` (${x.needed} + ${x.extra} extra)` : ""}`).join(" · ")],
+    ["Total test duration", E.hms(r.duration), ph.lengthNote],
+    [ph.tileLabel === "Steady state" ? "Full load (steady state)" : ph.tileLabel, ph.tileValue, ph.tileNote + (ph.tileLabel === "Steady state" ? " — measure here" : "")],
+    ["Total iterations (whole test)", fmt(t.iters.total), `all Vusers · about ${n1(perVu(t.iters.total))} per Vuser · ${fmt(t.iters.steady)} at full load + ${fmt(t.iters.total - t.iters.steady)} while Vusers start and stop`],
+    ["Total transactions (whole test)", fmt(t.tx.total), `${T ? fmt(t.iters.total) + " iterations × " + fmt(T) + " · " : ""}test-data rows if each takes one`],
+  );
+  if (t.hitsPerSec) tiles.push(["Requests per second (hits)", fmt(t.hitsPerSec * (over && t.tps ? tps / t.tps : 1), 1), "at full load"]);
+  // how to read them — with this plan's own numbers
+  const howLines = [`<b>At full load</b> = while every Vuser runs (the steady state, ${steadyMin ? fmt(steadyMin) + " min" : "the held step"}): the figures to compare with your target and with LRE's results.`];
+  if (one && one.pacing && one.pacing.mean && !over) {
+    const P = one.pacing.mean;
+    howLines.push(`${fmt(one.vusers)} Vusers ÷ ${n1(P)} s pacing = <b>${n1(one.ips)} iterations per second</b> (${fmt(one.ips * 3600)} per hour) → × ${fmt(T)} transactions = <b>${fmt(one.tps, 2)} TPS</b> → × 3,600 = <b>${fmt(one.tps * 3600)} TPH</b>.`);
+    howLines.push(`Think time and response time do not change these numbers while one iteration (${n1(one.it.mean)} s) fits in the pacing (${n1(P)} s). They change the iteration time, the Checks and, a little, the test duration (the last iterations finish).`);
+  } else if (over) {
+    howLines.push(`An iteration takes longer than its pacing, so each Vuser starts its next iteration late: LRE will reach about <b>${fmt(t.reachTps, 2)} TPS</b>, not the ${fmt(t.tps, 2)} the pacing asks for. Checks says how to fix it.`);
+  } else {
+    howLines.push("For each script: Vusers ÷ pacing = iterations per second → × its transactions per iteration = its TPS; the tiles add the scripts up. Details › Per script shows each one.");
+  }
+  howLines.push(`<b>Whole test</b> totals include the ramp-up and ramp-down — use them for test data (one row per iteration or per transaction).`);
+  $("#res-notes").innerHTML = `<summary>How to read these numbers</summary><ul>${howLines.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+  $("#tiles").innerHTML = tiles.map(([k, v, s, warn]) => `<div class="ds-tile${warn ? " wm-tile-warn" : ""}"><div class="ds-tile-label">${k}</div><div class="ds-tile-value">${v}</div><small>${esc(s)}</small></div>`).join("");
   drawChart(r);
   drawPhases(ph, r);
   $("#lre").textContent = r.lre + "\n\n" + ph.analysisText;
@@ -532,7 +628,8 @@ function perScript(r) {
 const paceShort = (p) => p.kind === "random" ? `random ${fmtS(p.min)} – ${fmtS(p.max)}` : p.kind === "asap" ? "as soon as possible" : p.kind === "after" ? `after the previous + ${fmtS(p.delay)}` : `every ${fmtS(p.mean)}`;
 function thinkShort(i) {
   const s = (lastResolved || state.groups)[i] || {}, m = s.thinkMode || "recorded";
-  return m === "multiply" ? `recorded × ${fmt(s.thinkFactor || 1, 2)}` : m === "random" ? `random ${s.thinkMinPct ?? 50}–${s.thinkMaxPct ?? 150}% of recorded` : m === "ignore" ? "ignored" : "as recorded";
+  const lim = m !== "ignore" && s.thinkLimit > 0 ? `, at most ${fmt(s.thinkLimit, 1)} s each` : "";
+  return (m === "multiply" ? `recorded × ${fmt(s.thinkFactor || 1, 2)}` : m === "random" ? `random ${s.thinkMinPct ?? 50}–${s.thinkMaxPct ?? 150}% of recorded` : m === "ignore" ? "ignored" : "as recorded") + lim;
 }
 // the load generators of an LRE group, by name only: the Vusers column says how many (LRE splits them evenly)
 const lgNames = (lgs) => lgs.map((x) => x.name).join(", ");
@@ -624,9 +721,11 @@ function formulas(sc) {
       "Defaults for every script — “Each script”: the default TPS; “In total”: (total − the TPS of the scripts with their own target) ÷ the scripts without one",
     ])}
     ${sec("2. One iteration", [
-      "Think time — as recorded: t · ignore: 0 · multiply: t × factor · random %: on average t × (lowest % + highest %) ÷ 200, at most t × highest % ÷ 100",
-      "Iteration = response time × T + think time (average)",
-      "Slow iteration = the 90th percentile (or the average, whichever is larger) × T + the longest think time",
+      "Think time (lr_think_time, load.thinkTime) — as recorded: t · ignore: 0 · multiply: t × factor · random %: on average t × (lowest % + highest %) ÷ 200, at most t × highest % ÷ 100",
+      "Limit each think time to L s: every think time is cut to L after the setting above (random %: the average of the cut values); the think times as the script has them, else t in equal parts — over the number of think times, or one per transaction",
+      "Fixed waits w (sleep, load.sleep): not think time — always waited in full, whatever the think-time setting",
+      "Iteration = response time × T + think time (average) + w",
+      "Slow iteration = the 90th percentile (or the average, whichever is larger) × T + the longest think time + w",
     ])}
     ${sec("3. Pacing and Vusers", [
       `Chosen by the tool: shortest pacing = ⌈iteration × ${fmt(1 + h / 100, 2)}⌉ s (random style: also at least slow iteration ÷ ${fmt(1 - rnd / 100, 2)}); Vusers = ⌈λ × shortest pacing⌉; then the pacing in whole seconds: exact if a few more Vusers (up to 10%, at least 2) give a whole number of seconds; otherwise the fewest Vusers whose whole-second pacing keeps the TPS at most 1% above the target; when even that is not possible (a short pacing, where one second is a big step) the pacing is kept to 0.1 s. The TPS never falls below the target. Random style: whole-second bounds around the same average`,
@@ -638,12 +737,13 @@ function formulas(sc) {
       "Planned TPS = Vusers × T ÷ pacing · iterations per second = Vusers ÷ pacing · hits per second = requests per iteration × iterations per second",
     ])}
     ${sec("4. Checks", [
-      "Response-time limit = (shortest pacing − longest think time) ÷ T — the slowest average per transaction that keeps the TPS",
+      "Response-time limit = (shortest pacing − longest think time − w) ÷ T — the slowest average per transaction that keeps the TPS",
       `Not possible: shortest pacing < iteration; the TPS then drops to about Vusers × T ÷ iteration; enough Vusers = ⌈λ × iteration × ${fmt(1 + h / 100, 2)}⌉`,
       "Some iterations overrun: shortest pacing < slow iteration · Little headroom: shortest pacing < iteration × (1 + headroom)",
       "Think time longer than the pacing · rounding moved the TPS by more than 1% · more iterations than data rows · more Vusers than the licence",
     ])}
     ${sec("5. Ramp-up and ramp-down", [
+      "Your own ramp (Ramp-up and ramp-down: My own): start s Vusers every n s and stop as typed (stop empty: as the start), for every start and stop — the rules below are then not used; a spike's sudden jump stays the tool's. By group: each script starts as typed and the quicker ones hold longer, so all stop together. A check says when it is faster than the start rate",
       `Wanted ramp-up = the larger of (Vusers ÷ ${fmt(rate)}) and the smaller of (3 × the longest pacing, at least 60 s) and (a quarter of full load, at least 60 s, at most 30 min)`,
       "“Start X Vusers every N s”: the fewest Vusers per step whose interval is 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 45, 60, 90, 120, 180 or 300 s and gives a ramp within 10% of the wanted one, never faster than the start rate; one Vuser starts at once",
       `Ramp-down: half the ramp-up worked out as above with twice the start rate, but never shorter than Vusers ÷ ${fmt(rate * 2)} (the stop rate), so no step stops many Vusers at once; each Vuser finishes its current iteration`,
@@ -656,7 +756,7 @@ function formulas(sc) {
       "Each Vuser starts an iteration when it starts and then every cycle (the pacing's average) until it stops — an expected-value model, not a replay",
       "Iterations are counted per phase (ramp-up, full load, ramp-down); transactions = iterations × T; with gradual exit every iteration that starts also finishes",
       "Expected TPS at a moment = Σ running Vusers × T ÷ pacing",
-      "Test length = end of the schedule + the longer of the pacing and the slow iteration (the last iterations finish)",
+      "Test length = end of the schedule + one slow iteration (the last iterations finish; a Vuser waiting for its next pacing slot leaves at once) — one pacing when no response time is known",
     ])}
     ${sec("7. Load generators", [
       "Team rule: Vusers per machine = 1 ÷ (p ÷ web + (1 − p) ÷ API), p = the script's share of page requests (web pages = 1, API calls = 0; not read from a script = 1). E.g. 100 / 250 and 3 pages in 20 requests: 1 ÷ (0.15 ÷ 100 + 0.85 ÷ 250) = 204",
@@ -676,7 +776,7 @@ function formulas(sc) {
 /* ---------- phases: ramp-up, steady state (or each held step), ramp-down — with clock times ----------
    Basic schedule: one steady state = the full-load hold (the window to analyse).
    Stepped tests (stress, capacity, spike): every hold is a window; the 100% step (or "normal load") is the one to
-   compare with the target. The last iterations finish within the longer of one pacing and one slow iteration after the schedule ends. */
+   compare with the target. The last iterations finish within one slow iteration after the schedule ends (one pacing without a response time). */
 const PH_COL = { start: "var(--c-work)", hold: "color-mix(in srgb, var(--ds-accent-text) 45%, transparent)", steady: "var(--ds-ok)", stop: "var(--ds-warn)", finish: "var(--ds-text-3)" };
 function phases(r) {
   const holds = r.marks.filter((m) => m.type === "hold"), stepped = holds.length > 1;
@@ -697,7 +797,7 @@ function phases(r) {
   if (!stepped) {
     const h = holds[0] || { from: 0, to: 0 };
     out.tileLabel = "Steady state"; out.tileValue = E.hms(h.to - h.from); out.tileNote = `${E.hms(h.from)} → ${E.hms(h.to)} on the test clock`;
-    out.lengthNote = `up ${short(up)} · steady ${short(h.to - h.from)} · down ${short(r.duration - h.to)}`;
+    out.lengthNote = `ramp-up ${short(up)} + full load ${short(h.to - h.from)} + ramp-down and last iterations ${short(r.duration - h.to)}`;
     out.analysisText = `Steady state (full load) for analysis: ${E.hms(h.from)} to ${E.hms(h.to)} (${E.hms(h.to - h.from)}) after the scenario starts.`;
   } else {
     const each = holds.map((m) => m.to - m.from);

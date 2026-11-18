@@ -71,6 +71,12 @@
           <label class="wm-f">LRE workload type<select class="ds-field" id="sc-workload"></select><small id="wl-help"></small></label>
           <label class="wm-f" id="f-total">Scenario total TPS<div class="wm-unit"><input class="ds-field" type="number" id="sc-total" min="0" step="0.1"><span>TPS</span></div><small>split between the scripts sized by “share”</small></label>
           <label class="wm-f">Growth factor<input class="ds-field" type="number" id="sc-growth" min="0.1" step="0.1"><small>1 = today's peak · 1.5 = 50% more TPS (Vusers and iteration targets stay as entered)</small></label>
+          <label class="wm-f">Ramp-up and ramp-down<select class="ds-field" id="sc-ramp"><option value="auto">The tool chooses</option><option value="own">My own, as in LRE</option></select><small id="ramp-help">spread over about three pacings, never faster than the start rate</small></label>
+          <div class="wm-f wide wm-ramp-own" id="f-ramp-own" hidden>
+            <div class="wm-ramp-row"><span>Start</span><input class="ds-field" type="number" id="sc-start-per" min="1" step="1" aria-label="Vusers started at a time"><span>Vusers every</span><div class="wm-unit"><input class="ds-field" type="number" id="sc-start-every" min="0" step="1" aria-label="Seconds between starts"><span>s</span></div></div>
+            <div class="wm-ramp-row"><span>Stop</span><input class="ds-field" type="number" id="sc-stop-per" min="1" step="1" placeholder="as start" aria-label="Vusers stopped at a time"><span>Vusers every</span><div class="wm-unit"><input class="ds-field" type="number" id="sc-stop-every" min="0" step="1" placeholder="as start" aria-label="Seconds between stops"><span>s</span></div></div>
+            <small>as in LRE's Start Vusers / Stop Vusers — 0 s: all at once; Stop empty: the same as Start</small>
+          </div>
           <label class="wm-f adv">Licence limit<div class="wm-unit"><input class="ds-field" type="number" id="sc-licence" min="0" placeholder="no limit"><span>Vusers</span></div><small>the most your licence allows — empty: no limit</small></label>
           <label class="wm-f adv" id="f-levels">Steps (stress / capacity)<input class="ds-field" type="text" id="sc-levels"><small>% of the target at each step</small></label>
           <label class="wm-f adv" id="f-hold">Hold at each step<div class="wm-unit"><input class="ds-field" type="number" id="sc-hold" min="1" placeholder="auto"><span>min</span></div><small>empty: the tool chooses</small></label>
@@ -85,6 +91,19 @@
           <input type="file" id="in-fill" multiple accept=".zip,.har,.json,.xlsx" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Fill from scripts</label></div>
       <div class="ds-card-body">
+        <details class="wm-more wm-notes" id="script-notes" open>
+          <summary>Before you fill in a script — what each box means</summary>
+          <ul>
+            <li><b>One iteration</b> = one run through the script's Action part. Login in vuser_init and logout in vuser_end run once per Vuser and are not counted.</li>
+            <li><b>Transactions per iteration</b>: how many transactions one iteration runs — they make the TPS.</li>
+            <li><b>Think time — total per iteration</b>: every think time of one iteration <b>added up</b>, not per transaction. 10 transactions with 3 s between them = 9 × 3 s = <b>27 s</b>. Dropping the script ZIP fills it in.</li>
+            <li><b>Response time — per transaction</b>: the average of <b>one</b> transaction (your SLA will do), not the whole iteration.</li>
+            <li><b>Pacing</b>: how often each Vuser starts a new iteration. With a fixed pacing the load is set by three numbers only:<br>
+              <span class="wm-notes-f">iterations per second = Vusers ÷ pacing</span><span class="wm-notes-f">TPS = iterations per second × transactions per iteration</span><span class="wm-notes-f">TPH = TPS × 3,600 · iterations per hour = iterations per second × 3,600</span></li>
+            <li>Think time and response time do not change those numbers — one iteration (transactions × response time + think time) only has to <b>fit inside the pacing</b>. If it does not, the iterations start late and the load drops; Checks says so.</li>
+            <li><b>Example</b>: 10 Vusers, pacing 50 s, 10 transactions → 10 ÷ 50 = 0.2 iterations per second = 720 iterations per hour → 720 × 10 = 7,200 TPH = 2 TPS. The iteration (10 × 1 s + 27 s = 37 s) fits in 50 s.</li>
+          </ul>
+        </details>
         <div class="wm-dropzone" id="dropzone" tabindex="0" role="button" aria-label="Fill from scripts: choose script ZIPs or HAR files">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
           <div><b>Drop all your scripts here — or click to choose them</b><span class="wm-dz-more">Script ZIPs (Web HTTP/HTML or DevWeb; one ZIP may hold several scripts), HAR recordings, or the filled-in Excel sheet.
@@ -206,6 +225,7 @@
       <div class="ds-card-body">
         <div class="ds-note wm-summary" id="summary"></div>
         <div class="wm-tiles" id="tiles"></div>
+        <details class="wm-more wm-notes" id="res-notes" open></details>
         <svg class="wm-chart" id="chart" viewBox="0 0 640 190" role="img" aria-label="Vusers and expected TPS over the test"></svg>
         <div class="wm-phbar" id="phbar" aria-hidden="true"></div>
         <div class="wm-legend"><span><i style="background:var(--c-work)"></i>Vusers</span><span><i style="background:repeating-linear-gradient(90deg,var(--ds-ok) 0 6px,transparent 6px 9px)"></i>Expected TPS (right axis)</span><span id="lg-phase"></span></div>
