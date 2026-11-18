@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Open another: an empty box for the next file
+
+- "Open another" now shows the start screen's drop box empty and ready (Browse file, no green file name, no close button), so the next recording can be dropped or chosen straight away. The open recording stays named in the bar above with "Back to the recording" and is replaced once the new file is read.
+
 #### Fixes found while recapturing the guides
 
 - Script Studio's file bar names the recording's transactions as the HAR Explorer does: START / END bookmarks, a CDP Recorder recording, or the page loads of another HAR (it said "CDP Recorder" for every HAR with pages) — BUG-148.

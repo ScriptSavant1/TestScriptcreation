@@ -188,6 +188,8 @@
     var on = !!(S.har1 && S.entries1 && S.entries1.length && S.scripts && (S.scripts.ac || S.scripts.mj));
     $("#ss-resume").hidden = !on;
     if (on) $("#ss-resume-name").textContent = S.har1Name || "The recording";
+    // the open recording is named in the bar above, so the box is ready for the next file (it replaces this one once read)
+    $("#dz1").classList.toggle("ss-fresh", on);
   }
   $("#ss-dl").addEventListener("click", function () { closeReady(); dlZip(S.format === "both" ? "both" : S.format); });
 

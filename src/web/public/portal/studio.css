@@ -451,6 +451,12 @@ body.ss-reading #ph-proc { display: grid; }
 .ss-drop .dz-opt-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--ds-r-pill); font-size: 11px; font-weight: 600; color: var(--ds-text-2); background: var(--ds-surface); border: 1px solid var(--ds-border); }
 .ss-drop .ss-browse { pointer-events: none; }
 .ss-drop.loaded .ss-browse { display: none; }
+/* back on the start screen with a recording open ("Open another"): the box looks empty, ready for the next file —
+   the bar above names the open one and goes back to it */
+.ss-drop.loaded.ss-fresh { border-style: dashed; border-color: var(--ds-accent-line); background: var(--ds-accent-soft); }
+.ss-drop.loaded.ss-fresh .ss-browse { display: inline-flex; }
+.ss-drop.ss-fresh .dz-name, .ss-drop.ss-fresh .dz-clear-btn { display: none !important; }
+.ss-drop.ss-fresh .dz-sub { display: block !important; }
 .ss-drop .dz-clear-btn { position: absolute; top: 50%; right: 10px; margin-top: -15px; z-index: 2; width: 30px; height: 30px; border-radius: var(--ds-r-sm); border: 0; background: transparent; color: var(--ds-text-2); font-size: 0; cursor: pointer; }
 .ss-drop .dz-clear-btn:hover { background: var(--ds-bad-soft); color: var(--ds-bad); }
 .ss-drop .dz-clear-btn::after { content: ""; position: absolute; inset: 8px; background: currentColor; -webkit-mask: var(--i-x) center / contain no-repeat; mask: var(--i-x) center / contain no-repeat; }
