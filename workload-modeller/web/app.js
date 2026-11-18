@@ -39,7 +39,8 @@ const lgType = (p) => LG_TYPES.find((t) => t.id === p.kind) || LG_TYPES[LG_TYPES
 let seq = 0;
 const newScript = (o) => Object.assign({ id: "g" + (++seq), name: "Script " + seq, protocol: "web", pool: "p1", method: "tps", targetTps: 5, txPerIter: 3, thinkPerIter: 10, rtAvg: null, rtSource: "sla", thinkMode: "recorded", pacing: { mode: "auto" } }, o || {});
 const state = {
-  scenario: { testType: "load", steadyMin: 60, workload: "basic-group", totalTps: 10, growth: 1, headroomPct: 25, pacingStyle: "fixed", randomPct: 15, maxStartRate: 2, levels: null, stepHoldMin: null, licenceVusers: null, lgFill: "fill" },
+  scenario: { testType: "load", steadyMin: 60, workload: "basic-group", totalTps: 10, growth: 1, headroomPct: 25, pacingStyle: "fixed", randomPct: 15, maxStartRate: 2, levels: null, stepHoldMin: null, licenceVusers: null, lgFill: "fill",
+    rampMode: "auto", startPer: null, startEvery: null, stopPer: null, stopEvery: null },
   groups: [newScript({ name: "Payments", targetTps: 10, txPerIter: 4, thinkPerIter: 15, rtAvg: 1, sample: true })],
   pools: [defaultPool()],
   common: { rtAvg: null, tps: null, tpsMode: "each" },     // used by every script that has no value of its own
@@ -81,6 +82,13 @@ function renderTest() {
   $("#sc-hold").value = sc.stepHoldMin ?? "";
   $("#steady-help").textContent = tt.levels || tt.base ? "used by a basic schedule; steps use “Hold at each step”" : "how long full load is held, after the ramp-up";
   $("#f-total").style.display = state.groups.some((g) => g.method === "share") ? "" : "none";
+  const own = sc.rampMode === "own";
+  $("#sc-ramp").value = own ? "own" : "auto";
+  $("#f-ramp-own").hidden = !own || sc.workload === "goal";
+  $("#sc-ramp").disabled = sc.workload === "goal";
+  $("#ramp-help").textContent = sc.workload === "goal" ? "LRE adds Vusers itself in a goal-oriented test" : own ? "used for every start and stop (a spike's sudden jump stays the tool's)" : "spread over about three pacings, never faster than the start rate";
+  $("#sc-start-per").value = sc.startPer ?? ""; $("#sc-start-every").value = sc.startEvery ?? "";
+  $("#sc-stop-per").value = sc.stopPer ?? ""; $("#sc-stop-every").value = sc.stopEvery ?? "";
 }
 $("#test-types").addEventListener("click", (e) => {
   const b = e.target.closest("[data-tt]"); if (!b) return;
@@ -90,8 +98,18 @@ $("#test-types").addEventListener("click", (e) => {
 });
 const bindNum = (id, key, nullable) => $(id).addEventListener("input", (e) => { const v = parseFloat(e.target.value); state.scenario[key] = Number.isFinite(v) ? v : (nullable ? null : 0); calc(); });
 bindNum("#sc-steady", "steadyMin"); bindNum("#sc-total", "totalTps", true); bindNum("#sc-growth", "growth"); bindNum("#sc-licence", "licenceVusers", true);
+bindNum("#sc-start-per", "startPer", true); bindNum("#sc-start-every", "startEvery", true); bindNum("#sc-stop-per", "stopPer", true); bindNum("#sc-stop-every", "stopEvery", true);
+// "My own" ramp: starts from the ramp the tool worked out, so the user only changes what differs from the LRE test
+$("#sc-ramp").addEventListener("change", (e) => {
+  const sc = state.scenario; sc.rampMode = e.target.value;
+  if (sc.rampMode === "own" && sc.startEvery == null) {
+    const r = last && (last.actions || (last.groupPlans && last.groupPlans[0] && last.groupPlans[0].actions) || []).find((a) => a.type === "start");
+    sc.startPer = r ? (r.all ? r.count : r.perStep) : 1; sc.startEvery = r ? (r.all ? 0 : r.every) : 5;
+  }
+  renderTest(); calc();
+});
 bindNum("#sc-headroom", "headroomPct"); bindNum("#sc-random", "randomPct"); bindNum("#sc-rate", "maxStartRate"); bindNum("#sc-hold", "stepHoldMin", true);
-$("#sc-workload").addEventListener("change", (e) => { state.scenario.workload = e.target.value; $("#wl-help").textContent = WL_HELP[e.target.value]; calc(); });
+$("#sc-workload").addEventListener("change", (e) => { state.scenario.workload = e.target.value; $("#wl-help").textContent = WL_HELP[e.target.value]; renderTest(); calc(); });
 $("#sc-style").addEventListener("change", (e) => { state.scenario.pacingStyle = e.target.value; calc(); });
 $("#sc-levels").addEventListener("input", (e) => { const l = e.target.value.split(/[,; ]+/).map(Number).filter((x) => x > 0); state.scenario.levels = l.length ? l : null; calc(); });
 
@@ -650,6 +668,7 @@ function formulas(sc) {
       "Think time longer than the pacing · rounding moved the TPS by more than 1% · more iterations than data rows · more Vusers than the licence",
     ])}
     ${sec("5. Ramp-up and ramp-down", [
+      "Your own ramp (Ramp-up and ramp-down: My own): start s Vusers every n s and stop as typed (stop empty: as the start), for every start and stop — the rules below are then not used; a spike's sudden jump stays the tool's. By group: each script starts as typed and the quicker ones hold longer, so all stop together. A check says when it is faster than the start rate",
       `Wanted ramp-up = the larger of (Vusers ÷ ${fmt(rate)}) and the smaller of (3 × the longest pacing, at least 60 s) and (a quarter of full load, at least 60 s, at most 30 min)`,
       "“Start X Vusers every N s”: the fewest Vusers per step whose interval is 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 45, 60, 90, 120, 180 or 300 s and gives a ramp within 10% of the wanted one, never faster than the start rate; one Vuser starts at once",
       `Ramp-down: half the ramp-up worked out as above with twice the start rate, but never shorter than Vusers ÷ ${fmt(rate * 2)} (the stop rate), so no step stops many Vusers at once; each Vuser finishes its current iteration`,

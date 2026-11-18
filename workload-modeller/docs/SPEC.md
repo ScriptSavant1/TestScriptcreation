@@ -71,6 +71,10 @@ pages, API calls; the reader counts pages and API calls — `pages`, `pageShare`
 
 Let T = transactions per iteration, h = headroom (default 25%), r = random spread (default ±15%).
 
+Own ramp (scenario rampMode "own"; startPer, startEvery, stopPer, stopEvery — stop empty = start): every normal start and
+stop uses it (spike burst stays the tool's); by group no slowing to the longest ramp, holds padded as before; checks
+ramp-own-missing (start not filled in → tool's ramp), ramp-own-fast (faster than maxStartRate; by group × groups).
+
 Think time (mean / longest): as recorded t / t; ignore 0 / 0; multiply t×f / t×f; random t×(min+max)/200 / t×max/100.
 Limit L (LRE "Limit think time to"): each think time cut to L after the setting (random: mean of min(x, L) over the spread);
 the script's own think times, else t in equal parts over the number of think times (one per transaction if unknown — info check).

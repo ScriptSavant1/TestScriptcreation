@@ -345,6 +345,16 @@
     return best || stepPlan(V, target, rate);
   }
 
+  // The ramp the user typed (scenario rampMode "own"): start startPer Vusers every startEvery s; stop stopPer every
+  // stopEvery s (empty: as the start). null when the tool chooses, or when the start is not filled in.
+  function ownRamp(sc) {
+    if (!sc || sc.rampMode !== "own" || !pos(sc.startPer) || !nn(sc.startEvery)) return null;
+    const whole = (x) => Math.max(1, Math.round(x));
+    const start = { perStep: whole(sc.startPer), every: sc.startEvery };
+    const stop = { perStep: pos(sc.stopPer) ? whole(sc.stopPer) : start.perStep, every: nn(sc.stopEvery) ? sc.stopEvery : start.every };
+    return { start, stop };
+  }
+
   /* ---------- schedule: a list of actions, simulated per Vuser ---------- */
   // actions: { type: 'start', count, perStep, every } | { type: 'hold', dur, label } | { type: 'stop', count|'all', perStep, every }
   function buildProfile(sc, groups, wl) {
@@ -355,8 +365,12 @@
     const rate = sc.maxStartRate;
     // ramp-down: half the ramp-up, but never shorter than the stop rate allows (Vusers ÷ twice the start rate) — halving
     // the ramp-up also halved that floor, so the steps had to stop many Vusers at once
-    const stopPlan = (n) => { const p = stepPlan(n, Math.max(rampTarget(n, maxPace, steadyS, false, rate * 2) / 2, pos(rate) ? n / (rate * 2) : 0), rate * 2); return { type: "stop", count: n, perStep: p.perStep, every: p.every, all: p.all }; };
-    const startPlan = (n, fast) => { const p = stepPlan(n, rampTarget(n, maxPace, steadyS, fast, rate), fast ? null : rate); return { type: "start", count: n, perStep: p.perStep, every: p.every, all: p.all }; };
+    // the user's own ramp ("Start 1 Vuser every 5 s"), as typed in LRE: used for every normal start and stop; a spike's
+    // sudden jump stays the tool's
+    const own = ownRamp(sc);
+    const ownPlan = (type, n, x) => ({ type, count: n, perStep: Math.min(x.perStep, n), every: x.every, all: x.perStep >= n || x.every === 0 });
+    const stopPlan = (n) => { if (own) return ownPlan("stop", n, own.stop); const p = stepPlan(n, Math.max(rampTarget(n, maxPace, steadyS, false, rate * 2) / 2, pos(rate) ? n / (rate * 2) : 0), rate * 2); return { type: "stop", count: n, perStep: p.perStep, every: p.every, all: p.all }; };
+    const startPlan = (n, fast) => { if (own && !fast) return ownPlan("start", n, own.start); const p = stepPlan(n, rampTarget(n, maxPace, steadyS, fast, rate), fast ? null : rate); return { type: "start", count: n, perStep: p.perStep, every: p.every, all: p.all }; };
 
     if (wl === "real-world" && (tt.levels || tt.base)) {
       const acts = [];
@@ -749,10 +763,11 @@
         return { g, gi: x.gi, share, prof: buildProfile(Object.assign({}, sc, { testType: "load", maxStartRate: share }), [g], "basic") };
       });
       const longest = Math.max(0, ...plans.map((p) => rampOf(p.prof.actions[0])));
-      // the same length for all: a slower start for the quicker groups (never faster than their share)
+      // the same length for all: a slower start for the quicker groups (never faster than their share) — not with the
+      // user's own ramp: each group starts as typed; the quicker ones then hold longer, so all still stop together
       plans.forEach((p) => {
         const a = p.prof.actions[0];
-        if (a.all || rampOf(a) >= longest) return;
+        if (ownRamp(sc) || a.all || rampOf(a) >= longest) return;
         const s = fitPlan(p.g.vusers, longest, p.share);
         p.prof.actions[0] = { type: "start", count: s.count, perStep: s.perStep, every: s.every, all: s.all };
       });
@@ -838,6 +853,16 @@
     const maxPace = Math.max(...groups.map((g) => g.pacing.mean));
     if (start && start.to - start.from < maxPace && res.totals.vusers > 1 && sc.testType !== "spike")
       checks.push({ level: "warn", code: "ramp-short", text: `All Vusers start within ${words(start.to - start.from)}, shorter than one pacing (${sec1(maxPace)}): their iterations bunch together.` });
+    // the user's own ramp: not filled in, or faster than the start rate (with a by-group schedule the groups start together)
+    const own = ownRamp(sc);
+    if (sc.rampMode === "own" && !own && wl !== "goal")
+      checks.push({ level: "warn", code: "ramp-own-missing", text: "Your own ramp: enter how many Vusers start and every how many seconds — until then the tool chooses the ramp." });
+    if (own && wl !== "goal" && pos(sc.maxStartRate)) {
+      const lanes = wl === "basic-group" ? (res.lreGroups || []).filter((x) => x.vusers > 0).length || 1 : 1;
+      const perSec = own.start.every > 0 ? lanes * own.start.perStep / own.start.every : Infinity;
+      if (perSec > sc.maxStartRate + EPS)
+        checks.push({ level: "info", code: "ramp-own-fast", text: `Your ramp starts ${perSec === Infinity ? "Vusers all at once" : `${round(perSec, 2)} Vusers per second`}${lanes > 1 ? ` (${lanes} groups starting together)` : ""} — faster than the start rate the tool keeps to (${round(sc.maxStartRate, 2)} per second, Fine tuning). Fine if the system copes with that many log-ins.` });
+    }
     if (groups.some((g) => (g.it.think.mean === 0) && g.it.think.worst === 0 && g.method !== "vusers" && (g.pacing.kind === "fixed" || g.pacing.kind === "random")) && groups.some((g) => (input.groups.find((x, i) => (x.id || "g" + (i + 1)) === g.id).thinkMode) === "ignore"))
       checks.push({ level: "info", code: "think-ignored", text: "Think time is ignored at replay: the pacing alone holds the load (the iteration is all requests, then a wait)." });
 

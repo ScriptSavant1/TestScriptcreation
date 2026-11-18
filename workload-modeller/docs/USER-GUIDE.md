@@ -42,6 +42,10 @@ The page works out the plan as you type. A section you have not touched keeps se
 - **What kind of test**: Load (normal busy hour, held), Soak (many hours), Stress and Capacity (steps above the
   target), Spike (normal load, a burst, back).
 - **Full-load duration**: how long all users run together after the ramp-up.
+- **Ramp-up and ramp-down**: the tool chooses (recommended for a new test), or **My own, as in LRE** — Start
+  [n] Vusers every [s] s and Stop [n] Vusers every [s] s, as typed in LRE's Start Vusers / Stop Vusers (Stop empty:
+  the same as Start; 0 s: all at once). Use it to compare the plan with an LRE test that already exists. Choosing it
+  starts from the ramp the tool worked out.
 - **LRE workload type**: Basic schedule by group (recommended for load and soak), by test, Real-world (needed for
   stepped tests) or Goal-oriented.
 - **Growth factor**: 1 = today's peak; 1.5 = 50% more TPS. Scripts sized by Vusers or iterations keep their numbers.
@@ -235,6 +239,10 @@ Also: iterations per second = Vusers ÷ pacing; hits per second = requests per i
   spread out evenly; the start rate protects the log-ins.
 - **"Start X Vusers every N seconds"**: the fewest Vusers per step whose interval is 1, 2, 3, 4, 5, 6, 10, 12, 15, 20,
   30, 45, 60, 90, 120, 180 or 300 s and gives a ramp within 10% of the wanted one, never faster than the start rate.
+- **Your own ramp** replaces the two rules above and below with the values typed, for every start and stop (a spike's
+  sudden jump stays the tool's). Example: 40 Vusers, start 1 every 5 s → full load after 39 × 5 s = 3:15; stop the same.
+  By group, each script starts as typed and the quicker ones hold longer, so all stop together. A check says when the
+  ramp starts more Vusers per second than the start rate (Fine tuning).
 - **Ramp-down**: half the ramp-up worked out with twice the start rate, but never shorter than Vusers ÷ the stop rate, so no step stops many Vusers at once; each Vuser finishes its current iteration.
 - **Basic schedule by group**: every group starts immediately (LRE "Start Group: Immediately") and ramps over the same
   length — the longest ramp any script needs on its own. A quicker script starts its Vusers more slowly (one Vuser

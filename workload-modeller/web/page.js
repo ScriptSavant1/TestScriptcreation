@@ -375,7 +375,7 @@ function poolFacts(p) {
 }
 function sectionSums(r) {
   const sc = state.scenario;
-  $("#sum-test").textContent = `— ${E.TEST_TYPES[sc.testType].label.replace(/ \(.*/, "")} · ${fmt(sc.steadyMin)} min · ${E.WORKLOADS[sc.workload]}`;
+  $("#sum-test").textContent = `— ${E.TEST_TYPES[sc.testType].label.replace(/ \(.*/, "")} · ${fmt(sc.steadyMin)} min · ${E.WORKLOADS[sc.workload]}${sc.rampMode === "own" && sc.workload !== "goal" ? " · own ramp" : ""}`;
   const needs = r.groups.filter((g) => g.status === "needs-input").length;
   $("#sum-scripts").textContent = `— ${state.groups.length} script${state.groups.length === 1 ? "" : "s"}${needs ? ` · ${needs} need input` : ""}`;
   $("#sum-lg").textContent = "— " + (r.lgTotal != null ? `${r.lgTotal} machine${r.lgTotal === 1 ? "" : "s"} · ` : "") + state.pools.map((p) => p.name).join(", ");

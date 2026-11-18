@@ -255,3 +255,55 @@ describe('Workload engine — think time limit and fixed waits', () => {
     expect(g.why.join(' ')).toMatch(/0 s think \+ 27 s fixed waits/);
   });
 });
+
+describe('Workload engine — my own ramp (as in an LRE test)', () => {
+  // the LRE test: 40 Vusers, start 1 every 5 s, 60 min, stop 1 every 5 s, pacing 360 s (LRE ran 440 iterations)
+  const g = [{ name: 'S', method: 'vusers', vusers: 40, txPerIter: 10, rtAvg: 0.3, waitPerIter: 27, pacing: { mode: 'fixed', fixed: 360 } }];
+  const own = (extra) => Object.assign({ rampMode: 'own', startPer: 1, startEvery: 5, maxStartRate: 2 }, extra || {});
+
+  test.each(['basic-scenario', 'basic-group'])('%s: start and stop as typed — 39 × 5 s = 3:15 each way; about 440 iterations', (wl) => {
+    const r = run(g, own({ workload: wl }));
+    expect(r.firstFull).toBe(195);
+    const stop = r.marks.find((m) => m.type === 'stop');
+    expect(stop.to - stop.from).toBe(195);
+    // each Vuser: 10 iterations in the hour, plus the ones started while the others start and stop
+    expect(r.totals.iters.steady).toBe(400);
+    expect(Math.abs(r.totals.iters.total - 440)).toBeLessThanOrEqual(5);
+    expect(r.lre).toMatch(/Start 40 Vusers: 1 Vuser every 00:00:05/);
+    expect(r.lre).toMatch(/Stop 40 Vusers: 1 Vuser every 00:00:05/);
+  });
+
+  test('stop values of their own; 0 s = all at once', () => {
+    const r = run(g, own({ stopPer: 4, stopEvery: 10 }));
+    expect(r.lre).toMatch(/Stop 40 Vusers: 4 Vusers every 00:00:10/);
+    expect(run(g, own({ startEvery: 0 })).lre).toMatch(/Start 40 Vusers simultaneously/);
+  });
+
+  test("not filled in: the tool's ramp, and a check says what to enter", () => {
+    const r = run(g, { rampMode: 'own', startPer: null, startEvery: null });
+    expect(r.checks.some((c) => c.code === 'ramp-own-missing')).toBe(true);
+    expect(r.firstFull).toBe(run(g).firstFull);
+  });
+
+  test('faster than the start rate: said, not changed', () => {
+    const r = run(g, own({ startPer: 10, startEvery: 1 }));
+    expect(r.checks.find((c) => c.code === 'ramp-own-fast').text).toMatch(/10 Vusers per second/);
+    expect(r.lre).toMatch(/10 Vusers every 00:00:01/);
+    expect(run(g, own()).checks.some((c) => c.code === 'ramp-own-fast')).toBe(false);
+  });
+
+  test("a stepped stress test uses the own ramp at every step; the tool's ramp stays when not chosen", () => {
+    const r = run(g, own({ testType: 'stress', workload: 'real-world' }));
+    expect(r.actions.filter((a) => a.type === 'start').every((a) => a.perStep === 1 && a.every === 5)).toBe(true);
+    expect(run(g, { testType: 'stress', workload: 'real-world' }).actions.some((a) => a.type === 'start' && a.every !== 5)).toBe(true);
+  });
+
+  test('by group, two scripts: each starts as typed (no slowing to the longest); all still stop together', () => {
+    const two = [Object.assign({}, g[0], { name: 'A', vusers: 40 }), Object.assign({}, g[0], { name: 'B', vusers: 10 })];
+    const r = run(two, own({ workload: 'basic-group' }));
+    const starts = r.groupPlans.map((p) => p.actions[0]);
+    expect(starts.every((a) => a.perStep === 1 && a.every === 5)).toBe(true);
+    const ends = r.groupPlans.map((p) => p.actions.find((a) => a.type === 'hold')).map((h, i) => r.groupPlans[i].ramp + h.dur);
+    expect(new Set(ends).size).toBe(1);
+  });
+});

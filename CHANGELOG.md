@@ -6,6 +6,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### Your own ramp, as in LRE
+
+- "Ramp-up and ramp-down" in the test: the tool chooses (as before), or **My own, as in LRE** — Start [n] Vusers every [s] s and Stop [n] Vusers every [s] s, as typed in LRE. Used for every start and stop (a spike's jump stays the tool's), shown in the LRE settings; a check says when it is faster than the start rate. To compare a plan with an LRE test that already exists.
+
 #### Think time as LRE replays it (BUG-149)
 
 - Fill from scripts reads think time written with a constant (`load.sleep(thinktime)` with `const thinktime = 3`, `#define`, a C variable); a value it cannot work out (a parameter, a calculation) is counted and named in the import list.

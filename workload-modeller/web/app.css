@@ -52,6 +52,14 @@ html.embedded .wm-top { justify-content: flex-end; padding-top: 8px; padding-bot
 [data-theme="light"] .ds-chip.ok { color: #11652f; }
 .wm-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 body.simple .adv { display: none !important; }
+/* the user's own ramp: "Start [1] Vusers every [5] s" on one line, as LRE writes it */
+.wm-ramp-own { display: grid; gap: 8px; }
+.wm-ramp-own[hidden] { display: none; }
+.wm-ramp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--ds-fs-sm); }
+.wm-ramp-row > span:first-child { min-width: 40px; font-weight: 600; }
+.wm-ramp-own .wm-ramp-row > .ds-field { width: 100px; flex: none; }
+.wm-ramp-own .wm-ramp-row .wm-unit { width: 110px; flex: none; }
+.wm-ramp-own .wm-ramp-row .wm-unit .ds-field { padding-right: 26px; }
 details.wm-more > summary { cursor: pointer; color: var(--ds-accent-text); font-size: var(--ds-fs-sm); font-weight: 600; list-style: none; }
 details.wm-more > summary::before { content: "+ "; }
 details.wm-more[open] > summary::before { content: "− "; }
