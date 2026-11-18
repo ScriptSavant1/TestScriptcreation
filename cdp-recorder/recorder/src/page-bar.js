@@ -59,7 +59,7 @@ function barClient(cfg) {
 
   // state from the recorder (poll answer) and the bar's own view state
   let S = null, wasRec = false, lastSeen = Date.now(), msg = "", msgUntil = 0, renaming = null, typed = "";
-  const V = { open: false, min: false, hidden: false, scrollLive: false, gone: false };
+  const V = { open: false, min: false, hidden: false, scrollLive: false, gone: false, front: true };
 
   // ── DOM helpers (no innerHTML: Trusted Types) ──
   const NS = "http://www.w3.org/2000/svg";
@@ -333,8 +333,13 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
   function prefs(p) { send({ act: "prefs", prefs: Object.assign({}, S.prefs, p) }); S.prefs = Object.assign({}, S.prefs, p); draw(); }
 
   // the recorder's answer: state, and a message for this window
-  globalThis.__perfxBarUpdate = (state, note) => {
+  globalThis.__perfxBarUpdate = (state, note, front) => {
     lastSeen = Date.now();
+    // one bar on screen: only the recorded window the user works in shows it (the recorder decides)
+    const wasFront = V.front;
+    V.front = front !== false;
+    host.style.setProperty("display", V.front ? "block" : "none", "important");
+    if (!V.front && wasFront) { V.open = false; renaming = null; }
     // not recording yet (the page attached a moment before the recording began): wait for the next answer
     if (!state || (!state.recording && !wasRec)) return;
     if (state.recording) wasRec = true;
@@ -353,6 +358,11 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
   globalThis.__perfxBarHide = (on) => { host.style.setProperty("visibility", on ? "hidden" : "visible", "important"); };
 
   // Alt+Shift+H hides the bar completely and brings it back (a combination applications rarely use)
+  // when the user last clicked or typed in this window (or came into it): the bar shows in the window used last.
+  // Not document.hasFocus(): automation and some security tools make every window report the focus.
+  let lastUsed = 0;
+  const used = () => { lastUsed = Date.now(); if (!V.gone && !V.front) send({ act: "poll", title: String(document.title || "").slice(0, 200), used: lastUsed }); };
+  for (const t of ["pointerdown", "keydown", "focus"]) window.addEventListener(t, used, true);
   window.addEventListener("keydown", (e) => {
     if (e.altKey && e.shiftKey && (e.key === "H" || e.key === "h" || e.code === "KeyH") && S && S.recording) {
       e.preventDefault(); e.stopPropagation();
@@ -382,7 +392,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
   const poll = () => {
     if (V.gone) return;
     if (S && Date.now() - lastSeen > 8000) { V.gone = true; host.remove(); return; }
-    send({ act: "poll", title: String(document.title || "").slice(0, 200) });
+    send({ act: "poll", title: String(document.title || "").slice(0, 200), used: lastUsed });
     setTimeout(poll, 700);
   };
   if (document.documentElement) poll(); else document.addEventListener("DOMContentLoaded", poll, { once: true });

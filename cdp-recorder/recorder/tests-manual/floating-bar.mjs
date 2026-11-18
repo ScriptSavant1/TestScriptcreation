@@ -81,6 +81,8 @@ try {
   let p;
   for (let i = 0; i < 40 && !p; i++) { p = ctx.pages().find((x) => x.url().includes("/select")); if (!p) await wait(250); }
   check(!!p, "the recording window shows the application");
+  const size = await p.evaluate(() => [outerWidth, outerHeight, screen.availWidth, screen.availHeight]);
+  check(size[0] >= size[2] - 4 && size[1] >= size[3] - 4, "the recording window opens maximised: " + size.join(" × "));
   await p.setViewportSize({ width: 1366, height: 768 }).catch(() => {});
   const bar = (q) => p.locator(`${BAR} ${q}`);
   await bar(".pill").waitFor({ timeout: 15000 }).catch(() => {});
@@ -138,11 +140,20 @@ try {
   const pb = (q) => pop.locator(`${BAR} ${q}`);
   await pb(".pill").waitFor({ timeout: 10000 }).catch(() => {});
   check(await pb(".pill").isVisible(), "the pop-up has the bar too");
+  await wait(1200);
+  const shown = async (pg) => pg.evaluate((tag) => { const h = document.querySelector(tag); return !!h && getComputedStyle(h).display !== "none"; }, BAR);
+  check(!(await shown(p)), "one bar on screen: the main window hides its bar while the pop-up is in front");
+  await p.mouse.click(600, 500); await wait(1200);
+  check((await shown(p)) && !(await shown(pop)), "a click in the main window moves the bar there (the pop-up hides it)");
+  await pop.mouse.click(250, 400); await wait(1200);
+  check((await shown(pop)) && !(await shown(p)), "a click in the pop-up moves it back");
   check(/T03_Checkout/.test(await pb(".narrow").textContent().catch(() => "")) || /T03_Checkout/.test(await pb(".txn b").textContent().catch(() => "")), "with the same recording (T03_Checkout)");
   const fits = await pop.evaluate((tag) => { const r = document.querySelector(tag).shadowRoot; const pill = r.querySelector(".pill").getBoundingClientRect(); return [...r.querySelectorAll(".pill button")].filter((b) => b.offsetParent).every((b) => b.getBoundingClientRect().right <= Math.min(pill.right, innerWidth) + 1); }, BAR);
   check(fits, "every button of the bar fits a 500 px pop-up");
   await shot(pop, "05-popup-500");
   await pop.close();
+  await p.bringToFront(); await wait(1500);
+  check(await shown(p), "the pop-up closed: the bar is back in the main window");
 
   // dock to the bottom: remembered in its file, every window follows
   await bar(".dockb").click(); await wait(500);

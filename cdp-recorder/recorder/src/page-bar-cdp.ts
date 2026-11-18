@@ -18,7 +18,7 @@ type Client = CDP.Client;
 type Send = (method: string, params: object | undefined, sessionId?: string) => Promise<unknown>;
 
 export interface BarNote { text: string; bad?: boolean; scroll?: boolean }
-export type BarAction = { act: string; name?: string; from?: string; to?: string; prefs?: unknown; title?: string };
+export type BarAction = { act: string; name?: string; from?: string; to?: string; prefs?: unknown; title?: string; used?: number };
 
 const BINDING = "__perfxBar_" + randomBytes(6).toString("hex");
 let enabled = true;
@@ -26,6 +26,10 @@ let stateOf: () => unknown = () => null;
 let actions: (a: BarAction) => Promise<BarNote | null> = async () => null;
 // the bar's context in each page session (the latest one asking: a new document gets a new context)
 const contexts = new Map<string, number>();
+// ONE bar on screen: the one in the recorded window the user works in (the last one whose page had the focus).
+// The others hide theirs; clicking into another recorded window moves the bar there at its next ask (700 ms).
+let front = "", frontAt = 0;
+const seenSessions = new Set<string>();
 let wired: Client | null = null;
 const DEBUG = process.env.CDP_RECORDER_BAR_TEST === "1";
 const seen = new Set<string>(), answered = new Set<string>();
@@ -73,11 +77,21 @@ function wire(client: Client): void {
     try { a = JSON.parse(p.payload) as BarAction; } catch { return; }
     handle(client, sessionId, p.executionContextId, a).catch((err) => console.warn(`[cdp-recorder] floating bar: ${(err as Error).message}`));
   });
-  client.on("Target.detachedFromTarget", (params: unknown) => { contexts.delete((params as { sessionId: string }).sessionId); });
+  client.on("Target.detachedFromTarget", (params: unknown) => {
+    const sid = (params as { sessionId: string }).sessionId;
+    contexts.delete(sid);
+    // the window in front closed (a pop-up): the bar goes back to the window opened last before it
+    if (front === sid) front = [...contexts.keys()].pop() || "";
+  });
 }
 
 async function handle(client: Client, sessionId: string, contextId: number, a: BarAction): Promise<void> {
   let note: BarNote | null = null;
+  // a window opened during the recording (pop-up, new tab or window) takes the bar at once; afterwards the window
+  // clicked or typed in last has it
+  if (!seenSessions.has(sessionId)) { seenSessions.add(sessionId); front = sessionId; frontAt = Date.now(); }
+  else if (typeof a.used === "number" && a.used > frontAt) { front = sessionId; frontAt = a.used; }
+  else if (!front || !contexts.has(front)) front = sessionId;
   if (a.act !== "poll") {
     try { note = await actions(a); } catch (err) { note = { text: (err as Error).message, bad: true }; }
     // every other window shows the new state at its next poll; this one at once, with the message
@@ -86,7 +100,7 @@ async function handle(client: Client, sessionId: string, contextId: number, a: B
 }
 
 async function answer(client: Client, sessionId: string, contextId: number, note: BarNote | null): Promise<void> {
-  const expr = `globalThis.__perfxBarUpdate && globalThis.__perfxBarUpdate(${JSON.stringify(stateOf())}, ${JSON.stringify(note)})`;
+  const expr = `globalThis.__perfxBarUpdate && globalThis.__perfxBarUpdate(${JSON.stringify(stateOf())}, ${JSON.stringify(note)}, ${front === sessionId})`;
   try {
     const r = (await send(client)("Runtime.evaluate", { expression: expr, contextId }, sessionId)) as { exceptionDetails?: { exception?: { description?: string } } };
     if (DEBUG && !answered.has(sessionId)) { answered.add(sessionId); console.log("[cdp-recorder] floating bar first answer: " + JSON.stringify(r).slice(0, 300)); }
@@ -110,4 +124,4 @@ export async function barsHidden(client: Client, sessionIds: string[], hidden: b
   }));
 }
 
-export function resetBars(): void { contexts.clear(); }
+export function resetBars(): void { contexts.clear(); seenSessions.clear(); front = ""; frontAt = 0; }

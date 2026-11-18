@@ -53,9 +53,11 @@ RECORD FROM PERFX STUDIO (recommended)
    End. An optional script ID (More options, e.g. SC01) starts the file
    name and the transaction names in the script (SC01_01_...).
 
-   THE FLOATING BAR (0.3.0): every page in the recording window - new tabs
-   and pop-ups too - shows a small bar at the top: REC, the time, the
-   running transaction and the same box. Type a name, Enter (or Mark): the
+   THE FLOATING BAR (0.3.0): the recording window (it opens maximised)
+   shows a small bar at the top: REC, the time, the running transaction
+   and the same box. One bar on screen: a new tab, window or pop-up takes
+   it as it opens, and it follows you to the recorded window you last
+   clicked or typed in. Type a name, Enter (or Mark): the
    running transaction ends and the next starts. The arrow opens the
    details (transactions, rename, Undo last mark, planned steps); Stop and
    save is on the bar too. Drag it by its grip (top or bottom, left, middle

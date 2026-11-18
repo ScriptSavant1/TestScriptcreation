@@ -284,6 +284,9 @@ export async function launchAndWaitForPort(
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-popup-blocking", // same rationale as the Phase 0 probe — see its src/probe.ts
+    // the recording window opens maximised (a fresh profile every time, so nothing remembered overrides it);
+    // pop-ups keep the size the application asks for
+    "--start-maximized",
   ];
   // pop-ups and new tabs are still captured in a private window (tests-manual/private-window-probe.mjs)
   if (options.privateWindow) args.push(/chrome\.exe$/i.test(browserPath) ? "--incognito" : "--inprivate");
