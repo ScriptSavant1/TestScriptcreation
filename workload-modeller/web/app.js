@@ -120,6 +120,14 @@ function num(label, key, val, unit, help, cls, extra) {
 }
 // the replay settings act on the think time above: greyed out while there is none
 const noThink = (g) => !(g.thinkPerIter > 0);
+// Multiply / Random: the think time LRE will really wait, so a factor is never read as seconds (27 s × 3 = 81 s)
+function thinkResult(g) {
+  const t = g.thinkPerIter, f = g.thinkFactor ?? 1, lo = g.thinkMinPct ?? 50, hi = g.thinkMaxPct ?? 150;
+  if (!(t > 0)) return g.thinkMode === "multiply" ? "a factor, not seconds — enter the think time above" : "of the recorded think time";
+  const cut = g.thinkLimit > 0 ? `, before the ${fmtS(g.thinkLimit)} limit` : "";
+  if (g.thinkMode === "multiply") return Number.isFinite(f) ? `a factor, not seconds: ${fmtS(t)} × ${Number.isInteger(f) ? fmt(f) : fmt(f, 2)} = ${fmtS(t * f)} think per iteration${cut}` : "a factor, not seconds";
+  return Number.isFinite(lo) && Number.isFinite(hi) ? `${fmtS(t)} becomes ${fmtS(t * lo / 100)} – ${fmtS(t * hi / 100)}, about ${fmtS(t * (lo + hi) / 200)} on average${cut}` : "of the recorded think time";
+}
 const thinkHelp = (g) => (noThink(g) ? "no think time above — nothing to replay" : "LRE's Think Time setting — what LRE does with the think time above; “As recorded” waits it in full");
 function scriptCard(g) {
   const m = g.method, p = g.pacing || {};
@@ -169,8 +177,8 @@ function scriptCard(g) {
       </div></div>
       <div><p class="wm-sub">Replay in LRE <span class="wm-subh">— runtime settings</span></p><div class="wm-grid">${pacing}
         <label class="wm-f">Think time in LRE<select class="ds-field" data-k="thinkMode" data-thinkdep${noThink(g) ? " disabled" : ""}>${opt(THINK, g.thinkMode)}</select><small data-thinkhelp>${thinkHelp(g)}</small></label>
-        ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×") : ""}
-        ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%") : ""}
+        ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
+        ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%", "of the recorded think time") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
         ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "only if you tick LRE's “Limit think time to” — else leave empty", g.thinkLimit > 0 ? "" : "adv", `data-thinkdep${noThink(g) ? " disabled" : ""}`)}
         ${g.thinkMode === "ignore" ? "" : num("How many think times", "thinkPauses", g.thinkPauses, "", "in one iteration, so the limit can cut each one — read from the script").replace('<label class="wm-f ', `<label data-pauses${g.thinkLimit > 0 ? "" : " hidden"} class="wm-f `)}
       </div></div>
@@ -198,6 +206,7 @@ $("#scripts-list").addEventListener("input", (e) => {
   if (k === "name") { const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }
   // the number of think times matters only with a limit: shown while one is set (no redraw, the focus stays)
   if (k === "thinkPerIter") { const c = el.closest("[data-id]"); c.querySelectorAll("[data-thinkdep]").forEach((x) => { x.disabled = noThink(g); }); const h = c.querySelector("[data-thinkhelp]"); if (h) h.textContent = thinkHelp(g); }
+  if (["thinkPerIter", "thinkFactor", "thinkMinPct", "thinkMaxPct", "thinkLimit"].includes(k)) { const r = el.closest("[data-id]").querySelector("[data-thinkres]"); if (r) r.textContent = thinkResult(g); }
   if (k === "thinkLimit") { const f = el.closest("[data-id]").querySelector("[data-pauses]"); if (f) f.hidden = !(v > 0); }
   if (STRUCT.has(k)) { if (tableView()) tvRedraw(g, k); else renderScripts(); renderTest(); renderPools(); calc(); } else calcSoon();
 });

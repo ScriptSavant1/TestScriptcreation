@@ -72,7 +72,8 @@ The page works out the plan as you type. A section you have not touched keeps se
   time, so the tool needs to know how many there are; filled from the script.
 - **Replay in LRE**: pacing (let the tool choose — recommended —, fixed, random, as soon as possible, after the
   previous iteration + a delay), **Think time in LRE** (LRE's Think Time setting — what LRE does with the think time
-  total: as recorded, ignore, multiply, random %; greyed out when the think time is 0) and **Limit each think time to**
+  total: as recorded, ignore, multiply, random %; greyed out when the think time is 0; Multiply takes a factor, not
+  seconds, and shows the result — 27 s × 3 = 81 s; Random shows the range and the average) and **Limit each think time to**
   (LRE's "Limit think time to N seconds"; read from rts.yml or default.cfg, empty = no limit; shown in the Detailed
   view, or when a script sets a limit — leave it empty unless that box is ticked in LRE).
 - **Not possible**: when one iteration takes longer than the pacing, the card says so in figures (iteration time,

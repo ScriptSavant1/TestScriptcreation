@@ -13,6 +13,7 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - Scripts: notes at the top ("Before you fill in a script — what each box means") with the formulas and a worked example; the boxes say "Think time — total per iteration", "Response time — per transaction", "Transactions per iteration".
 - "Not possible" now says why and what to change, in the script card: the iteration time in figures against the pacing, the TPS LRE will really reach, and the ways out — a pacing that fits (with room for slower responses), the Vusers that keep the TPS, or the response time that would fit — with a button for the first two (Undo takes it back). The summary opens with the same one-line reason.
 - "Think time in LRE" (LRE's Think Time setting) says what it does with the think time above and is greyed out when there is none; "Limit each think time to" shows in the Detailed view only (or when a script sets a limit) — leave it empty unless LRE's "Limit think time to" is ticked.
+- Multiply / Random think time show what LRE will really wait, as you type: "a factor, not seconds: 27 s × 3 = 81 s think per iteration", "27 s becomes 13.5 s – 40.5 s, about 27 s on average" — so a factor is never mistaken for seconds.
 
 #### Test length closer to LRE; clearer think-time fields
 
