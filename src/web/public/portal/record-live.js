@@ -20,7 +20,7 @@
   'use strict';
 
   var REC = 'http://localhost:8787';
-  var LATEST = '0.2.3';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
+  var LATEST = '0.3.0';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
   var PREF = 'perfx-rec-live';     // remembered choices: recent addresses, browser, private window, name, last transaction
   var STATIC_TYPES = { Image: 1, Stylesheet: 1, Script: 1, Font: 1, Media: 1 };
   var ROWS_PER_GROUP = 400;        // rows drawn per open transaction (the newest)
@@ -92,6 +92,7 @@
           '<label class="rl-field">Script ID <span class="rl-opt">(optional)</span><input class="ds-field" id="lv-sid" type="text" autocomplete="off" spellcheck="false" maxlength="20" placeholder="e.g. SC01" aria-describedby="lv-sid-help lv-sid-err"><small id="lv-sid-help">Just the ID, for example SC01 — the transactions become SC01_01_Launch, SC01_02_Login …</small><span class="rl-ferr" id="lv-sid-err" role="alert" hidden></span></label>' +
           '<label class="rl-field">First transaction<input class="ds-field" id="lv-first" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="e.g. Launch"><small>Starts when the page opens; numbered for you (T01_Launch).</small></label>' +
           '<label class="rl-field rl-wide">Planned steps <span class="rl-opt">(optional, one per line)</span><textarea class="ds-field" id="lv-plan" rows="3" spellcheck="false" placeholder="Login&#10;Search&#10;Add to cart"></textarea><small>While recording, press Enter on an empty box to start the next planned step — no typing during the journey.</small></label>' +
+          '<label class="rl-toggle rl-wide"><input type="checkbox" id="lv-bar" checked><span><b>Floating bar in the recording window</b><small>The CDP Recorder 0.3.0 shows a small bar at the top of every page it records — name transactions, Mark, Undo, Stop and save — without leaving the application. Drag it, put it at the bottom, minimise it, or press Alt+Shift+H to hide it. Nothing of it is in the recording.</small></span></label>' +
         '</div></details>' +
         '<div class="rl-save ds-note ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg><span>Saved automatically to your <b>Downloads</b> folder as <code id="lv-file">Recording_….har</code></span></div>' +
       '</div>' +
@@ -221,6 +222,7 @@
     $('lv-sid').value = prefs.sid || '';
     $('lv-sid-err').hidden = true; $('lv-sid').classList.remove('bad'); sidHelp();
     $('lv-plan').value = prefs.plan || '';
+    $('lv-bar').checked = prefs.bar !== false;
     if (prefs.plan) $('lv-plan').closest('details').open = true;   // a plan from last time is in sight
     $('lv-go').disabled = false; goLabel('Start recording');
     setView(true); markBrowsers(); showFileName();
@@ -272,6 +274,8 @@
     prefs.plan = $('lv-plan').value;
     req.plan = prefs.plan;   // the CDP Recorder 0.2.2 and newer: an empty name on its toolbar starts the next planned step
     req.scriptId = prefs.sid;   // 0.2.3 and newer: the file and the HAR carry it (older ones ignore it)
+    prefs.bar = $('lv-bar').checked;
+    req.bar = prefs.bar;        // 0.3.0 and newer: the floating bar inside the recorded pages (older ones ignore it)
     prefs.urls = [url].concat((prefs.urls || []).filter(function (u) { return u !== url; })).slice(0, 6);
     prefs.browser = req.browser; prefs.private = req.private; prefs.name = req.name;
     savePrefs();

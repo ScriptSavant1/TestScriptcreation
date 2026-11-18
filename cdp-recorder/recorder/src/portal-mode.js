@@ -86,7 +86,7 @@ export function readSession(body) {
   const clean = (v, n) => String(v || "").trim().slice(0, n);
   const scriptId = scriptIdOf(b.scriptId);
   if (scriptId === null) return { ok: false, error: "The script ID takes letters and digits only, up to 12 (for example SC01)" };
-  return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80), plan: planSteps(String(b.plan || "").slice(0, 4000)), scriptId };
+  return { ok: true, url, browser, private: b.private !== false, name: clean(b.name, 80), firstTx: clean(b.firstTx, 80), plan: planSteps(String(b.plan || "").slice(0, 4000)), scriptId, bar: b.bar !== false };
 }
 
 // ── transaction names: the same rules as the PerfX Studio page (src/web/public/portal/record-live.js fullName / nextNum —

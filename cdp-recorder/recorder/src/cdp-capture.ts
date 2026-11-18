@@ -36,6 +36,7 @@ import { normalize as _normalize } from "./url-normalizer.js";
 const harBuilder = _harBuilder as any;
 const bgDetector = _bgDetector as any;
 const normalize = _normalize as (url: string) => string;
+import { setupBar } from "./page-bar-cdp.js";
 
 type Client = CDP.Client;
 
@@ -395,6 +396,8 @@ async function handleAttached(
     // recording.
     void retryNetworkEnable(client, sessionId, targetInfo.targetId);
   }
+  // the floating bar (0.3.0): its script and private channel are in place before the page runs anything
+  setupBar(client, sessionId);
   if (waitingForDebugger) await resumeIfWaiting(client, sessionId, targetInfo.targetId);
 }
 

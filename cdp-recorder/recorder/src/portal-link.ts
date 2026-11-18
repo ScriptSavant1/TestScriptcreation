@@ -16,6 +16,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { LINK_SCHEME, linkCommand, expandEnv, readAllowedPages } from "./portal-mode.js";
+import { barPrefsOf } from "./page-bar.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -87,6 +88,31 @@ export function saveAllowedPages(pages: string[], file = allowedPagesFile()): bo
   try {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ pages }, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Where the floating bar's place (top / bottom, left / middle / right) is remembered — CDP_RECORDER_BAR_FILE overrides it. */
+export function barPrefsFile(): string {
+  return process.env.CDP_RECORDER_BAR_FILE || join(process.env.LOCALAPPDATA || homedir(), "PerfX", "cdp-recorder", "floating-bar.json");
+}
+
+/** The floating bar's remembered place; top, middle when the file is missing or unreadable. */
+export function loadBarPrefs(file = barPrefsFile()): { dock: string; pos: string } {
+  try {
+    return barPrefsOf(JSON.parse(readFileSync(file, "utf8")));
+  } catch {
+    return barPrefsOf(null);
+  }
+}
+
+/** Remembers the floating bar's place; never throws. */
+export function saveBarPrefs(prefs: unknown, file = barPrefsFile()): boolean {
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(barPrefsOf(prefs), null, 2));
     return true;
   } catch {
     return false;

@@ -75,8 +75,9 @@ try {
   });
   const errs = [];
   page.on("pageerror", (e) => errs.push(e.message));
-  await page.goto(PORTAL + "/recorder", { waitUntil: "networkidle" });
-  await page.click("#lv-start");
+  // Start recording is part of Script Studio (the Recorder page was merged into it)
+  await page.goto(PORTAL + "/studio", { waitUntil: "networkidle" });
+  await page.click("#ss-rec-btn");
   await page.fill("#lv-url-inp", site);
   await page.click("#lv-go");
   await page.waitForFunction(() => /Allow/.test(document.getElementById("lv-step-rec").textContent), null, { timeout: 8000 });

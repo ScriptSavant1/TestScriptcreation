@@ -63,7 +63,11 @@ describe('originAccess — who may drive the recorder', () => {
 describe('readSession — the Start recording request', () => {
   test('defaults: Edge, private window', () => {
     expect(P.readSession({ url: 'https://app.example.com/login' }))
-      .toEqual({ ok: true, url: 'https://app.example.com/login', browser: 'edge', private: true, name: '', firstTx: '', plan: [], scriptId: '' });
+      .toEqual({ ok: true, url: 'https://app.example.com/login', browser: 'edge', private: true, name: '', firstTx: '', plan: [], scriptId: '', bar: true });
+  });
+  test('the floating bar (0.3.0): on unless the page turns it off', () => {
+    expect(P.readSession({ url: 'https://app.example.com/', bar: false }).bar).toBe(false);
+    expect(P.readSession({ url: 'https://app.example.com/', bar: 'no' }).bar).toBe(true);
   });
   test('Chrome, normal window, name and first transaction kept', () => {
     expect(P.readSession({ url: ' http://app/x ', browser: 'Chrome', private: false, name: ' SC01 ', firstTx: '01_Launch' }))

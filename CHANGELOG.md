@@ -31,6 +31,15 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### CDP Recorder
 
+#### Version 0.3.0: the floating bar inside the recorded pages
+
+- Every page in the recording window — new tabs and pop-ups too — shows a small bar at the top: REC, the time, the running transaction, one box to name the next transaction (Enter or Mark: the running one ends and the next starts — no End on the bar), the counts and Settled, Stop and save. The arrow opens the details: every transaction with its requests, rename (pencil), Undo last mark, the planned steps. The same rules as the page and the toolbar (one `startTx` in `server.ts`).
+- Out of the application's way: drag it by its grip to the top or bottom, left, middle or right (remembered in `floating-bar.json` beside the allowed pages), minimise it to a REC dot, Alt+Shift+H hides it and brings it back. It gets slimmer in small windows (a 500 px sign-in pop-up keeps the box, Mark, Stop and the details).
+- Never in the recording: it runs in its own isolated script world and talks to the recorder over the DevTools connection (no network request); it is hidden while the transaction screenshots are taken. Built so strict pages do not block it (Content-Security-Policy, Trusted Types) and kept above the application's own pop-ups (top layer; inside an open modal dialog, which would otherwise make it unclickable). Keys typed in it never reach the application.
+- On by default; Script Studio's Start recording → More options → "Floating bar in the recording window" turns it off (or `--no-bar` when started by hand). The toolbar stays as it is (Allow questions, keep / close windows).
+- Setting the bar up never delays a new tab or pop-up: its commands are sent without waiting (the first try did wait, and a slow new tab lost its first request — found by `portal-session.mjs`).
+- The pages expect 0.3.0 (`LATEST`). Tests: `tests/unit/cdpPageBar.test.js`; manual `tests-manual/floating-bar.mjs` (real recorder and Edge: 30 checks); `portal-ask.mjs` now starts from Script Studio's Start recording (the Recorder page is part of Script Studio).
+
 #### Version 0.2.3: page title as a hint, rename, Undo last mark, script ID
 
 - While recording from Script Studio, the title of the page on screen is offered as grey text in the transaction box; **Tab** takes it (never filled in by itself). The recorder reads it from the browser every 2 s (`pageTitle` in the status); its own pages are never offered.

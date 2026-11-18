@@ -48,6 +48,8 @@ interface Args {
   portalLink: string | null;
   /** --out given: page-started recordings are saved there too, instead of Downloads */
   outGiven: boolean;
+  /** --no-bar: no floating bar inside the recorded pages (recordings started from the toolbar) */
+  noBar: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -58,6 +60,7 @@ function parseArgs(argv: string[]): Args {
   let browserChoice: BrowserChoice = "auto";
   let portalLink: string | null = null;
   let outGiven = false;
+  let noBar = false;
   // a link is passed as one argument; it must not be split at its own "=" signs
   const linkAt = argv.indexOf("--portal");
   if (linkAt >= 0) {
@@ -71,6 +74,7 @@ function parseArgs(argv: string[]): Args {
     if (a === "--real-profile") profileMode = { kind: "real" };
     else if (a === "--profile") profileMode = { kind: "custom", dir: resolve(argv[++i] ?? ".") };
     else if (a === "--cdp-port") cdpPort = Number(argv[++i]);
+    else if (a === "--no-bar") noBar = true;
     else if (a === "--ui-port") uiPort = Number(argv[++i]);
     else if (a === "--out") {
       outDir = resolve(argv[++i] ?? ".");
@@ -82,7 +86,7 @@ function parseArgs(argv: string[]): Args {
       else console.warn(`Unrecognized --browser value "${v}" — expected "edge" or "chrome". Falling back to auto-detect.`);
     }
   }
-  return { profileMode, cdpPort, uiPort, outDir, browserChoice, portalLink, outGiven };
+  return { profileMode, cdpPort, uiPort, outDir, browserChoice, portalLink, outGiven, noBar };
 }
 
 function openAsNormalTab(url: string): void {
@@ -236,6 +240,7 @@ export async function run(pageHtml: string): Promise<void> {
   };
 
   const serverOptions = {
+    bar: !args.noBar,
     windows,
     portals: new Set<string>([...remembered, ...(link?.portal ? [link.portal] : [])]),
     remember,

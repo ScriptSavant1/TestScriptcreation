@@ -52,6 +52,16 @@ RECORD FROM PERFX STUDIO (recommended)
    End. An optional script ID (More options, e.g. SC01) starts the file
    name and the transaction names in the script (SC01_01_...).
 
+   THE FLOATING BAR (0.3.0): every page in the recording window - new tabs
+   and pop-ups too - shows a small bar at the top: REC, the time, the
+   running transaction and the same box. Type a name, Enter (or Mark): the
+   running transaction ends and the next starts. The arrow opens the
+   details (transactions, rename, Undo last mark, planned steps); Stop and
+   save is on the bar too. Drag it by its grip (top or bottom, left, middle
+   or right), minimise it, or press Alt+Shift+H to hide it and bring it
+   back. It is never part of the recording. Turn it off on the page under
+   More options, or start the recorder with --no-bar.
+
 6. Click Stop and save on the page (or Stop Recording on the toolbar).
    The recording (.har file) is saved in your Downloads folder and opens
    in Script Studio by itself. The toolbar says it is saved; the recorder's

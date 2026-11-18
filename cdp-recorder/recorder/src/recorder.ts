@@ -46,6 +46,7 @@ import {
   refreshPageTitle,
 } from "./cdp-capture.js";
 import { liveRow } from "./portal-mode.js";
+import { barsFinal, barsHidden, resetBars } from "./page-bar-cdp.js";
 // Ported plain-JS modules, imported as `any` — see cdp-capture.ts's header
 // comment on its own imports for why.
 import { harBuilder as _harBuilder } from "./har-builder.js";
@@ -58,6 +59,8 @@ export class Recorder {
   private child: import("node:child_process").ChildProcess | undefined;
   private profile: ResolvedProfile | undefined;
   private recording = false;
+  /** When start() began capturing (epoch ms) — the floating bar's clock. */
+  startedAt = 0;
   private titleTimer: ReturnType<typeof setInterval> | undefined;
   // transaction id (har-builder.js's `tx_N`) -> screenshots taken at its
   // start/end. Attached onto the HAR's log.pages[] entries in stop(), after
@@ -140,8 +143,10 @@ export class Recorder {
     this.liveNo = new WeakMap();
     this.liveDone.clear();
     this.liveCount = 0;
+    resetBars();
     await startCapture(this.client);
     this.recording = true;
+    this.startedAt = Date.now();
     // the title of the page on screen, asked every 2 s while recording (a suggested transaction name on the page)
     const client = this.client;
     if (this.titleTimer) clearInterval(this.titleTimer);
@@ -221,7 +226,10 @@ export class Recorder {
     if (!this.client) return [];
     const client = this.client;
     const sessionIds = getAttachedSessionIds();
+    // the screenshots show the application, not the floating bar
+    await barsHidden(client, sessionIds, true);
     const shots = await Promise.all(sessionIds.map((sid) => captureScreenshot(client, sid)));
+    await barsHidden(client, sessionIds, false);
     return shots.filter((s): s is string => s !== null);
   }
 
@@ -291,6 +299,17 @@ export class Recorder {
     return { requestCount };
   }
 
+  /** Requests per transaction name so far (the floating bar's list). */
+  txCounts(): Record<string, number> {
+    const names: Record<string, string> = {};
+    for (const t of harBuilder.completedTransactions as Array<{ id: string; name: string }>) names[t.id] = t.name;
+    const out: Record<string, number> = {};
+    const add = (e: { pageref?: string | null }) => { const n = e.pageref ? names[e.pageref] : undefined; if (n) out[n] = (out[n] || 0) + 1; };
+    for (const e of harBuilder.completedEntries as Array<{ pageref?: string | null }>) add(e);
+    for (const e of (harBuilder.pendingEntries as Map<string, { pageref?: string | null }>).values()) add(e);
+    return out;
+  }
+
   private countRequestsForTransaction(txId: string): number {
     let n = 0;
     for (const e of harBuilder.completedEntries as Array<{ pageref?: string | null }>) if (e.pageref === txId) n++;
@@ -329,6 +348,8 @@ export class Recorder {
     await this.captureEndScreenshotSync();
 
     if (this.titleTimer) { clearInterval(this.titleTimer); this.titleTimer = undefined; }
+    this.recording = false;          // the bars' last answer says "saving"
+    await barsFinal(this.client);
     await stopCapture(this.client);
     resetCapture();
     this.recording = false;
