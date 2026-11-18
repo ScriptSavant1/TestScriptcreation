@@ -6,6 +6,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### Test length closer to LRE; clearer think-time fields
+
+- The last iterations finish within one slow iteration after the last stop, not one pacing: a Vuser waiting for its next pacing slot leaves at once (an LRE run with a 360 s pacing ended 3 s after its stop ramp). One pacing only when no response time is known.
+- Script card: "Fixed waits" shows when the script has some (Detailed view: always); "How many think times" moved next to "Limit each think time to" and shows only while a limit is set.
+
 #### Your own ramp, as in LRE
 
 - "Ramp-up and ramp-down" in the test: the tool chooses (as before), or **My own, as in LRE** — Start [n] Vusers every [s] s and Stop [n] Vusers every [s] s, as typed in LRE. Used for every start and stop (a spike's jump stays the tool's), shown in the LRE settings; a check says when it is faster than the start rate. To compare a plan with an LRE test that already exists.

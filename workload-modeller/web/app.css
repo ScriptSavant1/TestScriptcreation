@@ -28,6 +28,7 @@ html.embedded .wm-top { justify-content: flex-end; padding-top: 8px; padding-bot
 .wm-f small { font-weight: 400; color: var(--ds-text-3); font-size: var(--ds-fs-xs); line-height: 1.35; }
 .wm-f .ds-field { width: 100%; min-width: 0; }
 .wm-f.wide { grid-column: 1 / -1; }
+.wm-f[hidden] { display: none; }
 .wm-unit { position: relative; }
 .wm-unit > span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--ds-text-3); font-size: var(--ds-fs-xs); pointer-events: none; }
 .wm-unit .ds-field { padding-right: 46px; }

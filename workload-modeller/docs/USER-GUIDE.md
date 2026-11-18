@@ -62,8 +62,11 @@ The page works out the plan as you type. A section you have not touched keeps se
 - **Target type** and **Target**: TPS, transactions per hour, a share of the total TPS, a number of Vusers, Vusers and
   TPS together (checked against each other), or a number of iterations (data rows).
 - **Response time**: average per transaction, without think time.
-- **Think time**, **Fixed waits** and **Think times** (how many think-time calls one iteration has — needed only for
-  the limit): filled from the script.
+- **Think time**: all the think times of one iteration added up (9 × `load.thinkTime(3)` = 27 s). **Fixed waits**: all
+  the `sleep` / `load.sleep` of one iteration added up — shown when the script has some (Detailed view: always). Both
+  are filled from the script.
+- **How many think times** (in Replay in LRE): shown only when a think-time limit is set — the limit cuts each think
+  time, so the tool needs to know how many there are; filled from the script.
 - **Replay in LRE**: pacing (let the tool choose — recommended —, fixed, random, as soon as possible, after the
   previous iteration + a delay), think time (as recorded, ignore, multiply, random %) and **Limit each think time to**
   (LRE's "Limit think time to N seconds"; read from rts.yml or default.cfg, empty = no limit).
@@ -244,6 +247,8 @@ Also: iterations per second = Vusers ÷ pacing; hits per second = requests per i
   By group, each script starts as typed and the quicker ones hold longer, so all stop together. A check says when the
   ramp starts more Vusers per second than the start rate (Fine tuning).
 - **Ramp-down**: half the ramp-up worked out with twice the start rate, but never shorter than Vusers ÷ the stop rate, so no step stops many Vusers at once; each Vuser finishes its current iteration.
+- **Last iterations finish**: after the last stop, at most one slow iteration — a Vuser stopped while it waits for its
+  next pacing slot leaves at once (one pacing when no response time is known).
 - **Basic schedule by group**: every group starts immediately (LRE "Start Group: Immediately") and ramps over the same
   length — the longest ramp any script needs on its own. A quicker script starts its Vusers more slowly (one Vuser
   per step whenever it fits, at any whole-second interval, ending at most 10% before that length, never after it), so every script reaches full load

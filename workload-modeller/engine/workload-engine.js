@@ -819,8 +819,10 @@
       }
     });
     res.firstFull = firstFull; res.steadyFrom = steadyFrom; res.steadyTo = steadyTo;
-    // running iterations finish (gradual exit): at most the longer of the pacing and a slow (90th percentile) iteration
-    res.tail = Math.max(...groups.map((g) => Math.max(g.pacing.mean, (g.it && g.it.worst) || 0)));
+    // running iterations finish (gradual exit): a Vuser stopped while it waits for its next pacing slot leaves at once; one
+    // stopped mid-iteration finishes that iteration — so at most one slow (90th percentile) iteration, not one pacing (an
+    // LRE run ended 3 s after its stop ramp with a 360 s pacing). Without a response time the iteration is not known: the pacing.
+    res.tail = Math.max(...groups.map((g) => (g.it && g.it.worst != null ? g.it.worst : g.pacing.mean || 0)));
     res.duration = end + res.tail;
 
     /* timeline (Vusers and expected TPS per bucket) */

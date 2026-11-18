@@ -156,9 +156,8 @@ function scriptCard(g) {
       </div></div>
       <div><p class="wm-sub">One iteration <span class="wm-subh">— one run through the script</span></p><div class="wm-grid">
         ${num("Transactions", "txPerIter", g.txPerIter, "", g.txNames && g.txNames.length ? "in the script: " + esc(g.txNames.length > 4 ? g.txNames.slice(0, 3).join(", ") + " and " + (g.txNames.length - 3) + " more" : g.txNames.join(", ")) : "that count for the TPS")}
-        ${num("Think time", "thinkPerIter", g.thinkPerIter, "s", "total per iteration, as recorded (lr_think_time, load.thinkTime)")}
-        ${num("Fixed waits", "waitPerIter", g.waitPerIter, "s", "sleep, load.sleep — always waited in full")}
-        ${num("Think times", "thinkPauses", g.thinkPauses, "", "how many per iteration — for the limit")}
+        ${num("Think time", "thinkPerIter", g.thinkPerIter, "s", "all think times of one iteration added up (lr_think_time, load.thinkTime)")}
+        ${num("Fixed waits", "waitPerIter", g.waitPerIter, "s", "all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full", g.waitPerIter > 0 ? "" : "adv")}
         ${num("Response time", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}
         <label class="wm-f adv">Response time from<select class="ds-field" data-k="rtSource">${opt(RTSRC, g.rtSource)}</select></label>
         ${num("90th percentile", "rt90", g.rt90, "s", "optional — for the worst case", "adv")}
@@ -169,7 +168,8 @@ function scriptCard(g) {
         <label class="wm-f">Think time<select class="ds-field" data-k="thinkMode">${opt(THINK, g.thinkMode)}</select></label>
         ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×") : ""}
         ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%") : ""}
-        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "empty: no limit")}
+        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "LRE's “Limit think time to” — empty: no limit")}
+        ${g.thinkMode === "ignore" ? "" : num("How many think times", "thinkPauses", g.thinkPauses, "", "in one iteration, so the limit can cut each one — read from the script").replace('<label class="wm-f ', `<label data-pauses${g.thinkLimit > 0 ? "" : " hidden"} class="wm-f `)}
       </div></div>
     </div></div>`;
 }
@@ -193,6 +193,8 @@ $("#scripts-list").addEventListener("input", (e) => {
   if (el.type === "number") { v = parseFloat(v); if (!Number.isFinite(v)) v = null; }
   setKey(g, k, v); g.sample = false;
   if (k === "name") { const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }
+  // the number of think times matters only with a limit: shown while one is set (no redraw, the focus stays)
+  if (k === "thinkLimit") { const f = el.closest("[data-id]").querySelector("[data-pauses]"); if (f) f.hidden = !(v > 0); }
   if (STRUCT.has(k)) { if (tableView()) tvRedraw(g, k); else renderScripts(); renderTest(); renderPools(); calc(); } else calcSoon();
 });
 $("#scripts").addEventListener("click", (e) => {
@@ -681,7 +683,7 @@ function formulas(sc) {
       "Each Vuser starts an iteration when it starts and then every cycle (the pacing's average) until it stops — an expected-value model, not a replay",
       "Iterations are counted per phase (ramp-up, full load, ramp-down); transactions = iterations × T; with gradual exit every iteration that starts also finishes",
       "Expected TPS at a moment = Σ running Vusers × T ÷ pacing",
-      "Test length = end of the schedule + the longer of the pacing and the slow iteration (the last iterations finish)",
+      "Test length = end of the schedule + one slow iteration (the last iterations finish; a Vuser waiting for its next pacing slot leaves at once) — one pacing when no response time is known",
     ])}
     ${sec("7. Load generators", [
       "Team rule: Vusers per machine = 1 ÷ (p ÷ web + (1 − p) ÷ API), p = the script's share of page requests (web pages = 1, API calls = 0; not read from a script = 1). E.g. 100 / 250 and 3 pages in 20 requests: 1 ÷ (0.15 ÷ 100 + 0.85 ÷ 250) = 204",
@@ -701,7 +703,7 @@ function formulas(sc) {
 /* ---------- phases: ramp-up, steady state (or each held step), ramp-down — with clock times ----------
    Basic schedule: one steady state = the full-load hold (the window to analyse).
    Stepped tests (stress, capacity, spike): every hold is a window; the 100% step (or "normal load") is the one to
-   compare with the target. The last iterations finish within the longer of one pacing and one slow iteration after the schedule ends. */
+   compare with the target. The last iterations finish within one slow iteration after the schedule ends (one pacing without a response time). */
 const PH_COL = { start: "var(--c-work)", hold: "color-mix(in srgb, var(--ds-accent-text) 45%, transparent)", steady: "var(--ds-ok)", stop: "var(--ds-warn)", finish: "var(--ds-text-3)" };
 function phases(r) {
   const holds = r.marks.filter((m) => m.type === "hold"), stepped = holds.length > 1;

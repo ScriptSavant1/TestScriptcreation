@@ -150,8 +150,9 @@ model: each Vuser starts an iteration at its start and then every cycle (the pac
 without pacing). A plan whose iterations overrun is marked "not possible" rather than simulated. Iterations are counted
 per phase: ramp-up, full load (the last hold), ramp-down; with gradual exit every iteration started also finishes.
 Transactions = iterations × T. Timeline: Vusers and expected TPS per bucket (≥ 10 s, about 240 points). Test length =
-end of the schedule + the longer of the pacing and the longest iteration (a stopped Vuser finishes its current
-iteration). Data rows: warn when total iterations exceed the rows available.
+end of the schedule + the longest (slow) iteration — a stopped Vuser finishes its current iteration; one waiting for
+its next pacing slot leaves at once (an LRE run ended 3 s after its stop ramp with a 360 s pacing); one pacing when no
+response time is known. Data rows: warn when total iterations exceed the rows available.
 
 ## 7. Load generators
 
@@ -199,7 +200,7 @@ requests per second, share of the team rule; per script kind, Vusers per machine
 Simple view hides the detailed fields; Detailed shows them all.
 
 Phases (under the chart): a bar aligned to the chart and a table — phase, from, to, length on the test clock. Basic
-schedule: Ramp-up · Steady state (full load, "measure here") · Ramp-down · Last iterations finish (up to one pacing or one slow iteration after the
+schedule: Ramp-up · Steady state (full load, "measure here") · Ramp-down · Last iterations finish (up to one slow iteration after the
 schedule ends). Stepped tests: every start / hold / stop; the 100% step (stress, capacity) or "normal load" (spike) is
 the one marked "measure here". Tiles: "Steady state" (length and its window) or "Held steps" (N × hold, the 100% step's
 window); "Test length" says its parts in words. The LRE settings text and the Excel Summary end with the window(s) to
