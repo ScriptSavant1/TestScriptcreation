@@ -72,6 +72,9 @@ pages, API calls; the reader counts pages and API calls — `pages`, `pageShare`
 Let T = transactions per iteration, h = headroom (default 25%), r = random spread (default ±15%).
 
 Think time (mean / longest): as recorded t / t; ignore 0 / 0; multiply t×f / t×f; random t×(min+max)/200 / t×max/100.
+Limit L (LRE "Limit think time to"): each think time cut to L after the setting (random: mean of min(x, L) over the spread);
+the script's own think times, else t in equal parts over the number of think times (one per transaction if unknown — info check).
+Fixed waits w (sleep / load.sleep): added in full to mean, longest and shortest, whatever the setting.
 
 Iteration: mean = RT avg × T + think mean; longest = RT 90th (or avg) × T + think longest.
 - RT avg × T is exact when RT avg is the average over the script's transactions; time outside transactions is not
@@ -217,12 +220,14 @@ limit (`TEAM.limitPct`). The Load generators section says which figures are in u
 
 All scripts at once: choose or drop any number of files; each script becomes (or updates, by name) a card.
 - Script ZIP, Web HTTP/HTML: transactions = `lr_start_transaction` in the Action files (vuser_init and vuser_end run once
-  per Vuser and are not counted; listed as "at the start" / "at the end" — e.g. login in vuser_init, logout in vuser_end); think time = sum of `lr_think_time(n)`; requests = `web_url`,
+  per Vuser and are not counted; listed as "at the start" / "at the end" — e.g. login in vuser_init, logout in vuser_end); think time = sum of `lr_think_time(n)` (n a number, a `#define` or a C variable set once); fixed waits = `sleep(ms)`; requests = `web_url`,
   `web_custom_request`, `web_submit_data`, `web_submit_form`, `web_link`, `web_image`, `web_rest`; replay think time from
-  `default.cfg` [ThinkTime] Options (NOTHINK → ignore); the script's own pacing is reported and replaced by the plan's.
+  `default.cfg` [ThinkTime] Options (NOTHINK → ignore) and LimitFlag / Limit; the script's own pacing is reported and replaced by the plan's.
 - Script ZIP, DevWeb (main.js + rts.yml): transactions = `.start()` calls inside `load.action` (declared anywhere;
   load.initialize / load.finalize listed as "at the start" / "at the end");
-  think time = `load.thinkTime(n)` / `load.sleep(n)`; requests = `new load.WebRequest`; replay think time from rts.yml.
+  think time = `load.thinkTime(n)` / `thinkTimeAsync`; fixed waits = `load.sleep(n)` / `sleepAsync` (n a number or a constant
+  defined once, e.g. `const thinktime = 3`; anything else is counted as unknown and named); requests = `new load.WebRequest`;
+  replay think time and its limit from rts.yml (`thinkTime: type`, `limit`, -1 = none).
 - One ZIP may hold several scripts (every folder with a .usr, or main.js + rts.yml). Comments are ignored; text in
   quotes is kept (a "https://" is not a comment).
 - Transactions inside other transactions (a start while another is open; DevWeb ends one with `.stop()`): listed, all

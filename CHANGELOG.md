@@ -6,6 +6,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### Think time as LRE replays it (BUG-149)
+
+- Fill from scripts reads think time written with a constant (`load.sleep(thinktime)` with `const thinktime = 3`, `#define`, a C variable); a value it cannot work out (a parameter, a calculation) is counted and named in the import list.
+- Fixed waits (`sleep(ms)` in VuGen C, `load.sleep` in DevWeb) are no longer think time: their own field on the card ("Fixed waits"), always waited in full — LRE's think-time settings never change them.
+- "Limit each think time to" on the card — LRE's "Limit think time to N seconds", read from rts.yml or default.cfg — cuts each think time, after the replay setting; "Think times" (how many per iteration) makes it exact. The LRE settings text names the limit.
+
 #### New tool
 
 - **Workload Modeller** (sidebar group "Plan"): give each script its target — TPS, transactions per hour, Vusers, a share of the total TPS or iterations — and get the Vusers, pacing, ramp-up and ramp-down, load generators and iterations, the LRE settings to type in and an Excel workbook, with checks that say what cannot work and how it is worked out.

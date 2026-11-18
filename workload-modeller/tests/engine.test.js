@@ -192,3 +192,66 @@ describe('Workload engine — empty and malformed input', () => {
     expect([g.status, g.needs]).toEqual(['needs-input', 'pacing']);
   });
 });
+
+describe('Workload engine — think time limit and fixed waits', () => {
+  // 40 Vusers, 10 transactions of 0.3 s, fixed pacing 360 s (an LRE run: 40 × 10 ÷ 360 = 1.11 TPS)
+  const base = { name: 'S', method: 'vusers', vusers: 40, txPerIter: 10, rtAvg: 0.3, pacing: { mode: 'fixed', fixed: 360 } };
+  const one = (g) => run([Object.assign({}, base, g)]).groups[0];
+
+  test('fixed waits count in full even when think time is ignored: 3 s + 27 s = 30 s; the TPS is the pacing\'s', () => {
+    const g = one({ thinkPerIter: 0, waitPerIter: 27, thinkMode: 'ignore' });
+    expect(near(g.it.mean, 30, 1e-9)).toBe(true);
+    expect(near(g.tps, 400 / 360, 1e-9)).toBe(true);
+  });
+
+  test('multiply leaves fixed waits alone: 10 s think × 2 + 5 s waits = 25 s', () => {
+    expect(near(one({ thinkPerIter: 10, waitPerIter: 5, thinkMode: 'multiply', thinkFactor: 2 }).it.think.mean, 25, 1e-9)).toBe(true);
+  });
+
+  test('a limit above every think time changes nothing and says nothing', () => {
+    const g = one({ thinkPerIter: 27, thinkPauses: 9, thinkLimit: 3 });
+    expect(g.it.think.mean).toBe(27);
+    expect(g.checks.some((c) => /^think-/.test(c.code))).toBe(false);
+  });
+
+  test('the limit cuts each think time: 1 + 1 + 10 s at most 3 s → 5 s, not 9 s (equal parts would give 9)', () => {
+    const g = one({ thinkPerIter: 12, thinkList: [1, 1, 10], thinkPauses: 3, thinkLimit: 3 });
+    expect(g.it.think.mean).toBe(5);
+    expect(g.checks.find((c) => c.code === 'think-limited').text).toMatch(/thinks 5 s instead of 12 s/);
+  });
+
+  test('a total changed by hand no longer matches the script\'s list: equal parts over the think times', () => {
+    // 20 s over 2 think times = 10 s each, cut to 3 s → 6 s
+    expect(one({ thinkPerIter: 20, thinkList: [1, 1, 10], thinkPauses: 2, thinkLimit: 3 }).it.think.mean).toBe(6);
+  });
+
+  test('without the number of think times: one per transaction, and it says so (with a way to the field)', () => {
+    // multiply 2: 54 s over 10 = 5.4 s each, cut to 3 s → 30 s
+    const g = one({ thinkPerIter: 27, thinkLimit: 3, thinkMode: 'multiply', thinkFactor: 2 });
+    expect(near(g.it.think.mean, 30, 1e-9)).toBe(true);
+    const c = g.checks.find((x) => x.code === 'think-pauses-assumed');
+    expect([c.field, c.text]).toEqual(['thinkPauses', expect.stringMatching(/assumed 10 think times/)]);
+  });
+
+  test('random 50–150% with a limit: 3 s think times spread 1.5–4.5 s, cut at 3 s → on average 2.625 s each', () => {
+    // mean of min(x, 3) for x evenly over [1.5, 4.5] = ((9 − 2.25) ÷ 2 + 3 × 1.5) ÷ 3 = 2.625; 9 of them = 23.625
+    const g = one({ thinkPerIter: 27, thinkPauses: 9, thinkLimit: 3, thinkMode: 'random' });
+    expect([g.it.think.mean, g.it.think.worst, g.it.think.min]).toEqual([23.625, 27, 13.5]);
+  });
+
+  test('ignore: the limit has nothing to cut; LRE settings text names the limit otherwise', () => {
+    expect(one({ thinkPerIter: 27, thinkPauses: 9, thinkLimit: 3, thinkMode: 'ignore' }).it.think.mean).toBe(0);
+    const r = run([Object.assign({}, base, { thinkPerIter: 27, thinkPauses: 9, thinkLimit: 3 })], { workload: 'basic-group' });
+    expect(r.lre).toMatch(/Think time: Replay think time as recorded; Limit think time to 3 seconds/);
+  });
+
+  test('think time and fixed waits longer than the pacing are flagged by both names', () => {
+    const r = run([{ name: 'S', method: 'vusers', vusers: 5, txPerIter: 1, thinkPerIter: 10, waitPerIter: 15, pacing: { mode: 'fixed', fixed: 20 } }]);
+    expect(r.checks.find((c) => c.code === 'think-exceeds-pacing').text).toMatch(/think time and fixed waits alone \(25 s\) are longer/);
+  });
+
+  test('the explanation names fixed waits', () => {
+    const g = run([{ name: 'S', method: 'tps', targetTps: 1, txPerIter: 10, rtAvg: 0.3, thinkPerIter: 0, waitPerIter: 27 }]).groups[0];
+    expect(g.why.join(' ')).toMatch(/0 s think \+ 27 s fixed waits/);
+  });
+});

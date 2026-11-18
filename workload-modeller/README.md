@@ -14,7 +14,8 @@ read on the user's PC and never sent to the server.
 - Team settings: `config/workload-settings.json` (machine types and their Vusers per machine, load-generator limits,
   schedule defaults, protocol assumptions) — edit on the server, read by every page when it opens.
 - **Fill from scripts**: script ZIPs (Web HTTP/HTML, DevWeb; several scripts per ZIP) and HAR files give each script's
-  transactions, think time and requests. Transactions in `vuser_init` / `vuser_end` (`load.initialize` /
+  transactions, think time, fixed waits (`sleep`, `load.sleep`: not changed by the think-time settings) and requests,
+  and the "Limit think time to" setting. Transactions in `vuser_init` / `vuser_end` (`load.initialize` /
   `load.finalize`) run once per Vuser and are not counted.
 - Many scripts: Cards or Table view, Find and filter, Overwrite all scripts, Defaults for every script, Paste from Excel,
   and an Excel sheet to fill in and drop back.

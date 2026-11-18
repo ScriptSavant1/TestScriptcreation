@@ -30,7 +30,8 @@ The page works out the plan as you type. A section you have not touched keeps se
 | Iteration | One run through the script's Action part (vuser_init and vuser_end run only once per Vuser) |
 | Transactions per iteration (T) | The transactions in one iteration that count for the TPS |
 | Pacing | How often a Vuser starts a new iteration (for example every 24 s) |
-| Think time | The pauses written in the script between steps |
+| Think time | The pauses written in the script between steps with `lr_think_time` (VuGen C) or `load.thinkTime` (DevWeb). LRE's Think Time settings (ignore, multiply, random %, limit) change them |
+| Fixed waits | Plain waits in the script: `sleep(ms)` (VuGen C) or `load.sleep` (DevWeb). They are not think time: LRE always waits them in full, whatever the Think Time settings say |
 | Response time | How long one transaction takes, on average (your SLA is a good value to start with) |
 | Headroom | How much longer the pacing is than one iteration, so slower responses do not break the TPS (25% by default) |
 | Steady state (full load) | The part of the test where every Vuser runs — the window to analyse |
@@ -50,13 +51,18 @@ The page works out the plan as you type. A section you have not touched keeps se
 - **Fill from scripts**: script ZIPs (Web HTTP/HTML or DevWeb; one ZIP may hold several scripts) and HAR files. The
   import note lists what was read and anything to check: transactions that run once at the start (vuser_init /
   load.initialize) or at the end (vuser_end / load.finalize) and are not counted, transactions inside other
-  transactions, a script that ignores its think time. Loops are counted once — correct the transaction count if a
+  transactions, a script that ignores its think time, think-time or wait calls whose value the reader cannot work out
+  (a number or a constant such as `const thinktime = 3` is read; a parameter or a calculation is not — enter the total),
+  and think times longer than the script's "Limit think time to" setting. Loops are counted once — correct the transaction count if a
   script repeats steps.
 - **Target type** and **Target**: TPS, transactions per hour, a share of the total TPS, a number of Vusers, Vusers and
   TPS together (checked against each other), or a number of iterations (data rows).
 - **Response time**: average per transaction, without think time.
+- **Think time**, **Fixed waits** and **Think times** (how many think-time calls one iteration has — needed only for
+  the limit): filled from the script.
 - **Replay in LRE**: pacing (let the tool choose — recommended —, fixed, random, as soon as possible, after the
-  previous iteration + a delay) and think time (as recorded, ignore, multiply, random %).
+  previous iteration + a delay), think time (as recorded, ignore, multiply, random %) and **Limit each think time to**
+  (LRE's "Limit think time to N seconds"; read from rts.yml or default.cfg, empty = no limit).
 
 Many scripts:
 - **Cards / Table**: the table shows one line per script and is edited like a spreadsheet (arrow keys, Enter, paste a
@@ -187,8 +193,13 @@ Defaults for every script: "Each script" gives the default TPS to every script w
 
 - Think time: as recorded t · ignore 0 · multiply t × factor · random % on average t × (lowest % + highest %) ÷ 200,
   at most t × highest % ÷ 100.
-- **Iteration = response time × T + think time** (averages).
-- **Slow iteration = the 90th percentile (or the average, whichever is larger) × T + the longest think time.** It adds
+- Limit each think time to L s: every think time is cut to L, after the setting above (random %: the average of the cut
+  values). The tool uses each think time as the script has it; if the total was typed by hand, the total in equal parts
+  over the number of think times (one per transaction when that is not known — a check says so). Example: think times of
+  1, 1 and 10 s with a 3 s limit give 1 + 1 + 3 = 5 s.
+- Fixed waits w (`sleep`, `load.sleep`): always waited in full, whatever the think-time setting.
+- **Iteration = response time × T + think time + w** (averages).
+- **Slow iteration = the 90th percentile (or the average, whichever is larger) × T + the longest think time + w.** It adds
   the 90th percentiles, so it errs on the long side; it is used only for warnings, the random pacing style and the
   test length.
 
@@ -211,7 +222,7 @@ Also: iterations per second = Vusers ÷ pacing; hits per second = requests per i
 
 | Check | When |
 |---|---|
-| Response-time limit | (shortest pacing − longest think time) ÷ T — the slowest average per transaction that keeps the TPS |
+| Response-time limit | (shortest pacing − longest think time − fixed waits) ÷ T — the slowest average per transaction that keeps the TPS |
 | Not possible | shortest pacing < iteration: iterations overrun and the TPS drops to about Vusers × T ÷ iteration; enough Vusers = ⌈λ × iteration × (1 + headroom)⌉ |
 | Some iterations overrun | shortest pacing < slow iteration |
 | Little headroom | shortest pacing < iteration × (1 + headroom) |

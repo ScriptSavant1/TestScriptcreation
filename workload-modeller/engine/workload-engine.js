@@ -64,18 +64,52 @@
   const sec1 = (x) => (Math.abs(x - Math.round(x)) < 0.05 ? String(Math.round(x)) : x.toFixed(1)) + " s";
 
   /* ---------- iteration time ---------- */
-  // Think time as LRE replays it (Runtime Settings > Think Time).
+  // The pauses of one iteration as LRE replays them (Runtime Settings > Think Time).
+  // Think time (thinkPerIter — lr_think_time, load.thinkTime) follows the setting: as recorded, ignore, multiply, random %,
+  // and "Limit think time to N seconds" (thinkLimit), which cuts EACH think time. Fixed waits (waitPerIter — sleep(),
+  // load.sleep) are not think time: always waited in full. mean / worst / min = both together; think = think time alone.
   function thinkTime(g) {
     const t = nn(g.thinkPerIter) ? g.thinkPerIter : 0;
+    const w = nn(g.waitPerIter) ? g.waitPerIter : 0;
     const m = g.thinkMode || "recorded";
-    if (m === "ignore") return { mean: 0, worst: 0, min: 0 };
-    if (m === "multiply") { const f = pos(g.thinkFactor) ? g.thinkFactor : 1; return { mean: t * f, worst: t * f, min: t * f }; }
-    if (m === "random") {
-      const lo = nn(g.thinkMinPct) ? g.thinkMinPct : 50, hi = nn(g.thinkMaxPct) ? Math.max(g.thinkMaxPct, lo) : 150;
-      return { mean: t * (lo + hi) / 200, worst: t * hi / 100, min: t * lo / 100 };
+    const f = pos(g.thinkFactor) ? g.thinkFactor : 1;
+    const lo = nn(g.thinkMinPct) ? g.thinkMinPct : 50, hi = nn(g.thinkMaxPct) ? Math.max(g.thinkMaxPct, lo) : 150;
+    const L = pos(g.thinkLimit) && m !== "ignore" ? g.thinkLimit : null;
+    let th, assumed = null, uncut = null;
+    if (m === "ignore") th = { mean: 0, worst: 0, min: 0 };
+    else if (!L || !(t > 0)) {
+      if (m === "multiply") th = { mean: t * f, worst: t * f, min: t * f };
+      else if (m === "random") th = { mean: t * (lo + hi) / 200, worst: t * hi / 100, min: t * lo / 100 };
+      else th = { mean: t, worst: t, min: t };           // as recorded
+    } else {
+      // the limit works per think time: each one's value when the script gave them (and they still add up to the
+      // total), else the total in equal parts — over the number of think times, or one per transaction if not known
+      const given = Array.isArray(g.thinkList) && g.thinkList.length && Math.abs(g.thinkList.reduce((a, x) => a + x, 0) - t) < 0.051;
+      let list = given ? g.thinkList : null;
+      if (!list) {
+        const k = pos(g.thinkPauses) ? Math.max(1, Math.round(g.thinkPauses)) : txCount(g);
+        if (!pos(g.thinkPauses)) assumed = k;
+        list = new Array(k).fill(t / k);
+      }
+      const cut = (x) => Math.min(x, L);
+      // average of min(x, L) for x spread evenly over [a, b]
+      const cutMean = (a, b) => (L >= b ? (a + b) / 2 : L <= a ? L : ((L * L - a * a) / 2 + L * (b - L)) / (b - a));
+      th = { mean: 0, worst: 0, min: 0 };
+      list.forEach((p) => {
+        if (m === "multiply") { th.mean += cut(p * f); th.worst += cut(p * f); th.min += cut(p * f); }
+        else if (m === "random") { const a = p * lo / 100, b = p * hi / 100; th.mean += cutMean(a, b); th.worst += cut(b); th.min += cut(a); }
+        else { th.mean += cut(p); th.worst += cut(p); th.min += cut(p); }
+      });
+      uncut = m === "multiply" ? t * f : m === "random" ? t * (lo + hi) / 200 : t;
     }
-    return { mean: t, worst: t, min: t };                 // as recorded
+    return { mean: th.mean + w, worst: th.worst + w, min: th.min + w, think: th.mean, wait: w, limit: L, assumed,
+      cut: uncut != null && uncut - th.mean > 0.05 ? uncut : null };
   }
+  // "27 s think" or "27 s think + 9 s fixed waits" — what one iteration waits
+  const pauseWords = (th, which) => {
+    const k = which || "mean", w = th.wait || 0;
+    return w ? `${sec1(th[k] - w)} think + ${sec1(w)} fixed waits` : `${sec1(th[k])} think`;
+  };
   // Response time per iteration: average per transaction x transactions (+ 90th percentile for the worst case).
   function iterationTime(g) {
     const T = txCount(g), think = thinkTime(g);
@@ -121,6 +155,11 @@
     const FIELD = { target: ({ volume: "volumePerHour", share: "sharePct", iterations: "iterations" })[g.method] || "targetTps", vusers: "vusers", rt: "rtAvg",
       pacing: ((g.pacing && g.pacing.mode) === "random") ? "pacing.min" : "pacing.fixed" };
     const need = (what, text) => { out.status = "needs-input"; out.needs = what; out.checks.push({ level: "bad", code: "needs-" + what, text, gid: g.id, field: FIELD[what] }); return out; };
+    // "Limit think time to N seconds": say what it cuts, and when the number of think times had to be assumed
+    if (it.think.cut != null)
+      out.checks.push({ level: "info", code: "think-limited", text: `${out.name}: LRE cuts each think time to ${sec1(it.think.limit)}, so an iteration thinks ${sec1(it.think.think)} instead of ${sec1(it.think.cut)}.` });
+    if (it.think.assumed != null)
+      out.checks.push({ level: "info", code: "think-pauses-assumed", gid: g.id, field: "thinkPauses", text: `${out.name}: to apply the ${sec1(it.think.limit)} think-time limit the tool assumed ${it.think.assumed} think time${it.think.assumed === 1 ? "" : "s"} per iteration (one per transaction) — enter the number of think times for an exact figure.` });
 
     const target = targetTps(g, sc, shareTotal);
     out.target = target;
@@ -173,7 +212,7 @@
       }
       setRange(it.mean + delay);
       V = sizedByTps ? Math.max(1, ceilE(lam * P)) : g.vusers;
-      out.why.push(`No fixed pacing: an iteration starts ${delay ? `${sec1(delay)} after` : "as soon as"} the previous one ends, so one Vuser takes ≈ ${sec1(P)} per iteration (${T} × ${round(it.rtMean / T, 2)} s response + ${sec1(it.think.mean)} think${delay ? ` + ${sec1(delay)}` : ""}).`);
+      out.why.push(`No fixed pacing: an iteration starts ${delay ? `${sec1(delay)} after` : "as soon as"} the previous one ends, so one Vuser takes ≈ ${sec1(P)} per iteration (${T} × ${round(it.rtMean / T, 2)} s response + ${pauseWords(it.think)}${delay ? ` + ${sec1(delay)}` : ""}).`);
       out.why.push(sizedByTps ? `Vusers = TPS × ${sec1(P)} ÷ ${T} = ${round(target, 3)} × ${round(P, 2)} ÷ ${T}, rounded up = ${V}.` : `${V} Vusers as entered → about ${round(V * T / P, 2)} TPS.`);
       out.checks.push({ level: "warn", code: "uncontrolled", text: `${out.name}: no fixed pacing — the TPS rises and falls with the response times. Fine for a stress test; use a fixed or random pacing to prove a TPS target.` });
     } else {                                               // auto: the tool chooses the pacing
@@ -201,7 +240,7 @@
         // a short pacing where one second is a big step (4.4 s → 4 s is 10%): keep the TPS, pace to 0.1 s as before
         pick = pick || near || { v: v0, p: Math.floor((v0 / lam) * 10 + EPS) / 10, over: 0, tenths: best ? best.over : null };
         V = pick.v; setRange(pick.p); wholeRandom();
-        out.why.push(`Iteration ≈ ${sec1(it.mean)} (${T} × ${it.rtMean / T} s response + ${sec1(it.think.mean)} think). Shortest safe pacing = iteration + ${Math.round(h * 100)}% headroom → ${b} s.`);
+        out.why.push(`Iteration ≈ ${sec1(it.mean)} (${T} × ${it.rtMean / T} s response + ${pauseWords(it.think)}). Shortest safe pacing = iteration + ${Math.round(h * 100)}% headroom → ${b} s.`);
         out.why.push(`Vusers = TPS × pacing ÷ transactions → ${V}; pacing ${sec1(P)}${pick.tenths != null ? ` (to 0.1 s: a whole second would put the TPS ${round(pick.tenths * 100, 1)}% above the target)` : pick.over ? ` (whole seconds) — the TPS lands ${round(pick.over * 100, 2)}% above the target` : " (whole seconds) so the TPS is exact"}.`
           + (V > v0 ? ` (${V - v0} more than the ${v0} the shortest pacing needs, for a whole-second pacing.)` : ""));
       } else {
@@ -221,7 +260,7 @@
     // budget: the slowest average response time per transaction that keeps the pacing
     if (kind === "fixed" || kind === "random") {
       out.rtBudget = (pMin - it.think.worst) / T;
-      if (out.rtBudget <= 0) out.checks.push({ level: "bad", code: "think-exceeds-pacing", text: `${out.name}: the think time alone (${sec1(it.think.worst)}) is longer than the ${kind === "random" ? "shortest " : ""}pacing (${sec1(pMin)}). Shorten the think time or lengthen the pacing.` });
+      if (out.rtBudget <= 0) out.checks.push({ level: "bad", code: "think-exceeds-pacing", text: `${out.name}: the ${it.think.wait ? "think time and fixed waits" : "think time"} alone (${sec1(it.think.worst)}) ${it.think.wait ? "are" : "is"} longer than the ${kind === "random" ? "shortest " : ""}pacing (${sec1(pMin)}). Shorten ${it.think.wait ? "them" : "the think time"} or lengthen the pacing.` });
     }
 
     // feasibility against the iteration time
@@ -824,9 +863,10 @@
   function thinkText(g, src) {
     const m = src.thinkMode || "recorded";
     if (m === "ignore") return "Ignore think time";
-    if (m === "multiply") return `Multiply recorded think time by ${src.thinkFactor || 1}`;
-    if (m === "random") return `Use random percentage of recorded think time: min ${src.thinkMinPct ?? 50}%, max ${src.thinkMaxPct ?? 150}%`;
-    return "Replay think time as recorded";
+    const lim = pos(src.thinkLimit) ? `; Limit think time to ${round(src.thinkLimit, 1)} seconds` : "";
+    if (m === "multiply") return `Multiply recorded think time by ${src.thinkFactor || 1}${lim}`;
+    if (m === "random") return `Use random percentage of recorded think time: min ${src.thinkMinPct ?? 50}%, max ${src.thinkMaxPct ?? 150}%${lim}`;
+    return "Replay think time as recorded" + lim;
   }
   // "LG1, LG2 (100 Vusers each)" or "LG3 (67), LG4 (66)" — at the peak (the highest step of a stepped test)
   function lgText(lgs) {

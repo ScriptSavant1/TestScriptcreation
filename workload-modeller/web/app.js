@@ -138,7 +138,9 @@ function scriptCard(g) {
       </div></div>
       <div><p class="wm-sub">One iteration <span class="wm-subh">— one run through the script</span></p><div class="wm-grid">
         ${num("Transactions", "txPerIter", g.txPerIter, "", g.txNames && g.txNames.length ? "in the script: " + esc(g.txNames.length > 4 ? g.txNames.slice(0, 3).join(", ") + " and " + (g.txNames.length - 3) + " more" : g.txNames.join(", ")) : "that count for the TPS")}
-        ${num("Think time", "thinkPerIter", g.thinkPerIter, "s", "total per iteration, as recorded")}
+        ${num("Think time", "thinkPerIter", g.thinkPerIter, "s", "total per iteration, as recorded (lr_think_time, load.thinkTime)")}
+        ${num("Fixed waits", "waitPerIter", g.waitPerIter, "s", "sleep, load.sleep — always waited in full")}
+        ${num("Think times", "thinkPauses", g.thinkPauses, "", "how many per iteration — for the limit")}
         ${num("Response time", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}
         <label class="wm-f adv">Response time from<select class="ds-field" data-k="rtSource">${opt(RTSRC, g.rtSource)}</select></label>
         ${num("90th percentile", "rt90", g.rt90, "s", "optional — for the worst case", "adv")}
@@ -149,6 +151,7 @@ function scriptCard(g) {
         <label class="wm-f">Think time<select class="ds-field" data-k="thinkMode">${opt(THINK, g.thinkMode)}</select></label>
         ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×") : ""}
         ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%") : ""}
+        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "empty: no limit")}
       </div></div>
     </div></div>`;
 }
@@ -532,7 +535,8 @@ function perScript(r) {
 const paceShort = (p) => p.kind === "random" ? `random ${fmtS(p.min)} – ${fmtS(p.max)}` : p.kind === "asap" ? "as soon as possible" : p.kind === "after" ? `after the previous + ${fmtS(p.delay)}` : `every ${fmtS(p.mean)}`;
 function thinkShort(i) {
   const s = (lastResolved || state.groups)[i] || {}, m = s.thinkMode || "recorded";
-  return m === "multiply" ? `recorded × ${fmt(s.thinkFactor || 1, 2)}` : m === "random" ? `random ${s.thinkMinPct ?? 50}–${s.thinkMaxPct ?? 150}% of recorded` : m === "ignore" ? "ignored" : "as recorded";
+  const lim = m !== "ignore" && s.thinkLimit > 0 ? `, at most ${fmt(s.thinkLimit, 1)} s each` : "";
+  return (m === "multiply" ? `recorded × ${fmt(s.thinkFactor || 1, 2)}` : m === "random" ? `random ${s.thinkMinPct ?? 50}–${s.thinkMaxPct ?? 150}% of recorded` : m === "ignore" ? "ignored" : "as recorded") + lim;
 }
 // the load generators of an LRE group, by name only: the Vusers column says how many (LRE splits them evenly)
 const lgNames = (lgs) => lgs.map((x) => x.name).join(", ");
@@ -624,9 +628,11 @@ function formulas(sc) {
       "Defaults for every script — “Each script”: the default TPS; “In total”: (total − the TPS of the scripts with their own target) ÷ the scripts without one",
     ])}
     ${sec("2. One iteration", [
-      "Think time — as recorded: t · ignore: 0 · multiply: t × factor · random %: on average t × (lowest % + highest %) ÷ 200, at most t × highest % ÷ 100",
-      "Iteration = response time × T + think time (average)",
-      "Slow iteration = the 90th percentile (or the average, whichever is larger) × T + the longest think time",
+      "Think time (lr_think_time, load.thinkTime) — as recorded: t · ignore: 0 · multiply: t × factor · random %: on average t × (lowest % + highest %) ÷ 200, at most t × highest % ÷ 100",
+      "Limit each think time to L s: every think time is cut to L after the setting above (random %: the average of the cut values); the think times as the script has them, else t in equal parts — over the number of think times, or one per transaction",
+      "Fixed waits w (sleep, load.sleep): not think time — always waited in full, whatever the think-time setting",
+      "Iteration = response time × T + think time (average) + w",
+      "Slow iteration = the 90th percentile (or the average, whichever is larger) × T + the longest think time + w",
     ])}
     ${sec("3. Pacing and Vusers", [
       `Chosen by the tool: shortest pacing = ⌈iteration × ${fmt(1 + h / 100, 2)}⌉ s (random style: also at least slow iteration ÷ ${fmt(1 - rnd / 100, 2)}); Vusers = ⌈λ × shortest pacing⌉; then the pacing in whole seconds: exact if a few more Vusers (up to 10%, at least 2) give a whole number of seconds; otherwise the fewest Vusers whose whole-second pacing keeps the TPS at most 1% above the target; when even that is not possible (a short pacing, where one second is a big step) the pacing is kept to 0.1 s. The TPS never falls below the target. Random style: whole-second bounds around the same average`,
@@ -638,7 +644,7 @@ function formulas(sc) {
       "Planned TPS = Vusers × T ÷ pacing · iterations per second = Vusers ÷ pacing · hits per second = requests per iteration × iterations per second",
     ])}
     ${sec("4. Checks", [
-      "Response-time limit = (shortest pacing − longest think time) ÷ T — the slowest average per transaction that keeps the TPS",
+      "Response-time limit = (shortest pacing − longest think time − w) ÷ T — the slowest average per transaction that keeps the TPS",
       `Not possible: shortest pacing < iteration; the TPS then drops to about Vusers × T ÷ iteration; enough Vusers = ⌈λ × iteration × ${fmt(1 + h / 100, 2)}⌉`,
       "Some iterations overrun: shortest pacing < slow iteration · Little headroom: shortest pacing < iteration × (1 + headroom)",
       "Think time longer than the pacing · rounding moved the TPS by more than 1% · more iterations than data rows · more Vusers than the licence",
