@@ -271,7 +271,17 @@
         // what LRE will really reach: each Vuser starts its next iteration only when the last one ends
         out.reachTps = reach; out.reachIps = V / Math.max(it.mean, P);
         const fix = sizedByTps ? ` Use at least ${Math.max(1, ceilE(lam * it.mean * (1 + h)))} Vusers` : ` Lengthen the pacing to at least ${Math.ceil(it.mean * (1 + h))} s`;
-        out.checks.push({ level: "bad", code: "pacing-too-short", text: `${out.name}: one iteration takes about ${sec1(it.mean)} but the ${kind === "random" ? "shortest " : ""}pacing is ${sec1(pMin)} — iterations overrun and the TPS drops to about ${round(reach, 2)}.${fix}.` });
+        // the ways out, worked out for the card: a pacing that fits (with the headroom), the Vusers that keep the TPS, the response time that fits
+        const safe = Math.ceil(it.mean * (1 + h) - EPS);
+        out.overrun = {
+          iter: it.mean, tx: T, rt: it.rtMean, think: it.think.think, wait: it.think.wait || 0, pacing: pMin, kind, headroomPct: Math.round(h * 100),
+          askTps: out.tps, reachTps: reach, sizedByTps,
+          pacingFit: Math.ceil(it.mean - EPS), pacingSafe: safe,
+          tpsAtSafe: sizedByTps ? out.tps : V * T / safe,
+          vusersAtSafe: Math.max(1, ceilE(out.tps * safe / T)),
+          rtFit: (pMin - it.think.mean) / T > 0 ? (pMin - it.think.mean) / T : null,
+        };
+        out.checks.push({ level: "bad", code: "pacing-too-short", gid: g.id, field: "pacing.fixed", text: `${out.name}: one iteration takes about ${sec1(it.mean)} but the ${kind === "random" ? "shortest " : ""}pacing is ${sec1(pMin)} — iterations overrun and the TPS drops to about ${round(reach, 2)}.${fix}.` });
       } else if (pMin < it.worst - EPS) {
         out.checks.push({ level: "warn", code: "pacing-tight", text: `${out.name}: slow iterations (${sec1(it.worst)} at the 90th percentile${it.think.worst > it.think.mean ? " and the longest think time" : ""}) are longer than the ${kind === "random" ? "shortest " : ""}pacing of ${sec1(pMin)}; some iterations will overrun.` });
       } else if (pMin < it.mean * (1 + h) - EPS) {

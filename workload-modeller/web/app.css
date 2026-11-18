@@ -177,6 +177,12 @@ details.wm-more[open] > summary { margin-bottom: 12px; }
 .wm-script-head .ds-field { flex: 1 1 140px; max-width: 280px; }
 .wm-script-head .wm-gres { margin-left: auto; }
 .wm-plan { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--ds-surface); border: 1px solid var(--ds-border); font-size: var(--ds-fs-sm); }
+.wm-plan.wm-plan-bad { background: var(--ds-bad-soft); border-color: var(--ds-bad); line-height: 1.5; }
+.wm-plan-fix { display: block; margin-top: 6px; font-weight: 600; }
+.wm-plan-ways { margin: 4px 0 0; padding-left: 20px; }
+.wm-plan-ways li { margin: 4px 0; }
+.wm-plan-ways .ds-btn { margin-left: 6px; vertical-align: middle; }
+.wm-f select:disabled, .wm-f input:disabled { opacity: .55; cursor: not-allowed; }
 .wm-empty-res { color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
 .wm-empty-res ol { margin: 8px 0 0; padding-left: 20px; }
 .wm-empty-res li { margin: 3px 0; }

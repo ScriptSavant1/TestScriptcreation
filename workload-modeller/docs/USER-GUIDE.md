@@ -71,8 +71,14 @@ The page works out the plan as you type. A section you have not touched keeps se
 - **How many think times** (in Replay in LRE): shown only when a think-time limit is set — the limit cuts each think
   time, so the tool needs to know how many there are; filled from the script.
 - **Replay in LRE**: pacing (let the tool choose — recommended —, fixed, random, as soon as possible, after the
-  previous iteration + a delay), think time (as recorded, ignore, multiply, random %) and **Limit each think time to**
-  (LRE's "Limit think time to N seconds"; read from rts.yml or default.cfg, empty = no limit).
+  previous iteration + a delay), **Think time in LRE** (LRE's Think Time setting — what LRE does with the think time
+  total: as recorded, ignore, multiply, random %; greyed out when the think time is 0) and **Limit each think time to**
+  (LRE's "Limit think time to N seconds"; read from rts.yml or default.cfg, empty = no limit; shown in the Detailed
+  view, or when a script sets a limit — leave it empty unless that box is ticked in LRE).
+- **Not possible**: when one iteration takes longer than the pacing, the card says so in figures (iteration time,
+  pacing, the TPS LRE will really reach) and lists what to change: a pacing that fits with the headroom, the Vusers
+  that keep the TPS at that pacing, or the response time per transaction that would fit. With a fixed pacing the first
+  two have a button; Undo in the message takes it back.
 
 Many scripts:
 - **Cards / Table**: the table shows one line per script and is edited like a spreadsheet (arrow keys, Enter, paste a

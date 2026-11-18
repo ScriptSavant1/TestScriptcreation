@@ -118,6 +118,9 @@ const opt = (list, v) => list.map(([k, l]) => `<option value="${k}"${k === v ? "
 function num(label, key, val, unit, help, cls, extra) {
   return `<label class="wm-f ${cls || ""}">${label}<div class="${unit ? "wm-unit" : ""}"><input class="ds-field" type="number" data-k="${key}" value="${val ?? ""}" min="0" step="any" ${extra || ""}>${unit ? `<span>${unit}</span>` : ""}</div>${help ? `<small>${help}</small>` : ""}</label>`;
 }
+// the replay settings act on the think time above: greyed out while there is none
+const noThink = (g) => !(g.thinkPerIter > 0);
+const thinkHelp = (g) => (noThink(g) ? "no think time above — nothing to replay" : "LRE's Think Time setting — what LRE does with the think time above; “As recorded” waits it in full");
 function scriptCard(g) {
   const m = g.method, p = g.pacing || {};
   const target = {
@@ -146,7 +149,7 @@ function scriptCard(g) {
       ${`<button class="wm-x" data-del aria-label="Remove ${esc(g.name)}" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`}
     </div>
     <div class="wm-script-body" id="body-${g.id}">
-      <p class="wm-plan" id="plan-${g.id}"></p>
+      <div class="wm-plan" id="plan-${g.id}"></div>
       <div><p class="wm-sub">Target</p><div class="wm-grid">
         <label class="wm-f">Target type<select class="ds-field" data-k="method">${opt(METHODS, m)}</select></label>${target}
         <label class="wm-f">Protocol<select class="ds-field" data-k="protocol">${opt(Object.entries(PROTOS).map(([k, v]) => [k, v.label]), g.protocol)}</select></label>
@@ -165,10 +168,10 @@ function scriptCard(g) {
         ${num("Data rows available", "dataRows", g.dataRows, "", "warns when the test needs more", "adv")}
       </div></div>
       <div><p class="wm-sub">Replay in LRE <span class="wm-subh">— runtime settings</span></p><div class="wm-grid">${pacing}
-        <label class="wm-f">Think time<select class="ds-field" data-k="thinkMode">${opt(THINK, g.thinkMode)}</select></label>
+        <label class="wm-f">Think time in LRE<select class="ds-field" data-k="thinkMode" data-thinkdep${noThink(g) ? " disabled" : ""}>${opt(THINK, g.thinkMode)}</select><small data-thinkhelp>${thinkHelp(g)}</small></label>
         ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×") : ""}
         ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%") : ""}
-        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "LRE's “Limit think time to” — empty: no limit")}
+        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "only if you tick LRE's “Limit think time to” — else leave empty", g.thinkLimit > 0 ? "" : "adv", `data-thinkdep${noThink(g) ? " disabled" : ""}`)}
         ${g.thinkMode === "ignore" ? "" : num("How many think times", "thinkPauses", g.thinkPauses, "", "in one iteration, so the limit can cut each one — read from the script").replace('<label class="wm-f ', `<label data-pauses${g.thinkLimit > 0 ? "" : " hidden"} class="wm-f `)}
       </div></div>
     </div></div>`;
@@ -194,6 +197,7 @@ $("#scripts-list").addEventListener("input", (e) => {
   setKey(g, k, v); g.sample = false;
   if (k === "name") { const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }
   // the number of think times matters only with a limit: shown while one is set (no redraw, the focus stays)
+  if (k === "thinkPerIter") { const c = el.closest("[data-id]"); c.querySelectorAll("[data-thinkdep]").forEach((x) => { x.disabled = noThink(g); }); const h = c.querySelector("[data-thinkhelp]"); if (h) h.textContent = thinkHelp(g); }
   if (k === "thinkLimit") { const f = el.closest("[data-id]").querySelector("[data-pauses]"); if (f) f.hidden = !(v > 0); }
   if (STRUCT.has(k)) { if (tableView()) tvRedraw(g, k); else renderScripts(); renderTest(); renderPools(); calc(); } else calcSoon();
 });
@@ -202,6 +206,12 @@ $("#scripts").addEventListener("click", (e) => {
   if (head && !e.target.closest("[data-del], input, select, textarea, a") && (e.target.closest("[data-fold-card]") || !e.target.closest("button"))) {
     const g = state.groups.find((x) => x.id === head.closest("[data-id]").dataset.id);
     foldCard(g, !g.folded, { only: true });
+    return;
+  }
+  const fx = e.target.closest("[data-fix]");
+  if (fx) {
+    const g = state.groups.find((x) => x.id === fx.closest("[data-id]").dataset.id), sets = JSON.parse(fx.dataset.fix);
+    clearWith(`${g.name}: ${Object.entries(sets).map(([k, v]) => (k === "vusers" ? `${v} Vusers` : `pacing ${v} s`)).join(", ")}.`, () => { Object.entries(sets).forEach(([k, v]) => setKey(g, k, v)); g.sample = false; });
     return;
   }
   if (!e.target.closest("[data-del]")) return;
@@ -433,6 +443,21 @@ function cal() {
 ["#cal-v", "#cal-cpu", "#cal-mem"].forEach((s) => $(s).addEventListener("input", cal));
 
 /* ---------- results ---------- */
+// "Not possible": why, in plain words, and the ways out — with a button where one box changes it (Undo in the toast)
+function overrunHtml(r, g) {
+  const o = r.overrun, fixed = g && (g.pacing || {}).mode === "fixed", byV = g && g.method === "vusers";
+  const parts = [`${o.tx} × ${fmtS(o.rt / o.tx)} response`];
+  if (o.think > 0) parts.push(`${fmtS(o.think)} think`);
+  if (o.wait > 0) parts.push(`${fmtS(o.wait)} fixed waits`);
+  const btn = (label, sets) => `<button type="button" class="ds-btn ds-btn-sm" data-fix='${esc(JSON.stringify(sets))}'>${esc(label)}</button>`;
+  const pace = o.kind === "random" ? "shortest pacing" : "pacing";
+  const ways = [];
+  ways.push(`<li><b>Lengthen the ${pace}</b> to ${fmtS(o.pacingSafe)} — the iteration (${fmtS(o.iter)}) plus ${o.headroomPct}% room for slower responses${o.pacingSafe > o.pacingFit ? `; ${fmtS(o.pacingFit)} is the bare minimum` : ""}. ${o.sizedByTps ? `The tool then uses ${fmt(o.vusersAtSafe)} Vusers for the same ${fmt(o.askTps, 2)} TPS.` : `With ${fmt(r.vusers)} Vusers that gives <b>${fmt(o.tpsAtSafe, 2)} TPS</b>.`}${fixed ? " " + btn(`Use ${o.pacingSafe} s`, { "pacing.fixed": o.pacingSafe }) : ""}</li>`);
+  if (byV) ways.push(`<li><b>Keep ${fmt(o.askTps, 2)} TPS:</b> ${fmt(o.vusersAtSafe)} Vusers with a ${fmtS(o.pacingSafe)} ${pace}.${fixed ? " " + btn(`Use ${o.vusersAtSafe} Vusers, ${o.pacingSafe} s`, { vusers: o.vusersAtSafe, "pacing.fixed": o.pacingSafe }) : ""}</li>`);
+  ways.push(`<li><b>Or make one iteration shorter:</b> ${o.rtFit != null ? `the response time must stay under ${fmtS(o.rtFit)} per transaction, or ` : ""}${o.wait > 0 ? "less think time or fixed waits — " : o.think > 0 ? "less think time — " : ""}check the figures are per iteration (think time is the total, not per transaction).</li>`);
+  return `<b>Not possible as it stands.</b> One iteration takes <b>${fmtS(o.iter)}</b> (${parts.join(" + ")}), but the ${pace} starts a new one every <b>${fmtS(o.pacing)}</b>. LRE starts each iteration late, so you would get about <b>${fmt(o.reachTps, 2)} TPS</b>, not the ${fmt(o.askTps, 2)} planned.
+    <span class="wm-plan-fix">Change one of these:</span><ul class="wm-plan-ways">${ways.join("")}</ul>`;
+}
 let last = null;
 function calc() {
   const res = resolved();
@@ -450,7 +475,9 @@ function calc() {
     const pl = $("#plan-" + g.id);
     if (pl) pl.innerHTML = g.status === "needs-input" ? `<b>Needs:</b> ${esc(((g.checks.find((c) => c.code.startsWith("needs-")) || {}).text || "more input").replace(g.name + ": ", ""))}`
       : g.status === "estimate" ? `<b>Plan:</b> ${fmt(g.vusers)} Vusers — the TPS depends on the response time (see “How it is worked out”).`
+      : g.status === "infeasible" && g.overrun ? overrunHtml(g, state.groups.find((x) => x.id === g.id))
       : `<b>Plan:</b> ${fmt(g.vusers)} Vusers, a new iteration every ${g.pacing.kind === "random" ? fmtS(g.pacing.min) + " – " + fmtS(g.pacing.max) : fmtS(g.pacing.mean)}, ${fmt(g.tps, 2)} TPS${g.status === "infeasible" ? " — not possible as it stands (see Checks)" : ""}.`;
+    if (pl) pl.classList.toggle("wm-plan-bad", g.status === "infeasible");
   });
   r.groups.forEach((g, i) => { const el = $("#facts-" + g.id); if (el) el.innerHTML = facts(res.groups[i], g); });
   r.groups.forEach((g) => {   // the table: status, worked-out Vusers and TPS, the box still needed in amber
@@ -459,7 +486,7 @@ function calc() {
     const st = ({ "needs-input": "Needs input", estimate: "Estimate", infeasible: "Not possible" })[g.status] || "Ready";
     s.className = "wm-dot " + (g.status === "ok" ? "ok" : g.status === "infeasible" ? "bad" : "warn");
     s.setAttribute("aria-label", st);
-    s.title = st + (need ? " — " + need.text : g.status === "infeasible" ? " — see Checks" : "");
+    s.title = st + (need ? " — " + need.text : g.status === "infeasible" ? (g.overrun ? ` — one iteration takes ${fmtS(g.overrun.iter)} but the pacing is ${fmtS(g.overrun.pacing)}: open the card for the fixes` : " — see Checks") : "");
     $("#tv-v-" + g.id).textContent = need ? "—" : fmt(g.vusers);
     $("#tv-t-" + g.id).textContent = need ? "—" : g.status === "estimate" ? "varies" : fmt(g.tps, g.tps < 10 ? 2 : 1);
     const tr = s.closest("tr");
@@ -518,7 +545,10 @@ function calc() {
   }
   $("#chart").style.display = ""; $(".wm-legend").style.display = "";
   $("#summary").className = "ds-note " + (bad ? "bad" : "ok") + " wm-summary";
-  $("#summary").textContent = (bad ? "The plan has problems to fix (see Checks). As it stands: " : "") + r.summary;
+  // lead with the problem in one line: what is wrong and where the fixes are
+  const overGs = r.groups.filter((g) => g.overrun);
+  const lead = overGs.length ? overGs.map((g) => `${g.name}: one iteration takes ${fmtS(g.overrun.iter)} but the pacing starts one every ${fmtS(g.overrun.pacing)}, so it reaches ${fmt(g.overrun.reachTps, 2)} TPS, not ${fmt(g.overrun.askTps, 2)}.`).join(" ") + " Its script card shows what to change. " : "The plan has problems to fix (see Checks). ";
+  $("#summary").textContent = (bad ? lead + "As it stands: " : "") + r.summary;
   const t = r.totals, range = Math.abs(t.tpsMax - t.tpsMin) > 1e-6;
   const ph = phases(r);
   // Names both a tester and a manager read: "Transactions per second (TPS)". The load at full load first, then one

@@ -543,7 +543,7 @@
         <h3 class="help-h3">Good to know</h3>
         <ul class="help-list">
           <li><strong>Defaults for every script</strong> stay in force: they fill only empty fields, also in scripts added later. <strong>Overwrite all scripts</strong> replaces each script's own value once (you can undo it).</li>
-          <li>The rule behind every number: TPS = Vusers × transactions per iteration ÷ pacing, and the pacing must be at least one iteration (response times + think time). <strong>How it is worked out</strong> shows each step for each script, and <strong>All the formulas</strong> lists every rule the tool uses.</li>
+          <li>The rule behind every number: TPS = Vusers × transactions per iteration ÷ pacing, and the pacing must be at least one iteration (response times + think time). When it is not, the script card says <strong>Not possible</strong> with the reason in figures and what to change (a longer pacing, more Vusers to keep the TPS, or a shorter iteration) — the first two with a button, which Undo takes back. <strong>How it is worked out</strong> shows each step for each script, and <strong>All the formulas</strong> lists every rule the tool uses.</li>
           <li>The growth factor raises TPS targets; scripts sized by Vusers or iterations keep their numbers.</li>
           <li>Machine figures from CPU and memory are starting assumptions — check the load generators' CPU and memory in the first run and correct the figure.</li>
         </ul>

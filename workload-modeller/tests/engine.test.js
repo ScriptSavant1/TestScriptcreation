@@ -334,3 +334,39 @@ describe('Workload engine — the figures on the result tiles', () => {
     expect(r.summary).toMatch(/1\.43 transactions per second \(TPS\).*not the 2 TPS the pacing asks for/);
   });
 });
+
+describe('Workload engine — "not possible": the reason and the ways out', () => {
+  // the owner's plan: 40 Vusers, 10 transactions of 5 s, 27 s think, fixed pacing 50 s → a 77 s iteration
+  const g = (o) => [Object.assign({ name: 'Payments', method: 'vusers', vusers: 40, txPerIter: 10, rtAvg: 5, thinkPerIter: 27, pacing: { mode: 'fixed', fixed: 50 } }, o)];
+
+  test('the figures for the card: iteration, reach, a pacing that fits, the Vusers that keep the TPS', () => {
+    const x = run(g()).groups[0];
+    expect(x.status).toBe('infeasible');
+    const o = x.overrun;
+    expect([o.iter, o.tx, o.rt, o.think, o.wait, o.pacing]).toEqual([77, 10, 50, 27, 0, 50]);
+    expect(near(o.reachTps, 400 / 77, 1e-9)).toBe(true);
+    expect(o.askTps).toBe(8);
+    expect([o.pacingFit, o.pacingSafe, o.headroomPct]).toEqual([77, 97, 25]);   // 77 × 1.25 = 96.25 → 97
+    expect(near(o.tpsAtSafe, 400 / 97, 1e-9)).toBe(true);
+    expect(o.vusersAtSafe).toBe(78);                                            // 8 × 97 ÷ 10 = 77.6 → 78
+    expect(near(o.rtFit, 2.3, 1e-9)).toBe(true);                                // (50 − 27) ÷ 10
+  });
+
+  test('the fixes work: the safe pacing, or the Vusers with it, make the plan possible', () => {
+    expect(run(g({ pacing: { mode: 'fixed', fixed: 97 } })).groups[0].status).not.toBe('infeasible');
+    const k = run(g({ vusers: 78, pacing: { mode: 'fixed', fixed: 97 } })).groups[0];
+    expect(k.status).not.toBe('infeasible');
+    expect(k.tps).toBeGreaterThanOrEqual(8);
+    expect(run(g({ rtAvg: 2.3 })).groups[0].status).not.toBe('infeasible');
+  });
+
+  test('think time alone longer than the pacing: no response time fits; fixed waits are told apart', () => {
+    const o = run(g({ thinkPerIter: 40, waitPerIter: 15 })).groups[0].overrun;
+    expect(o.rtFit).toBeNull();
+    expect([o.think, o.wait]).toEqual([40, 15]);
+  });
+
+  test('a plan that fits has no overrun figures', () => {
+    expect(run(g({ pacing: { mode: 'fixed', fixed: 100 } })).groups[0].overrun).toBeUndefined();
+  });
+});
