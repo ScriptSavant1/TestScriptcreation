@@ -313,6 +313,8 @@ export function startServer(
           // the toolbar polls without an Origin header (a same-origin GET) — "local"; portal pages never see it
           askingPortal: access === "self" || access === "local" ? asks.pending() : null,
           closingIn: options.windows ? options.windows.closingIn() : null,
+          // the toolbar window answered in the last few seconds (none with the floating bar, 0.3.0)
+          toolbarOpen: Date.now() - toolbarSeen < 3000,
           lastHarPath: state.lastHarPath,
           lastHarEntryCount: state.lastHarEntryCount,
           error: state.error,

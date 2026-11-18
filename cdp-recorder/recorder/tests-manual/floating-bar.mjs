@@ -85,6 +85,8 @@ try {
   const bar = (q) => p.locator(`${BAR} ${q}`);
   await bar(".pill").waitFor({ timeout: 15000 }).catch(() => {});
   check(await bar(".pill").isVisible(), "the floating bar is in the first page");
+  await wait(3500);
+  check((await status()).toolbarOpen === false, "no separate toolbar window — the bar holds what it held");
   if (!(await bar(".pill").isVisible())) { console.log("DEBUG url", p.url(), "pages", ctx.pages().map((x) => x.url()).join(" | "), "contexts", pw.contexts().length, "hosts", await p.evaluate(() => document.querySelectorAll("perfx-recorder-bar").length), "shadow", await p.evaluate(() => { const h = document.querySelector("perfx-recorder-bar"); return h ? String(!!h.shadowRoot) + " " + (h.shadowRoot ? h.shadowRoot.innerHTML.slice(0, 200) : "") : "-"; })); if (SHOTS) await p.screenshot({ path: join(SHOTS, "00-debug.png") }); }
   check(/T01_Launch/.test(await bar(".txn b").textContent()), "it shows the running transaction T01_Launch");
   check(await bar('button:has-text("End")').count() === 0, "no End button");
@@ -177,6 +179,9 @@ try {
   for (let i = 0; i < 40 && !p2; i++) { p2 = pw.contexts()[0].pages().find((x) => x.url().includes("/select")); if (!p2) await wait(250); }
   await wait(1500);
   check(!!p2 && (await p2.locator(BAR).count()) === 0, "bar: false — no bar in the page");
+  let tbOpen = false;
+  for (let i = 0; i < 40 && !tbOpen; i++) { await wait(250); tbOpen = (await status()).toolbarOpen === true; }
+  check(tbOpen, "bar: false — the toolbar window opens, as before");
   await call("POST", "/api/stop", {});
 } catch (err) {
   check(false, "test error: " + err.message);

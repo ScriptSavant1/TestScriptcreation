@@ -46,7 +46,8 @@ RECORD FROM PERFX STUDIO (recommended)
    one starts. The number is added for you (T02_Login); type your own,
    for example T07_Pay, to use another number. With planned steps (More
    options on the page), press Enter on an empty box to start the next
-   one. End Transaction ends the running one without starting another.
+   one. There is no End: the next name ends the running transaction, and
+   Stop ends the last one.
    On the page: Tab takes the page title as the name; the pencil in the
    list renames a transaction; Undo last mark takes back the last Start or
    End. An optional script ID (More options, e.g. SC01) starts the file
@@ -93,7 +94,7 @@ only in the recording window - your normal browser is not recorded.
 On the toolbar click Start Recording, type a transaction name (for example
 Login) and press Enter: it is numbered for you (T01_Login). Do the steps,
 then type the next name and press Enter - the running transaction ends and
-the next one starts. End Transaction ends the last one.
+the next one starts. Stop Recording ends the last one.
 
 Click Stop Recording. The recording (.har file) is saved in the same folder
 as cdp-recorder.exe. Open it in PerfX Studio's Script Studio.

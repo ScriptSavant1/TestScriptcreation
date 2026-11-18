@@ -189,3 +189,6 @@
 .rl-txlist .rl-ren svg { width: 14px; height: 14px; }
 .rl-txlist .rl-rename { height: 28px; padding: 0 8px; font-family: var(--ds-mono); font-size: var(--ds-fs-xs); min-width: 0; flex: 1; }
 #lv-tx-undo[hidden] { display: none; }
+
+/* after saving with the floating bar: the recording windows' countdown, Keep open / Close now (the toolbar's, 0.3.0) */
+.rl-winnote { position: fixed; right: 20px; bottom: 20px; z-index: 9000; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: 12px; background: var(--ds-surface); color: var(--ds-text); border: 1px solid var(--ds-border-2); box-shadow: 0 12px 32px rgba(20, 10, 60, .18); font-size: var(--ds-fs-sm); }

@@ -147,7 +147,7 @@
           '<label class="rl-field" for="lv-tx-name">Next transaction</label>' +
           '<div class="rl-txbox"><span class="rl-prefix" id="lv-prefix" title="Added for you — type your own (for example T07_Pay) to use another number">T01_</span><input class="ds-field" id="lv-tx-name" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. Login — press Enter" aria-describedby="lv-tx-err"></div>' +
           '<span class="rl-ferr" id="lv-tx-err" role="alert" hidden></span>' +
-          '<div class="rl-txbtns"><button class="ds-btn ds-btn-primary" type="button" id="lv-tx-start">Start</button><button class="ds-btn ds-btn-ghost" type="button" id="lv-tx-undo" disabled title="Take back the last Start or End: the transaction before runs again">Undo last mark</button><button class="ds-btn" type="button" id="lv-tx-end" disabled title="End the running transaction without starting another — for a gap you do not want measured">End</button></div>' +
+          '<div class="rl-txbtns"><button class="ds-btn ds-btn-primary" type="button" id="lv-tx-start">Start</button><button class="ds-btn ds-btn-ghost" type="button" id="lv-tx-undo" disabled title="Take back the last mark: the transaction it started goes, the one before runs again">Undo last mark</button></div>' +
           '<ol class="rl-plan" id="lv-planlist" hidden aria-label="Planned steps"></ol>' +
           '<ol class="rl-txlist" id="lv-txlist"></ol>' +
           '<div class="rl-call ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>The same buttons are on the small toolbar next to the recording window — use whichever is closer.</span></div>' +
@@ -275,6 +275,7 @@
     req.plan = prefs.plan;   // the CDP Recorder 0.2.2 and newer: an empty name on its toolbar starts the next planned step
     req.scriptId = prefs.sid;   // 0.2.3 and newer: the file and the HAR carry it (older ones ignore it)
     prefs.bar = $('lv-bar').checked;
+    savedWithBar = prefs.bar;
     req.bar = prefs.bar;        // 0.3.0 and newer: the floating bar inside the recorded pages (older ones ignore it)
     prefs.urls = [url].concat((prefs.urls || []).filter(function (u) { return u !== url; })).slice(0, 6);
     prefs.browser = req.browser; prefs.private = req.private; prefs.name = req.name;
@@ -491,7 +492,6 @@
           : '<b>' + esc(t.name) + '</b>' + (canEdit ? '<button type="button" class="rl-ren" data-ren="' + esc(t.name) + '" title="Rename ' + esc(t.name) + '" aria-label="Rename ' + esc(t.name) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>' : '')) +
         '<span class="c">' + (t.live ? 'recording… ' : '') + plural(counts[t.name] || 0, 'request') + '</span></li>';
     }).join('') : '<li class="none">No transactions yet — requests are recorded anyway; you can group them later in the Recorder.</li>';
-    $('lv-tx-end').disabled = !L.txActive;
     $('lv-tx-undo').hidden = !canEdit; $('lv-tx-undo').disabled = !items.length;
     // the number before the box, and the hint: the next planned step (Enter on an empty box starts it), else a name
     // from the page title (Tab takes it — never filled in by itself)
@@ -603,11 +603,6 @@
       render();
     }, function (e) { toast('Could not start the transaction: ' + e.message, 'error'); });
   }
-  function txEnd() {
-    var me = L;
-    api('POST', '/api/tx/end').then(function () { if (L === me) { me.txActive = null; render(); } },
-      function (e) { toast('Could not end the transaction: ' + e.message, 'error'); });
-  }
   function stop() {
     if (!L || L.stopping) return;
     var me = L;
@@ -619,6 +614,25 @@
       warn('Could not stop the recording: ' + e.message);
     });
   }
+  // With the floating bar (0.3.0) no toolbar window opens, so its "the windows close in 10 s · Keep open · Close now"
+  // after saving is here, on the page (the recorder's /api/windows, as the toolbar used it).
+  var savedWithBar = false;
+  function windowsNote() {
+    var old = document.getElementById('rl-winnote'); if (old) old.remove();
+    var el = document.createElement('div');
+    el.id = 'rl-winnote'; el.className = 'rl-winnote'; el.setAttribute('role', 'status');
+    var txt = document.createElement('span'), keep = document.createElement('button'), close = document.createElement('button');
+    keep.type = close.type = 'button'; keep.className = 'ds-btn ds-btn-sm'; close.className = 'ds-btn ds-btn-sm ds-btn-ghost';
+    keep.textContent = 'Keep open'; close.textContent = 'Close now';
+    el.append(txt, keep, close); document.body.appendChild(el);
+    var left = 10, t = 0;
+    function done() { clearInterval(t); el.remove(); }
+    function tick() { txt.textContent = 'The recording windows close in ' + left + ' s'; if (left-- <= 0) done(); }
+    tick(); t = setInterval(tick, 1000);
+    keep.addEventListener('click', function () { api('POST', '/api/windows', { action: 'keep' }).then(function () { done(); toast('The recording windows stay open — close them yourself when you are done.', 'info', 5000); }, done); });
+    close.addEventListener('click', function () { api('POST', '/api/windows', { action: 'close' }).then(done, done); });
+  }
+
   // the recorder has saved the .har to Downloads: fetch it and hand it to the page like a dropped file
   function openSaved(path) {
     var name = String(path || 'recording.har').split(/[\\/]/).pop();
@@ -627,6 +641,7 @@
       endLive();
       P.onSaved(new File([JSON.stringify(har)], name, { type: 'application/json' }), path);
       toast('Saved to your Downloads folder: ' + name, 'success', 6000);
+      if (savedWithBar) windowsNote();
     }, function () {
       endLive();
       toast('The recording was saved as ' + path + ' but could not be opened here — load it from your Downloads folder.', 'error', 9000);
@@ -677,7 +692,6 @@
 
     $('lv-stop').addEventListener('click', stop);
     $('lv-tx-start').addEventListener('click', txStart);
-    $('lv-tx-end').addEventListener('click', txEnd);
     $('lv-tx-undo').addEventListener('click', undoMark);
     $('lv-tx-name').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); txStart(); }

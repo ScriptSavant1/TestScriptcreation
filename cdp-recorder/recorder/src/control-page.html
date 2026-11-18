@@ -98,7 +98,6 @@ body.asking > :not(#askCard):not(.header) { opacity: .35; pointer-events: none; 
 .btn-danger { background: var(--danger); color: white; }
 .btn-tx { background: var(--tx-color); color: white; }
 .btn-tx:hover:not(:disabled) { background: var(--tx-hover); }
-.btn-tx-end { background: var(--bg-subtle); color: var(--tx-color); border: 1px solid var(--tx-color); }
 .btn-secondary { background: var(--bg-subtle); color: var(--text); border: 1px solid var(--border); }
 
 .har-ready-title { font-weight: 600; margin-bottom: 4px; font-size: 12.5px; }
@@ -186,7 +185,6 @@ body.asking > :not(#askCard):not(.header) { opacity: .35; pointer-events: none; 
     <button id="btnStart" class="btn btn-primary">Start Recording</button>
     <button id="btnStop" class="btn btn-danger hidden">Stop Recording</button>
     <button id="btnStartTx" class="btn btn-tx hidden">Start Transaction</button>
-    <button id="btnEndTx" class="btn btn-tx-end hidden">End Transaction</button>
   </div>
 
   <div id="notice" class="notice">
@@ -232,7 +230,7 @@ function render(s) {
   $("countBackground").textContent = s.background;
   // Only relevant when Start Transaction is actually an option — showing
   // "safe to start a transaction" while one is already running is confusing
-  // (there's nothing to start; End Transaction is the only action available).
+  // (the next name ends it and starts the next one; Stop ends the last).
   $("settledPill").classList.toggle("hidden", !(s.recording && s.settled && !s.activeTransaction));
 
   $("trailCard").classList.toggle("hidden", s.transactions.length === 0);
@@ -249,7 +247,6 @@ function render(s) {
     $("txNameInput").placeholder = s.nextTx.planned ? `Next planned: ${s.nextTx.planned} — press Enter` : "e.g. Login — press Enter";
   }
   $("btnStartTx").disabled = !s.settled;
-  $("btnEndTx").classList.toggle("hidden", !s.activeTransaction);
 
   // started from PerfX Studio: the file is already in Downloads and open there — no Download / New Recording,
   // a countdown before the windows close instead, and the next recording is started from PerfX Studio
@@ -388,11 +385,6 @@ $("btnStartTx").addEventListener("click", async () => {
   // a message about the name stays under the box (the error banner is redrawn from the recorder each second)
   try { await api("POST", "/api/tx/start", { name, auto: true }); $("txNameInput").value = ""; $("txErr").classList.add("hidden"); await poll(); }
   catch (err) { $("txErr").textContent = err.message; $("txErr").classList.remove("hidden"); $("txNameInput").focus(); }
-});
-
-$("btnEndTx").addEventListener("click", async () => {
-  try { await api("POST", "/api/tx/end"); await poll(); }
-  catch (err) { setError(err.message); }
 });
 
 $("txNameInput").addEventListener("input", () => $("txErr").classList.add("hidden"));

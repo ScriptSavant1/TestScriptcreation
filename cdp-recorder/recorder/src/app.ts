@@ -202,7 +202,9 @@ export async function run(pageHtml: string): Promise<void> {
     if (closing || closeTimer || recorder.isConnected()) await closeWindows(); // a fresh window for the chosen browser / private mode
     console.log(`Recording ${s.url} in ${s.browser === "chrome" ? "Chrome" : "Edge"}${s.private ? " (private window)" : ""}...`);
     await recorder.connect({ kind: "temp" }, cdpPort, s.browser, { privateWindow: s.private, landingUrl: portalLandingUrl(s.url) });
-    await openToolbar();
+    // with the floating bar (0.3.0) inside the recorded pages, no separate toolbar window: the bar names transactions,
+    // undoes, stops; Keep open / Close now after saving are on the PerfX Studio page. Without the bar: the toolbar.
+    if (s.bar === false) await openToolbar();
     if (args.outGiven) return { outDir };
     const dl = await downloadsFolder();
     return { outDir: dl ?? (portalMode ? dirname(process.execPath) : outDir) };

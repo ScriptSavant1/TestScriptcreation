@@ -102,6 +102,12 @@ try {
   await page.click("#lv-stop");
   await page.waitForFunction(() => document.getElementById("rl-live").hidden, null, { timeout: 30000 });
   check(true, "Stop and save: back on the page with the recording");
+  // the floating bar is on (the default): the windows' countdown with Keep open / Close now is on the page (0.3.0)
+  const note = await page.waitForSelector("#rl-winnote", { timeout: 5000 }).then(() => true, () => false);
+  check(note && /close in \d+ s/.test(await page.textContent("#rl-winnote")), "after saving: the page offers Keep open / Close now");
+  if (note) await page.click("#rl-winnote button:has-text('Keep open')");
+  await wait(500);
+  check((await call("GET", "/api/status", origin)).json.closingIn === null, "Keep open on the page stops the countdown");
 
   // 3. another page: Don't allow → not asked again for a minute; a page cannot answer its own question
   const evil = "https://other.example.com";

@@ -143,7 +143,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 </div></div>
 <div class="step"><div class="num">4</div><div>
 <h3>Name transactions — on the toolbar or on the page</h3>
-<p>Type a name and press <b>Enter</b> (or click <b>Start Transaction</b>), do the step, then type the next name and press <b>Enter</b> — the same as in <a href="#record">section 5</a>. The number is added for you (<i>add to cart</i> becomes <code>T04_Add_to_cart</code>); type your own, for example <code>T07_Pay</code>, to use another number. The title of the page on screen is offered as grey text in the box — <b>Tab</b> takes it (never filled in by itself). A transaction's name can be changed with the pencil in the list, and <b>Undo last mark</b> takes back the last Start or End — the transaction before runs again. With planned steps (More options on the page), press <b>Enter</b> on an empty box to start the next one. <b>End Transaction</b> ends the running one; Stop ends it too.</p>
+<p>Type a name and press <b>Enter</b> (or click <b>Start Transaction</b>), do the step, then type the next name and press <b>Enter</b> — the same as in <a href="#record">section 5</a>. The number is added for you (<i>add to cart</i> becomes <code>T04_Add_to_cart</code>); type your own, for example <code>T07_Pay</code>, to use another number. The title of the page on screen is offered as grey text in the box — <b>Tab</b> takes it (never filled in by itself). A transaction's name can be changed with the pencil in the list, and <b>Undo last mark</b> takes back the last mark — the transaction before runs again. With planned steps (More options on the page), press <b>Enter</b> on an empty box to start the next one. The next name ends the running transaction; Stop ends the last one.</p>
 </div></div>
 <div class="step"><div class="num">5</div><div>
 <h3>Or name them on the floating bar, without leaving your application</h3>
@@ -159,7 +159,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 </div></div>
 <div class="step"><div class="num">6</div><div>
 <h3>Stop and save</h3>
-<p>Click <b>Stop and save</b> on the page (or <b>Stop Recording</b> on the toolbar). The HAR is saved to your <b>Downloads</b> folder as <code>&lt;name&gt;_&lt;date&gt;_&lt;time&gt;.har</code>, and Script Studio opens the file with the script ready, in the format you chose. The toolbar says the recording is saved, and the two recorder windows close after <b>10 seconds</b> — click <b>Keep open</b> to look at the recording window first, or <b>Close windows</b> to close them now.</p>
+<p>Click <b>Stop and save</b> on the page or on the floating bar (or <b>Stop Recording</b> on the toolbar when the bar is off). With the floating bar no toolbar window opens: the countdown, <b>Keep open</b> and <b>Close now</b> after saving are on the PerfX Studio page. The HAR is saved to your <b>Downloads</b> folder as <code>&lt;name&gt;_&lt;date&gt;_&lt;time&gt;.har</code>, and Script Studio opens the file with the script ready, in the format you chose. The toolbar says the recording is saved, and the two recorder windows close after <b>10 seconds</b> — click <b>Keep open</b> to look at the recording window first, or <b>Close windows</b> to close them now.</p>
 <div class="shots"><figure class="toolbar"><img src="{{img:26-toolbar-saved.png}}" alt="Toolbar: Saved to your Downloads folder, it is open in PerfX Studio now, these windows close in 9 s, Close windows and Keep open buttons"><figcaption>The toolbar after Stop and save.</figcaption></figure></div>
 <div class="shots"><figure><img src="{{img:23-saved-studio.png}}" alt="Script Studio after Stop: saved to your Downloads folder, the recording open with its requests, transactions and script"><figcaption>Saved to Downloads and opened in Script Studio.</figcaption></figure></div>
 </div></div>
@@ -197,15 +197,15 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <h3>Do the step in the recording window</h3>
 <p>The toolbar badge now reads <b>Recording — Login</b>. Go to the recording window, type your application's address in its address bar, and carry out the step.</p>
 <div class="shots">
-  <figure class="toolbar"><img src="{{img:04-toolbar-in-transaction.png}}" alt="Toolbar with status Recording — Login and an End Transaction button"><figcaption>A transaction in progress.</figcaption></figure>
+  <figure class="toolbar"><img src="{{img:04-toolbar-in-transaction.png}}" alt="Toolbar with status Recording — Login"><figcaption>A transaction in progress.</figcaption></figure>
   <figure style="flex:1 1 380px"><img src="{{img:05-recording-app.png}}" alt="An application's sign-in page open in the recording window"><figcaption>Your application in the recording window. (A sample app is shown here.)</figcaption></figure>
 </div>
 <p><b>Active</b> counts requests still in progress. <b>Background</b> counts repeating "heartbeat" calls the app makes on its own; these are kept separate.</p>
 </div></div>
 
 <div class="step"><div class="num">4</div><div>
-<h3>Click End Transaction, then repeat for the next step</h3>
-<p>Wait until the page has finished loading (Active back to <b>0</b>), then click <b>End Transaction</b>. Name the next step and start it. Finished transactions are listed under <b>Completed transactions</b>.</p>
+<h3>Name the next step — the running one ends</h3>
+<p>Wait until the page has finished loading (Active back to <b>0</b>), then name the next step and start it — that ends the running transaction (there is no End Transaction since 0.3.0; <b>Stop Recording</b> ends the last one). Finished transactions are listed under <b>Completed transactions</b>.</p>
 <div class="shots"><figure class="toolbar"><img src="{{img:06-toolbar-trail.png}}" alt="Toolbar listing completed transactions Login and Search"><figcaption>Two transactions done: Login and Search.</figcaption></figure></div>
 <div class="callout ok"><strong>New tabs and pop-ups are recorded too</strong>If a link opens a new tab or a sign-in pop-up, keep going in that tab. It belongs to the recording window and its traffic is captured in the current transaction.</div>
 </div></div>
@@ -242,7 +242,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 
 <h2 id="quit">9. Finish up</h2>
 <p>Click <b>Quit</b> on the toolbar. This closes both windows and deletes the temporary browser profile, including anything you logged in to during the session. Your HAR files are kept. A recording that is still running is <b>saved first</b> — to Downloads when it was started from PerfX Studio, otherwise next to the <code>.exe</code> — so Quit never loses a recording.</p>
-<p>When you record from PerfX Studio you don't need to Quit: after <b>Stop and save</b> the recorder closes its windows by itself after a 10-second countdown on the toolbar (<b>Keep open</b> keeps them), waits in the background for the next recording, and closes itself after an hour without use.</p>
+<p>When you record from PerfX Studio you don't need to Quit: after <b>Stop and save</b> the recorder closes its windows by itself after a 10-second countdown, shown on the PerfX Studio page — or on the toolbar when the floating bar is off (<b>Keep open</b> keeps them), waits in the background for the next recording, and closes itself after an hour without use.</p>
 
 <h2 id="chrome">10. Use Chrome instead of Edge</h2>
 <p>Recording from PerfX Studio? Just choose <b>Google Chrome</b> in the Start recording window. When you start the recorder yourself, it uses Microsoft Edge by default and falls back to Chrome only if Edge can't be used. To use Chrome that way, make a shortcut once:</p>
