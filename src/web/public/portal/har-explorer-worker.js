@@ -14,7 +14,7 @@
  * Requests are named by their number in the file (n = index + 1), the same numbers the page shows. */
 "use strict";
 // In Studio's order; studio-codegen.js and shared/vugen-codegen.js write the extractor code exactly as Studio writes it
-importScripts("../shared/vugen-codegen.js", "../VuGen-Script-Studio-constants.js", "../VuGen-Script-Studio-correlation.js",
+importScripts("../shared/request-filter.js", "../shared/vugen-codegen.js", "../VuGen-Script-Studio-constants.js", "../VuGen-Script-Studio-correlation.js",
   "../studio-advisor.js", "../studio-codegen.js");
 
 var E = [];   // per request: { n, url, method, query, reqH, reqBody, params, resH, resBody, mime }
@@ -35,6 +35,7 @@ function studioFindings(har) {
   try {
     var withRequest = [];   // Studio skips entries without a request: its index → the request's number in the file
     ((har.log && har.log.entries) || []).forEach(function (e, i) { if (e && e.request) withRequest.push(i + 1); });
+    WITH_REQ = withRequest;
     S.entries1 = parseHar(har); S.entries2 = [];
     detectMarkers(S.entries1); applyFilters(S.entries1); pruneEmptyPagerefTransactions(S.entries1);
     S.correlations = singleHarCorrelate(S.entries1);
@@ -160,26 +161,8 @@ function investigate(v) {
 
 // ── "Correlate this": the extractor, in Script Studio's own correlation shape {name, extractorType, extractorConfig},
 //    written by Studio's own code writers (webHttpCorrCode / devwebExtractorDecl) ──
-// The value between the first `lb` and the next `rb` — what a boundary extractor (first match, Ord=1) captures
-function firstMatch(text, lb, rb) {
-  var a = text.indexOf(lb); if (a < 0) return null;
-  a += lb.length; var b = rb ? text.indexOf(rb, a) : -1;
-  return b < 0 ? null : text.slice(a, b);
-}
-// Boundaries around the value at `at` that capture exactly it as the FIRST match: start from `lb0`, or the text just
-// before the value, and widen to the left (same line) until the first match is the value itself
-function safeBoundaries(text, at, s, lb0, rb0) {
-  var after = text.slice(at + s.length, at + s.length + 12);
-  var rb = rb0 || ((/^["'&;,<\s}\])]/.exec(after) || [after.charAt(0)])[0] || "");
-  if (!rb) return null;
-  var lineStart = text.lastIndexOf("\n", at - 1) + 1;
-  var minLen = lb0 && text.slice(at - lb0.length, at) === lb0 ? lb0.length : Math.min(6, at - lineStart);
-  for (var len = Math.max(1, minLen); at - len >= Math.max(0, lineStart - 0) && len <= 120; len++) {
-    var lb = text.slice(at - len, at);
-    if (firstMatch(text, lb, rb) === s) return { lb: lb, rb: rb };
-  }
-  return null;
-}
+// firstMatch / safeBoundaries: in studio-advisor.js (shared with Paste & Detect) — the same code, moved
+var firstMatch = _advFirstMatch, safeBoundaries = _advSafeBoundaries;
 function safeName(n) { n = String(n || "value").replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+|_+$/g, ""); return /^[A-Za-z]/.test(n) ? n : "c_" + (n || "value"); }
 function correlation(v, src, later) {
   var x = E[src.n - 1]; if (!x) return null;
@@ -309,6 +292,25 @@ function ownSuggestions(skip) {
   return out.sort(function (a, b) { return likely(a.name) - likely(b.name); }).slice(0, 10);
 }
 
+// The dynamic values of one request (the Dynamic values tab), from Script Studio's own engine in the Studio copy of
+// this worker: the same list as Studio's tab (advGetRequestFields; the source from the field's trace, else the
+// Advisor card's for the same value). Requests are named by their number in the file (n).
+var WITH_REQ = [];
+function studioFields(n) {
+  var sid = WITH_REQ.indexOf(n) + 1;
+  var idx = sid ? S.entries1.findIndex(function (e) { return !e.isMarker && e.id === sid; }) : -1;
+  if (idx < 0) return { none: true };
+  if (S.entries1[idx].filtered) return { out: true };
+  var nOf = function (i) { var e = S.entries1[i]; return e && e.id ? WITH_REQ[e.id - 1] || null : null; };
+  var list = [];
+  try { list = advGetRequestFields(idx) || []; } catch (e) { list = []; }
+  return { list: list.map(function (x) {
+    var card = (S.advisorCandidates || []).filter(function (c) { return c.value === x.value && c.status !== "skipped"; })[0] || null;
+    var src = x.traceSource || (card && card.source) || null;
+    return { key: x.key, location: x.location, value: String(x.value || ""), srcN: src ? nOf(src.entryIdx) : null, srcPath: src && src.jsonPath || "", advisor: !!card };
+  }) };
+}
+
 var STUDIO = {}, OUT = {};   // OUT: numbers of the requests the Recorder's rules leave out of the script (from the page)
 onmessage = function (ev) {
   var d = ev.data;
@@ -320,6 +322,7 @@ onmessage = function (ev) {
       try { postMessage({ type: "studio", list: studioFindings(JSON.parse(d.text)) }); } finally { console.log = log; }
       return;
     }
+    if (d.type === "fields") { postMessage({ type: "fields", n: d.n, result: studioFields(d.n) }); return; }
     if (d.type === "studioList") {
       // Studio's findings arrived: keep those a request in the script sends back, put them first, and suggest again
       STUDIO = {};

@@ -185,6 +185,9 @@ async function runAnalyze(page, bgDecisions) {
       });
       bgApplied = rows.map(g => g.dataset.url + '=' + ((g.querySelector('.bg-dec.active') || {}).dataset || {}).val);
       try { await applyBgDecisions(); } catch (e) { threw = 'applyBgDecisions: ' + String(e && e.message || e); }
+    } else {
+      // a later reading of the same file keeps the earlier background answer: the page applies it by itself — wait for it
+      for (let i = 0; i < 80 && !Object.keys(S.scripts || {}).length; i++) await new Promise((r) => setTimeout(r, 100));
     }
     return { threw, phaseAfterAnalyze: act ? act.id : null, bgShown, bgUi, bgState, bgApplied, phase: (document.querySelector('.phase.active') || {}).id || null };
   }, bgDecisions || null);
@@ -293,8 +296,8 @@ async function runSteps(browser) {
   try {
     await step('load-webhttp', async () => { await page.evaluate(() => setFmt('webhttp')); return loadSlot(page, 1, fx, text); });
     await step('analyze-bg-review-defaults', () => reanalyze(null), { zip: true });
-    await step('bg-once-and-all', async () => { await page.evaluate(() => goBack()); return reanalyze({ 0: 'once', 1: 'all' }); }, { zip: true });
-    await step('rt-add-css-js-img-font', async () => { await ev(page, () => { goBack(); ['stylesheet', 'script', 'image', 'font'].forEach(k => studioToggleRt(k)); }); return reanalyze(null); });
+    await step('bg-once-and-all', async () => { await page.evaluate(() => { goBack(); if (window.SS) SS.bgChoice = null; }); return reanalyze({ 0: 'once', 1: 'all' }); }, { zip: true });
+    await step('rt-add-css-js-img-font', async () => { await ev(page, () => { goBack(); if (window.SS) SS.bgChoice = null; ['stylesheet', 'script', 'image', 'font'].forEach(k => studioToggleRt(k)); }); return reanalyze(null); });
     await step('rt-all', async () => { await ev(page, () => { goBack(); studioToggleRt('__all__'); }); return reanalyze(null); });
     await step('rt-none-fetch-only', async () => { await ev(page, () => { goBack(); studioToggleRtNone(); }); return reanalyze(null); });
     await step('rt-all-domain-cdn-off', async () => { await ev(page, () => { goBack(); studioToggleRt('__all__'); studioToggleDomain('cdn.example-outdoor.com', false); }); return reanalyze(null); });

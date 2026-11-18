@@ -16,6 +16,9 @@
       })();
     </script>
     <link rel="stylesheet" href="portal/ds.css" />
+    <link rel="stylesheet" href="portal/brand.css" />
+    <link rel="stylesheet" href="portal/request-details.css" />
+    <link rel="stylesheet" href="portal/find-value.css" />
     <link rel="stylesheet" href="portal/har-explorer.css" />
   </head>
   <body>
@@ -63,7 +66,7 @@
             <p class="hx-busy" id="hx-drop-busy" role="status" aria-live="polite"></p>
           </div>
           <ol class="hx-steps">
-            <li><i>1</i><span><b>See every request</b>Grouped by transaction, like the Recorder. Headers, payload, response, cookies and timing.</span></li>
+            <li><i>1</i><span><b>See every request</b>Grouped by transaction, like Script Studio. Headers, payload, response, cookies and timing.</span></li>
             <li><i>2</i><span><b>Find a value</b>Type it, pick a suggestion, or select it in a response. Encoded forms are found too.</span></li>
             <li><i>3</i><span><b>Correlate it</b>The extractor is built for VuGen or DevWeb — continue in Script Studio with it added.</span></li>
           </ol>
@@ -106,6 +109,7 @@
               <div class="hx-dom-list" id="hx-dom-list" role="group" aria-label="Domains in this recording"></div>
             </div>
           </div>
+          <span class="hx-lbl">Show</span>
           <div class="hx-types" id="hx-types" role="group" aria-label="Request types"></div>
           <span class="hx-sep" aria-hidden="true"></span>
           <label class="hx-toggle"><input type="checkbox" id="hx-out" /> Show left-out requests</label>
@@ -113,9 +117,11 @@
         </div>
 
         <div class="hx-panes" id="hx-panes">
-          <section class="ds-card hx-pane" aria-label="Requests">
-            <div class="hx-ph"><h2>Requests</h2><span class="hx-count" id="hx-count"></span><span class="hx-grow"></span><button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" id="hx-fold">Collapse all</button>
-              <button type="button" class="ds-btn ds-btn-sm hx-findbtn" id="hx-findbtn" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>Find a value</button></div>
+          <section class="ds-card hx-pane" id="hx-reqpane" aria-label="Requests">
+            <button type="button" class="hx-rail" id="hx-rail" title="Show the request list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 10-2 2 2 2"/></svg>Requests</button>
+            <div class="hx-ph" title="Click an empty part of this bar to hide the list (the details get the room)"><h2>Requests</h2><span class="hx-count" id="hx-count"></span><span class="hx-grow"></span><button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" id="hx-fold">Collapse all</button>
+              <button type="button" class="ds-btn ds-btn-sm hx-findbtn" id="hx-findbtn" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>Find a value</button>
+              <button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-hide" id="hx-hide" title="Hide the request list (the details get the room)" aria-label="Hide the request list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 10-2 2 2 2"/></svg></button></div>
             <div class="hx-cols" aria-hidden="true"><span>#</span><span>Method</span><span>Address</span><span>Status</span><span>Size</span><span>Time</span><span>Timeline</span></div>
             <div class="hx-list" id="hx-list" tabindex="0" role="listbox" aria-label="Requests — arrow keys move">
               <div class="hx-vlist" id="hx-vlist"><div id="hx-rows"></div></div>
@@ -131,11 +137,14 @@
 
     <!-- The Recorder's engine, unchanged and in its order: the same reading of a HAR, the same transactions and
          left-out rules (portal/har-explorer-model.js builds on them) -->
+    <script src="shared/request-filter.js"></script>
     <script src="VuGen-Recorder-state.js"></script>
     <script src="VuGen-Recorder-parsers.js"></script>
     <script src="portal/recorder-core.js"></script>
     <script src="portal/har-explorer-model.js"></script>
     <script src="portal/track.js"></script>
+    <script src="portal/request-details.js"></script>
+    <script src="portal/find-value.js"></script>
     <script src="portal/har-explorer.js"></script>
   </body>
 </html>

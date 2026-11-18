@@ -27,43 +27,10 @@
   // ── helpers ──
   var toastEl = $("#hx-toast"), toastTimer;
   function toast(msg) { toastEl.textContent = msg; toastEl.classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove("on"); }, 3500); }
-  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  function short(s, n) { s = String(s); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
-  function size(n) { return n == null || n < 0 ? "—" : n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
-  function ms(n) { return n < 1000 ? Math.round(n) + " ms" : (n / 1000).toFixed(2) + " s"; }
+  // the request details view and its small helpers are shared with Script Studio (portal/request-details.js)
+  var RD = window.RequestDetails;
+  var esc = RD.esc, short = RD.short, size = RD.size, ms = RD.ms, methodClass = RD.methodClass;
   function split(url) { var m = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*)(.*)$/i.exec(url || ""); return m ? { host: m[2], path: m[3] || "/" } : { host: "", path: url || "" }; }
-  var SECRET = /^(authorization|proxy-authorization|cookie|set-cookie|x-xsrf-token|x-csrf-token|dpop)$|pass(word)?|secret|token|session|csrf|xsrf/i;
-  function shown(name, value) { return M.mask && SECRET.test(name) ? "••••••" : value; }
-  function methodClass(m) { return { GET: "get", POST: "post", PUT: "put", PATCH: "put", DELETE: "del" }[m] || "oth"; }
-
-  // decoded response / request text (HAR bodies can be Base64)
-  function bodyText(c) {
-    if (!c || c.text == null) return null;
-    if (c.encoding === "base64" && !/^image\//i.test(c.mimeType || "")) {
-      try { var b = atob(c.text), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return new TextDecoder().decode(a); } catch (e) { return c.text; }
-    }
-    return c.text;
-  }
-  var BIG = 300000;   // characters drawn before "Show all"
-  var PREVIEW_CSP = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:\">";
-  function codeBlock(text, mime, key) {
-    var full = M.full[key], t = text, cut = !full && t.length > BIG;
-    if (cut) t = t.slice(0, BIG);
-    var out = '<pre class="hx-code">' + hl(pretty(t, mime)) + "</pre>";
-    if (cut) out += '<button class="ds-btn ds-btn-sm hx-more" data-full="' + key + '">Show all (' + size(text.length) + ")</button>";
-    return out;
-  }
-  function pretty(text, mime) {
-    if (/json/i.test(mime || "") || /^\s*[{[]/.test(text)) {
-      try {
-        return esc(JSON.stringify(JSON.parse(text), null, 2)).replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)(\s*:)?|\b(true|false|null)\b|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)/g, function (m, str, colon, kw, num) {
-          return str ? '<span class="' + (colon ? "k" : "s") + '">' + str + "</span>" + (colon || "") : kw ? '<span class="t">' + kw + "</span>" : '<span class="n">' + num + "</span>";
-        });
-      } catch (e) { /* not JSON */ }
-    }
-    return esc(text);
-  }
-
   // ── state ──
   var M = null;   // { name, size, model, rows, sel, tab, closed, types, q, showOut, mask, full }
 
@@ -108,7 +75,7 @@
     var model = hxBuild(har);
     clearTimeout(toastTimer); toastEl.classList.remove("on");   // an earlier message is about another file
     M = { name: name, size: bytes, model: model, sel: null, tab: "headers", closed: {}, types: {}, q: "", showOut: !!prefs.showOut, mask: false, full: {},
-      view: "req", find: "", inv: null, hits: null, sugg: null, studioCount: 0, byN: {},
+      view: "req", find: "", inv: null, hits: null, sugg: null, studioCount: 0, byN: {}, dyn: {}, dynAsked: {}, studioReady: false,
       // "Correlate this": the script format (Script Studio's remembered choice, else DevWeb — Studio's default),
       // the name typed for the value on screen, and the correlations to hand to Studio
       fmt: (function () { try { return localStorage.getItem("perfx-studio-fmt") === "webhttp" ? "webhttp" : "devweb"; } catch (e) { return "devweb"; } })(),
@@ -125,7 +92,7 @@
     $("#hx-fb-name").textContent = name;
     $("#hx-fb-sub").textContent = size(bytes) + " · " + (model.creator.name || "unknown tool") + (model.creator.version ? " " + model.creator.version : "");
     $("#hx-fb-src").textContent = { bookmarks: "Bookmark transactions (START / END)", cdp: "PerfX CDP Recorder transactions", pages: "Transactions from the page loads", none: "No transactions in this file" }[model.source];
-    $("#hx-fb-src").title = { bookmarks: "Transactions from the START / END bookmarks in the recording — grouped as the Recorder groups them", cdp: "Recorded with the PerfX CDP Recorder — its transactions, as the Recorder shows them", pages: "The recording's page loads (pages in the HAR), as the Recorder uses them", none: "This recording has no bookmarks and no pages" }[model.source];
+    $("#hx-fb-src").title = { bookmarks: "Transactions from the START / END bookmarks in the recording — grouped as Script Studio groups them", cdp: "Recorded with the PerfX CDP Recorder — its transactions, as Script Studio shows them", pages: "The recording's page loads (pages in the HAR), as Script Studio uses them", none: "This recording has no bookmarks and no pages" }[model.source];
     $("#hx-fb-src").classList.toggle("none", model.source === "none");
     $("#hx-fb-n").innerHTML = "<b>" + inScript + "</b>&nbsp;of " + model.items.length + " requests in the script";
     $("#hx-fb-tx").innerHTML = "<b>" + tx + "</b>&nbsp;transaction" + (tx === 1 ? "" : "s");
@@ -163,6 +130,31 @@
   $("#hx-out").addEventListener("change", function (e) { M.showOut = e.target.checked; prefs.showOut = M.showOut; savePrefs(); renderTypes(); build(); });
   $("#hx-mask").addEventListener("change", function (e) { M.mask = e.target.checked; renderDetails(); });
 
+  // ── As in the mockup: the filter bar folds ("Filters"), the types have All / None, "Show left-out" is the eye in the
+  //    Requests header and "Hide secrets" is in the details header. The two tick boxes stay (hidden) and do the work. ──
+  (function () {
+    var tools = document.querySelector(".hx-tools");
+    var ICON_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+    tools.insertAdjacentHTML("afterbegin", '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-ffold" id="hx-ffold" aria-expanded="true" title="Fold the filters to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>Filters</button>');
+    $("#hx-types").insertAdjacentHTML("afterend", '<span class="hx-types-all"><button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" id="hx-types-all" title="Show every type">All</button><button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" id="hx-types-none" title="Show no type">None</button></span>');
+    function setTypes(on) { if (!M) return; HX_TYPES.forEach(function (t) { M.types[t[0]] = on; }); renderTypes(); build(); }
+    $("#hx-types-all").addEventListener("click", function () { setTypes(true); });
+    $("#hx-types-none").addEventListener("click", function () { setTypes(false); });
+    function fold(f) { tools.classList.toggle("folded", f); $("#hx-ffold").setAttribute("aria-expanded", String(!f)); prefs.foldFilters = f; savePrefs(); }
+    $("#hx-ffold").addEventListener("click", function () { fold(!tools.classList.contains("folded")); });
+    if (prefs.foldFilters) fold(true);
+    $("#hx-findbtn").insertAdjacentHTML("beforebegin", '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-outbtn" id="hx-outbtn" aria-pressed="false" title="Show left-out requests (faded)" aria-label="Show left-out requests">' + ICON_EYE + "</button>");
+    var out = $("#hx-out");
+    function syncOut() { $("#hx-outbtn").setAttribute("aria-pressed", String(out.checked)); }
+    $("#hx-outbtn").addEventListener("click", function () { out.checked = !out.checked; out.dispatchEvent(new Event("change")); syncOut(); });
+    out.addEventListener("change", syncOut);
+    new MutationObserver(syncOut).observe(document.getElementById("hx-ws"), { attributes: true, attributeFilter: ["hidden"] });
+    $("#hx-det").addEventListener("click", function (e) {
+      if (!e.target.closest("#hx-maskbtn")) return;
+      var m = $("#hx-mask"); m.checked = !m.checked; m.dispatchEvent(new Event("change"));
+    });
+  })();
+
   // ── domains: show or hide the requests of each server (with the address and type filters) ──
   // The host is read from the address by splitting, never with new URL() — addresses may hold {{variables}}.
   function hostOf(url) { var m = /^[a-z][a-z0-9+.-]*:\/\/([^\/?#]+)/i.exec(url || ""); return m ? m[1].replace(/^[^@]*@/, "").toLowerCase() : "(no domain)"; }
@@ -193,8 +185,56 @@
     }).join("") : '<p class="hx-dom-none">No domain contains "' + esc(q) + '".</p>';
   }
   function setDomains(fn) { M.hosts.forEach(function (h) { M.hostOn[h.host] = fn(h.host); }); renderDomains(); build(); }
+  // Wide screens: the domain list is a panel on the left of the requests, always open (as in Script Studio and the
+  // mockup); narrow screens keep it as a pop-up under the Domains button. The same element moves; nothing is drawn twice.
+  var domPane = document.createElement("section");
+  domPane.className = "ds-card hx-pane hx-dompane"; domPane.id = "hx-dompane"; domPane.setAttribute("aria-label", "Domains");
+  domPane.innerHTML = '<div class="hx-ph"><h2>Domains</h2></div>';
+  var ICON_HIDE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>';
+  domPane.innerHTML = '<button type="button" class="hx-rail" id="hx-dom-rail" title="Show the domains">' + ICON_HIDE + 'Domains</button>' +
+    '<div class="hx-ph"><h2>Domains</h2><span class="hx-grow"></span><span class="hx-dom-head" id="hx-dom-head"></span>' +
+    '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-hide" id="hx-dom-hide" title="Hide the domains (the requests get the room)" aria-label="Hide the domains">' + ICON_HIDE + '</button></div>';
+  // the details hide to a rail too (a separate grid item: the details pane is redrawn on every click)
+  var detRail = document.createElement("button");
+  detRail.type = "button"; detRail.className = "hx-rail hx-det-rail"; detRail.id = "hx-det-rail"; detRail.title = "Show the request details";
+  detRail.innerHTML = ICON_HIDE + "Request details";
+  $("#hx-panes").appendChild(detRail);
+  var domWide = matchMedia("(min-width: 1250px)");
+  // Panel columns on wide screens: Domains | Requests | divider | details — each but the divider can fold to a rail
+  function relayout() {
+    var panes = $("#hx-panes"), wide = domWide.matches;
+    var noDom = wide && !!prefs.noDom, noDet = wide && !!prefs.noDet, noList = !!prefs.noList && !noDet;
+    panes.classList.toggle("no-list", noList); panes.classList.toggle("no-dom", noDom); panes.classList.toggle("no-det", noDet);
+    domPane.classList.toggle("is-rail", noDom);
+    if (!wide) { panes.style.gridTemplateColumns = ""; return; }
+    panes.style.gridTemplateColumns = [noDom ? "46px" : "270px", noList ? "46px" : noDet ? "minmax(0, 1fr)" : "minmax(360px, var(--hx-list-w, 42%))", "10px", noDet ? "46px" : "minmax(0, 1fr)"].join(" ");
+  }
+  function dockDomains() {
+    var pop = $("#hx-dom-pop"), panes = $("#hx-panes"), on = domWide.matches;
+    if (on && pop.parentNode !== domPane) { domPane.appendChild(pop); panes.insertBefore(domPane, panes.firstChild); }
+    else if (!on && pop.parentNode === domPane) { $("#hx-dom").appendChild(pop); domPane.remove(); }
+    // All on / All off in the panel's header, as in Script Studio (back under the search in the pop-up)
+    var all = $("#hx-dom-all"), none = $("#hx-dom-none");
+    if (on) { domPane.querySelector("#hx-dom-head").appendChild(all); domPane.querySelector("#hx-dom-head").appendChild(none); all.textContent = "All on"; none.textContent = "All off"; }
+    else { var acts = pop.querySelector(".hx-dom-acts"); acts.insertBefore(none, acts.firstChild); acts.insertBefore(all, none); all.textContent = "All"; none.textContent = "None"; }
+    panes.classList.toggle("dock-dom", on); pop.classList.toggle("docked", on);
+    pop.hidden = !on; $("#hx-dom-btn").hidden = on; $("#hx-dom-btn").setAttribute("aria-expanded", String(on));
+    relayout();
+  }
+  domPane.querySelector("#hx-dom-hide").addEventListener("click", function () { prefs.noDom = true; savePrefs(); relayout(); $("#hx-dom-rail").focus(); });
+  domPane.querySelector("#hx-dom-rail").addEventListener("click", function () { prefs.noDom = false; savePrefs(); relayout(); });
+  detRail.addEventListener("click", function () { prefs.noDet = false; savePrefs(); relayout(); });
+  $("#hx-det").addEventListener("click", function (e) { if (e.target.closest("#hx-det-hide")) { prefs.noDet = true; savePrefs(); relayout(); detRail.focus(); } });
+  if (domWide.addEventListener) domWide.addEventListener("change", dockDomains);
+  dockDomains();
+  // the address filter sits at the top of the request list, as in Script Studio and the mockup
+  (function () {
+    var srch = document.querySelector(".hx-tools > .hx-search"); if (!srch) return;
+    var w = document.createElement("div"); w.className = "hx-req-search"; w.appendChild(srch);
+    $("#hx-reqpane").insertBefore(w, $("#hx-reqpane .hx-cols"));
+  })();
   function openDomains() { $("#hx-dom-pop").hidden = false; $("#hx-dom-btn").setAttribute("aria-expanded", "true"); renderDomains(); $("#hx-dom-q").focus(); }
-  function closeDomains(focus) { $("#hx-dom-pop").hidden = true; $("#hx-dom-btn").setAttribute("aria-expanded", "false"); if (focus) $("#hx-dom-btn").focus(); }
+  function closeDomains(focus) { if ($("#hx-dom-pop").classList.contains("docked")) return; $("#hx-dom-pop").hidden = true; $("#hx-dom-btn").setAttribute("aria-expanded", "false"); if (focus) $("#hx-dom-btn").focus(); }
   $("#hx-dom-btn").addEventListener("click", function () { if ($("#hx-dom-pop").hidden) openDomains(); else closeDomains(); });
   $("#hx-dom-q").addEventListener("input", renderDomains);
   $("#hx-dom-all").addEventListener("click", function () { setDomains(function () { return true; }); });
@@ -297,6 +337,16 @@
 
   // drag the divider between the list and the details (remembered)
   (function () {
+    // the request list hides to a rail (remembered); one click on the rail brings it back
+    var panes = $("#hx-panes");
+    function listShown(on) {
+      prefs.noList = !on; if (!on) prefs.noDet = false; savePrefs(); relayout();
+      if (on) { if (M) draw(true); $("#hx-list").focus(); } else $("#hx-rail").focus();
+    }
+    relayout();
+    $("#hx-hide").addEventListener("click", function () { listShown(false); });
+    $("#hx-rail").addEventListener("click", function () { listShown(true); });
+    $("#hx-reqpane .hx-ph").addEventListener("click", function (e) { if (e.target === e.currentTarget || e.target.tagName === "H2") listShown(false); });
     var sp = $("#hx-split"), ws = $("#hx-panes"), on = false;
     if (prefs.listW) ws.style.setProperty("--hx-list-w", prefs.listW + "%");
     sp.addEventListener("pointerdown", function (e) { on = true; sp.setPointerCapture(e.pointerId); });
@@ -323,96 +373,60 @@
     return html.replace(/\u0001/g, '<mark class="hx-hl">').replace(/\u0002/g, "</mark>");
   }
 
-  // ── request details ──
-  function kv(list, empty) {
-    if (!list || !list.length) return '<p class="hx-none">' + (empty || "None") + "</p>";
-    return '<table class="hx-kv">' + list.map(function (h) {
-      return "<tr" + (M.mask && SECRET.test(h.name) ? ' class="secret"' : "") + "><td>" + esc(h.name) + "</td><td>" + hl(esc(shown(h.name, h.value))) + "</td></tr>";
-    }).join("") + "</table>";
-  }
-  function sec(title, inner, right, closed) {
-    return '<details class="hx-sec"' + (closed ? "" : " open") + '><summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' +
-      title + (right ? '<span class="r">' + right + "</span>" : "") + "</summary>" + inner + "</details>";
-  }
-  function count(n) { return ' <span class="c">' + n + "</span>"; }
-  function queryOf(rq) {
-    if (rq.queryString && rq.queryString.length) return rq.queryString;
-    var q = (rq.url || "").split("?")[1]; if (!q) return [];
-    return q.split("#")[0].split("&").filter(Boolean).map(function (p) { var i = p.indexOf("="); return { name: decode(i < 0 ? p : p.slice(0, i)), value: i < 0 ? "" : p.slice(i + 1) }; });
-  }
-  function decode(s) { try { return decodeURIComponent(String(s).replace(/\+/g, " ")); } catch (e) { return s; } }
-  function cookiesOf(list, headers, setCookie) {
-    if (list && list.length) return list;
-    var out = [];
-    (headers || []).forEach(function (h) {
-      if (setCookie ? !/^set-cookie$/i.test(h.name) : !/^cookie$/i.test(h.name)) return;
-      (setCookie ? h.value.split(/\n/) : h.value.split(/;\s*/)).forEach(function (c) { var i = c.indexOf("="); if (i > 0) out.push({ name: c.slice(0, i).trim(), value: setCookie ? c.slice(i + 1).split(";")[0] : c.slice(i + 1) }); });
-    });
-    return out;
-  }
-  function maskBody(text) {
-    return text.replace(/("(?:password|pass|pwd|secret|token|access_token|refresh_token|id_token|client_secret|_csrf)"\s*:\s*)"[^"]*"/gi, '$1"••••••"').replace(/((?:^|&)(?:password|pass|pwd|_csrf|token|client_secret)=)[^&]*/gi, "$1••••••");
-  }
-
-  function renderDetails() {
+  // ── request details (portal/request-details.js) ──
+  function renderDetails() { renderDetails0(); addDetHide(); }
+  function renderDetails0() {
     if (M && M.view === "find") { renderFind(); return; }
     var d = $("#hx-det"), it = M && M.sel;
     if (!it) { d.innerHTML = '<p class="hx-none hx-pick">Click a request to see its headers, payload and response.</p>'; return; }
-    var e = it.e, raw = it.raw || {}, rq = raw.request || {}, rs = raw.response || {}, content = rs.content || {}, pd = rq.postData;
-    var body = bodyText(content), reqH = rq.headers || [], resH = rs.headers || [], query = queryOf(rq);
-    var reqC = cookiesOf(rq.cookies, reqH, false), resC = cookiesOf(rs.cookies, resH, true);
-    var tabs = [["headers", "Headers", reqH.length + resH.length], ["payload", "Payload", query.length + (pd ? 1 : 0)], ["response", "Response"], ["preview", "Preview"], ["cookies", "Cookies", reqC.length + resC.length], ["timing", "Timing"]];
-    var h = "", mime = content.mimeType || "";
-    if (M.tab === "headers") {
-      var gen = [{ name: "Request URL", value: e.url }, { name: "Request method", value: e.method }, { name: "Status code", value: (rs.status || "—") + " " + (rs.statusText || "") }, { name: "HTTP version", value: rs.httpVersion || rq.httpVersion || "" }];
-      if (rs.redirectURL) gen.push({ name: "Redirects to", value: rs.redirectURL });
-      h += sec("General", kv(gen));
-      h += sec("Response headers" + count(resH.length), kv(resH));
-      h += sec("Request headers" + count(reqH.length), kv(reqH));
-    } else if (M.tab === "payload") {
-      if (query.length) h += sec("Query string parameters" + count(query.length), kv(query.map(function (p) { var v = p.value, dv = decode(v); return { name: p.name, value: dv !== v ? v + "    (decoded: " + dv + ")" : v }; })));
-      if (pd) {
-        var params = pd.params || [];
-        if (params.length) h += sec("Form data" + count(params.length), kv(params.map(function (p) { return { name: p.name, value: p.value != null ? p.value : (p.fileName ? "[file " + p.fileName + "]" : "") }; })), '<span class="mono">' + esc(pd.mimeType || "") + "</span>");
-        if (pd.text) h += sec(params.length ? "Raw body" : "Request body", codeBlock(M.mask ? maskBody(pd.text) : pd.text, pd.mimeType, "req"), '<span class="mono">' + esc(pd.mimeType || "") + " · " + size(pd.text.length) + "</span>", params.length > 0);
-      }
-      if (!h) h = '<p class="hx-none">This request sends no query string and no body.</p>';
-    } else if (M.tab === "response") {
-      if (/^image\//i.test(mime) && content.text) h = '<p class="hx-none">An image — see Preview.</p>';
-      else if (body == null || body === "") h = '<p class="hx-none">' + (rs.status >= 300 && rs.status < 400 ? "A redirect has no body — see “Redirects to” under Headers." : "No response body in this HAR — the response was empty, or the browser did not keep it (for example, served from its cache).") + "</p>";
-      else h = sec("Response body", codeBlock(M.mask ? maskBody(body) : body, mime, "res"), '<span class="mono">' + esc(mime) + " · " + size(body.length) + "</span>");
-    } else if (M.tab === "preview") {
-      if (/^image\//i.test(mime) && content.text && content.encoding === "base64") h = '<div class="hx-sec hx-img"><img alt="The response image" src="data:' + esc(mime) + ";base64," + esc(content.text) + '"></div>';
-      else if (/^image\/svg/i.test(mime) && body) h = '<div class="hx-sec hx-img"><img alt="The response image" src="data:image/svg+xml;charset=utf-8,' + encodeURIComponent(body) + '"></div>';
-      // nothing may leave the PC: no scripts (sandbox) and no images, styles or fonts fetched from the site (CSP)
-      else if (/html/i.test(mime) && body) h = sec("Page preview — scripts, links and the site's images switched off", '<iframe class="hx-frame" sandbox="" srcdoc="' + esc(PREVIEW_CSP + body) + '" title="Page preview"></iframe>');
-      else if (body && /json/i.test(mime)) h = sec("JSON", codeBlock(M.mask ? maskBody(body) : body, mime, "res"));
-      else if (!body && /html|json|image/i.test(mime)) h = '<p class="hx-none">Nothing to preview — this HAR does not contain the response body (the browser did not keep it, for example because it came from its cache).</p>';
-      else h = '<p class="hx-none">Nothing to preview for this response.</p>';
-    } else if (M.tab === "cookies") {
-      h += sec("Request cookies" + count(reqC.length), kv(reqC, "No cookies sent"));
-      h += sec("Response cookies (Set-Cookie)" + count(resC.length), kv(resC.map(function (c) { return { name: c.name, value: c.value + (c.httpOnly ? " · HttpOnly" : "") + (c.secure ? " · Secure" : "") }; }), "No cookies set"));
-      h += '<p class="ds-note hx-hint">VuGen and DevWeb keep cookies between requests by themselves — a value that only travels in cookies needs no correlation.</p>';
-    } else if (M.tab === "timing") {
-      var t = raw.timings || {}, parts = [["blocked", "Queued / blocked"], ["dns", "DNS lookup"], ["connect", "Initial connection"], ["ssl", "TLS handshake"], ["send", "Request sent"], ["wait", "Waiting for the server (TTFB)"], ["receive", "Content download"]];
-      var sum = 0; parts.forEach(function (p) { sum += Math.max(0, t[p[0]] || 0); }); sum = Math.max(sum, 1);
-      var acc = 0;
-      h = sec("Timing — " + ms(it.dur), '<div class="hx-tl">' + parts.map(function (p, i) {
-        var v = Math.max(0, t[p[0]] || 0), bar = v ? '<i class="c' + i + '" style="left:' + (acc / sum * 100) + "%;width:" + Math.max(0.8, v / sum * 100) + '%"></i>' : "";
-        acc += v; return '<div class="row"><span>' + p[1] + '</span><span class="bar">' + bar + '</span><span class="v">' + (t[p[0]] == null || t[p[0]] < 0 ? "—" : ms(v)) + "</span></div>";
-      }).join("") + '<div class="row"><span>Started at</span><span></span><span class="v">+' + ms(it.start) + "</span></div></div>");
-      h += '<p class="ds-note hx-hint">Under load, <b>Waiting for the server (TTFB)</b> is the part that grows — it is the server\'s own time. DNS, connection and TLS happen once per new connection.</p>';
-    }
-    d.innerHTML = '<div class="hx-dh">' +
-      (M.inv ? '<p class="hx-back"><mark class="hx-hl">' + esc(short(M.inv.value, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back>Back to Find a value</button></p>' : "") +
-      '<div class="hx-durl"><span class="hx-meth ' + methodClass(e.method) + '">' + esc(e.method) + "</span><code>" + hl(esc(e.url)) + "</code></div>" +
-      '<div class="hx-dsum"><span>#<b>' + it.n + '</b></span><span>Status <b class="st s' + String(e.status).charAt(0) + '">' + (rs.status || "—") + " " + esc(rs.statusText || "") + "</b></span><span>Type <b>" + hxTypeLabel(it.type) + "</b></span><span>Size <b>" + size(e.size) + "</b></span><span>Time <b>" + ms(it.dur) + "</b></span>" +
-      '<span class="r"><button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" data-copy="url">' + ICON_COPY + 'Copy URL</button><button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" data-copy="curl">' + ICON_COPY + "Copy as cURL</button></span></div>" +
-      (it.out ? '<p class="hx-why"><b>Left out of the script:</b> ' + esc(hxWhy(it)) + "</p>" : "") +
-      '<div class="hx-tabs" role="tablist">' + tabs.map(function (t) { return '<button type="button" role="tab" class="hx-tab" data-tab="' + t[0] + '" aria-selected="' + (M.tab === t[0]) + '">' + t[1] + (t[2] ? "<i>" + t[2] + "</i>" : "") + "</button>"; }).join("") + "</div></div>" +
-      '<div class="hx-db">' + h + "</div>";
+    d.innerHTML = RD.html({
+      n: it.n, e: it.e, raw: it.raw, type: hxTypeLabel(it.type), dur: it.dur, start: it.start, out: it.out, why: it.out ? hxWhy(it) : "",
+      tab: M.tab, mask: M.mask, full: M.full, hl: hl, extra: [dynTab(it)],
+      top: M.inv ? '<p class="hx-back"><mark class="hx-hl">' + esc(short(M.inv.value, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back>Back to Find a value</button></p>' : "",
+    });
   }
-  var ICON_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+  // the details' hide button (wide screens), put back after every redraw of the pane
+  function addDetHide() {
+    var d = $("#hx-det");
+    syncFindSheet();
+    if (M && M.view !== "find" && M.sel && !d.querySelector("#hx-maskbtn")) {
+      d.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ds-btn-sm hx-maskbtn" id="hx-maskbtn" aria-pressed="' + !!M.mask + '" title="Mask passwords, tokens and cookies (for screenshots)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Hide secrets</button>');
+    }
+    if (d.querySelector("#hx-det-hide")) return;
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "ds-btn ds-btn-sm ds-btn-ghost hx-hide hx-det-hide"; b.id = "hx-det-hide";
+    b.title = "Hide the request details (the requests get the room)"; b.setAttribute("aria-label", "Hide the request details");
+    b.innerHTML = ICON_HIDE; d.appendChild(b);
+  }
+  // ── Dynamic values tab (as in Script Studio and the mockup): the values of this request that change, from Script
+  //    Studio's own engine (worker message "fields"); a value opens Find a value, a source opens that request ──
+  var DYN_LOC = { header: "header", query: "query string", body: "body", body_json: "JSON body", body_form: "form field", cookie: "cookie", path: "URL path" };
+  function dynTab(it) {
+    var r = M.dyn[it.n];
+    if (!r && M.studioReady && studioWorker && !M.dynAsked[it.n]) { M.dynAsked[it.n] = true; studioWorker.postMessage({ type: "fields", n: it.n }); }
+    var html;
+    if (!r) html = '<p class="hx-none">' + (M.studioReady ? "Working out the dynamic values…" : studioWorker ? "Script Studio's analysis is still running — the dynamic values follow." : "The dynamic values are not available in this browser.") + "</p>";
+    else if (r.out) html = '<p class="hx-none">This request is left out of the script, so nothing in it needs correlation.</p>';
+    else if (r.none || !r.list.length) html = '<p class="hx-none">No value in this request looks dynamic or comes from an earlier response.</p>';
+    else {
+      var row = function (x) {
+        var se = x.srcN && M.byN[x.srcN];
+        return '<tr><td><b>' + esc(x.key) + "</b><small>" + esc(DYN_LOC[x.location] || x.location || "") + '</small></td><td><button type="button" class="hx-dyn-v" data-dynfind="' + esc(x.value) + '" title="Find where this value comes from and where it goes"><code>' + esc(short(x.value, 60)) + "</code></button></td><td>" +
+          (se ? '<a href="#" data-go="' + x.srcN + '" data-tab="response">#' + x.srcN + " " + esc(se.e.method) + " " + esc(short(split(se.e.url).path, 48)) + "</a>" + (x.srcPath ? ' <span class="hx-dyn-p">' + esc(x.srcPath) + "</span>" : "") : '<span class="hx-dyn-none">source not found in the recording</span>') +
+          "</td><td>" + (x.advisor ? '<span class="hx-dyn-adv" title="Script Studio&#39;s Correlation Advisor lists it">In the Advisor</span>' : "") + "</td></tr>";
+      };
+      var sec = function (title, rows, dot) { return rows.length ? '<details class="hx-sec hx-dyn-sec" open><summary><span class="hx-dyn-dot ' + dot + '"></span>' + title + ' <span class="c">' + rows.length + '</span></summary><table class="hx-dyn"><tbody>' + rows.map(row).join("") + "</tbody></table></details>" : ""; };
+      html = sec("Traced to an earlier response — correlate these", r.list.filter(function (x) { return x.srcN; }), "g") +
+        sec("Looks dynamic, source not found", r.list.filter(function (x) { return !x.srcN; }), "y") +
+        '<p class="ds-note hx-hint"><span>Click a value to see where it comes from and where it goes (Find a value), then <b>Correlate this</b> to add it to Script Studio.</span></p>';
+    }
+    return { key: "dynamic", label: "Dynamic values", count: r && r.list ? r.list.length || "" : "", html: html };
+  }
+  $("#hx-det").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-dynfind]"); if (!b) return;
+    e.preventDefault(); find(b.getAttribute("data-dynfind")); draw(true); findButton();
+  });
+  var ICON_COPY = RD.ICON_COPY;
   $("#hx-det").addEventListener("click", function (e) {
     if (e.target.closest("[data-back]")) { M.view = "find"; draw(true); renderFind(); findButton(); return; }
     var go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); select(+go.dataset.go, null, go.dataset.tab); return; }
@@ -421,13 +435,7 @@
     var t = e.target.closest(".hx-tab"); if (t) { M.tab = t.dataset.tab; M.full = {}; renderDetails(); return; }
     var f = e.target.closest("[data-full]"); if (f) { M.full[f.dataset.full] = true; renderDetails(); return; }
     var c = e.target.closest("[data-copy]"); if (!c || !M.sel) return;
-    var rq = M.sel.raw.request || {}, txt;
-    if (c.dataset.copy === "url") txt = rq.url || M.sel.e.url;
-    else {
-      var q = function (s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; };
-      txt = "curl -X " + (rq.method || "GET") + " " + q(rq.url) + (rq.headers || []).filter(function (h) { return h.name.charAt(0) !== ":"; }).map(function (h) { return " \\\n  -H " + q(h.name + ": " + shown(h.name, h.value)); }).join("") +
-        (rq.postData && rq.postData.text ? " \\\n  --data-raw " + q(M.mask ? maskBody(rq.postData.text) : rq.postData.text) : "");
-    }
+    var txt = RD.copy(M.sel.raw, c.dataset.copy, M.mask, M.sel.e.url);
     var done = function () { toast(c.dataset.copy === "url" ? "Address copied" : "cURL command copied"); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, function () { toast("Copying is not allowed here."); });
     else toast("Copying is not allowed here.");
@@ -444,7 +452,12 @@
     // Script Studio's own analysis runs in a second copy, so a very large recording never makes Find a value wait
     try {
       studioWorker = new Worker("portal/har-explorer-worker.js");
-      studioWorker.onmessage = function (ev) { if (ev.data.type === "studio" && worker) worker.postMessage({ type: "studioList", list: ev.data.list }); studioWorker.terminate(); studioWorker = null; };
+      // it stays while the file is open: it also answers the Dynamic values tab (message "fields")
+      studioWorker.onmessage = function (ev) {
+        var d = ev.data;
+        if (d.type === "studio") { if (worker) worker.postMessage({ type: "studioList", list: d.list }); if (M) { M.studioReady = true; if (M.sel && M.view !== "find") renderDetails(); } }
+        else if (d.type === "fields" && M) { M.dyn[d.n] = d.result; if (M.sel && M.sel.n === d.n && M.view !== "find") renderDetails(); }
+      };
       studioWorker.onerror = function () { if (worker) worker.postMessage({ type: "studioList", list: [] }); studioWorker = null; };
       studioWorker.postMessage({ type: "studio", text: text });
     } catch (e) { studioWorker = null; }
@@ -544,7 +557,7 @@
       try { if (typeof w.setFmt === "function") w.setFmt(fmt); } catch (e) { /* Studio keeps its own format */ }
       w.loadFile(file, 1);
       if (!list.length) {
-        if (typeof w.showToast === "function") w.showToast(file.name + " opened from the HAR Explorer — choose the format and filters, then click Analyse.", "info");
+        if (typeof w.showToast === "function") w.showToast(file.name + " opened from the HAR Explorer.", "info");
         return;
       }
       later(function () { return st().har1; }, function () {
@@ -584,29 +597,34 @@
     renderFind(true);
   }
   function findButton() { $("#hx-findbtn").setAttribute("aria-pressed", String(!!M && M.view === "find")); }
+  function closeFind() { if (!M.sel) M.sel = M.model.items.filter(visible)[0] || null; M.view = "req"; draw(true); renderDetails(); findButton(); }
   $("#hx-findbtn").addEventListener("click", function () {
-    if (M.view === "find") { if (!M.sel) M.sel = M.model.items.filter(visible)[0] || null; M.view = "req"; }
-    else M.view = "find";
+    if (M.view === "find") { closeFind(); return; }
+    M.view = "find";
     draw(true); renderDetails(); findButton();
   });
+  // Find a value is a sheet over the workspace (as in the mockup and Script Studio's details): a blurred backdrop
+  // behind it; the backdrop, its close button and Esc close it
+  var findScrim = document.createElement("div");
+  findScrim.className = "hx-find-scrim"; findScrim.hidden = true;
+  document.body.appendChild(findScrim);
+  findScrim.addEventListener("pointerdown", function (e) { e.preventDefault(); closeFind(); });
+  function syncFindSheet() {
+    var d = $("#hx-det"), on = !!M && M.view === "find";
+    d.classList.toggle("hx-find-sheet", on); if (findScrim) findScrim.hidden = !on;
+    var h = d.querySelector(".hx-fh");
+    if (on && h && !h.querySelector("#hx-find-close")) h.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost hx-find-close" id="hx-find-close" title="Close (Esc)" aria-label="Close Find a value"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>');
+  }
+  $("#hx-det").addEventListener("click", function (e) { if (e.target.closest("#hx-find-close")) closeFind(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && M && M.view === "find" && !e.defaultPrevented) closeFind(); });
 
-  var VERDICT = {
-    correlate: ["ok", "Correlate it", function (i) { return "The server sends it in <b>#" + i.src.n + "</b> and the journey sends it back <b>" + i.later.length + "</b> time" + (i.later.length === 1 ? "" : "s") + ". Every virtual user gets a different value — capture it at #" + i.src.n + " and use it in the requests below."; }],
-    cookie: ["plain", "Nothing to do — it travels in cookies only", function (i) { return "Set by the server in #" + i.src.n + " and only sent back as a cookie. VuGen and DevWeb keep cookies by themselves."; }],
-    redirect: ["plain", "Nothing to do — a redirect the script follows", function (i) { return "#" + i.src.n + " redirects to it and the next request only follows that redirect, as VuGen and DevWeb do by themselves."; }],
-    outonly: ["plain", "Nothing to do — only sent to requests left out of the script", function (i) { return "Every request that sends it back is left out of the script (analytics, static files …), so the script never needs it."; }],
-    unused: ["plain", "Never sent back", function (i) { return i.src ? "The server returns it, but no later request sends it — nothing to correlate." : "It is in the recording, but no request sends it."; }],
-    missing: ["warn", "Its source is not in this recording", function (i) { return "No response in this HAR contains it — but <b>" + i.missing + "</b> earlier response" + (i.missing === 1 ? " has" : "s have") + " no body in the file (the browser kept no copy, for example because it served the page from its cache), so it probably comes from one of those. Without that response there is nothing to capture it from, so <b>Correlate this</b> cannot be offered. Record the journey again with DevTools “Disable cache” ticked, or with the PerfX CDP Recorder, and look it up again."; }],
-    input: ["param", "A value typed in the journey — make it a parameter", function () { return "It never comes back from the server before it is sent: the user typed or chose it (a user name, a search term …). Give it a parameter with test data, so each virtual user can use a different one."; }],
-    generated: ["param", "Made by the browser — generate it in the script", function () { return "It never comes from the server and looks like a time stamp or a GUID created by the page's JavaScript. Generate a new one in the script (VuGen: lr_save_timestamp / lr_generate_uuid; DevWeb: Date.now() / a uuid function)."; }],
-    none: ["plain", "Not found in this recording", function () { return "Check the spelling, or try a shorter part of the value."; }],
-  };
-  function tabFor(h) { return h.side === "res" ? (h.header ? "headers" : "response") : h.kind === "body" || /^query/.test(h.where) ? "payload" : h.kind === "cookie" ? "cookies" : "headers"; }
+  var FV = window.FindValue, tabFor = FV.tabFor;   // the answer of Find a value, shared with Script Studio
   function trailLink(h) {
     var it = M.byN[h.n], e = it ? it.e : { method: "", url: "" };
     return '<a href="#" data-go="' + h.n + '" data-tab="' + tabFor(h) + '">#' + h.n + " " + esc(e.method) + " " + esc(split(e.url).path) + "</a>";
   }
-  function renderFind(busy) {
+  function renderFind(busy) { renderFind0(busy); addDetHide(); }
+  function renderFind0(busy) {
     var d = $("#hx-det"), inv = M.inv, v = M.find;
     var input = $("#hx-fq"), caret = input && document.activeElement === input ? input.selectionStart : null;
     var sugg = M.sugg === null ? '<p class="hx-sugg-wait">Looking for values that change…</p>'
@@ -620,21 +638,10 @@
     if (!v) body = '<p class="ds-note hx-hint">Type or paste a value above, pick one the server sends (Studio marks the ones Script Studio finds by itself), or select any value in a request\'s Headers, Payload or Response.</p>';
     else if (busy || !inv || inv.value !== v) body = '<p class="hx-none">Looking for ' + esc(short(v, 60)) + " …</p>";
     else {
-      var V = VERDICT[inv.kind];
-      body += '<div class="hx-verdict ' + V[0] + '"><div><h3>' + V[1] + "</h3><p>" + V[2](inv) + "</p>" +
-        (inv.kind === "correlate" ? '<p class="hx-studio">' + (inv.studio ? "Script Studio correlates this one by itself." : "Script Studio does not find this one by itself — add it there with <b>Paste &amp; Detect</b> or <b>Add Manual</b>.") + "</p>" : "") + "</div></div>";
-      var steps = [];
-      if (inv.src) steps.push('<li class="from"><span class="hx-badge src">Comes from</span><span>' + trailLink(inv.src) + '<span class="wh">' + esc(inv.src.where) + (inv.src.enc ? ' · <span class="hx-badge enc">' + esc(inv.src.enc) + "</span>" : "") + "</span></span></li>");
-      (inv.src ? inv.later : inv.uses).forEach(function (u) {
-        steps.push('<li><span class="hx-badge use">Sent in</span><span>' + trailLink(u) + '<span class="wh">' + esc(u.where) + (u.enc ? ' · <span class="hx-badge enc">sent ' + esc(u.enc) + "</span>" : "") + "</span></span></li>");
+      body = FV.html(inv, {
+        num: function (h) { return h.n; }, link: trailLink, corr: inv.corr ? corrPanel(inv) : "",
+        studio: function (i) { return '<p class="hx-studio">' + (i.studio ? "Script Studio correlates this one by itself." : "Script Studio does not find this one by itself — add it there with <b>Paste &amp; Detect</b> or <b>Add Manual</b>.") + "</p>"; },
       });
-      if (steps.length) body += '<ol class="hx-trail">' + steps.join("") + "</ol>";
-      var aside = [];
-      if (inv.outsideCount) aside.push("sent to " + inv.outsideCount + " request" + (inv.outsideCount === 1 ? "" : "s") + " left out of the script (" + inv.outside.slice(0, 6).map(function (o) { return trailLink(o).replace(/>#(\d+)[^<]*</, ">#$1<"); }).join(", ") + (inv.outsideCount > 6 ? " …" : "") + ")");
-      if (inv.referer) aside.push("in the Referer / Origin header of " + inv.referer + " request" + (inv.referer === 1 ? "" : "s") + " — the page address, which the script copies as it is");
-      if (aside.length) body += '<p class="hx-also">Also ' + aside.join("; and ") + ". Not counted above.</p>";
-      if (inv.also.length) body += '<p class="hx-also">Also returned later by ' + inv.also.map(function (o) { return trailLink(o).replace(/>#(\d+)[^<]*</, ">#$1<") + " (" + esc(o.where) + ")"; }).join(", ") + " — the first one is the one to capture.</p>";
-      if (inv.corr) body += corrPanel(inv);
     }
     d.innerHTML = '<div class="hx-dh hx-fh"><h2>Find a value</h2>' +
       "<p>Where it first came from, every request that sends it back, and what to do in the script. URL-encoded, JSON-escaped, Base64 and HTML-entity forms are found too.</p>" +

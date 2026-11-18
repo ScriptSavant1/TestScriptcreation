@@ -16,12 +16,15 @@
     home:    { hash: "#/home",            tab: "home",      group: "PerfX Studio",   name: "Home",                    c: "--c-home",    help: "hacc-quickstart" },
     postman: { hash: "#/convert/postman", tab: "converter", sub: "bruno", group: "Create scripts", name: "Postman / Bruno converter", c: "--c-convert", help: "hacc-converter" },
     jmeter:  { hash: "#/convert/jmeter",  tab: "converter", sub: "jmx",   group: "Create scripts", name: "JMeter converter",          c: "--c-jmeter",  help: "hacc-jmeter" },
-    record:  { hash: "#/record",          tab: "recorder",  group: "Create scripts", name: "Recorder",                c: "--c-record",  help: "hacc-recorder" },
     explore: { hash: "#/explore",         tab: "explorer",  group: "Create scripts", name: "HAR Explorer",            c: "--c-explore", help: "hacc-explorer" },
     studio:  { hash: "#/studio",          tab: "studio",    group: "Create scripts", name: "Script Studio",           c: "--c-studio",  help: "hacc-studio" },
-    results: { hash: "#/results",         tab: "analyser",  group: "Analyse",        name: "Results Analyser",        c: "--c-results", help: "hacc-analyser" },
-    help:    { hash: "#/help",            tab: "help",      group: "Learn",          name: "Help & guides",           c: "--c-help",    help: null },
+    workload: { hash: "#/workload",       tab: "workload",  group: "Plan & analyse", name: "Workload Modeller",       c: "--c-work",    help: "hacc-workload" },
+    results: { hash: "#/results",         tab: "analyser",  group: "Plan & analyse", name: "Results Analyser",        c: "--c-results", help: "hacc-analyser" },
+    help:    { hash: "#/help",            tab: "help",      group: "PerfX Studio",   name: "Help & guides",           c: "--c-help",    help: null },
   };
+  // the Recorder is part of Script Studio now: old names, links and Help anchors lead there
+  const ALIAS = { record: "studio" };
+  const HASH_ALIAS = { "#/record": "#/studio", "#/help/recorder": "#/help/studio" };
   const html = document.documentElement;
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
@@ -92,6 +95,7 @@
   /** Open a page through the portal's own switchers (with a view transition where supported). */
   function go(page, opts) {
     opts = opts || {};
+    page = ALIAS[page] || page;
     const p = PAGES[page];
     if (!p) return;
     const run = () => {
@@ -110,8 +114,9 @@
     } else run();
   }
 
-  /** "#/help/recorder" → { page: "help", section: "hacc-recorder" } */
+  /** "#/help/studio" → { page: "help", section: "hacc-studio" } */
   function parseHash(h) {
+    h = HASH_ALIAS[h] || h;
     const m = /^#\/help\/([\w-]+)$/.exec(h || "");
     if (m) return { page: "help", section: "hacc-" + m[1] };
     const page = Object.keys(PAGES).find((k) => PAGES[k].hash === h);
@@ -170,16 +175,26 @@
   const tip = document.createElement("div");
   tip.className = "sb-tip"; tip.setAttribute("role", "tooltip");
   document.body.appendChild(tip);
+  // collapsed: the name and the one-line description; open menu: the description only, after a short pause
+  let tipTimer = 0;
   function showTip(el) {
-    if (!html.classList.contains("sb-collapsed") || innerWidth <= 900) return;
+    clearTimeout(tipTimer);
+    if (innerWidth <= 900) return;
+    const open = !html.classList.contains("sb-collapsed");
+    if (open) { if (!el.querySelector(".sb-sub")) return; tipTimer = setTimeout(() => placeTip(el, true), 450); return; }
+    placeTip(el, false);
+  }
+  function placeTip(el, subOnly) {
     const label = el.querySelector(".sb-label"), sub = el.querySelector(".sb-sub");
-    tip.innerHTML = ""; tip.append(label ? label.textContent : "");
-    if (sub && sub.textContent) { const s = document.createElement("small"); s.textContent = sub.textContent; tip.append(s); }
+    tip.innerHTML = "";
+    if (subOnly) { tip.append(sub ? sub.textContent : ""); }
+    else tip.append(label ? label.textContent : "");
+    if (!subOnly && sub && sub.textContent) { const s = document.createElement("small"); s.textContent = sub.textContent; tip.append(s); }
     const r = el.getBoundingClientRect();
     tip.style.left = r.right + 10 + "px"; tip.style.top = r.top + r.height / 2 + "px";
     tip.classList.add("show");
   }
-  function hideTip() { tip.classList.remove("show"); }
+  function hideTip() { clearTimeout(tipTimer); tip.classList.remove("show"); }
   $$(".sb .sb-item").forEach((el) => {
     el.addEventListener("mouseenter", () => showTip(el)); el.addEventListener("mouseleave", hideTip);
     el.addEventListener("focus", () => showTip(el)); el.addEventListener("blur", hideTip);
@@ -200,7 +215,7 @@
   {
     let want = null;
     try { want = sessionStorage.getItem("perfx-open"); sessionStorage.removeItem("perfx-open"); } catch (_) { /* storage blocked */ }
-    if (want && PAGES[want]) go(want, { instant: true });
+    if (want && PAGES[ALIAS[want] || want]) go(want, { instant: true });
   }
   // the same for a "#/…" link opened while the portal is already open
   window.addEventListener("hashchange", () => {
@@ -223,7 +238,7 @@
       .then((s) => {
         Object.assign(recorder, { running: true, recording: !!s.recording, active: s.active || 0, background: s.background || 0 });
         const badge = $("#sb-rec-badge");
-        if (badge) { badge.hidden = false; badge.textContent = s.recording ? "Recording" : "Running"; }
+        if (badge) { badge.hidden = false; badge.textContent = s.recording ? "REC" : "Running"; badge.classList.toggle("is-rec", !!s.recording); badge.title = s.recording ? "The CDP Recorder is recording" : "The CDP Recorder is running on this computer"; }
         document.dispatchEvent(new CustomEvent("perfx:recorder", { detail: recorder }));
       })
       .catch(() => { /* nothing running locally — normal */ });

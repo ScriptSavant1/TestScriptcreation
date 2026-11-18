@@ -23,7 +23,7 @@
       platform: navigator.platform || null,
     });
   }
-  // the page lives at …/recorder or …/results-analyser; the tracking route sits beside it
+  // the page lives at …/studio or …/results-analyser; the tracking route sits beside it
   var base = location.pathname.replace(/\/[^/]*$/, "");
   window.PerfxTrack = {
     send: function (payload) {

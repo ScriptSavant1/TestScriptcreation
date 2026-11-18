@@ -37,7 +37,7 @@ try {
   await tb.waitForSelector("#settledPill:not(.hidden)", { timeout: 25000 });
   await tb.fill("#txNameInput", "T01_Open");
   await tb.click("#btnStartTx");
-  await tb.waitForSelector("#btnEndTx:not(.hidden)");
+  await tb.waitForFunction(() => /Recording — T01_Open/.test(document.getElementById("statusText").textContent));
   // browse in the recording window: open the test page through the recording browser's own DevTools endpoint
   const prof = readdirSync(tmpdir()).filter((d) => d.startsWith("cdp-recorder-")).map((d) => join(tmpdir(), d));
   let port = 0;
@@ -45,8 +45,7 @@ try {
   check(port > 0, "found the recording window");
   if (port) await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(base + "/")}`, { method: "PUT" });
   await wait(2500);
-  await tb.click("#btnEndTx");
-  await wait(500);
+  // no End Transaction (0.3.0): Stop ends the running transaction
   await tb.click("#btnStop");
   await tb.waitForSelector("#askCard:not(.hidden)");
   check(true, "Stop asks for the file name inside the toolbar");

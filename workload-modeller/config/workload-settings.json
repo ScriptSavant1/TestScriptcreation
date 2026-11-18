@@ -1,0 +1,17 @@
+{
+  "_help": "Team settings for the Workload Modeller. Edit a value, save, and every user gets it on the next page load. A wrong value keeps the built-in one and the page names it. Users can still change any figure on the page for one plan. See docs/USER-GUIDE.md, 'Team settings'.",
+  "updated": "2026-11-13",
+  "machineTypes": [
+    { "id": "onprem-win", "label": "On-premise Windows server", "location": "On-premise", "cores": 8, "memoryGb": 32, "diskGb": 230, "webVusersPerLg": 100, "apiVusersPerLg": 250 },
+    { "id": "aws-linux", "label": "AWS c6a.4xlarge — Linux", "location": "AWS", "cores": 16, "cpuWord": "vCPU", "memoryGb": 32, "webVusersPerLg": 200, "apiVusersPerLg": 500 },
+    { "id": "aws-win", "label": "AWS c6a.4xlarge — Windows", "location": "AWS", "cores": 16, "cpuWord": "vCPU", "memoryGb": 32, "webVusersPerLg": 200, "apiVusersPerLg": 500 }
+  ],
+  "loadGenerators": { "busyLimitPct": 70, "extraMachines": 1, "smallestGroup": 5, "fastLoopRequestsPerSecond": 2 },
+  "schedule": { "headroomPct": 25, "maxStartRatePerSecond": 2 },
+  "protocols": {
+    "web": { "memoryMbPerVuser": 5, "vusersPerCore": 50 },
+    "devweb": { "memoryMbPerVuser": 3, "vusersPerCore": 80 },
+    "truclient": { "memoryMbPerVuser": 350, "vusersPerCore": 2 },
+    "other": { "memoryMbPerVuser": 10, "vusersPerCore": 30 }
+  }
+}

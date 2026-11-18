@@ -15,6 +15,7 @@
  *    the recorded Negotiate / NTLM handshake is never sent as a fixed header
  */
 
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const path = require('path');
 const PageResources = require('../../src/web/public/shared/page-resources.js');

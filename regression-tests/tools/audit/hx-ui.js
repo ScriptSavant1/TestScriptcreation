@@ -42,17 +42,17 @@ if (!fs.existsSync(BIG)) {
   await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown');
   console.log('keyboard: from #' + before + ' to #' + await f.evaluate(() => document.querySelector('.hx-req.sel .num').textContent));
   // show left-out, filter, collapse
-  await f.check('#hx-out'); const c1 = await f.textContent('#hx-count');
+  await f.click('#hx-outbtn'); const c1 = await f.textContent('#hx-count');
   await f.fill('#hx-q', 'nav.pl'); await p.waitForTimeout(100); const c2 = await f.textContent('#hx-count');
   await f.fill('#hx-q', ''); await f.click('#hx-fold'); const c3 = await f.evaluate(() => [document.querySelectorAll('.hx-req').length, document.getElementById('hx-fold').textContent]);
-  await f.click('#hx-fold'); await f.uncheck('#hx-out');
+  await f.click('#hx-fold'); await f.click('#hx-outbtn');
   console.log('show left-out:', c1, '| filter nav.pl:', c2, '| collapse all → rows, button:', JSON.stringify(c3));
   // mask + copy as cURL
-  await f.check('#hx-mask'); await f.click('.hx-tab[data-tab="headers"]'); await shot('03-masked');
+  await f.click('#hx-maskbtn'); await f.click('.hx-tab[data-tab="headers"]'); await shot('03-masked');
   await f.click('[data-copy="curl"]'); await p.waitForTimeout(200);
   const clip = await p.evaluate(() => navigator.clipboard.readText().catch(() => '(no clipboard)'));
   console.log('cURL copied, first line:', clip.split('\n')[0], '| masked cookie in cURL:', /Cookie: ••••••/i.test(clip) || !/Cookie/i.test(clip));
-  await f.uncheck('#hx-mask');
+  await f.click('#hx-maskbtn');
   await p.evaluate(() => document.getElementById('tb-theme').click()); await p.waitForTimeout(200); await shot('04-other-theme');
   await p.evaluate(() => document.getElementById('tb-theme').click());
 
@@ -62,10 +62,10 @@ if (!fs.existsSync(BIG)) {
 
   // 3000 requests: scroll to the end
   await another(); console.log('big-3000 load', await load(FX + 'big-3000.har'), 'ms');
-  await f.check('#hx-out');
+  await f.click('#hx-outbtn');
   const end = await f.evaluate(async () => { const l = document.getElementById('hx-list'); l.scrollTop = l.scrollHeight; await new Promise((r) => setTimeout(r, 120)); const nums = [...document.querySelectorAll('.hx-req .num')].map((x) => +x.textContent); return { rows: document.querySelectorAll('#hx-rows > *').length, last: Math.max(...nums), count: document.getElementById('hx-count').textContent }; });
   console.log('big-3000 scrolled to the end:', JSON.stringify(end)); await shot('06-big-3000-end');
-  await f.uncheck('#hx-out');
+  await f.click('#hx-outbtn');
 
   // 20,000 requests
   await another(); const big = fs.statSync(BIG).size;

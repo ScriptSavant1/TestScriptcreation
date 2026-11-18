@@ -95,6 +95,7 @@ function loadFile(file, slot) {
         S.har1 = parsed;
         S.isNetLog1 = netlog;
         S.har1Name = file.name;
+        S._usageSent = false;   // a new recording: one usage ping when it is first read
         markLoaded(1, file.name, netlog);
         studioBuildDomains(parsed);
         studioInitFilters();
@@ -234,21 +235,20 @@ function updateUploadState() {
 // ═══════════════════════════════════════════════════════════════════════════
 // HAR REQUEST FILTERS (Chrome DevTools-style resource type + domain)
 // ═══════════════════════════════════════════════════════════════════════════
+// The Recorder's types and defaults (shared/request-filter.js — one rule set, BUG-142): a static file is JS, CSS,
+// Img or Font by its content; Media and Other stay in the script by default, as in the Recorder and the HAR Explorer.
+// (Manifest and WebSocket were types of their own here: a manifest counts as Other, a WebSocket is always left out.)
 const STUDIO_RT_TYPES = [
-  { key: "fetch", label: "Fetch/XHR", color: "#4f8ef7" },
   { key: "document", label: "Doc", color: "#e8a838" },
-  { key: "stylesheet", label: "CSS", color: "#9b59b6" },
+  { key: "fetch", label: "Fetch/XHR", color: "#4f8ef7" },
   { key: "script", label: "JS", color: "#f39c12" },
-  { key: "font", label: "Font", color: "#16a085" },
+  { key: "stylesheet", label: "CSS", color: "#9b59b6" },
   { key: "image", label: "Img", color: "#27ae60" },
+  { key: "font", label: "Font", color: "#16a085" },
   { key: "media", label: "Media", color: "#e74c3c" },
-  { key: "manifest", label: "Manifest", color: "#8e44ad" },
-  { key: "websocket", label: "WS", color: "#2980b9" },
   { key: "other", label: "Other", color: "#7f8c8d" },
 ];
-// Default: only Fetch/XHR and Document enabled — static resources (CSS/JS/images/fonts) are
-// excluded by default as they are not relevant to performance test scripting.
-const STUDIO_RT_DEFAULT = new Set(["fetch", "document"]);
+const STUDIO_RT_DEFAULT = new Set(["document", "fetch", "media", "other"]);
 
 function studioInitFilters() {
   const list = document.getElementById("rt-filter-list");
@@ -302,7 +302,7 @@ function studioToggleRt(key) {
 function studioToggleRtNone() {
   const list = document.getElementById("rt-filter-list");
   if (!list) return;
-  const firstKey = STUDIO_RT_TYPES[0].key;
+  const firstKey = "fetch";   // "None" keeps Fetch/XHR, as before
   S.filterResourceTypes = new Set([firstKey]);
   list.querySelectorAll(".rt-filter-row").forEach((r) => {
     r.classList.toggle("rt-row-on", r.dataset.key === firstKey);
@@ -793,7 +793,12 @@ function renderAdvisorPanel() {
   if (!panel) return;
 
   var candidates = S.advisorCandidates || [];
-  if (candidates.length === 0) {
+  // Shown whenever a recording is loaded — also when the scan found nothing, so Paste & Detect, Add Manual and the
+  // Request Inspector are always at hand. Hidden only before a recording is loaded.
+  var loaded = (S.entries1 || []).some(function (e) {
+    return !e.isMarker && !e.filtered;
+  });
+  if (candidates.length === 0 && !loaded) {
     panel.style.display = "none";
     return;
   }
@@ -801,7 +806,12 @@ function renderAdvisorPanel() {
 
   // Re-render cards
   var cardsEl = document.getElementById("adv-cards");
-  if (cardsEl) cardsEl.innerHTML = candidates.map(_advCardHtml).join("");
+  if (cardsEl)
+    cardsEl.innerHTML = candidates.length
+      ? candidates.map(_advCardHtml).join("")
+      : '<div class="adv-empty" id="adv-empty"><b>No correlation found automatically.</b><br>' +
+        "If a value changes on every run, add it with <b>Paste &amp; Detect</b> or <b>Add Manual</b>, " +
+        "or look at the values of a request (its <b>Dynamic values</b> tab, or the <b>Request Inspector</b>).</div>";
 
   // Re-populate inspector dropdown (entries may have changed)
   _advBuildInspectorDropdown();
@@ -822,31 +832,32 @@ function _advCardHtml(c) {
   if (c.status === "accepted") cardCls += " adv-card-accepted";
   if (c.status === "skipped") cardCls += " adv-card-skipped";
 
+  // Source = the request whose response sends the value; Replaced in = where the script puts the parameter
   var srcHtml = c.source
-    ? '<span class="adv-flow-src">&#x2190; From</span> <b>' +
-      _esc(c.source.url) +
-      "</b>" +
+    ? '<span class="adv-flow-src">Source</span> ' +
+      _advReqLink(c.source.entryIdx, c.source.url) +
       (c.source.jsonPath
-        ? " &rarr; <b>" + _esc(c.source.jsonPath) + "</b>"
+        ? " &middot; <b>" + _esc(c.source.jsonPath) + "</b>"
         : "")
     : '<span style="color:var(--text-3)">Source not found in HAR</span>';
 
   var usageCount = (c.usages || []).length;
   var firstUsage = c.usages && c.usages[0];
   var useHtml = firstUsage
-    ? '<span class="adv-flow-use">&#x2192; Used in</span> <b>' +
-      _esc(firstUsage.location) +
-      "</b>" +
-      (firstUsage.url ? " &mdash; " + _esc(firstUsage.url) : "") +
+    ? '<span class="adv-flow-use">Replaced in</span> ' +
+      _advReqLink(firstUsage.entryIdx, firstUsage.url) +
+      ' <span class="adv-where">&middot; ' + _esc(_advWhere(firstUsage)) + "</span>" +
       (usageCount > 1
-        ? ' <span style="color:var(--text-3)">+' +
+        ? ' <button type="button" class="adv-more" onclick="advisorShowUses(\'' + c.id + '\')" title="Every place this value is replaced">+' +
           (usageCount - 1) +
-          " more</span>"
+          " more</button>"
         : "")
-    : '<span style="color:var(--text-3)">No request body usage found</span>';
+    : '<span style="color:var(--text-3)">Not replaced in any request</span>';
 
   var manualTag = c._explorer
     ? '<span class="adv-manual-tag">From HAR Explorer</span>'
+    : c._paste
+    ? '<span class="adv-manual-tag">From Paste &amp; Detect</span>'
     : c._manual
     ? '<span class="adv-manual-tag">Manual</span>'
     : c._arrayReconstruct
@@ -958,6 +969,8 @@ function _advCardHtml(c) {
     confLabel +
     "</span>" +
     manualTag +
+    // applied to the script (Apply & Regenerate), as in the mockup
+    (c._applied ? '<span class="adv-in-script" title="This correlation is in the script">&#x2713; In the script</span>' : "") +
     "</div>" +
     '<div class="adv-card-value">' +
     _esc(c.preview) +
@@ -992,10 +1005,77 @@ function _advCardHtml(c) {
     '" onclick="advisorSkip(\'' +
     c.id +
     '\')" title="Dismiss this suggestion">&#x2715; Skip</button>' +
+    // the request whose response sends the value (as in the mockup)
+    (c.source && S.entries1 && S.entries1[c.source.entryIdx] && S.entries1[c.source.entryIdx].id
+      ? '<button type="button" class="adv-btn-show" onclick="advisorOpenRequest(' + S.entries1[c.source.entryIdx].id + ')" title="Open the request that sends this value">Show request</button>'
+      : "") +
     "</div>" +
     "</div>" +
     "</div>"
   );
+}
+
+// ---------------------------------------------------------------------------
+// Source / Replaced in: a request as "#id METHOD /path" (Studio's request id), a click opens its details
+// (Script Studio page: SSW.openDetails); "+n more" lists every place
+// ---------------------------------------------------------------------------
+var _ADV_WHERE = { body_json: "JSON body", body_form: "form field", header: "header", query: "query string", url_path: "address path", url: "address", cookie: "cookie" };
+function _advWhere(u) {
+  var w = _ADV_WHERE[u.location] || String(u.location || "").replace(/_/g, " ");
+  var f = u.jsonPath || u.key || "";
+  return w + (f ? " " + f : "");
+}
+function _advReqLabel(idx, fallbackUrl) {
+  var e = (S.entries1 || [])[idx];
+  if (!e || e.isMarker) return _esc(fallbackUrl || "");
+  var p = String(e.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "") || "/";
+  return "#" + e.id + " " + _esc(e.method) + " " + _esc(p.length > 64 ? p.slice(0, 63) + "\u2026" : p);
+}
+function _advReqLink(idx, fallbackUrl) {
+  var e = (S.entries1 || [])[idx];
+  var id = e && !e.isMarker ? e.id : -1;
+  return '<button type="button" class="adv-req-link" onclick="advisorOpenRequest(' + id + ')" title="Open this request">' + _advReqLabel(idx, fallbackUrl) + "</button>";
+}
+function advisorOpenRequest(id) {
+  if (!(id > 0) || !window.SSW || typeof SSW.openDetails !== "function") return;
+  var d = document.getElementById("adv-uses-dlg");
+  if (d && d.open) d.close();
+  SSW.openDetails(id);
+}
+function advisorShowUses(id) {
+  var c = _advFindById(id);
+  if (!c) return;
+  var d = document.getElementById("adv-uses-dlg");
+  if (!d) {
+    d = document.createElement("dialog");
+    d.id = "adv-uses-dlg";
+    d.className = "ss-dlg ss-dlg-wide adv-uses-dlg";
+    d.setAttribute("aria-labelledby", "adv-uses-h");
+    document.body.appendChild(d);
+    d.addEventListener("click", function (e) { if (e.target === d || e.target.closest("[data-close]")) d.close(); });
+  }
+  var row = function (kind, u) {
+    return "<tr><td>" + kind + "</td><td>" + _advReqLink(u.entryIdx, u.url) + "</td><td>" + _esc(u === c.source ? (u.jsonPath ? "response " + u.jsonPath : "response") : _advWhere(u)) + "</td></tr>";
+  };
+  d.innerHTML =
+    '<div class="ss-dlg-in"><div class="ss-dlg-h"><h2 id="adv-uses-h">' + _esc(c.varName) + " — every place</h2>" +
+    '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" data-close aria-label="Close">&#x2715;</button></div>' +
+    '<div class="ss-dlg-b"><p>Value <code>' + _esc(c.preview) + "</code> &middot; " + (c.usages || []).length + " place" + ((c.usages || []).length === 1 ? "" : "s") + " in the script. Click a request to see it.</p>" +
+    '<table class="adv-uses"><thead><tr><th></th><th>Request</th><th>Where</th></tr></thead><tbody>' +
+    (c.source ? row("Source", c.source) : "") +
+    (c.usages || []).map(function (u) { return row("Replaced in", u); }).join("") +
+    "</tbody></table></div></div>";
+  try { d.showModal(); } catch (e) { d.setAttribute("open", ""); }
+}
+
+// Accept every High-confidence suggestion still pending (Apply & Regenerate puts them in the script)
+function advisorAcceptAllHigh() {
+  var n = 0;
+  (S.advisorCandidates || []).forEach(function (c) {
+    if (c.status === "pending" && c.confidence === "high") { c.status = "accepted"; n++; }
+  });
+  renderAdvisorPanel();
+  if (n) showToast(n + " high-confidence suggestion" + (n === 1 ? "" : "s") + " accepted — click Apply &amp; Regenerate to put " + (n === 1 ? "it" : "them") + " in the script.", "success");
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,7 +1101,14 @@ function advisorSkip(id) {
 
 function advisorSetName(id, val) {
   var c = _advFindById(id);
-  if (c) c.varName = val.trim() || c.varName;
+  if (!c) return;
+  // letters, digits and _ only (a hyphen breaks VuGen {name} and DevWeb load.global.name)
+  var safe = typeof _advSafeVarName !== "undefined" ? _advSafeVarName(val) : val.trim();
+  c.varName = safe || c.varName;
+  if (safe && safe !== val.trim()) {
+    _advRefreshCard(c);
+    showToast("Renamed to " + safe + " — a parameter name takes letters, digits and _ only.", "info");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1464,8 +1551,22 @@ function _advUpdateFooter() {
   var pending = candidates.filter(function (c) {
     return c.status === "pending";
   }).length;
+  var pendingHigh = candidates.filter(function (c) {
+    return c.status === "pending" && c.confidence === "high";
+  }).length;
+  var allHigh = document.getElementById("adv-btn-allhigh");
+  if (!allHigh) {
+    allHigh = document.createElement("button");
+    allHigh.id = "adv-btn-allhigh";
+    allHigh.type = "button";
+    allHigh.className = "adv-btn-allhigh";
+    allHigh.onclick = function () { advisorAcceptAllHigh(); };
+    regen.parentNode.insertBefore(allHigh, regen);
+  }
+  allHigh.textContent = "Accept all high (" + pendingHigh + ")";
+  allHigh.hidden = !pendingHigh;
 
-  if (accepted === 0 && skipped === 0) {
+  if (accepted === 0 && skipped === 0 && !pendingHigh) {
     footer.style.display = "none";
     return;
   }
@@ -1847,6 +1948,38 @@ function pcSelectOccurrence(idx) {
   if (descEl) descEl.innerHTML = _pcExtDesc(occ);
 }
 
+// A boundary extractor captures the FIRST text between its boundaries: when the pasted response has the same left
+// boundary earlier (several meta tags, hidden fields …), widen it to the left until the first match is this value —
+// _advSafeBoundaries, the HAR Explorer's own rule. Such a boundary needs no occurrence number (_first); one that
+// cannot be made safe keeps the boundary and occurrence number Detect found (_unsafe, shown as a warning).
+function _pcSafeOccurrences(res, text) {
+  if (!res || !res.allOccurrences || typeof _advSafeBoundaries === "undefined") return;
+  res.allOccurrences.forEach(function (o) {
+    if (o.extType !== "boundary" || o.position == null) return;
+    var s = text.substr(o.position, String(res.value || "").length);
+    var known = o.contextType !== "generic";
+    var b = _advSafeBoundaries(text, o.position, s, known ? o.lb : null, known ? o.rb : null);
+    if (b) {
+      // readable: from the start of the word (c" content=" → name="visitor-hmac" content="), if still the first match
+      var start = o.position - b.lb.length;
+      var lineStart = text.lastIndexOf("\n", o.position - 1) + 1;
+      while (start > lineStart && o.position - start < 120 && !/[\s<>{},;]/.test(text.charAt(start - 1))) start--;
+      var wide = text.slice(start, o.position);
+      if (wide !== b.lb && _advFirstMatch(text, wide, b.rb) === s) b.lb = wide;
+      o.lb = b.lb;
+      o.rb = b.rb;
+      o._first = true;
+    } else o._unsafe = true;
+  });
+  var best = res.allOccurrences[(res.ordinal || 1) - 1];
+  if (best && res.extType === "boundary") {
+    res.lb = best.lb;
+    res.rb = best.rb;
+    res._first = best._first;
+    res._unsafe = best._unsafe;
+  }
+}
+
 function _pcExtDesc(r) {
   if (!r) return "";
   if (r.extType === "jsonpath")
@@ -1870,6 +2003,9 @@ function _pcExtDesc(r) {
     "</code>" +
     (r.contextLabel
       ? ' <span class="pc-pattern-label">(' + _esc(r.contextLabel) + ")</span>"
+      : "") +
+    (r._unsafe
+      ? '<div class="pc-result-hint">Check: the response has this left boundary before the value too — the extractor uses the occurrence number.</div>'
       : "")
   );
 }
@@ -1900,7 +2036,7 @@ function runPasteDetect() {
   if (!res) {
     res = _pcBuildFallbackExtractor(targetVal);
     autoFallback = true;
-  }
+  } else _pcSafeOccurrences(res, respText);
   _riPasteResult = res;
 
   // ── Build result HTML ─────────────────────────────────────────────────────
@@ -2032,9 +2168,11 @@ function submitPasteCorrelate() {
   var varName =
     ((document.getElementById("pc-varname-input") || {}).value || "").trim() ||
     _riPasteResult.varName;
-  var srcIdxStr = (document.getElementById("pc-src-select") || {}).value || "";
-  var srcIdx = parseInt(srcIdxStr, 10);
-  if (isNaN(srcIdx)) srcIdx = 0;
+  // step 3: the request that USES the value (optional)
+  var useIdx = parseInt(
+    (document.getElementById("pc-src-select") || {}).value || "",
+    10,
+  );
 
   var res = _riPasteResult;
 
@@ -2053,8 +2191,11 @@ function submitPasteCorrelate() {
     effective = res.allOccurrences[_riPasteOccIdx];
   }
 
-  // Use the nearest earlier entry as "source" so codegen has a valid sourceIdx
-  var sourceEntryIdx = isNaN(srcIdx) ? 0 : Math.max(0, srcIdx - 1);
+  // The source = the recorded response that holds the value (see _pcFindSource); when no recorded response holds
+  // it (served from the browser cache, or typed by hand), the request before the one that uses it, else the first.
+  var sourceEntryIdx = _pcFindSource(res.value, useIdx);
+  var sourceFound = sourceEntryIdx >= 0;
+  if (!sourceFound) sourceEntryIdx = isNaN(useIdx) ? 0 : Math.max(0, useIdx - 1);
 
   // Build extractorType + extractorConfig for all result types
   var extractorType, extractorConfig;
@@ -2070,88 +2211,103 @@ function submitPasteCorrelate() {
   } else {
     extractorType = "boundary";
     extractorConfig = { lb: effective.lb || "", rb: effective.rb || "" };
-    // Add ordinal if multiple occurrences
-    if (res.allOccurrences && res.allOccurrences.length > 1) {
+    // Add ordinal if multiple occurrences — not for a boundary made safe (its first match is the value)
+    if (res.allOccurrences && res.allOccurrences.length > 1 && !effective._first) {
       extractorConfig.ordinal = _riPasteOccIdx + 1;
     }
   }
 
-  // Create correlation with the detected extractor
-  var newCorr = {
-    name: varName,
-    sourceIdx: sourceEntryIdx,
-    extractorType: extractorType,
-    extractorConfig: extractorConfig,
-    usages: [],
-    _fromAdvisor: true,
-    _pasteDetect: true,
-  };
-
-  // Auto-scan ALL requests for usages of this value
-  var entries = S.entries1 || [];
+  // The correlation becomes an Advisor card, the same way as Add Manual and the HAR Explorer: advisorAddManual finds
+  // the uses (body JSON, form fields, query, headers, URL path — in the requests after the source) and the card keeps
+  // this exact extractor (_paste, honoured by advisorToCorrelation).
   var value = res.value;
-  entries.forEach(function (e, i) {
-    if (e.isMarker || e.filtered) return;
-    var bodyText = (e.body && e.body.text) || "";
-    if (bodyText) {
-      var obj;
-      try {
-        obj = JSON.parse(bodyText);
-      } catch (err) {
-        obj = null;
-      }
-      if (obj && typeof _advWalkLeaves !== "undefined") {
-        _advWalkLeaves(
-          obj,
-          "$",
-          function (val, jpath) {
-            if (val === value) {
-              newCorr.usages.push({
-                reqIdx: i,
-                location: "body_json",
-                key: jpath.split(".").pop(),
-                tokenValue: value,
-                originalValue: value,
-                prefix: "",
-              });
-            }
-          },
-          0,
-        );
-      } else if (bodyText.includes(value)) {
-        newCorr.usages.push({
-          reqIdx: i,
-          location: "body_json",
-          key: "value",
-          tokenValue: value,
-          originalValue: value,
-          prefix: "",
-        });
-      }
-    }
-    for (var h of e.reqHdrs || []) {
-      var hval = String(h.value || "");
-      if (hval === value || hval === "Bearer " + value) {
-        newCorr.usages.push({
-          reqIdx: i,
-          location: "header",
-          key: h.name,
-          tokenValue: value,
-          originalValue: value,
-          prefix: /^bearer\s+/i.test(hval) ? "Bearer " : "",
-        });
-      }
-    }
-  });
-
-  S.correlations = (S.correlations || []).concat([newCorr]);
-  closePasteCorrelate();
-  renderAdvisorPanel();
-  showToast(
-    "Correlation added. Click Apply & Regenerate to update the script.",
-    "success",
+  var cand = advisorAddManual(
+    sourceEntryIdx,
+    extractorType === "jsonpath" ? "jsonpath" : "boundary",
+    extractorConfig.path || extractorConfig.lb || "",
+    varName,
+    value,
   );
-  if (typeof regenerateFromAdvisor !== "undefined") regenerateFromAdvisor();
+  cand._paste = { extractorType: extractorType, extractorConfig: extractorConfig };
+
+  // A body that is not JSON and has no form fields (plain text, XML …) that holds the value: used there too,
+  // as Paste & Detect always did
+  var entries = S.entries1 || [];
+  for (var i = sourceEntryIdx + 1; i < entries.length; i++) {
+    var e = entries[i];
+    if (e.isMarker || e.filtered) continue;
+    var bodyText = (e.body && e.body.text) || "";
+    if (!value || !bodyText || bodyText.indexOf(value) < 0) continue;
+    var counted = cand.usages.some(function (u) {
+      return u.entryIdx === i && /^body/.test(u.location);
+    });
+    if (!counted && !_advParseJson(bodyText))
+      cand.usages.push({ entryIdx: i, url: _advShortUrl(e), location: "body_json", jsonPath: null });
+  }
+
+  // Applied at once (only this card — other accepted cards still wait for Apply & Regenerate)
+  var nc = advisorToCorrelation(cand);
+  var dup = (S.correlations || []).some(function (ex) {
+    return (
+      ex.name === nc.name &&
+      ex.extractorType === nc.extractorType &&
+      JSON.stringify(ex.extractorConfig) === JSON.stringify(nc.extractorConfig)
+    );
+  });
+  if (!dup) S.correlations = (S.correlations || []).concat([nc]);
+  cand._applied = true;
+
+  closePasteCorrelate();
+  if (typeof regenerateFromAdvisor !== "undefined") regenerateFromAdvisor({ quiet: true });
+  else renderAdvisorPanel();
+
+  // one message: what was added, where from, where used
+  var srcE = entries[sourceEntryIdx];
+  var srcLabel = srcE ? _advShortUrl(srcE) : "the first request";
+  var uses = {};
+  cand.usages.forEach(function (u) {
+    uses[u.entryIdx] = 1;
+  });
+  var nUses = Object.keys(uses).length;
+  var typed = String(varName || "").trim();
+  var msg =
+    cand.varName +
+    " added" +
+    (typed && typed !== cand.varName ? " (renamed from " + typed + ": letters, digits and _ only)" : "") +
+    " — extracted from " +
+    srcLabel +
+    ", used in " +
+    nUses +
+    (nUses === 1 ? " request" : " requests") +
+    ". Script regenerated.";
+  if (!sourceFound)
+    showToast(
+      msg + " The value is in no recorded response (cached or typed?) — check the extraction in the script.",
+      "warning",
+      9000,
+    );
+  else if (!nUses)
+    showToast(msg + " No later request sends this value — check the value or pick the request in step 3.", "warning", 9000);
+  else showToast(msg, "success", 6000);
+}
+
+// The request whose recorded response holds the value: with a request picked in step 3 (it USES the value), the
+// last one before it — or that request itself when only its own response holds the value (it was picked as the
+// source); without, the first. -1 when no recorded response holds it. Indexes into S.entries1; filtered requests
+// and markers are skipped.
+function _pcFindSource(value, useIdx) {
+  var entries = S.entries1 || [];
+  if (!value) return -1;
+  var holds = function (i) {
+    var e = entries[i];
+    return !!e && !e.isMarker && !e.filtered && String(e.respBody || "").indexOf(value) >= 0;
+  };
+  if (!isNaN(useIdx)) {
+    for (var i = Math.min(useIdx, entries.length) - 1; i >= 0; i--) if (holds(i)) return i;
+    return holds(useIdx) ? useIdx : -1;
+  }
+  for (var j = 0; j < entries.length; j++) if (holds(j)) return j;
+  return -1;
 }
 
 // =============================================================================

@@ -48,16 +48,16 @@
     list.push({ group: "Actions", title: "Switch light / dark theme", sub: "", icon: I_THEME, run: () => { const b = $("#tb-theme"); if (b) b.click(); } });
     if (innerWidth > 900) list.push({ group: "Actions", title: document.documentElement.classList.contains("sb-collapsed") ? "Expand the menu" : "Collapse the menu", sub: "Ctrl+B", icon: I_MENU, run: () => { const b = $(".sb-collapse"); if (b) b.click(); } });
     /* global PORTAL_CONFIG */
-    const recOff = typeof PORTAL_CONFIG !== "undefined" && PORTAL_CONFIG.tabs && PORTAL_CONFIG.tabs.recorder && PORTAL_CONFIG.tabs.recorder.enabled === false;
-    // Start recording: the Recorder page, then its Start recording window (portal/recorder-live.js) once the page is there
+    const recOff = typeof PORTAL_CONFIG !== "undefined" && PORTAL_CONFIG.tabs && PORTAL_CONFIG.tabs.studio && PORTAL_CONFIG.tabs.studio.enabled === false;
+    // Start recording: Script Studio, its start screen, then its Start recording window (portal/record-live.js) once the page is there
     if (!recOff) list.push({ group: "Actions", title: "Start recording", sub: "Record a journey with the CDP Recorder — Edge or Chrome opens on your desktop", icon: I_REC, c: "--c-record",
       run: () => {
-        if (window.PerfxShell) window.PerfxShell.go("record");
+        if (window.PerfxShell) window.PerfxShell.go("studio");
         let tries = 0;
         const open = () => {
-          const f = document.getElementById("iframe-recorder");
-          const live = f && f.contentWindow && f.contentWindow.PerfxRecordLive;
-          if (live) live.open(); else if (++tries < 40) setTimeout(open, 150);
+          const f = document.getElementById("iframe-studio"), w = f && f.contentWindow;
+          const live = w && w.PerfxRecordLive;
+          if (live && w.SS && w.SS.view) { w.SS.view("home"); live.open(); } else if (++tries < 40) setTimeout(open, 150);
         };
         open();
       } });
@@ -74,7 +74,8 @@
       const t = x.title.toLowerCase(), all = t + " " + x.sub.toLowerCase() + " " + x.group.toLowerCase();
       const inHead = words.every((w) => all.includes(w));
       if (!inHead && !(x.kw && words.every((w) => x.kw.includes(w)))) return null;   // Help sections: also their text
-      const score = inHead ? (t.startsWith(words[0]) ? 0 : 2) + (words.every((w) => t.includes(w)) ? 0 : 1) : 4;
+      // the title exactly as typed first ("Start recording" → the action, before a question that starts with it)
+      const score = t === words.join(" ") ? -1 : inHead ? (t.startsWith(words[0]) ? 0 : 2) + (words.every((w) => t.includes(w)) ? 0 : 1) : 4;
       return { x, score };
     }).filter(Boolean).sort((a, b) => a.score - b.score).map((r) => r.x);
   }

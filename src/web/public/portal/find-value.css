@@ -1,0 +1,72 @@
+/* Find a value — the answer and "Correlate this" (portal/find-value.js), shared by the HAR Explorer and Script Studio.
+ * Moved unchanged from portal/har-explorer.css; loaded before the page's own sheet. */
+.hx-hl { padding: 0 1px; border-radius: 3px; background: color-mix(in srgb, var(--ds-warn) 32%, transparent); color: inherit; outline: 1px solid color-mix(in srgb, var(--ds-warn) 55%, transparent); }
+.hx-fh { padding-bottom: 14px; }
+.hx-fh h2 { margin: 0 0 4px; font-size: var(--ds-fs-md); font-weight: 700; }
+.hx-fh > p { margin: 0 0 10px; font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+.hx-fin { display: flex; gap: 8px; }
+.hx-fin .hx-search { max-width: none; }
+.hx-sugg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.hx-sugg button { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 30px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--ds-border-2); background: var(--ds-surface); font-size: var(--ds-fs-xs); color: var(--ds-text); cursor: pointer; }
+.hx-sugg button:hover, .hx-sugg button[aria-pressed="true"] { border-color: var(--ds-accent); background: var(--ds-accent-soft); }
+.hx-sugg button b { font-weight: 600; }
+.hx-sugg button code { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-mono); font-size: 11.5px; color: var(--ds-text-2); }
+.hx-sugg .by { padding: 0 6px; border-radius: 99px; background: color-mix(in srgb, var(--c-studio) 16%, transparent); color: var(--ds-text); font-size: 10.5px; font-weight: 700; }
+.hx-sugg-wait { margin: 10px 0 0; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.hx-verdict { margin-top: 12px; padding: 14px 16px; border-radius: var(--ds-r-tile); }
+.hx-verdict h3 { margin: 0 0 4px; font-size: var(--ds-fs-md); font-weight: 700; }
+.hx-verdict p { margin: 0; font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+.hx-verdict p b { color: var(--ds-text); }
+.hx-verdict .hx-studio { margin-top: 8px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--ds-text) 10%, transparent); }
+.hx-verdict.warn { background: var(--ds-warn-soft); }
+.hx-verdict.ok { background: var(--ds-ok-soft); } .hx-verdict.param { background: color-mix(in srgb, var(--c-studio) 12%, transparent); } .hx-verdict.plain { background: var(--ds-surface-2); }
+.hx-trail { list-style: none; margin: 14px 0 0; padding: 0; }
+.hx-trail li { position: relative; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 8px 0 8px 18px; font-size: var(--ds-fs-sm); }
+.hx-trail li::before { content: ""; position: absolute; left: 3px; top: 15px; width: 9px; height: 9px; border-radius: 50%; background: var(--ds-accent); }
+.hx-trail li.from::before { background: var(--ds-ok); }
+.hx-trail li + li::after { content: ""; position: absolute; left: 6px; top: -7px; height: 22px; border-left: 2px dotted var(--ds-border-2); }
+.hx-trail a, .hx-also a { color: var(--ds-accent-text); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.hx-trail a:hover, .hx-also a:hover { text-decoration: underline; }
+.hx-trail .wh { display: block; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.hx-badge { justify-self: start; align-self: start; display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+.hx-badge.src { background: var(--ds-ok-soft); color: var(--ds-ok); } .hx-badge.use { background: var(--ds-accent-soft); color: var(--ds-accent-text); } .hx-badge.enc { background: var(--ds-warn-soft); color: var(--ds-warn); }
+[data-theme="light"] .hx-badge.src { color: #11652f; } [data-theme="light"] .hx-badge.enc { color: #8a4a00; }
+.hx-also { margin: 10px 0 0; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+/* Correlate this */
+.hx-corr { margin-top: 16px; border: 1px solid color-mix(in srgb, var(--ds-ok) 35%, var(--ds-border)); border-radius: var(--ds-r-tile); overflow: hidden; }
+.hx-corr-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; background: var(--ds-ok-soft); }
+.hx-corr-h h3 { margin: 0; font-size: var(--ds-fs-md); font-weight: 700; }
+.hx-corr-h .hx-fmt { margin-left: auto; }
+.hx-corr-b { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.hx-cn { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; font-size: var(--ds-fs-sm); font-weight: 600; color: var(--ds-text-2); }
+.hx-cn input { width: 240px; max-width: 100%; height: 34px; padding: 0 10px; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-border-2); background: var(--ds-inset); font-family: var(--ds-mono); font-size: 12.5px; }
+.hx-cn input:focus { outline: 0; border-color: var(--ds-focus); box-shadow: 0 0 0 3px var(--ds-accent-soft); }
+.hx-cn input:disabled { opacity: .75; }
+.hx-corr-from { margin: 0; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.hx-corr-from a { color: var(--ds-accent-text); font-weight: 600; text-decoration: none; }
+.hx-corr-code { max-height: none; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-border); }
+.hx-corr-uses { margin: 0; padding-left: 18px; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.hx-corr-uses li { margin: 3px 0; }
+.hx-corr-uses a { color: var(--ds-accent-text); font-weight: 600; text-decoration: none; }
+.hx-corr-uses code { font-family: var(--ds-mono); color: var(--ds-text); }
+.hx-corr-warn { margin: 0; color: var(--ds-text-2); }
+.hx-corr-act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.hx-corr-act svg { width: 16px; height: 16px; }
+.hx-added { display: inline-flex; align-items: center; gap: 6px; font-size: var(--ds-fs-sm); font-weight: 600; color: var(--ds-ok); }
+[data-theme="light"] .hx-added { color: #11652f; }
+.hx-selbtn { position: fixed; z-index: 60; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: var(--ds-r-sm); background: var(--ds-text); color: var(--ds-bg); font-size: var(--ds-fs-xs); font-weight: 600; cursor: pointer; box-shadow: 0 8px 20px -6px rgba(0, 0, 0, .35); }
+.hx-selbtn svg { width: 14px; height: 14px; }
+.hx-back { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 0 0 10px; padding: 6px 6px 6px 12px; border-radius: var(--ds-r-sm); background: var(--ds-surface-2); font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.hx-back mark { font-family: var(--ds-mono); }
+.hx-back .ds-btn { margin-left: auto; }
+
+/* the trail as two sections (Source, Replaced in), as in the mockup */
+.fv-sec { margin-top: 14px; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-tile); overflow: hidden; background: var(--ds-surface); }
+.fv-sec > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--br-head, var(--ds-surface-2)); font-weight: 700; cursor: pointer; }
+.fv-sec > summary::-webkit-details-marker { display: none; }
+.fv-sec > summary svg { width: 16px; height: 16px; transition: transform .15s; }
+.fv-sec:not([open]) > summary svg { transform: rotate(-90deg); }
+.fv-sec .hx-trail { margin: 0; }
+.fv-sec .hx-trail li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 10px 14px; border-top: 1px solid var(--ds-border); align-items: start; }
+.fv-sec .hx-trail li::before, .fv-sec .hx-trail li + li::after { display: none; }
+.fv-sec .hx-trail .wh { display: block; font-family: var(--ds-mono); font-size: var(--ds-fs-xs); color: var(--ds-text); }

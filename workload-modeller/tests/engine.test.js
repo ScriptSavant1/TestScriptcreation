@@ -1,0 +1,372 @@
+/**
+ * Workload Modeller engine — the worked cases of the spec (docs/SPEC section 9) and the edge cases.
+ * Expected values are worked out by hand in the comments, not taken from the engine.
+ */
+const E = require('../engine/workload-engine.js');
+
+const pool = [{ id: 'p1', name: 'On-premise', cores: 8, ramGb: 32, extra: 1 }];
+const run = (groups, scenario) => E.model({ scenario: Object.assign({ steadyMin: 60, workload: 'basic-scenario' }, scenario || {}), groups, pools: pool });
+const near = (a, b, eps = 1e-9) => Math.abs(a - b) < eps;
+
+describe('Workload engine — sizing', () => {
+  test('worked example: 10 TPS, 4 transactions, 1 s, 15 s think → 60 Vusers at 24 s', () => {
+    // iteration 4×1 + 15 = 19 s; +25% = 23.75 → 24 s; Vusers = 10 × 24 ÷ 4 = 60
+    const g = run([{ name: 'Payments', method: 'tps', targetTps: 10, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 }]).groups[0];
+    expect([g.vusers, g.pacing.mean]).toEqual([60, 24]);
+    expect(near(g.tps, 10)).toBe(true);
+    expect(g.iters.steady).toBe(9000);                       // 60 × 3600 ÷ 24
+  });
+
+  test('Vusers + fixed pacing without a response time → TPS and the response-time limit', () => {
+    const r = run([{ name: 'S', method: 'vusers', vusers: 50, txPerIter: 4, thinkPerIter: 15, pacing: { mode: 'fixed', fixed: 24 } }]);
+    const g = r.groups[0];
+    expect(near(g.tps, 50 * 4 / 24)).toBe(true);
+    expect(near(g.rtBudget, 2.25)).toBe(true);                // (24 − 15) ÷ 4
+    expect(r.ready).toBe(true);
+    expect(g.checks.some((c) => c.code === 'rt-budget' && c.level === 'info')).toBe(true);
+  });
+
+  test('Vusers, as soon as possible, no response time → what-if table and ceiling', () => {
+    const r = run([{ name: 'S', method: 'vusers', vusers: 50, txPerIter: 4, thinkPerIter: 15, pacing: { mode: 'asap' } }]);
+    const g = r.groups[0];
+    expect(g.status).toBe('estimate');
+    expect(near(g.ceilingTps, 200 / 15)).toBe(true);
+    expect(near(g.whatIf[1].tps, 200 / 17)).toBe(true);       // 0.5 s × 4 + 15 = 17 s
+    expect(r.ready).toBe(false);
+  });
+
+  test('Vusers only, automatic pacing, no response time → asks for it', () => {
+    const g = run([{ name: 'S', method: 'vusers', vusers: 50, txPerIter: 4, thinkPerIter: 15 }]).groups[0];
+    expect([g.status, g.needs]).toEqual(['needs-input', 'rt']);
+  });
+
+  test('Vusers and TPS that cannot fit → not possible, with the Vusers needed', () => {
+    // iteration 4 × 1.25 + 15 = 20 s; 100 TPS ÷ 4 = 25 iterations/s × 20 × 1.25 = 625 Vusers
+    const g = run([{ name: 'S', method: 'vusers_tps', vusers: 50, targetTps: 100, txPerIter: 4, rtAvg: 1.25, thinkPerIter: 15 }]).groups[0];
+    expect(g.status).toBe('infeasible');
+    expect(g.checks.some((c) => c.code === 'pacing-too-short' && /625 Vusers/.test(c.text))).toBe(true);
+  });
+
+  test('three scripts with their own TPS add up exactly', () => {
+    const r = run([
+      { name: 'Login', method: 'tps', targetTps: 2, txPerIter: 1, rtAvg: 1, thinkPerIter: 5 },
+      { name: 'Search', method: 'tps', targetTps: 6, txPerIter: 2, rtAvg: 0.5, thinkPerIter: 10 },
+      { name: 'Payment', method: 'tps', targetTps: 2, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 },
+    ]);
+    expect(near(r.totals.tps, 10)).toBe(true);
+  });
+
+  test('random pacing 20–28 s: TPS at the mean, range at the ends, low headroom', () => {
+    const g = run([{ name: 'S', method: 'vusers', vusers: 50, txPerIter: 4, thinkPerIter: 15, rtAvg: 1, pacing: { mode: 'random', min: 20, max: 28 } }]).groups[0];
+    expect(near(g.tps, 200 / 24) && near(g.tpsMin, 200 / 28) && near(g.tpsMax, 10)).toBe(true);
+    expect(g.checks.some((c) => c.code === 'low-headroom')).toBe(true);   // 20 < 19 × 1.25
+  });
+
+  test('random think 50–150% with 24 s pacing → slow iterations overrun (warning)', () => {
+    // longest think 22.5 + 4 = 26.5 s > 24 s
+    const g = run([{ name: 'S', method: 'vusers', vusers: 50, txPerIter: 4, thinkPerIter: 15, rtAvg: 1, thinkMode: 'random', thinkMinPct: 50, thinkMaxPct: 150, pacing: { mode: 'fixed', fixed: 24 } }]).groups[0];
+    expect(g.checks.some((c) => c.code === 'pacing-tight')).toBe(true);
+  });
+
+  test('share of the total: 60% of 10 TPS = 6; shares that do not add up to 100% are flagged', () => {
+    let r = run([{ name: 'A', method: 'share', sharePct: 60, txPerIter: 2, rtAvg: 1, thinkPerIter: 8 }, { name: 'B', method: 'share', sharePct: 40, txPerIter: 1, rtAvg: 1, thinkPerIter: 4 }], { totalTps: 10 });
+    expect(near(r.groups[0].target, 6)).toBe(true);
+    expect(Math.abs(r.totals.tps - 10)).toBeLessThan(0.2);
+    r = run([{ name: 'A', method: 'share', sharePct: 60, txPerIter: 2, rtAvg: 1, thinkPerIter: 8 }], { totalTps: 10 });
+    expect(r.checks.some((c) => c.code === 'share-total')).toBe(true);
+  });
+
+  test('36,000 per hour × growth 1.5 → 15 TPS', () => {
+    expect(near(run([{ name: 'V', method: 'volume', volumePerHour: 36000, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 }], { growth: 1.5 }).groups[0].target, 15)).toBe(true);
+  });
+
+  test('think time longer than the pacing is flagged', () => {
+    expect(run([{ name: 'S', method: 'vusers', vusers: 5, txPerIter: 1, thinkPerIter: 30, pacing: { mode: 'fixed', fixed: 20 } }]).checks.some((c) => c.code === 'think-exceeds-pacing')).toBe(true);
+  });
+
+  test('iterations target: 7,200 × 2 ÷ 3,600 s = 4 TPS; too few data rows flagged', () => {
+    const r = run([{ name: 'D', method: 'iterations', iterations: 7200, txPerIter: 2, rtAvg: 1, thinkPerIter: 8, dataRows: 5000 }]);
+    expect(near(r.groups[0].target, 4)).toBe(true);
+    expect(r.checks.some((c) => c.code === 'data-short')).toBe(true);
+  });
+
+  test('automatic random pacing: the shortest wait covers the slowest iteration', () => {
+    const g = run([{ name: 'S', method: 'tps', targetTps: 10, txPerIter: 4, rtAvg: 1, rt90: 2, thinkPerIter: 15 }], { pacingStyle: 'random', randomPct: 20 }).groups[0];
+    expect(g.pacing.min).toBeGreaterThanOrEqual(g.it.worst - 1e-9);
+    expect(Math.abs(g.tps - 10)).toBeLessThan(0.05);
+  });
+
+  test('TPS with a given fixed pacing: Vusers rounded up and said', () => {
+    // 2 TPS ÷ 4 × 23 s = 11.5 → 12
+    const g = run([{ name: 'S', method: 'tps', targetTps: 2, txPerIter: 4, pacing: { mode: 'fixed', fixed: 23 } }]).groups[0];
+    expect(g.vusers).toBe(12);
+    expect(g.checks.some((c) => c.code === 'rounded')).toBe(true);
+  });
+
+  test('licence limit', () => {
+    expect(run([{ name: 'S', method: 'vusers', vusers: 600, txPerIter: 1, pacing: { mode: 'fixed', fixed: 10 } }], { licenceVusers: 500 }).checks.some((c) => c.code === 'licence')).toBe(true);
+  });
+});
+
+describe('Workload engine — schedule', () => {
+  test('ramp step plan close to the wanted length; one user starts at once', () => {
+    const sp = E.stepPlan(60, 72);
+    expect(sp.duration).toBeGreaterThan(0);
+    expect(Math.abs(sp.duration - 72) / 72).toBeLessThanOrEqual(0.25);
+    expect(E.stepPlan(1, 60).all).toBe(true);
+  });
+
+  test('basic schedule by group: every group full together; steady iterations = Vusers × 3600 ÷ pacing', () => {
+    const r = E.model({ scenario: { steadyMin: 60, workload: 'basic-group' }, pools: pool, groups: [
+      { name: 'Login', method: 'tps', targetTps: 2, txPerIter: 1, rtAvg: 1, thinkPerIter: 5 },
+      { name: 'Payment', method: 'tps', targetTps: 2, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 }] });
+    expect(r.ready).toBe(true);
+    expect(r.groups.map((x) => x.iters.steady)).toEqual([16 * 3600 / 8, 12 * 3600 / 24]);
+  });
+
+  test('stress in a real-world schedule peaks at 150% (90 Vusers); a basic schedule is flagged', () => {
+    const g = [{ name: 'S', method: 'tps', targetTps: 10, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 }];
+    expect(run(g, { testType: 'stress', workload: 'real-world' }).peakVusers).toBe(90);
+    expect(run(g, { testType: 'stress', workload: 'basic-scenario' }).checks.some((c) => c.code === 'needs-real-world')).toBe(true);
+  });
+
+  test('spike peaks at 200% (120 Vusers)', () => {
+    expect(run([{ name: 'S', method: 'tps', targetTps: 10, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 }], { testType: 'spike', workload: 'real-world' }).peakVusers).toBe(120);
+  });
+
+  test('iterations per phase add up; the timeline peaks at the Vusers', () => {
+    const r = run([{ name: 'S', method: 'tps', targetTps: 10, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 }]);
+    const it = r.totals.iters;
+    expect(it.rampUp + it.steady + it.rampDown).toBe(it.total);
+    expect(Math.max(...r.timeline.map((x) => x.vusers))).toBe(60);
+  });
+
+  test('2,000 Vusers never start faster than 2 per second', () => {
+    const r = E.model({ scenario: { steadyMin: 60, workload: 'basic-scenario' }, pools: [{ id: 'p1', name: 'x', capacity: { web: 500 } }], groups: [{ name: 'Big', method: 'vusers', vusers: 2000, txPerIter: 1, pacing: { mode: 'fixed', fixed: 30 } }] });
+    const a = r.actions[0];
+    expect(a.perStep / a.every).toBeLessThanOrEqual(2.2);
+  });
+});
+
+describe('Workload engine — load generators', () => {
+  test('capacity from cores and memory; missing size flagged; from a past run', () => {
+    expect(E.lgCapacity({ cores: 8, ramGb: 32 }, 'web', E.PROTOCOLS).cap).toBe(Math.min(Math.floor(30 * 1024 * 0.7 / 5), Math.floor(8 * 50 * 0.7)));
+    const r = E.model({ scenario: { workload: 'basic-scenario' }, pools: [{ id: 'p1', name: 'Cloud' }], groups: [{ name: 'S', method: 'vusers', vusers: 10, txPerIter: 1, pacing: { mode: 'fixed', fixed: 10 } }] });
+    expect(r.checks.some((c) => c.code === 'lg-size') && r.lgTotal === null).toBe(true);
+    expect(E.capacityFromRun(200, 45, 60, 70)).toBe(233);    // 200 × 70 ÷ 60
+    expect(E.capacityFromRun(0, 45, 60, 70)).toBeNull();
+    expect(E.capacityFromRun(200, 0, 0, 70)).toBeNull();
+  });
+
+  test('two pools with their own figures: 300 ÷ 250 → 2 + 1 extra; 30 ÷ 20 → 2', () => {
+    const r = E.model({ scenario: { workload: 'basic-scenario' }, pools: [{ id: 'a', name: 'On-prem', capacity: { web: 250 }, extra: 1 }, { id: 'b', name: 'Cloud', capacity: { truclient: 20 }, extra: 0 }],
+      groups: [{ name: 'W', protocol: 'web', pool: 'a', method: 'vusers', vusers: 300, txPerIter: 1, pacing: { mode: 'fixed', fixed: 10 } },
+        { name: 'T', protocol: 'truclient', pool: 'b', method: 'vusers', vusers: 30, txPerIter: 1, pacing: { mode: 'fixed', fixed: 60 } }] });
+    expect([r.lg[0].total, r.lg[1].total, r.lgTotal]).toEqual([3, 2, 5]);
+  });
+});
+
+describe('Workload engine — empty and malformed input', () => {
+  test('no scripts: not ready, says so', () => {
+    const r = E.model({ scenario: {}, groups: [] });
+    expect(r.ready).toBe(false);
+    expect(r.checks.some((c) => c.code === 'no-scripts')).toBe(true);
+  });
+
+  test('no input object fields at all: does not throw', () => {
+    expect(() => E.model({})).not.toThrow();
+  });
+
+  test('negative, zero or text numbers are treated as missing, never as values', () => {
+    for (const bad of [-5, 0, 'abc', NaN, null]) {
+      const g = run([{ name: 'S', method: 'tps', targetTps: bad, txPerIter: 4, rtAvg: 1 }]).groups[0];
+      expect([g.status, g.needs]).toEqual(['needs-input', 'target']);
+    }
+    const g = run([{ name: 'S', method: 'tps', targetTps: 5, txPerIter: -3, rtAvg: 1, thinkPerIter: 'x' }]).groups[0];
+    expect(g.T).toBe(1);                                       // a bad transaction count counts as 1
+    expect(g.status).toBe('ok');
+  });
+
+  test('fixed pacing without its seconds asks for them', () => {
+    const g = run([{ name: 'S', method: 'vusers', vusers: 5, txPerIter: 1, pacing: { mode: 'fixed' } }]).groups[0];
+    expect([g.status, g.needs]).toEqual(['needs-input', 'pacing']);
+  });
+});
+
+describe('Workload engine — think time limit and fixed waits', () => {
+  // 40 Vusers, 10 transactions of 0.3 s, fixed pacing 360 s (an LRE run: 40 × 10 ÷ 360 = 1.11 TPS)
+  const base = { name: 'S', method: 'vusers', vusers: 40, txPerIter: 10, rtAvg: 0.3, pacing: { mode: 'fixed', fixed: 360 } };
+  const one = (g) => run([Object.assign({}, base, g)]).groups[0];
+
+  test('fixed waits count in full even when think time is ignored: 3 s + 27 s = 30 s; the TPS is the pacing\'s', () => {
+    const g = one({ thinkPerIter: 0, waitPerIter: 27, thinkMode: 'ignore' });
+    expect(near(g.it.mean, 30, 1e-9)).toBe(true);
+    expect(near(g.tps, 400 / 360, 1e-9)).toBe(true);
+  });
+
+  test('multiply leaves fixed waits alone: 10 s think × 2 + 5 s waits = 25 s', () => {
+    expect(near(one({ thinkPerIter: 10, waitPerIter: 5, thinkMode: 'multiply', thinkFactor: 2 }).it.think.mean, 25, 1e-9)).toBe(true);
+  });
+
+  test('a limit above every think time changes nothing and says nothing', () => {
+    const g = one({ thinkPerIter: 27, thinkPauses: 9, thinkLimit: 3 });
+    expect(g.it.think.mean).toBe(27);
+    expect(g.checks.some((c) => /^think-/.test(c.code))).toBe(false);
+  });
+
+  test('the limit cuts each think time: 1 + 1 + 10 s at most 3 s → 5 s, not 9 s (equal parts would give 9)', () => {
+    const g = one({ thinkPerIter: 12, thinkList: [1, 1, 10], thinkPauses: 3, thinkLimit: 3 });
+    expect(g.it.think.mean).toBe(5);
+    expect(g.checks.find((c) => c.code === 'think-limited').text).toMatch(/thinks 5 s instead of 12 s/);
+  });
+
+  test('a total changed by hand no longer matches the script\'s list: equal parts over the think times', () => {
+    // 20 s over 2 think times = 10 s each, cut to 3 s → 6 s
+    expect(one({ thinkPerIter: 20, thinkList: [1, 1, 10], thinkPauses: 2, thinkLimit: 3 }).it.think.mean).toBe(6);
+  });
+
+  test('without the number of think times: one per transaction, and it says so (with a way to the field)', () => {
+    // multiply 2: 54 s over 10 = 5.4 s each, cut to 3 s → 30 s
+    const g = one({ thinkPerIter: 27, thinkLimit: 3, thinkMode: 'multiply', thinkFactor: 2 });
+    expect(near(g.it.think.mean, 30, 1e-9)).toBe(true);
+    const c = g.checks.find((x) => x.code === 'think-pauses-assumed');
+    expect([c.field, c.text]).toEqual(['thinkPauses', expect.stringMatching(/assumed 10 think times/)]);
+  });
+
+  test('random 50–150% with a limit: 3 s think times spread 1.5–4.5 s, cut at 3 s → on average 2.625 s each', () => {
+    // mean of min(x, 3) for x evenly over [1.5, 4.5] = ((9 − 2.25) ÷ 2 + 3 × 1.5) ÷ 3 = 2.625; 9 of them = 23.625
+    const g = one({ thinkPerIter: 27, thinkPauses: 9, thinkLimit: 3, thinkMode: 'random' });
+    expect([g.it.think.mean, g.it.think.worst, g.it.think.min]).toEqual([23.625, 27, 13.5]);
+  });
+
+  test('ignore: the limit has nothing to cut; LRE settings text names the limit otherwise', () => {
+    expect(one({ thinkPerIter: 27, thinkPauses: 9, thinkLimit: 3, thinkMode: 'ignore' }).it.think.mean).toBe(0);
+    const r = run([Object.assign({}, base, { thinkPerIter: 27, thinkPauses: 9, thinkLimit: 3 })], { workload: 'basic-group' });
+    expect(r.lre).toMatch(/Think time: Replay think time as recorded; Limit think time to 3 seconds/);
+  });
+
+  test('think time and fixed waits longer than the pacing are flagged by both names', () => {
+    const r = run([{ name: 'S', method: 'vusers', vusers: 5, txPerIter: 1, thinkPerIter: 10, waitPerIter: 15, pacing: { mode: 'fixed', fixed: 20 } }]);
+    expect(r.checks.find((c) => c.code === 'think-exceeds-pacing').text).toMatch(/think time and fixed waits alone \(25 s\) are longer/);
+  });
+
+  test('the explanation names fixed waits', () => {
+    const g = run([{ name: 'S', method: 'tps', targetTps: 1, txPerIter: 10, rtAvg: 0.3, thinkPerIter: 0, waitPerIter: 27 }]).groups[0];
+    expect(g.why.join(' ')).toMatch(/0 s think \+ 27 s fixed waits/);
+  });
+});
+
+describe('Workload engine — my own ramp (as in an LRE test)', () => {
+  // the LRE test: 40 Vusers, start 1 every 5 s, 60 min, stop 1 every 5 s, pacing 360 s (LRE ran 440 iterations)
+  const g = [{ name: 'S', method: 'vusers', vusers: 40, txPerIter: 10, rtAvg: 0.3, waitPerIter: 27, pacing: { mode: 'fixed', fixed: 360 } }];
+  const own = (extra) => Object.assign({ rampMode: 'own', startPer: 1, startEvery: 5, maxStartRate: 2 }, extra || {});
+
+  test.each(['basic-scenario', 'basic-group'])('%s: start and stop as typed — 39 × 5 s = 3:15 each way; about 440 iterations', (wl) => {
+    const r = run(g, own({ workload: wl }));
+    expect(r.firstFull).toBe(195);
+    const stop = r.marks.find((m) => m.type === 'stop');
+    expect(stop.to - stop.from).toBe(195);
+    // each Vuser: 10 iterations in the hour, plus the ones started while the others start and stop
+    expect(r.totals.iters.steady).toBe(400);
+    expect(Math.abs(r.totals.iters.total - 440)).toBeLessThanOrEqual(5);
+    expect(r.lre).toMatch(/Start 40 Vusers: 1 Vuser every 00:00:05/);
+    expect(r.lre).toMatch(/Stop 40 Vusers: 1 Vuser every 00:00:05/);
+  });
+
+  test('stop values of their own; 0 s = all at once', () => {
+    const r = run(g, own({ stopPer: 4, stopEvery: 10 }));
+    expect(r.lre).toMatch(/Stop 40 Vusers: 4 Vusers every 00:00:10/);
+    expect(run(g, own({ startEvery: 0 })).lre).toMatch(/Start 40 Vusers simultaneously/);
+  });
+
+  test("not filled in: the tool's ramp, and a check says what to enter", () => {
+    const r = run(g, { rampMode: 'own', startPer: null, startEvery: null });
+    expect(r.checks.some((c) => c.code === 'ramp-own-missing')).toBe(true);
+    expect(r.firstFull).toBe(run(g).firstFull);
+  });
+
+  test('faster than the start rate: said, not changed', () => {
+    const r = run(g, own({ startPer: 10, startEvery: 1 }));
+    expect(r.checks.find((c) => c.code === 'ramp-own-fast').text).toMatch(/10 Vusers per second/);
+    expect(r.lre).toMatch(/10 Vusers every 00:00:01/);
+    expect(run(g, own()).checks.some((c) => c.code === 'ramp-own-fast')).toBe(false);
+  });
+
+  test("a stepped stress test uses the own ramp at every step; the tool's ramp stays when not chosen", () => {
+    const r = run(g, own({ testType: 'stress', workload: 'real-world' }));
+    expect(r.actions.filter((a) => a.type === 'start').every((a) => a.perStep === 1 && a.every === 5)).toBe(true);
+    expect(run(g, { testType: 'stress', workload: 'real-world' }).actions.some((a) => a.type === 'start' && a.every !== 5)).toBe(true);
+  });
+
+  test('by group, two scripts: each starts as typed (no slowing to the longest); all still stop together', () => {
+    const two = [Object.assign({}, g[0], { name: 'A', vusers: 40 }), Object.assign({}, g[0], { name: 'B', vusers: 10 })];
+    const r = run(two, own({ workload: 'basic-group' }));
+    const starts = r.groupPlans.map((p) => p.actions[0]);
+    expect(starts.every((a) => a.perStep === 1 && a.every === 5)).toBe(true);
+    const ends = r.groupPlans.map((p) => p.actions.find((a) => a.type === 'hold')).map((h, i) => r.groupPlans[i].ramp + h.dur);
+    expect(new Set(ends).size).toBe(1);
+  });
+});
+
+describe('Workload engine — the figures on the result tiles', () => {
+  // 10 Vusers, pacing 50 s, 10 transactions: 10 ÷ 50 = 0.2 iterations per second = 720 per hour; × 10 = 2 TPS = 7,200 TPH
+  const g = (think) => [{ name: 'S', method: 'vusers', vusers: 10, txPerIter: 10, rtAvg: 1, thinkPerIter: think, pacing: { mode: 'fixed', fixed: 50 } }];
+
+  test('iterations per second and per hour, TPS and TPH at full load', () => {
+    const t = run(g(27)).totals;
+    expect([t.ips, t.itersPerHour, t.tps, t.perHour]).toEqual([0.2, 720, 2, 7200]);
+    expect(t.reachTps).toBeNull();
+  });
+
+  test('think time inside the pacing changes the iteration, not the TPS', () => {
+    const a = run(g(0)), b = run(g(27));
+    expect([a.groups[0].it.mean, b.groups[0].it.mean]).toEqual([10, 37]);
+    expect([a.totals.tps, b.totals.tps]).toEqual([2, 2]);
+  });
+
+  test('an iteration longer than the pacing: what LRE reaches — 10 × 10 ÷ 70 s = 1.43 TPS — and the summary says so', () => {
+    const r = run(g(60));
+    expect(near(r.totals.reachTps, 100 / 70, 1e-9)).toBe(true);
+    expect(near(r.totals.reachIps, 10 / 70, 1e-9)).toBe(true);
+    // the counts and the chart follow the real cycle (70 s), not the pacing: about 3,600 ÷ 70 × 10 = 514 in the hour
+    expect(Math.abs(r.totals.iters.steady - 514)).toBeLessThanOrEqual(2);
+    expect(near(Math.max(...r.timeline.map((x) => x.tps)), 100 / 70, 1e-6)).toBe(true);
+    expect(r.summary).toMatch(/1\.43 transactions per second \(TPS\).*not the 2 TPS the pacing asks for/);
+  });
+});
+
+describe('Workload engine — "not possible": the reason and the ways out', () => {
+  // the owner's plan: 40 Vusers, 10 transactions of 5 s, 27 s think, fixed pacing 50 s → a 77 s iteration
+  const g = (o) => [Object.assign({ name: 'Payments', method: 'vusers', vusers: 40, txPerIter: 10, rtAvg: 5, thinkPerIter: 27, pacing: { mode: 'fixed', fixed: 50 } }, o)];
+
+  test('the figures for the card: iteration, reach, a pacing that fits, the Vusers that keep the TPS', () => {
+    const x = run(g()).groups[0];
+    expect(x.status).toBe('infeasible');
+    const o = x.overrun;
+    expect([o.iter, o.tx, o.rt, o.think, o.wait, o.pacing]).toEqual([77, 10, 50, 27, 0, 50]);
+    expect(near(o.reachTps, 400 / 77, 1e-9)).toBe(true);
+    expect(o.askTps).toBe(8);
+    expect([o.pacingFit, o.pacingSafe, o.headroomPct]).toEqual([77, 97, 25]);   // 77 × 1.25 = 96.25 → 97
+    expect(near(o.tpsAtSafe, 400 / 97, 1e-9)).toBe(true);
+    expect(o.vusersAtSafe).toBe(78);                                            // 8 × 97 ÷ 10 = 77.6 → 78
+    expect(near(o.rtFit, 2.3, 1e-9)).toBe(true);                                // (50 − 27) ÷ 10
+  });
+
+  test('the fixes work: the safe pacing, or the Vusers with it, make the plan possible', () => {
+    expect(run(g({ pacing: { mode: 'fixed', fixed: 97 } })).groups[0].status).not.toBe('infeasible');
+    const k = run(g({ vusers: 78, pacing: { mode: 'fixed', fixed: 97 } })).groups[0];
+    expect(k.status).not.toBe('infeasible');
+    expect(k.tps).toBeGreaterThanOrEqual(8);
+    expect(run(g({ rtAvg: 2.3 })).groups[0].status).not.toBe('infeasible');
+  });
+
+  test('think time alone longer than the pacing: no response time fits; fixed waits are told apart', () => {
+    const o = run(g({ thinkPerIter: 40, waitPerIter: 15 })).groups[0].overrun;
+    expect(o.rtFit).toBeNull();
+    expect([o.think, o.wait]).toEqual([40, 15]);
+  });
+
+  test('a plan that fits has no overrun figures', () => {
+    expect(run(g({ pacing: { mode: 'fixed', fixed: 100 } })).groups[0].overrun).toBeUndefined();
+  });
+});

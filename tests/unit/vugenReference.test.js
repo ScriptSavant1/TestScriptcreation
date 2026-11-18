@@ -10,6 +10,7 @@
  * DECIDED with the reason.
  */
 
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const path = require('path');
 const ref = require('../../vugen-reference/compare.js');
@@ -21,19 +22,12 @@ const { version, usrVersion, dir: REF } = ref.currentVersion();
 const refFile = (p) => fs.readFileSync(path.join(REF, p), 'utf-8');
 const [MAJOR, MINOR] = version.split('.');
 
-// ---- the four tools, loaded the way the pages and the server load them -----------------------------------------
+// ---- the tools (the converters and Script Studio), loaded the way the pages and the server load them ------------
 const DevWebFiles = require('../../src/generators/devweb/filesGenerator.js');
 const VugenFiles = require('../../src/generators/vugen/filesGenerator.js');
 const devwebConv = new DevWebFiles({ scriptName: 'T' });
 const vugenConv = new VugenFiles({ scriptName: 'T' });
 
-function loadRecorder() {
-  const S = { txns: [{ name: 't01' }], hasDpop: false };
-  // eslint-disable-next-line no-new-func
-  return new Function('S', read('VuGen-Recorder-templates.js') + '\n' + read('VuGen-Recorder-usr-gen.js')
-    + '\nreturn { WEB_DEFAULT_CFG, WEB_DEFAULT_USP, DEVWEB_RTS_YML, DEVWEB_TSCONFIG_JSON, DEVWEB_DEFAULT_CFG,'
-    + ' DEVWEB_DEFAULT_USP, genUsrFile, genDevWebUsrFile };')(S);
-}
 function loadStudio() {
   const PageResources = require('../../src/web/public/shared/page-resources.js');
   const HostParams = require('../../src/web/public/shared/host-params.js');
@@ -46,7 +40,6 @@ function loadStudio() {
   r.S.txns = [{ name: 't01' }];
   return r;
 }
-const rec = loadRecorder();
 const stu = loadStudio();
 
 const TOOLS = {
@@ -55,18 +48,17 @@ const TOOLS = {
       Converter: devwebConv.generateRtsYml(),
       'Converter (proxy + user arguments)': devwebConv.generateRtsYml(
         { enabled: true, host: 'proxy.example.com', port: 8080, username: 'your-user', password: 'your-password' }, { base_url: 'https://app.example.com' }),
-      Recorder: rec.DEVWEB_RTS_YML,
       'Script Studio': stu.genRtsYml(null),
       'Script Studio (Kerberos)': stu.genRtsYml({ type: 'kerberos' }),
     },
-    cfg: { Converter: devwebConv.generateDevWebDefaultCfg(), Recorder: rec.DEVWEB_DEFAULT_CFG, 'Script Studio': stu.DEVWEB_DEFAULT_CFG },
-    usp: { Converter: devwebConv.generateDevWebDefaultUsp(), Recorder: rec.DEVWEB_DEFAULT_USP, 'Script Studio': stu.DEVWEB_DEFAULT_USP },
-    usr: { Converter: devwebConv.generateDevWebUsrFile('T', ['t01']), Recorder: rec.genDevWebUsrFile('T'), 'Script Studio': stu.genDevWebUsrFile('T') },
+    cfg: { Converter: devwebConv.generateDevWebDefaultCfg(), 'Script Studio': stu.DEVWEB_DEFAULT_CFG },
+    usp: { Converter: devwebConv.generateDevWebDefaultUsp(), 'Script Studio': stu.DEVWEB_DEFAULT_USP },
+    usr: { Converter: devwebConv.generateDevWebUsrFile('T', ['t01']), 'Script Studio': stu.genDevWebUsrFile('T') },
   },
   qtweb: {
-    cfg: { Converter: vugenConv.generateDefaultCfg(), Recorder: rec.WEB_DEFAULT_CFG, 'Script Studio': stu.genDefaultCfg(null) },
-    usp: { Converter: vugenConv.generateDefaultUsp(), Recorder: rec.WEB_DEFAULT_USP, 'Script Studio': stu.WEB_DEFAULT_USP },
-    usr: { Converter: vugenConv.generateUsrFile('T', ['t01']), Recorder: rec.genUsrFile('T'), 'Script Studio': stu.genUsrFile('T') },
+    cfg: { Converter: vugenConv.generateDefaultCfg(), 'Script Studio': stu.genDefaultCfg(null) },
+    usp: { Converter: vugenConv.generateDefaultUsp(), 'Script Studio': stu.WEB_DEFAULT_USP },
+    usr: { Converter: vugenConv.generateUsrFile('T', ['t01']), 'Script Studio': stu.genUsrFile('T') },
   },
 };
 
@@ -165,14 +157,12 @@ describe(`DevWeb project files against VuGen ${version}`, () => {
   test('tsconfig.json compiler options match the template in every tool', () => {
     const want = JSON.parse(refFile('DevWeb/tsconfig.json')).compilerOptions;
     expect(devwebConv.generateTsConfig().compilerOptions).toEqual(want);
-    expect(JSON.parse(rec.DEVWEB_TSCONFIG_JSON).compilerOptions).toEqual(want);
     expect(JSON.parse(stu.DEVWEB_TSCONFIG_JSON).compilerOptions).toEqual(want);
   });
 
   test('the one DevWebSdk.d.ts (src/web/public) is the one of this version', () => {
     const want = refFile('DevWeb/DevWebSdk.d.ts').replace(/\r\n/g, '\n');
     expect(read('DevWebSdk.d.ts').replace(/\r\n/g, '\n') === want).toBe(true);
-    expect(read('VuGen-Recorder-templates.js')).not.toMatch(/DEVWEB_SDK_DTS|Type definitions for \[DevWeb SDK\]/);
   });
 });
 
@@ -222,7 +212,6 @@ describe('DevWebSdk.d.ts comes from src/web/public in every tool', () => {
   const down = async () => ({ ok: false, text: async () => '' });
 
   test.each([
-    ['Recorder', ['VuGen-Recorder-templates.js', 'VuGen-Recorder-usr-gen.js'], '/converter/recorder'],
     ['Script Studio', ['studio-app.js'], '/converter/studio'],
   ])('%s fetches the server file next to the page; when it cannot, it warns', async (tool, files, page) => {
     const good = await devwebZip(files, ok, page);
@@ -255,8 +244,8 @@ describe(`Web HTTP/HTML project files against VuGen ${version}`, () => {
   });
 
   test('the files globals.h includes are shipped or come with VuGen', () => {
-    // generated globals.h includes lrw_custom_body.h; the Recorder and Script Studio ship it, VuGen's include folder has it too
-    expect(rec.DEVWEB_RTS_YML).toBeDefined();
+    // generated globals.h includes lrw_custom_body.h; Script Studio ships it, VuGen's include folder has it too
+    expect(stu.DEVWEB_RTS_YML).toBeDefined();
     expect(fs.existsSync(path.join(REF, 'qtweb/lrw_custom_body.h'))).toBe(true);
   });
 });

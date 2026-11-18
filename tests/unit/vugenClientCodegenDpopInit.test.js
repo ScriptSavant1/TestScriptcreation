@@ -2,9 +2,8 @@
 
 /**
  * Regression test — a stray ':' instead of ';' at the end of the DPoP init
- * Code= string in TWO independent client-side VuGen generators:
- *   - src/web/public/studio-codegen.js       (Script Studio, HAR-based)
- *   - src/web/public/VuGen-Recorder-generators.js (Recorder tool, HAR-based)
+ * Code= string in the client-side VuGen generator, src/web/public/studio-codegen.js (Script Studio, HAR-based).
+ * (The Recorder tool had its own copy of the generator with the same typo; it was merged into Script Studio.)
  *
  * Both emit:
  *   "Code=initDpopKey(LR.getParam('dpop_jwk')); 'DPoP engine initialized successfully';"
@@ -65,43 +64,5 @@ describe('studio-codegen.js genVuserInit() — DPoP init Code= string', () => {
 
     const codeStr = extractCodeString(output);
     expect(() => new Function(codeStr)).not.toThrow();
-  });
-});
-
-describe('VuGen-Recorder-generators.js genVuserInit() — DPoP init Code= string', () => {
-  function loadRecorderGenerators() {
-    const code = fs.readFileSync(
-      path.resolve(__dirname, '../../src/web/public/VuGen-Recorder-generators.js'),
-      'utf-8'
-    );
-    const S = { hasDpop: true };
-    // eslint-disable-next-line no-new-func
-    const factory = new Function('S', code + '\nreturn { genVuserInit };');
-    return factory(S);
-  }
-
-  test('DPoP init Code= string is valid JavaScript (no stray colon)', () => {
-    const { genVuserInit } = loadRecorderGenerators();
-    const output = genVuserInit();
-    expect(output).toContain(
-      "Code=initDpopKey(LR.getParam('dpop_jwk')); 'DPoP engine initialized successfully';"
-    );
-    expect(output).not.toContain("successfully':");
-
-    const codeStr = extractCodeString(output);
-    expect(() => new Function(codeStr)).not.toThrow();
-  });
-
-  test('vuser_init() without DPoP: only the once-per-Vuser SSL setting (no servers, no common headers here)', () => {
-    const code = fs.readFileSync(
-      path.resolve(__dirname, '../../src/web/public/VuGen-Recorder-generators.js'),
-      'utf-8'
-    );
-    const S = { hasDpop: false };
-    // eslint-disable-next-line no-new-func
-    const factory = new Function('S', code + '\nreturn { genVuserInit };');
-    const { genVuserInit } = factory(S);
-    const output = genVuserInit();
-    expect(output).toBe('vuser_init()\n{\n\n\tweb_set_sockets_option("SSL_VERSION", "AUTO");\n\n\treturn 0;\n}\n');
   });
 });

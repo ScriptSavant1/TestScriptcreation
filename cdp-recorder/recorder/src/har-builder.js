@@ -32,11 +32,14 @@ class HarBuilder {
     this.activeTransaction    = null;         // {id, name, startTime (epochMs)}
     this.completedTransactions = [];          // [{id, name, startTime, endTime}]
     this._txCounter           = 0;
+    this.scriptId             = '';           // optional (e.g. SC01): log._perfx_scriptId
   }
 
   // ── Transaction management ─────────────────────────────────────────────────
 
   startTransaction(name) {
+    // a transaction still running ends now, with its end time (it used to be replaced without one: onLoad -1)
+    this.endTransaction();
     const id = `tx_${++this._txCounter}`;
     this.activeTransaction = { id, name, startTime: Date.now(), endTime: null };
     this.completedTransactions.push(this.activeTransaction);
@@ -52,6 +55,43 @@ class HarBuilder {
 
   getTransactions() {
     return this.completedTransactions;
+  }
+
+  /** A new name for a transaction (finished or running), found by its current name — the last one with it. */
+  renameTransaction(from, to) {
+    const tx = [...this.completedTransactions].reverse().find((t) => t.name === from);
+    if (!tx || !to) return false;
+    tx.name = to;
+    return true;
+  }
+
+  /**
+   * "Undo last mark": the last Start or End is taken back.
+   *  - the last mark started a transaction: that transaction goes; its requests go back to the transaction before
+   *    it when that one ran right up to it (it was ended by this start), which then runs again — else they are
+   *    between transactions;
+   *  - the last mark ended a transaction: it runs again.
+   * Returns { undone: name taken away or null, active: the running transaction's name or null }, or null when
+   * there is nothing to undo.
+   */
+  undoLastMark() {
+    const txs = this.completedTransactions;
+    const last = txs[txs.length - 1];
+    if (!last) return null;
+    if (this.activeTransaction === last) {
+      txs.pop();
+      const prev = txs[txs.length - 1] || null;
+      const resume = !!(prev && prev.endTime != null && last.startTime - prev.endTime <= 1000);
+      const to = resume ? prev.id : null;
+      const move = (e) => { if (e.pageref === last.id) e.pageref = to; };
+      this.completedEntries.forEach(move);
+      this.pendingEntries.forEach(move);
+      if (resume) { prev.endTime = null; this.activeTransaction = prev; } else this.activeTransaction = null;
+      return { undone: last.name, active: this.activeTransaction ? this.activeTransaction.name : null };
+    }
+    last.endTime = null;
+    this.activeTransaction = last;
+    return { undone: null, active: last.name };
   }
 
   // ── CDP event handlers ─────────────────────────────────────────────────────
@@ -322,6 +362,7 @@ class HarBuilder {
         browser: { name: 'Chrome', version: '', comment: '' },
         pages,
         entries,
+        ...(this.scriptId ? { _perfx_scriptId: this.scriptId } : {}),
       },
     };
   }

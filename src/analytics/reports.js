@@ -8,10 +8,11 @@ const TOOL_LABELS = {
   studio:    "Script Studio",
   converter: "Postman / Bruno Converter",
   jmx:       "JMeter Converter",
+  workload:  "Workload Modeller",
   analyser:  "Results Analyser",
 };
 // the order the tools are shown in everywhere (sidebar order)
-const TOOL_ORDER = ["recorder", "explorer", "studio", "converter", "jmx", "analyser"];
+const TOOL_ORDER = ["recorder", "explorer", "studio", "converter", "jmx", "workload", "analyser"];
 
 const ERROR_LABELS = {
   timeout: "Took too long (time-out)",
@@ -194,6 +195,7 @@ function generateInsights(s) {
       jmx:       "indicating JMeter migration is an active workstream",
       recorder:  "indicating browser-capture recording is frequently used",
       explorer:  "indicating recordings are investigated value by value before scripting",
+      workload:  "indicating tests are planned with the Workload Modeller before they run",
       analyser:  "indicating test-result analysis is the main activity",
     };
     insights.push(`${top.label} is the most used tool at ${top.pct}% of uses (${top.count.toLocaleString()} total), ${notes[top.tool] || ""}.`);

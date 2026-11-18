@@ -82,11 +82,6 @@ function measure() {
     await p.setInputFiles('#fi-col', COL + 'postman_collection.json'); await p.click('#btn-cvt');
     await p.waitForSelector('#res-ok', { state: 'visible', timeout: 60000 }); await run('Postman result');
     await go('jmeter'); await run('JMeter');
-    await go('record'); await p.waitForFunction(() => { const w = document.getElementById('iframe-recorder').contentWindow; return w && w.JSZip; }, null, { timeout: 20000 });
-    await run('Recorder start', 'recorder');
-    f = await frameOf('recorder');
-    await f.setInputFiles('#hf', FX + 'recorder/fixtures/bookmarklet-markers.har'); await f.click('#fmt-go'); await f.waitForSelector('#main:not([hidden])');
-    await run('Recorder workspace', 'recorder');
     await go('explore'); await p.waitForFunction(() => { const d = document.getElementById('iframe-explorer').contentDocument; return d && d.getElementById('hx-file'); }, null, { timeout: 20000 });
     await run('Explorer start', 'explorer');
     f = await frameOf('explorer'); await f.setInputFiles('#hx-file', require('path').resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/' + 'WebTours.har'); await f.waitForSelector('#hx-ws:not([hidden])');
@@ -97,14 +92,29 @@ function measure() {
     await go('studio'); await p.waitForFunction(() => { const w = document.getElementById('iframe-studio').contentWindow; return w && w.document.readyState === 'complete' && typeof w.loadFile === 'function'; }, null, { timeout: 20000 });
     await run('Studio start', 'studio');
     f = await frameOf('studio');
-    await f.setInputFiles('#dz1 input[type=file]', FX + 'studio/fixtures/api-tokens.har'); await p.waitForTimeout(400); await f.click('#btn-analyze');
-    await f.waitForSelector('#ph-res.active', { timeout: 60000 }); await p.waitForTimeout(800);
+    // How to record (moved from the Recorder): both ways
+    await f.click('#ss-guide [data-fold]'); await run('Studio how to record', 'studio');
+    await f.click('#tab-classic'); await run('Studio how to record bookmarks', 'studio');
+    await f.click('#tab-cdp'); await f.click('#ss-guide [data-fold]');
+    // the file is read as soon as it is opened (no Analyse button)
+    await f.setInputFiles('#dz1 input[type=file]', FX + 'studio/fixtures/api-tokens.har');
+    await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 }); await p.waitForTimeout(800);
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1200); }
     await run('Studio results', 'studio');
+    await f.click('#ss-tab-corr'); await p.waitForTimeout(300); await run('Studio advisor', 'studio');
+    await f.click('#ss-tab-data'); await p.waitForTimeout(300); await run('Studio test data', 'studio');
+    await f.click('#ss-tab-script');
+    await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
+    await run('Workload start', 'workload');
+    f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail'); await f.click('#sview [data-v="table"]').catch(() => {});
+    await run('Workload model', 'workload');
     await go('results'); await p.waitForFunction(() => { const d = document.getElementById('iframe-analyser').contentDocument; return d && d.getElementById('in-zip'); }, null, { timeout: 20000 });
     await run('Analyser start', 'analyser');
-    f = await frameOf('analyser'); await f.setInputFiles('#in-zip', FX + 'qa/demo-run.zip'); await p.waitForTimeout(9000);
-    await run('Analyser report', 'analyser');
+    // the demo run is made locally (lre-results-analyser/tools/make-demo-run.js); skipped when it is not there
+    if (fs.existsSync(FX + 'qa/demo-run.zip')) {
+      f = await frameOf('analyser'); await f.setInputFiles('#in-zip', FX + 'qa/demo-run.zip'); await p.waitForTimeout(9000);
+      await run('Analyser report', 'analyser');
+    }
     await go('help'); await run('Help');
     report[theme + ' · _meta'] = { errors: errs, external: [...new Set(ext)] };
     await p.close();

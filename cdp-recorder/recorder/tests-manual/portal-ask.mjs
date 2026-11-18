@@ -1,4 +1,4 @@
-// End-to-end test: Start recording on the Recorder page when the CDP Recorder was started BY HAND and the
+// End-to-end test: Start recording on the PerfX Studio page when the CDP Recorder was started BY HAND and the
 // browser may not start programs (the perfx-recorder: link does nothing). The page asks to be allowed, the
 // toolbar shows Allow / Don't allow, Allow is remembered (allowed-pages.json) and works after a restart.
 //
@@ -63,7 +63,7 @@ try {
   check((await call("POST", "/api/session", origin, { url: site })).status === 403, "it still cannot start a recording");
   check((await call("POST", "/api/ask", undefined)).status === 400, "a program (no Origin) cannot ask");
 
-  // 2. the toolbar (as served) and the Recorder page
+  // 2. the toolbar (as served) and the PerfX Studio page
   const bar = await browser.newPage({ viewport: { width: 300, height: 480 } });
   await bar.goto(`http://localhost:${UI}/`);
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -75,8 +75,9 @@ try {
   });
   const errs = [];
   page.on("pageerror", (e) => errs.push(e.message));
-  await page.goto(PORTAL + "/recorder", { waitUntil: "networkidle" });
-  await page.click("#lv-start");
+  // Start recording is part of Script Studio (the Recorder page was merged into it)
+  await page.goto(PORTAL + "/studio", { waitUntil: "networkidle" });
+  await page.click("#ss-rec-btn");
   await page.fill("#lv-url-inp", site);
   await page.click("#lv-go");
   await page.waitForFunction(() => /Allow/.test(document.getElementById("lv-step-rec").textContent), null, { timeout: 8000 });
@@ -101,6 +102,12 @@ try {
   await page.click("#lv-stop");
   await page.waitForFunction(() => document.getElementById("rl-live").hidden, null, { timeout: 30000 });
   check(true, "Stop and save: back on the page with the recording");
+  // the floating bar is on (the default): the windows' countdown with Keep open / Close now is on the page (0.3.0)
+  const note = await page.waitForSelector("#rl-winnote", { timeout: 5000 }).then(() => true, () => false);
+  check(note && /close in \d+ s/.test(await page.textContent("#rl-winnote")), "after saving: the page offers Keep open / Close now");
+  if (note) await page.click("#rl-winnote button:has-text('Keep open')");
+  await wait(500);
+  check((await call("GET", "/api/status", origin)).json.closingIn === null, "Keep open on the page stops the countdown");
 
   // 3. another page: Don't allow → not asked again for a minute; a page cannot answer its own question
   const evil = "https://other.example.com";

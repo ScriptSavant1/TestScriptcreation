@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════════
  * PerfX Studio — Home v6 (design system v4, see ds.css), modelled on the agreed design:
- * welcome band (full width, soft blue) with the inputs → outputs picture · Quick actions (six tools) ·
+ * welcome band (full width, soft blue) with the inputs → outputs picture · Quick actions (seven tools) ·
  * "Your workflow" + "Need help?" side by side · footer line.
  * Widths respond to the Home column itself (container "hm"), so the sidebar state does not matter.
  * One text font; weights 400 / 600 / 700; tool colours on icons only.
@@ -78,10 +78,13 @@ body.has-shell #portal-home.hm { width: 100%; max-width: var(--ds-page-max); mar
 
 /* ── Quick actions ── */
 .hm-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-gap); }
-/* six tools: 2 × 3, then 3 × 2, then one row of six */
-@container hm (min-width: 560px) { .hm-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container hm (min-width: 820px) { .hm-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@container hm (min-width: 1360px) { .hm-tools { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+/* seven tools: one column; two columns with the last one full width; four then three, each row full width (12 columns) */
+@container hm (min-width: 560px) { .hm-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hm-tool:last-child:nth-child(odd) { grid-column: 1 / -1; } }
+@container hm (min-width: 1000px) {
+  .hm-tools { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .hm-tool { grid-column: span 3; }
+  .hm-tool:nth-child(n+5), .hm-tool:last-child:nth-child(odd) { grid-column: span 4; }
+}
 .hm-tool {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 22px 20px 20px; text-align: left; cursor: pointer;
   background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-r-card); box-shadow: var(--ds-shadow-1);

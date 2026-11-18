@@ -10,6 +10,7 @@
  * left-out reason, and linked to its own HAR entry (headers, bodies, timings).
  */
 
+global.RequestFilter = require('../../src/web/public/shared/request-filter.js');   // as the pages load it, before the engines
 const fs = require('fs');
 const path = require('path');
 

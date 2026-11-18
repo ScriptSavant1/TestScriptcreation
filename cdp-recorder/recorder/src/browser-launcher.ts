@@ -192,7 +192,7 @@ h1{color:#c2410c;margin:0 0 12px;font-size:24px}li{margin:6px 0}</style></head><
 const RECORDING_WINDOW_LANDING_URL = "data:text/html;charset=utf-8," + encodeURIComponent(RECORDING_WINDOW_LANDING_HTML);
 
 /**
- * Landing page for a recording started from the PerfX Studio Recorder page: the recorder opens the
+ * Landing page for a recording started from the PerfX Studio page: the recorder opens the
  * application address itself as soon as capture is confirmed, so this only says what is happening.
  */
 export function portalLandingUrl(appUrl: string): string {
@@ -284,6 +284,9 @@ export async function launchAndWaitForPort(
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-popup-blocking", // same rationale as the Phase 0 probe — see its src/probe.ts
+    // the recording window opens maximised (a fresh profile every time, so nothing remembered overrides it);
+    // pop-ups keep the size the application asks for
+    "--start-maximized",
   ];
   // pop-ups and new tabs are still captured in a private window (tests-manual/private-window-probe.mjs)
   if (options.privateWindow) args.push(/chrome\.exe$/i.test(browserPath) ? "--incognito" : "--inprivate");
