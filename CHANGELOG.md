@@ -173,6 +173,7 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 #### Changed
 
+- Documentation checked against the tools as they are now: README (sidebar groups, the tools' current features, CDP Recorder 0.3.0) and the local guides — the Recorder is part of Script Studio everywhere (feature catalogue, executive summary, architecture, code structure, developer, protocol and auth guides, deployment guide, diagrams), files read at once (no "Analyse & generate"), the collapse button at the top, the Workload Modeller in the catalogue and the index; the documentation site's coverage check gained the floating bar, Undo last mark, script ID, Leave out, the Workload Modeller and where the CDP Recorder keeps its setup.
 - Sidebar: one line per tool (every row the same height; each tool's description shows when the pointer rests on it, in the open menu too), two groups — Create scripts, Plan & analyse — and Help & guides at the bottom beside the status line; the brand shows "PerfX Studio" only (its cut-off subtitle is gone). The top bar names the group "Plan & analyse".
 
 - Home: seven tool cards (four then three on wide screens). Sidebar: new group "Plan". Help: Workload Modeller section, contents entry, tools table row and What's New line. Usage statistics and the admin reports know the tool `workload` (counted in scripts).

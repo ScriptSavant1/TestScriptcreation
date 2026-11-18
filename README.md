@@ -18,17 +18,17 @@ PerfX Studio removes most of the manual VuGen scripting effort by generating:
 
 ## The tools
 
-The portal has a collapsible left sidebar: **Home**, then **Create scripts** (Script Studio, HAR Explorer, Postman / Bruno, JMeter), **Plan** (Workload Modeller), **Analyse** (Results Analyser) and **Learn** (Help & guides).
+The portal has a collapsible left sidebar, one line per tool: **Home**, then **Create scripts** (Script Studio, HAR Explorer, Postman / Bruno, JMeter), **Plan & analyse** (Workload Modeller, Results Analyser), and **Help & guides** at the bottom. Every page and tool uses the same purple look, light and dark.
 
 | Tool | Input | Best for |
 |---|---|---|
-| **HAR Explorer** | A HAR file | Seeing every request, finding where a dynamic value comes from, and adding it to Script Studio; works where DevTools is switched off |
-| **Script Studio** | **Start recording**, or 1 or 2 HAR files (or a Chrome NetLog `.json`) | Recording journeys where VuGen proxy recording is blocked, then the script straight away: domains, request types, transactions, correlation (pattern mode with 1 HAR, diff mode with 2), test data. Includes what was the Recorder tool; `/recorder` opens it |
+| **HAR Explorer** | A HAR file | Seeing every request (Domains panel, request types, folding panels, Dynamic values tab), finding where a dynamic value comes from (Source / Replaced in), and adding it to Script Studio; works where DevTools is switched off |
+| **Script Studio** | **Start recording**, or 1 or 2 HAR files (or a Chrome NetLog `.json`) | Recording journeys where VuGen proxy recording is blocked, then the script straight away: domains, request types, transactions (new, rename, ungroup), leave out single requests, correlation (pattern mode with 1 HAR, diff mode with 2; Correlation Advisor with Source / Replaced in), test data. Includes what was the Recorder tool; `/recorder` opens it |
 | **Postman / Bruno** converter | Postman v2.1 or Bruno collection (`.json`, `.yml`, `.yaml`, `.bru`, zipped folder), optional environment file and client certificates | Converting existing API collections |
 | **JMeter** converter | JMeter `.jmx`, optional CSV data files and certificates | Migrating JMeter tests; also produces a Workload Model Excel |
 | **Workload Modeller** | Each script's target (TPS, transactions per hour, Vusers, share, iterations), optionally filled from script ZIPs or HAR files | Vusers, pacing, ramp-up and ramp-down, load generators and checks; LRE settings to copy and an Excel workbook |
 | **Results Analyser** | LoadRunner Enterprise raw results folder or ZIP | Transaction summary, steady state, insights; Excel, Word, PDF and HTML reports |
-| **CDP Recorder** (Windows download) | Records a browser journey | Records every tab and pop-up to a HAR, with no browser extension and no administrator rights; driven by **Start recording** on the page, or by its own floating toolbar |
+| **CDP Recorder** (Windows download) | Records a browser journey | Records every tab and pop-up to a HAR, with no browser extension and no administrator rights; driven by **Start recording** on the page. Version 0.3.0 adds a floating bar inside the recorded pages (name transactions, Undo, Stop and save — one bar, in the window you use); started by hand, its own toolbar |
 
 The PerfX Chrome / Edge browser extension has been retired and removed from the repository. The CDP Recorder replaces it.
 
