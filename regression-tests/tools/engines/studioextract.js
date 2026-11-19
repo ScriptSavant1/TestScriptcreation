@@ -8,7 +8,7 @@
 //                Regex, added the way the correlation editor does (advisorAddManual + _edit + advisorApplyOne)
 //   list-all     a list of four items, a later request sends the 1st and 4th item's value: the Correlation Advisor's
 //                own list (SelectAll), Every value — the new values at the same places (BUG-150)
-//   list-random  the same list, One at random: each field sends one of the new values
+//   list-random  the same list, One at random: one new value, picked once per iteration (both fields send it)
 //   select-*     a page with two <select>s; a list made in the editor (advisorAddList) from the second one's options —
 //                boundaries <option value=" … " with every match and the range of that select — and a JSON list:
 //                select-recorded (the place recorded), select-rotate (the next each iteration, 2 iterations),
@@ -113,7 +113,7 @@ const CASES = {
   'list-all': { old: LIST_OLD, new: LIST_NEW, har: listHar, last: /\/wishlist$/, setup: listSetup, arg: 'all',
     check: (sent, NEW) => sent.primaryImage === NEW.img[0] && sent.altImage === NEW.img[3] ? '' : 'WRONG primaryImage=' + sent.primaryImage + ', altImage=' + sent.altImage },
   'list-random': { old: LIST_OLD, new: LIST_NEW, har: listHar, last: /\/wishlist$/, setup: listSetup, arg: 'random',
-    check: (sent, NEW) => NEW.img.includes(sent.primaryImage) && NEW.img.includes(sent.altImage) ? '' : 'WRONG primaryImage=' + sent.primaryImage + ', altImage=' + sent.altImage },
+    check: (sent, NEW) => NEW.img.includes(sent.primaryImage) && sent.altImage === sent.primaryImage ? '' : 'WRONG primaryImage=' + sent.primaryImage + ', altImage=' + sent.altImage },
   'select-recorded': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/book$/, iters: 2, setup: selSetup, arg: { kind: 'select', pick: 'all' },
     checkAll: (rs, NEW) => { const v = rs.map((r) => form(r).outbound); return v.length === 2 && v.every((x) => x === NEW.flights[1]) ? '' : 'WRONG ' + v.join(' / '); } },
   'select-rotate': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/book$/, iters: 2, setup: selSetup, arg: { kind: 'select', pick: 'rotate' },

@@ -1208,9 +1208,9 @@ function advisorToCorrelation(candidate) {
     extractorType = candidate._extract.extractorType;
     extractorConfig = candidate._extract.extractorConfig;
   } else if (candidate.source && candidate.source.jsonPath) {
-    // Auto-detected via HAR response scan: use the JSON path we traced. A list (every match) can be used one value at
-    // random each iteration (_pick, chosen in Script Studio's editor): random_select, the same as the Rnd switch
-    extractorType = candidate._selectAll && candidate._pick === 'random' && !candidate._edit ? 'random_select' : 'jsonpath';
+    // Auto-detected via HAR response scan: use the JSON path we traced (a list: every match; how it is used is _pick,
+    // below — one random picker for every list, the editor's and the Rnd switch)
+    extractorType = 'jsonpath';
     extractorConfig = candidate._selectAll
       ? { path: candidate.source.jsonPath, selectAll: true }
       : { path: candidate.source.jsonPath };
@@ -1220,9 +1220,9 @@ function advisorToCorrelation(candidate) {
     extractorConfig = { lb: candidate.value.slice(0, 8), rb: '' };
   }
 
-  // A list (_selectAll) and how each place uses it (Script Studio's editor): _pick "rotate" (the next value each
-  // iteration), "nth" (always value _nth), or "random" for a list made in the editor (an Advisor list keeps
-  // random_select above); _range = the matches that belong to it (the options of one <select>). None of these: as before.
+  // A list (_selectAll) and how each place uses it (Script Studio's editor, the Rnd switch): _pick "random" (one value
+  // at random each iteration), "rotate" (the next value each iteration), "nth" (always value _nth); _range = the matches
+  // that belong to it (the options of one <select>). None of these: every value as recorded, as before.
   const out = {
     name: candidate.varName,
     sourceIdx: candidate._edit && candidate._edit.extractorType && candidate._edit.sourceIdx != null ? candidate._edit.sourceIdx
@@ -1232,7 +1232,7 @@ function advisorToCorrelation(candidate) {
     usages,
     _fromAdvisor: true,
   };
-  const pick = candidate._selectAll && extractorType !== 'random_select' ? candidate._pick : null;
+  const pick = candidate._selectAll ? candidate._pick : null;
   if (pick === 'rotate' || pick === 'nth' || pick === 'random') {
     out.list = { pick };
     if (pick === 'nth') out.list.nth = Math.max(1, parseInt(candidate._nth, 10) || 1);

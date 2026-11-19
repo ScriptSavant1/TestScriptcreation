@@ -158,6 +158,7 @@ Versions up to v2.10.13 are in [BUGS-ARCHIVE.md](BUGS-ARCHIVE.md).
 
 | ID | Version | Description |
 |----|---------|-------------|
+| REFACTOR-002 | not released yet | **Open — the old random list type `random_select` is no longer produced.** Every list used one value at random now goes through one picker (`corr.list = {pick: "random"}`, studio-codegen `_listRef` / `_listPicker`; one pick per iteration in both formats — DevWeb used to pick again for each place). Nothing creates `random_select` any more (the Rnd switch takes an old one back to every value); its branches in studio-codegen.js (DYNRND sentinel, the VuGen `web_js_run` picker for it, the `_selected` checks) can be removed, with the golden harness and `studioextract.js` to show nothing else changes. |
 | REFACTOR-001 | v2.10.8 | VuGen JWT expiry check refactored from two ternary `web_js_run` calls in Action.c into a single `refreshJWT(clientId, aud, scope, kid, secret, tokenParam)` function in `lre-utils.dat`. The function owns all state: reads cached token, calls `createJWT()` if expired, updates `_jwt_expires_at` via `LR.setParam()` internally, and returns the token. Action.c now emits one `web_js_run` call instead of two. Users upgrading existing scripts should rename the two ternary blocks to a single `refreshJWT(...)` call — the setup comment in `vuser_init.c` is unchanged. |
 
 ## Process improvements

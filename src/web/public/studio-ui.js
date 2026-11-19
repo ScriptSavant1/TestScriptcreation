@@ -406,19 +406,24 @@ function switchTab(el, tab) {
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDER RESULTS
 // ═══════════════════════════════════════════════════════════════════════════
+// The Rnd switch of Correlation details: a list (every match) used one value at random each iteration, or every value
+// as recorded again — corr.list, the same picker as the editor's choice (one pick per iteration in both formats).
+function _corrIsRnd(c) { return c.extractorType === "random_select" || !!(c.list && c.list.pick === "random"); }
 function toggleCorrRandSelect(idx) {
   const c = S.correlations[idx];
   if (!c) return;
   if (c.extractorType === "random_select") {
-    c.extractorType = "jsonpath";
+    c.extractorType = "jsonpath";   // a script made before the one picker: back to every value
     if (c.extractorConfig) c.extractorConfig.selectAll = true;
   } else if (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) {
-    c.extractorType = "random_select";
+    if (c.list && c.list.pick === "random") delete c.list; else c.list = { pick: "random" };
   } else {
     return;
   }
   (S.advisorCandidates || []).forEach(function (x) {
-    if (x._applied && x._selectAll && x.varName === c.name) x._pick = c.extractorType === "random_select" ? "random" : undefined;
+    if (!(x._applied && x._selectAll && x.varName === c.name)) return;
+    if (_corrIsRnd(c)) x._pick = "random"; else delete x._pick;
+    delete x._nth;
   });
   regenerateFromAdvisor();
 }
@@ -439,7 +444,7 @@ function renderCorrelations() {
     html += S.correlations
       .map((c) => {
         const typeClass =
-          c.extractorType === "jsonpath" || c.extractorType === "random_select"
+          c.extractorType === "jsonpath" || _corrIsRnd(c)
             ? "jsonpath"
             : c.extractorType === "cookie"
               ? "cookie"
@@ -449,7 +454,7 @@ function renderCorrelations() {
         const typeLabel =
           c.extractorType === "jsonpath"
             ? "JSON"
-            : c.extractorType === "random_select"
+            : _corrIsRnd(c)
               ? "RandSel"
               : c.extractorType === "cookie"
                 ? "Cookie"
@@ -470,10 +475,10 @@ function renderCorrelations() {
         const advisorBadge = c._fromAdvisor
           ? `<span class="corr-advisor-badge">Advisor</span>`
           : "";
-        const _siIsSelectAll = (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) || c.extractorType === "random_select";
+        const _siIsSelectAll = (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll && (!c.list || c.list.pick === "random")) || c.extractorType === "random_select";
         const _siIdx = S.correlations.indexOf(c);
         const randBtn = _siIsSelectAll
-          ? `<button class="corr-rnd-btn${c.extractorType === "random_select" ? " active" : ""}" onclick="toggleCorrRandSelect(${_siIdx})" title="${c.extractorType === "random_select" ? "Switch back to SelectAll" : "Switch to Random Select (pick one per iteration)"}">&#x1F3B2; Rnd</button>`
+          ? `<button class="corr-rnd-btn${_corrIsRnd(c) ? " active" : ""}" onclick="toggleCorrRandSelect(${_siIdx})" title="${_corrIsRnd(c) ? "Switch back to SelectAll" : "Switch to Random Select (pick one per iteration)"}">&#x1F3B2; Rnd</button>`
           : "";
         return `<div class="corr-item">
   <span class="corr-badge ${typeClass}">${typeLabel}</span>

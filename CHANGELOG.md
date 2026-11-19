@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### One random picker for every list
+
+- One at random — chosen in the editor or with the Rnd switch of Correlation details, for the Correlation Advisor's lists too — now uses the same picker as the lists made in the editor: one value picked once per iteration, sent to every place in both formats (DevWeb used to pick again for each place). Proved on both engines (`studioextract.js` list-random: both fields send the same new value).
+
 #### Lists in Add manual correlation: a select's options, a JSON list, and how each is used
 
 - How to read it adds List: every value like the one chosen — the options of a `<select>` (only its own, when the page has others), the same field in every item of a JSON list (`$.seats[*].id`), the text of repeated tags. Selecting a whole section (options, part of a JSON array) makes the list of what is inside it. A single value that is one of a list says so, with a link to read them all.

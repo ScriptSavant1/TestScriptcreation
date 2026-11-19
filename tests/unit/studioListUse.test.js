@@ -182,10 +182,10 @@ describe('lists made in the editor', () => {
     E.S.correlations = [E.advisorToCorrelation(c)];
     expect(E.genDefaultCfg ? E.genDefaultCfg(null) : '').toMatch(/EnableJsForTransport=1|^$/);
   });
-  test('an Advisor list: random stays random_select (the Rnd switch); rotate and nth become a list choice', () => {
+  test('an Advisor list: random, rotate and nth are list choices (the one picker)', () => {
     const E = engine();
     const c = { id: 'adv-0', value: '(array)', varName: 'imgArr', confidence: 'high', status: 'accepted', _selectAll: true, source: { entryIdx: 0, url: '/x', jsonPath: '$.items[*].img' }, usages: [] };
-    c._pick = 'random'; expect([E.advisorToCorrelation(c).extractorType, E.advisorToCorrelation(c).list]).toEqual(['random_select', undefined]);
+    c._pick = 'random'; expect([E.advisorToCorrelation(c).extractorType, E.advisorToCorrelation(c).list]).toEqual(['jsonpath', { pick: 'random' }]);
     c._pick = 'rotate'; expect([E.advisorToCorrelation(c).extractorType, E.advisorToCorrelation(c).list]).toEqual(['jsonpath', { pick: 'rotate' }]);
     c._pick = 'nth'; c._nth = 2; expect(E.advisorToCorrelation(c).list).toEqual({ pick: 'nth', nth: 2 });
   });

@@ -111,12 +111,12 @@ describe('advisorApplyOne (Add manual correlation, Paste & Detect)', () => {
 describe('advisorSetListPick and _pick', () => {
   const list = () => ({ id: 'adv-0', value: '(list)', varName: 'imageKeyArr', confidence: 'high', status: 'accepted', _selectAll: true,
     source: { entryIdx: 0, url: '/products', jsonPath: '$.items[*].imageKey' }, usages: [{ entryIdx: 2, url: '/wishlist', location: 'body_json', jsonPath: '$.img' }] });
-  test('without a choice the list is read as before (jsonpath, every match); One at random → random_select', () => {
+  test('without a choice the list is read as before (jsonpath, every match); One at random → the one list picker', () => {
     const E = studio();
     const c = list();
     expect(E.advisorToCorrelation(c)).toMatchObject({ extractorType: 'jsonpath', extractorConfig: { path: '$.items[*].imageKey', selectAll: true } });
     c._pick = 'random';
-    expect(E.advisorToCorrelation(c)).toMatchObject({ extractorType: 'random_select', extractorConfig: { path: '$.items[*].imageKey', selectAll: true } });
+    expect(E.advisorToCorrelation(c)).toMatchObject({ extractorType: 'jsonpath', extractorConfig: { path: '$.items[*].imageKey', selectAll: true }, list: { pick: 'random' } });
   });
   test('before it is in the script: only the choice; in the script: the correlation changes too and the script is made again', () => {
     const E = studio();
@@ -125,13 +125,17 @@ describe('advisorSetListPick and _pick', () => {
     E.advisorSetListPick('adv-0', 'random');
     expect([c._pick, E.S.correlations.length, E.S._regen || 0]).toEqual(['random', 0, 0]);
     E.advisorApplyOne(c);
-    expect(E.S.correlations[0].extractorType).toBe('random_select');
+    expect(E.S.correlations[0].list).toEqual({ pick: 'random' });
     E.advisorSetListPick('adv-0', 'all');
-    expect([c._pick, E.S.correlations[0].extractorType, E.S._regen]).toEqual([undefined, 'jsonpath', 1]);
+    expect([c._pick, E.S.correlations[0].extractorType, E.S.correlations[0].list, E.S._regen]).toEqual([undefined, 'jsonpath', undefined, 1]);
     // the Rnd switch keeps the choice in step, so Take out still finds the correlation
     E.toggleCorrRandSelect(0);
-    expect([E.S.correlations[0].extractorType, c._pick]).toEqual(['random_select', 'random']);
-    expect(E.advisorRemoveFromScript('adv-0').extractorType).toBe('random_select');
+    expect([E.S.correlations[0].list, c._pick]).toEqual([{ pick: 'random' }, 'random']);
+    expect(E.advisorRemoveFromScript('adv-0').list).toEqual({ pick: 'random' });
+    // a script made before the one picker (random_select): the switch takes it back to every value
+    E.S.correlations = [{ name: 'x', extractorType: 'random_select', extractorConfig: { path: '$.a[*]', selectAll: true }, usages: [] }];
+    E.toggleCorrRandSelect(0);
+    expect([E.S.correlations[0].extractorType, E.S.correlations[0].list]).toEqual(['jsonpath', undefined]);
   });
   test('a rebuilt list and a plain value are left alone', () => {
     const E = studio();
