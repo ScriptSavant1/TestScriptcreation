@@ -10,7 +10,7 @@ Browser tools use Microsoft Edge through the CDP Recorder's `playwright-core`, s
 | `converter/` | Postman / Bruno and JMeter panels | `node make-inputs.js` once, then `node harness.js <portal URL> <out folder>` and `node compare.js <old> <new>` |
 | `help/` | Help text, word by word | `node capture.js <portal URL> baseline.json`, again to `next.json` after the change, then `node diff.js` |
 | `audit/` | Fonts, weights, contrast and shapes on every section (`audit.js`); HAR Explorer against Script Studio (`hx-parity.js <files>`: every request's transaction and left-out reason); screen walk-through (`hx-ui.js`) | `node audit.js [out folder]` |
-| `engines/` | What generated scripts really send, on the real VuGen and DevWeb engines through a local test proxy | `node runvugen.js <script folder> <out folder> [--har=<file>]`, `node rundevweb.js ...`, `node wirediff.js ...`; `node studioextract.js <studio url> <out folder>` (Script Studio's Regex and XPath extractors on both engines, against a copy of the recording with new values) |
+| `engines/` | What generated scripts really send, on the real VuGen and DevWeb engines through a local test proxy | `node runvugen.js <script folder> <out folder> [--har=<file>]`, `node rundevweb.js ...`, `node wirediff.js ...`; `node studioextract.js <studio url> <out folder>` (Script Studio's Regex and XPath extractors, and a list sent back every value / one at random, on both engines against a copy of the recording with new values) |
 
 Take the baseline from the code before the change, for example from a second working copy.
 

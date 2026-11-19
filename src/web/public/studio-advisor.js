@@ -609,6 +609,33 @@ function _advAddUsage(foundMap, value, source, usage, confidence) {
 // This generates web_reg_save_param_json with SelectAll=Yes (VuGen) or
 // {all: true} (DevWeb) so a loop-skeleton can iterate the captured array.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// The position (1-based) of the value at <prefix>[idx]<sub> among the matches of <prefix>[*]<sub> in a response —
+// the order VuGen (SelectAll: name_1 … name_N) and DevWeb (an array) give: the items before it that have the field,
+// plus one. null when the response cannot be read. (BUG-150)
+// ---------------------------------------------------------------------------
+function _advAt(obj, path) {
+  const re = /\.([^.[\]]+)|\[(\d+)\]/g;
+  let cur = obj, m;
+  const p = String(path || '').replace(/^\$/, '');
+  while ((m = re.exec(p))) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = m[1] != null ? cur[m[1]] : cur[+m[2]];
+  }
+  return cur;
+}
+function _advListPos(entry, prefix, idx, sub) {
+  const obj = entry && _advParseJson(entry.respBody || '');
+  const arr = obj ? _advAt(obj, prefix) : undefined;
+  if (!Array.isArray(arr) || idx >= arr.length) return null;
+  let n = 0;
+  for (let j = 0; j < idx; j++) {
+    const v = _advAt(arr[j], sub);
+    if (v !== undefined && v !== null && typeof v !== 'object') n++;
+  }
+  return n + 1;
+}
+
 function _advMergeArrayCandidates(candidates) {
   // Map: basePath → array of candidates
   const arrayGroups = new Map();
@@ -637,7 +664,15 @@ function _advMergeArrayCandidates(candidates) {
     // and array usages ($.nextAlerts[0].systemID) from the same entry are preserved.
     const first = group[0];
     const seenUsageKeys = new Set();
-    const allUsages = group.flatMap(c => c.usages).filter(u => {
+    // Each use sends ONE value of the list: keep that value (tokenValue) and its place in the list (listIdx), so the
+    // script sends the value at the same place (BUG-150 — before, every use had the list's label and nothing was
+    // replaced). Values from another response are not in the list read here: they stay as before (not replaced), as a SelectAll list has no plain {name}.
+    const _srcEntry = (S.entries1 || [])[first.source.entryIdx];
+    const allUsages = group.flatMap(c => {
+      const m2 = c.source.jsonPath.match(/^(.*)\[(\d+)\](.*)$/);
+      const pos = c.source.entryIdx === first.source.entryIdx ? _advListPos(_srcEntry, m2[1], +m2[2], m2[3]) : null;
+      return c.usages.map(u => pos ? Object.assign({}, u, { tokenValue: u.tokenValue || c.value, listIdx: pos }) : u);
+    }).filter(u => {
       const _uk = u.entryIdx + '\x01' + (u.jsonPath || '') + '\x01' + (u.location || '');
       if (seenUsageKeys.has(_uk)) return false;
       seenUsageKeys.add(_uk);
@@ -1086,14 +1121,15 @@ function advisorScan(entries, existingCorrelations) {
 // Called by applyAndRegen() in studio-app.js for each accepted candidate.
 // ---------------------------------------------------------------------------
 function advisorToCorrelation(candidate) {
-  const usages = candidate.usages.map(u => ({
+  const usages = candidate.usages.map(u => Object.assign({
     reqIdx: u.entryIdx,                         // correct S.entries1 index
     location: u.location,                        // 'body_json' | 'body_form' | 'header'
     key: u.jsonPath ? u.jsonPath.split('.').pop().replace(/[\[\]]/g, '') : 'value',
-    tokenValue: candidate.value,
-    originalValue: candidate.value,
+    // a list's use sends one of its values (BUG-150); every other candidate: its own value, as before
+    tokenValue: candidate._selectAll && u.tokenValue ? u.tokenValue : candidate.value,
+    originalValue: candidate._selectAll && u.tokenValue ? u.tokenValue : candidate.value,
     prefix: '',
-  }));
+  }, candidate._selectAll && u.listIdx ? { listIdx: u.listIdx } : {}));
 
   // Array reconstruction: short-circuit — all config is already in _arrayConfig.
   // Maps body_array usages (sentinel placement) AND body_json_standalone usages

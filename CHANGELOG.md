@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### A list sent back by a later request now sends the values read from the response (BUG-150)
+
+- A list the Correlation Advisor reads with every match (for example the image keys of a product list) was read but never used: the later request still sent the recorded values. Now each place sends the value at the same position in the list (VuGen `{name_K}`, DevWeb `load.global.name[K-1]`), or one picked at random when One at random is chosen. Proved with both engines against a recording whose values changed.
+
 #### A list's options in the correlation editor (Script Studio in steps, part 7)
 
 - A list (the response sends several values) shows "How the list is used" in the editor: Every value, as recorded, or One at random each iteration — now also before it is in the script (the Rnd switch of Correlation details was only after). A list sent back rebuilt shows its fields, One item for each value of (the loop), and Fill the missing paths. Options on a list row opens the editor; the values of the list are marked in the response.

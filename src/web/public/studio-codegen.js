@@ -335,6 +335,15 @@ function devwebHeaderExtractorDecl(name, cfg) {
 
 // Returns the bare constructor expression for an extractor (no indentation).
 // Used by both genCorrelationsJS (file declarations) and devwebExtractorCode (inline).
+// A list read with every match (jsonpath + selectAll): each use sends the value at its place in the list (listIdx, from
+// the Correlation Advisor) — DevWeb load.global.name[K-1] (an array), VuGen {name_K} (SelectAll). Any other correlation,
+// a list used one value at random (random_select: {name_selected} / a random pick) or a use with no place: the name.
+// (BUG-150)
+function _listRef(corr, u, fmt) {
+  if (!u || !u.listIdx || corr.extractorType !== "jsonpath" || !corr.extractorConfig || !corr.extractorConfig.selectAll) return corr.name;
+  return fmt === "devweb" ? corr.name + "[" + (u.listIdx - 1) + "]" : corr.name + "_" + u.listIdx;
+}
+
 function devwebExtractorDecl(corr) {
   const { name, extractorType, extractorConfig: cfg } = corr;
   switch (extractorType) {
@@ -1297,7 +1306,7 @@ function genMainJS(entries, correlations) {
       if (!corrUsages.has(u.reqIdx)) corrUsages.set(u.reqIdx, []);
       corrUsages.get(u.reqIdx).push({
         ...u,
-        name: corr.name,
+        name: _listRef(corr, u, "devweb"),
         extractorType: corr.extractorType,
       });
     }
@@ -1440,7 +1449,7 @@ function genMainJS(entries, correlations) {
       for (const u of c.usages) {
         const rawVal = u.tokenValue || u.originalValue;
         if (rawVal && dv.includes(rawVal)) {
-          dv = dv.split(rawVal).join(`\x00DYNSTART_${c.name}\x00DYNEND`);
+          dv = dv.split(rawVal).join(c.extractorType === "random_select" ? `\x00DYNRND_${c.name}\x00DYNEND` : `\x00DYNSTART_${_listRef(c, u, "devweb")}\x00DYNEND`);
           isDynDef = true;
         }
       }
@@ -1449,7 +1458,7 @@ function genMainJS(entries, correlations) {
       const expr = escTpl(dv).replace(
         /\x00DYNSTART_([^]+?)\x00DYNEND/g,
         "${load.global.$1}",
-      );
+      ).replace(/\x00DYNRND_([^]+?)\x00DYNEND/g, (_, nm) => `\${(load.global.${nm}||[]).length?load.global.${nm}[Math.floor(Math.random()*load.global.${nm}.length)]:''}`);
       o += `    "${escJs(k)}": \`${expr}\`,\n`;
     } else {
       o += `    "${escJs(k)}": ${subHdrValMj(v, mjHostVarMap)},\n`;
@@ -1798,7 +1807,7 @@ function genMainJS(entries, correlations) {
         for (const u of c.usages) {
           const rawVal = u.tokenValue || u.originalValue;
           if (rawVal && v.includes(rawVal)) {
-            v = v.split(rawVal).join(`\x00DYNSTART_${c.name}\x00DYNEND`);
+            v = v.split(rawVal).join(c.extractorType === "random_select" ? `\x00DYNRND_${c.name}\x00DYNEND` : `\x00DYNSTART_${_listRef(c, u, "devweb")}\x00DYNEND`);
             changed = true;
           }
         }
@@ -2633,7 +2642,7 @@ function genActionC(entries, correlations) {
       if (!corrUsages.has(u.reqIdx)) corrUsages.set(u.reqIdx, []);
       corrUsages.get(u.reqIdx).push({
         ...u,
-        name: corr.name,
+        name: _listRef(corr, u, "vugen"),
         extractorType: corr.extractorType,
       });
     }
@@ -3090,7 +3099,7 @@ function genActionC(entries, correlations) {
           for (const u of corr.usages) {
             const raw = u.tokenValue || u.originalValue;
             if (raw && hdrVal.includes(raw)) {
-              const _dhPh = corr.extractorType === "random_select" ? `{${corr.name}_selected}` : `{${corr.name}}`;
+              const _dhPh = corr.extractorType === "random_select" ? `{${corr.name}_selected}` : `{${_listRef(corr, u, "vugen")}}`;
               hdrVal = hdrVal.split(raw).join(_dhPh);
               hdrDynamic = true;
             }

@@ -307,7 +307,7 @@ Sentinels are only used in `studio-codegen.js` (client-side Studio). The server-
 | Type | DevWeb | VuGen C |
 |------|--------|---------|
 | `jsonpath` | `new load.JsonPathExtractor(name, path)` | `web_reg_save_param_json(...)` |
-| `jsonpath+selectAll` | third arg `true` (boolean); runtime stores result as **JS array** at `load.global.name` (NOT `name_1`/`name_count`) | `SelectAll=Yes`; VuGen stores `{name}_1..N` + `{name}_count` |
+| `jsonpath+selectAll` | third arg `true` (boolean); runtime stores result as **JS array** at `load.global.name` (NOT `name_1`/`name_count`); a use with a place (`listIdx`) sends `load.global.name[K-1]` (`_listRef`, studio-codegen.js — BUG-150) | `SelectAll=Yes`; VuGen stores `{name}_1..N` + `{name}_count`; a use with a place sends `{name_K}` |
 | `boundary` | `new load.BoundaryExtractor(name, {leftBoundary, rightBoundary, scope: load.ExtractorScope.Body})` | `web_reg_save_param(LB=..., RB=...)` |
 | `boundary_header` | `devwebHeaderExtractorDecl`: `new load.BoundaryExtractor(name, {leftBoundary, rightBoundary, scope: load.ExtractorScope.Headers})`, right boundary `""` when the stored one is a line ending (the engine reads each header with no line ending); a query value by `RegexpExtractor` (the engine sorts a followed `Location` query) — BUG-125 | `web_reg_save_param(LB/IC=..., RB=..., Search=Headers)` (`LB/IC` when the left boundary starts with a header name); a query value by `web_reg_save_param_regexp(..., SEARCH_FILTERS, "Scope=Headers", LAST)` — BUG-126, BUG-127 |
 | `regexp` | `new load.RegExpExtractor(name, pattern)`; Script Studio (editor's Regex, `{pattern}`): `new load.RegexpExtractor(name, {expression, flags: ""})` — the first group | `web_reg_save_param_regexp(...)` (Studio: `Group=1`, `Ordinal=1`) |
@@ -359,7 +359,7 @@ lre-utils.js lre-utils.dat` should always be empty.
 | studio-advisor.js | `_advHiddenFieldScan()` | Phase 2.6: form fields whose value the nearest earlier page sent in an HTML hidden input, under any name; generated-looking values only (BUG-141) |
 | studio-advisor.js | `_advHtmlValueExtractor()` | Boundary for a value in an HTML / text response, read from the page (`name="x" value="` … `"`) and widened until its first match is the value; used by Phases 2.5 and 2.6 |
 | studio-advisor.js | `_advPatternScan()` | Phase 3: JWT/UUID pattern detection |
-| studio-advisor.js | `_advMergeArrayCandidates()` | F1: merge array siblings → SelectAll |
+| studio-advisor.js | `_advMergeArrayCandidates()` | F1: merge array siblings → SelectAll; each use keeps its value + place (`tokenValue`, `listIdx` via `_advListPos`; values from another response: no place, not replaced) — BUG-150 |
 | studio-advisor.js | `_advDetectArrayGroups()` | F2: detect array reconstruction |
 | studio-advisor.js | `advisorToCorrelation()` | Convert candidate → S.correlations entry |
 | studio-advisor.js | `advisorAddManual()` | Manual correlation via field browser |
