@@ -864,19 +864,28 @@ html .adv-type-badge { background: var(--ds-accent-soft); color: var(--ds-accent
 /* ── the four steps (portal/studio-page.js step()): 1 Requests · 2 Correlate · 3 Test data · 4 Download ──
    Step 1 is the workspace as it was; steps 2 and 3 give the right panel (Correlation Advisor / Test data) the whole
    width; step 4 is the Ready list and the download. */
-.ss-steps { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px var(--ds-page-x); background: var(--ds-surface); border-bottom: 1px solid var(--ds-border); }
-.ss-steps ol { display: flex; align-items: center; margin: 0; padding: 0; list-style: none; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* the step line: a card per step — the current one raised in the brand colour, the steps before it ticked (! when
+   something there is worth a look), the line filled up to the current step, each note a pill */
+.ss-steps { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px var(--ds-page-x); background: linear-gradient(180deg, var(--ds-surface), var(--br-head)); border-bottom: 1px solid var(--ds-border-2); box-shadow: var(--ds-shadow-1); position: relative; z-index: 2; }
+.ss-steps ol { display: flex; align-items: center; margin: 0; padding: 2px; list-style: none; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .ss-steps li { display: flex; align-items: center; flex: none; }
-.ss-steps li + li::before { content: ""; width: 20px; height: 1px; margin: 0 4px; background: var(--ds-border-2); }
-.ss-steps [data-step] { display: flex; gap: 10px; align-items: center; padding: 5px 14px 5px 6px; border: 1px solid transparent; border-radius: var(--ds-r-tile); background: none; color: var(--ds-text-2); font: inherit; text-align: left; cursor: pointer; }
-.ss-steps [data-step]:hover { background: var(--ds-surface-2); color: var(--ds-text); }
-.ss-steps [data-step] i { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--ds-border-2); font-style: normal; font-weight: 700; font-size: var(--ds-fs-sm); color: var(--ds-text-2); background: var(--ds-surface-2); }
-.ss-steps [data-step] span { display: flex; flex-direction: column; line-height: 1.25; }
-.ss-steps [data-step] b { font-size: var(--ds-fs-sm); font-weight: 700; color: var(--ds-text); white-space: nowrap; }
-.ss-steps [data-step] small { font-size: var(--ds-fs-xs); color: var(--ds-text-3); white-space: nowrap; }
-.ss-steps [data-step].ss-todo small { color: var(--ds-text-2); font-weight: 600; }
-.ss-steps [aria-current="step"] { background: var(--ds-accent-soft); border-color: var(--ds-accent-line); }
-.ss-steps [aria-current="step"] i { background: var(--ds-accent); border-color: var(--ds-accent); color: #fff; }
+.ss-steps li + li::before { content: ""; width: 34px; height: 3px; margin: 0 6px; border-radius: 3px; background: var(--ds-border-2); transition: background .2s var(--ds-ease); }
+.ss-steps li.is-reached + li.is-reached::before { background: var(--ds-accent); }
+.ss-steps [data-step] { display: flex; gap: 12px; align-items: center; padding: 7px 16px 7px 8px; border: 1px solid var(--ds-border); border-radius: var(--ds-r-tile); background: var(--ds-surface); color: var(--ds-text-2); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s var(--ds-ease), box-shadow .15s var(--ds-ease), background .15s var(--ds-ease); }
+.ss-steps [data-step]:hover { border-color: var(--ds-accent-line); box-shadow: var(--ds-shadow-1); color: var(--ds-text); }
+.ss-steps [data-step] i { flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--ds-border-2); font-style: normal; font-weight: 700; font-size: var(--ds-fs-sm); color: var(--ds-text-2); background: var(--ds-surface-2); }
+.ss-steps [data-step] i svg.i { width: 16px; height: 16px; }
+.ss-steps [data-step] span { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; line-height: 1.2; }
+.ss-steps [data-step] b { font-size: var(--ds-fs); font-weight: 700; color: var(--ds-text); white-space: nowrap; }
+.ss-steps [data-step] small { padding: 1px 8px; border-radius: var(--ds-r-pill); font-size: var(--ds-fs-xs); color: var(--ds-text-2); background: var(--ds-surface-2); white-space: nowrap; }
+.ss-steps [data-step] small.st-ok { color: color-mix(in srgb, var(--ds-ok) 72%, var(--ds-text)); background: var(--ds-ok-soft); font-weight: 600; }
+.ss-steps [data-step] small.st-warn { color: color-mix(in srgb, var(--ds-warn) 80%, var(--ds-text)); background: var(--ds-warn-soft); font-weight: 600; }
+.ss-steps [data-step] small.st-info { color: color-mix(in srgb, var(--ds-info) 80%, var(--ds-text)); background: var(--ds-info-soft); font-weight: 600; }
+.ss-steps [data-step].is-past i { border-color: var(--ds-ok); background: var(--ds-ok-soft); color: var(--ds-ok); }
+.ss-steps [data-step].is-past i[data-ic="warn"] { border-color: var(--ds-warn); background: var(--ds-warn-soft); color: var(--ds-warn); }
+.ss-steps [aria-current="step"] { background: var(--ds-accent-soft); border-color: var(--ds-accent); box-shadow: 0 0 0 3px var(--ds-accent-soft), var(--ds-shadow-1); }
+.ss-steps [aria-current="step"] b { color: var(--ds-accent-text); }
+.ss-steps [aria-current="step"] i { background: var(--ds-accent); border-color: var(--ds-accent); color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--ds-accent) 22%, transparent); }
 .ss-steps > .ds-btn { flex: none; }
 .ss-next-ic { transform: rotate(180deg); }
 /* step 1: the right panel keeps the script; the Correlation Advisor and Test data are steps 2 and 3 */
@@ -894,7 +903,7 @@ body.ss-step-4 .ss-cols { display: none; }
 .ss-done { flex: 1; min-height: 0; overflow: auto; padding: 16px var(--ds-page-x) 20px; }
 .ss-done[hidden] { display: none; }
 .ss-done-card { max-width: 920px; margin: 0 auto; padding: 20px 24px 22px; }
-.ss-done-top { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+.ss-done-top { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 16px; }
 .ss-done-top h2 { margin: 0 0 2px; font-size: var(--ds-fs-lg); font-weight: 700; }
 .ss-done-top p { margin: 0; }
 .ss-done-list { display: grid; gap: 6px; }
@@ -908,13 +917,18 @@ body.ss-step-4 .ss-cols { display: none; }
 .ss-done-files { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 1100px) {
   .ss-steps [data-step] small { display: none; }
+  .ss-steps li + li::before { width: 18px; margin: 0 4px; }
   body.ss-step-wide #ss-p-right { height: auto; min-height: 70vh; }
 }
-@media (max-width: 600px) {
+/* narrow: the four steps on their own row (only the current one named), Back / Next below */
+@media (max-width: 900px) {
   .ss-steps { flex-wrap: wrap; padding: 8px 16px; }
   .ss-steps ol { width: 100%; }
+  .ss-steps [data-step] { padding: 5px 10px 5px 5px; }
   .ss-steps [data-step]:not([aria-current="step"]) b { display: none; }
   .ss-steps li + li::before { width: 10px; }
+}
+@media (max-width: 600px) {
   .ss-done { padding: 12px 16px 16px; }
   .ss-done-card { padding: 16px; }
 }
@@ -932,7 +946,8 @@ body.ss-step-4 .ss-cols { display: none; }
 #ss-t-corr:not(.ss-cr-cards) #adv-panel { display: none !important; }
 #ss-t-corr.ss-cr-cards :is(#ss-cr-tools, #ss-cr-wrap, #ss-cr-foot) { display: none; }
 .ss-corr { display: flex; flex-direction: column; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-card); background: var(--ds-surface); }
-.ss-corr-h { display: flex; gap: 16px; align-items: flex-start; padding: 14px 16px 10px; }
+.ss-corr-h { display: flex; gap: 14px; align-items: center; padding: 16px 18px 14px; background: linear-gradient(90deg, var(--br-head), var(--ds-surface) 70%); border-radius: var(--ds-r-card) var(--ds-r-card) 0 0; }
+.ss-corr-hact { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .ss-corr-h h2 { margin: 0 0 2px; font-size: var(--ds-fs-lg); font-weight: 700; }
 .ss-corr-h p { margin: 0; max-width: 90ch; font-size: var(--ds-fs-sm); }
 .ss-corr-tools { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--ds-border); border-bottom: 1px solid var(--ds-border); background: var(--ds-surface-2); }
@@ -1010,8 +1025,8 @@ body.ss-step-4 .ss-cols { display: none; }
 .ss-cr-row.is-member td:nth-child(2) { padding-left: 26px; }
 .ss-cr-row.is-member.is-tick td { background: var(--ds-accent-soft) !important; }
 /* step 3: a heading as on step 2, the same width */
-.ss-step-h { display: none; margin: 0; font-size: var(--ds-fs-lg); font-weight: 700; }
-body.ss-step-3 .ss-step-h { display: block; }
+.ss-step-h { display: none; }
+body.ss-step-3 .ss-step-h { display: flex; }
 body.ss-step-wide #ss-t-data { width: 100%; max-width: 1500px; margin: 0 auto; }
 
 /* the editor's add screen (Add manual correlation) and the response's Body / Headers */
@@ -1048,3 +1063,29 @@ body.ss-step-wide #ss-t-data { width: 100%; max-width: 1500px; margin: 0 auto; }
 .ss-ed-hrow code { overflow-wrap: anywhere; }
 .ss-ed-hrow.is-cur { background: var(--ds-accent-soft); box-shadow: inset 0 0 0 1px var(--ds-accent-line); }
 .ss-ed-hrow.is-later code { box-shadow: inset 0 -2px 0 var(--ds-warn); }
+
+/* a richer look: section headers with an icon tile, buttons that read as buttons, highlighted actions */
+.ss-sec-ic { flex: none; display: inline-grid; place-items: center; width: 42px; height: 42px; border-radius: var(--ds-r-tile); background: var(--ds-accent-soft); color: var(--ds-accent-text); box-shadow: inset 0 0 0 1px var(--ds-accent-line); }
+.ss-sec-ic svg.i { width: 22px; height: 22px; }
+.ss-sec-head { gap: 14px; align-items: center; margin: 0 0 14px; }
+.ss-sec-head h2 { margin: 0 0 2px; font-size: var(--ds-fs-lg); font-weight: 700; }
+.ss-sec-head p { margin: 0; font-size: var(--ds-fs-sm); }
+/* the highlighted, non-primary action of an area (Add manual correlation) */
+.ds-btn.ss-btn-accent { background: var(--ds-accent-soft); border-color: var(--ds-accent); color: var(--ds-accent-text); }
+.ds-btn.ss-btn-accent:hover { background: color-mix(in srgb, var(--ds-accent) 18%, var(--ds-surface)); color: var(--ds-accent-text); }
+/* secondary buttons: a light lift and a brand-coloured icon; ghost buttons get a surface so they read as buttons */
+.ds-btn:not(.ds-btn-primary):not(.ds-btn-ghost) { box-shadow: 0 1px 2px rgba(15, 23, 42, .06); }
+.ds-btn:not(.ds-btn-primary):not(:disabled):hover { border-color: var(--ds-accent-line); }
+.ds-btn:not(.ds-btn-primary) > svg.i:first-child { color: var(--ds-accent-text); }
+.ss-pane-h .ds-btn-ghost, .ss-req-act .ds-btn-ghost, .ss-corr-tools .ds-btn-ghost, .ss-corr-foot .ds-btn-ghost, .ss-td-bar .ds-btn-ghost { background: var(--ds-surface-2); border-color: var(--ds-border); color: var(--ds-text); }
+.ss-pane-h .ds-btn-ghost:hover, .ss-req-act .ds-btn-ghost:hover, .ss-corr-tools .ds-btn-ghost:hover, .ss-corr-foot .ds-btn-ghost:hover, .ss-td-bar .ds-btn-ghost:hover { background: var(--ds-accent-soft); border-color: var(--ds-accent-line); }
+/* the Correlate table: a clearer head, the row under the pointer, a ticked row marked on its edge, a tinted footer */
+.ss-corr-t th { color: var(--ds-text-2); }
+.ss-corr-t tbody tr:hover td { background: var(--br-sel); }
+.ss-cr-row.is-tick td:first-child { box-shadow: inset 3px 0 0 var(--ds-accent); }
+.ss-corr-foot { background: linear-gradient(90deg, var(--ds-accent-soft), var(--ds-surface) 75%); }
+.ss-corr-foot #ss-cr-n { color: var(--ds-text); font-weight: 600; }
+/* Download: the things worth a look stand out */
+.ss-done-card { box-shadow: var(--ds-shadow-2); }
+.ss-done-i.warn { border-color: color-mix(in srgb, var(--ds-warn) 45%, var(--ds-border)); background: var(--ds-warn-soft); }
+.ss-done-i:not(.warn) > svg.i:first-child { padding: 2px; border-radius: 50%; background: var(--ds-ok-soft); }

@@ -291,8 +291,8 @@
             <li><button type="button" data-step="4" aria-current="false"><i>4</i><span><b>Download</b><small id="ss-st-4">Check and download</small></span></button></li>
           </ol>
           <span class="ss-grow"></span>
-          <button class="ds-btn ds-btn-sm" type="button" id="ss-step-back" hidden><svg class="i"><use href="#i-left"/></svg><span>Back</span></button>
-          <button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-step-next"><span>Next: Correlate</span><svg class="i ss-next-ic"><use href="#i-left"/></svg></button>
+          <button class="ds-btn" type="button" id="ss-step-back" hidden><svg class="i"><use href="#i-left"/></svg><span>Back</span></button>
+          <button class="ds-btn ds-btn-primary" type="button" id="ss-step-next"><span>Next: Correlate</span><svg class="i ss-next-ic"><use href="#i-left"/></svg></button>
         </nav>
 
         <div class="ss-notices" id="ss-notices"></div>
@@ -423,9 +423,14 @@
                    below stay (Cards view) — they carry the list / array options until the editor has them -->
               <div class="ss-corr" id="ss-corr">
                 <div class="ss-corr-h">
+                  <span class="ss-sec-ic" aria-hidden="true"><svg class="i"><use href="#i-studio"/></svg></span>
                   <div><h2>Correlate</h2><p class="ss-muted">Values the server makes for each user (session ids, tokens, order numbers) and the script must read from a response, not replay. Tick the ones to put in the script, then <b>Add to the script</b>.</p></div>
                   <span class="ss-grow"></span>
+                  <span class="ss-corr-hact">
+                  <button class="ds-btn ss-btn-accent" type="button" id="ss-cr-manual" title="Choose a request and the value in its response yourself"><svg class="i"><use href="#i-plus"/></svg>Add manual correlation</button>
+                  <button class="ds-btn" type="button" id="ss-cr-cant" aria-haspopup="true" aria-expanded="false"><svg class="i"><use href="#i-q"/></svg>Can't find a value?</button>
                   <span class="ss-seg" id="ss-cr-view" role="group" aria-label="View"><button type="button" data-view="table" aria-pressed="true"><svg class="i"><use href="#i-table"/></svg>Table</button><button type="button" data-view="cards" aria-pressed="false"><svg class="i"><use href="#i-layers"/></svg>Cards</button></span>
+                  </span>
                 </div>
                 <div class="ss-corr-tools" id="ss-cr-tools">
                   <label class="ss-search ss-cr-q"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-cr-q" type="search" placeholder="Name, value or address" aria-label="Search the values" /></label>
@@ -435,8 +440,6 @@
                   <span class="ss-grow"></span>
                   <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-high" title="Tick every High-confidence value in the list"><svg class="i"><use href="#i-ok"/></svg>Select all high</button>
                   <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-clear" title="Untick every value that is not in the script yet">Clear selection</button>
-                  <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-manual" title="Choose a request and the value in its response yourself"><svg class="i"><use href="#i-plus"/></svg>Add manual correlation</button>
-                  <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-cant" aria-haspopup="true" aria-expanded="false"><svg class="i"><use href="#i-q"/></svg>Can't find a value?</button>
                   <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-names" aria-haspopup="true" aria-expanded="false" title="How new names are written"><svg class="i"><use href="#i-edit"/></svg>Names</button>
                 </div>
                 <div class="ss-corr-wrap" id="ss-cr-wrap">
@@ -543,7 +546,7 @@
 
             <div class="ss-tab" id="ss-t-data" role="tabpanel" aria-labelledby="ss-tab-data" hidden>
               <!-- the Test data table (portal/studio-testdata.js) -->
-              <h2 class="ss-step-h">Test data</h2>
+              <div class="ss-sec-head ss-step-h"><span class="ss-sec-ic" aria-hidden="true"><svg class="i"><use href="#i-table"/></svg></span><div><h2>Test data</h2><p class="ss-muted">What the user typed (names, passwords, search words), given to each virtual user from a data file.</p></div></div>
               <div class="ss-td-bar">
                 <button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
                 <span class="ss-grow"></span>
@@ -574,7 +577,8 @@
         <section class="ss-done" id="ss-done" aria-labelledby="ss-done-h" hidden>
           <div class="ss-card ss-done-card">
             <div class="ss-done-top">
-              <div><h2 id="ss-done-h">Ready to download?</h2><p class="ss-muted">Worth a look first. The download is never blocked.</p></div>
+              <span class="ss-sec-ic" aria-hidden="true"><svg class="i"><use href="#i-down"/></svg></span>
+              <div class="ss-grow"><h2 id="ss-done-h">Ready to download?</h2><p class="ss-muted">Worth a look first. The download is never blocked.</p></div>
               <button class="ds-btn ds-btn-primary ds-btn-lg" type="button" id="ss-done-dl"><svg class="i"><use href="#i-down"/></svg>Download ZIP</button>
             </div>
             <div class="ss-done-list" id="ss-done-list"></div>

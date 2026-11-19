@@ -89,6 +89,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### A richer look (Script Studio in steps, part 5)
+
+- The step line: a card per step, the current one raised in the brand colour, the steps before it ticked (or ! when something there is worth a look), the line filled up to the current step, each note a coloured pill (amber worth a look, green done). On narrow screens the four steps keep their own row.
+- Add manual correlation and Can't find a value? sit in the Correlate header, Add manual correlation highlighted; the filters have their own row.
+- Correlate, Test data and Download open with an icon tile and a short lead; ticked rows are marked on their edge, the row under the pointer is highlighted, the footer is tinted; on Download the things worth a look are amber.
+- Buttons read as buttons: a light lift and a brand-coloured icon; the plain-text buttons of the panels (Find a value, Show left-out, Collapse all …) get a surface.
+
 #### Add manual correlation in the editor (Script Studio in steps, part 4)
 
 - Add manual correlation opens the correlation editor instead of the old dialog: the request on the left (by default only those whose response has a value a later request sends back, with a filter), its response on the right (Body / Headers). The values a later request sends back are marked: click one, or select any text. How it is read (JSON path, Boundaries, Header), its name, the code and where it is sent back fill in; Add to the script puts in this value only.

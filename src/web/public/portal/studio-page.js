@@ -355,6 +355,7 @@
     for (var i = 1; i <= 4; i++) document.body.classList.toggle("ss-step-" + i, i === n);
     document.body.classList.toggle("ss-step-wide", n === 2 || n === 3);
     $$("#ss-steps [data-step]").forEach(function (b) { b.setAttribute("aria-current", +b.getAttribute("data-step") === n ? "step" : "false"); });
+    marks();
     if (STEP_TAB[n]) showTab(STEP_TAB[n]);
     $("#ss-done").hidden = n !== 4;
     $("#ss-step-back").hidden = n === 1;
@@ -375,6 +376,19 @@
     var n = t[(i + (e.key === "ArrowRight" ? 1 : t.length - 1)) % t.length]; n.focus(); n.click();
   });
   // the short line under each step's name
+  // the step line's look: steps before the current one show a tick (or ! when something there is worth a look), the
+  // line fills up to the current step; each note is a pill — amber worth a look, green done (stepNotes sets ST)
+  var ST = {};
+  function marks() {
+    $$("#ss-steps [data-step]").forEach(function (b) {
+      var n = +b.getAttribute("data-step"), i = b.querySelector("i"), st = ST[n] || "";
+      var icon = n < cur ? (st === "warn" ? "warn" : "ok") : "";
+      if (i.getAttribute("data-ic") !== icon) { i.setAttribute("data-ic", icon); i.innerHTML = icon ? '<svg class="i"><use href="#i-' + icon + '"/></svg>' : String(n); }
+      b.classList.toggle("is-past", n < cur);
+      b.parentNode.classList.toggle("is-reached", n <= cur);
+      var s = b.querySelector("small"); if (s) s.className = st ? "st-" + st : "";
+    });
+  }
   function stepNotes() {
     var es = S.entries1 || [], reqs = es.filter(function (e) { return !e.isMarker; });
     var inn = reqs.filter(function (e) { return !e.filtered; }).length;
@@ -389,6 +403,8 @@
     $("#ss-st-3").textContent = p ? plural(p, "parameter") : "No typed values found";
     var warn = readyItems().filter(function (i) { return i.warn; }).length;
     $("#ss-st-4").textContent = warn ? plural(warn, "thing") + " worth a look" : "Ready";
+    ST = { 1: reqs.length ? "ok" : "", 2: tk || pend ? "warn" : inScript ? "ok" : "", 3: p ? "info" : "", 4: warn ? "warn" : "ok" };
+    marks();
   }
   // step 4: the Ready list in full, the script files, the download
   function done() {
