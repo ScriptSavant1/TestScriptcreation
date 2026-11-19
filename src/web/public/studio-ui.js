@@ -408,18 +408,12 @@ function switchTab(el, tab) {
 // ═══════════════════════════════════════════════════════════════════════════
 // The Rnd switch of Correlation details: a list (every match) used one value at random each iteration, or every value
 // as recorded again — corr.list, the same picker as the editor's choice (one pick per iteration in both formats).
-function _corrIsRnd(c) { return c.extractorType === "random_select" || !!(c.list && c.list.pick === "random"); }
+function _corrIsRnd(c) { return !!(c.list && c.list.pick === "random"); }
 function toggleCorrRandSelect(idx) {
   const c = S.correlations[idx];
   if (!c) return;
-  if (c.extractorType === "random_select") {
-    c.extractorType = "jsonpath";   // a script made before the one picker: back to every value
-    if (c.extractorConfig) c.extractorConfig.selectAll = true;
-  } else if (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) {
-    if (c.list && c.list.pick === "random") delete c.list; else c.list = { pick: "random" };
-  } else {
-    return;
-  }
+  if (!(c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll)) return;
+  if (c.list && c.list.pick === "random") delete c.list; else c.list = { pick: "random" };
   (S.advisorCandidates || []).forEach(function (x) {
     if (!(x._applied && x._selectAll && x.varName === c.name)) return;
     if (_corrIsRnd(c)) x._pick = "random"; else delete x._pick;
@@ -475,7 +469,7 @@ function renderCorrelations() {
         const advisorBadge = c._fromAdvisor
           ? `<span class="corr-advisor-badge">Advisor</span>`
           : "";
-        const _siIsSelectAll = (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll && (!c.list || c.list.pick === "random")) || c.extractorType === "random_select";
+        const _siIsSelectAll = (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll && (!c.list || c.list.pick === "random"));
         const _siIdx = S.correlations.indexOf(c);
         const randBtn = _siIsSelectAll
           ? `<button class="corr-rnd-btn${_corrIsRnd(c) ? " active" : ""}" onclick="toggleCorrRandSelect(${_siIdx})" title="${_corrIsRnd(c) ? "Switch back to SelectAll" : "Switch to Random Select (pick one per iteration)"}">&#x1F3B2; Rnd</button>`
@@ -1490,9 +1484,8 @@ function advisorRestoreToScript(id, corr) {
 // Put ONE candidate in the script at once (Paste & Detect, Script Studio's Add manual correlation): its correlation is
 // added unless the same one (name, type, settings) is there already, and the card is marked applied. Other ticked
 // cards still wait for Apply & Regenerate. The caller regenerates.
-// A list read with every match (Script Studio's editor): "all" = every value as recorded, "random" = one value at random
-// each iteration (random_select). Kept on the candidate (_pick); when it is in the script its correlation changes too
-// (as the Rnd switch of Correlation details does) and the script is made again.
+// A list read with every match (Script Studio's editor): how each place uses it, kept on the candidate (_pick); when it
+// is in the script its correlation changes too (as the Rnd switch of Correlation details does) and the script is made again.
 // pick: "all" (every value as recorded), "random", "rotate" (the next value each iteration), "nth" (always value nth)
 function advisorSetListPick(id, pick, nth) {
   var c = _advFindById(id);

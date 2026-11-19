@@ -337,7 +337,7 @@ function devwebHeaderExtractorDecl(name, cfg) {
 // Used by both genCorrelationsJS (file declarations) and devwebExtractorCode (inline).
 // A list read with every match (jsonpath + selectAll): each use sends the value at its place in the list (listIdx, from
 // the Correlation Advisor) — DevWeb load.global.name[K-1] (an array), VuGen {name_K} (SelectAll). Any other correlation,
-// a list used one value at random (random_select: {name_selected} / a random pick) or a use with no place: the name.
+// or a use with no place: the name.
 // (BUG-150)
 // A list chosen in the editor (corr.list): "nth" → always that element; "random" / "rotate" → name_selected, picked once
 // per iteration before its first use (_listPicker).
@@ -386,11 +386,6 @@ function devwebExtractorDecl(corr) {
       return `new load.HtmlExtractor("${name}", "${cfg.selector}", "${cfg.attr || "value"}")`;
     case "boundary_header":
       return devwebHeaderExtractorDecl(name, cfg);
-    case "random_select":
-      // Extraction same as jsonpath+selectAll — collects all values as array.
-      // Usage: DYNRND sentinel → random element access inline in DevWeb template literals.
-      return `new load.JsonPathExtractor("${name}", "${escJs(cfg.path)}", true)`;
-
     case "regexp":
       // Chosen in the correlation editor: the first ( ) group of the expression is the value
       return `new load.RegexpExtractor("${name}", {expression: "${escJs(cfg.pattern)}", flags: ""})`;
@@ -964,10 +959,6 @@ function webHttpCorrCode(corr, indent) {
       return cols.map(col => VugenCodegen.emitJsonAll(col.varName, col.sourceJsonPath, t)).join('');
     }
 
-    case "random_select":
-      // Extraction same as jsonpath+selectAll; usage resolved by web_js_run picker + {name_selected}
-      return VugenCodegen.emitJsonAll(name, cfg.path, t);
-
     case "regexp":
       // Chosen in the correlation editor: the first ( ) group of the expression is the value
       return VugenCodegen.emitRegexp(name, { pattern: cfg.pattern, group: 1 }, t);
@@ -1478,7 +1469,7 @@ function genMainJS(entries, correlations) {
       for (const u of c.usages) {
         const rawVal = u.tokenValue || u.originalValue;
         if (rawVal && dv.includes(rawVal)) {
-          dv = dv.split(rawVal).join(c.extractorType === "random_select" ? `\x00DYNRND_${c.name}\x00DYNEND` : `\x00DYNSTART_${_listRef(c, u, "devweb")}\x00DYNEND`);
+          dv = dv.split(rawVal).join(`\x00DYNSTART_${_listRef(c, u, "devweb")}\x00DYNEND`);
           isDynDef = true;
         }
       }
@@ -1836,7 +1827,7 @@ function genMainJS(entries, correlations) {
         for (const u of c.usages) {
           const rawVal = u.tokenValue || u.originalValue;
           if (rawVal && v.includes(rawVal)) {
-            v = v.split(rawVal).join(c.extractorType === "random_select" ? `\x00DYNRND_${c.name}\x00DYNEND` : `\x00DYNSTART_${_listRef(c, u, "devweb")}\x00DYNEND`);
+            v = v.split(rawVal).join(`\x00DYNSTART_${_listRef(c, u, "devweb")}\x00DYNEND`);
             changed = true;
           }
         }
@@ -1925,15 +1916,10 @@ function genMainJS(entries, correlations) {
           decodeURIComponent(rawVal || ""),
           String(rawVal).replace(/ /g, "+"),
         ];
-        const _bsIsRnd = correlations.find(c => c.name === u.name)?.extractorType === "random_select";
         let _bodyReplaced = false;
         for (const sv of variants) {
           if (sv && bodyText.includes(sv)) {
-            // random_select: pick one value at runtime; DYNJSON doesn't apply since it's a scalar
-            const _bsSentinel = _bsIsRnd
-              ? `\x00DYNRND_${u.name}\x00DYNEND`
-              : `\x00DYNSTART_${u.name}\x00DYNEND`;
-            bodyText = bodyText.replace(sv, _bsSentinel);
+            bodyText = bodyText.replace(sv, `\x00DYNSTART_${u.name}\x00DYNEND`);
             bodyHasDynamic = true;
             _bodyReplaced = true;
             break;
@@ -1941,8 +1927,7 @@ function genMainJS(entries, correlations) {
         }
         // 5th variant: JSON-escaped form — catches values embedded as JSON string values
         // e.g. {"json":"{\"condition\":\"or\"}"} where rawVal = {"condition":"or"}
-        // random_select values are scalars; JSON-in-JSON embedding is very unlikely but safe to check
-        if (!_bodyReplaced && !_bsIsRnd) {
+        if (!_bodyReplaced) {
           const _jv = _jsonStrEscVariant(rawVal);
           if (_jv && bodyText.includes(_jv)) {
             bodyText = bodyText.replace(_jv, `\x00DYNJSON_${u.name}\x00DYNEND`);
@@ -1951,7 +1936,7 @@ function genMainJS(entries, correlations) {
         }
       }
       // Standalone anchor replacements from array_reconstruct correlations.
-      // Uses DYNRND sentinel (same as random_select) — extraction already covered by the
+      // Uses the DYNRND sentinel (a random element) — extraction already covered by the
       // array_reconstruct column, so no duplicate load.JsonPathExtractor is emitted.
       for (const c of correlations) {
         if (c.extractorType !== 'array_reconstruct') continue;
@@ -2061,9 +2046,7 @@ function genMainJS(entries, correlations) {
     for (const u of mjPathUsages) {
       const rawVal = u.tokenValue || u.originalValue;
       if (rawVal && urlOut.includes(rawVal)) {
-        const _upIsRnd = correlations.find(c => c.name === u.name)?.extractorType === "random_select";
-        const _upSentinel = _upIsRnd ? `\x00DYNRND_${u.name}\x00DYNEND` : `\x00DYNSTART_${u.name}\x00DYNEND`;
-        urlOut = urlOut.replace(rawVal, _upSentinel);
+        urlOut = urlOut.replace(rawVal, `\x00DYNSTART_${u.name}\x00DYNEND`);
         urlHasDynamic = true;
       }
     }
@@ -2076,8 +2059,7 @@ function genMainJS(entries, correlations) {
         decodeURIComponent(rawVal || ""),
         String(rawVal).replace(/ /g, "+"),
       ];
-      const _uqIsRnd = correlations.find(c => c.name === u.name)?.extractorType === "random_select";
-      const _uqSentinel = _uqIsRnd ? `\x00DYNRND_${u.name}\x00DYNEND` : `\x00DYNSTART_${u.name}\x00DYNEND`;
+      const _uqSentinel = `\x00DYNSTART_${u.name}\x00DYNEND`;
       for (const sv of variants) {
         if (sv && urlOut.includes(sv)) {
           urlOut = urlOut.replace(sv, _uqSentinel);
@@ -2419,7 +2401,7 @@ function genMainJS(entries, correlations) {
           /\x00DYNSTART_([^]+?)\x00DYNEND/g,
           "${load.global.$1}",
         );
-        // random_select: pick a random element from the extracted array at runtime
+        // DYNRND (a rebuilt list's standalone value): a random element of the extracted array at runtime
         esc1 = esc1.replace(
           /\x00DYNRND_([^]+?)\x00DYNEND/g,
           (_, nm) => `\${(load.global.${nm}||[]).length?load.global.${nm}[Math.floor(Math.random()*load.global.${nm}.length)]:''}`
@@ -2945,11 +2927,9 @@ function genActionC(entries, correlations) {
 
   // Track DYNJSON correlations whose web_js_run escape call has already been emitted.
   const _dynJsonEscEmitted = new Set();
-  // Track random_select correlations whose web_js_run picker has been emitted this Action().
-  // The picker runs once and stores corrName_selected; all subsequent uses reuse that value.
+  // Pickers already written in this Action() (a list's pick, a rebuilt list's standalone value): each runs once and
+  // stores its _selected value; later uses reuse it.
   const _randSelEmitted = new Set();
-  // Quick lookup: correlation name → extractorType (avoids repeated .find() calls per request)
-  const _corrExtractorTypeMap = new Map(correlations.map(c => [c.name, c.extractorType]));
 
   for (let idx = 0; idx < entries.length; idx++) {
     const e = entries[idx];
@@ -3030,14 +3010,12 @@ function genActionC(entries, correlations) {
     );
     for (const u of pathUsages) {
       const rawVal = u.tokenValue || u.originalValue;
-      const _pIsRnd = _corrExtractorTypeMap.get(u.name) === "random_select";
-      if (rawVal) urlOut = urlOut.replace(rawVal, `{${u.name}${_pIsRnd ? "_selected" : ""}}`);
+      if (rawVal) urlOut = urlOut.replace(rawVal, `{${u.name}}`);
     }
     // Query param correlation substitutions
     const queryUsages = reqUsages.filter((u) => u.location === "query");
     for (const u of queryUsages) {
-      const _qIsRnd = _corrExtractorTypeMap.get(u.name) === "random_select";
-      const _qPh = `{${u.name}${_qIsRnd ? "_selected" : ""}}`;
+      const _qPh = `{${u.name}}`;
       urlOut = urlOut
         .replace(encodeURIComponent(u.originalValue), _qPh)
         .replace(u.originalValue, _qPh);
@@ -3077,9 +3055,7 @@ function genActionC(entries, correlations) {
         hdrOut += `\tgen_${u.name}();\n`;
         continue;
       }
-      const _hdrRndSel = _corrExtractorTypeMap.get(u.name) === "random_select";
-      const _hdrCorrName = _hdrRndSel ? `${u.name}_selected` : u.name;
-      const replVal = u.prefix ? `${u.prefix}{${_hdrCorrName}}` : `{${_hdrCorrName}}`;
+      const replVal = u.prefix ? `${u.prefix}{${u.name}}` : `{${u.name}}`;
       hdrOut += `\tweb_add_header("${hdrTitleCase(u.key)}", "${replVal}");\n`;
     }
     // DPoP headers — the proof made just above for this request
@@ -3135,7 +3111,7 @@ function genActionC(entries, correlations) {
           for (const u of corr.usages) {
             const raw = u.tokenValue || u.originalValue;
             if (raw && hdrVal.includes(raw)) {
-              const _dhPh = corr.extractorType === "random_select" ? `{${corr.name}_selected}` : `{${_listRef(corr, u, "vugen")}}`;
+              const _dhPh = `{${_listRef(corr, u, "vugen")}}`;
               hdrVal = hdrVal.split(raw).join(_dhPh);
               hdrDynamic = true;
             }
@@ -3146,21 +3122,10 @@ function genActionC(entries, correlations) {
     }
 
     if (e.method === "GET" || e.method === "HEAD") {
-      // Emit random_select pickers for any correlation used in this GET that hasn't been picked yet.
-      // Also emit pickers for array_reconstruct correlations with body_json_standalone usages.
+      // Emit pickers for array_reconstruct correlations with body_json_standalone usages (a list's pick: _listPicker).
       // Picker must run once per Action() before first use; for GET the value is in URL/headers.
       for (const c of correlations) {
-        if (c.extractorType === "random_select") {
-          if (_randSelEmitted.has(c.name)) continue;
-          const usedHere = reqUsages.some(u => u.name === c.name);
-          if (!usedHere) continue;
-          _randSelEmitted.add(c.name);
-          o += `\tweb_js_run(\n`;
-          o += `\t\t"Code=var _n=parseInt(LR.getParam('${c.name}_count'))||0;"\n`;
-          o += `\t\t"LR.setParam('${c.name}_selected',_n>0?LR.getParam('${c.name}_'+(Math.floor(Math.random()*_n)+1)):'');",\n`;
-          o += `\t\t"ResultParam=_rand_sel_result",\n`;
-          o += `\t\tLAST);\n\n`;
-        } else if (c.extractorType === "array_reconstruct") {
+        if (c.extractorType === "array_reconstruct") {
           const _anchorVarG = c.extractorConfig && c.extractorConfig.countVar;
           if (!_anchorVarG) continue;
           const _hasStandaloneG = c.usages.some(u => u.reqIdx === idx && u.location === 'body_json_standalone');
@@ -3324,22 +3289,11 @@ function genActionC(entries, correlations) {
         }
       }
 
-      // random_select pickers — emit for any correlation used in this non-GET request.
-      // Also emit pickers for array_reconstruct correlations that have body_json_standalone
-      // usages here — those standalone anchor values get replaced with {anchorVar_selected}.
+      // Pickers for array_reconstruct correlations that have body_json_standalone usages here — those standalone
+      // anchor values get replaced with {anchorVar_selected} (a list's pick: _listPicker).
       // Placed after array_reconstruct web_js_run, before extractors (VuGen ordering rule).
       for (const c of correlations) {
-        if (c.extractorType === "random_select") {
-          if (_randSelEmitted.has(c.name)) continue;
-          const usedHere = reqUsages.some(u => u.name === c.name);
-          if (!usedHere) continue;
-          _randSelEmitted.add(c.name);
-          o += `\tweb_js_run(\n`;
-          o += `\t\t"Code=var _n=parseInt(LR.getParam('${c.name}_count'))||0;"\n`;
-          o += `\t\t"LR.setParam('${c.name}_selected',_n>0?LR.getParam('${c.name}_'+(Math.floor(Math.random()*_n)+1)):'');",\n`;
-          o += `\t\t"ResultParam=_rand_sel_result",\n`;
-          o += `\t\tLAST);\n\n`;
-        } else if (c.extractorType === "array_reconstruct") {
+        if (c.extractorType === "array_reconstruct") {
           const _anchorVar = c.extractorConfig && c.extractorConfig.countVar;
           if (!_anchorVar) continue;
           const _hasStandalone = c.usages.some(u => u.reqIdx === idx && u.location === 'body_json_standalone');
@@ -3545,8 +3499,7 @@ function genActionC(entries, correlations) {
               String(rawVal).replace(/ /g, "+"),
             ];
             let _replaced = false;
-            const _bIsRnd = _corrExtractorTypeMap.get(u.name) === "random_select";
-            const _bCorrPh = `{${u.name}${_bIsRnd ? "_selected" : ""}}`;
+            const _bCorrPh = `{${u.name}}`;
             for (const sv of variants) {
               if (sv && body.includes(sv)) {
                 body = body.replace(sv, _bCorrPh);
@@ -4115,7 +4068,7 @@ function genDefaultCfg(auth) {
   // DPoP proof generation, PKCE, array reconstruction, and JSON-in-JSON body escaping.
   const _needsJs = S.hasDpop || S.hasPkce ||
     (S.correlations && S.correlations.some(
-      c => c.extractorType === 'array_reconstruct' || c.extractorType === 'random_select' ||
+      c => c.extractorType === 'array_reconstruct' ||
         (c.list && (c.list.pick === 'random' || c.list.pick === 'rotate'))   // a list's pick (_listPicker)
     ));
   if (_needsJs) overrides["EnableJsForTransport"] = "1";

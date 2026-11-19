@@ -93,16 +93,18 @@ describe('the generators send the element at its place', () => {
     expect(s.mj).toContain('"primaryImage":"${load.global.imageKeyArr[0]}","altImage":"${load.global.imageKeyArr[2]}"');
     expect(s.mj).not.toContain(KEYS[0]);
   });
-  test('one at random: {name_selected} and a random pick, as the Rnd switch always wrote', () => {
-    const s = scripts(corr('random_select'));
-    expect(s.ac).toContain('\\"primaryImage\\":\\"{imageKeyArr_selected}\\"');
-    expect(s.mj).toContain('load.global.imageKeyArr[Math.floor(Math.random()*load.global.imageKeyArr.length)]');
+  test('one at random (corr.list, the one picker): {name_selected}, picked once — the same value in every place', () => {
+    const s = scripts(Object.assign(corr('jsonpath'), { list: { pick: 'random' } }));
+    expect(s.ac).toContain('\\"primaryImage\\":\\"{imageKeyArr_selected}\\",\\"altImage\\":\\"{imageKeyArr_selected}\\"');
+    expect((s.ac.match(/LR\.setParam\('imageKeyArr_selected'/g) || []).length).toBe(1);
+    expect(s.mj).toContain('"primaryImage":"${load.global.imageKeyArr_selected}","altImage":"${load.global.imageKeyArr_selected}"');
     expect(s.mj).not.toContain(KEYS[3]);
+    expect(s.ac + s.mj).not.toMatch(/random_select|DYNRND/);
   });
   test('_listRef: only a list read with every match, and only a use with a place', () => {
     const E = engine(), c = corr('jsonpath');
     expect([E._listRef(c, { listIdx: 2 }, 'vugen'), E._listRef(c, { listIdx: 2 }, 'devweb'), E._listRef(c, {}, 'vugen')]).toEqual(['imageKeyArr_2', 'imageKeyArr[1]', 'imageKeyArr']);
-    expect(E._listRef(corr('random_select'), { listIdx: 2 }, 'vugen')).toBe('imageKeyArr');
+    expect(E._listRef(Object.assign(corr('jsonpath'), { list: { pick: 'random' } }), { listIdx: 2 }, 'vugen')).toBe('imageKeyArr_selected');
     expect(E._listRef({ name: 'tok', extractorType: 'jsonpath', extractorConfig: { path: '$.t' } }, { listIdx: 2 }, 'devweb')).toBe('tok');
   });
 });
