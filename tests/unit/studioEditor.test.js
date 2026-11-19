@@ -199,3 +199,25 @@ describe('listValues (the values a list reads, marked in the editor)', () => {
     expect(E.listValues('<html>', ['$.a'])).toEqual([]);
   });
 });
+
+describe('selections that read well', () => {
+  test('readable: the left boundary widened by whole tokens while its first match is still the value', () => {
+    const b = '<meta name="x" content="aa"><meta name="csrf-token" content="T0K-123456"><input type="hidden" name="userSession" value="143549.81">';
+    expect(E.readable(b, b.indexOf('T0K'), { lb: 'tent="', rb: '"' })).toEqual({ lb: 'name="csrf-token" content="', rb: '"' });
+    expect(E.readable(b, b.indexOf('1435'), { lb: 'ion" value="', rb: '"' })).toEqual({ lb: 'name="userSession" value="', rb: '"' });
+    const j = '{"a":1,"nonce":"NC-1"}';
+    expect(E.readable(j, j.indexOf('NC-'), { lb: 'nce":"', rb: '"' })).toEqual({ lb: '"nonce":"', rb: '"' });
+    expect(E.readable(b, 5, null)).toBeNull();
+  });
+  test('Regex asked for on a JSON response gives a regex, not a JSON path', () => {
+    const body = JSON.stringify({ tok: 'abc-123-xyz' });
+    const x = E.fromSelection(resp(body), body.indexOf('abc'), 'abc-123-xyz', 'regexp', St.findJsonPath, St._advSafeBoundaries);
+    expect(x.extractorType).toBe('regexp');
+    expect(new RegExp(x.extractorConfig.pattern).exec(body)[1]).toBe('abc-123-xyz');
+    expect(E.fromSelection(resp(body), body.indexOf('abc'), 'abc-123-xyz', 'any', St.findJsonPath, St._advSafeBoundaries).extractorType).toBe('jsonpath');
+  });
+  test('addresses and files a page links to are not values to correlate', () => {
+    const page = '<a href="/login">x</a><frame src="nav.pl?in=home"><frame src="/WebTours/home.html"><img src="https://cdn.example.com/a.png"><input value="SESS-12345">';
+    expect(E.valuesOf(resp(page)).map((v) => v.value)).toEqual(['SESS-12345']);
+  });
+});

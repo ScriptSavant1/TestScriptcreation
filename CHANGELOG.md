@@ -89,6 +89,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Clearer selections in the correlation editor, a calmer Correlate page
+
+- A value selected in a response gets boundaries a person can read: the left one widened by whole tokens (`name="csrf-token" content="`, `"nonce":"`) while it still reads exactly that value first; a regular expression built from a selection uses them too.
+- Regex chosen on a JSON response gives a regular expression (it gave a JSON path).
+- Add manual correlation no longer marks addresses and file names a page links to (`/login`, `nav.pl?in=home`, `home.html`) as values sent back.
+- Correlation details and Advanced: second recording have the same header as Correlate (icon, one-line lead); steps 2 and 3 sit on the page instead of inside a white frame.
+
 #### A list sent back by a later request now sends the values read from the response (BUG-150)
 
 - A list the Correlation Advisor reads with every match (for example the image keys of a product list) was read but never used: the later request still sent the recorded values. Now each place sends the value at the same position in the list (VuGen `{name_K}`, DevWeb `load.global.name[K-1]`), or one picked at random when One at random is chosen. Proved with both engines against a recording whose values changed.

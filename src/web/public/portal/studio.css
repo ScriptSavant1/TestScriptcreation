@@ -1111,3 +1111,15 @@ body.ss-step-wide #ss-t-data { width: 100%; max-width: 1500px; margin: 0 auto; }
 .ss-ed-miss { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; padding: 8px 10px; border-radius: var(--ds-r-tile); background: var(--ds-warn-soft); font-size: var(--ds-fs-sm); }
 .ss-ed-miss > svg.i { color: var(--ds-warn); flex: none; }
 .ss-ed-miss > span { flex: 1; min-width: 180px; }
+/* steps 2 and 3: the sections sit on the page, not inside a white frame; the panels below Correlate match its header */
+body.ss-step-wide #ss-p-right { background: transparent; border-color: transparent; }
+.ss-sec-ic.sm { width: 32px; height: 32px; border-radius: var(--ds-r-sm); }
+.ss-sec-ic.sm svg.i { width: 18px; height: 18px; }
+.ss-hd-t { display: flex; flex-direction: column; gap: 1px; }
+.ss-hd-t small { font-size: var(--ds-fs-xs); font-weight: 400; }
+#ss-t-corr .corr-panel, #ss-t-corr .ss-diff { box-shadow: var(--ds-shadow-1); }
+#ss-t-corr .corr-panel-hdr, #ss-t-corr .ss-diff > .ss-card-h { min-height: 58px; padding: 10px 16px; background: linear-gradient(90deg, var(--br-head), var(--ds-surface) 70%); }
+#ss-t-corr .corr-panel-hdr:hover, #ss-t-corr .ss-diff > .ss-card-h:hover { background: linear-gradient(90deg, var(--br-sel), var(--ds-surface) 70%); }
+#ss-t-corr .ss-diff > .ss-card-h { display: flex; align-items: center; gap: 10px; }
+#ss-t-corr .ss-diff > .ss-card-h h3 { margin: 0; font-size: var(--ds-fs-md); font-weight: 700; }
+#ss-t-corr .ss-corr { box-shadow: var(--ds-shadow-1); }

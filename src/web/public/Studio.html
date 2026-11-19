@@ -516,7 +516,7 @@
               </div>
               <div class="corr-panel" id="corr-panel">
                 <div class="corr-panel-hdr" onclick="toggleCorrPanel()">
-                  <span><svg class="i"><use href="#i-studio"/></svg>Correlation details</span>
+                  <span><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-studio"/></svg></span><span class="ss-hd-t">Correlation details<small class="ss-muted">What the script reads now, and every place it sends it back</small></span></span>
                   <span class="corr-toggle-icon" id="corr-toggle-icon">&#x25BE;</span>
                 </div>
                 <div class="corr-list" id="corr-list"></div>
@@ -524,7 +524,7 @@
 
               <!-- Advanced: a second recording of the same journey (diff mode) -->
               <section class="ss-card ss-diff folded" id="ss-diff">
-                <div class="ss-card-h" data-fold="diff"><svg class="i ss-chev"><use href="#i-chev"/></svg><h3>Advanced: second recording</h3><span class="ss-pill" id="mode-badge">Mode: <b>Pattern</b> (1 HAR)</span></div>
+                <div class="ss-card-h" data-fold="diff"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><h3 class="ss-hd-t">Advanced: second recording<small class="ss-muted">Record the same journey again with other data: every value that changes is found</small></h3><span class="ss-pill" id="mode-badge">Mode: <b>Pattern</b> (1 HAR)</span></div>
                 <div class="ss-card-b">
                   <p class="ss-p"><b>One recording (pattern mode)</b> — dynamic values are found by their shape and by tracing them back to an earlier response. Quick to start.</p>
                   <p class="ss-p"><b>Two recordings (diff mode)</b> — record the same journey twice with different data. Every value that changes between the two is found: the deepest and most reliable correlation.</p>

@@ -115,17 +115,32 @@
   function fromSelection(entry, at, s, kind, findPath, safe) {
     var body = String(entry && entry.respBody || "");
     if (!s || body.slice(at, at + s.length) !== s) return null;
-    if (kind !== "boundary") {
+    if (kind === "any" || kind === "jsonpath") {
       var o = parse(body), p = o !== undefined && findPath ? findPath(body, s) : null;
       if (p && jget(o, p).value === s) return { extractorType: "jsonpath", extractorConfig: { path: p } };
       if (kind === "jsonpath") return null;
     }
-    var b = safe(body, at, s);
+    var b = readable(body, at, safe(body, at, s));
     if (b && kind === "regexp") {
       var p = rx(b.lb) + (/[\r\n]/.test(s) ? "([\\s\\S]+?)" : "(.+?)") + rx(b.rb), c = compile(p), m = c.re && c.re.exec(body);
       return m && m[1] === s ? { extractorType: "regexp", extractorConfig: { pattern: p } } : null;
     }
     return b ? { extractorType: "boundary", extractorConfig: { lb: b.lb, rb: b.rb } } : null;
+  }
+  // boundaries a person can read: the left one widened to the start of its token (content=" → not tent=", the
+  // attribute name with name="x" value=", "key":" in JSON), kept only while its first match is still the value
+  function readable(body, at, b) {
+    if (!b || body.slice(at - b.lb.length, at) !== b.lb) return b;
+    // token by token to the left (at most 4, never past the start of a tag or 80 characters) until it is the first match
+    var i = at - b.lb.length, lim = Math.max(0, i - 80);
+    for (var n = 0; n < 4 && i > lim; n++) {
+      while (i > lim && !/[\s<>{},;&?[]/.test(body.charAt(i - 1))) i--;
+      var lb = body.slice(i, at);
+      if (lb.length > b.lb.length && body.indexOf(lb) + lb.length === at) return { lb: lb, rb: b.rb };
+      if (/[<>{}[]/.test(body.charAt(i - 1))) break;
+      while (i > lim && /\s/.test(body.charAt(i - 1))) i--;
+    }
+    return b;
   }
   // a name for a value from the text in front of it: name="vs" value="… → vs, "nonce":"… → nonce, <Token>… → Token
   function nameBefore(body, at) {
@@ -153,6 +168,8 @@
     "keep-alive": 1, "referrer-policy": 1, "permissions-policy": 1, "alt-svc": 1, "nel": 1, "report-to": 1 };
   // words that are sent back but are not values to correlate (the word before a token, booleans, common types)
   var WORDS = /^(true|false|null|none|undefined|bearer|basic|digest|negotiate|token|json|text|html|success|error|enabled|disabled|active|https?|application\/json|text\/html|text\/plain)$/i;
+  // an address or a file (a link, a frame, a form action): the page sends it, it is not a value the server makes per user
+  var ADDR = /^(https?:\/\/|\/|\.\.?\/|#|mailto:|javascript:)|\.(html?|php|pl|aspx?|jsp|cgi|js|mjs|css|png|gif|jpe?g|svg|ico|webp|woff2?|ttf|map|pdf)(\?|#|$)/i;
   // The values a response gives that could be correlated: JSON leaves (strings and numbers, with their path), else the
   // value="…" attributes of an HTML / text page, and the response headers above. 4 to 2000 characters, no spaces,
   // not a 1–3 digit number, not one of the WORDS; each value once.
@@ -160,7 +177,7 @@
     var out = [], seen = {};
     function add(v, where, kind) {
       v = String(v);
-      if (v.length < 4 || v.length > 2000 || /\s/.test(v) || /^\d{1,3}$/.test(v) || WORDS.test(v) || seen[v]) return;
+      if (v.length < 4 || v.length > 2000 || /\s/.test(v) || /^\d{1,3}$/.test(v) || WORDS.test(v) || ADDR.test(v) || seen[v]) return;
       seen[v] = 1; out.push({ value: v, where: where, kind: kind });
     }
     var body = String(entry && entry.respBody || ""), o = body ? parse(body) : undefined, n = 0;
@@ -215,7 +232,7 @@
   function laterValues(entries, i, idx) {
     return valuesOf(entries[i]).filter(function (v) { return idx.later(v.value, i); });
   }
-  return { jget: jget, listValues: listValues, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
+  return { jget: jget, listValues: listValues, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
 });
 
 (function () {
