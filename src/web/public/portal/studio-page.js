@@ -80,7 +80,7 @@
   window.markLoaded = function (slot) {
     var r = engineMarkLoaded.apply(this, arguments);
     if (slot === 1 && window.SSW) SSW.newFile();
-    if (slot === 1) { step(1); S.scriptName = ""; nameShow(); }   // a new recording starts at step 1, with the default name
+    if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); }   // a new recording starts at step 1, with the default name
     setTimeout(function () { if (S.har1) window.analyze(); }, 0);
     return r;
   };
@@ -120,6 +120,7 @@
     notices();
     badges();
     if (window.SSW) SSW.render();
+    if (window.SSC) SSC.render();
   }
   // the engine draws several parts one after another — the page follows once
   var queued = false;
@@ -261,6 +262,8 @@
     var out = [];
     var pend = (S.advisorCandidates || []).filter(function (c) { return c.status === "pending"; }).length;
     if (pend) out.push({ warn: true, text: plural(pend, "correlation suggestion") + " not reviewed yet", go: "corr" });
+    var tk = SS.corrTicked ? SS.corrTicked() : 0;
+    if (tk) out.push({ warn: true, text: plural(tk, "value") + " ticked in Correlate but not added to the script yet", go: "corr" });
     if (S.harWarning) out.push({ warn: true, text: "The recording has a warning — read it before you run the script", go: "notice" });
     var bg = (SS.bgSummary || []).length;
     if (bg) out.push({ text: plural(bg, "background endpoint") + " (repeated by the page) — left out unless you choose otherwise", go: "bg" });
@@ -344,8 +347,9 @@
   //    table; step 4 lists what is worth a look and downloads. Nothing is applied or lost by moving between steps. ──
   var NEXT = { 1: "Next: Correlate", 2: "Next: Test data", 3: "Next: Download" };
   var cur = 0;
-  function step(n) {
+  function step(n, sure) {
     n = n >= 1 && n <= 4 ? n : 1;
+    if (cur === 2 && n !== 2 && !sure && SS.leaveCorr && SS.leaveCorr(function () { step(n, true); })) return;
     var was = cur; cur = n;
     for (var i = 1; i <= 4; i++) document.body.classList.toggle("ss-step-" + i, i === n);
     document.body.classList.toggle("ss-step-wide", n === 2 || n === 3);
@@ -356,6 +360,7 @@
     var nx = $("#ss-step-next"); nx.hidden = n === 4; if (NEXT[n]) nx.firstElementChild.textContent = NEXT[n];
     if (window.SSW && SSW.panes) SSW.panes();
     if (n === 4) done();
+    if (n === 2 && window.SSC) SSC.render();   // High values come ticked when the step opens
     if (was && was !== n) { var ws = $("#ph-res"); if (ws.scrollTop) ws.scrollTop = 0; }
   }
   SS.step = step;
@@ -376,8 +381,9 @@
     var cs = S.advisorCandidates || [];
     var pend = cs.filter(function (c) { return c.status === "pending"; }).length;
     var inScript = (S.correlations || []).length;
-    $("#ss-st-2").textContent = pend ? plural(pend, "value") + " to review" : inScript ? plural(inScript, "correlation") + " in the script" : "Nothing to review";
-    $("#ss-steps [data-step='2']").classList.toggle("ss-todo", !!pend);
+    var tk = SS.corrTicked ? SS.corrTicked() : 0;
+    $("#ss-st-2").textContent = tk ? tk + " ticked, not added yet" : pend ? plural(pend, "value") + " to review" : inScript ? plural(inScript, "correlation") + " in the script" : "Nothing to review";
+    $("#ss-steps [data-step='2']").classList.toggle("ss-todo", !!(pend || tk));
     var p = (S.params || []).length;
     $("#ss-st-3").textContent = p ? plural(p, "parameter") : "No typed values found";
     var warn = readyItems().filter(function (i) { return i.warn; }).length;
@@ -432,11 +438,14 @@
   bgDlg.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) bgDlg.close(); });
 
   // a question before a change that throws away work (dialog #ss-ask)
-  SS.ask = function (title, text, okLabel, then) {
+  // opt (optional): { no: label of the other button, otherwise: what it does — without it, the other button cancels }
+  SS.ask = function (title, text, okLabel, then, opt) {
     var d = $("#ss-ask");
+    opt = opt || {};
     $("#ss-ask-h").textContent = title; $("#ss-ask-t").textContent = text; $("#ss-ask-yes").textContent = okLabel || "Continue";
+    $("#ss-ask-no").textContent = opt.no || "Cancel";
     d.returnValue = "";
-    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); };
+    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); else if (d.returnValue === "no" && opt.otherwise) opt.otherwise(); };
     try { d.showModal(); } catch (e) { if (window.confirm(title + "\n\n" + text)) then(); }
   };
 

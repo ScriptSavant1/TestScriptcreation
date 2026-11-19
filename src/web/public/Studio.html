@@ -419,6 +419,44 @@
             </div>
 
             <div class="ss-tab" id="ss-t-corr" role="tabpanel" aria-labelledby="ss-tab-corr" hidden>
+              <!-- step 2: the Correlation Advisor's findings as one table (portal/studio-corr.js); the engine's cards
+                   below stay (Cards view) — they carry the list / array options until the editor has them -->
+              <div class="ss-corr" id="ss-corr">
+                <div class="ss-corr-h">
+                  <div><h2>Correlate</h2><p class="ss-muted">Values the server makes for each user (session ids, tokens, order numbers) and the script must read from a response, not replay. Tick the ones to put in the script, then <b>Add to the script</b>.</p></div>
+                  <span class="ss-grow"></span>
+                  <span class="ss-seg" id="ss-cr-view" role="group" aria-label="View"><button type="button" data-view="table" aria-pressed="true"><svg class="i"><use href="#i-table"/></svg>Table</button><button type="button" data-view="cards" aria-pressed="false"><svg class="i"><use href="#i-layers"/></svg>Cards</button></span>
+                </div>
+                <div class="ss-corr-tools" id="ss-cr-tools">
+                  <label class="ss-search ss-cr-q"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-cr-q" type="search" placeholder="Name, value or address" aria-label="Search the values" /></label>
+                  <select class="ss-field ss-cr-sel" id="ss-cr-type" aria-label="Type"><option value="">Every type</option></select>
+                  <select class="ss-field ss-cr-sel" id="ss-cr-conf" aria-label="Confidence"><option value="">Any confidence</option><option value="high">High</option><option value="medium">Medium</option></select>
+                  <span class="ss-seg" id="ss-cr-show" role="group" aria-label="Show"><button type="button" data-show="review" aria-pressed="true">To review</button><button type="button" data-show="script" aria-pressed="false">In the script</button><button type="button" data-show="skipped" aria-pressed="false">Skipped</button><button type="button" data-show="all" aria-pressed="false">All</button></span>
+                  <span class="ss-grow"></span>
+                  <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-high" title="Tick every High-confidence value in the list"><svg class="i"><use href="#i-ok"/></svg>Select all high</button>
+                  <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-clear" title="Untick every value that is not in the script yet">Clear selection</button>
+                  <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-manual" title="Choose a request and the value in its response yourself"><svg class="i"><use href="#i-plus"/></svg>Add manual correlation</button>
+                  <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-cant" aria-haspopup="true" aria-expanded="false"><svg class="i"><use href="#i-q"/></svg>Can't find a value?</button>
+                </div>
+                <div class="ss-corr-wrap" id="ss-cr-wrap">
+                  <table class="ss-corr-t" id="ss-cr-table">
+                    <thead><tr><th class="ss-cr-c0"><span class="ss-vh">Add</span></th><th>Name</th><th>What it is</th><th>Value</th><th>Comes from</th><th>Sent back in</th><th title="High: an earlier response sends this value. Medium: found by its shape only.">Confidence</th><th><span class="ss-vh">Actions</span></th></tr></thead>
+                    <tbody id="ss-cr-body"></tbody>
+                  </table>
+                  <p class="ss-empty" id="ss-cr-empty" hidden></p>
+                </div>
+                <div class="ss-corr-foot" id="ss-cr-foot">
+                  <span id="ss-cr-n" class="ss-muted"></span>
+                  <span class="ss-grow"></span>
+                  <button class="ds-btn ds-btn-primary" type="button" id="ss-cr-apply"><svg class="i"><use href="#i-ok"/></svg><span>Add to the script</span></button>
+                </div>
+                <div class="ss-menu" id="ss-cr-cant-m" role="menu" hidden>
+                  <div class="ss-menu-h"><b>Can't find a value?</b><span class="ss-muted">Three ways to correlate a value that is not in the list.</span></div>
+                  <button type="button" role="menuitem" data-cant="find"><svg class="i"><use href="#i-search"/></svg><span><b>I have the value</b><br><small class="ss-muted">Find where it comes from and every request that sends it back</small></span></button>
+                  <button type="button" role="menuitem" data-cant="paste"><svg class="i"><use href="#i-paste"/></svg><span><b>Its response is empty in the recording</b><br><small class="ss-muted">Paste the response and the value: the extractor is made from it</small></span></button>
+                  <button type="button" role="menuitem" data-cant="second"><svg class="i"><use href="#i-layers"/></svg><span><b>Use a second recording</b><br><small class="ss-muted">The same journey recorded again with other data: every value that changes is found</small></span></button>
+                </div>
+              </div>
               <div class="adv-panel" id="adv-panel" style="display:none">
                 <div class="adv-panel-hdr" onclick="toggleAdvisorPanel()">
                   <div class="adv-panel-hdr-left">
@@ -741,5 +779,6 @@
     <script src="portal/studio-page.js"></script>
     <script src="portal/studio-workspace.js"></script>
     <script src="portal/studio-testdata.js"></script>
+    <script src="portal/studio-corr.js"></script>
   </body>
 </html>

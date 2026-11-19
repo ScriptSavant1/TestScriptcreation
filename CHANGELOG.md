@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### The Correlate table (Script Studio in steps, part 2)
+
+- Step 2 shows the Correlation Advisor's findings as one table: tick, name (editable), what it is, the value and its length, comes from, sent back in, confidence with the reason. High values come ticked when the step opens. Search, type and confidence filters; To review / In the script / Skipped / All; Select all high, Clear selection, Skip / Put back, Add manual correlation, and Can't find a value? (Find a value, Paste & Detect, the second recording). Nothing reaches the script before Add n to the script; leaving the step with ticked values asks (Not now keeps them). The engine's cards stay one click away (Cards), with the list options. The same engine calls as the cards: the scripts are the same.
+
 #### Script name and think time (Script Studio in steps, part 1b)
 
 - Step 1 has a settings bar above the filters. **Script name**: the ZIP and the .usr file take it (letters, numbers and underscores; empty keeps the default name, WebHttpScript_Correlated / DevWebScript_Correlated). **Think time between transactions**: Fixed (3 s by default, as before, or any number of seconds), As recorded (the pause in the recording, in whole seconds) or None; remembered per browser. Nothing changes in the script until you choose something else.

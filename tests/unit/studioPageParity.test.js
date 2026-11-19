@@ -20,7 +20,7 @@ describe('Script Studio redesign — same scripts as the classic page', () => {
   test('Studio.html loads the classic scripts unchanged, in the same order, then its layout script', () => {
     const engine = scripts(classic);
     expect(scripts(page).slice(0, engine.length)).toEqual(engine);
-    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js']);
+    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js', 'portal/studio-corr.js']);
   });
 
   test('the classic stylesheet is still loaded (it styles what the scripts draw), then the new one', () => {
@@ -116,8 +116,21 @@ describe('Script Studio — the four steps', () => {
     ['ss-tab-script', 'ss-tab-corr', 'ss-tab-data', 'ss-t-script', 'ss-t-corr', 'ss-t-data'].forEach((id) => expect(page).toContain('id="' + id + '"'));
     expect(js).toContain('var TAB_STEP = { script: 1, corr: 2, data: 3 }');
     expect(js).toContain('function tab(name) { step(TAB_STEP[name] || 1); }');
-    expect(js).toContain('if (slot === 1) { step(1); S.scriptName = ""; nameShow(); }');
+    expect(js).toContain('if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); }');
     // step 1 settings: the script name and the think time
     ['id="ss-setbar"', 'id="ss-sc-name"', 'id="ss-think"', 'id="ss-think-sec"'].forEach((id) => expect(page).toContain(id));
+  });
+});
+
+// Step 2 (portal/studio-corr.js): the table only drives the engine — a tick is advisorAccept, Skip advisorSkip, the name
+// advisorSetName, Add to the script advisorApplyAndRegen — so the script is what the cards give; the cards stay (Cards view).
+describe('Script Studio — the Correlate table', () => {
+  const js = read('portal/studio-corr.js');
+  test('the table, its tools and the Cards view are on the page', () => {
+    ['ss-corr', 'ss-cr-table', 'ss-cr-body', 'ss-cr-apply', 'ss-cr-high', 'ss-cr-clear', 'ss-cr-manual', 'ss-cr-cant', 'ss-cr-cant-m', 'ss-cr-view', 'adv-panel', 'adv-cards'].forEach((id) => expect(page).toContain('id="' + id + '"'));
+  });
+  test('every change goes through the engine functions the cards use', () => {
+    ['advisorAccept(', 'advisorSkip(', 'advisorSetName(', 'advisorApplyAndRegen()', 'advisorShowUses(', 'openAdvisorModal()', 'openPasteCorrelate()', 'SSW.openFind()'].forEach((f) => expect(js).toContain(f));
+    expect(js).not.toMatch(/S\.correlations\s*=|\.status\s*=[^=]|_applied\s*=[^=]/);
   });
 });
