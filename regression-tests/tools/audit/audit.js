@@ -101,9 +101,10 @@ function measure() {
     await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 }); await p.waitForTimeout(800);
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1200); }
     await run('Studio results', 'studio');
-    await f.click('#ss-tab-corr'); await p.waitForTimeout(300); await run('Studio advisor', 'studio');
-    await f.click('#ss-tab-data'); await p.waitForTimeout(300); await run('Studio test data', 'studio');
-    await f.click('#ss-tab-script');
+    await f.click('#ss-steps [data-step="2"]'); await p.waitForTimeout(300); await run('Studio advisor', 'studio');
+    await f.click('#ss-steps [data-step="3"]'); await p.waitForTimeout(300); await run('Studio test data', 'studio');
+    await f.click('#ss-steps [data-step="4"]'); await p.waitForTimeout(300); await run('Studio download', 'studio');
+    await f.click('#ss-steps [data-step="1"]');
     await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
     await run('Workload start', 'workload');
     f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail'); await f.click('#sview [data-v="table"]').catch(() => {});

@@ -788,7 +788,9 @@
   prefs.hide = prefs.hide || {};
   var cols = $("#ss-cols");
   function panes() {
-    ["dom", "req", "right"].forEach(function (p) { cols.classList.toggle("no-" + p, !!prefs.hide[p]); });
+    // steps 2 and 3 show only the right panel, at full width: never as a rail there (the step 1 choice is kept)
+    var wide = document.body.classList.contains("ss-step-wide");
+    ["dom", "req", "right"].forEach(function (p) { cols.classList.toggle("no-" + p, !!prefs.hide[p] && !(wide && p === "right")); });
     if (prefs.wDom) cols.style.setProperty("--ss-dw", prefs.wDom + "px");
     if (prefs.wRight) cols.style.setProperty("--ss-rw", prefs.wRight + "px");
   }
@@ -854,7 +856,7 @@
     },
     openFind: function (v) { openFind(v); },
     openDetails: function (id) { openDet(id); },
-    // "Show an example" in the Correlation Advisor tab (as in the mockup): a request that sends back a value the
+    // "Show an example" in step 2, Correlate (as in the mockup): a request that sends back a value the
     // Advisor found, opened on its Dynamic values tab
     showExample: function () {
       var c = (S.advisorCandidates || []).filter(function (x) { return x.status !== "skipped" && x.usages && x.usages.length; })[0];
@@ -865,6 +867,7 @@
     undoToast: function (msg, undo) { undoToast(msg, undo); },
     closeDetails: function () { closeDet(); },
     showPane: showPane,
+    panes: panes,
     state: W,
   };
 })();

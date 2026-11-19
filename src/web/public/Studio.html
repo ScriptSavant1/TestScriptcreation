@@ -89,7 +89,7 @@
           <section class="ss-hero" id="ss-hero">
             <button class="ds-btn ds-btn-sm ds-btn-ghost ss-hero-x" type="button" id="ss-hero-hide" title="Hide this introduction (remembered)">Hide</button>
             <h1><span class="ss-hero-ic"><svg class="i"><use href="#i-studio"/></svg></span>Script Studio</h1>
-            <p>Record a journey or open a HAR file and get a LoadRunner script straight away. The Correlation Advisor checks it by itself, one tab away.</p>
+            <p>Record a journey or open a HAR file and get a LoadRunner script straight away. Then correlate, add test data and download, one step at a time.</p>
             <ol class="ss-flow" aria-label="How it goes">
               <li><em>1</em>Record or open</li><li><em>2</em>Review requests</li><li><em>3</em>Correlate (optional)</li><li><em>4</em>Download for VuGen / LRE</li>
             </ol>
@@ -148,7 +148,7 @@
               <li><i>1</i><div><b>Record your journey</b><span>With Start recording, or the bookmarks and DevTools (see How to record, below).</span></div></li>
               <li><i>2</i><div><b>Open the recording</b><span>A recording made here opens by itself. The script is ready at once.</span></div></li>
               <li><i>3</i><div><b>Review and download</b><span>Format, filters, domains and transactions, then the ZIP.</span></div></li>
-              <li><i>4</i><div><b>Correlate when needed</b><span>The Correlation Advisor tab, in the same workspace.</span></div></li>
+              <li><i>4</i><div><b>Correlate when needed</b><span>Step 2, Correlate: the Correlation Advisor checks the recording by itself.</span></div></li>
             </ol>
           </section>
 
@@ -282,6 +282,19 @@
           </span>
         </div>
 
+        <!-- the four steps (portal/studio-page.js): each one is a view of the same workspace; none blocks another -->
+        <nav class="ss-steps" id="ss-steps" aria-label="Steps">
+          <ol>
+            <li><button type="button" data-step="1" aria-current="step"><i>1</i><span><b>Requests</b><small id="ss-st-1">Domains, requests, the script</small></span></button></li>
+            <li><button type="button" data-step="2" aria-current="false"><i>2</i><span><b>Correlate</b><small id="ss-st-2">Values the server changes</small></span></button></li>
+            <li><button type="button" data-step="3" aria-current="false"><i>3</i><span><b>Test data</b><small id="ss-st-3">Values per user</small></span></button></li>
+            <li><button type="button" data-step="4" aria-current="false"><i>4</i><span><b>Download</b><small id="ss-st-4">Check and download</small></span></button></li>
+          </ol>
+          <span class="ss-grow"></span>
+          <button class="ds-btn ds-btn-sm" type="button" id="ss-step-back" hidden><svg class="i"><use href="#i-left"/></svg><span>Back</span></button>
+          <button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-step-next"><span>Next: Correlate</span><svg class="i ss-next-ic"><use href="#i-left"/></svg></button>
+        </nav>
+
         <div class="ss-notices" id="ss-notices"></div>
 
         <section class="ss-card ss-fbar" id="ss-fbar">
@@ -364,7 +377,7 @@
 
           <!-- Script | Correlation Advisor | Test data -->
           <section class="ss-pane" id="ss-p-right" aria-label="Script and correlation">
-            <button class="ss-rail" type="button" data-show="right" title="Show the script panel"><svg class="i"><use href="#i-panel"/></svg>Script · Correlation Advisor · Test data</button>
+            <button class="ss-rail" type="button" data-show="right" title="Show the script panel"><svg class="i"><use href="#i-panel"/></svg>Script</button>
             <div class="ss-tabs" role="tablist" aria-label="Script and correlation">
               <button type="button" role="tab" id="ss-tab-script" aria-selected="true" aria-controls="ss-t-script" data-tab="script"><svg class="i"><use href="#i-code"/></svg>Script</button>
               <button type="button" role="tab" id="ss-tab-corr" aria-selected="false" aria-controls="ss-t-corr" data-tab="corr"><svg class="i"><use href="#i-bulb"/></svg>Correlation Advisor <span class="ss-badge" id="ss-adv-n" hidden></span></button>
@@ -490,6 +503,19 @@
             </div>
           </section>
         </div>
+
+        <!-- step 4: what is worth a look, the files, the download (never blocked) -->
+        <section class="ss-done" id="ss-done" aria-labelledby="ss-done-h" hidden>
+          <div class="ss-card ss-done-card">
+            <div class="ss-done-top">
+              <div><h2 id="ss-done-h">Ready to download?</h2><p class="ss-muted">Worth a look first. The download is never blocked.</p></div>
+              <button class="ds-btn ds-btn-primary ds-btn-lg" type="button" id="ss-done-dl"><svg class="i"><use href="#i-down"/></svg>Download ZIP</button>
+            </div>
+            <div class="ss-done-list" id="ss-done-list"></div>
+            <h3>Files in the ZIP</h3>
+            <p class="ss-muted ss-done-files" id="ss-done-files"></p>
+          </div>
+        </section>
       </div>
     </div>
 

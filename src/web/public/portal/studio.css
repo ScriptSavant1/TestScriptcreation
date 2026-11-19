@@ -861,3 +861,60 @@ html .adv-type-badge { background: var(--ds-accent-soft); color: var(--ds-accent
 .adv-card-flow :is(.adv-flow-src, .adv-flow-use)::first-letter { font-size: inherit; }
 .adv-card-flow :is(.adv-flow-src, .adv-flow-use)::after { display: none; }
 #ph-res .adv-card-actions .adv-btn-show { padding-left: 12px; }
+/* ── the four steps (portal/studio-page.js step()): 1 Requests · 2 Correlate · 3 Test data · 4 Download ──
+   Step 1 is the workspace as it was; steps 2 and 3 give the right panel (Correlation Advisor / Test data) the whole
+   width; step 4 is the Ready list and the download. */
+.ss-steps { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px var(--ds-page-x); background: var(--ds-surface); border-bottom: 1px solid var(--ds-border); }
+.ss-steps ol { display: flex; align-items: center; margin: 0; padding: 0; list-style: none; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ss-steps li { display: flex; align-items: center; flex: none; }
+.ss-steps li + li::before { content: ""; width: 20px; height: 1px; margin: 0 4px; background: var(--ds-border-2); }
+.ss-steps [data-step] { display: flex; gap: 10px; align-items: center; padding: 5px 14px 5px 6px; border: 1px solid transparent; border-radius: var(--ds-r-tile); background: none; color: var(--ds-text-2); font: inherit; text-align: left; cursor: pointer; }
+.ss-steps [data-step]:hover { background: var(--ds-surface-2); color: var(--ds-text); }
+.ss-steps [data-step] i { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--ds-border-2); font-style: normal; font-weight: 700; font-size: var(--ds-fs-sm); color: var(--ds-text-2); background: var(--ds-surface-2); }
+.ss-steps [data-step] span { display: flex; flex-direction: column; line-height: 1.25; }
+.ss-steps [data-step] b { font-size: var(--ds-fs-sm); font-weight: 700; color: var(--ds-text); white-space: nowrap; }
+.ss-steps [data-step] small { font-size: var(--ds-fs-xs); color: var(--ds-text-3); white-space: nowrap; }
+.ss-steps [data-step].ss-todo small { color: var(--ds-text-2); font-weight: 600; }
+.ss-steps [aria-current="step"] { background: var(--ds-accent-soft); border-color: var(--ds-accent-line); }
+.ss-steps [aria-current="step"] i { background: var(--ds-accent); border-color: var(--ds-accent); color: #fff; }
+.ss-steps > .ds-btn { flex: none; }
+.ss-next-ic { transform: rotate(180deg); }
+/* step 1: the right panel keeps the script; the Correlation Advisor and Test data are steps 2 and 3 */
+body.ss-step-1 :is(#ss-tab-corr, #ss-tab-data) { display: none; }
+/* steps 2 and 3: the right panel alone, the whole width */
+body:is(.ss-step-wide, .ss-step-4) :is(#ss-fbar, #ss-p-dom, #ss-p-req, .ss-cols > .ss-rs) { display: none !important; }
+body.ss-step-wide .ss-cols, body.ss-step-wide.ss-dock.ss-det-open .ss-cols { grid-template-columns: minmax(0, 1fr); }
+body.ss-step-wide #ss-p-right, body.ss-step-wide.ss-dock.ss-det-open #ss-p-right { grid-column: 1; }
+body.ss-step-wide .ss-tabs { display: none; }
+body.ss-step-wide #ss-t-corr { width: 100%; max-width: 1500px; margin: 0 auto; }
+body.ss-step-wide.ss-dock.ss-det-open .ss-cols { grid-template-columns: minmax(0, 1fr) 10px minmax(560px, 0.8fr); }
+body.ss-step-wide.ss-dock.ss-det-open #ss-det { grid-column: 3; }
+/* step 4 */
+body.ss-step-4 .ss-cols { display: none; }
+.ss-done { flex: 1; min-height: 0; overflow: auto; padding: 16px var(--ds-page-x) 20px; }
+.ss-done[hidden] { display: none; }
+.ss-done-card { max-width: 920px; margin: 0 auto; padding: 20px 24px 22px; }
+.ss-done-top { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+.ss-done-top h2 { margin: 0 0 2px; font-size: var(--ds-fs-lg); font-weight: 700; }
+.ss-done-top p { margin: 0; }
+.ss-done-list { display: grid; gap: 6px; }
+.ss-done-i { display: flex; gap: 10px; align-items: center; width: 100%; padding: 10px 12px; border: 1px solid var(--ds-border); border-radius: var(--ds-r-tile); background: var(--ds-surface-2); color: var(--ds-text); font: inherit; font-size: var(--ds-fs-sm); text-align: left; cursor: pointer; }
+.ss-done-i:hover { border-color: var(--ds-accent-line); }
+.ss-done-i > svg.i:first-child { flex: none; color: var(--ds-ok); }
+.ss-done-i.warn > svg.i:first-child { color: var(--ds-warn); }
+.ss-done-i > span { flex: 1; min-width: 0; }
+.ss-done-go { flex: none; transform: rotate(180deg); color: var(--ds-text-3); }
+.ss-done-card h3 { margin: 18px 0 4px; font-size: var(--ds-fs); font-weight: 700; }
+.ss-done-files { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 1100px) {
+  .ss-steps [data-step] small { display: none; }
+  body.ss-step-wide #ss-p-right { height: auto; min-height: 70vh; }
+}
+@media (max-width: 600px) {
+  .ss-steps { flex-wrap: wrap; padding: 8px 16px; }
+  .ss-steps ol { width: 100%; }
+  .ss-steps [data-step]:not([aria-current="step"]) b { display: none; }
+  .ss-steps li + li::before { width: 10px; }
+  .ss-done { padding: 12px 16px 16px; }
+  .ss-done-card { padding: 16px; }
+}

@@ -103,3 +103,19 @@ describe('Script Studio redesign — every element the scripts use exists', () =
     expect(fs.existsSync(path.join(PUB, 'Recorder.html'))).toBe(false);
   });
 });
+
+// The workspace in four steps (portal/studio-page.js): each step is a view of the same workspace, and the old tabs
+// open their step, so every caller that opened a tab (the engine, Ready to download, request details) still works.
+describe('Script Studio — the four steps', () => {
+  const js = read('portal/studio-page.js');
+  test('the step line has Requests, Correlate, Test data and Download, with Next / Back', () => {
+    [1, 2, 3, 4].forEach((n) => expect(page).toContain('data-step="' + n + '"'));
+    ['id="ss-steps"', 'id="ss-step-next"', 'id="ss-step-back"', 'id="ss-done"', 'id="ss-done-dl"', 'id="ss-done-list"'].forEach((id) => expect(page).toContain(id));
+  });
+  test('the tabs are kept (the engine and the harness use them) and each one opens its step', () => {
+    ['ss-tab-script', 'ss-tab-corr', 'ss-tab-data', 'ss-t-script', 'ss-t-corr', 'ss-t-data'].forEach((id) => expect(page).toContain('id="' + id + '"'));
+    expect(js).toContain('var TAB_STEP = { script: 1, corr: 2, data: 3 }');
+    expect(js).toContain('function tab(name) { step(TAB_STEP[name] || 1); }');
+    expect(js).toContain('if (slot === 1) step(1);');
+  });
+});

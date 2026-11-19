@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio in four steps (Script Studio in steps, part 1)
+
+- The workspace now has a step line under the file bar: **1 Requests** (filters, Domains, Requests and the script, as before), **2 Correlate** (the Correlation Advisor, the whole width), **3 Test data** (the table, the whole width) and **4 Download** (what is worth a look, the files in the ZIP and Download ZIP). Each step says what is waiting (for example "4 values to review"); Next / Back move between them and no step blocks another. Download ZIP and Ready to download? stay in the file bar on every step. Every link that opened a tab before (Ready to download?, request details, Show an example) opens its step; a new recording starts at step 1. The scripts and ZIP files are unchanged.
+
 #### Open another: an empty box for the next file
 
 - "Open another" now shows the start screen's drop box empty and ready (Browse file, no green file name, no close button), so the next recording can be dropped or chosen straight away. The open recording stays named in the bar above with "Back to the recording" and is replaced once the new file is read.

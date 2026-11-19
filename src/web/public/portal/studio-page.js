@@ -4,7 +4,8 @@
  *  - a recording is read as soon as it is opened (no Analyse button); analyze() runs one at a time
  *  - the start screen ⇄ the workspace (#ph-upload / #ph-res; #ph-proc is an overlay while the file is read)
  *  - the file bar (counts, sign-in found, format switch, Open another, Download ZIP + "Ready to download?")
- *  - the notices, the right-panel tabs (Script · Correlation Advisor · Test data), the background-requests dialog
+ *  - the four steps (Requests · Correlate · Test data · Download) over the right panel's tabs, the notices,
+ *    the background-requests dialog
  *  - Escape / focus for the engine's dialogs, keyboard for the controls the engine draws as divs, script colouring
  *  - the format remembered (localStorage "perfx-studio-fmt"), page layout remembered ("perfx-studio-ui")
  *  - "Start recording" (portal/record-live.js), drop anywhere, window.PerfxStudio for the HAR Explorer hand-off
@@ -79,6 +80,7 @@
   window.markLoaded = function (slot) {
     var r = engineMarkLoaded.apply(this, arguments);
     if (slot === 1 && window.SSW) SSW.newFile();
+    if (slot === 1) step(1);   // a new recording starts at step 1
     setTimeout(function () { if (S.har1) window.analyze(); }, 0);
     return r;
   };
@@ -214,6 +216,8 @@
     $("#ss-data-empty").hidden = !!p;
     var warn = readyItems().filter(function (i) { return i.warn; }).length;
     var r = $("#ss-ready-n"); r.hidden = !warn; r.textContent = warn;
+    stepNotes();
+    if (cur === 4) done();
   }
   SS.badges = badges;
   var menu = $("#ss-ready"), more = $("#ss-dl-more");
@@ -233,14 +237,17 @@
   });
   menu.addEventListener("click", function (e) {
     var b = e.target.closest("[data-go]"); if (!b) return;
-    var go = b.getAttribute("data-go");
     closeReady();
-    if (go === "dl") $("#ss-dl").click();
-    else if (go === "corr" || go === "data") tab(go);
-    else if (go === "bg") openBg(false);
-    else if (go === "notice") { var n = $("#ss-notices .ss-notice"); if (n) { n.classList.add("open"); n.scrollIntoView({ block: "nearest" }); } }
-    else if (go === "dom" && window.SSW) SSW.showPane("dom", true);
+    go(b.getAttribute("data-go"));
   });
+  // where a Ready item leads (the menu and step 4)
+  function go(to) {
+    if (to === "dl") $("#ss-dl").click();
+    else if (to === "corr" || to === "data") tab(to);
+    else if (to === "bg") openBg(false);
+    else if (to === "notice") { var n = $("#ss-notices .ss-notice"); if (n) { n.classList.add("open"); n.scrollIntoView({ block: "nearest" }); } }
+    else if (to === "dom") { tab("script"); if (window.SSW) SSW.showPane("dom", true); }
+  }
   document.addEventListener("click", function (e) { if (!menu.hidden && !menu.contains(e.target)) closeReady(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !menu.hidden) { closeReady(); more.focus(); } });
 
@@ -260,21 +267,73 @@
     if (e.target.closest("[data-more]")) { var o = n.classList.toggle("open"); e.target.closest("[data-more]").setAttribute("aria-expanded", String(o)); e.target.closest("[data-more]").textContent = o ? "Less" : "Details"; }
   });
 
-  // ── right panel tabs ──
-  function tab(name) {
+  // ── the right panel's tabs (Script · Correlation Advisor · Test data) — each one is now shown by its step ──
+  function showTab(name) {
     $$(".ss-tabs [role=tab]").forEach(function (b) { b.setAttribute("aria-selected", String(b.getAttribute("data-tab") === name)); });
     ["script", "corr", "data"].forEach(function (t) { $("#ss-t-" + t).hidden = t !== name; });
-    prefs.tab = name; save();
-    if (window.SSW) SSW.showPane("right", true);
   }
+  // every caller that opened a tab (the engine's links, the Ready list, request details) now opens its step
+  var TAB_STEP = { script: 1, corr: 2, data: 3 }, STEP_TAB = { 1: "script", 2: "corr", 3: "data" };
+  function tab(name) { step(TAB_STEP[name] || 1); }
   SS.tab = tab;
   $(".ss-tabs").addEventListener("click", function (e) { var b = e.target.closest("[role=tab]"); if (b) tab(b.getAttribute("data-tab")); });
-  $(".ss-tabs").addEventListener("keydown", function (e) {
+
+  // ── the four steps: 1 Requests · 2 Correlate · 3 Test data · 4 Download. One workspace, four views of it: step 1
+  //    is the workspace as it was; steps 2 and 3 give the whole width to the Correlation Advisor / the Test data
+  //    table; step 4 lists what is worth a look and downloads. Nothing is applied or lost by moving between steps. ──
+  var NEXT = { 1: "Next: Correlate", 2: "Next: Test data", 3: "Next: Download" };
+  var cur = 0;
+  function step(n) {
+    n = n >= 1 && n <= 4 ? n : 1;
+    var was = cur; cur = n;
+    for (var i = 1; i <= 4; i++) document.body.classList.toggle("ss-step-" + i, i === n);
+    document.body.classList.toggle("ss-step-wide", n === 2 || n === 3);
+    $$("#ss-steps [data-step]").forEach(function (b) { b.setAttribute("aria-current", +b.getAttribute("data-step") === n ? "step" : "false"); });
+    if (STEP_TAB[n]) showTab(STEP_TAB[n]);
+    $("#ss-done").hidden = n !== 4;
+    $("#ss-step-back").hidden = n === 1;
+    var nx = $("#ss-step-next"); nx.hidden = n === 4; if (NEXT[n]) nx.firstElementChild.textContent = NEXT[n];
+    if (window.SSW && SSW.panes) SSW.panes();
+    if (n === 4) done();
+    if (was && was !== n) { var ws = $("#ph-res"); if (ws.scrollTop) ws.scrollTop = 0; }
+  }
+  SS.step = step;
+  SS.curStep = function () { return cur; };
+  $("#ss-steps").addEventListener("click", function (e) { var b = e.target.closest("[data-step]"); if (b) step(+b.getAttribute("data-step")); });
+  $("#ss-step-next").addEventListener("click", function () { step(cur + 1); });
+  $("#ss-step-back").addEventListener("click", function () { step(cur - 1); });
+  $("#ss-steps").addEventListener("keydown", function (e) {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-    var t = $$(".ss-tabs [role=tab]"), i = t.indexOf(document.activeElement); if (i < 0) return;
+    var t = $$("#ss-steps [data-step]"), i = t.indexOf(document.activeElement); if (i < 0) return;
     var n = t[(i + (e.key === "ArrowRight" ? 1 : t.length - 1)) % t.length]; n.focus(); n.click();
   });
-  tab(["script", "corr", "data"].indexOf(prefs.tab) !== -1 ? prefs.tab : "script");
+  // the short line under each step's name
+  function stepNotes() {
+    var es = S.entries1 || [], reqs = es.filter(function (e) { return !e.isMarker; });
+    var inn = reqs.filter(function (e) { return !e.filtered; }).length;
+    $("#ss-st-1").textContent = reqs.length ? inn + " of " + reqs.length + " requests in the script" : "Domains, requests, the script";
+    var cs = S.advisorCandidates || [];
+    var pend = cs.filter(function (c) { return c.status === "pending"; }).length;
+    var inScript = (S.correlations || []).length;
+    $("#ss-st-2").textContent = pend ? plural(pend, "value") + " to review" : inScript ? plural(inScript, "correlation") + " in the script" : "Nothing to review";
+    $("#ss-steps [data-step='2']").classList.toggle("ss-todo", !!pend);
+    var p = (S.params || []).length;
+    $("#ss-st-3").textContent = p ? plural(p, "parameter") : "No typed values found";
+    var warn = readyItems().filter(function (i) { return i.warn; }).length;
+    $("#ss-st-4").textContent = warn ? plural(warn, "thing") + " worth a look" : "Ready";
+  }
+  // step 4: the Ready list in full, the script files, the download
+  function done() {
+    var items = readyItems();
+    $("#ss-done-list").innerHTML = items.map(function (i) {
+      return '<button type="button" class="ss-done-i' + (i.warn ? " warn" : "") + '" data-go="' + i.go + '"><svg class="i"><use href="#i-' + (i.warn ? "warn" : "ok") + '"/></svg><span>' + esc(i.text) + '</span><svg class="i ss-done-go"><use href="#i-left"/></svg></button>';
+    }).join("");
+    var files = $$("#code-tabs .code-tab").map(function (t) { return t.textContent.trim(); }).filter(Boolean);
+    $("#ss-done-files").textContent = (files.length ? files.join(", ") + ", " : "") + "and the project files VuGen and LoadRunner Enterprise need (.usr, run-time settings" + ((S.params || []).length ? ", the test data files" : "") + ").";
+  }
+  $("#ss-done-dl").addEventListener("click", function () { $("#ss-dl").click(); });
+  $("#ss-done-list").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (b) go(b.getAttribute("data-go")); });
+  step(1);
 
   // ── background requests: the engine stops for them after reading (as before); here they open in a dialog over
   //    the workspace. Closing it without a choice keeps the default (all left out) and makes the script. ──
@@ -448,7 +507,7 @@
 })();
 
 // Drop .har / NetLog .json files anywhere on the page: the start screen opens it as the recording; in the workspace a
-// dropped file is opened as a new recording too (the second recording has its own box in the Correlation Advisor tab).
+// dropped file is opened as a new recording too (the second recording has its own box in step 2, Correlate).
 (function () {
   "use strict";
   if (!window.PerfxDrop) return;
@@ -465,7 +524,7 @@
 
 // "Start recording" (portal/record-live.js draws the window and the live view): the live view takes the place of the
 // start screen's cards while recording; the saved recording opens as the recording, or as the second recording when
-// "Record it now" was used in the Correlation Advisor tab (diff mode) — through loadFile(), as a dropped file.
+// "Record it now" was used in step 2, Correlate (diff mode) — through loadFile(), as a dropped file.
 (function () {
   var btn = document.getElementById("ss-rec-btn");
   if (!btn || !window.PerfxRecordLive) return;
