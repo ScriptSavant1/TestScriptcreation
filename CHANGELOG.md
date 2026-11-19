@@ -89,6 +89,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### A list's options in the correlation editor (Script Studio in steps, part 7)
+
+- A list (the response sends several values) shows "How the list is used" in the editor: Every value, as recorded, or One at random each iteration — now also before it is in the script (the Rnd switch of Correlation details was only after). A list sent back rebuilt shows its fields, One item for each value of (the loop), and Fill the missing paths. Options on a list row opens the editor; the values of the list are marked in the response.
+- The scripts are the same as with the cards and the Rnd switch (checked in both formats).
+
 #### Regex and XPath in the correlation editor (Script Studio in steps, part 6)
 
 - How to read it adds Regex (the first ( ) group of a regular expression is the value) and XPath (XML responses; element names without a prefix match in any namespace, /@name reads an attribute), tested as you type. Selecting a value fills them in; names come from the field (sessionToken, nonce, buildId).

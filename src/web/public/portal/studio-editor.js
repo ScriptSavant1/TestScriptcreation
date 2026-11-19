@@ -15,7 +15,11 @@
  * Regex: the first ( ) group of a regular expression is the value (VuGen web_reg_save_param_regexp, DevWeb
  * RegexpExtractor; tried here with the browser's engine). XPath: for XML responses (VuGen web_reg_save_param_xpath with
  * local-name() steps — VugenCodegen.vugenXpath — DevWeb XpathExtractor with the plain names; tried here in the
- * local-name() form, which matches both). */
+ * local-name() form, which matches both).
+ * A list (the Correlation Advisor's _selectAll / _arrayReconstruct) is read as the Advisor found it; the editor shows its
+ * options instead of the ways to read it: every value or one at random (advisorSetListPick), or, for a list a later
+ * request sends back rebuilt, its columns, the loop anchor (advisorSetArrayAnchor) and Fill the missing paths
+ * (advisorFillArrayPaths) — the engine functions the cards use. */
 (function (root, factory) {
   var api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -25,6 +29,13 @@
   // the value at a JSON path ($.a.b[0].c, ['x'], [*] = every element: the first counts, as a single extractor reads)
   // → { value } | { none: true } | { unknown: true } (a path this reader does not follow: .., filters, functions)
   function jget(obj, path) {
+    var r = jnodes(obj, path);
+    if (!r.nodes) return r;
+    var v = r.nodes[0];
+    return { value: v !== null && typeof v === "object" ? JSON.stringify(v) : String(v) };
+  }
+  // every node a JSON path reaches → { nodes } | { none: true } | { unknown: true }
+  function jnodes(obj, path) {
     path = String(path || "");
     if (path.charAt(0) !== "$" || /\.\.|\?\(|\(\)/.test(path)) return { unknown: true };
     var re = /\.([^.[\]]+)|\[(\d+|\*|'[^']*'|"[^"]*")\]/g, cur = [obj], pos = 1, m;
@@ -41,8 +52,19 @@
       cur = next;
       if (!cur.length) return { none: true };
     }
-    var v = cur[0];
-    return { value: v !== null && typeof v === "object" ? JSON.stringify(v) : String(v) };
+    return { nodes: cur };
+  }
+  // the values a list reads from a JSON response (every match of each path; plain values only, each once)
+  function listValues(body, paths) {
+    var o = parse(String(body || "")), out = [], seen = {};
+    if (o === undefined) return out;
+    (paths || []).forEach(function (p) {
+      (jnodes(o, p).nodes || []).forEach(function (v) {
+        if (v === null || typeof v === "object") return;
+        v = String(v); if (v && !seen[v]) { seen[v] = 1; out.push(v); }
+      });
+    });
+    return out;
   }
   function parse(text) { try { return JSON.parse(text); } catch (e) { return undefined; } }
   function hdr(entry, name) {
@@ -193,7 +215,7 @@
   function laterValues(entries, i, idx) {
     return valuesOf(entries[i]).filter(function (v) { return idx.later(v.value, i); });
   }
-  return { jget: jget, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
+  return { jget: jget, listValues: listValues, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
 });
 
 (function () {
@@ -389,7 +411,7 @@
         : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + ". To change how it is read, " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> first (Undo puts it back).'
         : c.confidence === "high" ? "<b>An earlier response sends this value</b> and " + plural(us.length, "later place") + " send it back. A new user gets a new value, so the script must read it from the response each time."
         : "<b>It looks like a " + esc(String(c.valueType || "token")) + "</b> by its shape, and " + plural(us.length, "later place") + " send it back. No earlier response was found that sends it: check the response, or use Can't find a value?";
-      if (isList(c) && !c._applied) why += ' It is a list: how it is read and sent back is set in its <button type="button" class="adv-req-link" id="ss-ed-opts">list options</button>.';
+      if (isList(c)) why += " It is a list: its options are below.";
     }
     $("#ss-ed-why").innerHTML = why;
     $("#ss-ed-src-l").textContent = adding ? "Comes from (the request whose response has the value)" : "Read from the response of";
@@ -399,6 +421,8 @@
     var e = srcIdx != null ? entry(srcIdx) : null, btxt = String(e && e.respBody || "");
     var isJson = (function () { try { JSON.parse(btxt); return !!btxt.trim(); } catch (x) { return false; } })(), isXml = !!xml(btxt);
     var heads = adding ? Object.keys(e && e.respHdrsMap || {}) : E.headersWith(e, c.value);
+    $("#ss-ed-kind-l").textContent = isList(c) && !adding ? "How the list is used" : "How to read it";
+    $("#ss-ed-kind").hidden = isList(c) && !adding;
     $$("#ss-ed-kind [data-kind]").forEach(function (b) {
       var k = b.getAttribute("data-kind");
       b.hidden = adding && k === "auto";
@@ -481,8 +505,41 @@
     $("#ss-ed-code").textContent = s;
   }
 
+  // a list: every value or one at random; a rebuilt list: its columns, the loop anchor, the missing paths
+  function listOpts(c) {
+    var x = $("#ss-ed-expr"), a; try { a = auto(c); } catch (err) { a = null; }
+    if (c._arrayReconstruct && c._arrayConfig) {
+      var cfg = c._arrayConfig, cols = cfg.columns || [], st = cfg.staticFields || [], lock = !!c._applied;
+      var miss = cols.filter(function (k) { return k._placeholder; }).length, real = cols.some(function (k) { return !k._placeholder && k.sourceJsonPath; });
+      var anchor = (cols.filter(function (k) { return k.varName === cfg.countVar; })[0] || {}).targetKey || "";
+      x.innerHTML = '<p class="ss-ed-lead">A later request sends this list back <b>rebuilt</b>: one item for each value the response sends, made from these fields.</p>' +
+        '<div class="ss-ed-arr"><table><thead><tr><th>Read from the response</th><th>Name in the script</th><th>Field of each item</th></tr></thead><tbody>' +
+        cols.map(function (k) {
+          return "<tr" + (k._placeholder ? ' class="is-miss"' : "") + "><td>" + (k._placeholder ? '<span class="ss-muted">no source yet</span>' : "<code>" + esc(k.sourceJsonPath) + "</code>") +
+            "</td><td><code>" + esc(k.varName) + "</code>" + (k.varName === cfg.countVar ? '<span class="ss-ed-anc">loop</span>' : "") + "</td><td><code>" + esc(k.targetKey) + "</code></td></tr>";
+        }).join("") +
+        st.map(function (s) { return '<tr class="is-static"><td><span class="ss-muted">the same in every item</span></td><td><code>' + esc(s.value) + "</code></td><td><code>" + esc(s.targetKey) + "</code></td></tr>"; }).join("") +
+        "</tbody></table></div>" +
+        '<label class="ss-fld" for="ss-ed-anchor">One item for each value of</label>' +
+        '<select class="ss-field" id="ss-ed-anchor"' + (lock ? " disabled" : "") + ">" + cols.map(function (k) {
+          return '<option value="' + esc(k.targetKey) + '"' + (k.targetKey === anchor ? " selected" : "") + (k._placeholder && !real ? " disabled" : "") + ">" + esc(k.targetKey) + (k._placeholder ? " (no source yet)" : "") + "</option>";
+        }).join("") + "</select>" +
+        (miss ? '<div class="ss-ed-miss"><svg class="i"><use href="#i-warn"/></svg><span>' + plural(miss, "field") + " of the items " + (miss === 1 ? "has" : "have") + " no source in the response yet." +
+          (real ? "" : " There is no field to start from: correlate one of them first.") + "</span>" +
+          (real ? '<button type="button" class="ds-btn ds-btn-sm" id="ss-ed-fill"' + (lock ? " disabled" : "") + ' title="Each missing field is read from the same items of the response, by its name">Fill the missing paths</button>' : "") + "</div>" : "") +
+        (lock ? '<p class="ss-muted ss-ed-note">In the script: take it out first to change it.</p>' : "");
+      return;
+    }
+    var path = a && a.extractorConfig ? a.extractorConfig.path : "", rnd = c._pick === "random";
+    x.innerHTML = '<p class="ss-ed-lead">The response sends <b>several values</b> (JSON path <code>' + esc(path || "") + "</code>, every match) and the script reads them all. Which one is sent back:</p>" +
+      '<div class="ss-ed-pick" role="radiogroup" aria-label="Which value is sent back">' +
+        '<button type="button" role="radio" data-pick="all" aria-checked="' + !rnd + '"><b>Every value, as recorded</b><small>Each place sends back the value it sent in the recording, by its position in the list.</small></button>' +
+        '<button type="button" role="radio" data-pick="random" aria-checked="' + rnd + '"><b>One at random each iteration</b><small>For a list the user picked from (a product, a slot): each iteration picks another one.</small></button>' +
+      "</div>" + (c._applied ? '<p class="ss-muted ss-ed-note">In the script: a change makes the script again.</p>' : "");
+  }
   function expr(c, e, heads) {
     var x = $("#ss-ed-expr"), cfg = draft && draft.extractorConfig || {};
+    if (!adding && isList(c)) { listOpts(c); return; }
     if (!adding && kind === "auto") {
       var a; try { a = auto(c); } catch (err) { a = null; }
       var t = !a ? "" : a.extractorType === "jsonpath" ? "JSON path <code>" + esc(a.extractorConfig.path) + "</code>" + (a.extractorConfig.selectAll ? " (every match)" : "")
@@ -532,7 +589,7 @@
     }
     p.hidden = false;
     if (!e) { p.className = "ss-ed-test bad"; p.textContent = "No earlier response was found that sends this value: choose one that has it (marked “has the value”), or use Can't find a value?"; return; }
-    if (isList(c)) { testOk = true; p.className = "ss-ed-test"; p.textContent = "A list: every match is read when the script runs (see its list options)."; return; }
+    if (isList(c)) { testOk = true; p.className = "ss-ed-test"; p.textContent = "A list: every match is read when the script runs."; return; }
     try { r = E.readWith(e, x, _advFirstMatch, xp); } catch (err) { r = { unknown: true }; }
     if (r.bad) { p.className = "ss-ed-test bad"; p.textContent = r.bad; return; }
     if (r.unknown) { testOk = true; p.className = "ss-ed-test"; p.textContent = "Read when the script runs (this way of reading is not tried here)."; return; }
@@ -560,8 +617,10 @@
     $("#ss-ed-paste").hidden = rview !== "body" || adding;
     pre.hidden = rview !== "body" || !text;
     hd.hidden = rview !== "headers" || !nh;
-    $("#ss-ed-hint").textContent = !e ? (adding ? "Choose a request on the left." : "") : locked(c) ? "The value is marked." : rview === "headers" ? "Click a header to read the value from it." : "Select a value (or double-click it) to read it from here.";
-    var key = cur + "|" + srcIdx + "|" + rview + "|" + text.length + "|" + c.value + "|" + (draft ? JSON.stringify(draft) : "");
+    $("#ss-ed-hint").textContent = !e ? (adding ? "Choose a request on the left." : "") : !adding && isList(c) ? "The values of the list are marked." : locked(c) ? "The value is marked." : rview === "headers" ? "Click a header to read the value from it." : "Select a value (or double-click it) to read it from here.";
+    // a list: the values it reads are marked (every match of its JSON path, or of each field of a rebuilt list)
+    var lpaths = !adding && isList(c) ? (c._arrayReconstruct ? ((c._arrayConfig || {}).columns || []).map(function (k) { return k._placeholder ? "" : k.sourceJsonPath; }).filter(Boolean) : [c.source && c.source.jsonPath].filter(Boolean)) : [];
+    var key = cur + "|" + srcIdx + "|" + rview + "|" + text.length + "|" + c.value + "|" + (draft ? JSON.stringify(draft) : "") + "|" + lpaths.join(",");
     if (shownBody === key) return;
     shownBody = key;
     var v = String(c.value || "");
@@ -574,7 +633,10 @@
     }
     // ranges: the chosen value (every place) and, when adding, the first place of each value sent back later
     var t = text.length > MAXB ? text.slice(0, MAXB) : text, rs = [], i, j;
-    if (v.length >= 2) { i = 0; while ((j = t.indexOf(v, i)) !== -1) { rs.push([j, j + v.length, "cur"]); i = j + v.length; } }
+    (lpaths.length ? E.listValues(text, lpaths).map(function (x) { return JSON.stringify(x).slice(1, -1); }) : [v]).forEach(function (w) {
+      if (w.length < 2) return;
+      i = 0; while ((j = t.indexOf(w, i)) !== -1) { rs.push([j, j + w.length, "cur"]); i = j + w.length; }
+    });
     lat.forEach(function (x) {
       if (x.kind === "header" || x.value === v) return;
       var q = x.kind === "json" ? JSON.stringify(x.value).slice(1, -1) : x.value, k = t.indexOf(q);
@@ -643,7 +705,8 @@
     else if (t.id === "ss-ed-src-up" || t.id === "ss-ed-src-down") { var o = $$("#ss-ed-src option").map(function (x) { return x.value; }).filter(Boolean).map(Number), p = o.indexOf(srcIdx); var to = p === -1 ? o[0] : o[p + (t.id === "ss-ed-src-down" ? 1 : -1)]; if (to != null) setSrc(to); }
     else if (t.id === "ss-ed-out") { if (SS.corrTakeOut) SS.corrTakeOut(c.id); shownBody = null; draw(); }
     else if (t.id === "ss-ed-paste") { if (typeof openPasteCorrelate === "function") openPasteCorrelate(); }
-    else if (t.id === "ss-ed-opts") { close(); SSC.view("cards"); var card = document.getElementById("advc-" + c.id); if (card) card.scrollIntoView({ block: "center" }); }
+    else if (t.hasAttribute("data-pick")) { advisorSetListPick(c.id, t.getAttribute("data-pick")); afterList(); }
+    else if (t.id === "ss-ed-fill") { advisorFillArrayPaths(c.id, $("#ss-ed-anchor").value); afterList(); }
   });
   // add mode: put the new value in the script (this value only; other ticked values wait for Add to the script)
   function addNow() {
@@ -696,6 +759,16 @@
     save(); draw();
   }
   $("#ss-ed-src").addEventListener("change", function () { if (this.value !== "") setSrc(+this.value); });
+  // a list option changed: the cards and the editor show it
+  function afterList() { if (typeof renderAdvisorPanel === "function") renderAdvisorPanel(); draw(); }
+  box.addEventListener("change", function (ev) {
+    if (ev.target.id !== "ss-ed-anchor") return;
+    var c = cand(cur); if (!c || !c._arrayConfig) return;
+    var cols = c._arrayConfig.columns || [];
+    if (cols.some(function (k) { return k._placeholder; })) advisorFillArrayPaths(c.id, ev.target.value);   // as the card's Fill & apply
+    else advisorSetArrayAnchor(c.id, ev.target.value);
+    afterList();
+  });
   $("#ss-ed-only").addEventListener("change", function () { draw(); });
   $("#ss-ed-srcq").addEventListener("input", function () { var c = cand(cur); if (c) sources(c, false, c.usages || []); });
   box.addEventListener("input", function (ev) {

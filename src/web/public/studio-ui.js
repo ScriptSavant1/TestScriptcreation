@@ -417,6 +417,9 @@ function toggleCorrRandSelect(idx) {
   } else {
     return;
   }
+  (S.advisorCandidates || []).forEach(function (x) {
+    if (x._applied && x._selectAll && x.varName === c.name) x._pick = c.extractorType === "random_select" ? "random" : undefined;
+  });
   regenerateFromAdvisor();
 }
 
@@ -1482,6 +1485,22 @@ function advisorRestoreToScript(id, corr) {
 // Put ONE candidate in the script at once (Paste & Detect, Script Studio's Add manual correlation): its correlation is
 // added unless the same one (name, type, settings) is there already, and the card is marked applied. Other ticked
 // cards still wait for Apply & Regenerate. The caller regenerates.
+// A list read with every match (Script Studio's editor): "all" = every value as recorded, "random" = one value at random
+// each iteration (random_select). Kept on the candidate (_pick); when it is in the script its correlation changes too
+// (as the Rnd switch of Correlation details does) and the script is made again.
+function advisorSetListPick(id, pick) {
+  var c = _advFindById(id);
+  if (!c || !c._selectAll || c._arrayReconstruct) return;
+  if (pick === "random") c._pick = "random"; else delete c._pick;
+  if (!c._applied) return;
+  (S.correlations || []).forEach(function (x) {
+    if (x.name !== c.varName) return;
+    if (x.extractorType === "random_select" && pick !== "random") x.extractorType = "jsonpath";
+    else if (x.extractorType === "jsonpath" && x.extractorConfig && x.extractorConfig.selectAll && pick === "random") x.extractorType = "random_select";
+  });
+  regenerateFromAdvisor({ quiet: true });
+}
+
 function advisorApplyOne(cand) {
   var nc = advisorToCorrelation(cand);
   var dup = (S.correlations || []).some(function (ex) {

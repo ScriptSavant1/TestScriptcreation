@@ -189,3 +189,13 @@ describe('Regex and XPath', () => {
     expect(fs.readFileSync(path.join(__dirname, '../../src/generators/vugen/scriptGenerator.js'), 'utf8')).toContain('return _vugen.vugenXpath(q);');
   });
 });
+
+describe('listValues (the values a list reads, marked in the editor)', () => {
+  test('every match of each path, plain values once; not JSON or a missing path: none', () => {
+    const body = JSON.stringify({ items: [{ sku: 'A1', img: 'i-1', o: { x: 1 } }, { sku: 'B2', img: 'i-1' }, { sku: 'C3' }] });
+    expect(E.listValues(body, ['$.items[*].sku', '$.items[*].img'])).toEqual(['A1', 'B2', 'C3', 'i-1']);
+    expect(E.listValues(body, ['$.items[*].o'])).toEqual([]);
+    expect(E.listValues(body, ['$.nope[*].x'])).toEqual([]);
+    expect(E.listValues('<html>', ['$.a'])).toEqual([]);
+  });
+});

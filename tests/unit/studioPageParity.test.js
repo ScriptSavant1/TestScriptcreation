@@ -149,3 +149,15 @@ describe('Script Studio — Add manual correlation', () => {
     expect(read('studio-ui.js')).toContain('  advisorApplyOne(cand);');   // Paste & Detect: the same function
   });
 });
+
+// A list's options are in the editor: the engine functions the cards use, nothing written to the engine state by the page
+describe('Script Studio — list options in the editor', () => {
+  const ed = read('portal/studio-editor.js'), corr = read('portal/studio-corr.js');
+  test('every value / one at random, the loop anchor and the missing paths go through the engine', () => {
+    ['advisorSetListPick(c.id, t.getAttribute("data-pick"))', 'advisorFillArrayPaths(', 'advisorSetArrayAnchor(', 'renderAdvisorPanel()'].forEach((f) => expect(ed).toContain(f));
+    expect(ed).not.toMatch(/_pick\s*=[^=]|countVar\s*=[^=]|\.extractorType\s*=[^=]/);   // reads (===) are fine
+  });
+  test('Options on a list row opens the editor', () => {
+    expect(corr).toContain('if (b) { if (window.SSE) SSE.open(b.getAttribute("data-opts")); }');
+  });
+});

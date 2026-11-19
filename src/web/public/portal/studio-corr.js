@@ -1,8 +1,8 @@
 /* Script Studio — step 2, Correlate: the Correlation Advisor's findings as one table (window.SSC).
  * The engine stays the judge of everything: a tick is the candidate's "accepted" status (advisorAccept), Skip is
  * advisorSkip, the name is advisorSetName, "Add to the script" is advisorApplyAndRegen — the same calls the cards make,
- * so the script is exactly what the cards would give. The engine's cards stay on the page (Cards view): they carry the
- * list / array options until the editor has them.
+ * so the script is exactly what the cards would give. The engine's cards stay on the page (Cards view); a list's options
+ * (every value or one at random, how it is rebuilt) are in the editor (Options opens it).
  * High-confidence values come ticked when the user opens the step (once per reading); nothing reaches the script
  * before "Add to the script", and leaving the step with ticked values asks first (SS.leaveCorr). */
 (function () {
@@ -105,7 +105,7 @@
       : c.status === "skipped" ? '<button type="button" class="ds-btn ds-btn-xs" data-skip="' + esc(c.id) + '" title="Back to the list to review">Put back</button>'
       : '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-skip="' + esc(c.id) + '" title="Not a value to correlate: hide it from the list">Skip</button>';
     act = '<button type="button" class="ds-btn ds-btn-xs" data-edit="' + esc(c.id) + '" title="Open it: how it is read, the response, every place it is sent back">' + (c._applied ? "Open" : "Review") + "</button>" + act;
-    if (c._arrayReconstruct || c._selectAll) act += '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-opts="' + esc(c.id) + '" title="The list options (rebuild, every value or one at random): in the Cards view">Options</button>';
+    if (c._arrayReconstruct || c._selectAll) act += '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-opts="' + esc(c.id) + '" title="The list options (every value or one at random, or how it is rebuilt): in the editor">Options</button>';
     return '<tr class="' + cls + '" data-id="' + esc(c.id) + '">' +
       '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-tick' + (c.status === "accepted" || c._applied ? " checked" : "") + (c._applied ? " disabled" : "") + ' aria-label="Add ' + esc(c.varName) + ' to the script" /></td>' +
       '<td><input class="ss-field ss-cr-name" data-name value="' + esc(c.varName) + '" spellcheck="false" aria-label="Name of ' + esc(c.varName) + '"' + (c._applied ? " disabled title=\"In the script: the name is fixed\"" : "") + " /></td>" +
@@ -198,7 +198,7 @@
     if (b) { advisorShowUses(b.getAttribute("data-uses")); return; }
     b = e.target.closest("[data-opts]");
     if (!b && !e.target.closest("button, input, a, select")) { var tr = e.target.closest(".ss-cr-row"); if (tr && window.SSE && !window.getSelection().toString()) SSE.open(tr.getAttribute("data-id") || (G[tr.getAttribute("data-gid")] || [])[0]); return; }
-    if (b) { view("cards"); var card = document.getElementById("advc-" + b.getAttribute("data-opts")); if (card) { card.scrollIntoView({ block: "center" }); card.classList.add("ss-flash"); setTimeout(function () { card.classList.remove("ss-flash"); }, 1600); } }
+    if (b) { if (window.SSE) SSE.open(b.getAttribute("data-opts")); }
   });
   $("#ss-cr-q").addEventListener("input", function () { F.q = this.value.trim(); render(); });
   $("#ss-cr-type").addEventListener("change", function () { F.type = this.value; render(); });

@@ -977,7 +977,6 @@ body.ss-step-4 .ss-cols { display: none; }
 #ss-cr-empty { padding: 18px 16px; margin: 0; }
 .ss-corr-foot { position: sticky; bottom: 0; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--ds-border-2); background: var(--ds-surface); border-radius: 0 0 var(--ds-r-card) var(--ds-r-card); }
 #ss-cr-cant-m b { font-weight: 700; }
-.adv-card.ss-flash { box-shadow: 0 0 0 3px var(--ds-accent-line); }
 @media (max-width: 1100px) { .ss-cr-q { width: 100%; } .ss-corr-h { flex-wrap: wrap; } }
 /* step 2: the correlation editor (portal/studio-editor.js) — takes the place of the table while open */
 #ss-t-corr.ss-cr-editing > :not(#ss-ed) { display: none !important; }
@@ -1090,3 +1089,25 @@ body.ss-step-wide #ss-t-data { width: 100%; max-width: 1500px; margin: 0 auto; }
 .ss-done-i.warn { border-color: color-mix(in srgb, var(--ds-warn) 45%, var(--ds-border)); background: var(--ds-warn-soft); }
 .ss-done-i:not(.warn) > svg.i:first-child { padding: 2px; border-radius: 50%; background: var(--ds-ok-soft); }
 .ss-ed-note { margin: 4px 0 0; font-size: var(--ds-fs-xs); line-height: 1.45; }
+/* the editor: a list's options (every value or one at random; a rebuilt list's fields and loop) */
+.ss-ed-lead { margin: 6px 0 8px; font-size: var(--ds-fs-sm); line-height: 1.5; color: var(--ds-text-2); }
+.ss-ed-lead b { color: var(--ds-text); }
+.ss-ed-pick { display: grid; gap: 8px; }
+.ss-ed-pick button { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px 10px 38px; position: relative; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-tile); background: var(--ds-surface); color: var(--ds-text); font: inherit; text-align: left; cursor: pointer; }
+.ss-ed-pick button::before { content: ""; position: absolute; left: 12px; top: 12px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ds-border-2); background: var(--ds-surface); }
+.ss-ed-pick button:hover { border-color: var(--ds-accent-line); }
+.ss-ed-pick button[aria-checked="true"] { border-color: var(--ds-accent); background: var(--ds-accent-soft); }
+.ss-ed-pick button[aria-checked="true"]::before { border-color: var(--ds-accent); background: radial-gradient(circle, var(--ds-accent) 0 45%, var(--ds-surface) 50%); }
+.ss-ed-pick b { font-size: var(--ds-fs-sm); font-weight: 700; }
+.ss-ed-pick small { font-size: var(--ds-fs-xs); color: var(--ds-text-2); line-height: 1.4; }
+.ss-ed-arr { overflow: auto; border: 1px solid var(--ds-border); border-radius: var(--ds-r-tile); }
+.ss-ed-arr table { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-xs); }
+.ss-ed-arr th { padding: 6px 8px; text-align: left; font-weight: 600; color: var(--ds-text-2); background: var(--br-head); border-bottom: 1px solid var(--ds-border-2); }
+.ss-ed-arr td { padding: 6px 8px; border-bottom: 1px solid var(--ds-border); vertical-align: top; overflow-wrap: anywhere; }
+.ss-ed-arr tr:last-child td { border-bottom: 0; }
+.ss-ed-arr tr.is-miss td { background: var(--ds-warn-soft); }
+.ss-ed-arr tr.is-static td { color: var(--ds-text-2); }
+.ss-ed-anc { margin-left: 6px; padding: 0 6px; border-radius: var(--ds-r-pill); background: var(--ds-accent); color: #fff; font-size: 11px; font-weight: 600; }
+.ss-ed-miss { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; padding: 8px 10px; border-radius: var(--ds-r-tile); background: var(--ds-warn-soft); font-size: var(--ds-fs-sm); }
+.ss-ed-miss > svg.i { color: var(--ds-warn); flex: none; }
+.ss-ed-miss > span { flex: 1; min-width: 180px; }

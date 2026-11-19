@@ -19,7 +19,7 @@ function studio() {
   const document = { documentElement: el, getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] };
   // eslint-disable-next-line no-new-func
   return new Function('window', 'document', 'localStorage', src +
-    '\nreturn { S, _advFindUsages, advisorAddManual, advisorSuggestMore, advisorApplyAndRegen, advisorRemoveFromScript, advisorRestoreToScript, advisorToCorrelation, advisorApplyOne };')({ addEventListener() {} }, document, { getItem: () => null, setItem() {} });
+    '\nreturn { S, _advFindUsages, advisorAddManual, advisorSuggestMore, advisorApplyAndRegen, advisorRemoveFromScript, advisorRestoreToScript, advisorToCorrelation, advisorApplyOne, advisorSetListPick, toggleCorrRandSelect };')({ addEventListener() {} }, document, { getItem: () => null, setItem() {} });
 }
 
 let id = 1;
@@ -104,5 +104,40 @@ describe('advisorApplyOne (Add manual correlation, Paste & Detect)', () => {
     expect([c._applied, other._applied]).toEqual([true, undefined]);
     E.advisorApplyOne(c);
     expect(E.S.correlations).toHaveLength(1);
+  });
+});
+
+// A list's options in the editor: every value or one at random (_pick), the same as the Rnd switch of Correlation details
+describe('advisorSetListPick and _pick', () => {
+  const list = () => ({ id: 'adv-0', value: '(list)', varName: 'imageKeyArr', confidence: 'high', status: 'accepted', _selectAll: true,
+    source: { entryIdx: 0, url: '/products', jsonPath: '$.items[*].imageKey' }, usages: [{ entryIdx: 2, url: '/wishlist', location: 'body_json', jsonPath: '$.img' }] });
+  test('without a choice the list is read as before (jsonpath, every match); One at random → random_select', () => {
+    const E = studio();
+    const c = list();
+    expect(E.advisorToCorrelation(c)).toMatchObject({ extractorType: 'jsonpath', extractorConfig: { path: '$.items[*].imageKey', selectAll: true } });
+    c._pick = 'random';
+    expect(E.advisorToCorrelation(c)).toMatchObject({ extractorType: 'random_select', extractorConfig: { path: '$.items[*].imageKey', selectAll: true } });
+  });
+  test('before it is in the script: only the choice; in the script: the correlation changes too and the script is made again', () => {
+    const E = studio();
+    const c = list();
+    Object.assign(E.S, { entries1: recording(), advisorCandidates: [c], correlations: [] });
+    E.advisorSetListPick('adv-0', 'random');
+    expect([c._pick, E.S.correlations.length, E.S._regen || 0]).toEqual(['random', 0, 0]);
+    E.advisorApplyOne(c);
+    expect(E.S.correlations[0].extractorType).toBe('random_select');
+    E.advisorSetListPick('adv-0', 'all');
+    expect([c._pick, E.S.correlations[0].extractorType, E.S._regen]).toEqual([undefined, 'jsonpath', 1]);
+    // the Rnd switch keeps the choice in step, so Take out still finds the correlation
+    E.toggleCorrRandSelect(0);
+    expect([E.S.correlations[0].extractorType, c._pick]).toEqual(['random_select', 'random']);
+    expect(E.advisorRemoveFromScript('adv-0').extractorType).toBe('random_select');
+  });
+  test('a rebuilt list and a plain value are left alone', () => {
+    const E = studio();
+    const a = Object.assign(list(), { _arrayReconstruct: true }), v = Object.assign(list(), { id: 'adv-1', _selectAll: false });
+    Object.assign(E.S, { entries1: recording(), advisorCandidates: [a, v], correlations: [] });
+    E.advisorSetListPick('adv-0', 'random'); E.advisorSetListPick('adv-1', 'random');
+    expect([a._pick, v._pick]).toEqual([undefined, undefined]);
   });
 });

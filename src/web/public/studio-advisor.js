@@ -1172,8 +1172,9 @@ function advisorToCorrelation(candidate) {
     extractorType = candidate._extract.extractorType;
     extractorConfig = candidate._extract.extractorConfig;
   } else if (candidate.source && candidate.source.jsonPath) {
-    // Auto-detected via HAR response scan: use the JSON path we traced
-    extractorType = 'jsonpath';
+    // Auto-detected via HAR response scan: use the JSON path we traced. A list (every match) can be used one value at
+    // random each iteration (_pick, chosen in Script Studio's editor): random_select, the same as the Rnd switch
+    extractorType = candidate._selectAll && candidate._pick === 'random' ? 'random_select' : 'jsonpath';
     extractorConfig = candidate._selectAll
       ? { path: candidate.source.jsonPath, selectAll: true }
       : { path: candidate.source.jsonPath };
