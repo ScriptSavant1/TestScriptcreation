@@ -1009,3 +1009,7 @@ body.ss-step-4 .ss-cols { display: none; }
 .ss-cr-row.is-member td { background: var(--ds-surface-2) !important; }
 .ss-cr-row.is-member td:nth-child(2) { padding-left: 26px; }
 .ss-cr-row.is-member.is-tick td { background: var(--ds-accent-soft) !important; }
+/* step 3: a heading as on step 2, the same width */
+.ss-step-h { display: none; margin: 0; font-size: var(--ds-fs-lg); font-weight: 700; }
+body.ss-step-3 .ss-step-h { display: block; }
+body.ss-step-wide #ss-t-data { width: 100%; max-width: 1500px; margin: 0 auto; }

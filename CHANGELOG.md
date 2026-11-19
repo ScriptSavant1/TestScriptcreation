@@ -93,6 +93,7 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 - Take out: a value in the script can be taken out again from the table or the editor (Undo puts the same correlation back); then it can be changed in the editor.
 - A token the server renews (the same name and field, a new value each time) is one row, Renewed, that opens to each renewal; tick, name and Skip apply to all. The script is as before (each renewal is read again under the same name).
+- Step 3 has a Test data heading and the same width as step 2.
 - Names: the field's own name or with a p in front (pSessionId), remembered; names typed by the user, manual ones and values in the script are not changed.
 - Also suggest other repeated values: values a JSON response sends and a later request sends back that the Advisor leaves out (under 10 characters, numbers, past the first 20), as Medium, not ticked; test data values and common words are left out.
 
