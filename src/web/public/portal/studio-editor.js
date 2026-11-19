@@ -55,6 +55,73 @@
     }
     return { nodes: cur };
   }
+  // what a list's extractor reads, in order and with repeats (the places VuGen's name_1 … name_N and DevWeb's array
+  // give): every plain value a JSON path reaches, or every match of a pair of boundaries
+  function jsonAll(body, path) {
+    var o = parse(String(body || "")), r = o === undefined ? {} : jnodes(o, path);
+    return (r.nodes || []).filter(function (v) { return v !== null && typeof v !== "object"; }).map(String);
+  }
+  function boundAll(body, lb, rb) { return boundAt(body, lb, rb).map(function (m) { return m.v; }); }
+  function boundAt(body, lb, rb) {
+    var out = [], i = 0, j, k; body = String(body || "");
+    if (!lb || !rb) return out;
+    while ((j = body.indexOf(lb, i)) !== -1) {
+      k = body.indexOf(rb, j + lb.length); if (k === -1) break;
+      out.push({ v: body.slice(j + lb.length, k), at: j + lb.length }); i = k + rb.length;
+    }
+    return out;
+  }
+  // A list from one of its values (at = where it starts in the body; span = a selected section {at, len}):
+  //  - JSON: the value's path with its last index as [*] ($.items[2].id → $.items[*].id), every match
+  //  - a page: the same tag and attribute (<option value=") or the same opening tag (<td class="x"> … </td), every
+  //    match; the list is the matches inside the section selected, else inside the <select> around the value, else all
+  // → { ext, values, from, to, name, about } (from / to: 1-based, among every match) | { why }
+  function listFrom(body, at, v, findPath, span) {
+    body = String(body || ""); v = String(v || "");
+    var o = parse(body), r, ms, from = 1, to, name, about;
+    if (o !== null && typeof o === "object") {
+      var p = findPath ? findPath(body, v) : null;
+      if (!p || !/\[\d+\]/.test(p)) return { why: "This value is not one of a JSON list (its path has no [n])." };
+      var star = p.replace(/\[\d+\](?!.*\[\d+\])/, "[*]"), vals = jsonAll(body, star);
+      ms = []; var pos = 0;
+      vals.forEach(function (x) { var q = JSON.stringify(x).slice(1, -1), k = body.indexOf(q, pos); ms.push({ v: x, at: k }); if (k !== -1) pos = k + q.length; });
+      var key = (star.replace(/\[\*\]$/, "").match(/([A-Za-z_$][\w$]*)(?:\[\d+\])?$/) || [])[1] || "value";
+      // a generic field takes its list's name: $.seats[*].id → seatId
+      var parent = (star.match(/([A-Za-z_$][\w$]*)\[\*\][^[]*$/) || [])[1];
+      if (parent && /^(id|value|name|key|code|uuid|token)$/i.test(key)) key = parent.replace(/ies$/, "y").replace(/s$/, "") + key.charAt(0).toUpperCase() + key.slice(1);
+      r = { ext: { extractorType: "jsonpath", extractorConfig: { path: star, selectAll: true } } };
+      name = key + "Arr"; about = "JSON path <code>" + star + "</code>";
+    } else {
+      var lt = body.lastIndexOf("<", at), pre = lt === -1 ? "" : body.slice(lt, at), lb, rb, m;
+      if (pre.indexOf(">") === -1 && (m = /^<([A-Za-z][\w:-]*)\b[^<>]*?\s([\w:-]+)\s*=\s*(["'])$/.exec(pre))) {
+        lb = "<" + m[1] + " " + m[2] + "=" + m[3]; rb = m[3];
+        if (body.indexOf(lb) === -1) { lb = pre; }
+        about = "every <code>" + lb.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</code>";
+      } else if ((m = /^<([A-Za-z][\w:-]*)\b[^<>]*>$/.exec(pre))) {
+        lb = pre; rb = "</" + m[1];
+        about = "the text of every <code>" + pre.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</code>";
+      } else return { why: "Select a value inside a tag (an option, a link, a cell) to read every one like it." };
+      ms = boundAt(body, lb, rb);
+      r = { ext: { extractorType: "boundary", extractorConfig: { lb: lb, rb: rb, all: true } } };
+      var sel = body.lastIndexOf("<select", at), selEnd = sel === -1 ? -1 : body.indexOf("</select", sel);
+      if (!span && sel !== -1 && selEnd > at) {
+        span = { at: sel, len: selEnd - sel };
+        var sn = /^<select\b[^>]*\bname\s*=\s*["']([^"']+)/i.exec(body.slice(sel, sel + 300));
+        if (sn) name = sn[1].replace(/[^\w]/g, "_") + "Options";
+        about += sn ? " in <code>&lt;select name=\"" + sn[1].replace(/&/g, "&amp;").replace(/</g, "&lt;") + "\"&gt;</code>" : " in its &lt;select&gt;";
+      }
+      if (!name) name = (m[2] || m[1]) + "Arr";
+    }
+    if (ms.every(function (x) { return x.at !== at; }) && r.ext.extractorType === "boundary") return { why: "That value is not one of the matches." };
+    to = ms.length;
+    if (span) {
+      var inside = ms.map(function (x, i) { return x.at >= span.at && x.at < span.at + span.len ? i + 1 : 0; }).filter(Boolean);
+      if (inside.length) { from = inside[0]; to = inside[inside.length - 1]; }
+    }
+    if (to - from + 1 < 2) return { why: "Only one value: not a list." };
+    r.values = ms.map(function (x) { return x.v; }); r.from = from; r.to = to; r.name = name; r.about = about;
+    return r;
+  }
   // the values a list reads from a JSON response (every match of each path; plain values only, each once)
   function listValues(body, paths) {
     var o = parse(String(body || "")), out = [], seen = {};
@@ -197,8 +264,11 @@
       while ((m = kv.exec(body))) add(m[1], "page", "body");
       var tx = /<([\w.-]+(?::[\w.-]+)?)(?:\s[^<>]*)?>([^<>&\s]{4,2000})<\/\1>/g;
       while ((m = tx.exec(body))) add(m[2], "page", "body");
-      var at = /\s[\w:.-]+\s*=\s*"([^"<>\s]{4,2000})"/g;   // other attributes (an XML id="…"); only those sent back are marked
-      while ((m = at.exec(body))) add(m[1], "page", "body");
+      // other attributes (an XML id="…"); only those sent back are marked. Not the attributes that name or shape the
+      // page (a form field's name is sent back as the field's name, not a value), nor an HTML page's id
+      var at = /\s([\w:.-]+)\s*=\s*"([^"<>\s]{4,2000})"/g, html = /<(!doctype\s+html|html|body|form|div|select|input)\b/i.test(body);
+      var SHAPE = /^(name|class|type|for|method|action|href|src|rel|style|lang|charset|target|role|title|alt|placeholder|autocomplete|enctype|http-equiv|xmlns(:.*)?|xml:lang|width|height|align|border|size|maxlength)$/i;
+      while ((m = at.exec(body))) if (!SHAPE.test(m[1]) && !(html && /^id$/i.test(m[1]))) add(m[2], "page", "body");
     }
     var map = entry && entry.respHdrsMap || {};
     Object.keys(map).sort().forEach(function (k) { if (!SKIP_HDRS[k.toLowerCase()]) add(map[k], k, "header"); });
@@ -233,7 +303,7 @@
   function laterValues(entries, i, idx) {
     return valuesOf(entries[i]).filter(function (v) { return idx.later(v.value, i); });
   }
-  return { jget: jget, listValues: listValues, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
+  return { jget: jget, listValues: listValues, jsonAll: jsonAll, boundAll: boundAll, listFrom: listFrom, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
 });
 
 (function () {
@@ -269,7 +339,8 @@
           '<button type="button" data-kind="boundary" aria-pressed="false">Boundaries</button>' +
           '<button type="button" data-kind="regexp" aria-pressed="false">Regex</button>' +
           '<button type="button" data-kind="xpath" aria-pressed="false">XPath</button>' +
-          '<button type="button" data-kind="header" aria-pressed="false">Header</button></span>' +
+          '<button type="button" data-kind="header" aria-pressed="false">Header</button>' +
+          '<button type="button" data-kind="list" aria-pressed="false" title="Every value like this one (the options of a select, the items of a JSON list): a list">List</button></span>' +
         '<div class="ss-ed-expr" id="ss-ed-expr"></div>' +
         '<p class="ss-ed-test" id="ss-ed-test" role="status" aria-live="polite"></p>' +
         '<div class="ss-ed-sec"><span class="ss-ed-num">3</span><label class="ss-fld" for="ss-ed-name">Name in the script</label></div>' +
@@ -297,7 +368,7 @@
 
   var cur = null, kind = "auto", draft = null, srcIdx = null, rview = "body";
   // add mode: the new correlation being made (not in the Advisor's list until it is added)
-  var adding = false, nc = null, nameTyped = false, idxFor = null, idx = null, laterFor = {}, hint = "", tray = [];
+  var adding = false, nc = null, nameTyped = false, idxFor = null, idx = null, laterFor = {}, hint = "", tray = [], listSt = null;
   function cand(id) { if (adding) return nc; return (S.advisorCandidates || []).filter(function (c) { return c.id === id; })[0] || null; }
   function isList(c) { return !!(c._arrayReconstruct || c._selectAll); }
   function locked(c) { return !adding && (!!c._applied || isList(c)); }
@@ -362,7 +433,7 @@
   }
   // Add manual correlation: the same screen for a value the Correlation Advisor did not list
   function add(from) {
-    adding = true; nameTyped = false; cur = "new"; draft = null; kind = "auto"; rview = "body"; tray = [];
+    adding = true; nameTyped = false; cur = "new"; draft = null; kind = "auto"; rview = "body"; tray = []; listSt = null;
     nc = { id: "new", value: "", preview: "", valueType: "token", confidence: "high", varName: "", usages: [], status: "accepted", _manual: true, source: null };
     srcIdx = from != null && entry(from) ? from : null;
     $("#ss-ed-srcq").value = "";
@@ -398,6 +469,20 @@
   // add mode: the value is what the extractor reads; its uses are the engine's
   function sync() {
     var c = nc, e = entry(srcIdx), r = null;
+    if (listSt) {
+      var lab = "(list — " + (listSt.to - listSt.from + 1) + " values)";
+      if (c.value !== lab || c._listKey !== listKey()) {
+        c.value = lab; c._listKey = listKey(); c.preview = listSt.values.slice(listSt.from - 1, listSt.from + 2).join(", ");
+        var us = [], seen = {};
+        for (var pos = listSt.from; pos <= listSt.to; pos++) {
+          var lv = listSt.values[pos - 1]; if (!lv || seen[lv]) continue; seen[lv] = 1;
+          _advFindUsages(S.entries1 || [], srcIdx, lv).forEach(function (u) { us.push(Object.assign(u, { tokenValue: lv, listIdx: pos })); });
+        }
+        c.usages = us;
+      }
+      if (!nameTyped) c.varName = free(listSt.name);
+      return;
+    }
     if (e && draft) { try { r = E.readWith(e, draft, _advFirstMatch, xp); } catch (x) { r = null; } }
     var v = r && r.value != null ? String(r.value) : "";
     if (v !== c.value) {
@@ -411,6 +496,7 @@
       c.varName = free(_advSuggestName(draft && draft.extractorType === "jsonpath" ? draft.extractorConfig.path : xn ? "$." + xn : null, hn, v));
     }
   }
+  function listKey() { return listSt ? JSON.stringify([listSt.ext, listSt.from, listSt.to]) : ""; }
   // names in use: correlations in the script and the Advisor's suggestions
   function taken(n) {
     return tray.some(function (x) { return x.varName === n; }) || (S.correlations || []).some(function (x) { return x.name === n; }) ||
@@ -450,9 +536,10 @@
     $$("#ss-ed-kind [data-kind]").forEach(function (b) {
       var k = b.getAttribute("data-kind");
       b.hidden = adding && k === "auto";
-      var on = adding ? draft && (k === "header" ? draft.extractorType === "boundary_header" : draft.extractorType === k) : k === kind;
+      var on = adding ? (listSt ? k === "list" : draft && (k === "header" ? draft.extractorType === "boundary_header" : draft.extractorType === k)) : k === kind;
+      b.hidden = (adding && k === "auto") || (!adding && k === "list");
       b.setAttribute("aria-pressed", String(!!on));
-      b.disabled = lock || !e || (k === "jsonpath" && !isJson) || (k === "xpath" && !isXml) || (k === "regexp" && !btxt) || (k === "header" && !heads.length);
+      b.disabled = lock || !e || (k === "jsonpath" && !isJson) || (k === "xpath" && !isXml) || (k === "regexp" && !btxt) || (k === "header" && !heads.length) || (k === "list" && !listSt && !c.value);
       b.title = k === "jsonpath" && !isJson ? "This response is not JSON" : k === "xpath" && !isXml ? "This response is not XML" : k === "header" && !heads.length ? "No header of this response has the value"
         : k === "auto" ? "What the Correlation Advisor chose" : k === "regexp" ? "A regular expression: the first ( ) group is the value" : k === "xpath" ? "An XPath in the XML response" : "";
     });
@@ -534,6 +621,26 @@
     $("#ss-ed-code").textContent = s;
   }
 
+  // how a list is used: every value as recorded, one at random, the next each iteration, always the Nth
+  function pickHtml(pick, nth, n, note) {
+    pick = pick || "all";
+    var opt = function (k, title, text) { return '<button type="button" role="radio" data-pick="' + k + '" aria-checked="' + (pick === k) + '"><b>' + title + "</b><small>" + text + "</small></button>"; };
+    return '<div class="ss-ed-pick" role="radiogroup" aria-label="Which value is sent back">' +
+      opt("all", "Every value, as recorded", "Each place sends back the value at the position it used in the recording.") +
+      opt("random", "One at random each iteration", "A list the user picks from (a product, a flight): another one each iteration.") +
+      opt("rotate", "The next one each iteration", "Iteration 1 takes the 1st value, iteration 2 the 2nd … and round again.") +
+      '<div class="ss-ed-nth' + (pick === "nth" ? " on" : "") + '">' + opt("nth", "Always the same one", "The value at this position every time:") +
+        '<label class="ss-ed-nthl">Position <input type="number" class="ss-field" id="ss-ed-nth" min="1"' + (n ? ' max="' + n + '"' : "") + ' value="' + (nth || 1) + '"' + (pick === "nth" ? "" : " disabled") + " />" + (n ? " of " + n : "") + "</label></div>" +
+      "</div>" + (note ? '<p class="ss-muted ss-ed-note">' + note + "</p>" : "");
+  }
+  // a list being made (add mode): what it reads, then how it is used
+  function listAddOpts() {
+    var n = listSt.to - listSt.from + 1, vals = listSt.values.slice(listSt.from - 1, listSt.to);
+    $("#ss-ed-expr").innerHTML = '<p class="ss-ed-lead">A list of <b>' + n + " values</b>: " + listSt.about + ", every match" +
+      (listSt.from > 1 || listSt.to < listSt.values.length ? " (matches " + listSt.from + "–" + listSt.to + " of " + listSt.values.length + ")" : "") + '.</p><p class="ss-ed-vals">' +
+      vals.slice(0, 6).map(function (x) { return "<code>" + esc(short(x)) + "</code>"; }).join(" ") + (n > 6 ? ' <span class="ss-muted">and ' + (n - 6) + " more</span>" : "") + "</p>" +
+      '<span class="ss-fld">Which value is sent back</span>' + pickHtml(listSt.pick, listSt.nth, n);
+  }
   // a list: every value or one at random; a rebuilt list: its columns, the loop anchor, the missing paths
   function listOpts(c) {
     var x = $("#ss-ed-expr"), a; try { a = auto(c); } catch (err) { a = null; }
@@ -559,16 +666,23 @@
         (lock ? '<p class="ss-muted ss-ed-note">In the script: take it out first to change it.</p>' : "");
       return;
     }
-    var path = a && a.extractorConfig ? a.extractorConfig.path : "", rnd = c._pick === "random";
-    x.innerHTML = '<p class="ss-ed-lead">The response sends <b>several values</b> (JSON path <code>' + esc(path || "") + "</code>, every match) and the script reads them all. Which one is sent back:</p>" +
-      '<div class="ss-ed-pick" role="radiogroup" aria-label="Which value is sent back">' +
-        '<button type="button" role="radio" data-pick="all" aria-checked="' + !rnd + '"><b>Every value, as recorded</b><small>Each place sends back the value it sent in the recording, by its position in the list.</small></button>' +
-        '<button type="button" role="radio" data-pick="random" aria-checked="' + rnd + '"><b>One at random each iteration</b><small>For a list the user picked from (a product, a slot): each iteration picks another one.</small></button>' +
-      "</div>" + (c._applied ? '<p class="ss-muted ss-ed-note">In the script: a change makes the script again.</p>' : "");
+    var cc = a; try { cc = advisorToCorrelation(c); } catch (err) { cc = a; }
+    var how = cc && cc.extractorType === "boundary" ? "boundaries <code>" + esc(cc.extractorConfig.lb) + "</code> … <code>" + esc(cc.extractorConfig.rb) + "</code>" : "JSON path <code>" + esc(cc && cc.extractorConfig ? cc.extractorConfig.path : "") + "</code>";
+    var vals = lvals(c);
+    x.innerHTML = '<p class="ss-ed-lead">The response sends <b>' + (vals.length > 1 ? vals.length + " values" : "several values") + "</b> (" + how + ", every match) and the script reads them all. Which one is sent back:</p>" +
+      pickHtml(c._pick, c._nth, vals.length, c._applied ? "In the script: a change makes the script again." : "");
+  }
+  function lvals(c) {
+    var e = entry(srcIdx), body = String(e && e.respBody || ""), cc;
+    try { cc = advisorToCorrelation(c); } catch (err) { return []; }
+    var all = cc.extractorType === "boundary" && cc.extractorConfig.all ? E.boundAll(body, cc.extractorConfig.lb, cc.extractorConfig.rb)
+      : cc.extractorConfig && cc.extractorConfig.selectAll ? E.jsonAll(body, cc.extractorConfig.path) : [];
+    return c._range ? all.slice(c._range.from - 1, c._range.to) : all;
   }
   function expr(c, e, heads) {
     var x = $("#ss-ed-expr"), cfg = draft && draft.extractorConfig || {};
     if (!adding && isList(c)) { listOpts(c); return; }
+    if (adding && listSt) { listAddOpts(); return; }
     if (!adding && kind === "auto") {
       var a; try { a = auto(c); } catch (err) { a = null; }
       var t = !a ? "" : a.extractorType === "jsonpath" ? "JSON path <code>" + esc(a.extractorConfig.path) + "</code>" + (a.extractorConfig.selectAll ? " (every match)" : "")
@@ -598,6 +712,13 @@
   function test(c, e) {
     var p = $("#ss-ed-test"), x = ext(c), r;
     testOk = false;
+    if (adding && listSt) {
+      var ln = listSt.to - listSt.from + 1, un = (c.usages || []).length;
+      testOk = ln >= 2; p.hidden = false;
+      p.className = "ss-ed-test " + (un ? "good" : "warn");
+      p.innerHTML = '<svg class="i"><use href="#i-' + (un ? "ok" : "warn") + '"/></svg><span>Reads <b>' + ln + " values</b>" + (un ? "; " + plural(un, "later place") + (un === 1 ? " sends" : " send") + " one of them back." : ". No later request sends one of them back as recorded.") + "</span>";
+      return;
+    }
     if (adding) {
       if (!e || !draft) { p.className = "ss-ed-test"; p.textContent = ""; p.hidden = true; return; }
       p.hidden = false;
@@ -607,13 +728,20 @@
       if (r.none) { p.className = "ss-ed-test bad"; p.textContent = r.why === "not JSON" ? "This response is not JSON." : r.why === "not XML" ? "This response is not XML." : "Nothing found in this response."; return; }
       testOk = true;
       var n = (c.usages || []).length;
+      // a value that is one of a list: say so, one click reads them all
+      var bt = String(e.respBody || ""), lh = "";
+      if (bt.length < 300000 && draft.extractorType !== "boundary_header") {
+        var a0 = bt.indexOf(c.value); if (a0 === -1) a0 = bt.indexOf(JSON.stringify(c.value).slice(1, -1));
+        var lr = a0 === -1 ? null : E.listFrom(bt, a0, c.value, typeof findJsonPath === "function" ? findJsonPath : null);
+        if (lr && !lr.why) lh = ' It is one of <b>' + (lr.to - lr.from + 1) + '</b> like it: <button type="button" class="adv-req-link" data-kind="list">read them all as a List</button>.';
+      }
       // the Correlation Advisor lists this value already: say so (adding it again makes a second extractor)
       var known = (S.advisorCandidates || []).filter(function (x) { return x.value === String(r.value) && x.status !== "skipped"; })[0];
       p.className = "ss-ed-test " + (n && !known ? "good" : "warn");
       p.innerHTML = '<svg class="i"><use href="#i-' + (n && !known ? "ok" : "warn") + '"/></svg><span>Reads <code>' + esc(short(r.value)) + "</code>" +
         (n ? ", sent back in " + plural(n, "later place") + "." : ". No later request sends it back as recorded: check that this is the value you want.") +
         (known ? ' The Correlation Advisor lists this value already as <b>' + esc(known.varName) + "</b>" + (known._applied ? " (in the script)" : "") +
-          ': <button type="button" class="adv-req-link" data-known="' + esc(known.id) + '">open it</button> instead.' : "") + "</span>";
+          ': <button type="button" class="adv-req-link" data-known="' + esc(known.id) + '">open it</button> instead.' : "") + lh + "</span>";
       return;
     }
     p.hidden = false;
@@ -649,7 +777,8 @@
     $("#ss-ed-hint").textContent = !e ? (adding ? "Choose a request on the left." : "") : !adding && isList(c) ? "The values of the list are marked." : locked(c) ? "The value is marked." : rview === "headers" ? "Click a header to read the value from it." : "Select a value (or double-click it) to read it from here.";
     // a list: the values it reads are marked (every match of its JSON path, or of each field of a rebuilt list)
     var lpaths = !adding && isList(c) ? (c._arrayReconstruct ? ((c._arrayConfig || {}).columns || []).map(function (k) { return k._placeholder ? "" : k.sourceJsonPath; }).filter(Boolean) : [c.source && c.source.jsonPath].filter(Boolean)) : [];
-    var key = cur + "|" + srcIdx + "|" + rview + "|" + text.length + "|" + c.value + "|" + (draft ? JSON.stringify(draft) : "") + "|" + lpaths.join(",") + "|" + tray.length;
+    var lmark = adding && listSt ? listSt.values.slice(listSt.from - 1, listSt.to) : !adding && isList(c) && !c._arrayReconstruct ? lvals(c) : null;
+    var key = cur + "|" + srcIdx + "|" + rview + "|" + text.length + "|" + c.value + "|" + (draft ? JSON.stringify(draft) : "") + "|" + lpaths.join(",") + "|" + tray.length + "|" + listKey();
     if (shownBody === key) return;
     shownBody = key;
     var v = String(c.value || "");
@@ -662,7 +791,7 @@
     }
     // ranges: the chosen value (every place) and, when adding, the first place of each value sent back later
     var t = text.length > MAXB ? text.slice(0, MAXB) : text, rs = [], i, j;
-    (lpaths.length ? E.listValues(text, lpaths).map(function (x) { return JSON.stringify(x).slice(1, -1); }) : [v]).forEach(function (w) {
+    (lmark && lmark.length ? lmark.map(function (x) { return /^\s*[[{]/.test(text) ? JSON.stringify(x).slice(1, -1) : x; }) : lpaths.length ? E.listValues(text, lpaths).map(function (x) { return JSON.stringify(x).slice(1, -1); }) : [v]).forEach(function (w) {
       if (w.length < 2) return;
       i = 0; while ((j = t.indexOf(w, i)) !== -1) { rs.push([j, j + w.length, "cur"]); i = j + w.length; }
     });
@@ -694,8 +823,33 @@
     var txt = s.toString(), at = pr.toString().length, lead = txt.length - txt.replace(/^\s+/, "").length;
     return { at: at + lead, s: txt.trim() };
   }
+  // a section selected (several values, options of a select): the list of what is inside it
+  function sectionList(at, s) {
+    var body = String(entry(srcIdx) && entry(srcIdx).respBody || ""), a = -1, v = "", m;
+    var oi = s.search(/<option\b[^>]*\bvalue\s*=\s*["']/i);
+    if (oi !== -1) { m = /<option\b[^>]*\bvalue\s*=\s*(["'])([^"']*)\1/i.exec(s.slice(oi)); if (m) { a = at + oi + m[0].indexOf(m[1]) + 1; v = m[2]; } }
+    if (a === -1) {
+      var inside = later(srcIdx).filter(function (x) { return x.kind !== "header"; }).map(function (x) { var q = x.kind === "json" ? JSON.stringify(x.value).slice(1, -1) : x.value, k = body.indexOf(q, at); return { v: x.value, at: k }; })
+        .filter(function (x) { return x.at >= at && x.at < at + s.length; }).sort(function (p, q) { return p.at - q.at; });
+      if (inside.length < 2) {
+        // a JSON section: the first value inside it that is one of a list (its path has [n])
+        var js = E.valuesOf(entry(srcIdx)).filter(function (x) { return x.kind === "json" && /[d+]/.test(x.where); })
+          .map(function (x) { return { v: x.value, at: body.indexOf(JSON.stringify(x.value).slice(1, -1), at) }; })
+          .filter(function (x) { return x.at >= at && x.at < at + s.length; }).sort(function (p, q) { return p.at - q.at; });
+        if (!js.length) return false;
+        inside = js;
+      }
+      a = inside[0].at; v = inside[0].v;
+    }
+    var r = E.listFrom(body, a, v, typeof findJsonPath === "function" ? findJsonPath : null, { at: at, len: s.length });
+    if (r.why) { if (typeof showToast === "function") showToast(r.why, "warning", 4000); return true; }
+    setList(r); return true;
+  }
+  function setList(r) { listSt = r; listSt.pick = "all"; listSt.nth = 1; draft = r.ext; kind = "list"; save(); draw(); }
   function pickAt(at, s) {
     var c = cand(cur); if (!c || locked(c)) return;
+    if (adding && (/<option\b/i.test(s) || s.length > 80 || /\n/.test(s)) && sectionList(at, s)) return;
+    if (adding) listSt = null;
     if (adding) hint = E.nameBefore(String(entry(srcIdx) && entry(srcIdx).respBody || ""), at);
     var e = entry(srcIdx), cur0 = adding ? (draft ? draft.extractorType : "") : kind;
     var want = /^(boundary|regexp|xpath)$/.test(cur0) ? cur0 : !adding && cur0 === "jsonpath" ? "jsonpath" : "any";
@@ -737,7 +891,10 @@
     else if (t.id === "ss-ed-src-up" || t.id === "ss-ed-src-down") { var o = $$("#ss-ed-src option").map(function (x) { return x.value; }).filter(Boolean).map(Number), p = o.indexOf(srcIdx); var to = p === -1 ? o[0] : o[p + (t.id === "ss-ed-src-down" ? 1 : -1)]; if (to != null) setSrc(to); }
     else if (t.id === "ss-ed-out") { if (SS.corrTakeOut) SS.corrTakeOut(c.id); shownBody = null; draw(); }
     else if (t.id === "ss-ed-paste") { if (typeof openPasteCorrelate === "function") openPasteCorrelate(); }
-    else if (t.hasAttribute("data-pick")) { advisorSetListPick(c.id, t.getAttribute("data-pick")); afterList(); }
+    else if (t.hasAttribute("data-pick")) {
+      var pk = t.getAttribute("data-pick"), nv = $("#ss-ed-nth") ? $("#ss-ed-nth").value : 1;
+      if (adding && listSt) { listSt.pick = pk; draw(); } else { advisorSetListPick(c.id, pk, nv); afterList(); }
+    }
     else if (t.id === "ss-ed-fill") { advisorFillArrayPaths(c.id, $("#ss-ed-anchor").value); afterList(); }
   });
   // add mode: put the new value in the script (this value only; other ticked values wait for Add to the script)
@@ -745,13 +902,14 @@
   function current() {
     var c = nc;
     if (!c || !c.value || !draft || !testOk || !c.varName || taken(c.varName)) return null;
-    return { srcIdx: srcIdx, draft: JSON.parse(JSON.stringify(draft)), value: c.value, varName: c.varName, usages: (c.usages || []).length };
+    return { srcIdx: srcIdx, draft: JSON.parse(JSON.stringify(draft)), value: c.value, varName: c.varName, usages: (c.usages || []).length,
+      list: listSt ? { values: listSt.values.slice(), from: listSt.from, to: listSt.to, pick: listSt.pick, nth: listSt.nth } : null };
   }
   function keep() {
     var k = current(); if (!k) return;
     tray.push(k);
     // the next value: the same response, nothing chosen yet
-    draft = null; kind = "auto"; nc.value = ""; nc.usages = []; nc.varName = ""; nameTyped = false; hint = ""; nc._edit = undefined;
+    draft = null; kind = "auto"; nc.value = ""; nc.usages = []; nc.varName = ""; nameTyped = false; hint = ""; nc._edit = undefined; listSt = null;
     shownBody = null; draw();
     var m = $("#ss-ed-body mark.later"); if (m) m.focus();
   }
@@ -759,7 +917,7 @@
     var box2 = $("#ss-ed-tray"); box2.hidden = !tray.length;
     $("#ss-ed-tray-n").textContent = tray.length ? plural(tray.length, "value") : "";
     $("#ss-ed-tray-l").innerHTML = tray.map(function (k, i) {
-      var e = entry(k.srcIdx), how = k.draft.extractorType === "jsonpath" ? "JSON path" : k.draft.extractorType === "boundary_header" ? "Header" : k.draft.extractorType === "regexp" ? "Regex" : k.draft.extractorType === "xpath" ? "XPath" : "Boundaries";
+      var e = entry(k.srcIdx), how = k.list ? "List of " + (k.list.to - k.list.from + 1) + ({ random: ", one at random", rotate: ", the next each iteration", nth: ", always no. " + k.list.nth }[k.list.pick] || "") : k.draft.extractorType === "jsonpath" ? "JSON path" : k.draft.extractorType === "boundary_header" ? "Header" : k.draft.extractorType === "regexp" ? "Regex" : k.draft.extractorType === "xpath" ? "XPath" : "Boundaries";
       return '<li><code>' + esc(k.varName) + '</code><span class="ss-muted">' + esc(how) + " · #" + (e ? e.id : "?") + " · " + plural(k.usages, "place") + '</span><button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" data-untray="' + i + '" title="Remove ' + esc(k.varName) + '" aria-label="Remove ' + esc(k.varName) + '"><svg class="i"><use href="#i-x"/></svg></button></li>';
     }).join("");
   }
@@ -768,6 +926,12 @@
     if (!all.length) return;
     var names = [], places = 0;
     all.forEach(function (x) {
+      if (x.list) {
+        var li = advisorAddList(x.srcIdx, x.draft, x.varName, x.list.values, { from: x.list.from, to: x.list.to, pick: x.list.pick, nth: x.list.nth });
+        advisorApplyOne(li);
+        names.push(li.varName); places += (li.usages || []).length;
+        return;
+      }
       var t = x.draft.extractorType, cfg = x.draft.extractorConfig;
       var made = advisorAddManual(x.srcIdx, t === "jsonpath" ? "jsonpath" : t === "boundary_header" ? "header" : "boundary",
         t === "jsonpath" ? cfg.path : t === "boundary_header" ? String(cfg.lb || "").replace(/:\s*$/, "") : cfg.lb, x.varName, x.value);
@@ -782,6 +946,15 @@
   // a new way to read it: start from the value in this response
   function setKind(k) {
     var c = cand(cur), e = entry(srcIdx); if (!c) return;
+    if (k === "list") {
+      if (listSt) return;
+      var bt = String(e && e.respBody || ""), at0 = c.value ? bt.indexOf(c.value) : -1;
+      if (at0 === -1 && c.value) at0 = bt.indexOf(JSON.stringify(c.value).slice(1, -1));
+      var r = at0 === -1 ? { why: "Choose a value in the body first." } : E.listFrom(bt, at0, c.value, typeof findJsonPath === "function" ? findJsonPath : null);
+      if (r.why) { if (typeof showToast === "function") showToast(r.why, "warning", 4000); return; }
+      setList(r); return;
+    }
+    if (adding && listSt) { var first = listSt.values[listSt.from - 1]; listSt = null; c.value = first; }
     if (k === "header") {
       var hs = adding ? (draft && draft.extractorType === "boundary_header" ? [] : E.headersWith(e, c.value)) : E.headersWith(e, c.value);
       if (adding && !hs.length) { rview = "headers"; kind = "header"; draw(); return; }
@@ -802,7 +975,7 @@
     var c = cand(cur), e = entry(i);
     if (adding) {
       c.source = { entryIdx: i, url: typeof _advShortUrl === "function" ? _advShortUrl(e) : "", jsonPath: null };
-      draft = null; kind = "auto"; c.value = ""; c.usages = []; hint = ""; if (!nameTyped) c.varName = "";
+      draft = null; kind = "auto"; c.value = ""; c.usages = []; hint = ""; listSt = null; if (!nameTyped) c.varName = "";
       rview = "body"; save(); draw(); return;
     }
     // the value in the new response: read it the same way if possible, else by boundaries around it
@@ -820,6 +993,11 @@
   // a list option changed: the cards and the editor show it
   function afterList() { if (typeof renderAdvisorPanel === "function") renderAdvisorPanel(); draw(); }
   box.addEventListener("change", function (ev) {
+    if (ev.target.id === "ss-ed-nth") {
+      var c0 = cand(cur), nv = Math.max(1, parseInt(ev.target.value, 10) || 1);
+      if (adding && listSt) { listSt.nth = nv; rest(); } else if (c0) { advisorSetListPick(c0.id, "nth", nv); afterList(); }
+      return;
+    }
     if (ev.target.id !== "ss-ed-anchor") return;
     var c = cand(cur); if (!c || !c._arrayConfig) return;
     var cols = c._arrayConfig.columns || [];

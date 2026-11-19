@@ -1134,3 +1134,12 @@ body.ss-step-wide #ss-p-right { background: transparent; border-color: transpare
 /* the editor's buttons stay in view while the left column scrolls */
 .ss-ed-left > .ss-ed-act { position: sticky; bottom: 0; z-index: 1; margin: 12px -16px 0; padding: 12px 16px; background: var(--ds-surface); border-top: 1px solid var(--ds-border); box-shadow: 0 -6px 12px -8px rgba(15, 23, 42, .25); }
 #ss-t-corr.ss-cr-editing { padding-bottom: 0; }
+/* a list in the editor: its values, and "always the same one" with its position */
+.ss-ed-vals { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
+.ss-ed-vals code { padding: 1px 6px; border-radius: 6px; background: var(--ds-surface-2); border: 1px solid var(--ds-border); }
+.ss-ed-nth { display: grid; gap: 0; border-radius: var(--ds-r-tile); }
+.ss-ed-nthl { display: flex; gap: 8px; align-items: center; padding: 6px 12px 10px 38px; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.ss-ed-nthl input { width: 76px; height: 30px; }
+.ss-ed-nth.on > button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.ss-ed-nth.on .ss-ed-nthl { border: 1px solid var(--ds-accent); border-top: 0; border-radius: 0 0 var(--ds-r-tile) var(--ds-r-tile); background: var(--ds-accent-soft); }
+.ss-ed-nth:not(.on) .ss-ed-nthl { display: none; }

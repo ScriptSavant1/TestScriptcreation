@@ -158,7 +158,7 @@ describe('Script Studio — Add manual correlation', () => {
 describe('Script Studio — list options in the editor', () => {
   const ed = read('portal/studio-editor.js'), corr = read('portal/studio-corr.js');
   test('every value / one at random, the loop anchor and the missing paths go through the engine', () => {
-    ['advisorSetListPick(c.id, t.getAttribute("data-pick"))', 'advisorFillArrayPaths(', 'advisorSetArrayAnchor(', 'renderAdvisorPanel()'].forEach((f) => expect(ed).toContain(f));
+    ['advisorSetListPick(c.id, pk, nv)', 'advisorSetListPick(c0.id, "nth", nv)', 'advisorAddList(', 'advisorFillArrayPaths(', 'advisorSetArrayAnchor(', 'renderAdvisorPanel()'].forEach((f) => expect(ed).toContain(f));
     expect(ed).not.toMatch(/_pick\s*=[^=]|countVar\s*=[^=]|\.extractorType\s*=[^=]/);   // reads (===) are fine
   });
   test('Options on a list row opens the editor', () => {

@@ -25,7 +25,7 @@ function engine() {
   const doc = { getElementById: () => null, querySelectorAll: () => [], querySelector: () => null, documentElement: { setAttribute() {}, classList: { add() {} } } };
   // eslint-disable-next-line no-new-func
   return new Function('document', 'window', 'localStorage', ['VuGen-Script-Studio-constants.js', 'VuGen-Script-Studio-correlation.js', 'studio-advisor.js', 'studio-codegen.js'].map(read).join('\n') +
-    '\nreturn { S, _advMergeArrayCandidates, _advListPos, advisorToCorrelation, genActionC, genMainJS, _listRef };')(doc, { location: { pathname: '/converter/studio' }, addEventListener() {} }, { getItem: () => null, setItem() {} });
+    '\nreturn { S, _advMergeArrayCandidates, _advListPos, advisorToCorrelation, advisorAddList, genActionC, genMainJS, genDefaultCfg, devwebExtractorDecl, _listRef };')(doc, { location: { pathname: '/converter/studio' }, addEventListener() {} }, { getItem: () => null, setItem() {} });
 }
 
 let nextId = 1;
@@ -104,5 +104,89 @@ describe('the generators send the element at its place', () => {
     expect([E._listRef(c, { listIdx: 2 }, 'vugen'), E._listRef(c, { listIdx: 2 }, 'devweb'), E._listRef(c, {}, 'vugen')]).toEqual(['imageKeyArr_2', 'imageKeyArr[1]', 'imageKeyArr']);
     expect(E._listRef(corr('random_select'), { listIdx: 2 }, 'vugen')).toBe('imageKeyArr');
     expect(E._listRef({ name: 'tok', extractorType: 'jsonpath', extractorConfig: { path: '$.t' } }, { listIdx: 2 }, 'devweb')).toBe('tok');
+  });
+});
+
+// Lists made in the editor: a JSON path or boundaries reading every match, and how each place uses the list
+describe('lists made in the editor', () => {
+  const E2 = require('../../src/web/public/portal/studio-editor.js');
+  const page = '<select name="seatClass"><option value="economy">E</option><option value="business">B</option></select>' +
+    '<select name="outbound"><option value="F-1;a">1</option><option value="F-2;b">2</option><option value="F-3;c">3</option></select>';
+  test('listFrom: a <select> among others reads every <option value=", the list is its own options', () => {
+    const r = E2.listFrom(page, page.indexOf('F-2'), 'F-2;b', null);
+    expect([r.ext, r.from, r.to, r.name, r.values]).toEqual([{ extractorType: 'boundary', extractorConfig: { lb: '<option value="', rb: '"', all: true } }, 3, 5, 'outboundOptions', ['economy', 'business', 'F-1;a', 'F-2;b', 'F-3;c']]);
+  });
+  test('listFrom: JSON — the last index as [*], a generic field named after its list; a section selected limits the range', () => {
+    const j = JSON.stringify({ seats: [{ id: 'S-1' }, { id: 'S-2' }, { id: 'S-3' }, { id: 'S-4' }] });
+    const r = E2.listFrom(j, j.indexOf('S-2'), 'S-2', () => '$.seats[1].id');
+    expect([r.ext.extractorConfig, r.from, r.to, r.name]).toEqual([{ path: '$.seats[*].id', selectAll: true }, 1, 4, 'seatIdArr']);
+    const s = E2.listFrom(j, j.indexOf('S-2'), 'S-2', () => '$.seats[1].id', { at: j.indexOf('S-2') - 3, len: j.indexOf('S-3') + 6 - j.indexOf('S-2') });
+    expect([s.from, s.to]).toEqual([2, 3]);
+    expect(E2.listFrom(j, 0, 'x', () => '$.x').why).toMatch(/not one of a JSON list/);
+  });
+  test('listFrom: the text of repeated tags; one value alone is not a list', () => {
+    const t = '<td class="c">T-111</td><td class="c">T-222</td>';
+    expect(E2.listFrom(t, t.indexOf('T-222'), 'T-222', null).ext.extractorConfig).toEqual({ lb: '<td class="c">', rb: '</td', all: true });
+    expect(E2.listFrom('<p><b>X-1</b></p>', 6, 'X-1', null).why).toMatch(/Only one/);
+  });
+  test('boundAll / jsonAll: every match in order, repeats kept', () => {
+    expect(E2.boundAll(page, '<option value="', '"')).toHaveLength(5);
+    expect(E2.jsonAll(JSON.stringify({ a: [{ k: 'x' }, { k: 'y' }, { k: 'x' }] }), '$.a[*].k')).toEqual(['x', 'y', 'x']);
+  });
+
+  function eng() {
+    const E = engine();
+    E.S.entries1 = [
+      ent('https://travel.example.com/flights', { respBody: page, ct: 'text/html' }),
+      ent('https://travel.example.com/book', { method: 'POST', body: { mimeType: 'application/x-www-form-urlencoded', text: 'outbound=F-2%3Bb', params: [{ name: 'outbound', value: 'F-2;b' }] } }),
+    ];
+    Object.assign(E.S, { advisorCandidates: [], correlations: [], format: 'both', txns: [], params: [], hostNames: {} });
+    return E;
+  }
+  const ext = { extractorType: 'boundary', extractorConfig: { lb: '<option value="', rb: '"', all: true } };
+  const vals = ['economy', 'business', 'F-1;a', 'F-2;b', 'F-3;c'];
+  test('advisorAddList: uses of the list values in its range, with their place; the choice and range kept', () => {
+    const E = eng();
+    const c = E.advisorAddList(0, ext, 'outboundOptions', vals, { from: 3, to: 5, pick: 'rotate' });
+    expect(c.usages.map((u) => [u.entryIdx, u.tokenValue, u.listIdx])).toEqual([[1, 'F-2;b', 4]]);
+    expect([c._selectAll, c._pick, c._range, c.value]).toEqual([true, 'rotate', { from: 3, to: 5 }, '(list — 3 values)']);
+    const corr = E.advisorToCorrelation(c);
+    expect([corr.extractorType, corr.extractorConfig, corr.list]).toEqual(['boundary', ext.extractorConfig, { pick: 'rotate', from: 3, to: 5 }]);
+  });
+  test('the generators: every match, the place, the Nth, and the pick before the first use', () => {
+    const run = (opts) => {
+      const E = eng(), c = E.advisorAddList(0, ext, 'outboundOptions', vals, Object.assign({ from: 3, to: 5 }, opts)), corr = E.advisorToCorrelation(c);
+      E.S.correlations = [corr];
+      return { ac: E.genActionC(E.S.entries1, [corr]), mj: E.genMainJS(E.S.entries1, [corr]), decl: E.devwebExtractorDecl(corr) };
+    };
+    const rec = run({});
+    expect(rec.ac).toContain('"Ord=ALL"');
+    expect(rec.ac).toContain('"Value={outboundOptions_4}"');
+    expect(rec.decl).toContain('occurrence: load.ExtractorOccurrenceType.All');
+    expect(rec.mj).toContain('load.global.outboundOptions[3]');
+    const nth = run({ pick: 'nth', nth: 5 });
+    expect(nth.ac).toContain('{outboundOptions_5}');
+    expect(nth.mj).toContain('load.global.outboundOptions[4]');
+    const rot = run({ pick: 'rotate' });
+    expect(rot.ac).toContain("LR.setParam('outboundOptions_turn',String(k+1))");
+    expect(rot.ac).toContain(',f=3,t=5,');
+    expect(rot.ac.indexOf('web_js_run')).toBeLessThan(rot.ac.indexOf('{outboundOptions_selected}'));
+    expect(rot.mj).toContain('((load.config.runtime.iteration || 1) - 1) % (t - f + 1)');
+    expect(rot.mj).toContain('load.global.outboundOptions_selected');
+    const rnd = run({ pick: 'random' });
+    expect(rnd.ac).toContain('f+Math.floor(Math.random()*(t-f+1))');
+    expect(rnd.mj).toContain('Math.floor(Math.random() * (t - f + 1))');
+  });
+  test('the JavaScript engine is switched on in VuGen for a list pick', () => {
+    const E = eng(), c = E.advisorAddList(0, ext, 'outboundOptions', vals, { pick: 'random' });
+    E.S.correlations = [E.advisorToCorrelation(c)];
+    expect(E.genDefaultCfg ? E.genDefaultCfg(null) : '').toMatch(/EnableJsForTransport=1|^$/);
+  });
+  test('an Advisor list: random stays random_select (the Rnd switch); rotate and nth become a list choice', () => {
+    const E = engine();
+    const c = { id: 'adv-0', value: '(array)', varName: 'imgArr', confidence: 'high', status: 'accepted', _selectAll: true, source: { entryIdx: 0, url: '/x', jsonPath: '$.items[*].img' }, usages: [] };
+    c._pick = 'random'; expect([E.advisorToCorrelation(c).extractorType, E.advisorToCorrelation(c).list]).toEqual(['random_select', undefined]);
+    c._pick = 'rotate'; expect([E.advisorToCorrelation(c).extractorType, E.advisorToCorrelation(c).list]).toEqual(['jsonpath', { pick: 'rotate' }]);
+    c._pick = 'nth'; c._nth = 2; expect(E.advisorToCorrelation(c).list).toEqual({ pick: 'nth', nth: 2 });
   });
 });

@@ -9,10 +9,14 @@
 //   list-all     a list of four items, a later request sends the 1st and 4th item's value: the Correlation Advisor's
 //                own list (SelectAll), Every value — the new values at the same places (BUG-150)
 //   list-random  the same list, One at random: each field sends one of the new values
+//   select-*     a page with two <select>s; a list made in the editor (advisorAddList) from the second one's options —
+//                boundaries <option value=" … " with every match and the range of that select — and a JSON list:
+//                select-recorded (the place recorded), select-rotate (the next each iteration, 2 iterations),
+//                json-nth (always the 3rd), json-random (one of them)
 'use strict';
 const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
 const { chromium } = require(path.resolve(__dirname, '../../../cdp-recorder/recorder/node_modules/playwright-core'));
-const [URL, OUT0] = process.argv.slice(2);
+const [URL, OUT0] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 if (!URL || !OUT0) { console.error('usage: node studioextract.js <studio page url> <out dir>'); process.exit(2); }
 const OUT = path.resolve(OUT0);
 fs.mkdirSync(OUT, { recursive: true });
@@ -21,7 +25,7 @@ function har(entries) {
   let t = Date.parse('2026-01-01T10:00:00Z');
   return { log: { version: '1.2', creator: { name: 'studioextract', version: '1' }, pages: [], entries: entries.map(([method, url, mime, body, req]) => ({
     startedDateTime: new Date(t += 1000).toISOString(), time: 50,
-    request: { method, url, httpVersion: 'HTTP/1.1', headers: [{ name: 'Accept', value: '*/*' }].concat(req ? [{ name: 'Content-Type', value: req.mime }] : []), queryString: [], cookies: [], headersSize: -1, bodySize: req ? req.text.length : 0, postData: req ? { mimeType: req.mime, text: req.text } : undefined },
+    request: { method, url, httpVersion: 'HTTP/1.1', headers: [{ name: 'Accept', value: '*/*' }].concat(req ? [{ name: 'Content-Type', value: req.mime }] : []), queryString: [], cookies: [], headersSize: -1, bodySize: req ? req.text.length : 0, postData: req ? Object.assign({ mimeType: req.mime, text: req.text }, /urlencoded/.test(req.mime) ? { params: [...new URLSearchParams(req.text)].map(([name, value]) => ({ name, value })) } : {}) : undefined },
     response: { status: 200, statusText: 'OK', httpVersion: 'HTTP/1.1', headers: [{ name: 'Content-Type', value: mime }], cookies: [], content: { size: body.length, mimeType: mime, text: body }, redirectURL: '', headersSize: -1, bodySize: body.length },
     cache: {}, timings: { send: 1, wait: 40, receive: 9 },
   })) } };
@@ -74,18 +78,58 @@ const listSetup = (pick) => {
   advisorApplyAndRegen();
   return c.varName + ' ' + (pick === 'random' ? 'one at random' : 'every value') + ', places ' + S.correlations.find((x) => x.name === c.varName).usages.map((u) => u.listIdx).join(',');
 };
+const SEL_OLD = { flights: ['F-1001;0800;ab12', 'F-1002;1130;cd34', 'F-1003;1545;ef56', 'F-1004;1920;gh78'], seats: ['S-7A1B2C', 'S-7A1B2D', 'S-7A1B2E', 'S-7A1B2F'] };
+const SEL_NEW = { flights: ['F-9001;0700;zz01', 'F-9002;1000;zz02', 'F-9003;1300;zz03', 'F-9004;1600;zz04'], seats: ['S-NEW001', 'S-NEW002', 'S-NEW003', 'S-NEW004'] };
+const FORM = 'application/x-www-form-urlencoded';
+const selHar = (v) => har([
+  ['GET', 'https://travel.example.com/flights', 'text/html; charset=utf-8', '<!doctype html><html><body><form action="/book" method="post">' +
+    '<select name="seatClass"><option value="economy">Economy</option><option value="business">Business</option><option value="first">First</option></select>' +
+    '<select name="outbound">' + v.flights.map((x) => '<option value="' + x + '">' + x.split(';')[1] + '</option>').join('') + '</select></form></body></html>'],
+  ['POST', 'https://travel.example.com/book', 'text/html', '<html>booked</html>', { mime: FORM, text: 'seatClass=economy&outbound=' + encodeURIComponent(v.flights[1]) }],
+  ['GET', 'https://travel.example.com/api/seats', JSONM, JSON.stringify({ seats: v.seats.map((id, i) => ({ id, row: 7, n: i })) })],
+  ['POST', 'https://travel.example.com/api/hold', JSONM, '{"ok":true}', { mime: JSONM, text: JSON.stringify({ seat: v.seats[2] }) }],
+]);
+// in the page: the list as the editor makes it (StudioEdit reads the values; advisorAddList; advisorApplyOne)
+const selSetup = (arg) => {
+  const S = PerfxStudio.state(), idx = (u) => S.entries1.findIndex((e) => e.url.endsWith(u));
+  (S.advisorCandidates || []).forEach((x) => { if (x.status === 'accepted') advisorAccept(x.id); });
+  let c;
+  if (arg.kind === 'select') {
+    const i = idx('/flights'), body = S.entries1[i].respBody, ext = { extractorType: 'boundary', extractorConfig: { lb: '<option value="', rb: '"', all: true } };
+    const vals = StudioEdit.boundAll(body, '<option value="', '"');
+    c = advisorAddList(i, ext, 'outbound', vals, { from: 4, to: 7, pick: arg.pick });
+  } else {
+    const i = idx('/api/seats'), ext = { extractorType: 'jsonpath', extractorConfig: { path: '$.seats[*].id', selectAll: true } };
+    c = advisorAddList(i, ext, 'seatId', StudioEdit.jsonAll(S.entries1[i].respBody, '$.seats[*].id'), { pick: arg.pick, nth: arg.nth });
+  }
+  advisorApplyOne(c);
+  S.correlations = S.correlations.filter((x) => x.name === c.varName);
+  regenerateFromAdvisor({ quiet: true });
+  return c.varName + ' ' + arg.pick + ', places ' + c.usages.map((u) => u.listIdx).join(',');
+};
+const form = (r) => { const o = {}; new URLSearchParams(r.body || '').forEach((v, k) => { o[k] = v; }); return o; };
 const CASES = {
   extractors: { ...EXTRACT, last: /\/use$/ },
   'list-all': { old: LIST_OLD, new: LIST_NEW, har: listHar, last: /\/wishlist$/, setup: listSetup, arg: 'all',
     check: (sent, NEW) => sent.primaryImage === NEW.img[0] && sent.altImage === NEW.img[3] ? '' : 'WRONG primaryImage=' + sent.primaryImage + ', altImage=' + sent.altImage },
   'list-random': { old: LIST_OLD, new: LIST_NEW, har: listHar, last: /\/wishlist$/, setup: listSetup, arg: 'random',
     check: (sent, NEW) => NEW.img.includes(sent.primaryImage) && NEW.img.includes(sent.altImage) ? '' : 'WRONG primaryImage=' + sent.primaryImage + ', altImage=' + sent.altImage },
+  'select-recorded': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/book$/, iters: 2, setup: selSetup, arg: { kind: 'select', pick: 'all' },
+    checkAll: (rs, NEW) => { const v = rs.map((r) => form(r).outbound); return v.length === 2 && v.every((x) => x === NEW.flights[1]) ? '' : 'WRONG ' + v.join(' / '); } },
+  'select-rotate': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/book$/, iters: 2, setup: selSetup, arg: { kind: 'select', pick: 'rotate' },
+    checkAll: (rs, NEW) => { const v = rs.map((r) => form(r).outbound); return v.join(' / ') === NEW.flights[0] + ' / ' + NEW.flights[1] ? '' : 'WRONG ' + v.join(' / '); } },
+  'json-nth': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/api\/hold$/, iters: 2, setup: selSetup, arg: { kind: 'json', pick: 'nth', nth: 3 },
+    checkAll: (rs, NEW) => { const v = rs.map((r) => JSON.parse(r.body || '{}').seat); return v.length === 2 && v.every((x) => x === NEW.seats[2]) ? '' : 'WRONG ' + v.join(' / '); } },
+  'json-random': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/api\/hold$/, iters: 2, setup: selSetup, arg: { kind: 'json', pick: 'random' },
+    checkAll: (rs, NEW) => { const v = rs.map((r) => JSON.parse(r.body || '{}').seat); return v.length === 2 && v.every((x) => NEW.seats.includes(x)) ? '' : 'WRONG ' + v.join(' / '); } },
 };
+const ONLY = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 
 (async () => {
   const b = await chromium.launch({ channel: 'msedge' });
   let bad = 0;
   for (const [name, C] of Object.entries(CASES)) {
+    if (ONLY && !name.includes(ONLY)) continue;
     const dir = path.join(OUT, name);
     fs.mkdirSync(dir, { recursive: true });
     const REC = path.join(dir, 'rec.har'), REPLAY = path.join(dir, 'replay.har');
@@ -113,11 +157,12 @@ const CASES = {
       fs.rmSync(sdir, { recursive: true, force: true }); fs.mkdirSync(sdir, { recursive: true });
       for (const [n, x] of Object.entries(files)) fs.writeFileSync(path.join(sdir, path.basename(n)), x);
       const out = path.join(dir, 'run-' + fmt);
-      execFileSync(process.execPath, [path.join(__dirname, runner), sdir, out, '--har=' + REPLAY, '--iters=1'], { stdio: 'ignore' });
+      execFileSync(process.execPath, [path.join(__dirname, runner), sdir, out, '--har=' + REPLAY, '--iters=' + (C.iters || 1)], { stdio: 'ignore' });
       const wire = fs.existsSync(path.join(out, 'wire.jsonl')) ? fs.readFileSync(path.join(out, 'wire.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
       const last = wire.find((r) => C.last.test(r.url));
       let sent = {}; try { sent = JSON.parse(last && last.body || '{}'); } catch (e) { sent = {}; }
-      const wrong = last ? C.check(sent, C.new) : 'the last request was not sent';
+      const lasts = wire.filter((r) => C.last.test(r.url));
+      const wrong = !last ? 'the last request was not sent' : C.checkAll ? C.checkAll(lasts, C.new) : C.check(sent, C.new);
       if (wrong) bad++;
       console.log(name + ' ' + engine + ' (' + what + '): ' + (wrong || 'the new values sent'));
     }

@@ -339,9 +339,38 @@ function devwebHeaderExtractorDecl(name, cfg) {
 // the Correlation Advisor) — DevWeb load.global.name[K-1] (an array), VuGen {name_K} (SelectAll). Any other correlation,
 // a list used one value at random (random_select: {name_selected} / a random pick) or a use with no place: the name.
 // (BUG-150)
+// A list chosen in the editor (corr.list): "nth" → always that element; "random" / "rotate" → name_selected, picked once
+// per iteration before its first use (_listPicker).
+function _isList(corr) {
+  var cfg = corr && corr.extractorConfig;
+  return !!cfg && ((corr.extractorType === "jsonpath" && cfg.selectAll) || (corr.extractorType === "boundary" && cfg.all));
+}
 function _listRef(corr, u, fmt) {
-  if (!u || !u.listIdx || corr.extractorType !== "jsonpath" || !corr.extractorConfig || !corr.extractorConfig.selectAll) return corr.name;
-  return fmt === "devweb" ? corr.name + "[" + (u.listIdx - 1) + "]" : corr.name + "_" + u.listIdx;
+  if (!_isList(corr)) return corr.name;
+  var L = corr.list || {};
+  if (L.pick === "random" || L.pick === "rotate") return corr.name + "_selected";
+  var k = L.pick === "nth" ? L.nth : u && u.listIdx;
+  if (!k) return corr.name;
+  return fmt === "devweb" ? corr.name + "[" + (k - 1) + "]" : corr.name + "_" + k;
+}
+// The pick of a list used one value at random or the next value each iteration, among its matches from..to (all when
+// not set; to is cut to the number found). DevWeb: after the request that gives the list; VuGen: a web_js_run before
+// its first use (VuGen keeps saved parameters from one iteration to the next, so {name_turn} counts the iterations).
+function _listPicker(corr, fmt) {
+  var L = corr.list || {}, n = corr.name, f = L.from || 1, to = L.to || 0;
+  if (L.pick !== "random" && L.pick !== "rotate") return "";
+  if (fmt === "devweb") {
+    var at = L.pick === "random" ? "Math.floor(Math.random() * (t - f + 1))" : "((load.config.runtime.iteration || 1) - 1) % (t - f + 1)";
+    return "    // " + n + ": " + (L.pick === "random" ? "one value at random" : "the next value each iteration") + (L.from ? " (values " + f + "-" + (to || "last") + ")" : "") + "\n" +
+      "    load.global." + n + "_selected = (function (a, f, t) { a = [].concat(a || []); t = Math.min(t || a.length, a.length); return t >= f ? a[f - 1 + " + at + "] : \"\"; })(load.global." + n + ", " + f + ", " + to + ");\n";
+  }
+  var idx = L.pick === "random" ? "f+Math.floor(Math.random()*(t-f+1))" : "f+(k%(t-f+1))";
+  return "\t/* " + n + ": " + (L.pick === "random" ? "one value at random" : "the next value each iteration") + (L.from ? " (values " + f + "-" + (to || "last") + ")" : "") + " */\n" +
+    "\tweb_js_run(\n" +
+    "\t\t\"Code=var n=parseInt(LR.getParam('" + n + "_count'),10)||0,f=" + f + ",t=" + (to || "n") + ",k=0;try{k=parseInt(LR.getParam('" + n + "_turn'),10)||0;}catch(x){k=0;}\"\n" +
+    "\t\t\"if(t>n){t=n;}LR.setParam('" + n + "_turn',String(k+1));LR.setParam('" + n + "_selected',t>=f?LR.getParam('" + n + "_'+(" + idx + ")):'');\",\n" +
+    "\t\t\"ResultParam=_list_pick_result\",\n" +
+    "\t\tLAST);\n\n";
 }
 
 function devwebExtractorDecl(corr) {
@@ -373,7 +402,7 @@ function devwebExtractorDecl(corr) {
       return null;
     case "boundary":
     default:
-      return `new load.BoundaryExtractor("${name}", {leftBoundary: "${escJs(cfg.lb)}", rightBoundary: "${escJs(cfg.rb)}", scope: load.ExtractorScope.Body})`;
+      return `new load.BoundaryExtractor("${name}", {leftBoundary: "${escJs(cfg.lb)}", rightBoundary: "${escJs(cfg.rb)}", ${cfg.all ? "occurrence: load.ExtractorOccurrenceType.All, " : ""}scope: load.ExtractorScope.Body})`;
   }
 }
 
@@ -949,7 +978,7 @@ function webHttpCorrCode(corr, indent) {
     case "boundary":
     default:
       return VugenCodegen.emitBoundary(name, {
-        lb: cfg.lb, rb: cfg.rb || '"', ord: 1,
+        lb: cfg.lb, rb: cfg.rb || '"', ord: cfg.all ? "ALL" : 1,
       }, t);
   }
 }
@@ -2554,6 +2583,7 @@ function genMainJS(entries, correlations) {
             }
           } else {
             o += `    load.global.${c.name} = ${varN}.extractors.${c.name};\n`;
+            if (_isList(c)) o += _listPicker(c, "devweb");
           }
         }
         o += "\n";
@@ -2961,6 +2991,12 @@ function genActionC(entries, correlations) {
         o += `\t// Note: VuGen auto-follows ${_fc} request(s) — web_reg_save_param scans all responses in chain (IgnoreRedirections=No default)\n`;
     }
     o += pageResComment(idx);
+    for (const c of correlations) {
+      if (!_isList(c) || !c.list || _randSelEmitted.has("list:" + c.name)) continue;
+      if (!(c.usages || []).some((u) => u.reqIdx === idx)) continue;
+      const _pk = _listPicker(c, "vugen");
+      if (_pk) { _randSelEmitted.add("list:" + c.name); o += _pk; }
+    }
 
     const n = name(e.url);
     const ct = e.ct || "text/html";
@@ -4079,7 +4115,8 @@ function genDefaultCfg(auth) {
   // DPoP proof generation, PKCE, array reconstruction, and JSON-in-JSON body escaping.
   const _needsJs = S.hasDpop || S.hasPkce ||
     (S.correlations && S.correlations.some(
-      c => c.extractorType === 'array_reconstruct' || c.extractorType === 'random_select'
+      c => c.extractorType === 'array_reconstruct' || c.extractorType === 'random_select' ||
+        (c.list && (c.list.pick === 'random' || c.list.pick === 'rotate'))   // a list's pick (_listPicker)
     ));
   if (_needsJs) overrides["EnableJsForTransport"] = "1";
   if (auth && ["kerberos", "negotiate", "ntlm"].includes(auth.type)) {

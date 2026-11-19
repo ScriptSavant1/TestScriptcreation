@@ -1488,15 +1488,19 @@ function advisorRestoreToScript(id, corr) {
 // A list read with every match (Script Studio's editor): "all" = every value as recorded, "random" = one value at random
 // each iteration (random_select). Kept on the candidate (_pick); when it is in the script its correlation changes too
 // (as the Rnd switch of Correlation details does) and the script is made again.
-function advisorSetListPick(id, pick) {
+// pick: "all" (every value as recorded), "random", "rotate" (the next value each iteration), "nth" (always value nth)
+function advisorSetListPick(id, pick, nth) {
   var c = _advFindById(id);
   if (!c || !c._selectAll || c._arrayReconstruct) return;
-  if (pick === "random") c._pick = "random"; else delete c._pick;
+  if (pick === "random" || pick === "rotate" || pick === "nth") c._pick = pick; else delete c._pick;
+  if (pick === "nth") c._nth = Math.max(1, parseInt(nth, 10) || 1); else delete c._nth;
   if (!c._applied) return;
+  // in the script: its correlation becomes what the candidate now gives (as the Rnd switch did for random)
+  var want = advisorToCorrelation(c);
   (S.correlations || []).forEach(function (x) {
     if (x.name !== c.varName) return;
-    if (x.extractorType === "random_select" && pick !== "random") x.extractorType = "jsonpath";
-    else if (x.extractorType === "jsonpath" && x.extractorConfig && x.extractorConfig.selectAll && pick === "random") x.extractorType = "random_select";
+    x.extractorType = want.extractorType;
+    if (want.list) x.list = want.list; else delete x.list;
   });
   regenerateFromAdvisor({ quiet: true });
 }

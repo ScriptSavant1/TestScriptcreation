@@ -89,6 +89,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Lists in Add manual correlation: a select's options, a JSON list, and how each is used
+
+- How to read it adds List: every value like the one chosen — the options of a `<select>` (only its own, when the page has others), the same field in every item of a JSON list (`$.seats[*].id`), the text of repeated tags. Selecting a whole section (options, part of a JSON array) makes the list of what is inside it. A single value that is one of a list says so, with a link to read them all.
+- Which value is sent back, for any list (also the Correlation Advisor's): Every value, as recorded; One at random each iteration; The next one each iteration (round again); Always the same one (a position).
+- The script: VuGen `Ord=ALL` / `SelectAll=Yes`, `{name_K}`, a picker (`web_js_run`, JavaScript engine switched on) before the first use; DevWeb `occurrence: load.ExtractorOccurrenceType.All` / every match, `load.global.name[K-1]`, the pick after the list is read (`load.config.runtime.iteration` for the next one). Proved on both engines with two iterations against a recording whose values changed (`studioextract.js` select-recorded, select-rotate, json-nth, json-random).
+- Values a page uses to shape itself (a form field's name, an HTML id, type, class …) are no longer marked as values sent back.
+
 #### Several values at once in Add manual correlation
 
 - Keep, pick another puts the value shown in Values to add (top of the editor) and starts the next one — from the same response or another request; kept values are marked green in the response, their names count as taken. Add all n to the script puts them all in, with one regeneration; Cancel with kept values asks first. The editor's buttons stay in view while it scrolls.

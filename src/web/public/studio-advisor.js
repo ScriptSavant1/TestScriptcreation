@@ -1210,7 +1210,7 @@ function advisorToCorrelation(candidate) {
   } else if (candidate.source && candidate.source.jsonPath) {
     // Auto-detected via HAR response scan: use the JSON path we traced. A list (every match) can be used one value at
     // random each iteration (_pick, chosen in Script Studio's editor): random_select, the same as the Rnd switch
-    extractorType = candidate._selectAll && candidate._pick === 'random' ? 'random_select' : 'jsonpath';
+    extractorType = candidate._selectAll && candidate._pick === 'random' && !candidate._edit ? 'random_select' : 'jsonpath';
     extractorConfig = candidate._selectAll
       ? { path: candidate.source.jsonPath, selectAll: true }
       : { path: candidate.source.jsonPath };
@@ -1220,7 +1220,10 @@ function advisorToCorrelation(candidate) {
     extractorConfig = { lb: candidate.value.slice(0, 8), rb: '' };
   }
 
-  return {
+  // A list (_selectAll) and how each place uses it (Script Studio's editor): _pick "rotate" (the next value each
+  // iteration), "nth" (always value _nth), or "random" for a list made in the editor (an Advisor list keeps
+  // random_select above); _range = the matches that belong to it (the options of one <select>). None of these: as before.
+  const out = {
     name: candidate.varName,
     sourceIdx: candidate._edit && candidate._edit.extractorType && candidate._edit.sourceIdx != null ? candidate._edit.sourceIdx
       : candidate.source ? candidate.source.entryIdx : (usages[0] ? Math.max(0, usages[0].reqIdx - 1) : 0),
@@ -1229,6 +1232,13 @@ function advisorToCorrelation(candidate) {
     usages,
     _fromAdvisor: true,
   };
+  const pick = candidate._selectAll && extractorType !== 'random_select' ? candidate._pick : null;
+  if (pick === 'rotate' || pick === 'nth' || pick === 'random') {
+    out.list = { pick };
+    if (pick === 'nth') out.list.nth = Math.max(1, parseInt(candidate._nth, 10) || 1);
+    if (candidate._range && candidate._range.from) { out.list.from = candidate._range.from; out.list.to = candidate._range.to; }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -1366,6 +1376,40 @@ function advisorSuggestMore(skipValues) {
   }
   S.advisorCandidates = (S.advisorCandidates || []).concat(added);
   return added.length;
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC: a list made in Script Studio's editor — a JSON path or boundaries that read every match.
+// values = what the extractor reads from the response, in order (every match); opts.from / opts.to = the matches that
+// belong to the list (1-based, e.g. the options of one <select> among others; default all); opts.pick = "random" |
+// "rotate" | "nth" (opts.nth), default every value as recorded. Each later request that sends one of the values back
+// is a use with that value and its place (tokenValue, listIdx — as for a list the Correlation Advisor merges, BUG-150).
+// The candidate is ticked (as advisorAddManual's); the caller puts it in the script (advisorApplyOne).
+// ---------------------------------------------------------------------------
+function advisorAddList(sourceEntryIdx, ext, varName, values, opts) {
+  opts = opts || {};
+  const all = (values || []).map(String);
+  const from = Math.max(1, opts.from || 1), to = Math.min(all.length, opts.to || all.length);
+  const usages = [], seen = new Set();
+  for (let pos = from; pos <= to; pos++) {
+    const v = all[pos - 1];
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    _advFindUsages(S.entries1 || [], sourceEntryIdx, v).forEach(u => usages.push(Object.assign(u, { tokenValue: v, listIdx: pos })));
+  }
+  const cfg = ext.extractorConfig || {};
+  const c = advisorAddManual(sourceEntryIdx, ext.extractorType === 'jsonpath' ? 'jsonpath' : 'boundary', cfg.path || cfg.lb || '', varName, all[from - 1] || '');
+  const n = Math.max(0, to - from + 1);
+  c.usages = usages;
+  c.value = '(list — ' + n + ' values)';
+  c.preview = all.slice(from - 1, Math.min(to, from + 2)).join(', ') + (n > 3 ? ', …' : '');
+  c.valueType = 'list';
+  c._selectAll = true;
+  c._edit = { extractorType: ext.extractorType, extractorConfig: cfg, sourceIdx: sourceEntryIdx };
+  if (opts.pick === 'random' || opts.pick === 'rotate' || opts.pick === 'nth') c._pick = opts.pick;
+  if (opts.pick === 'nth') c._nth = Math.max(1, parseInt(opts.nth, 10) || 1);
+  if (from > 1 || to < all.length) c._range = { from, to };
+  return c;
 }
 
 function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, actualValue) {

@@ -115,8 +115,8 @@ describe('valuesOf / sentIndex / laterValues', () => {
     const r = rec();
     expect(E.valuesOf(r[0]).map((v) => [v.value, v.where, v.kind])).toEqual([
       ['tok-ABCDEF123', '$.access', 'json'], ['4711', '$.n', 'json'], ['shoes', '$.echo', 'json'], ['csrf-998877', 'x-csrf', 'header']]);
-    // a page: value="…" first; other attributes are listed too (only those a later request sends back are marked)
-    expect(E.valuesOf(r[3]).map((v) => v.value)).toEqual(['VS%2Fabc+12', 'hidden']);
+    // a page: value="…"; attributes that shape the page (type, name …) are not values
+    expect(E.valuesOf(r[3]).map((v) => v.value)).toEqual(['VS%2Fabc+12']);
     expect(E.valuesOf(ent({ respBody: JSON.stringify({ a: { 'b-c': ['x1y2z3'] } }) }))[0].where).toBe("$.a['b-c'][0]");
   });
   test('sentIndex.later: sent by a request AFTER the response (address, headers, body, URL-decoded); not the Cookie header', () => {
