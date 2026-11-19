@@ -102,6 +102,9 @@ function measure() {
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1200); }
     await run('Studio results', 'studio');
     await f.click('#ss-steps [data-step="2"]'); await p.waitForTimeout(300); await run('Studio advisor', 'studio');
+    // the correlation editor (one value at a time)
+    await f.evaluate(() => { const l = SSC.list(); if (l[0]) SSE.open(l[0]); }); await p.waitForTimeout(300); await run('Studio editor', 'studio');
+    await f.evaluate(() => SSE.close());
     await f.click('#ss-steps [data-step="3"]'); await p.waitForTimeout(300);
     // leaving Correlate with the High values ticked asks first: Not now keeps them ticked
     if (await f.isVisible('#ss-ask')) { await f.click('#ss-ask-no'); await p.waitForTimeout(200); } await run('Studio test data', 'studio');

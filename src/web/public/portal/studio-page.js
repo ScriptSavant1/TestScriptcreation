@@ -80,7 +80,7 @@
   window.markLoaded = function (slot) {
     var r = engineMarkLoaded.apply(this, arguments);
     if (slot === 1 && window.SSW) SSW.newFile();
-    if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); }   // a new recording starts at step 1, with the default name
+    if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); }   // a new recording starts at step 1, with the default name
     setTimeout(function () { if (S.har1) window.analyze(); }, 0);
     return r;
   };
@@ -121,6 +121,7 @@
     badges();
     if (window.SSW) SSW.render();
     if (window.SSC) SSC.render();
+    if (window.SSE && SSE.isOpen()) SSE.redraw();
   }
   // the engine draws several parts one after another — the page follows once
   var queued = false;

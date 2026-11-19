@@ -89,6 +89,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### The correlation editor (Script Studio in steps, part 3)
+
+- Review on a row of the Correlate table (or a click on it) opens one value at a time, with previous / next: why it was found, the response it is read from (requests that have the value are marked), how it is read (Auto = the Correlation Advisor's choice, JSON path, Boundaries, Header), tested as you type, the name and the code the script gets; on the right the response with the value marked (select or double-click a value to read it from there) and every place it is sent back. Accept & next ticks it. A value no later request sends back cannot be accepted; one already in the script is shown, not changed; Undo my changes returns to the Advisor's choice. A Medium value with no known source now asks for the response that has it instead of an 8-character boundary (BUG-144, in the editor). Regular expressions and XPath are not offered: the script generators have no extractor for them. Without a change in the editor, the scripts are the same.
+- A new recording starts the Correlate table's filters again (To review).
+
 #### The Correlate table (Script Studio in steps, part 2)
 
 - Step 2 shows the Correlation Advisor's findings as one table: tick, name (editable), what it is, the value and its length, comes from, sent back in, confidence with the reason. High values come ticked when the step opens. Search, type and confidence filters; To review / In the script / Skipped / All; Select all high, Clear selection, Skip / Put back, Add manual correlation, and Can't find a value? (Find a value, Paste & Detect, the second recording). Nothing reaches the script before Add n to the script; leaving the step with ticked values asks (Not now keeps them). The engine's cards stay one click away (Cards), with the list options. The same engine calls as the cards: the scripts are the same.

@@ -16,7 +16,7 @@
   var KIND = { jwt: "Sign-in token (JWT)", uuid: "Id (UUID)", hex: "Token (hex)", token: "Token", array: "List of values", json: "JSON value", xml: "XML value", html: "HTML value", text: "Text", unknown: "Value" };
   function kind(c) { return KIND[c.valueType] || (c.valueType ? String(c.valueType).charAt(0).toUpperCase() + String(c.valueType).slice(1) : "Value"); }
   function tag(c) {
-    return c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : c._arrayReconstruct ? "Array rebuild" : c._selectAll ? "List" : "";
+    return c._edit && !c._applied ? "Changed by you" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : c._arrayReconstruct ? "Array rebuild" : c._selectAll ? "List" : "";
   }
   function all() { return S.advisorCandidates || []; }
   function ticked() { return all().filter(function (c) { return c.status === "accepted" && !c._applied; }); }
@@ -60,6 +60,7 @@
     var act = c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span>'
       : c.status === "skipped" ? '<button type="button" class="ds-btn ds-btn-xs" data-skip="' + esc(c.id) + '" title="Back to the list to review">Put back</button>'
       : '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-skip="' + esc(c.id) + '" title="Not a value to correlate: hide it from the list">Skip</button>';
+    act = '<button type="button" class="ds-btn ds-btn-xs" data-edit="' + esc(c.id) + '" title="Open it: how it is read, the response, every place it is sent back">' + (c._applied ? "Open" : "Review") + "</button>" + act;
     if (c._arrayReconstruct || c._selectAll) act += '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-opts="' + esc(c.id) + '" title="The list options (rebuild, every value or one at random): in the Cards view">Options</button>';
     return '<tr class="' + cls + '" data-id="' + esc(c.id) + '">' +
       '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-tick' + (c.status === "accepted" || c._applied ? " checked" : "") + (c._applied ? " disabled" : "") + ' aria-label="Add ' + esc(c.varName) + ' to the script" /></td>' +
@@ -124,11 +125,14 @@
   body.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.hasAttribute("data-name")) e.target.blur(); });
   body.addEventListener("focusout", function (e) { if (e.target.hasAttribute && e.target.hasAttribute("data-name")) setTimeout(render, 0); });
   body.addEventListener("click", function (e) {
-    var b = e.target.closest("[data-skip]");
+    var b = e.target.closest("[data-edit]");
+    if (b) { if (window.SSE) SSE.open(b.getAttribute("data-edit")); return; }
+    b = e.target.closest("[data-skip]");
     if (b) { advisorSkip(b.getAttribute("data-skip")); return; }
     b = e.target.closest("[data-uses]");
     if (b) { advisorShowUses(b.getAttribute("data-uses")); return; }
     b = e.target.closest("[data-opts]");
+    if (!b && !e.target.closest("button, input, a, select")) { var tr = e.target.closest(".ss-cr-row"); if (tr && window.SSE && !window.getSelection().toString()) SSE.open(tr.getAttribute("data-id")); return; }
     if (b) { view("cards"); var card = document.getElementById("advc-" + b.getAttribute("data-opts")); if (card) { card.scrollIntoView({ block: "center" }); card.classList.add("ss-flash"); setTimeout(function () { card.classList.remove("ss-flash"); }, 1600); } }
   });
   $("#ss-cr-q").addEventListener("input", function () { F.q = this.value.trim(); render(); });
@@ -199,5 +203,13 @@
     return true;
   };
 
-  window.SSC = { render: render, view: view };
+  // the values the table shows now, in its order (the editor's previous / next)
+  function list() { return all().filter(shown).map(function (c) { return c.id; }); }
+  // a new recording: the filters start again (To review, no search)
+  function reset() {
+    F = { q: "", type: "", conf: "", show: "review" };
+    $("#ss-cr-q").value = ""; $("#ss-cr-conf").value = ""; $("#ss-cr-type").value = "";
+    $$("#ss-cr-show [data-show]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-show") === "review")); });
+  }
+  window.SSC = { render: render, view: view, list: list, reset: reset };
 })();

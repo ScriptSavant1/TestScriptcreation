@@ -20,7 +20,7 @@ describe('Script Studio redesign — same scripts as the classic page', () => {
   test('Studio.html loads the classic scripts unchanged, in the same order, then its layout script', () => {
     const engine = scripts(classic);
     expect(scripts(page).slice(0, engine.length)).toEqual(engine);
-    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js', 'portal/studio-corr.js']);
+    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js', 'portal/studio-corr.js', 'portal/studio-editor.js']);
   });
 
   test('the classic stylesheet is still loaded (it styles what the scripts draw), then the new one', () => {
@@ -116,7 +116,7 @@ describe('Script Studio — the four steps', () => {
     ['ss-tab-script', 'ss-tab-corr', 'ss-tab-data', 'ss-t-script', 'ss-t-corr', 'ss-t-data'].forEach((id) => expect(page).toContain('id="' + id + '"'));
     expect(js).toContain('var TAB_STEP = { script: 1, corr: 2, data: 3 }');
     expect(js).toContain('function tab(name) { step(TAB_STEP[name] || 1); }');
-    expect(js).toContain('if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); }');
+    expect(js).toContain('if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); }');
     // step 1 settings: the script name and the think time
     ['id="ss-setbar"', 'id="ss-sc-name"', 'id="ss-think"', 'id="ss-think-sec"'].forEach((id) => expect(page).toContain(id));
   });

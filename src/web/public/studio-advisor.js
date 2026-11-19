@@ -1144,7 +1144,11 @@ function advisorToCorrelation(candidate) {
   // Determine extractor type and config
   let extractorType, extractorConfig;
   const exact = candidate._explorer || candidate._paste;
-  if (candidate._manual && exact && exact.extractorType) {
+  if (candidate._edit && candidate._edit.extractorType) {
+    // Chosen in Script Studio's correlation editor (how to read it, and from which response): the user's choice wins
+    extractorType = candidate._edit.extractorType;
+    extractorConfig = candidate._edit.extractorConfig;
+  } else if (candidate._manual && exact && exact.extractorType) {
     // Handed over by the HAR Explorer, or built by Paste & Detect: the exact extractor (same types and config as Studio's own)
     extractorType = exact.extractorType;
     extractorConfig = exact.extractorConfig;
@@ -1181,7 +1185,8 @@ function advisorToCorrelation(candidate) {
 
   return {
     name: candidate.varName,
-    sourceIdx: candidate.source ? candidate.source.entryIdx : (usages[0] ? Math.max(0, usages[0].reqIdx - 1) : 0),
+    sourceIdx: candidate._edit && candidate._edit.extractorType && candidate._edit.sourceIdx != null ? candidate._edit.sourceIdx
+      : candidate.source ? candidate.source.entryIdx : (usages[0] ? Math.max(0, usages[0].reqIdx - 1) : 0),
     extractorType,
     extractorConfig,
     usages,
