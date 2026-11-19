@@ -445,8 +445,12 @@ function renderCorrelations() {
               : c.extractorType === "html"
                 ? "html"
                 : "boundary";
+        // a list (every match) says how it is used: List (as recorded), Random, Next (each iteration), No. N
+        const _lst = !!c.extractorConfig && c.extractorType !== "array_reconstruct" && c.extractorConfig && (c.extractorConfig.selectAll || c.extractorConfig.all);
         const typeLabel =
-          c.extractorType === "jsonpath"
+          _lst
+            ? (c.list && c.list.pick === "random" ? "Random" : c.list && c.list.pick === "rotate" ? "Next" : c.list && c.list.pick === "nth" ? "No. " + c.list.nth : "List")
+            : c.extractorType === "jsonpath"
             ? "JSON"
             : _corrIsRnd(c)
               ? "RandSel"
@@ -1454,6 +1458,7 @@ function advisorRemoveFromScript(id) {
     return x.name === want.name && x.extractorType === want.extractorType && JSON.stringify(x.extractorConfig) === JSON.stringify(want.extractorConfig);
   });
   var gone = i >= 0 ? S.correlations.splice(i, 1)[0] : null;
+  c._outAt = i;   // its place, so Undo (advisorRestoreToScript) puts it back where it was: the extractors keep their order
   if (gone && gone.extractorType === "array_reconstruct") {
     S.correlations.forEach(function (x) { if (x._suppressedBy === gone.name) { delete x._suppressed; delete x._suppressedBy; } });
   }
@@ -1468,7 +1473,10 @@ function advisorRemoveFromScript(id) {
 function advisorRestoreToScript(id, corr) {
   var c = _advFindById(id);
   if (!c || c._applied || !corr) return;
-  S.correlations = (S.correlations || []).concat([corr]);
+  var at = c._outAt;
+  delete c._outAt;
+  if (at >= 0 && at <= (S.correlations || []).length) S.correlations.splice(at, 0, corr);
+  else S.correlations = (S.correlations || []).concat([corr]);
   if (corr.extractorType === "array_reconstruct" && corr.extractorConfig && corr.extractorConfig.targetArrayKey) {
     var pat = corr.extractorConfig.targetArrayKey + "[";
     S.correlations.forEach(function (x) {

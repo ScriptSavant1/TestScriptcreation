@@ -543,34 +543,33 @@ function _advHiddenFieldScan(entries, knownValues) {
 
 // ---------------------------------------------------------------------------
 // PHASE 2.7: lists a page offers in a <select> (flights, slots, accounts) whose options look generated and that a
-// later request sends one of back. One High candidate per <select>: boundaries <option value=" … " with every match
-// (VuGen Ord=ALL, DevWeb occurrence All), the range of this select's options among every match on the page (_range),
+// later request sends one of back. One High candidate per <select>: a regular expression for the value of every
+// <option …> (any attributes before it; VuGen Ordinal=ALL, DevWeb occurrence All), the range of this select's options
+// among every match on the page (_range),
 // each use with the value it sends and its place (tokenValue, listIdx — as BUG-150's lists). Used every value as
-// recorded unless the user chooses otherwise (_pick). Options written another way (<option selected value=…, single
-// quotes) are left to Add manual correlation. Single candidates for one of its values from that page are dropped.
+// recorded unless the user chooses otherwise (_pick). Options without value="…" (single quotes, no value) are left to
+// Add manual correlation. Single candidates for one of its values from that page are dropped.
 // ---------------------------------------------------------------------------
 function _advSelectScan(entries, existingCorrelations) {
   const out = [];
-  const LB = '<option value="';
+  // the value of every <option …> on the page, whatever comes before it in the tag (selected="selected" …)
+  const PATTERN = '<option\\b[^>]*?\\svalue="([^"]*)"';
   const generated = (v) => !/\s/.test(v) && v.length >= 4 && !/^\d{1,6}$/.test(v) && (/\d/.test(v) || v.length >= 20);
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     if (e.filtered || e.isMarker) continue;
     const body = e.respBody || '';
-    if (body.indexOf('<select') < 0 || body.indexOf(LB) < 0) continue;
-    // every <option value=" on the page, in order (the places the extractor gives)
-    const all = [];
-    for (let j = body.indexOf(LB); j !== -1; j = body.indexOf(LB, j + 1)) {
-      const k = body.indexOf('"', j + LB.length);
-      if (k === -1) break;
-      all.push({ at: j, v: body.slice(j + LB.length, k) });
-    }
+    if (body.indexOf('<select') < 0 || body.indexOf('<option') < 0) continue;
+    // every match on the page, in order (the places the extractor gives)
+    const all = [], ore = new RegExp(PATTERN, 'g');
+    let om;
+    while ((om = ore.exec(body))) all.push({ at: om.index, v: om[1] });
     const re = /<select\b([^>]*)>([\s\S]*?)<\/select\s*>/gi;
     let m;
     while ((m = re.exec(body))) {
       const start = m.index, end = m.index + m[0].length;
       const tags = m[2].match(/<option\b[^>]*>/gi) || [];
-      if (tags.length < 2 || tags.some(t => t.indexOf(LB) !== 0)) continue;
+      if (tags.length < 2 || tags.some(t => !/\svalue="/.test(t))) continue;
       const mine = all.map((x, n) => ({ v: x.v, pos: n + 1, at: x.at })).filter(x => x.at > start && x.at < end);
       if (mine.length !== tags.length) continue;
       const values = mine.map(x => x.v);
@@ -595,7 +594,7 @@ function _advSelectScan(entries, existingCorrelations) {
         status: 'pending',
         _selectAll: true,
         _select: nm || '',
-        _extract: { extractorType: 'boundary', extractorConfig: { lb: LB, rb: '"', all: true } },
+        _extract: { extractorType: 'regexp', extractorConfig: { pattern: PATTERN, all: true } },
       };
       if (from > 1 || to < all.length) c._range = { from, to };
       out.push(c);

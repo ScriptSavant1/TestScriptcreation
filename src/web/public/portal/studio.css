@@ -1143,3 +1143,14 @@ body.ss-step-wide #ss-p-right { background: transparent; border-color: transpare
 .ss-ed-nth.on > button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .ss-ed-nth.on .ss-ed-nthl { border: 1px solid var(--ds-accent); border-top: 0; border-radius: 0 0 var(--ds-r-tile) var(--ds-r-tile); background: var(--ds-accent-soft); }
 .ss-ed-nth:not(.on) .ss-ed-nthl { display: none; }
+.ss-td-corr { display: flex; gap: 6px; align-items: flex-start; margin-top: 4px; padding: 4px 8px; border-radius: 8px; background: var(--ds-info-soft); color: var(--ds-text); font-size: var(--ds-fs-xs); }
+.ss-td-corr svg.i { flex: none; color: var(--ds-info); margin-top: 1px; }
+/* the Correlate filters with their counts; rows just added; Correlation details items open the editor */
+#ss-cr-show .ss-cnt { display: inline-block; min-width: 18px; margin-left: 4px; padding: 0 5px; border-radius: var(--ds-r-pill); background: var(--ds-surface-2); color: var(--ds-text-2); font-size: var(--ds-fs-xs); font-weight: 600; text-align: center; }
+#ss-cr-show [aria-pressed="true"] .ss-cnt { background: var(--ds-accent); color: #fff; }
+@keyframes ss-new { from { background: var(--ds-ok-soft); } to { background: transparent; } }
+.ss-cr-row.is-new td { animation: ss-new 2.4s var(--ds-ease) 1; }
+#corr-list .corr-item { position: relative; cursor: pointer; border-radius: 8px; transition: background .15s var(--ds-ease); }
+#corr-list .corr-item:hover { background: var(--br-sel); }
+#corr-list .corr-item::after { content: "Edit"; position: absolute; right: 8px; top: 10px; padding: 2px 10px; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-accent-line); background: var(--ds-accent-soft); color: var(--ds-accent-text); font-size: var(--ds-fs-xs); font-weight: 600; opacity: 0; transition: opacity .15s var(--ds-ease); }
+#corr-list .corr-item:hover::after { opacity: 1; }

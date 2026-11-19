@@ -146,3 +146,20 @@ describe('advisorSetListPick and _pick', () => {
     expect([a._pick, v._pick]).toEqual([undefined, undefined]);
   });
 });
+
+describe('Take out and Undo keep the place', () => {
+  test('a correlation taken out comes back where it was (the extractors keep their order)', () => {
+    const E = studio();
+    Object.assign(E.S, { entries1: recording(), advisorCandidates: [], correlations: [] });
+    const a = E.advisorAddManual(0, 'jsonpath', '$.token', 'token', 'tok-ABCDEFGHIJKL');
+    const b = E.advisorAddManual(0, 'jsonpath', '$.cart', 'cart', '4711');
+    E.advisorApplyAndRegen();
+    E.S.correlations.push({ name: 'later', extractorType: 'jsonpath', extractorConfig: { path: '$.l' }, usages: [] });
+    const before = E.S.correlations.map((c) => c.name);
+    const gone = E.advisorRemoveFromScript(a.id);
+    E.advisorRestoreToScript(a.id, gone);
+    expect(E.S.correlations.map((c) => c.name)).toEqual(before);
+    expect(a._outAt).toBeUndefined();
+    expect(b._applied).toBe(true);
+  });
+});

@@ -114,9 +114,14 @@ describe('lists made in the editor', () => {
   const E2 = require('../../src/web/public/portal/studio-editor.js');
   const page = '<select name="seatClass"><option value="economy">E</option><option value="business">B</option></select>' +
     '<select name="outbound"><option value="F-1;a">1</option><option value="F-2;b">2</option><option value="F-3;c">3</option></select>';
-  test('listFrom: a <select> among others reads every <option value=", the list is its own options', () => {
+  test('listFrom: a <select> among others reads the value of every <option …> (a regex, any attributes first), the list is its own options', () => {
     const r = E2.listFrom(page, page.indexOf('F-2'), 'F-2;b', null);
-    expect([r.ext, r.from, r.to, r.name, r.values]).toEqual([{ extractorType: 'boundary', extractorConfig: { lb: '<option value="', rb: '"', all: true } }, 3, 5, 'outboundOptions', ['economy', 'business', 'F-1;a', 'F-2;b', 'F-3;c']]);
+    expect([r.ext, r.from, r.to, r.name, r.values]).toEqual([{ extractorType: 'regexp', extractorConfig: { pattern: '<option\\b[^>]*?\\svalue="([^"]*)"', all: true } }, 3, 5, 'outboundOptions', ['economy', 'business', 'F-1;a', 'F-2;b', 'F-3;c']]);
+    // the first option selected="selected" (as many sites write it) is one of them
+    const sel = '<select name="depart" >\n<option selected="selected" value="Denver">D</option>\n<option value="London">L</option>\n<option value="Paris">P</option>\n</select>';
+    const s = E2.listFrom(sel, sel.indexOf('London'), 'London', null);
+    expect([s.from, s.to, s.values, s.name]).toEqual([1, 3, ['Denver', 'London', 'Paris'], 'departOptions']);
+    expect(E2.listFrom(sel, sel.indexOf('Denver'), 'Denver', null).values).toEqual(['Denver', 'London', 'Paris']);
   });
   test('listFrom: JSON — the last index as [*], a generic field named after its list; a section selected limits the range', () => {
     const j = JSON.stringify({ seats: [{ id: 'S-1' }, { id: 'S-2' }, { id: 'S-3' }, { id: 'S-4' }] });
@@ -206,14 +211,16 @@ describe('_advSelectScan', () => {
   test('a select with generated options, one sent back: one High list — every <option value=", its own range, the place used', () => {
     const E = engine();
     const [c] = E._advSelectScan(rec(pageOf(opts), flights[1]), []);
-    expect([c.varName, c.confidence, c._select, c._range, c._extract]).toEqual(['outboundOptions', 'high', 'outbound', { from: 3, to: 5 }, { extractorType: 'boundary', extractorConfig: { lb: '<option value="', rb: '"', all: true } }]);
+    expect([c.varName, c.confidence, c._select, c._range, c._extract]).toEqual(['outboundOptions', 'high', 'outbound', { from: 3, to: 5 }, { extractorType: 'regexp', extractorConfig: { pattern: '<option\\b[^>]*?\\svalue="([^"]*)"', all: true } }]);
     expect(c.usages.map((u) => [u.entryIdx, u.tokenValue, u.listIdx, u.location])).toEqual([[1, flights[1], 4, 'body_form']]);
-    expect(E.advisorToCorrelation(c)).toMatchObject({ extractorType: 'boundary', extractorConfig: { all: true } });
+    expect(E.advisorToCorrelation(c)).toMatchObject({ extractorType: 'regexp', extractorConfig: { all: true } });
   });
-  test('not a list: plain words, options written another way, nothing sent back, already correlated', () => {
+  test('not a list: plain words, options without value="…", nothing sent back, already correlated; <option selected …> is read', () => {
     const E = engine();
     expect(E._advSelectScan(rec(pageOf(opts), 'none-sent'), [])).toEqual([]);
-    expect(E._advSelectScan(rec(pageOf(flights.map((f) => '<option selected value="' + f + '">x</option>').join('')), flights[1]), [])).toEqual([]);
+    expect(E._advSelectScan(rec(pageOf(flights.map((f) => "<option value='" + f + "'>x</option>").join('')), flights[1]), [])).toEqual([]);
+    const [sel] = E._advSelectScan(rec(pageOf(flights.map((f, n) => '<option ' + (n ? '' : 'selected="selected" ') + 'value="' + f + '">x</option>').join('')), flights[1]), []);
+    expect([sel._range, sel.usages.map((u) => u.listIdx)]).toEqual([{ from: 3, to: 5 }, [4]]);
     expect(E._advSelectScan(rec(pageOf(opts), flights[1]), [{ name: 'x', usages: [{ tokenValue: flights[0] }] }])).toEqual([]);
     const words = pageOf('<option value="red">R</option><option value="blue">B</option>');
     expect(E._advSelectScan(rec(words, 'blue'), [])).toEqual([]);
@@ -225,5 +232,15 @@ describe('_advSelectScan', () => {
     const lists = E.S.advisorCandidates.filter((c) => c._select === 'outbound');
     expect(lists).toHaveLength(1);
     expect(E.S.advisorCandidates.filter((c) => c.value === flights[1])).toEqual([]);
+  });
+});
+
+describe('a list read by a regular expression (the options of a select written any way)', () => {
+  test('VuGen Ordinal=ALL, DevWeb occurrence All; the uses go by place', () => {
+    const E = engine();
+    const corr = { name: 'departOptions', sourceIdx: 0, extractorType: 'regexp', extractorConfig: { pattern: '<option\b[^>]*?\svalue="([^"]*)"', all: true }, usages: [] };
+    expect(E.devwebExtractorDecl(corr)).toContain('occurrence: load.ExtractorOccurrenceType.All');
+    expect(E._listRef(corr, { listIdx: 3 }, 'vugen')).toBe('departOptions_3');
+    expect(E._listRef(Object.assign({}, corr, { list: { pick: 'random' } }), { listIdx: 3 }, 'devweb')).toBe('departOptions_selected');
   });
 });

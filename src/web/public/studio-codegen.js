@@ -343,7 +343,7 @@ function devwebHeaderExtractorDecl(name, cfg) {
 // per iteration before its first use (_listPicker).
 function _isList(corr) {
   var cfg = corr && corr.extractorConfig;
-  return !!cfg && ((corr.extractorType === "jsonpath" && cfg.selectAll) || (corr.extractorType === "boundary" && cfg.all));
+  return !!cfg && ((corr.extractorType === "jsonpath" && cfg.selectAll) || ((corr.extractorType === "boundary" || corr.extractorType === "regexp") && cfg.all));
 }
 function _listRef(corr, u, fmt) {
   if (!_isList(corr)) return corr.name;
@@ -388,7 +388,8 @@ function devwebExtractorDecl(corr) {
       return devwebHeaderExtractorDecl(name, cfg);
     case "regexp":
       // Chosen in the correlation editor: the first ( ) group of the expression is the value
-      return `new load.RegexpExtractor("${name}", {expression: "${escJs(cfg.pattern)}", flags: ""})`;
+      // (all: every match, a list — the options of a <select> written any way)
+      return `new load.RegexpExtractor("${name}", {expression: "${escJs(cfg.pattern)}", flags: ""${cfg.all ? ", occurrence: load.ExtractorOccurrenceType.All" : ""}})`;
     case "xpath":
       // Plain element names: DevWeb matches them in any namespace (VuGen gets local-name() steps)
       return `new load.XpathExtractor("${name}", "${escJs(cfg.path)}")`;
@@ -961,7 +962,8 @@ function webHttpCorrCode(corr, indent) {
 
     case "regexp":
       // Chosen in the correlation editor: the first ( ) group of the expression is the value
-      return VugenCodegen.emitRegexp(name, { pattern: cfg.pattern, group: 1 }, t);
+      // (all: every match — {name_1} … {name_N} and {name_count}, as Ord=ALL)
+      return VugenCodegen.emitRegexp(name, { pattern: cfg.pattern, group: 1, ordinal: cfg.all ? "ALL" : 1 }, t);
 
     case "xpath":
       return VugenCodegen.emitXpath(name, VugenCodegen.vugenXpath(cfg.path), t);

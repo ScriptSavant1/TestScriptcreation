@@ -147,6 +147,11 @@ describe('Script Studio — Add manual correlation', () => {
     ['function keep()', 'tray.push(k)', 'var all = tray.slice(), k = current(); if (k) all.push(k);', '"Add all " + n + " to the script"', 'Leave without adding?'].forEach((f) => expect(ed).toContain(f));
     expect((ed.match(/regenerateFromAdvisor\(\{ quiet: true \}\)/g) || []).length).toBeGreaterThan(0);
   });
+  test('Edit a correlation in the script: taken out while it changes, saved back or put back as it was', () => {
+    ['function startEdit(c)', 'advisorRemoveFromScript(c.id)', 'advisorApplyOne(c)', 'advisorRestoreToScript(c.id, gone)', 'Save to the script', '"Discard"'].forEach((f) => expect(ed).toContain(f));
+    expect(ed).toContain('closest("#corr-list .corr-item")');   // Correlation details: a click opens the editor
+    expect(read('portal/studio-corr.js')).toContain('show: showOnly');
+  });
   test('the add screen uses the engine functions', () => {
     ['advisorAddManual(', 'advisorApplyOne(made)', '_advFindUsages(', 'regenerateFromAdvisor({ quiet: true })', 'made._edit = {'].forEach((f) => expect(ed).toContain(f));
     expect(ed).not.toMatch(/S\.correlations\s*=|S\.advisorCandidates\s*=/);

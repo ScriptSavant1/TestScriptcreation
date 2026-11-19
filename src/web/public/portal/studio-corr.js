@@ -128,9 +128,19 @@
     if (sel.innerHTML !== want) { sel.innerHTML = want; sel.value = types.indexOf(F.type) !== -1 ? F.type : ""; F.type = sel.value; }
     names();
     var rows = cs.filter(shown);
+    // how many each filter holds (manual correlations are under In the script once added)
+    var cnt = { review: cs.filter(function (c) { return !c._applied && c.status !== "skipped"; }).length, script: cs.filter(function (c) { return c._applied; }).length,
+      skipped: cs.filter(function (c) { return c.status === "skipped" && !c._applied; }).length, all: cs.length };
+    $$("#ss-cr-show [data-show]").forEach(function (x) {
+      var k = x.getAttribute("data-show"), lab = x.getAttribute("data-label") || x.textContent.trim();
+      x.setAttribute("data-label", lab);
+      var want = esc(lab) + ' <span class="ss-cnt">' + cnt[k] + "</span>";
+      if (x.innerHTML !== want) x.innerHTML = want;
+    });
     var body = $("#ss-cr-body"), focus = document.activeElement, fid = focus && focus.closest && focus.closest(".ss-cr-row") && focus.closest(".ss-cr-row").getAttribute("data-id"), fname = focus && focus.hasAttribute && focus.hasAttribute("data-name");
     if (fname && body.contains(focus)) { foot(); return; }   // never redraw under the user's typing
     body.innerHTML = rowsHtml(rows);
+    if (fresh) { fresh.forEach(function (id) { var r = body.querySelector('[data-id="' + id + '"]'); if (r) r.classList.add("is-new"); }); fresh = null; }
     $$("[data-mixed]", body).forEach(function (x) { x.indeterminate = true; });
     if (fid) { var r = body.querySelector('[data-id="' + fid + '"] [data-tick]'); if (r) r.focus(); }
     var empty = $("#ss-cr-empty");
@@ -317,5 +327,12 @@
     $("#ss-cr-q").value = ""; $("#ss-cr-conf").value = ""; $("#ss-cr-type").value = "";
     $$("#ss-cr-show [data-show]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-show") === "review")); });
   }
-  window.SSC = { render: render, view: view, list: list, reset: reset };
+  // show one filter (after Add manual correlation: In the script), the rows just added marked for a moment
+  var fresh = null;
+  function showOnly(k, ids) {
+    F.show = k; fresh = ids || null;
+    $$("#ss-cr-show [data-show]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-show") === k)); });
+    render();
+  }
+  window.SSC = { render: render, view: view, list: list, reset: reset, show: showOnly };
 })();

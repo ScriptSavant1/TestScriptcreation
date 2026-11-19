@@ -89,6 +89,14 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Select options written any way, editing a correlation in the script, manual correlations in the table
+
+- A <select> whose options are written with other attributes first (`<option selected="selected" value="Denver">`) is a list too: options are read by a regular expression with every match (`<option\b[^>]*?\svalue="([^"]*)"`; VuGen `Ordinal=ALL`, DevWeb `occurrence: load.ExtractorOccurrenceType.All`) — in the editor (click an option and List, or select the whole <select>) and in the Correlation Advisor's own select lists. Proved on both engines with the first option selected and plain city names (`studioextract.js` select-city-random).
+- Edit a correlation in the script: the editor's button is Edit; the correlation is out of the script while it changes, Save to the script puts the changed one in, Cancel (or Discard when leaving) puts the one before back exactly — in the same place among the extractors (Take out and Undo keep the place too). A click on an item of Correlation details opens it in the editor.
+- Manual correlations are in the table: To review / In the script / Skipped / All show how many each holds, and after Add the table shows In the script with the new rows marked.
+- Test data: a parameter whose every use is read from the page by a correlation (a list of a select's options) says so.
+- Correlation details names a list by how it is used: List, Random, Next, No. N.
+
 #### The old random list code removed (REFACTOR-002)
 
 - Nothing made the old random list type any more (every list uses one picker); its code in the generators is gone. The scripts are unchanged: golden harness identical, every engine case passes.

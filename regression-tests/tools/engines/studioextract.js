@@ -12,6 +12,7 @@
 //   select-*     a page with two <select>s; a list made in the editor (advisorAddList) from the second one's options —
 //                boundaries <option value=" … " with every match and the range of that select — and a JSON list:
 //                select-recorded (the place recorded), select-rotate (the next each iteration, 2 iterations),
+//                select-city-random (plain city names, the first option selected="selected": one at random),
 //                json-nth (always the 3rd), json-random (one of them)
 //   advisor-*    the same page: the Correlation Advisor's own list for the flights <select> (Phase 2.7), ticked alone
 //                and added — as recorded, and the next each iteration
@@ -80,14 +81,17 @@ const listSetup = (pick) => {
   advisorApplyAndRegen();
   return c.varName + ' ' + (pick === 'random' ? 'one at random' : 'every value') + ', places ' + S.correlations.find((x) => x.name === c.varName).usages.map((u) => u.listIdx).join(',');
 };
-const SEL_OLD = { flights: ['F-1001;0800;ab12', 'F-1002;1130;cd34', 'F-1003;1545;ef56', 'F-1004;1920;gh78'], seats: ['S-7A1B2C', 'S-7A1B2D', 'S-7A1B2E', 'S-7A1B2F'] };
-const SEL_NEW = { flights: ['F-9001;0700;zz01', 'F-9002;1000;zz02', 'F-9003;1300;zz03', 'F-9004;1600;zz04'], seats: ['S-NEW001', 'S-NEW002', 'S-NEW003', 'S-NEW004'] };
+const SEL_OLD = { flights: ['F-1001;0800;ab12', 'F-1002;1130;cd34', 'F-1003;1545;ef56', 'F-1004;1920;gh78'], seats: ['S-7A1B2C', 'S-7A1B2D', 'S-7A1B2E', 'S-7A1B2F'], cities: ['Denver', 'Frankfurt', 'London', 'Paris'] };
+const SEL_NEW = { flights: ['F-9001;0700;zz01', 'F-9002;1000;zz02', 'F-9003;1300;zz03', 'F-9004;1600;zz04'], seats: ['S-NEW001', 'S-NEW002', 'S-NEW003', 'S-NEW004'], cities: ['Oslo', 'Rome', 'Vienna', 'Madrid'] };
+// the first option of each select is written <option selected="selected" value="…"> (as many sites do)
+const opts = (vs, label) => vs.map((x, n) => '<option ' + (n ? '' : 'selected="selected" ') + 'value="' + x + '">' + label(x) + '</option>').join('');
 const FORM = 'application/x-www-form-urlencoded';
 const selHar = (v) => har([
   ['GET', 'https://travel.example.com/flights', 'text/html; charset=utf-8', '<!doctype html><html><body><form action="/book" method="post">' +
     '<select name="seatClass"><option value="economy">Economy</option><option value="business">Business</option><option value="first">First</option></select>' +
-    '<select name="outbound">' + v.flights.map((x) => '<option value="' + x + '">' + x.split(';')[1] + '</option>').join('') + '</select></form></body></html>'],
-  ['POST', 'https://travel.example.com/book', 'text/html', '<html>booked</html>', { mime: FORM, text: 'seatClass=economy&outbound=' + encodeURIComponent(v.flights[1]) }],
+    '<select name="depart" >\n' + opts(v.cities, (x) => x) + '\n</select>' +
+    '<select name="outbound">' + opts(v.flights, (x) => x.split(';')[1]) + '</select></form></body></html>'],
+  ['POST', 'https://travel.example.com/book', 'text/html', '<html>booked</html>', { mime: FORM, text: 'seatClass=economy&depart=' + encodeURIComponent(v.cities[2]) + '&outbound=' + encodeURIComponent(v.flights[1]) }],
   ['GET', 'https://travel.example.com/api/seats', JSONM, JSON.stringify({ seats: v.seats.map((id, i) => ({ id, row: 7, n: i })) })],
   ['POST', 'https://travel.example.com/api/hold', JSONM, '{"ok":true}', { mime: JSONM, text: JSON.stringify({ seat: v.seats[2] }) }],
 ]);
@@ -96,10 +100,12 @@ const selSetup = (arg) => {
   const S = PerfxStudio.state(), idx = (u) => S.entries1.findIndex((e) => e.url.endsWith(u));
   (S.advisorCandidates || []).forEach((x) => { if (x.status === 'accepted') advisorAccept(x.id); });
   let c;
-  if (arg.kind === 'select') {
-    const i = idx('/flights'), body = S.entries1[i].respBody, ext = { extractorType: 'boundary', extractorConfig: { lb: '<option value="', rb: '"', all: true } };
-    const vals = StudioEdit.boundAll(body, '<option value="', '"');
-    c = advisorAddList(i, ext, 'outbound', vals, { from: 4, to: 7, pick: arg.pick });
+  if (arg.kind === 'select' || arg.kind === 'city') {
+    // as the editor: one option clicked, then List (StudioEdit.listFrom: every <option …> value of that select)
+    const i = idx('/flights'), body = S.entries1[i].respBody, v = arg.kind === 'city' ? 'London' : 'F-1002;1130;cd34';
+    const r = StudioEdit.listFrom(body, body.indexOf('value="' + v + '"') + 7, v, null);
+    if (r.why) return 'NO LIST: ' + r.why;
+    c = advisorAddList(i, r.ext, arg.kind === 'city' ? 'depart' : 'outbound', r.values, { from: r.from, to: r.to, pick: arg.pick });
   } else {
     const i = idx('/api/seats'), ext = { extractorType: 'jsonpath', extractorConfig: { path: '$.seats[*].id', selectAll: true } };
     c = advisorAddList(i, ext, 'seatId', StudioEdit.jsonAll(S.entries1[i].respBody, '$.seats[*].id'), { pick: arg.pick, nth: arg.nth });
@@ -130,6 +136,8 @@ const CASES = {
     checkAll: (rs, NEW) => { const v = rs.map((r) => form(r).outbound); return v.length === 2 && v.every((x) => x === NEW.flights[1]) ? '' : 'WRONG ' + v.join(' / '); } },
   'select-rotate': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/book$/, iters: 2, setup: selSetup, arg: { kind: 'select', pick: 'rotate' },
     checkAll: (rs, NEW) => { const v = rs.map((r) => form(r).outbound); return v.join(' / ') === NEW.flights[0] + ' / ' + NEW.flights[1] ? '' : 'WRONG ' + v.join(' / '); } },
+  'select-city-random': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/book$/, iters: 2, setup: selSetup, arg: { kind: 'city', pick: 'random' },
+    checkAll: (rs, NEW) => { const v = rs.map((r) => form(r).depart); return v.length === 2 && v.every((x) => NEW.cities.includes(x)) ? '' : 'WRONG ' + v.join(' / '); } },
   'json-nth': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/api\/hold$/, iters: 2, setup: selSetup, arg: { kind: 'json', pick: 'nth', nth: 3 },
     checkAll: (rs, NEW) => { const v = rs.map((r) => JSON.parse(r.body || '{}').seat); return v.length === 2 && v.every((x) => x === NEW.seats[2]) ? '' : 'WRONG ' + v.join(' / '); } },
   'json-random': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/api\/hold$/, iters: 2, setup: selSetup, arg: { kind: 'json', pick: 'random' },

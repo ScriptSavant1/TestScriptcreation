@@ -71,6 +71,23 @@
     }
     return out;
   }
+  // the value of one attribute in every <tag …>, whatever comes before it: <option\b[^>]*?\svalue="([^"]*)"
+  function attrPattern(tag, attr, q) {
+    var e = function (s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); };
+    return "<" + e(tag) + "\\b[^>]*?\\s" + e(attr) + "=" + q + "([^" + q + "]*)" + q;
+  }
+  // every match of a regular expression whose first group ends right before its last character (an attribute's
+  // closing quote): { v, at } with at = where the value starts
+  function regexAt(body, pattern) {
+    var out = [], re, m;
+    try { re = new RegExp(pattern, "g"); } catch (x) { return out; }
+    while ((m = re.exec(body))) {
+      if (m[1] != null) out.push({ v: m[1], at: m.index + m[0].length - 1 - m[1].length });
+      if (!m[0]) re.lastIndex++;
+    }
+    return out;
+  }
+  function regexAll(body, pattern) { return regexAt(String(body || ""), pattern).map(function (x) { return x.v; }); }
   // A list from one of its values (at = where it starts in the body; span = a selected section {at, len}):
   //  - JSON: the value's path with its last index as [*] ($.items[2].id → $.items[*].id), every match
   //  - a page: the same tag and attribute (<option value=") or the same opening tag (<td class="x"> … </td), every
@@ -94,25 +111,28 @@
     } else {
       var lt = body.lastIndexOf("<", at), pre = lt === -1 ? "" : body.slice(lt, at), lb, rb, m;
       if (pre.indexOf(">") === -1 && (m = /^<([A-Za-z][\w:-]*)\b[^<>]*?\s([\w:-]+)\s*=\s*(["'])$/.exec(pre))) {
-        lb = "<" + m[1] + " " + m[2] + "=" + m[3]; rb = m[3];
-        if (body.indexOf(lb) === -1) { lb = pre; }
-        about = "every <code>" + lb.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</code>";
+        // an attribute: a regular expression, so the same attribute is read whatever comes before it in the tag
+        // (<option selected="selected" value="…"> as well as <option value="…">), every match
+        var pat = attrPattern(m[1], m[2], m[3]);
+        ms = regexAt(body, pat);
+        r = { ext: { extractorType: "regexp", extractorConfig: { pattern: pat, all: true } } };
+        about = "the <code>" + m[2] + "</code> of every <code>&lt;" + m[1] + "&gt;</code>";
       } else if ((m = /^<([A-Za-z][\w:-]*)\b[^<>]*>$/.exec(pre))) {
         lb = pre; rb = "</" + m[1];
         about = "the text of every <code>" + pre.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</code>";
+        ms = boundAt(body, lb, rb);
+        r = { ext: { extractorType: "boundary", extractorConfig: { lb: lb, rb: rb, all: true } } };
       } else return { why: "Select a value inside a tag (an option, a link, a cell) to read every one like it." };
-      ms = boundAt(body, lb, rb);
-      r = { ext: { extractorType: "boundary", extractorConfig: { lb: lb, rb: rb, all: true } } };
       var sel = body.lastIndexOf("<select", at), selEnd = sel === -1 ? -1 : body.indexOf("</select", sel);
-      if (!span && sel !== -1 && selEnd > at) {
-        span = { at: sel, len: selEnd - sel };
+      if (sel !== -1 && selEnd > at) {
+        if (!span) span = { at: sel, len: selEnd - sel };   // a section selected keeps its own range; the name is the select's
         var sn = /^<select\b[^>]*\bname\s*=\s*["']([^"']+)/i.exec(body.slice(sel, sel + 300));
         if (sn) name = sn[1].replace(/[^\w]/g, "_") + "Options";
         about += sn ? " in <code>&lt;select name=\"" + sn[1].replace(/&/g, "&amp;").replace(/</g, "&lt;") + "\"&gt;</code>" : " in its &lt;select&gt;";
       }
       if (!name) name = (m[2] || m[1]) + "Arr";
     }
-    if (ms.every(function (x) { return x.at !== at; }) && r.ext.extractorType === "boundary") return { why: "That value is not one of the matches." };
+    if (ms.every(function (x) { return x.at !== at; })) return { why: "That value is not one of the matches." };
     to = ms.length;
     if (span) {
       var inside = ms.map(function (x, i) { return x.at >= span.at && x.at < span.at + span.len ? i + 1 : 0; }).filter(Boolean);
@@ -303,7 +323,7 @@
   function laterValues(entries, i, idx) {
     return valuesOf(entries[i]).filter(function (v) { return idx.later(v.value, i); });
   }
-  return { jget: jget, listValues: listValues, jsonAll: jsonAll, boundAll: boundAll, listFrom: listFrom, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
+  return { jget: jget, listValues: listValues, jsonAll: jsonAll, boundAll: boundAll, regexAll: regexAll, attrPattern: attrPattern, listFrom: listFrom, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
 });
 
 (function () {
@@ -422,7 +442,43 @@
     return laterFor[i];
   }
 
+  // Edit a correlation that is in the script: it is taken out while it changes (every control unlocks), Save to the
+  // script puts the changed one in, Cancel (or Discard on leaving) puts the one before back exactly as it was.
+  var editing = null;   // { id, gone: the correlation taken out, snap: the candidate's choice before }
+  function snapOf(c) { return JSON.stringify({ _edit: c._edit, _pick: c._pick, _nth: c._nth, varName: c.varName }); }
+  function startEdit(c) {
+    var snap = snapOf(c), gone = advisorRemoveFromScript(c.id);
+    if (!gone) return;
+    editing = { id: c.id, gone: gone, snap: snap };
+    shownBody = null; draw();
+  }
+  function saveEdit(c) {
+    save();
+    advisorApplyOne(c);
+    editing = null;
+    regenerateFromAdvisor({ quiet: true });
+    if (typeof showToast === "function") showToast(c.varName + " changed in the script.", "success", 3500);
+    shownBody = null; draw();
+  }
+  function cancelEdit() {
+    if (!editing) return;
+    var c = (S.advisorCandidates || []).filter(function (x) { return x.id === editing.id; })[0], s = JSON.parse(editing.snap), gone = editing.gone;
+    editing = null;
+    if (!c) return;
+    ["_edit", "_pick", "_nth"].forEach(function (k) { if (s[k] === undefined) delete c[k]; else c[k] = s[k]; });
+    if (c.varName !== s.varName) advisorSetName(c.id, s.varName);
+    advisorRestoreToScript(c.id, gone);
+  }
+  // leaving while a change is open: save it, or put the one before back
+  function leaving(then) {
+    if (!editing) { then(); return; }
+    var c = (S.advisorCandidates || []).filter(function (x) { return x.id === editing.id; })[0];
+    if (!c || !SS.ask) { cancelEdit(); then(); return; }
+    SS.ask("Save the changes to " + c.varName + "?", "It is out of the script while you change it. Save puts the changed one in; Discard puts it back as it was.", "Save",
+      function () { saveEdit(c); then(); }, { no: "Discard", otherwise: function () { cancelEdit(); then(); } });
+  }
   function open(id) {
+    if (editing && editing.id !== id) { leaving(function () { open(id); }); return; }
     var c = (S.advisorCandidates || []).filter(function (x) { return x.id === id; })[0]; if (!c) return;
     adding = false; nc = null;
     cur = id; srcIdx = c._edit && c._edit.sourceIdx != null ? c._edit.sourceIdx : c.source ? c.source.entryIdx : null;
@@ -450,6 +506,7 @@
   }
   function close(sure) {
     if (!cur) return;
+    if (editing && !sure) { leaving(function () { close(true); }); return; }
     if (adding && tray.length && !sure && SS.ask) {
       SS.ask("Leave without adding?", plural(tray.length, "kept value") + " will not be added to the script.", "Leave", function () { close(true); }, { no: "Stay" });
       return;
@@ -518,7 +575,8 @@
     if (adding) why = "<b>Add a value yourself.</b> Choose the request whose response has it, then select the value on the right — or click one of the marked values. How it is read, its name and where it is sent back fill in.";
     else {
       why = !us.length ? "<b>No later request sends this value back</b>, so there is nothing to correlate. Skip it."
-        : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + ". To change how it is read, " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> first (Undo puts it back).'
+        : editing && editing.id === c.id ? "<b>Changing it.</b> It is out of the script until you click <b>Save to the script</b>; <b>Cancel</b> puts it back as it was."
+        : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + ". Click <b>Edit</b> to change how it is read, its name or its response; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
         : c.confidence === "high" ? "<b>An earlier response sends this value</b> and " + plural(us.length, "later place") + " send it back. A new user gets a new value, so the script must read it from the response each time."
         : "<b>It looks like a " + esc(String(c.valueType || "token")) + "</b> by its shape, and " + plural(us.length, "later place") + " send it back. No earlier response was found that sends it: check the response, or use Can't find a value?";
       if (isList(c)) why += " It is a list: its options are below.";
@@ -591,16 +649,20 @@
       $("#ss-ed-keep").disabled = !ready;
       trayDraw();
     } else {
-      $("#ss-ed-accept-t").textContent = "Accept & next";
-      acc.disabled = !!c._applied || !us.length || !testOk;
-      acc.title = !us.length ? "No later request sends this value back" : !testOk ? "The way to read it does not give the value yet" : "Tick it and go to the next value";
+      var ed = editing && editing.id === c.id;
+      $("#ss-ed-accept-t").textContent = ed ? "Save to the script" : c._applied ? "Edit" : "Accept & next";
+      acc.disabled = ed ? !us.length || !testOk : c._applied ? false : !us.length || !testOk;
+      acc.title = c._applied ? "Change how it is read, its name or its response — it is put back as it was if you cancel"
+        : !us.length ? "No later request sends this value back" : !testOk ? "The way to read it does not give the value yet" : ed ? "Put the changed correlation in the script" : "Tick it and go to the next value";
     }
     $("#ss-ed-skip").hidden = adding;
     $("#ss-ed-keep").hidden = !adding;
     if (!adding) $("#ss-ed-tray").hidden = true;
     $("#ss-ed-skip").textContent = c.status === "skipped" ? "Put back" : "Skip";
     $("#ss-ed-skip").disabled = !!c._applied;
-    $("#ss-ed-reset").hidden = adding || lock || !c._edit && kind === "auto";
+    $("#ss-ed-skip").hidden = adding || !!(editing && editing.id === c.id);
+    $("#ss-ed-reset").hidden = adding || (!(editing && editing.id === c.id) && (lock || !c._edit && kind === "auto"));
+    $("#ss-ed-reset").textContent = editing && editing.id === c.id ? "Cancel" : "Undo my changes";
     response(c, e);
     // sent back in
     $("#ss-ed-n").textContent = us.length ? plural(us.length, "place") : adding && !c.value ? "" : "nowhere";
@@ -667,7 +729,9 @@
       return;
     }
     var cc = a; try { cc = advisorToCorrelation(c); } catch (err) { cc = a; }
-    var how = cc && cc.extractorType === "boundary" ? "boundaries <code>" + esc(cc.extractorConfig.lb) + "</code> … <code>" + esc(cc.extractorConfig.rb) + "</code>" : "JSON path <code>" + esc(cc && cc.extractorConfig ? cc.extractorConfig.path : "") + "</code>";
+    var how = cc && cc.extractorType === "boundary" ? "boundaries <code>" + esc(cc.extractorConfig.lb) + "</code> … <code>" + esc(cc.extractorConfig.rb) + "</code>"
+      : cc && cc.extractorType === "regexp" ? (/^<option\b/.test(cc.extractorConfig.pattern) ? "the value of every <code>&lt;option&gt;</code>" : "the regular expression <code>" + esc(cc.extractorConfig.pattern) + "</code>")
+      : "JSON path <code>" + esc(cc && cc.extractorConfig ? cc.extractorConfig.path : "") + "</code>";
     var vals = lvals(c);
     x.innerHTML = '<p class="ss-ed-lead">The response sends <b>' + (vals.length > 1 ? vals.length + " values" : "several values") + "</b> (" + how + ", every match) and the script reads them all. Which one is sent back:</p>" +
       pickHtml(c._pick, c._nth, vals.length, c._applied ? "In the script: a change makes the script again." : "");
@@ -675,7 +739,8 @@
   function lvals(c) {
     var e = entry(srcIdx), body = String(e && e.respBody || ""), cc;
     try { cc = advisorToCorrelation(c); } catch (err) { return []; }
-    var all = cc.extractorType === "boundary" && cc.extractorConfig.all ? E.boundAll(body, cc.extractorConfig.lb, cc.extractorConfig.rb)
+    var all = cc.extractorType === "regexp" && cc.extractorConfig.all ? E.regexAll(body, cc.extractorConfig.pattern)
+      : cc.extractorType === "boundary" && cc.extractorConfig.all ? E.boundAll(body, cc.extractorConfig.lb, cc.extractorConfig.rb)
       : cc.extractorConfig && cc.extractorConfig.selectAll ? E.jsonAll(body, cc.extractorConfig.path) : [];
     return c._range ? all.slice(c._range.from - 1, c._range.to) : all;
   }
@@ -827,7 +892,7 @@
   function sectionList(at, s) {
     var body = String(entry(srcIdx) && entry(srcIdx).respBody || ""), a = -1, v = "", m;
     var oi = s.search(/<option\b[^>]*\bvalue\s*=\s*["']/i);
-    if (oi !== -1) { m = /<option\b[^>]*\bvalue\s*=\s*(["'])([^"']*)\1/i.exec(s.slice(oi)); if (m) { a = at + oi + m[0].indexOf(m[1]) + 1; v = m[2]; } }
+    if (oi !== -1) { m = /<option\b[^>]*\bvalue\s*=\s*(["'])([^"']*)\1/i.exec(s.slice(oi)); if (m) { a = at + oi + m[0].length - 1 - m[2].length; v = m[2]; } }   // the value's own place (after selected="…" too)
     if (a === -1) {
       var inside = later(srcIdx).filter(function (x) { return x.kind !== "header"; }).map(function (x) { var q = x.kind === "json" ? JSON.stringify(x.value).slice(1, -1) : x.value, k = body.indexOf(q, at); return { v: x.value, at: k }; })
         .filter(function (x) { return x.at >= at && x.at < at + s.length; }).sort(function (p, q) { return p.at - q.at; });
@@ -885,8 +950,9 @@
     else if (t.hasAttribute("data-known")) { if (!tray.length) open(t.getAttribute("data-known")); else if (typeof showToast === "function") showToast("Add or remove the kept values first.", "info", 3000); }
     else if (t.id === "ss-ed-keep") keep();
     else if (t.hasAttribute("data-untray")) { tray.splice(+t.getAttribute("data-untray"), 1); shownBody = null; rest(); }
-    else if (t.id === "ss-ed-accept") { if (adding) addNow(); else { save(); if (c.status !== "accepted") advisorAccept(c.id); var l2 = SSC.list(), k = l2.indexOf(cur), nx = l2[k + 1]; if (nx) open(nx); else close(); } }
+    else if (t.id === "ss-ed-accept") { if (adding) addNow(); else if (editing && editing.id === c.id) saveEdit(c); else if (c._applied) startEdit(c); else { save(); if (c.status !== "accepted") advisorAccept(c.id); var l2 = SSC.list(), k = l2.indexOf(cur), nx = l2[k + 1]; if (nx) open(nx); else close(); } }
     else if (t.id === "ss-ed-skip") { advisorSkip(c.id); draw(); }
+    else if (t.id === "ss-ed-reset" && editing) { cancelEdit(); shownBody = null; draw(); }
     else if (t.id === "ss-ed-reset") { delete c._edit; draft = null; kind = "auto"; srcIdx = c.source ? c.source.entryIdx : null; draw(); }
     else if (t.id === "ss-ed-src-up" || t.id === "ss-ed-src-down") { var o = $$("#ss-ed-src option").map(function (x) { return x.value; }).filter(Boolean).map(Number), p = o.indexOf(srcIdx); var to = p === -1 ? o[0] : o[p + (t.id === "ss-ed-src-down" ? 1 : -1)]; if (to != null) setSrc(to); }
     else if (t.id === "ss-ed-out") { if (SS.corrTakeOut) SS.corrTakeOut(c.id); shownBody = null; draw(); }
@@ -924,12 +990,12 @@
   function addNow() {
     var all = tray.slice(), k = current(); if (k) all.push(k);
     if (!all.length) return;
-    var names = [], places = 0;
+    var names = [], places = 0, ids = [];
     all.forEach(function (x) {
       if (x.list) {
         var li = advisorAddList(x.srcIdx, x.draft, x.varName, x.list.values, { from: x.list.from, to: x.list.to, pick: x.list.pick, nth: x.list.nth });
         advisorApplyOne(li);
-        names.push(li.varName); places += (li.usages || []).length;
+        names.push(li.varName); places += (li.usages || []).length; ids.push(li.id);
         return;
       }
       var t = x.draft.extractorType, cfg = x.draft.extractorConfig;
@@ -937,10 +1003,11 @@
         t === "jsonpath" ? cfg.path : t === "boundary_header" ? String(cfg.lb || "").replace(/:\s*$/, "") : cfg.lb, x.varName, x.value);
       made._edit = { extractorType: t, extractorConfig: cfg, sourceIdx: x.srcIdx };
       advisorApplyOne(made);
-      names.push(made.varName); places += (made.usages || []).length;
+      names.push(made.varName); places += (made.usages || []).length; ids.push(made.id);
     });
     close(true);
     regenerateFromAdvisor({ quiet: true });
+    if (window.SSC && SSC.show) SSC.show("script", ids);
     if (typeof showToast === "function") showToast((names.length > 1 ? plural(names.length, "value") + " added to the script (" + names.join(", ") + ")" : names[0] + " added to the script") + (places ? " — sent back in " + plural(places, "place") + "." : "."), "success", 5000);
   }
   // a new way to read it: start from the value in this response
@@ -1035,6 +1102,18 @@
   document.addEventListener("keydown", function (ev) {
     if (!cur || box.hidden) return;
     if (ev.key === "Escape" && !document.querySelector("dialog[open]") && !ev.target.closest("input, select, textarea")) close();
+  });
+
+  // Correlation details (the engine's list under the table): a click on an item opens it in the editor, to change it
+  document.addEventListener("click", function (ev) {
+    var it = ev.target.closest && ev.target.closest("#corr-list .corr-item");
+    if (!it || ev.target.closest("button, input, a, select")) return;
+    var items = Array.prototype.slice.call(document.querySelectorAll("#corr-list .corr-item")), corr = (S.correlations || [])[items.indexOf(it)];
+    if (!corr) return;
+    var c = (S.advisorCandidates || []).filter(function (x) { return x._applied && x.varName === corr.name; })[0];
+    if (!c) { if (typeof showToast === "function") showToast(corr.name + " was not made from a suggestion (it comes from the second recording): change it in the Cards view.", "info", 5000); return; }
+    if (SS.curStep && SS.curStep() !== 2) SS.step(2, true);
+    open(c.id);
   });
 
   window.SSE = { open: open, add: add, close: close, isOpen: function () { return !!cur; }, isAdding: function () { return adding; }, redraw: function () { if (cur) { shownBody = null; draw(); } } };
