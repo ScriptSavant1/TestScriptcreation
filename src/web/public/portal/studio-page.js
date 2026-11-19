@@ -80,7 +80,7 @@
   window.markLoaded = function (slot) {
     var r = engineMarkLoaded.apply(this, arguments);
     if (slot === 1 && window.SSW) SSW.newFile();
-    if (slot === 1) step(1);   // a new recording starts at step 1
+    if (slot === 1) { step(1); S.scriptName = ""; nameShow(); }   // a new recording starts at step 1, with the default name
     setTimeout(function () { if (S.har1) window.analyze(); }, 0);
     return r;
   };
@@ -116,6 +116,7 @@
   function refresh() {
     if (!S.har1) return;
     fileBar();
+    SS.settings();
     notices();
     badges();
     if (window.SSW) SSW.render();
@@ -182,6 +183,66 @@
     showToast("Script format: " + (S.format === "devweb" ? "DevWeb (JavaScript)" : "Web HTTP/HTML (C)") + ".", "success", 2500);
   });
   fmtButtons();
+
+  // ── the script's settings (step 1): its name and the think time between transactions ──
+  // the name: letters, digits and underscores, starting with a letter (VuGen's rule); the ZIP and the .usr take it
+  // (dlZip reads S.scriptName); empty = the default name. It belongs to the recording: a new file starts empty.
+  var nameIn = $("#ss-sc-name"), nameErr = $("#ss-sc-err");
+  function defaultName() { return S.format === "webhttp" ? "WebHttpScript_Correlated" : "DevWebScript_Correlated"; }
+  SS.scriptName = function () { return S.scriptName || defaultName(); };
+  function nameShow() { nameIn.placeholder = defaultName(); if (document.activeElement !== nameIn) nameIn.value = S.scriptName || ""; nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); }
+  function nameSet() {
+    var v = nameIn.value.trim().replace(/[\s-]+/g, "_");
+    if (v && !/^[A-Za-z][A-Za-z0-9_]{0,59}$/.test(v)) {
+      nameErr.textContent = "Letters, numbers and underscores only, starting with a letter.";
+      nameErr.hidden = false; nameIn.setAttribute("aria-invalid", "true");
+      return;
+    }
+    S.scriptName = v || ""; nameShow(); nameIn.value = S.scriptName; badges();
+  }
+  nameIn.addEventListener("change", nameSet);
+  nameIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); nameSet(); } if (e.key === "Escape") nameShow(); });
+  nameIn.addEventListener("input", function () { if (!nameErr.hidden) { nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); } });
+  // think time: Fixed N s (default 3 — what Studio has always written) / As recorded / None; remembered per browser
+  var thinkSec = $("#ss-think-sec");
+  function thinkNow() { var t = prefs.think || {}; return { mode: ["fixed", "recorded", "none"].indexOf(t.mode) !== -1 ? t.mode : "fixed", sec: t.sec >= 1 && t.sec <= 3600 ? Math.round(t.sec) : 3 }; }
+  function thinkShow() {
+    var t = thinkNow();
+    S.thinkTime = { mode: t.mode, sec: t.sec };
+    $$("#ss-think [data-think]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-think") === t.mode)); });
+    $("#ss-think-secw").hidden = t.mode !== "fixed";
+    if (document.activeElement !== thinkSec) thinkSec.value = t.sec;
+    var note = "";
+    if (t.mode === "fixed") note = t.sec + " s after each transaction but the last. Run-time settings decide how it is replayed.";
+    else if (t.mode === "none") note = "No think time in the script.";
+    else {
+      var gaps = (S.entries1 || []).map(function (e, i) { return e.isMarker && e.markerType === "end" && typeof _thinkAfter === "function" ? _thinkAfter(S.entries1, i) : undefined; }).filter(function (v) { return v !== undefined; });
+      gaps.pop();   // never after the last transaction
+      var n = gaps.filter(function (g) { return g != null; });
+      note = !gaps.length ? "The pauses of the recording between transactions — none here (one transaction or none)." :
+        !n.length ? "No pause of a second or more between the transactions of this recording: no think time is written." :
+        "The pauses of the recording: " + n.slice(0, 8).map(function (g) { return g + " s"; }).join(", ") + (n.length > 8 ? " …" : "") +
+        (n.length < gaps.length ? (n.length ? "; " : "") + plural(gaps.length - n.length, "pause") + " under a second, left out" : "") + ".";
+    }
+    $("#ss-think-note").textContent = note;
+  }
+  function thinkSet(t) {
+    prefs.think = t; save(); thinkShow();
+    if (S.entries1 && S.entries1.length && !running) regenerateFromAdvisor({ quiet: true });
+  }
+  $("#ss-think").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-think]"); if (!b) return;
+    var t = thinkNow(); if (t.mode === b.getAttribute("data-think")) return;
+    t.mode = b.getAttribute("data-think"); thinkSet(t);
+    if (t.mode === "fixed") thinkSec.focus();
+  });
+  thinkSec.addEventListener("change", function () {
+    var v = Math.round(+thinkSec.value);
+    if (!(v >= 1 && v <= 3600)) { thinkSec.value = thinkNow().sec; return; }
+    var t = thinkNow(); t.sec = v; thinkSet(t);
+  });
+  thinkShow();
+  SS.settings = function () { nameShow(); thinkShow(); };
 
   // ── open another / download ──
   $("#ss-open-another").addEventListener("click", function () { view("home"); var i = $("#dz1 input[type=file]"); if (i) i.focus(); });
@@ -329,6 +390,7 @@
       return '<button type="button" class="ss-done-i' + (i.warn ? " warn" : "") + '" data-go="' + i.go + '"><svg class="i"><use href="#i-' + (i.warn ? "warn" : "ok") + '"/></svg><span>' + esc(i.text) + '</span><svg class="i ss-done-go"><use href="#i-left"/></svg></button>';
     }).join("");
     var files = $$("#code-tabs .code-tab").map(function (t) { return t.textContent.trim(); }).filter(Boolean);
+    $("#ss-done-fh").textContent = "Files in " + SS.scriptName() + ".zip";
     $("#ss-done-files").textContent = (files.length ? files.join(", ") + ", " : "") + "and the project files VuGen and LoadRunner Enterprise need (.usr, run-time settings" + ((S.params || []).length ? ", the test data files" : "") + ").";
   }
   $("#ss-done-dl").addEventListener("click", function () { $("#ss-dl").click(); });

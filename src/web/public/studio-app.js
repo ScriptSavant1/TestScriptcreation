@@ -18,7 +18,7 @@ async function dlZip(fmt) {
   const isDev = fmt === "devweb" || fmt === "both";
 
   async function makeWebHttpZip() {
-    const nm = "WebHttpScript_Correlated";
+    const nm = S.scriptName || "WebHttpScript_Correlated";   // the name typed on the page (letters, digits, _)
     const zip = new JSZip();
     zip.file("Action.c", S.scripts.ac || "");
     zip.file("vuser_init.c", S.scripts.vi || "");
@@ -63,7 +63,7 @@ async function dlZip(fmt) {
   }
 
   async function makeDevWebZip() {
-    const nm = "DevWebScript_Correlated";
+    const nm = S.scriptName || "DevWebScript_Correlated";
     const zip = new JSZip();
     zip.file("main.js", S.scripts.mj || "");
     if (S.scripts.corrjs) zip.file("correlations.js", S.scripts.corrjs);

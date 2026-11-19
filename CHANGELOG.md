@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script name and think time (Script Studio in steps, part 1b)
+
+- Step 1 has a settings bar above the filters. **Script name**: the ZIP and the .usr file take it (letters, numbers and underscores; empty keeps the default name, WebHttpScript_Correlated / DevWebScript_Correlated). **Think time between transactions**: Fixed (3 s by default, as before, or any number of seconds), As recorded (the pause in the recording, in whole seconds) or None; remembered per browser. Nothing changes in the script until you choose something else.
+
 #### Script Studio in four steps (Script Studio in steps, part 1)
 
 - The workspace now has a step line under the file bar: **1 Requests** (filters, Domains, Requests and the script, as before), **2 Correlate** (the Correlation Advisor, the whole width), **3 Test data** (the table, the whole width) and **4 Download** (what is worth a look, the files in the ZIP and Download ZIP). Each step says what is waiting (for example "4 values to review"); Next / Back move between them and no step blocks another. Download ZIP and Ready to download? stay in the file bar on every step. Every link that opened a tab before (Ready to download?, request details, Show an example) opens its step; a new recording starts at step 1. The scripts and ZIP files are unchanged.

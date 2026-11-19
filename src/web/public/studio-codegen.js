@@ -1239,6 +1239,34 @@ function buildConcurrentGroups(entries, autoFollowSet, excludeSet, skipSet) {
 
 // DEVWEB CODE GENERATOR
 // ═══════════════════════════════════════════════════════════════════════════
+// Think time written between transactions (never after the last one). S.thinkTime = { mode, sec } from the page:
+//   fixed    — the same number of seconds every time (default: 3, as Studio has always written)
+//   recorded — the pause in the recording: from the end of the transaction's last request to the start of the next
+//              request in the script, in whole seconds; a pause under one second writes nothing
+//   none     — no think time
+function _thinkCfg() {
+  const t = S.thinkTime || {};
+  const mode = t.mode === "none" || t.mode === "recorded" ? t.mode : "fixed";
+  const sec = Number.isInteger(t.sec) && t.sec >= 1 && t.sec <= 3600 ? t.sec : 3;
+  return { mode, sec };
+}
+// seconds to wait after the transaction that ends at entries[idx], or null for none
+function _thinkAfter(entries, idx) {
+  const c = _thinkCfg();
+  if (c.mode === "none") return null;
+  if (c.mode === "fixed") return c.sec;
+  let end = 0;
+  for (let j = idx - 1; j >= 0; j--) {
+    const x = entries[j];
+    if (x.isMarker) { if (x.markerType === "start") break; continue; }
+    if (!x.filtered && x.startMs) end = Math.max(end, x.startMs + (x.dur || 0));
+  }
+  const next = entries.find((x, j) => j > idx && !x.isMarker && !x.filtered && x.startMs);
+  if (!end || !next) return null;
+  const s = Math.round((next.startMs - end) / 1000);
+  return s >= 1 ? s : null;
+}
+
 function genMainJS(entries, correlations) {
   let o = "";
   let rid = 1;
@@ -1365,8 +1393,11 @@ function genMainJS(entries, correlations) {
 
   // Servers
   o += _stDwServerBlock(mjHostVarMap, _shMainMj);
-  o += "// Think time between transactions (seconds) — Runtime Settings > Think Time decides how it is used, as in VuGen\n";
-  o += "let think_time = 3;\n\n";
+  const _think = _thinkCfg();
+  if (_think.mode === "fixed") {
+    o += "// Think time between transactions (seconds) — Runtime Settings > Think Time decides how it is used, as in VuGen\n";
+    o += "let think_time = " + _think.sec + ";\n\n";
+  }
 
   // Basic auth credentials — set at the start of each iteration (below): load.params only exists inside
   // initialize / action, so computing them here stopped the script before it started
@@ -1606,7 +1637,8 @@ function genMainJS(entries, correlations) {
         if (currentTxn) {
           o += `    TS${currentTxn.tsNum}.stop();\n`;
           // think time between transactions, not after the last one (Runtime Settings > Think Time applies)
-          o += entries.some((x, j) => j > idx && x.isMarker && x.markerType === "end") ? `    load.thinkTime(think_time);\n\n` : "\n";
+          const _tt = entries.some((x, j) => j > idx && x.isMarker && x.markerType === "end") ? _thinkAfter(entries, idx) : null;
+          o += _tt == null ? "\n" : _think.mode === "fixed" ? `    load.thinkTime(think_time);\n\n` : `    load.thinkTime(${_tt});\n\n`;
           currentTxn = null;
         }
       }
@@ -2878,7 +2910,7 @@ function genActionC(entries, correlations) {
         o += `\tlr_start_transaction("${acSc}");\n\n`;
       } else {
         o += `\tlr_end_transaction("${acSc}", LR_AUTO);\n\n`;
-        if (idx !== lastEnd) o += `\tlr_think_time(3);\n\n`;
+        if (idx !== lastEnd) { const _tt = _thinkAfter(entries, idx); if (_tt != null) o += `\tlr_think_time(${_tt});\n\n`; }
       }
       continue;
     }

@@ -297,6 +297,26 @@
 
         <div class="ss-notices" id="ss-notices"></div>
 
+        <!-- step 1: the script's own settings — its name (the ZIP and the .usr take it) and the think time (portal/studio-page.js) -->
+        <div class="ss-setbar" id="ss-setbar">
+          <span class="ss-set">
+            <label class="ss-lbl" for="ss-sc-name">Script name</label>
+            <input class="ss-field ss-sc-name" id="ss-sc-name" type="text" maxlength="60" spellcheck="false" autocomplete="off" aria-describedby="ss-sc-err" title="Letters, numbers and underscores, starting with a letter. The ZIP and the .usr file take this name; empty: the default name." />
+            <span class="ss-err" id="ss-sc-err" role="alert" hidden></span>
+          </span>
+          <span class="ss-sep"></span>
+          <span class="ss-set">
+            <span class="ss-lbl" id="ss-think-l">Think time between transactions</span>
+            <span class="ss-seg" role="group" aria-labelledby="ss-think-l" id="ss-think">
+              <button type="button" data-think="fixed" aria-pressed="true">Fixed</button>
+              <button type="button" data-think="recorded" aria-pressed="false">As recorded</button>
+              <button type="button" data-think="none" aria-pressed="false">None</button>
+            </span>
+            <span class="ss-think-sec" id="ss-think-secw"><input class="ss-field" id="ss-think-sec" type="number" min="1" max="3600" step="1" value="3" aria-label="Think time in seconds" /><span class="ss-muted">s</span></span>
+          </span>
+          <small class="ss-muted ss-think-note" id="ss-think-note"></small>
+        </div>
+
         <section class="ss-card ss-fbar" id="ss-fbar">
           <div class="ss-fbar-row">
             <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-fbar-fold" aria-expanded="true" title="Fold the filters to one line"><svg class="i ss-chev"><use href="#i-chev"/></svg><svg class="i"><use href="#i-filter"/></svg>Filters</button>
@@ -512,7 +532,7 @@
               <button class="ds-btn ds-btn-primary ds-btn-lg" type="button" id="ss-done-dl"><svg class="i"><use href="#i-down"/></svg>Download ZIP</button>
             </div>
             <div class="ss-done-list" id="ss-done-list"></div>
-            <h3>Files in the ZIP</h3>
+            <h3 id="ss-done-fh">Files in the ZIP</h3>
             <p class="ss-muted ss-done-files" id="ss-done-files"></p>
           </div>
         </section>

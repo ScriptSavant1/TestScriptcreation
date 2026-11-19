@@ -116,6 +116,8 @@ describe('Script Studio — the four steps', () => {
     ['ss-tab-script', 'ss-tab-corr', 'ss-tab-data', 'ss-t-script', 'ss-t-corr', 'ss-t-data'].forEach((id) => expect(page).toContain('id="' + id + '"'));
     expect(js).toContain('var TAB_STEP = { script: 1, corr: 2, data: 3 }');
     expect(js).toContain('function tab(name) { step(TAB_STEP[name] || 1); }');
-    expect(js).toContain('if (slot === 1) step(1);');
+    expect(js).toContain('if (slot === 1) { step(1); S.scriptName = ""; nameShow(); }');
+    // step 1 settings: the script name and the think time
+    ['id="ss-setbar"', 'id="ss-sc-name"', 'id="ss-think"', 'id="ss-think-sec"'].forEach((id) => expect(page).toContain(id));
   });
 });
