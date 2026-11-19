@@ -2186,9 +2186,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
    * matches with or without a namespace — as JMeter's XPath extractor does by default. Checked with VuGen.
    */
   _vugenXpath(q) {
-    const s = String(q || "");
-    if (!/^(\/\/?[A-Za-z_][\w.-]*(\[\d+\])?)+$/.test(s)) return s;
-    return s.replace(/(\/\/?)([A-Za-z_][\w.-]*)/g, (m, sl, name) => `${sl}*[local-name()='${name}']`);
+    return _vugen.vugenXpath(q);   // the shared rule (Script Studio uses the same)
   }
 
   generateCorrelationRegistrations(request, indent) {

@@ -353,6 +353,13 @@ function devwebExtractorDecl(corr) {
       // Usage: DYNRND sentinel → random element access inline in DevWeb template literals.
       return `new load.JsonPathExtractor("${name}", "${escJs(cfg.path)}", true)`;
 
+    case "regexp":
+      // Chosen in the correlation editor: the first ( ) group of the expression is the value
+      return `new load.RegexpExtractor("${name}", {expression: "${escJs(cfg.pattern)}", flags: ""})`;
+    case "xpath":
+      // Plain element names: DevWeb matches them in any namespace (VuGen gets local-name() steps)
+      return `new load.XpathExtractor("${name}", "${escJs(cfg.path)}")`;
+
     case "generate":
       return null;
     case "boundary":
@@ -922,6 +929,13 @@ function webHttpCorrCode(corr, indent) {
     case "random_select":
       // Extraction same as jsonpath+selectAll; usage resolved by web_js_run picker + {name_selected}
       return VugenCodegen.emitJsonAll(name, cfg.path, t);
+
+    case "regexp":
+      // Chosen in the correlation editor: the first ( ) group of the expression is the value
+      return VugenCodegen.emitRegexp(name, { pattern: cfg.pattern, group: 1 }, t);
+
+    case "xpath":
+      return VugenCodegen.emitXpath(name, VugenCodegen.vugenXpath(cfg.path), t);
 
     case "boundary":
     default:

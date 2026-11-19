@@ -115,7 +115,8 @@ describe('valuesOf / sentIndex / laterValues', () => {
     const r = rec();
     expect(E.valuesOf(r[0]).map((v) => [v.value, v.where, v.kind])).toEqual([
       ['tok-ABCDEF123', '$.access', 'json'], ['4711', '$.n', 'json'], ['shoes', '$.echo', 'json'], ['csrf-998877', 'x-csrf', 'header']]);
-    expect(E.valuesOf(r[3]).map((v) => v.value)).toEqual(['VS%2Fabc+12']);
+    // a page: value="…" first; other attributes are listed too (only those a later request sends back are marked)
+    expect(E.valuesOf(r[3]).map((v) => v.value)).toEqual(['VS%2Fabc+12', 'hidden']);
     expect(E.valuesOf(ent({ respBody: JSON.stringify({ a: { 'b-c': ['x1y2z3'] } }) }))[0].where).toBe("$.a['b-c'][0]");
   });
   test('sentIndex.later: sent by a request AFTER the response (address, headers, body, URL-decoded); not the Cookie header', () => {
@@ -133,5 +134,58 @@ describe('valuesOf / sentIndex / laterValues', () => {
     expect(E.laterValues(r, 0, E.sentIndex(r)).map((v) => v.value)).toEqual(['tok-ABCDEF123', '4711', 'shoes', 'csrf-998877']);
     r[1].filtered = true; r[2].isMarker = true;
     expect(E.laterValues(r, 0, E.sentIndex(r)).map((v) => v.value)).toEqual([]);
+  });
+});
+
+// Regex and XPath in the editor; the generators write them for VuGen and DevWeb (checked on the wire with both
+// engines: VuGen web_reg_save_param_regexp / _xpath with local-name() steps, DevWeb RegexpExtractor / XpathExtractor)
+describe('Regex and XPath', () => {
+  const page = '<script>window.__cfg = {"nonce":"NC-1234abcd5678", "v":2};</script>';
+  test('compile: a valid expression with a ( ) group; says why otherwise', () => {
+    expect(E.compile('a(b)').re).toBeInstanceOf(RegExp);
+    expect(E.compile('ab').bad).toMatch(/group/);
+    expect(E.compile('(').bad).toMatch(/valid/);
+    expect(E.compile('').bad).toMatch(/Type/);
+  });
+  test('rx escapes text so it matches literally', () => {
+    const s = 'a.b*c+d?e^f$g{h}i(j)k|l[m]n\o/p"q';
+    expect(new RegExp('^' + E.rx(s) + '$').test(s)).toBe(true);
+  });
+  test('readWith: the first group of a regex; XPath through the page reader', () => {
+    expect(E.readWith(resp(page), { extractorType: 'regexp', extractorConfig: { pattern: '"nonce":"([^"]+)"' } }).value).toBe('NC-1234abcd5678');
+    expect(E.readWith(resp(page), { extractorType: 'regexp', extractorConfig: { pattern: '"none":"([^"]+)"' } }).none).toBe(true);
+    expect(E.readWith(resp(page), { extractorType: 'regexp', extractorConfig: { pattern: 'nonce' } }).bad).toMatch(/group/);
+    const xp = (body, p) => ({ value: body + '|' + p });
+    expect(E.readWith(resp('<a/>'), { extractorType: 'xpath', extractorConfig: { path: '/a' } }, null, xp).value).toBe('<a/>|/a');
+    expect(E.readWith(resp('<a/>'), { extractorType: 'xpath', extractorConfig: { path: '/a' } }).unknown).toBe(true);
+  });
+  test('fromSelection kind regexp: the safe boundaries as an expression whose first group is the value', () => {
+    const x = E.fromSelection(resp(page), page.indexOf('NC-'), 'NC-1234abcd5678', 'regexp', null, St._advSafeBoundaries);
+    expect(x.extractorType).toBe('regexp');
+    expect(new RegExp(x.extractorConfig.pattern).exec(page)[1]).toBe('NC-1234abcd5678');
+  });
+  test('names: from the text in front of a value, from an XPath', () => {
+    const b = '<input name="vs" value="VS1"> {"nonce":"NC-1"} <ns:Token a="1">T-1</ns:Token>';
+    expect(['VS1', 'NC-1', 'T-1'].map((v) => E.nameBefore(b, b.indexOf(v)))).toEqual(['vs', 'nonce', 'Token']);
+    expect([E.nameOfXpath('/config/build/@id'), E.nameOfXpath('/Env/Body/SessionToken[2]'), E.nameOfXpath('//key')]).toEqual(['buildId', 'SessionToken', 'key']);
+  });
+  test('valuesOf a page or XML: "name":"value" pairs, element text and attributes', () => {
+    const xml = '<?xml version="1.0"?><config><build id="B-55aa66bb77">current</build><key>K-0099887766</key></config>';
+    expect(E.valuesOf(resp(xml)).map((v) => v.value)).toEqual(expect.arrayContaining(['B-55aa66bb77', 'K-0099887766', 'current']));
+    expect(E.valuesOf(resp(page)).map((v) => v.value)).toContain('NC-1234abcd5678');
+  });
+  test('the generators: VuGen regexp / xpath (local-name() steps), DevWeb RegexpExtractor / XpathExtractor (plain names)', () => {
+    const rx = { name: 'nonce', extractorType: 'regexp', extractorConfig: { pattern: '"nonce":"([^"]+)"' } };
+    const xp = { name: 'sid', extractorType: 'xpath', extractorConfig: { path: '/Envelope/Body/Token' } };
+    expect(St.webHttpCorrCode(rx, '\t')).toBe('\tweb_reg_save_param_regexp("ParamName=nonce",\n\t    "RegExp=\\"nonce\\":\\"([^\\"]+)\\"",\n\t    "Group=1",\n\t    "Ordinal=1",\n\t    LAST);\n');
+    expect(St.webHttpCorrCode(xp, '\t')).toBe("\tweb_reg_save_param_xpath(\"ParamName=sid\",\n\t    \"QueryString=/*[local-name()='Envelope']/*[local-name()='Body']/*[local-name()='Token']\",\n\t    LAST);\n");
+    expect(St.devwebExtractorDecl(rx)).toBe('new load.RegexpExtractor("nonce", {expression: "\\"nonce\\":\\"([^\\"]+)\\"", flags: ""})');
+    expect(St.devwebExtractorDecl(xp)).toBe('new load.XpathExtractor("sid", "/Envelope/Body/Token")');
+  });
+  test('vugenXpath: one rule in both copies of the VuGen writer, used by the converter', () => {
+    const shared = require('../../src/web/public/shared/vugen-codegen.js'), core = require('../../src/core/vugenCodegen.js');
+    const cases = { '//token': "//*[local-name()='token']", '/a/b[2]': "/*[local-name()='a']/*[local-name()='b'][2]", '/a/b/@id': "/*[local-name()='a']/*[local-name()='b']/@id", '//div[@class="x"]': '//div[@class="x"]', 'ns:a': 'ns:a' };
+    Object.entries(cases).forEach(([q, want]) => { expect(shared.vugenXpath(q)).toBe(want); expect(core.vugenXpath(q)).toBe(want); });
+    expect(fs.readFileSync(path.join(__dirname, '../../src/generators/vugen/scriptGenerator.js'), 'utf8')).toContain('return _vugen.vugenXpath(q);');
   });
 });

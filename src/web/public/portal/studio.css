@@ -1089,3 +1089,4 @@ body.ss-step-wide #ss-t-data { width: 100%; max-width: 1500px; margin: 0 auto; }
 .ss-done-card { box-shadow: var(--ds-shadow-2); }
 .ss-done-i.warn { border-color: color-mix(in srgb, var(--ds-warn) 45%, var(--ds-border)); background: var(--ds-warn-soft); }
 .ss-done-i:not(.warn) > svg.i:first-child { padding: 2px; border-radius: 50%; background: var(--ds-ok-soft); }
+.ss-ed-note { margin: 4px 0 0; font-size: var(--ds-fs-xs); line-height: 1.45; }

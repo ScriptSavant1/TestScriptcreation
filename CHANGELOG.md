@@ -89,6 +89,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Regex and XPath in the correlation editor (Script Studio in steps, part 6)
+
+- How to read it adds Regex (the first ( ) group of a regular expression is the value) and XPath (XML responses; element names without a prefix match in any namespace, /@name reads an attribute), tested as you type. Selecting a value fills them in; names come from the field (sessionToken, nonce, buildId).
+- The script gets web_reg_save_param_regexp / web_reg_save_param_xpath (VuGen, with local-name() steps so a SOAP namespace matches) and RegexpExtractor / XpathExtractor (DevWeb). Proved with both engines against a copy of the recording whose values all changed.
+- Add manual correlation also marks values inside a page's script ("name":"value") and the text and attributes of XML.
+
 #### A richer look (Script Studio in steps, part 5)
 
 - The step line: a card per step, the current one raised in the brand colour, the steps before it ticked (or ! when something there is worth a look), the line filled up to the current step, each note a coloured pill (amber worth a look, green done). On narrow screens the four steps keep their own row.

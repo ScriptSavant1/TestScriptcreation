@@ -454,7 +454,11 @@ function renderCorrelations() {
                   ? "HTML"
                   : c.extractorType === "boundary_header"
                     ? "Header"
-                    : "Boundary";
+                    : c.extractorType === "regexp"
+                      ? "RegExp"
+                      : c.extractorType === "xpath"
+                        ? "XPath"
+                        : "Boundary";
         const srcEntry = S.entries1[c.sourceIdx];
         const srcUrl = srcEntry
           ? srcEntry.url.split("?")[0].substring(0, 60)

@@ -11,8 +11,11 @@
  * Add manual correlation (SSE.add()) is the same screen for a new value: choose the request (by default only those
  * whose response has a value a later request sends back — StudioEdit.sentIndex / valuesOf), select the value or click
  * one of the marked ones; the value is what the extractor reads, its uses are the engine's (_advFindUsages); Add to
- * the script = advisorAddManual + _edit + advisorApplyOne (this value only) + regenerate. Regular expressions and
- * XPath are not offered: the generators have no extractor for them. */
+ * the script = advisorAddManual + _edit + advisorApplyOne (this value only) + regenerate.
+ * Regex: the first ( ) group of a regular expression is the value (VuGen web_reg_save_param_regexp, DevWeb
+ * RegexpExtractor; tried here with the browser's engine). XPath: for XML responses (VuGen web_reg_save_param_xpath with
+ * local-name() steps — VugenCodegen.vugenXpath — DevWeb XpathExtractor with the plain names; tried here in the
+ * local-name() form, which matches both). */
 (function (root, factory) {
   var api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -46,8 +49,17 @@
     var map = entry && entry.respHdrsMap || {}, k = String(name || "").toLowerCase();
     return Object.prototype.hasOwnProperty.call(map, k) ? String(map[k]) : null;
   }
-  // what an extractor reads from one response (firstMatch = the engine's _advFirstMatch)
-  function readWith(entry, ext, firstMatch) {
+  // a regular expression for the editor: the first ( ) group is the value → { re } | { bad }
+  function compile(pattern) {
+    var re;
+    try { re = new RegExp(String(pattern || "")); } catch (e) { return { bad: "Not a valid regular expression." }; }
+    if (!pattern) return { bad: "Type a regular expression." };
+    if (new RegExp(String(pattern) + "|").exec("").length < 2) return { bad: "Put the value in a ( ) group: the first group is what is read." };
+    return { re: re };
+  }
+  // what an extractor reads from one response (firstMatch = the engine's _advFirstMatch; xp(body, path) = the page's
+  // XPath reader → { value } | { none } | { bad })
+  function readWith(entry, ext, firstMatch, xp) {
     if (!entry || !ext) return { none: true };
     var body = String(entry.respBody || ""), cfg = ext.extractorConfig || {};
     if (ext.extractorType === "jsonpath") {
@@ -59,6 +71,12 @@
       var v = firstMatch(body, cfg.lb, cfg.rb);
       return v == null ? { none: true } : { value: v };
     }
+    if (ext.extractorType === "regexp") {
+      var c = compile(cfg.pattern); if (c.bad) return { bad: c.bad };
+      var m = c.re.exec(body);
+      return !m ? { none: true } : m[1] == null ? { none: true } : { value: m[1] };
+    }
+    if (ext.extractorType === "xpath") return xp ? xp(body, cfg.path) : { unknown: true };
     if (ext.extractorType === "boundary_header" && /^[\r\n]*$/.test(cfg.rb || "")) {
       var h = hdr(entry, String(cfg.lb || "").replace(/:\s*$/, ""));
       return h == null ? { none: true } : { value: h };
@@ -81,8 +99,27 @@
       if (kind === "jsonpath") return null;
     }
     var b = safe(body, at, s);
+    if (b && kind === "regexp") {
+      var p = rx(b.lb) + (/[\r\n]/.test(s) ? "([\\s\\S]+?)" : "(.+?)") + rx(b.rb), c = compile(p), m = c.re && c.re.exec(body);
+      return m && m[1] === s ? { extractorType: "regexp", extractorConfig: { pattern: p } } : null;
+    }
     return b ? { extractorType: "boundary", extractorConfig: { lb: b.lb, rb: b.rb } } : null;
   }
+  // a name for a value from the text in front of it: name="vs" value="… → vs, "nonce":"… → nonce, <Token>… → Token
+  function nameBefore(body, at) {
+    var pre = String(body || "").slice(Math.max(0, at - 160), at), m;
+    m = pre.match(/name\s*=\s*["']([\w.-]+)["'][^<>]*value\s*=\s*["']$/i) || pre.match(/([A-Za-z_][\w-]*)["']?\s*[:=]\s*["']?$/) || pre.match(/<(?:[\w.-]+:)?([A-Za-z_][\w.-]*)(?:\s[^<>]*)?>$/);
+    return m ? m[1] : "";
+  }
+  // a name for an XPath: its element, or element + attribute (/a/build/@id → buildId)
+  function nameOfXpath(p) {
+    var m = String(p || "").match(/([A-Za-z_][\w.-]*)(?:\[\d+\])?\/@([A-Za-z_][\w.-]*)$/);
+    if (m) return m[1] + m[2].charAt(0).toUpperCase() + m[2].slice(1);
+    m = String(p || "").match(/([A-Za-z_][\w.-]*)(?:\[\d+\])?$/);
+    return m ? m[1] : "";
+  }
+  // text as a regular expression that matches it literally (the same in the browser, VuGen and DevWeb)
+  function rx(s) { return String(s).replace(/[.*+?^${}()|[\]\\/]/g, "\\$&").replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/\t/g, "\\t"); }
 
   // ── Add manual correlation: which values of a response a later request sends back ──
   // Response headers that are never a value to correlate (and Set-Cookie: cookies are sent back by the engine itself).
@@ -115,6 +152,13 @@
     if (!(o !== null && typeof o === "object") && body) {
       var re = /\bvalue\s*=\s*(["'])([^"'<>]{4,2000})\1/gi, m;
       while ((m = re.exec(body))) add(m[2], "page", "body");
+      // "name": "value" pairs in a page or text (JSON inside a script tag), and the text of XML elements
+      var kv = /"[\w$.-]{1,80}"\s*:\s*"([^"\\<>]{4,2000})"/g;
+      while ((m = kv.exec(body))) add(m[1], "page", "body");
+      var tx = /<([\w.-]+(?::[\w.-]+)?)(?:\s[^<>]*)?>([^<>&\s]{4,2000})<\/\1>/g;
+      while ((m = tx.exec(body))) add(m[2], "page", "body");
+      var at = /\s[\w:.-]+\s*=\s*"([^"<>\s]{4,2000})"/g;   // other attributes (an XML id="…"); only those sent back are marked
+      while ((m = at.exec(body))) add(m[1], "page", "body");
     }
     var map = entry && entry.respHdrsMap || {};
     Object.keys(map).sort().forEach(function (k) { if (!SKIP_HDRS[k.toLowerCase()]) add(map[k], k, "header"); });
@@ -149,7 +193,7 @@
   function laterValues(entries, i, idx) {
     return valuesOf(entries[i]).filter(function (v) { return idx.later(v.value, i); });
   }
-  return { jget: jget, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
+  return { jget: jget, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
 });
 
 (function () {
@@ -182,6 +226,8 @@
           '<button type="button" data-kind="auto" aria-pressed="true" title="What the Correlation Advisor chose">Auto</button>' +
           '<button type="button" data-kind="jsonpath" aria-pressed="false">JSON path</button>' +
           '<button type="button" data-kind="boundary" aria-pressed="false">Boundaries</button>' +
+          '<button type="button" data-kind="regexp" aria-pressed="false">Regex</button>' +
+          '<button type="button" data-kind="xpath" aria-pressed="false">XPath</button>' +
           '<button type="button" data-kind="header" aria-pressed="false">Header</button></span>' +
         '<div class="ss-ed-expr" id="ss-ed-expr"></div>' +
         '<p class="ss-ed-test" id="ss-ed-test" role="status" aria-live="polite"></p>' +
@@ -209,13 +255,48 @@
 
   var cur = null, kind = "auto", draft = null, srcIdx = null, rview = "body";
   // add mode: the new correlation being made (not in the Advisor's list until it is added)
-  var adding = false, nc = null, nameTyped = false, idxFor = null, idx = null, laterFor = {};
+  var adding = false, nc = null, nameTyped = false, idxFor = null, idx = null, laterFor = {}, hint = "";
   function cand(id) { if (adding) return nc; return (S.advisorCandidates || []).filter(function (c) { return c.id === id; })[0] || null; }
   function isList(c) { return !!(c._arrayReconstruct || c._selectAll); }
   function locked(c) { return !adding && (!!c._applied || isList(c)); }
   function entry(i) { return (S.entries1 || [])[i]; }
   // the extractor the engine would use, without the user's choice
   function auto(c) { var x = Object.assign({}, c); delete x._edit; return advisorToCorrelation(x); }
+
+  // XML responses: parse (null when not XML), read an XPath (in the local-name() form VuGen gets, which also matches
+  // what DevWeb's plain names match), and find the XPath of a selected value (element text or attribute)
+  var xmlFor = null, xmlDoc = null;
+  function xml(body) {
+    if (xmlFor === body) return xmlDoc;
+    xmlFor = body; xmlDoc = null;
+    if (!/^\s*</.test(body || "")) return null;
+    try { var d = new DOMParser().parseFromString(body, "application/xml"); if (!d.getElementsByTagName("parsererror").length && d.documentElement) xmlDoc = d; } catch (e) { /* not XML */ }
+    return xmlDoc;
+  }
+  function xp(body, path) {
+    var d = xml(body); if (!d) return { none: true, why: "not XML" };
+    if (!path) return { bad: "Type an XPath." };
+    var q = typeof VugenCodegen !== "undefined" && VugenCodegen.vugenXpath ? VugenCodegen.vugenXpath(path) : path, n;
+    try { n = d.evaluate(q, d, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch (e) { return { bad: "Not a valid XPath." }; }
+    if (!n) return { none: true };
+    return { value: n.nodeType === 2 ? n.value : n.textContent };
+  }
+  function xpathOf(body, s) {
+    var d = xml(body); if (!d) return null;
+    function step(el) { var n = 1, x = el; while ((x = x.previousElementSibling)) if (x.localName === el.localName) n++; var more = n > 1 || (function () { var y = el; while ((y = y.nextElementSibling)) if (y.localName === el.localName) return true; return false; })(); return "/" + el.localName + (more ? "[" + n + "]" : ""); }
+    function path(el) { var p = ""; for (var x = el; x && x.nodeType === 1; x = x.parentNode) p = step(x) + p; return p; }
+    var all = d.getElementsByTagName("*");
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      for (var j = 0; j < el.attributes.length; j++) if (el.attributes[j].value === s && !/^xmlns/.test(el.attributes[j].name)) { var pa = path(el) + "/@" + el.attributes[j].localName; if (xp(body, pa).value === s) return pa; }
+      if (!el.children.length && el.textContent === s) { var pe = path(el); if (xp(body, pe).value === s) return pe; }
+    }
+    return null;
+  }
+  function selFor(e, at, s, want) {
+    if (want === "xpath") { var p = xpathOf(String(e && e.respBody || ""), s); return p ? { extractorType: "xpath", extractorConfig: { path: p } } : null; }
+    return E.fromSelection(e, at, s, want, typeof findJsonPath === "function" ? findJsonPath : null, _advSafeBoundaries);
+  }
 
   // which requests send what back (built once per recording)
   function sent() {
@@ -271,7 +352,7 @@
   // add mode: the value is what the extractor reads; its uses are the engine's
   function sync() {
     var c = nc, e = entry(srcIdx), r = null;
-    if (e && draft) { try { r = E.readWith(e, draft, _advFirstMatch); } catch (x) { r = null; } }
+    if (e && draft) { try { r = E.readWith(e, draft, _advFirstMatch, xp); } catch (x) { r = null; } }
     var v = r && r.value != null ? String(r.value) : "";
     if (v !== c.value) {
       c.value = v; c.preview = v.length > 40 ? v.slice(0, 40) + "…" : v;
@@ -279,7 +360,9 @@
     }
     if (!nameTyped && v) {
       var hn = draft && draft.extractorType === "boundary_header" ? String(draft.extractorConfig.lb || "").replace(/:\s*$/, "") : null;
-      c.varName = free(_advSuggestName(draft && draft.extractorType === "jsonpath" ? draft.extractorConfig.path : null, hn, v));
+      // an XPath names it after its element or attribute (…/SessionToken → sessionToken), as a JSON path does
+      var xn = draft && draft.extractorType === "xpath" ? E.nameOfXpath(draft.extractorConfig.path) : draft && /^(boundary|regexp)$/.test(draft.extractorType) ? hint : "";
+      c.varName = free(_advSuggestName(draft && draft.extractorType === "jsonpath" ? draft.extractorConfig.path : xn ? "$." + xn : null, hn, v));
     }
   }
   // names in use: correlations in the script and the Advisor's suggestions
@@ -314,15 +397,16 @@
     sources(c, lock, us);
     // how to read it
     var e = srcIdx != null ? entry(srcIdx) : null, btxt = String(e && e.respBody || "");
-    var isJson = (function () { try { JSON.parse(btxt); return !!btxt.trim(); } catch (x) { return false; } })();
+    var isJson = (function () { try { JSON.parse(btxt); return !!btxt.trim(); } catch (x) { return false; } })(), isXml = !!xml(btxt);
     var heads = adding ? Object.keys(e && e.respHdrsMap || {}) : E.headersWith(e, c.value);
     $$("#ss-ed-kind [data-kind]").forEach(function (b) {
       var k = b.getAttribute("data-kind");
       b.hidden = adding && k === "auto";
       var on = adding ? draft && (k === "header" ? draft.extractorType === "boundary_header" : draft.extractorType === k) : k === kind;
       b.setAttribute("aria-pressed", String(!!on));
-      b.disabled = lock || !e || (k === "jsonpath" && !isJson) || (k === "header" && !heads.length);
-      b.title = k === "jsonpath" && !isJson ? "This response is not JSON" : k === "header" && !heads.length ? "No header of this response has the value" : k === "auto" ? "What the Correlation Advisor chose" : "";
+      b.disabled = lock || !e || (k === "jsonpath" && !isJson) || (k === "xpath" && !isXml) || (k === "regexp" && !btxt) || (k === "header" && !heads.length);
+      b.title = k === "jsonpath" && !isJson ? "This response is not JSON" : k === "xpath" && !isXml ? "This response is not XML" : k === "header" && !heads.length ? "No header of this response has the value"
+        : k === "auto" ? "What the Correlation Advisor chose" : k === "regexp" ? "A regular expression: the first ( ) group is the value" : k === "xpath" ? "An XPath in the XML response" : "";
     });
     expr(c, e, heads);
     rest();
@@ -405,6 +489,8 @@
         : a.extractorType === "boundary" ? "Boundaries <code>" + esc(a.extractorConfig.lb) + "</code> … <code>" + esc(a.extractorConfig.rb) + "</code>"
         : a.extractorType === "boundary_header" ? "A response header (<code>" + esc(String(a.extractorConfig.lb || "").replace(/:\s*$/, "")) + "</code>)"
         : a.extractorType === "cookie" ? "The cookie <code>" + esc(a.extractorConfig.cookieName) + "</code>"
+        : a.extractorType === "regexp" ? "Regular expression <code>" + esc(a.extractorConfig.pattern) + "</code>"
+        : a.extractorType === "xpath" ? "XPath <code>" + esc(a.extractorConfig.path) + "</code>"
         : a.extractorType === "array_reconstruct" ? "The list, rebuilt (list options)" : esc(a.extractorType);
       x.innerHTML = '<p class="ss-muted">The Correlation Advisor reads it by ' + t + ".</p>";
       return;
@@ -414,6 +500,8 @@
     var dis = locked(c) ? " disabled" : "", k = draft.extractorType;
     if (k === "jsonpath") x.innerHTML = '<label class="ss-fld" for="ss-ed-path">JSON path</label><input class="ss-field ss-mono" id="ss-ed-path" spellcheck="false" value="' + esc(cfg.path || "") + '" placeholder="$.data.token"' + dis + " />";
     else if (k === "boundary") x.innerHTML = '<div class="ss-ed-lr"><span><label class="ss-fld" for="ss-ed-lb">Left boundary</label><input class="ss-field ss-mono" id="ss-ed-lb" spellcheck="false" value="' + esc(cfg.lb || "") + '"' + dis + ' /></span><span><label class="ss-fld" for="ss-ed-rb">Right boundary</label><input class="ss-field ss-mono" id="ss-ed-rb" spellcheck="false" value="' + esc(cfg.rb || "") + '"' + dis + " /></span></div>";
+    else if (k === "regexp") x.innerHTML = '<label class="ss-fld" for="ss-ed-re">Regular expression</label><input class="ss-field ss-mono" id="ss-ed-re" spellcheck="false" value="' + esc(cfg.pattern || "") + '" placeholder="&quot;token&quot;:&quot;([^&quot;]+)&quot;"' + dis + ' /><p class="ss-muted ss-ed-note">The first <code>( )</code> group is the value. Keep to plain syntax (no look-behind): VuGen and DevWeb read it with their own engines.</p>';
+    else if (k === "xpath") x.innerHTML = '<label class="ss-fld" for="ss-ed-xp">XPath</label><input class="ss-field ss-mono" id="ss-ed-xp" spellcheck="false" value="' + esc(cfg.path || "") + '" placeholder="/Envelope/Body/Token"' + dis + ' /><p class="ss-muted ss-ed-note">Element names without a prefix match in any namespace (VuGen gets <code>local-name()</code> steps). End with <code>/@name</code> for an attribute.</p>';
     else if (k === "boundary_header") {
       var h = String(cfg.lb || "").replace(/:\s*$/, "").toLowerCase();
       x.innerHTML = '<label class="ss-fld" for="ss-ed-hdr">Response header</label><select class="ss-field" id="ss-ed-hdr"' + dis + ">" + heads.map(function (k2) { return "<option" + (k2.toLowerCase() === h ? " selected" : "") + ">" + esc(k2) + "</option>"; }).join("") + "</select>";
@@ -427,9 +515,10 @@
     if (adding) {
       if (!e || !draft) { p.className = "ss-ed-test"; p.textContent = ""; p.hidden = true; return; }
       p.hidden = false;
-      try { r = E.readWith(e, x, _advFirstMatch); } catch (err) { r = { unknown: true }; }
+      try { r = E.readWith(e, x, _advFirstMatch, xp); } catch (err) { r = { unknown: true }; }
+      if (r.bad) { p.className = "ss-ed-test bad"; p.textContent = r.bad; return; }
       if (r.unknown) { p.className = "ss-ed-test bad"; p.textContent = draft.extractorType === "boundary" ? "Type both boundaries." : "Choose how to read it."; return; }
-      if (r.none) { p.className = "ss-ed-test bad"; p.textContent = r.why === "not JSON" ? "This response is not JSON." : "Nothing found in this response."; return; }
+      if (r.none) { p.className = "ss-ed-test bad"; p.textContent = r.why === "not JSON" ? "This response is not JSON." : r.why === "not XML" ? "This response is not XML." : "Nothing found in this response."; return; }
       testOk = true;
       var n = (c.usages || []).length;
       // the Correlation Advisor lists this value already: say so (adding it again makes a second extractor)
@@ -444,9 +533,10 @@
     p.hidden = false;
     if (!e) { p.className = "ss-ed-test bad"; p.textContent = "No earlier response was found that sends this value: choose one that has it (marked “has the value”), or use Can't find a value?"; return; }
     if (isList(c)) { testOk = true; p.className = "ss-ed-test"; p.textContent = "A list: every match is read when the script runs (see its list options)."; return; }
-    try { r = E.readWith(e, x, _advFirstMatch); } catch (err) { r = { unknown: true }; }
+    try { r = E.readWith(e, x, _advFirstMatch, xp); } catch (err) { r = { unknown: true }; }
+    if (r.bad) { p.className = "ss-ed-test bad"; p.textContent = r.bad; return; }
     if (r.unknown) { testOk = true; p.className = "ss-ed-test"; p.textContent = "Read when the script runs (this way of reading is not tried here)."; return; }
-    if (r.none) { p.className = "ss-ed-test bad"; p.textContent = r.why === "not JSON" ? "This response is not JSON." : "Nothing found in this response."; return; }
+    if (r.none) { p.className = "ss-ed-test bad"; p.textContent = r.why === "not JSON" ? "This response is not JSON." : r.why === "not XML" ? "This response is not XML." : "Nothing found in this response."; return; }
     if (r.value === c.value) { testOk = true; p.className = "ss-ed-test good"; p.innerHTML = '<svg class="i"><use href="#i-ok"/></svg><span>Reads <code>' + esc(short(r.value)) + "</code>, the value that is sent back.</span>"; return; }
     p.className = "ss-ed-test bad";
     p.innerHTML = '<svg class="i"><use href="#i-warn"/></svg><span>Reads <code>' + esc(short(r.value)) + "</code>, not the value sent back (<code>" + esc(short(c.value)) + "</code>).</span>";
@@ -514,10 +604,12 @@
   }
   function pickAt(at, s) {
     var c = cand(cur); if (!c || locked(c)) return;
-    var e = entry(srcIdx), want = adding ? (draft && draft.extractorType === "boundary" ? "boundary" : "any") : kind === "boundary" ? "boundary" : kind === "jsonpath" ? "jsonpath" : "any";
-    var x = E.fromSelection(e, at, s, want, typeof findJsonPath === "function" ? findJsonPath : null, _advSafeBoundaries);
-    if (!x && adding && want === "boundary") x = E.fromSelection(e, at, s, "any", typeof findJsonPath === "function" ? findJsonPath : null, _advSafeBoundaries);
-    if (!x) { if (typeof showToast === "function") showToast(kind === "jsonpath" ? "No JSON path found for that selection: try Boundaries." : "No boundaries capture exactly that selection as the first match.", "warning", 4000); return; }
+    if (adding) hint = E.nameBefore(String(entry(srcIdx) && entry(srcIdx).respBody || ""), at);
+    var e = entry(srcIdx), cur0 = adding ? (draft ? draft.extractorType : "") : kind;
+    var want = /^(boundary|regexp|xpath)$/.test(cur0) ? cur0 : !adding && cur0 === "jsonpath" ? "jsonpath" : "any";
+    var x = selFor(e, at, s, want);
+    if (!x && adding && want !== "any") x = selFor(e, at, s, "any");
+    if (!x) { if (typeof showToast === "function") showToast(want === "jsonpath" ? "No JSON path found for that selection: try Boundaries." : want === "xpath" ? "No XPath reads exactly that selection: select an element's text or an attribute value." : "No boundaries capture exactly that selection as the first match.", "warning", 4000); return; }
     draft = x; if (!adding) kind = x.extractorType; save(); draw();
   }
   function pick() { var sel = selection(); if (sel && sel.s && sel.s.length <= 4000) pickAt(sel.at, sel.s); }
@@ -578,8 +670,10 @@
     if (k === "auto") { draft = null; srcIdx = c.source ? c.source.entryIdx : srcIdx; save(); draw(); return; }
     rview = "body";
     var bodyText = String(e && e.respBody || ""), at = c.value ? bodyText.indexOf(c.value) : -1;
-    draft = (at !== -1 && E.fromSelection(e, at, c.value, k, typeof findJsonPath === "function" ? findJsonPath : null, _advSafeBoundaries)) ||
-      (k === "jsonpath" ? { extractorType: "jsonpath", extractorConfig: { path: "$." } } : { extractorType: "boundary", extractorConfig: { lb: "", rb: "" } });
+    if (k === "xpath" && at === -1 && c.value) at = 0;   // an XML value may be written with entities: the XPath finder reads the parsed text
+    draft = (at !== -1 && selFor(e, at, c.value, k)) ||
+      (k === "jsonpath" ? { extractorType: "jsonpath", extractorConfig: { path: "$." } } : k === "regexp" ? { extractorType: "regexp", extractorConfig: { pattern: "" } }
+        : k === "xpath" ? { extractorType: "xpath", extractorConfig: { path: "" } } : { extractorType: "boundary", extractorConfig: { lb: "", rb: "" } });
     save(); draw();
   }
   function setSrc(i) {
@@ -587,7 +681,7 @@
     var c = cand(cur), e = entry(i);
     if (adding) {
       c.source = { entryIdx: i, url: typeof _advShortUrl === "function" ? _advShortUrl(e) : "", jsonPath: null };
-      draft = null; kind = "auto"; c.value = ""; c.usages = []; if (!nameTyped) c.varName = "";
+      draft = null; kind = "auto"; c.value = ""; c.usages = []; hint = ""; if (!nameTyped) c.varName = "";
       rview = "body"; save(); draw(); return;
     }
     // the value in the new response: read it the same way if possible, else by boundaries around it
@@ -595,7 +689,7 @@
     if (k === "header") { var hs = E.headersWith(e, c.value); draft = hs.length ? { extractorType: "boundary_header", extractorConfig: { lb: hs[0] + ": ", rb: "\r\n" } } : draft; }
     else {
       var at = String(e && e.respBody || "").indexOf(c.value);
-      var x = at !== -1 ? E.fromSelection(e, at, c.value, k, typeof findJsonPath === "function" ? findJsonPath : null, _advSafeBoundaries) : null;
+      var x = at !== -1 || k === "xpath" ? selFor(e, Math.max(at, 0), c.value, k) : null;
       if (x) { draft = x; kind = x.extractorType; }
       else if (kind === "auto" && (!c.source || i !== c.source.entryIdx)) { kind = "boundary"; draft = { extractorType: "boundary", extractorConfig: { lb: "", rb: "" } }; }
     }
@@ -610,6 +704,8 @@
     if (!draft) return;
     if (id === "ss-ed-path") draft.extractorConfig = { path: ev.target.value.trim() };
     else if (id === "ss-ed-lb" || id === "ss-ed-rb") draft.extractorConfig = { lb: $("#ss-ed-lb").value, rb: $("#ss-ed-rb").value };
+    else if (id === "ss-ed-re") draft.extractorConfig = { pattern: ev.target.value };
+    else if (id === "ss-ed-xp") draft.extractorConfig = { path: ev.target.value.trim() };
     else return;
     save();
     if (adding) { rest(); return; }
