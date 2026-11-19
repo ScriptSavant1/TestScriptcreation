@@ -542,6 +542,69 @@ function _advHiddenFieldScan(entries, knownValues) {
 }
 
 // ---------------------------------------------------------------------------
+// PHASE 2.7: lists a page offers in a <select> (flights, slots, accounts) whose options look generated and that a
+// later request sends one of back. One High candidate per <select>: boundaries <option value=" … " with every match
+// (VuGen Ord=ALL, DevWeb occurrence All), the range of this select's options among every match on the page (_range),
+// each use with the value it sends and its place (tokenValue, listIdx — as BUG-150's lists). Used every value as
+// recorded unless the user chooses otherwise (_pick). Options written another way (<option selected value=…, single
+// quotes) are left to Add manual correlation. Single candidates for one of its values from that page are dropped.
+// ---------------------------------------------------------------------------
+function _advSelectScan(entries, existingCorrelations) {
+  const out = [];
+  const LB = '<option value="';
+  const generated = (v) => !/\s/.test(v) && v.length >= 4 && !/^\d{1,6}$/.test(v) && (/\d/.test(v) || v.length >= 20);
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.filtered || e.isMarker) continue;
+    const body = e.respBody || '';
+    if (body.indexOf('<select') < 0 || body.indexOf(LB) < 0) continue;
+    // every <option value=" on the page, in order (the places the extractor gives)
+    const all = [];
+    for (let j = body.indexOf(LB); j !== -1; j = body.indexOf(LB, j + 1)) {
+      const k = body.indexOf('"', j + LB.length);
+      if (k === -1) break;
+      all.push({ at: j, v: body.slice(j + LB.length, k) });
+    }
+    const re = /<select\b([^>]*)>([\s\S]*?)<\/select\s*>/gi;
+    let m;
+    while ((m = re.exec(body))) {
+      const start = m.index, end = m.index + m[0].length;
+      const tags = m[2].match(/<option\b[^>]*>/gi) || [];
+      if (tags.length < 2 || tags.some(t => t.indexOf(LB) !== 0)) continue;
+      const mine = all.map((x, n) => ({ v: x.v, pos: n + 1, at: x.at })).filter(x => x.at > start && x.at < end);
+      if (mine.length !== tags.length) continue;
+      const values = mine.map(x => x.v);
+      if (values.some(v => _advAlreadyCorrelated(v, existingCorrelations))) continue;
+      const usages = [], seen = new Set();
+      for (const x of mine) {
+        if (!x.v || seen.has(x.v) || !generated(x.v)) continue;
+        seen.add(x.v);
+        _advFindUsages(entries, i, x.v).forEach(u => usages.push(Object.assign(u, { tokenValue: x.v, listIdx: x.pos })));
+      }
+      if (!usages.length || values.filter(generated).length * 2 < values.length) continue;
+      const nm = (/\bname\s*=\s*["']([^"']+)["']/i.exec(m[1]) || /\bid\s*=\s*["']([^"']+)["']/i.exec(m[1]) || [])[1];
+      const from = mine[0].pos, to = mine[mine.length - 1].pos;
+      const c = {
+        value: '(list — ' + values.length + ' values)',
+        preview: values.slice(0, 3).join(', ') + (values.length > 3 ? ', …' : ''),
+        valueType: 'list',
+        confidence: 'high',
+        varName: (_advSafeVarName(nm || 'select') || 'select') + 'Options',
+        source: { entryIdx: i, url: _advShortUrl(e), jsonPath: null },
+        usages,
+        status: 'pending',
+        _selectAll: true,
+        _select: nm || '',
+        _extract: { extractorType: 'boundary', extractorConfig: { lb: LB, rb: '"', all: true } },
+      };
+      if (from > 1 || to < all.length) c._range = { from, to };
+      out.push(c);
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // PHASE 3: pattern scan — catch dynamic values in request bodies that weren't
 // found in any response (e.g. truncated HAR, first-ever recording).
 // Returns array of medium-confidence candidate objects.
@@ -1103,6 +1166,17 @@ function advisorScan(entries, existingCorrelations) {
   // F2: Detect groups of SelectAll candidates that feed the same target array
   // and promote them to _arrayReconstruct meta-candidates
   all = _advDetectArrayGroups(all);
+
+  // Phase 2.7 — lists in a <select>: placed with the High candidates; a single candidate for one of a list's values from
+  // the same page is covered by the list
+  const selects = _advSelectScan(entries, existingCorrelations);
+  if (selects.length) {
+    const covered = new Set();
+    selects.forEach(s => s.usages.forEach(u => covered.add(s.source.entryIdx + '\x01' + u.tokenValue)));
+    all = all.filter(c => c._selectAll || !c.source || !covered.has(c.source.entryIdx + '\x01' + c.value));
+    const firstMed = all.findIndex(c => c.confidence !== 'high');
+    all.splice(firstMed === -1 ? all.length : firstMed, 0, ...selects);
+  }
 
   // Re-index IDs after filtering
   all.forEach((c, i) => { c.id = 'adv-' + i; });

@@ -25,7 +25,7 @@ function engine() {
   const doc = { getElementById: () => null, querySelectorAll: () => [], querySelector: () => null, documentElement: { setAttribute() {}, classList: { add() {} } } };
   // eslint-disable-next-line no-new-func
   return new Function('document', 'window', 'localStorage', ['VuGen-Script-Studio-constants.js', 'VuGen-Script-Studio-correlation.js', 'studio-advisor.js', 'studio-codegen.js'].map(read).join('\n') +
-    '\nreturn { S, _advMergeArrayCandidates, _advListPos, advisorToCorrelation, advisorAddList, genActionC, genMainJS, genDefaultCfg, devwebExtractorDecl, _listRef };')(doc, { location: { pathname: '/converter/studio' }, addEventListener() {} }, { getItem: () => null, setItem() {} });
+    '\nreturn { S, _advMergeArrayCandidates, _advListPos, _advSelectScan, advisorScan, advisorToCorrelation, advisorAddList, genActionC, genMainJS, genDefaultCfg, devwebExtractorDecl, _listRef };')(doc, { location: { pathname: '/converter/studio' }, addEventListener() {} }, { getItem: () => null, setItem() {} });
 }
 
 let nextId = 1;
@@ -188,5 +188,40 @@ describe('lists made in the editor', () => {
     c._pick = 'random'; expect([E.advisorToCorrelation(c).extractorType, E.advisorToCorrelation(c).list]).toEqual(['jsonpath', { pick: 'random' }]);
     c._pick = 'rotate'; expect([E.advisorToCorrelation(c).extractorType, E.advisorToCorrelation(c).list]).toEqual(['jsonpath', { pick: 'rotate' }]);
     c._pick = 'nth'; c._nth = 2; expect(E.advisorToCorrelation(c).list).toEqual({ pick: 'nth', nth: 2 });
+  });
+});
+
+// Phase 2.7: the Correlation Advisor finds a <select> list by itself
+describe('_advSelectScan', () => {
+  const flights = ['F-1001;0800;ab12', 'F-1002;1130;cd34', 'F-1003;1545;ef56'];
+  const pageOf = (opts) => '<form><select name="seatClass"><option value="economy">E</option><option value="business">B</option></select>' +
+    '<select name="outbound">' + opts + '</select></form>';
+  const rec = (page, sent) => [
+    ent('https://travel.example.com/flights', { respBody: page, ct: 'text/html' }),
+    ent('https://travel.example.com/book', { method: 'POST', body: { mimeType: 'application/x-www-form-urlencoded', text: 'seatClass=economy&outbound=' + encodeURIComponent(sent), params: [{ name: 'seatClass', value: 'economy' }, { name: 'outbound', value: sent }] } }),
+  ];
+  const opts = flights.map((f) => '<option value="' + f + '">' + f + '</option>').join('');
+  test('a select with generated options, one sent back: one High list — every <option value=", its own range, the place used', () => {
+    const E = engine();
+    const [c] = E._advSelectScan(rec(pageOf(opts), flights[1]), []);
+    expect([c.varName, c.confidence, c._select, c._range, c._extract]).toEqual(['outboundOptions', 'high', 'outbound', { from: 3, to: 5 }, { extractorType: 'boundary', extractorConfig: { lb: '<option value="', rb: '"', all: true } }]);
+    expect(c.usages.map((u) => [u.entryIdx, u.tokenValue, u.listIdx, u.location])).toEqual([[1, flights[1], 4, 'body_form']]);
+    expect(E.advisorToCorrelation(c)).toMatchObject({ extractorType: 'boundary', extractorConfig: { all: true } });
+  });
+  test('not a list: plain words, options written another way, nothing sent back, already correlated', () => {
+    const E = engine();
+    expect(E._advSelectScan(rec(pageOf(opts), 'none-sent'), [])).toEqual([]);
+    expect(E._advSelectScan(rec(pageOf(flights.map((f) => '<option selected value="' + f + '">x</option>').join('')), flights[1]), [])).toEqual([]);
+    expect(E._advSelectScan(rec(pageOf(opts), flights[1]), [{ name: 'x', usages: [{ tokenValue: flights[0] }] }])).toEqual([]);
+    const words = pageOf('<option value="red">R</option><option value="blue">B</option>');
+    expect(E._advSelectScan(rec(words, 'blue'), [])).toEqual([]);
+  });
+  test('advisorScan: the list is among the High candidates, a single candidate for the same value is covered', () => {
+    const E = engine();
+    E.S.entries1 = rec(pageOf(opts), flights[1]);
+    E.advisorScan(E.S.entries1, []);
+    const lists = E.S.advisorCandidates.filter((c) => c._select === 'outbound');
+    expect(lists).toHaveLength(1);
+    expect(E.S.advisorCandidates.filter((c) => c.value === flights[1])).toEqual([]);
   });
 });

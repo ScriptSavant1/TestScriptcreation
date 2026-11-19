@@ -89,6 +89,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### The Correlation Advisor finds lists in a select by itself
+
+- A page that offers generated-looking options in a `<select>` (flights, slots, accounts) of which a later request sends one back gets one High suggestion: the list of that select's options (only its own, when the page has others), each place using the value at the position recorded — or One at random / The next one each iteration / Always the same one in the editor. Plain choices (economy, blue) are not suggested. In the table: List of values, Options of a select, n values. Proved on both engines (`studioextract.js` advisor-select, advisor-select-rotate).
+- A list's value in the table shows how many values it has (it showed a character count).
+
 #### One random picker for every list
 
 - One at random — chosen in the editor or with the Rnd switch of Correlation details, for the Correlation Advisor's lists too — now uses the same picker as the lists made in the editor: one value picked once per iteration, sent to every place in both formats (DevWeb used to pick again for each place). Proved on both engines (`studioextract.js` list-random: both fields send the same new value).

@@ -13,10 +13,10 @@
 
   var F = { q: "", type: "", conf: "", show: "review" };
   var tickedFor = null;   // the candidate list whose High values were ticked for the user
-  var KIND = { jwt: "Sign-in token (JWT)", uuid: "Id (UUID)", hex: "Token (hex)", token: "Token", array: "List of values", json: "JSON value", xml: "XML value", html: "HTML value", text: "Text", unknown: "Value" };
+  var KIND = { jwt: "Sign-in token (JWT)", uuid: "Id (UUID)", hex: "Token (hex)", token: "Token", array: "List of values", list: "List of values", json: "JSON value", xml: "XML value", html: "HTML value", text: "Text", unknown: "Value" };
   function kind(c) { return KIND[c.valueType] || (c.valueType ? String(c.valueType).charAt(0).toUpperCase() + String(c.valueType).slice(1) : "Value"); }
   function tag(c) {
-    return c._edit && !c._applied ? "Changed by you" : c._more ? "Repeated value" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : c._arrayReconstruct ? "Array rebuild" : c._selectAll ? "List" : "";
+    return c._edit && !c._applied ? "Changed by you" : c._more ? "Repeated value" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : c._arrayReconstruct ? "Array rebuild" : c._select ? "Options of a select" : c._selectAll ? "List" : "";
   }
   function all() { return S.advisorCandidates || []; }
   function ticked() { return all().filter(function (c) { return c.status === "accepted" && !c._applied; }); }
@@ -110,7 +110,7 @@
       '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-tick' + (c.status === "accepted" || c._applied ? " checked" : "") + (c._applied ? " disabled" : "") + ' aria-label="Add ' + esc(c.varName) + ' to the script" /></td>' +
       '<td><input class="ss-field ss-cr-name" data-name value="' + esc(c.varName) + '" spellcheck="false" aria-label="Name of ' + esc(c.varName) + '"' + (c._applied ? " disabled title=\"In the script: the name is fixed\"" : "") + " /></td>" +
       "<td>" + esc(kind(c)) + (t ? '<small class="ss-cr-tag">' + esc(t) + "</small>" : "") + "</td>" +
-      '<td><code class="ss-cr-val" title="' + esc(v.length > 400 ? v.slice(0, 400) + "…" : v) + '">' + esc(pv.length > 48 ? pv.slice(0, 47) + "…" : pv) + '</code><small class="ss-muted">' + plural(v.length, "character") + "</small></td>" +
+      '<td><code class="ss-cr-val" title="' + esc(v.length > 400 ? v.slice(0, 400) + "…" : v) + '">' + esc(pv.length > 48 ? pv.slice(0, 47) + "…" : pv) + '</code><small class="ss-muted">' + (/^\((?:list|array) — \d+ (?:values|items)/.test(v) ? v.slice(1).replace(/^(?:list|array) — /, "").replace(/\).*$/, "") : plural(v.length, "character")) + "</small></td>" +
       "<td>" + from(c) + "</td><td>" + uses(c) + "</td><td>" + conf + '</td><td class="ss-cr-act">' + act + "</td></tr>";
   }
 

@@ -13,6 +13,8 @@
 //                boundaries <option value=" … " with every match and the range of that select — and a JSON list:
 //                select-recorded (the place recorded), select-rotate (the next each iteration, 2 iterations),
 //                json-nth (always the 3rd), json-random (one of them)
+//   advisor-*    the same page: the Correlation Advisor's own list for the flights <select> (Phase 2.7), ticked alone
+//                and added — as recorded, and the next each iteration
 'use strict';
 const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
 const { chromium } = require(path.resolve(__dirname, '../../../cdp-recorder/recorder/node_modules/playwright-core'));
@@ -107,6 +109,16 @@ const selSetup = (arg) => {
   regenerateFromAdvisor({ quiet: true });
   return c.varName + ' ' + arg.pick + ', places ' + c.usages.map((u) => u.listIdx).join(',');
 };
+// in the page: only the Advisor's list for the <select> name="outbound", used as asked
+const advSetup = (pick) => {
+  const S = PerfxStudio.state(), c = S.advisorCandidates.find((x) => x._select === 'outbound');
+  if (!c) return 'NO SELECT LIST FOUND';
+  S.advisorCandidates.forEach((x) => { if (x !== c && x.status === 'accepted') advisorAccept(x.id); });
+  if (c.status !== 'accepted') advisorAccept(c.id);
+  if (pick !== 'all') advisorSetListPick(c.id, pick);
+  advisorApplyAndRegen();
+  return c.varName + ' ' + pick + ' (' + c.confidence + '), places ' + c.usages.map((u) => u.listIdx).join(',');
+};
 const form = (r) => { const o = {}; new URLSearchParams(r.body || '').forEach((v, k) => { o[k] = v; }); return o; };
 const CASES = {
   extractors: { ...EXTRACT, last: /\/use$/ },
@@ -122,6 +134,10 @@ const CASES = {
     checkAll: (rs, NEW) => { const v = rs.map((r) => JSON.parse(r.body || '{}').seat); return v.length === 2 && v.every((x) => x === NEW.seats[2]) ? '' : 'WRONG ' + v.join(' / '); } },
   'json-random': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/api\/hold$/, iters: 2, setup: selSetup, arg: { kind: 'json', pick: 'random' },
     checkAll: (rs, NEW) => { const v = rs.map((r) => JSON.parse(r.body || '{}').seat); return v.length === 2 && v.every((x) => NEW.seats.includes(x)) ? '' : 'WRONG ' + v.join(' / '); } },
+  'advisor-select': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/book$/, iters: 2, setup: advSetup, arg: 'all',
+    checkAll: (rs, NEW) => { const v = rs.map((r) => form(r).outbound); return v.length === 2 && v.every((x) => x === NEW.flights[1]) ? '' : 'WRONG ' + v.join(' / '); } },
+  'advisor-select-rotate': { old: SEL_OLD, new: SEL_NEW, har: selHar, last: /\/book$/, iters: 2, setup: advSetup, arg: 'rotate',
+    checkAll: (rs, NEW) => { const v = rs.map((r) => form(r).outbound); return v.join(' / ') === NEW.flights[0] + ' / ' + NEW.flights[1] ? '' : 'WRONG ' + v.join(' / '); } },
 };
 const ONLY = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 
