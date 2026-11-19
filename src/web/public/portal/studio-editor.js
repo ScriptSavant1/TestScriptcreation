@@ -11,7 +11,8 @@
  * Add manual correlation (SSE.add()) is the same screen for a new value: choose the request (by default only those
  * whose response has a value a later request sends back — StudioEdit.sentIndex / valuesOf), select the value or click
  * one of the marked ones; the value is what the extractor reads, its uses are the engine's (_advFindUsages); Add to
- * the script = advisorAddManual + _edit + advisorApplyOne (this value only) + regenerate.
+ * the script = advisorAddManual + _edit + advisorApplyOne (this value only) + regenerate. Keep, pick another puts the
+ * value in "Values to add" (tray) and starts the next one; Add all n puts every kept value in (one regeneration).
  * Regex: the first ( ) group of a regular expression is the value (VuGen web_reg_save_param_regexp, DevWeb
  * RegexpExtractor; tried here with the browser's engine). XPath: for XML responses (VuGen web_reg_save_param_xpath with
  * local-name() steps — VugenCodegen.vugenXpath — DevWeb XpathExtractor with the plain names; tried here in the
@@ -253,6 +254,7 @@
     '<div class="ss-ed-cols">' +
       '<div class="ss-ed-left">' +
         '<p class="ss-ed-why" id="ss-ed-why"></p>' +
+        '<div class="ss-ed-tray" id="ss-ed-tray" hidden><div class="ss-ed-tray-h"><b>Values to add</b><span class="ss-muted" id="ss-ed-tray-n"></span></div><ul id="ss-ed-tray-l"></ul></div>' +
         '<div class="ss-ed-sec"><span class="ss-ed-num">1</span><label class="ss-fld" for="ss-ed-src" id="ss-ed-src-l">Read from the response of</label></div>' +
         '<div class="ss-ed-find" id="ss-ed-find" hidden>' +
           '<label class="ss-search"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-ed-srcq" type="search" placeholder="Filter by address or method" aria-label="Filter the requests" /></label>' +
@@ -275,6 +277,7 @@
         '<p class="ss-ed-err" id="ss-ed-nerr" hidden></p>' +
         '<span class="ss-fld">The code</span><pre class="ss-ed-code" id="ss-ed-code"></pre>' +
         '<div class="ss-ed-act"><button type="button" class="ds-btn ds-btn-primary" id="ss-ed-accept"><svg class="i"><use href="#i-ok"/></svg><span id="ss-ed-accept-t">Accept &amp; next</span></button>' +
+          '<button type="button" class="ds-btn ss-btn-accent" id="ss-ed-keep" hidden title="Keep this value and choose another one; add them all at once"><svg class="i"><use href="#i-plus"/></svg>Keep, pick another</button>' +
           '<button type="button" class="ds-btn" id="ss-ed-skip">Skip</button><span class="ss-grow"></span>' +
           '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" id="ss-ed-reset" title="Back to what the Correlation Advisor chose">Undo my changes</button></div>' +
       "</div>" +
@@ -294,7 +297,7 @@
 
   var cur = null, kind = "auto", draft = null, srcIdx = null, rview = "body";
   // add mode: the new correlation being made (not in the Advisor's list until it is added)
-  var adding = false, nc = null, nameTyped = false, idxFor = null, idx = null, laterFor = {}, hint = "";
+  var adding = false, nc = null, nameTyped = false, idxFor = null, idx = null, laterFor = {}, hint = "", tray = [];
   function cand(id) { if (adding) return nc; return (S.advisorCandidates || []).filter(function (c) { return c.id === id; })[0] || null; }
   function isList(c) { return !!(c._arrayReconstruct || c._selectAll); }
   function locked(c) { return !adding && (!!c._applied || isList(c)); }
@@ -359,7 +362,7 @@
   }
   // Add manual correlation: the same screen for a value the Correlation Advisor did not list
   function add(from) {
-    adding = true; nameTyped = false; cur = "new"; draft = null; kind = "auto"; rview = "body";
+    adding = true; nameTyped = false; cur = "new"; draft = null; kind = "auto"; rview = "body"; tray = [];
     nc = { id: "new", value: "", preview: "", valueType: "token", confidence: "high", varName: "", usages: [], status: "accepted", _manual: true, source: null };
     srcIdx = from != null && entry(from) ? from : null;
     $("#ss-ed-srcq").value = "";
@@ -374,9 +377,13 @@
     if (!adding) $("#ss-ed-back").focus();
     var ws = $("#ss-t-corr"); if (ws.scrollTop) ws.scrollTop = 0;
   }
-  function close() {
+  function close(sure) {
     if (!cur) return;
-    var id = cur, was = adding; cur = null; adding = false; nc = null; box.hidden = true; tab.classList.remove("ss-cr-editing");
+    if (adding && tray.length && !sure && SS.ask) {
+      SS.ask("Leave without adding?", plural(tray.length, "kept value") + " will not be added to the script.", "Leave", function () { close(true); }, { no: "Stay" });
+      return;
+    }
+    var id = cur, was = adding; cur = null; adding = false; nc = null; tray = []; box.hidden = true; tab.classList.remove("ss-cr-editing");
     if (window.SSC) SSC.render();
     var r = was ? $("#ss-cr-manual") : document.querySelector('#ss-cr-body [data-id="' + id + '"] [data-edit]'); if (r) r.focus();
   }
@@ -406,7 +413,7 @@
   }
   // names in use: correlations in the script and the Advisor's suggestions
   function taken(n) {
-    return (S.correlations || []).some(function (x) { return x.name === n; }) ||
+    return tray.some(function (x) { return x.varName === n; }) || (S.correlations || []).some(function (x) { return x.name === n; }) ||
       (S.advisorCandidates || []).some(function (x) { return x.varName === n && x.status !== "skipped"; });
   }
   function free(n) { n = n || "value"; if (!taken(n)) return n; for (var i = 2; i < 999; i++) if (!taken(n + "_" + i)) return n + "_" + i; return n; }
@@ -490,15 +497,20 @@
     code(c);
     var acc = $("#ss-ed-accept");
     if (adding) {
-      $("#ss-ed-accept-t").textContent = "Add to the script";
-      acc.disabled = !c.value || !c.varName || !!nameBad || !testOk;
-      acc.title = !c.value ? "Choose a value first" : nameBad || "Put it in the script now (only this value)";
+      var ready = !!(c.value && c.varName && !nameBad && testOk), n = tray.length + (ready ? 1 : 0);
+      $("#ss-ed-accept-t").textContent = n > 1 ? "Add all " + n + " to the script" : tray.length ? "Add the kept value" : "Add to the script";
+      acc.disabled = !n;
+      acc.title = !n ? "Choose a value first" : tray.length && !ready && c.value ? "Adds the kept values (the one shown is not ready: " + (nameBad || "check how it is read") + ")" : "Put " + (n > 1 ? "them" : "it") + " in the script now";
+      $("#ss-ed-keep").disabled = !ready;
+      trayDraw();
     } else {
       $("#ss-ed-accept-t").textContent = "Accept & next";
       acc.disabled = !!c._applied || !us.length || !testOk;
       acc.title = !us.length ? "No later request sends this value back" : !testOk ? "The way to read it does not give the value yet" : "Tick it and go to the next value";
     }
     $("#ss-ed-skip").hidden = adding;
+    $("#ss-ed-keep").hidden = !adding;
+    if (!adding) $("#ss-ed-tray").hidden = true;
     $("#ss-ed-skip").textContent = c.status === "skipped" ? "Put back" : "Skip";
     $("#ss-ed-skip").disabled = !!c._applied;
     $("#ss-ed-reset").hidden = adding || lock || !c._edit && kind === "auto";
@@ -637,7 +649,7 @@
     $("#ss-ed-hint").textContent = !e ? (adding ? "Choose a request on the left." : "") : !adding && isList(c) ? "The values of the list are marked." : locked(c) ? "The value is marked." : rview === "headers" ? "Click a header to read the value from it." : "Select a value (or double-click it) to read it from here.";
     // a list: the values it reads are marked (every match of its JSON path, or of each field of a rebuilt list)
     var lpaths = !adding && isList(c) ? (c._arrayReconstruct ? ((c._arrayConfig || {}).columns || []).map(function (k) { return k._placeholder ? "" : k.sourceJsonPath; }).filter(Boolean) : [c.source && c.source.jsonPath].filter(Boolean)) : [];
-    var key = cur + "|" + srcIdx + "|" + rview + "|" + text.length + "|" + c.value + "|" + (draft ? JSON.stringify(draft) : "") + "|" + lpaths.join(",");
+    var key = cur + "|" + srcIdx + "|" + rview + "|" + text.length + "|" + c.value + "|" + (draft ? JSON.stringify(draft) : "") + "|" + lpaths.join(",") + "|" + tray.length;
     if (shownBody === key) return;
     shownBody = key;
     var v = String(c.value || "");
@@ -654,16 +666,17 @@
       if (w.length < 2) return;
       i = 0; while ((j = t.indexOf(w, i)) !== -1) { rs.push([j, j + w.length, "cur"]); i = j + w.length; }
     });
+    var kept = adding ? tray.filter(function (x) { return x.srcIdx === srcIdx; }).map(function (x) { return x.value; }) : [];
     lat.forEach(function (x) {
       if (x.kind === "header" || x.value === v) return;
       var q = x.kind === "json" ? JSON.stringify(x.value).slice(1, -1) : x.value, k = t.indexOf(q);
-      if (k !== -1) rs.push([k, k + q.length, "later"]);
+      if (k !== -1) rs.push([k, k + q.length, kept.indexOf(x.value) !== -1 ? "kept" : "later"]);
     });
     rs.sort(function (a, b) { return a[0] - b[0] || (a[2] === "cur" ? -1 : 1); });
     var h = "", pos = 0, first = true;
     rs.forEach(function (r) {
       if (r[0] < pos) return;
-      h += esc(t.slice(pos, r[0])) + "<mark" + (r[2] === "later" ? ' class="later" data-at="' + r[0] + '" title="Sent back by a later request: click to use it"' : first ? ' id="ss-ed-first"' : "") + ">" + esc(t.slice(r[0], r[1])) + "</mark>";
+      h += esc(t.slice(pos, r[0])) + "<mark" + (r[2] === "later" ? ' class="later" data-at="' + r[0] + '" title="Sent back by a later request: click to use it"' : r[2] === "kept" ? ' class="kept" title="Kept: in Values to add"' : first ? ' id="ss-ed-first"' : "") + ">" + esc(t.slice(r[0], r[1])) + "</mark>";
       if (r[2] === "cur") first = false;
       pos = r[1];
     });
@@ -715,7 +728,9 @@
     else if (t.hasAttribute("data-kind")) { setKind(t.getAttribute("data-kind")); }
     else if (t.hasAttribute("data-rv")) { rview = t.getAttribute("data-rv"); rest(); }
     else if (t.hasAttribute("data-h")) { setHeader(t.getAttribute("data-h")); }
-    else if (t.hasAttribute("data-known")) { open(t.getAttribute("data-known")); }
+    else if (t.hasAttribute("data-known")) { if (!tray.length) open(t.getAttribute("data-known")); else if (typeof showToast === "function") showToast("Add or remove the kept values first.", "info", 3000); }
+    else if (t.id === "ss-ed-keep") keep();
+    else if (t.hasAttribute("data-untray")) { tray.splice(+t.getAttribute("data-untray"), 1); shownBody = null; rest(); }
     else if (t.id === "ss-ed-accept") { if (adding) addNow(); else { save(); if (c.status !== "accepted") advisorAccept(c.id); var l2 = SSC.list(), k = l2.indexOf(cur), nx = l2[k + 1]; if (nx) open(nx); else close(); } }
     else if (t.id === "ss-ed-skip") { advisorSkip(c.id); draw(); }
     else if (t.id === "ss-ed-reset") { delete c._edit; draft = null; kind = "auto"; srcIdx = c.source ? c.source.entryIdx : null; draw(); }
@@ -726,17 +741,43 @@
     else if (t.id === "ss-ed-fill") { advisorFillArrayPaths(c.id, $("#ss-ed-anchor").value); afterList(); }
   });
   // add mode: put the new value in the script (this value only; other ticked values wait for Add to the script)
+  // the value shown, as a kept one (null when it is not ready)
+  function current() {
+    var c = nc;
+    if (!c || !c.value || !draft || !testOk || !c.varName || taken(c.varName)) return null;
+    return { srcIdx: srcIdx, draft: JSON.parse(JSON.stringify(draft)), value: c.value, varName: c.varName, usages: (c.usages || []).length };
+  }
+  function keep() {
+    var k = current(); if (!k) return;
+    tray.push(k);
+    // the next value: the same response, nothing chosen yet
+    draft = null; kind = "auto"; nc.value = ""; nc.usages = []; nc.varName = ""; nameTyped = false; hint = ""; nc._edit = undefined;
+    shownBody = null; draw();
+    var m = $("#ss-ed-body mark.later"); if (m) m.focus();
+  }
+  function trayDraw() {
+    var box2 = $("#ss-ed-tray"); box2.hidden = !tray.length;
+    $("#ss-ed-tray-n").textContent = tray.length ? plural(tray.length, "value") : "";
+    $("#ss-ed-tray-l").innerHTML = tray.map(function (k, i) {
+      var e = entry(k.srcIdx), how = k.draft.extractorType === "jsonpath" ? "JSON path" : k.draft.extractorType === "boundary_header" ? "Header" : k.draft.extractorType === "regexp" ? "Regex" : k.draft.extractorType === "xpath" ? "XPath" : "Boundaries";
+      return '<li><code>' + esc(k.varName) + '</code><span class="ss-muted">' + esc(how) + " · #" + (e ? e.id : "?") + " · " + plural(k.usages, "place") + '</span><button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" data-untray="' + i + '" title="Remove ' + esc(k.varName) + '" aria-label="Remove ' + esc(k.varName) + '"><svg class="i"><use href="#i-x"/></svg></button></li>';
+    }).join("");
+  }
   function addNow() {
-    var c = nc; if (!c || !c.value || !draft || !testOk) return;
-    var t = draft.extractorType;
-    var made = advisorAddManual(srcIdx, t === "jsonpath" ? "jsonpath" : t === "boundary_header" ? "header" : "boundary",
-      t === "jsonpath" ? draft.extractorConfig.path : t === "boundary_header" ? String(draft.extractorConfig.lb || "").replace(/:\s*$/, "") : draft.extractorConfig.lb, c.varName, c.value);
-    made._edit = { extractorType: t, extractorConfig: draft.extractorConfig, sourceIdx: srcIdx };
-    advisorApplyOne(made);
-    var name = made.varName, n = (made.usages || []).length;
-    close();
+    var all = tray.slice(), k = current(); if (k) all.push(k);
+    if (!all.length) return;
+    var names = [], places = 0;
+    all.forEach(function (x) {
+      var t = x.draft.extractorType, cfg = x.draft.extractorConfig;
+      var made = advisorAddManual(x.srcIdx, t === "jsonpath" ? "jsonpath" : t === "boundary_header" ? "header" : "boundary",
+        t === "jsonpath" ? cfg.path : t === "boundary_header" ? String(cfg.lb || "").replace(/:\s*$/, "") : cfg.lb, x.varName, x.value);
+      made._edit = { extractorType: t, extractorConfig: cfg, sourceIdx: x.srcIdx };
+      advisorApplyOne(made);
+      names.push(made.varName); places += (made.usages || []).length;
+    });
+    close(true);
     regenerateFromAdvisor({ quiet: true });
-    if (typeof showToast === "function") showToast(name + " added to the script" + (n ? " — sent back in " + plural(n, "place") + "." : "."), "success", 4000);
+    if (typeof showToast === "function") showToast((names.length > 1 ? plural(names.length, "value") + " added to the script (" + names.join(", ") + ")" : names[0] + " added to the script") + (places ? " — sent back in " + plural(places, "place") + "." : "."), "success", 5000);
   }
   // a new way to read it: start from the value in this response
   function setKind(k) {

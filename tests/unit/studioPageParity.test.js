@@ -143,6 +143,10 @@ describe('Script Studio — Add manual correlation', () => {
     expect(corr).toContain('if (window.SSE && SSE.add) SSE.add(); else if (typeof openAdvisorModal === "function") openAdvisorModal();');
     expect(page).toContain('id="adv-modal-overlay"');
   });
+  test('several values: kept in Values to add, all added at once through the same engine calls, one regeneration', () => {
+    ['function keep()', 'tray.push(k)', 'var all = tray.slice(), k = current(); if (k) all.push(k);', '"Add all " + n + " to the script"', 'Leave without adding?'].forEach((f) => expect(ed).toContain(f));
+    expect((ed.match(/regenerateFromAdvisor\(\{ quiet: true \}\)/g) || []).length).toBeGreaterThan(0);
+  });
   test('the add screen uses the engine functions', () => {
     ['advisorAddManual(', 'advisorApplyOne(made)', '_advFindUsages(', 'regenerateFromAdvisor({ quiet: true })', 'made._edit = {'].forEach((f) => expect(ed).toContain(f));
     expect(ed).not.toMatch(/S\.correlations\s*=|S\.advisorCandidates\s*=/);

@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Several values at once in Add manual correlation
+
+- Keep, pick another puts the value shown in Values to add (top of the editor) and starts the next one — from the same response or another request; kept values are marked green in the response, their names count as taken. Add all n to the script puts them all in, with one regeneration; Cancel with kept values asks first. The editor's buttons stay in view while it scrolls.
+
 #### Clearer selections in the correlation editor, a calmer Correlate page
 
 - A value selected in a response gets boundaries a person can read: the left one widened by whole tokens (`name="csrf-token" content="`, `"nonce":"`) while it still reads exactly that value first; a regular expression built from a selection uses them too.
