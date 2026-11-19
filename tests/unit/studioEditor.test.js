@@ -99,3 +99,39 @@ describe('advisorToCorrelation and the editor\'s choice (_edit)', () => {
     expect(St.advisorToCorrelation(x).extractorType).toBe('array_reconstruct');
   });
 });
+
+// Add manual correlation (the editor's add screen): which values of a response a later request sends back
+describe('valuesOf / sentIndex / laterValues', () => {
+  const ent = (o) => Object.assign({ method: 'GET', url: 'https://app.example.com/', reqHdrs: [], body: null, respBody: '', respHdrsMap: {} }, o);
+  const rec = () => [
+    ent({ url: 'https://app.example.com/login', respBody: JSON.stringify({ token_type: 'Bearer', access: 'tok-ABCDEF123', n: 4711, ok: true, small: 'ab', spaced: 'two words', echo: 'shoes' }),
+      respHdrsMap: { 'content-type': 'application/json', 'x-csrf': 'csrf-998877', 'set-cookie': 'SID=cookie-value-1' } }),
+    ent({ url: 'https://app.example.com/cart/4711', reqHdrs: [{ name: 'Authorization', value: 'Bearer tok-ABCDEF123' }, { name: 'Cookie', value: 'SID=cookie-value-1' }] }),
+    ent({ url: 'https://app.example.com/save', method: 'POST', body: { text: 'csrf=csrf-998877&q=shoes' } }),
+    ent({ url: 'https://app.example.com/page', respBody: '<form><input type="hidden" name="vs" value="VS%2Fabc+12"><input name="x" value="hi"></form>' }),
+    ent({ url: 'https://app.example.com/post', method: 'POST', body: { text: 'vs=VS%2Fabc%2B12' } }),
+  ];
+  test('valuesOf: JSON leaves with their path, page value attributes, headers; not words, short, spaced or infrastructure', () => {
+    const r = rec();
+    expect(E.valuesOf(r[0]).map((v) => [v.value, v.where, v.kind])).toEqual([
+      ['tok-ABCDEF123', '$.access', 'json'], ['4711', '$.n', 'json'], ['shoes', '$.echo', 'json'], ['csrf-998877', 'x-csrf', 'header']]);
+    expect(E.valuesOf(r[3]).map((v) => v.value)).toEqual(['VS%2Fabc+12']);
+    expect(E.valuesOf(ent({ respBody: JSON.stringify({ a: { 'b-c': ['x1y2z3'] } }) }))[0].where).toBe("$.a['b-c'][0]");
+  });
+  test('sentIndex.later: sent by a request AFTER the response (address, headers, body, URL-decoded); not the Cookie header', () => {
+    const r = rec(), ix = E.sentIndex(r);
+    expect(ix.later('tok-ABCDEF123', 0)).toBe(true);
+    expect(ix.later('4711', 0)).toBe(true);
+    expect(ix.later('csrf-998877', 0)).toBe(true);
+    expect(ix.later('csrf-998877', 2)).toBe(false);          // not after its own request
+    expect(ix.later('cookie-value-1', 0)).toBe(false);       // the engine sends cookies itself
+    expect(ix.later('VS/abc+12', 3)).toBe(true);             // decoded form value, a value with delimiters
+    expect(ix.later('abc', 0)).toBe(false);                  // under 4 characters
+  });
+  test('laterValues: the values of one response that are sent back later; filtered and marker requests send nothing', () => {
+    const r = rec();
+    expect(E.laterValues(r, 0, E.sentIndex(r)).map((v) => v.value)).toEqual(['tok-ABCDEF123', '4711', 'shoes', 'csrf-998877']);
+    r[1].filtered = true; r[2].isMarker = true;
+    expect(E.laterValues(r, 0, E.sentIndex(r)).map((v) => v.value)).toEqual([]);
+  });
+});

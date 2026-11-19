@@ -134,3 +134,18 @@ describe('Script Studio — the Correlate table', () => {
     expect(js).not.toMatch(/S\.correlations\s*=|\.status\s*=[^=]|_applied\s*=[^=]/);
   });
 });
+
+// Add manual correlation is the editor's add screen (portal/studio-editor.js): the value goes in through the engine —
+// advisorAddManual (uses found the engine's way), the exact extractor as _edit, advisorApplyOne (this value only)
+describe('Script Studio — Add manual correlation', () => {
+  const corr = read('portal/studio-corr.js'), ed = read('portal/studio-editor.js');
+  test('the table button opens the add screen of the editor; the classic dialog stays for the Cards view', () => {
+    expect(corr).toContain('if (window.SSE && SSE.add) SSE.add(); else if (typeof openAdvisorModal === "function") openAdvisorModal();');
+    expect(page).toContain('id="adv-modal-overlay"');
+  });
+  test('the add screen uses the engine functions', () => {
+    ['advisorAddManual(', 'advisorApplyOne(made)', '_advFindUsages(', 'regenerateFromAdvisor({ quiet: true })', 'made._edit = {'].forEach((f) => expect(ed).toContain(f));
+    expect(ed).not.toMatch(/S\.correlations\s*=|S\.advisorCandidates\s*=/);
+    expect(read('studio-ui.js')).toContain('  advisorApplyOne(cand);');   // Paste & Detect: the same function
+  });
+});

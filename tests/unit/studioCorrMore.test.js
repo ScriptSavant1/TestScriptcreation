@@ -19,7 +19,7 @@ function studio() {
   const document = { documentElement: el, getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] };
   // eslint-disable-next-line no-new-func
   return new Function('window', 'document', 'localStorage', src +
-    '\nreturn { S, _advFindUsages, advisorAddManual, advisorSuggestMore, advisorApplyAndRegen, advisorRemoveFromScript, advisorRestoreToScript, advisorToCorrelation };')({ addEventListener() {} }, document, { getItem: () => null, setItem() {} });
+    '\nreturn { S, _advFindUsages, advisorAddManual, advisorSuggestMore, advisorApplyAndRegen, advisorRemoveFromScript, advisorRestoreToScript, advisorToCorrelation, advisorApplyOne };')({ addEventListener() {} }, document, { getItem: () => null, setItem() {} });
 }
 
 let id = 1;
@@ -88,5 +88,21 @@ describe('advisorRemoveFromScript / advisorRestoreToScript', () => {
     expect(JSON.stringify(E.S.correlations)).toBe(before);
     expect(c._applied).toBe(true);
     expect(E.advisorRemoveFromScript('nope')).toBeNull();
+  });
+});
+
+describe('advisorApplyOne (Add manual correlation, Paste & Detect)', () => {
+  test('puts this value in the script only — other ticked values wait — and never twice', () => {
+    const E = studio();
+    Object.assign(E.S, { entries1: recording(), advisorCandidates: [], correlations: [] });
+    const other = E.advisorAddManual(0, 'jsonpath', '$.cart', 'cart', '4711');
+    const c = E.advisorAddManual(0, 'jsonpath', '$.token', 'token', 'tok-ABCDEFGHIJKL');
+    c._edit = { extractorType: 'boundary', extractorConfig: { lb: '"token":"', rb: '"' }, sourceIdx: 0 };
+    const nc = E.advisorApplyOne(c);
+    expect([nc.name, nc.extractorType, nc.extractorConfig]).toEqual(['token', 'boundary', { lb: '"token":"', rb: '"' }]);
+    expect(E.S.correlations.map((x) => x.name)).toEqual(['token']);
+    expect([c._applied, other._applied]).toEqual([true, undefined]);
+    E.advisorApplyOne(c);
+    expect(E.S.correlations).toHaveLength(1);
   });
 });

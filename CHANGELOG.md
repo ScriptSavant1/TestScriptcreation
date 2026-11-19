@@ -89,6 +89,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Add manual correlation in the editor (Script Studio in steps, part 4)
+
+- Add manual correlation opens the correlation editor instead of the old dialog: the request on the left (by default only those whose response has a value a later request sends back, with a filter), its response on the right (Body / Headers). The values a later request sends back are marked: click one, or select any text. How it is read (JSON path, Boundaries, Header), its name, the code and where it is sent back fill in; Add to the script puts in this value only.
+- When the Correlation Advisor already lists the value, the editor says so and opens it instead.
+- The editor's response has a Headers tab for every value (click a header to read the value from it).
+
 #### Take out, renewals, names, more suggestions (Script Studio in steps, part 3b)
 
 - Take out: a value in the script can be taken out again from the table or the editor (Undo puts the same correlation back); then it can be changed in the editor.

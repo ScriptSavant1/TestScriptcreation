@@ -1475,6 +1475,23 @@ function advisorRestoreToScript(id, corr) {
   regenerateFromAdvisor({ quiet: true });
 }
 
+// Put ONE candidate in the script at once (Paste & Detect, Script Studio's Add manual correlation): its correlation is
+// added unless the same one (name, type, settings) is there already, and the card is marked applied. Other ticked
+// cards still wait for Apply & Regenerate. The caller regenerates.
+function advisorApplyOne(cand) {
+  var nc = advisorToCorrelation(cand);
+  var dup = (S.correlations || []).some(function (ex) {
+    return (
+      ex.name === nc.name &&
+      ex.extractorType === nc.extractorType &&
+      JSON.stringify(ex.extractorConfig) === JSON.stringify(nc.extractorConfig)
+    );
+  });
+  if (!dup) S.correlations = (S.correlations || []).concat([nc]);
+  cand._applied = true;
+  return nc;
+}
+
 function advisorApplyAndRegen() {
   var accepted = (S.advisorCandidates || []).filter(function (c) {
     return c.status === "accepted";
@@ -2284,16 +2301,7 @@ function submitPasteCorrelate() {
   }
 
   // Applied at once (only this card — other accepted cards still wait for Apply & Regenerate)
-  var nc = advisorToCorrelation(cand);
-  var dup = (S.correlations || []).some(function (ex) {
-    return (
-      ex.name === nc.name &&
-      ex.extractorType === nc.extractorType &&
-      JSON.stringify(ex.extractorConfig) === JSON.stringify(nc.extractorConfig)
-    );
-  });
-  if (!dup) S.correlations = (S.correlations || []).concat([nc]);
-  cand._applied = true;
+  advisorApplyOne(cand);
 
   closePasteCorrelate();
   if (typeof regenerateFromAdvisor !== "undefined") regenerateFromAdvisor({ quiet: true });

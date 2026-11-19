@@ -214,7 +214,9 @@
     render();
   });
   $("#ss-cr-clear").addEventListener("click", function () { ticked().forEach(function (c) { advisorAccept(c.id); }); render(); });
-  $("#ss-cr-manual").addEventListener("click", function () { if (typeof openAdvisorModal === "function") openAdvisorModal(); });
+  // Add manual correlation: the editor's add screen (the request on the left, its response on the right); the classic
+  // dialog (openAdvisorModal) stays for the Cards view
+  $("#ss-cr-manual").addEventListener("click", function () { if (window.SSE && SSE.add) SSE.add(); else if (typeof openAdvisorModal === "function") openAdvisorModal(); });
   $("#ss-cr-apply").addEventListener("click", function () { add(); });
   function add() {
     var n = ticked().length; if (!n) return;
