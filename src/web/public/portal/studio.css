@@ -1004,3 +1004,8 @@ body.ss-step-4 .ss-cols { display: none; }
 .ss-ed-uses { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; max-height: 240px; overflow: auto; }
 .ss-ed-uses li { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; padding: 6px 10px; border-radius: 8px; background: var(--ds-surface-2); font-size: var(--ds-fs-sm); }
 @media (max-width: 1100px) { .ss-ed-cols { grid-template-columns: minmax(0, 1fr); } .ss-ed-left { border-right: 0; border-bottom: 1px solid var(--ds-border); } }
+/* renewals of one token: one row, opened to each renewal */
+.ss-cr-grp .ss-cr-tag { color: var(--ds-accent-text); font-weight: 600; }
+.ss-cr-row.is-member td { background: var(--ds-surface-2) !important; }
+.ss-cr-row.is-member td:nth-child(2) { padding-left: 26px; }
+.ss-cr-row.is-member.is-tick td { background: var(--ds-accent-soft) !important; }

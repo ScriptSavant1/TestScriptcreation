@@ -16,7 +16,7 @@
   var KIND = { jwt: "Sign-in token (JWT)", uuid: "Id (UUID)", hex: "Token (hex)", token: "Token", array: "List of values", json: "JSON value", xml: "XML value", html: "HTML value", text: "Text", unknown: "Value" };
   function kind(c) { return KIND[c.valueType] || (c.valueType ? String(c.valueType).charAt(0).toUpperCase() + String(c.valueType).slice(1) : "Value"); }
   function tag(c) {
-    return c._edit && !c._applied ? "Changed by you" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : c._arrayReconstruct ? "Array rebuild" : c._selectAll ? "List" : "";
+    return c._edit && !c._applied ? "Changed by you" : c._more ? "Repeated value" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : c._arrayReconstruct ? "Array rebuild" : c._selectAll ? "List" : "";
   }
   function all() { return S.advisorCandidates || []; }
   function ticked() { return all().filter(function (c) { return c.status === "accepted" && !c._applied; }); }
@@ -50,14 +50,58 @@
       '<small class="ss-cr-where">' + esc(typeof _advWhere === "function" ? _advWhere(u) : u.location || "") +
       (us.length > 1 ? ' <button type="button" class="adv-more" data-uses="' + esc(c.id) + '" title="Every place this value is sent back">+' + (us.length - 1) + " more</button>" : "") + "</small>";
   }
-  function row(c) {
+  // a token the server renews (the same name and field, a new value each time) is one row; it opens to the renewals
+  var openG = {}, G = {};
+  function gkey(c) { return c.varName + "|" + (c.source && c.source.jsonPath || "") + "|" + (c._applied ? 1 : 0); }
+  function rowsHtml(rows) {
+    var by = {}, order = [];
+    G = {};
+    rows.forEach(function (c) { var k = gkey(c); if (!by[k]) { by[k] = []; order.push(k); } by[k].push(c); });
+    return order.map(function (k, i) {
+      var g = by[k];
+      if (g.length < 2) return row(g[0]);
+      var gid = "g" + i; G[gid] = g.map(function (c) { return c.id; });
+      return grow(gid, g, !!openG[k]) + (openG[k] ? g.map(function (c) { return row(c, true); }).join("") : "");
+    }).join("");
+  }
+  function grow(gid, g, open) {
+    var c = g[0], ticked = g.filter(function (x) { return x.status === "accepted" || x._applied; }).length, uses = 0;
+    g.forEach(function (x) { uses += (x.usages || []).length; });
+    var conf = g.some(function (x) { return x.confidence === "high"; }) ? '<span class="ss-conf hi" title="Traced: earlier responses send these values">High</span>' : '<span class="ss-conf md" title="Found by shape only">Medium</span>';
+    var act = '<button type="button" class="ds-btn ds-btn-xs" data-gexp="' + gid + '" aria-expanded="' + open + '">' + (open ? "Hide the " : "Show the ") + g.length + "</button>" +
+      (c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span>' : '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-gskip="' + gid + '" title="Skip every renewal">Skip all</button>');
+    return '<tr class="ss-cr-row ss-cr-grp' + (ticked === g.length && !c._applied ? " is-tick" : "") + (c._applied ? " is-in" : "") + '" data-gid="' + gid + '">' +
+      '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-gtick' + (ticked === g.length ? " checked" : "") + (ticked && ticked < g.length ? " data-mixed" : "") + (c._applied ? " disabled" : "") + ' aria-label="Add every renewal of ' + esc(c.varName) + ' to the script" /></td>' +
+      '<td><input class="ss-field ss-cr-name" data-gname value="' + esc(c.varName) + '" spellcheck="false" aria-label="Name of ' + esc(c.varName) + '"' + (c._applied ? " disabled" : "") + " /></td>" +
+      "<td>" + esc(kind(c)) + '<small class="ss-cr-tag">Renewed</small></td>' +
+      '<td><code class="ss-cr-val">' + esc(String(c.preview || c.value).slice(0, 47)) + '</code><small class="ss-muted">' + g.length + " values: the server renews it</small></td>" +
+      "<td>" + from(c) + '<small class="ss-muted">and ' + plural(g.length - 1, "later response") + "</small></td>" +
+      "<td>" + plural(uses, "place") + '<small class="ss-muted">each renewal where it is sent back</small></td><td>' + conf + '</td><td class="ss-cr-act">' + act + "</td></tr>";
+  }
+
+  // names of new correlations: the field's own name, or with a p in front (remembered); names typed by the user,
+  // manual ones and those in the script are left as they are
+  var BASE = new WeakMap();   // the engine's own name of each candidate (kept by the page, not on the candidate)
+  function styled(base, st) { return st === "p" ? "p" + base.charAt(0).toUpperCase() + base.slice(1) : base; }
+  function names() {
+    var st = prefs.corrNames === "p" ? "p" : "field", other = st === "p" ? "field" : "p";
+    all().forEach(function (c) {
+      if (c._applied || c._manual) return;
+      if (!BASE.has(c)) BASE.set(c, c.varName);
+      var base = BASE.get(c), want = styled(base, st);
+      if (c.varName !== want && c.varName === styled(base, other)) advisorSetName(c.id, want);
+    });
+  }
+
+  function row(c, member) {
     var v = String(c.value == null ? "" : c.value), pv = String(c.preview || v);
-    var cls = "ss-cr-row" + (c._applied ? " is-in" : "") + (c.status === "skipped" ? " is-skip" : "") + (c.status === "accepted" && !c._applied ? " is-tick" : "");
+    var cls = "ss-cr-row" + (member ? " is-member" : "") + (c._applied ? " is-in" : "") + (c.status === "skipped" ? " is-skip" : "") + (c.status === "accepted" && !c._applied ? " is-tick" : "");
     var t = tag(c);
     var conf = c.confidence === "high"
       ? '<span class="ss-conf hi" title="Traced: an earlier response sends this value">High</span>'
+      : c._more ? '<span class="ss-conf md" title="A response sends it and a later request sends it back: check that it changes for each user">Medium</span>'
       : '<span class="ss-conf md" title="Found by its shape only (JWT, UUID, token): no earlier response was found that sends it">Medium</span>';
-    var act = c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span>'
+    var act = c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span><button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-out="' + esc(c.id) + '" title="Take it out of the script (Undo brings it back)">Take out</button>'
       : c.status === "skipped" ? '<button type="button" class="ds-btn ds-btn-xs" data-skip="' + esc(c.id) + '" title="Back to the list to review">Put back</button>'
       : '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-skip="' + esc(c.id) + '" title="Not a value to correlate: hide it from the list">Skip</button>';
     act = '<button type="button" class="ds-btn ds-btn-xs" data-edit="' + esc(c.id) + '" title="Open it: how it is read, the response, every place it is sent back">' + (c._applied ? "Open" : "Review") + "</button>" + act;
@@ -82,10 +126,12 @@
     cs.forEach(function (c) { if (c.valueType && types.indexOf(c.valueType) === -1) types.push(c.valueType); });
     var want = '<option value="">Every type</option>' + types.map(function (t) { return '<option value="' + esc(t) + '">' + esc(KIND[t] || t) + "</option>"; }).join("");
     if (sel.innerHTML !== want) { sel.innerHTML = want; sel.value = types.indexOf(F.type) !== -1 ? F.type : ""; F.type = sel.value; }
+    names();
     var rows = cs.filter(shown);
     var body = $("#ss-cr-body"), focus = document.activeElement, fid = focus && focus.closest && focus.closest(".ss-cr-row") && focus.closest(".ss-cr-row").getAttribute("data-id"), fname = focus && focus.hasAttribute && focus.hasAttribute("data-name");
     if (fname && body.contains(focus)) { foot(); return; }   // never redraw under the user's typing
-    body.innerHTML = rows.map(row).join("");
+    body.innerHTML = rowsHtml(rows);
+    $$("[data-mixed]", body).forEach(function (x) { x.indeterminate = true; });
     if (fid) { var r = body.querySelector('[data-id="' + fid + '"] [data-tick]'); if (r) r.focus(); }
     var empty = $("#ss-cr-empty");
     empty.hidden = !!rows.length;
@@ -111,9 +157,22 @@
   // ── the table's controls ──
   var body = $("#ss-cr-body");
   body.addEventListener("change", function (e) {
+    var gr = e.target.closest("[data-gid]");
+    if (gr) {
+      var ids = G[gr.getAttribute("data-gid")] || [], cs = all().filter(function (c) { return ids.indexOf(c.id) !== -1; });
+      if (e.target.hasAttribute("data-gtick")) {
+        var on = e.target.checked;
+        cs.forEach(function (c) { if ((c.status === "accepted") !== on) advisorAccept(c.id); });
+      } else if (e.target.hasAttribute("data-gname")) {
+        cs.forEach(function (c) { advisorSetName(c.id, e.target.value); });
+        setTimeout(render, 0);
+      }
+      return;
+    }
     var tr = e.target.closest(".ss-cr-row"); if (!tr) return;
     var id = tr.getAttribute("data-id"), c = all().filter(function (x) { return x.id === id; })[0];
     if (!c) return;
+    if (e.target.hasAttribute("data-gtick") || e.target.hasAttribute("data-gname")) return;
     if (e.target.hasAttribute("data-tick")) {
       // ticking a skipped value brings it back as ticked
       if (e.target.checked !== (c.status === "accepted")) advisorAccept(id);
@@ -125,14 +184,20 @@
   body.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.hasAttribute("data-name")) e.target.blur(); });
   body.addEventListener("focusout", function (e) { if (e.target.hasAttribute && e.target.hasAttribute("data-name")) setTimeout(render, 0); });
   body.addEventListener("click", function (e) {
-    var b = e.target.closest("[data-edit]");
+    var b = e.target.closest("[data-gexp]");
+    if (b) { var k0 = G[b.getAttribute("data-gexp")], c0 = k0 && all().filter(function (c) { return c.id === k0[0]; })[0]; if (c0) { var gk = gkey(c0); openG[gk] = !openG[gk]; render(); } return; }
+    b = e.target.closest("[data-gskip]");
+    if (b) { (G[b.getAttribute("data-gskip")] || []).forEach(function (id) { var c = all().filter(function (x) { return x.id === id; })[0]; if (c && c.status !== "skipped") advisorSkip(id); }); return; }
+    b = e.target.closest("[data-out]");
+    if (b) { takeOut(b.getAttribute("data-out")); return; }
+    b = e.target.closest("[data-edit]");
     if (b) { if (window.SSE) SSE.open(b.getAttribute("data-edit")); return; }
     b = e.target.closest("[data-skip]");
     if (b) { advisorSkip(b.getAttribute("data-skip")); return; }
     b = e.target.closest("[data-uses]");
     if (b) { advisorShowUses(b.getAttribute("data-uses")); return; }
     b = e.target.closest("[data-opts]");
-    if (!b && !e.target.closest("button, input, a, select")) { var tr = e.target.closest(".ss-cr-row"); if (tr && window.SSE && !window.getSelection().toString()) SSE.open(tr.getAttribute("data-id")); return; }
+    if (!b && !e.target.closest("button, input, a, select")) { var tr = e.target.closest(".ss-cr-row"); if (tr && window.SSE && !window.getSelection().toString()) SSE.open(tr.getAttribute("data-id") || (G[tr.getAttribute("data-gid")] || [])[0]); return; }
     if (b) { view("cards"); var card = document.getElementById("advc-" + b.getAttribute("data-opts")); if (card) { card.scrollIntoView({ block: "center" }); card.classList.add("ss-flash"); setTimeout(function () { card.classList.remove("ss-flash"); }, 1600); } }
   });
   $("#ss-cr-q").addEventListener("input", function () { F.q = this.value.trim(); render(); });
@@ -156,6 +221,45 @@
     advisorApplyAndRegen();
     if (typeof showToast === "function") showToast(plural(n, "value") + " added to the script.", "success", 3500);
   }
+
+  // take a correlation out of the script again (Undo puts the same one back)
+  function takeOut(id) {
+    var c = all().filter(function (x) { return x.id === id; })[0]; if (!c) return;
+    var gone = advisorRemoveFromScript(id);
+    if (!gone) return;
+    var msg = c.varName + " taken out of the script — it stays ticked: change it, or add it again.";
+    if (window.SSW && SSW.undoToast) SSW.undoToast(msg, function () { advisorRestoreToScript(id, gone); });
+    else if (typeof showToast === "function") showToast(msg, "info", 4000);
+  }
+  SS.corrTakeOut = takeOut;
+
+  // also suggest the values the Advisor leaves out (short ones, numbers, past the first 20)
+  $("#ss-cr-more").addEventListener("click", function () {
+    var n = advisorSuggestMore((S.params || []).map(function (p) { return p.value; }));
+    if (typeof renderAdvisorPanel === "function") renderAdvisorPanel();
+    if (n && F.show !== "review" && F.show !== "all") { F.show = "review"; $$("#ss-cr-show [data-show]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-show") === "review")); }); }
+    render();
+    if (typeof showToast === "function") showToast(n ? plural(n, "more value") + " suggested as Medium, not ticked: tick the ones that change for each user." : "No other value is sent by a response and sent back later.", n ? "success" : "info", 5000);
+  });
+
+  // names menu
+  var nb = $("#ss-cr-names"), nm = $("#ss-cr-names-m");
+  function nmClose() { nm.hidden = true; nb.setAttribute("aria-expanded", "false"); }
+  function nmMark() { $$("[data-names]", nm).forEach(function (x) { x.setAttribute("aria-checked", String(x.getAttribute("data-names") === (prefs.corrNames === "p" ? "p" : "field"))); }); }
+  nb.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (!nm.hidden) { nmClose(); return; }
+    var r = nb.getBoundingClientRect();
+    nm.style.top = (r.bottom + 6) + "px"; nm.style.right = Math.max(8, document.documentElement.clientWidth - r.right) + "px";
+    nmMark(); nm.hidden = false; nb.setAttribute("aria-expanded", "true");
+    var x = nm.querySelector("[aria-checked=true]"); if (x) x.focus();
+  });
+  nm.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-names]"); if (!b) return;
+    prefs.corrNames = b.getAttribute("data-names"); SS.save(); nmClose(); render();
+  });
+  document.addEventListener("click", function (e) { if (!nm.hidden && !nm.contains(e.target)) nmClose(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !nm.hidden) { nmClose(); nb.focus(); } });
 
   // Can't find a value? — the three ways that exist: Find a value, Paste & Detect, the second recording
   var cant = $("#ss-cr-cant"), menu = $("#ss-cr-cant-m");

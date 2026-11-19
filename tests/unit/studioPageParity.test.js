@@ -130,7 +130,7 @@ describe('Script Studio — the Correlate table', () => {
     ['ss-corr', 'ss-cr-table', 'ss-cr-body', 'ss-cr-apply', 'ss-cr-high', 'ss-cr-clear', 'ss-cr-manual', 'ss-cr-cant', 'ss-cr-cant-m', 'ss-cr-view', 'adv-panel', 'adv-cards'].forEach((id) => expect(page).toContain('id="' + id + '"'));
   });
   test('every change goes through the engine functions the cards use', () => {
-    ['advisorAccept(', 'advisorSkip(', 'advisorSetName(', 'advisorApplyAndRegen()', 'advisorShowUses(', 'openAdvisorModal()', 'openPasteCorrelate()', 'SSW.openFind()'].forEach((f) => expect(js).toContain(f));
+    ['advisorAccept(', 'advisorSkip(', 'advisorSetName(', 'advisorApplyAndRegen()', 'advisorShowUses(', 'openAdvisorModal()', 'openPasteCorrelate()', 'SSW.openFind()', 'advisorRemoveFromScript(', 'advisorRestoreToScript(', 'advisorSuggestMore('].forEach((f) => expect(js).toContain(f));
     expect(js).not.toMatch(/S\.correlations\s*=|\.status\s*=[^=]|_applied\s*=[^=]/);
   });
 });

@@ -89,6 +89,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Take out, renewals, names, more suggestions (Script Studio in steps, part 3b)
+
+- Take out: a value in the script can be taken out again from the table or the editor (Undo puts the same correlation back); then it can be changed in the editor.
+- A token the server renews (the same name and field, a new value each time) is one row, Renewed, that opens to each renewal; tick, name and Skip apply to all. The script is as before (each renewal is read again under the same name).
+- Names: the field's own name or with a p in front (pSessionId), remembered; names typed by the user, manual ones and values in the script are not changed.
+- Also suggest other repeated values: values a JSON response sends and a later request sends back that the Advisor leaves out (under 10 characters, numbers, past the first 20), as Medium, not ticked; test data values and common words are left out.
+
 #### The correlation editor (Script Studio in steps, part 3)
 
 - Review on a row of the Correlate table (or a click on it) opens one value at a time, with previous / next: why it was found, the response it is read from (requests that have the value are marked), how it is read (Auto = the Correlation Advisor's choice, JSON path, Boundaries, Header), tested as you type, the name and the code the script gets; on the right the response with the value marked (select or double-click a value to read it from there) and every place it is sent back. Accept & next ticks it. A value no later request sends back cannot be accepted; one already in the script is shown, not changed; Undo my changes returns to the Advisor's choice. A Medium value with no known source now asks for the response that has it instead of an 8-character boundary (BUG-144, in the editor). Regular expressions and XPath are not offered: the script generators have no extractor for them. Without a change in the editor, the scripts are the same.

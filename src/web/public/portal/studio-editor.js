@@ -171,7 +171,7 @@
     $("#ss-ed-prev").disabled = at <= 0; $("#ss-ed-next").disabled = at < 0 || at >= list.length - 1;
     // why, in plain words
     var why = !us.length ? "<b>No later request sends this value back</b>, so there is nothing to correlate. Skip it."
-      : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + "."
+      : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + ". To change how it is read, " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> first (Undo puts it back).'
       : c.confidence === "high" ? "<b>An earlier response sends this value</b> and " + plural(us.length, "later place") + " send it back. A new user gets a new value, so the script must read it from the response each time."
       : "<b>It looks like a " + esc(String(c.valueType || "token")) + "</b> by its shape, and " + plural(us.length, "later place") + " send it back. No earlier response was found that sends it: check the response, or use Can't find a value?";
     if (isList(c) && !c._applied) why += ' It is a list: how it is read and sent back is set in its <button type="button" class="adv-req-link" id="ss-ed-opts">list options</button>.';
@@ -307,6 +307,7 @@
     else if (t.id === "ss-ed-skip") { advisorSkip(c.id); draw(); }
     else if (t.id === "ss-ed-reset") { delete c._edit; draft = null; kind = "auto"; srcIdx = c.source ? c.source.entryIdx : null; draw(); }
     else if (t.id === "ss-ed-src-up" || t.id === "ss-ed-src-down") { var o = $$("#ss-ed-src option").map(function (x) { return x.value; }).filter(Boolean).map(Number), p = o.indexOf(srcIdx); var to = o[p + (t.id === "ss-ed-src-down" ? 1 : -1)]; if (to != null) setSrc(to); }
+    else if (t.id === "ss-ed-out") { if (SS.corrTakeOut) SS.corrTakeOut(c.id); shownBody = null; draw(); }
     else if (t.id === "ss-ed-paste") { if (typeof openPasteCorrelate === "function") openPasteCorrelate(); }
     else if (t.id === "ss-ed-opts") { close(); SSC.view("cards"); var card = document.getElementById("advc-" + c.id); if (card) card.scrollIntoView({ block: "center" }); }
   });

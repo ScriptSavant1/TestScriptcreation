@@ -1214,15 +1214,14 @@ function _advSafeVarName(name) {
 // actualValue    — (optional) the already-resolved field value from the field browser;
 //                  used to scan all subsequent requests for usages to substitute
 // ---------------------------------------------------------------------------
-function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, actualValue) {
-  const entry = (S.entries1 || [])[sourceEntryIdx];
-  const id = 'adv-' + (S.advisorCandidates.length);
-
-  // Auto-scan all SUBSEQUENT requests for the extracted value so the codegen
-  // can substitute it everywhere (queryString, body, headers).
+// ---------------------------------------------------------------------------
+// Every later request that sends `actualValue` back (after entries[sourceEntryIdx]): JSON body leaves, form fields,
+// query values, request headers (with or without "Bearer "), address path segments. Values under 4 characters: none.
+// Used by advisorAddManual and advisorSuggestMore.
+// ---------------------------------------------------------------------------
+function _advFindUsages(entries, sourceEntryIdx, actualValue) {
   const autoUsages = [];
   if (actualValue && actualValue.length >= 4) {
-    const entries = S.entries1 || [];
     for (let i = sourceEntryIdx + 1; i < entries.length; i++) {
       const e = entries[i];
       if (e.filtered || e.isMarker) continue;
@@ -1284,6 +1283,61 @@ function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, ac
       }
     }
   }
+
+  return autoUsages;
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC: "Also suggest other repeated values" (Script Studio, step 2). The scan above keeps values of 10 characters
+// or more, leaves short numbers out and shows 20 at most; this adds the other values a JSON response sends that a
+// later request sends back — 4 characters or more, numbers too — as Medium suggestions, not ticked (_more). Values
+// already suggested or in the script, the values in skipValues (the page passes the test data values) and common
+// words are left out.
+// Returns the number added.
+// ---------------------------------------------------------------------------
+function advisorSuggestMore(skipValues) {
+  const entries = S.entries1 || [];
+  const known = new Set((S.advisorCandidates || []).map(c => c.value));
+  (skipValues || []).forEach(v => { if (v != null) known.add(String(v)); });
+  const seen = new Set();
+  const added = [];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.filtered || e.isMarker || !e.respBody) continue;
+    const obj = _advParseJson(e.respBody);
+    if (!obj) continue;
+    _advWalkLeaves(obj, '$', (val, path) => {
+      if (val.length < 4 || val.length > 2000 || seen.has(val) || known.has(val)) return;
+      seen.add(val);
+      if (ADV_SKIP_VALUES.has(val.toLowerCase()) || /\s/.test(val) || /^\d{1,3}$/.test(val)) return;
+      if (_advAlreadyCorrelated(val, S.correlations)) return;
+      const usages = _advFindUsages(entries, i, val);
+      if (!usages.length) return;
+      added.push({
+        id: 'adv-' + ((S.advisorCandidates || []).length + added.length),
+        value: val,
+        preview: val.length > 40 ? val.slice(0, 40) + '…' : val,
+        valueType: _advValueType(val),
+        confidence: 'medium',
+        varName: _advSuggestName(path, null, val),
+        source: { entryIdx: i, url: _advShortUrl(e), jsonPath: path },
+        usages,
+        status: 'pending',
+        _more: true,
+      });
+    }, 0);
+  }
+  S.advisorCandidates = (S.advisorCandidates || []).concat(added);
+  return added.length;
+}
+
+function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, actualValue) {
+  const entry = (S.entries1 || [])[sourceEntryIdx];
+  const id = 'adv-' + (S.advisorCandidates.length);
+
+  // Auto-scan all SUBSEQUENT requests for the extracted value so the codegen
+  // can substitute it everywhere (queryString, body, headers).
+  const autoUsages = _advFindUsages(S.entries1 || [], sourceEntryIdx, actualValue);
 
   const candidate = {
     id,
