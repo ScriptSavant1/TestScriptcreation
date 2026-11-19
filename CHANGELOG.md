@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### The old random list code removed (REFACTOR-002)
+
+- Nothing made the old random list type any more (every list uses one picker); its code in the generators is gone. The scripts are unchanged: golden harness identical, every engine case passes.
+
 #### The Correlation Advisor finds lists in a select by itself
 
 - A page that offers generated-looking options in a `<select>` (flights, slots, accounts) of which a later request sends one back gets one High suggestion: the list of that select's options (only its own, when the page has others), each place using the value at the position recorded — or One at random / The next one each iteration / Always the same one in the editor. Plain choices (economy, blue) are not suggested. In the table: List of values, Options of a select, n values. Proved on both engines (`studioextract.js` advisor-select, advisor-select-rotate).
