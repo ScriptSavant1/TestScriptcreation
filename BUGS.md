@@ -6,7 +6,7 @@ Every bug found in PerfX Studio, newest first. Open bugs are at the top; fixed b
 
 | Bug | Severity | Description |
 |-----|----------|-------------|
-| BUG-133 | Low | **Home page is 2 px wider than the window at about 760 px wide** (a sideways scroll of 2 px). Found while checking the Home grid for the Workload Modeller at six widths; the same with the Home as it was before that change, so it is older. Tool cards fit at every width; the element that overflows is not identified yet. |
+| BUG-133 | Low | **Home page is 2 px wider than the window at about 760 px wide** (a sideways scroll of 2 px). Found while checking the Home grid for the Workload Modeller at six widths; the same with the Home as it was before that change, so it is older. Tool cards fit at every width; the element that overflows is not identified yet. The Postman / Bruno and JMeter panels are 2 px wider at 900 px too (their header band `.cv-band`), before any conversion — the same pattern, also older. |
 | BUG-144 | Low | **Script Studio: a Medium-confidence card with no known source gets a weak boundary when accepted** — the first 8 characters of the value as the left boundary and no right boundary (for example LB `csrf_tok`). Pre-existing; seen while checking BUG-141. Accepting such a card needs a look at the extractor; better: build it from the response like `_advHtmlValueExtractor`, or offer Find a value. Since the correlation editor (Script Studio in steps, part 3): Review on that row asks for the response that has the value and builds safe boundaries from it; ticking the row in the table without the editor still gives the weak boundary. |
 
 ## Known limitations

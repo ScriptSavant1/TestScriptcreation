@@ -291,6 +291,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### The converters show what the script contains before the download
+
+- Postman / Bruno and JMeter: after a conversion, What the script contains shows the servers the requests call (addresses resolved with the collection and environment variables; one that is still a variable with no value is flagged, one a script or an extractor sets while it runs is marked so), every request grouped by folder or thread group (filter by name or address, a click on a server shows only its requests) and the generated files with their code — the panel layout of Script Studio. Read-only: the ZIP is exactly as before (converter golden harness: every ZIP and request identical; the answers only gain `preview`).
+- The download link works once and for 5 minutes: once used or expired, its button reads Convert again and converts the same files again.
+
 #### Changed
 
 - Documentation checked against the tools as they are now: README (sidebar groups, the tools' current features, CDP Recorder 0.3.0) and the local guides — the Recorder is part of Script Studio everywhere (feature catalogue, executive summary, architecture, code structure, developer, protocol and auth guides, deployment guide, diagrams), files read at once (no "Analyse & generate"), the collapse button at the top, the Workload Modeller in the catalogue and the index; the documentation site's coverage check gained the floating bar, Undo last mark, script ID, Leave out, the Workload Modeller and where the CDP Recorder keeps its setup.

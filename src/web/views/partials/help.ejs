@@ -236,6 +236,7 @@
           <li><strong>Single .bru file</strong> — a single Bruno request</li>
         </ul>
         <p class="help-p">Optionally upload an <strong>Environment file</strong> alongside your collection. It fills in variable values — base URLs, API keys, usernames — directly in the generated script so you do not need to edit them by hand.</p>
+        <p class="help-p">After the conversion, <strong>What the script contains</strong> shows it before you download: the <strong>Servers</strong> the requests call (a click shows only that server's requests; an address that is still a variable with no value is flagged — add the environment file that defines it; one a script sets while it runs is marked so), the <strong>Requests</strong> grouped by folder (filter by name or address) and the generated <strong>Files</strong> with their code (Copy). The download link works once and for 5 minutes; after that the button reads <strong>Convert again</strong> and makes it again from the same files.</p>
         <h3 class="help-h3">Step-by-step</h3>
         <ol class="help-steps-list">
           <li>Click <strong>Postman / Bruno</strong> in the sidebar.</li>
@@ -270,6 +271,7 @@
       <div class="help-acc-inner">
         <div class="help-tool-badge help-badge-orange"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>JMeter Converter</div>
         <p class="help-p">Migrating from Apache JMeter to LoadRunner? Upload your <code>.jmx</code> test plan and receive an equivalent VuGen script, plus a <strong>Workload Model Excel</strong> file that translates your JMeter thread groups into a LoadRunner workload definition.</p>
+        <p class="help-p">After the conversion, <strong>What the script contains</strong> shows the servers, the requests grouped by thread group and the generated files with their code, before you download — as for Postman / Bruno.</p>
         <h3 class="help-h3">What to upload</h3>
         <ul class="help-list">
           <li><strong>.jmx file</strong> — your JMeter test plan (exported from JMeter: <em>File → Save Test Plan As</em>)</li>

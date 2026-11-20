@@ -87,6 +87,8 @@ class JmxConverter {
     this.injectCsvVariables(csvDataSets, environmentVars);
     this.injectRequestVariables(requests, environmentVars);
     this.injectProxyVariables(collection, environmentVars);
+    // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
+    this.previewSource = { requests, collection, environmentVars };
 
     // 3. Prepare root output dir
     await fs.mkdir(this.options.outputDir, { recursive: true });

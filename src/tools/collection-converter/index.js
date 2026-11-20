@@ -65,6 +65,8 @@ class BrunoDevWebConverter {
 
       // Step 1b: Load environment file if provided
       const environmentVars = await this.loadEnvironmentFile();
+      // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
+      this.previewSource = { requests, collection: parser.collection, environmentVars };
 
       // Step 2: Select generator based on protocol
       const isWebHttp = this.options.protocol === "web-http";
@@ -168,6 +170,8 @@ class BrunoDevWebConverter {
 
       // Step 2: Load environment file if provided
       const environmentVars = await this.loadEnvironmentFile();
+      // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
+      this.previewSource = { requests, collection: parser.collection, environmentVars };
 
       // Step 3: Group requests by top-level folder
       const folderGroups = this.groupByTopLevelFolder(requests);

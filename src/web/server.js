@@ -55,6 +55,7 @@ const { resolveCdpRecorderDownload } = require("./cdpRecorderDownload");
 const BrunoDevWebConverter      = require("../tools/collection-converter");
 const JmxConverter              = require("../tools/jmx-converter");
 const JmxDependencyResolver     = require("../lib/jmxDependencyResolver");
+const { safePreview }           = require("./convertPreview");
 
 // Analytics — lazy-loaded so a missing DB never crashes the server
 let analytics, adminReports, csvExporter, xlsxExporter, docxExporter;
@@ -474,6 +475,8 @@ class WebServer {
             analysis:    results.analysis,
             protocol:    options.protocol,
             mode:        options.mode,
+            // what the ZIP holds — requests, servers, files — shown before the download (read-only)
+            preview:     safePreview({ kind: "pm", ...(converter.previewSource || {}), files, outputDir }),
           });
 
         } catch (err) {
@@ -645,6 +648,7 @@ class WebServer {
             dependency,
             protocol:    options.protocol,
             mode:        options.mode,
+            preview:     safePreview({ kind: "jmx", ...(converter.previewSource || {}), files, outputDir }),
           });
 
         } catch (err) {

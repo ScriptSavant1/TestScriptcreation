@@ -61,3 +61,21 @@ describe('Converter panels — markup the converter functions need', () => {
     ].forEach((t) => expect(partial).toContain(t));
   });
 });
+
+// The preview after a conversion (portal/convert-preview.js): read-only, added after the result is shown; the result
+// panel's own ids, handlers and the download link are kept (the converter golden harness proves the answers' other
+// fields and every ZIP unchanged)
+describe('Converter panels — the preview', () => {
+  test('both results show the preview, Convert another hides it, the script is loaded after converter.js', () => {
+    expect(index).toContain("if (window.ConvertPreview) ConvertPreview.show(data, 'pm');");
+    expect(index).toContain("if (window.ConvertPreview) ConvertPreview.show(data, 'jmx');");
+    expect(index).toContain('if (window.ConvertPreview) ConvertPreview.hide();');
+    expect(index.indexOf('portal/convert-preview.js')).toBeGreaterThan(index.indexOf('portal/converter.js'));
+  });
+  test('the answers carry the preview, built from what was already generated (never breaks a conversion)', () => {
+    const server = fs.readFileSync(path.resolve(__dirname, '../../src/web/server.js'), 'utf-8');
+    expect(server).toContain('preview:     safePreview({ kind: "pm", ...(converter.previewSource || {}), files, outputDir }),');
+    expect(server).toContain('preview:     safePreview({ kind: "jmx", ...(converter.previewSource || {}), files, outputDir }),');
+    expect(partial).toContain('id="btn-dl"');
+  });
+});

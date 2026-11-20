@@ -1465,6 +1465,7 @@ code {
 <link rel="stylesheet" href="<%= basePath %>/portal/converter.css">
 <script src="<%= basePath %>/portal/drop-anywhere.js" defer></script>
 <script src="<%= basePath %>/portal/converter.js" defer></script>
+<script src="<%= basePath %>/portal/convert-preview.js" defer></script>
 <link rel="stylesheet" href="<%= basePath %>/portal/help.css">
 <script src="<%= basePath %>/portal/help.js" defer></script>
 </head>
@@ -2109,6 +2110,8 @@ function showResult(data, err) {
   const ml = data.mode === 'multi' ? 'Multi-Script' : 'Single Script';
   document.getElementById('res-sub').textContent = `${pl} · ${ml} · Ready for LoadRunner Enterprise`;
   document.getElementById('btn-dl').href = data.downloadUrl;
+  // what the script contains — servers, requests, files — before the download (portal/convert-preview.js)
+  if (window.ConvertPreview) ConvertPreview.show(data, 'pm');
   document.getElementById('res-ok').style.display = 'block';
   document.getElementById('res-ok').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -2204,6 +2207,7 @@ function showJmxResult(data, err) {
   }
 
   document.getElementById('btn-dl').href = data.downloadUrl;
+  if (window.ConvertPreview) ConvertPreview.show(data, 'jmx');
   document.getElementById('res-ok').style.display = 'block';
   document.getElementById('res-ok').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -2215,6 +2219,7 @@ function stat(num, label) {
 function hideResults() {
   document.getElementById('res-ok').style.display = 'none';
   document.getElementById('res-err').style.display = 'none';
+  if (window.ConvertPreview) ConvertPreview.hide();
 }
 function resetResult() { hideResults(); }
 </script>
