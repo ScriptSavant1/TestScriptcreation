@@ -85,6 +85,8 @@ function measure() {
     await p.click('#cv-pv-rlist [data-tick-req="1"]'); await run('Postman leave out'); await p.click('#cv-pv-undo');
     // the Values tab and a script name typed (the settings strip)
     await p.click('#cv-pv-tab-values'); await p.fill('#cv-pv-name', 'Audit name'); await run('Postman values'); await p.click('#cv-pv-undo'); await p.click('#cv-pv-tab-files');
+    // a value given in the Values tab (the editor open)
+    await p.click('#cv-pv-tab-values'); await p.click('#cv-pv-vlist [data-give] >> nth=0'); await run('Postman give a value'); await p.click('[data-give-cancel]'); await p.click('#cv-pv-tab-files');
     await go('jmeter'); await run('JMeter');
     await go('explore'); await p.waitForFunction(() => { const d = document.getElementById('iframe-explorer').contentDocument; return d && d.getElementById('hx-file'); }, null, { timeout: 20000 });
     await run('Explorer start', 'explorer');

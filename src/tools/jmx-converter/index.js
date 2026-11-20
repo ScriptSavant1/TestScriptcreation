@@ -11,7 +11,7 @@
 
 'use strict';
 
-const { applyScriptName, noteGenerated } = require('../../core/scriptSettings');
+const { applyScriptName, noteGenerated, applyValues } = require('../../core/scriptSettings');
 const { keepSelected, readLeaveOut } = require('../../core/requestSelection');
 const path                  = require('path');
 const fs                    = require('fs').promises;
@@ -95,8 +95,10 @@ class JmxConverter {
     this.injectCsvVariables(csvDataSets, environmentVars);
     this.injectRequestVariables(requests, environmentVars);
     this.injectProxyVariables(collection, environmentVars);
+    // values given on the page go where the script reads them (src/core/scriptSettings.js applyValues; none → as before)
+    Object.assign(environmentVars, applyValues(collection, environmentVars, this.options.values));
     // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
-    this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection, environmentVars };
+    this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection, environmentVars, given: Object.keys(this.options.values || {}) };
 
     // 3. Prepare root output dir
     await fs.mkdir(this.options.outputDir, { recursive: true });

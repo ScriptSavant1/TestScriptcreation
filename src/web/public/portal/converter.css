@@ -420,6 +420,21 @@ body.has-shell #portal-converter .cv-pv-vuse[aria-pressed="true"] { text-decorat
 body.has-shell #portal-converter .cv-pv-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 10px; border: 1px solid var(--ds-accent); border-radius: var(--ds-r-pill); background: var(--ds-accent-soft); color: var(--ds-text); font: inherit; font-size: var(--ds-fs-xs); font-weight: 600; cursor: pointer; }
 body.has-shell #portal-converter .cv-pv-chip code { font-family: var(--ds-mono); }
 body.has-shell #portal-converter .cv-pv-chip .cv-pv-i { width: 14px; height: 14px; }
+/* environment, given values, thread groups, Plan the load (part 4) */
+body.has-shell #portal-converter .cv-pv-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; }
+body.has-shell #portal-converter #cv-pv-wm { flex: none; height: 36px; padding: 0 14px; font-size: var(--ds-fs-sm); }
+body.has-shell #portal-converter .cv-pv-env { display: flex; align-items: center; gap: 6px; min-height: 38px; }
+body.has-shell #portal-converter .cv-pv-envname { max-width: 260px; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-fs-sm); font-weight: 600; }
+body.has-shell #portal-converter .cv-pv-envname.none { color: var(--ds-text-2); font-weight: 400; }
+body.has-shell #portal-converter .cv-pv-tg { flex-basis: 100%; padding-left: 22px; color: var(--ds-text-2); font-size: var(--ds-fs-xs); font-weight: 400; }
+body.has-shell #portal-converter .cv-pv-gb { flex-wrap: wrap; }
+body.has-shell #portal-converter .cv-pv-gtag { flex: none; padding: 1px 8px; border-radius: var(--ds-r-pill); background: var(--ds-accent-soft); color: var(--ds-text); font-size: var(--ds-fs-xs); font-weight: 600; }
+body.has-shell #portal-converter .cv-pv-vnew { color: var(--ds-text); }
+body.has-shell #portal-converter .cv-pv-vedit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 4px 0 2px; }
+body.has-shell #portal-converter .cv-pv-vedit .cv-pv-flabel { flex-basis: 100%; }
+body.has-shell #portal-converter #cv-pv-val { flex: 1 1 180px; min-width: 0; height: 34px; padding: 0 10px; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-sm); background: var(--ds-surface); color: var(--ds-text); font-family: var(--ds-mono); font-size: var(--ds-fs-sm); }
+body.has-shell #portal-converter #cv-pv-val:focus { outline: 0; border-color: var(--ds-accent); box-shadow: 0 0 0 3px var(--ds-accent-soft); }
+body.has-shell #portal-converter .cv-pv-vact { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 @media (max-width: 1100px) {
   body.has-shell #portal-converter .cv-pv-cols { grid-template-columns: minmax(0, 1fr); height: auto; }
   body.has-shell #portal-converter .cv-pv-pane { max-height: 60vh; }

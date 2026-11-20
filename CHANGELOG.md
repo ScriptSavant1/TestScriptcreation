@@ -291,6 +291,15 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### The converters: environment, values, thread groups and Plan the load
+
+- Postman / Bruno: the settings strip shows the environment file with Choose / Change and Remove (the panel's own file box, kept in step); a new or removed environment is applied with Update the script.
+- Values tab: Give a value / Change the value for a value with no value, an empty one, or one from the environment, collection or test plan — it goes where the script reads it (the collection's or test plan's own variable when it has one, else the environment); "Given here" marks it; Use the file's value takes it back.
+- JMeter: each thread group's users, ramp-up, hold time and loops (setUp / tearDown named) under its name in the request list; the workload workbook (Include / Leave out) in the settings strip.
+- Plan the load in Workload Modeller: hands the generated ZIP to the Workload Modeller in the portal (every script filled in, as if chosen there); the ZIP is then kept in the browser so Download goes on working; a used or expired link converts again first.
+- Opening the same converter panel again (back from another tool) keeps its result; switching between Postman / Bruno and JMeter still clears it, as before.
+- Nothing changes without a choice (converter golden harness: every ZIP and every request identical).
+
 #### The converters: script settings and the values the requests send
 
 - Postman / Bruno and JMeter, What the script contains: a settings strip — Script name (the .usr of every script, the upload metadata, the JMeter workload workbook and the ZIP's file name) and Think time (the form's own choice, kept in step both ways) — and Rename on a server whose parameter the script writes (checked as in Script Studio: not a name the script or a value already uses). Applied with Update the script; Undo changes puts them back; the choice is kept over later updates.

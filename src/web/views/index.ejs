@@ -1747,11 +1747,13 @@ function openConverterTab(subTab) {
 
 /* ── Converter tab switching ────────────────────────────────────────────── */
 function switchTab(tab) {
+  // the same panel again (back from another tool, e.g. after Plan the load): its result stays
+  const same = document.getElementById('panel-' + tab).style.display !== 'none';
   document.getElementById('panel-bruno').style.display = tab === 'bruno' ? '' : 'none';
   document.getElementById('panel-jmx').style.display   = tab === 'jmx'   ? '' : 'none';
   document.getElementById('tab-bruno').className = 'tab-btn' + (tab === 'bruno' ? ' active-bruno' : '');
   document.getElementById('tab-jmx').className   = 'tab-btn' + (tab === 'jmx'   ? ' active-jmx'   : '');
-  hideResults();
+  if (!same) hideResults();
 }
 
 /* ── Protocol selectors ─────────────────────────────────────────────────── */

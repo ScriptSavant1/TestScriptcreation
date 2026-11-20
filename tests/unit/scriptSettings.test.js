@@ -70,6 +70,28 @@ describe('applyServerNames / applyScriptName', () => {
   });
 });
 
+describe('values given on the page', () => {
+  test('readValues: names as variables are written, plain values only; none → no option', () => {
+    expect(S.readValues('{"base_url":"https://shop.example.com","a.b-c":1,"9x":"no","o":{},"n":null}')).toEqual({ base_url: 'https://shop.example.com', 'a.b-c': '1' });
+    expect(S.readValues('[]')).toBeNull();
+    expect(S.settingsOptions({ values: '{}' })).toEqual({});
+    expect(S.settingsOptions({ values: '{"HOST":"x"}' })).toEqual({ values: { HOST: 'x' } });
+  });
+  test('applyValues: the collection / test plan variable when there is one (the environment only fills gaps), else the environment', () => {
+    const c = { variable: [{ key: 'HOST', value: 'old.example.com' }, { key: 'off', value: 'x', disabled: true }] };
+    const env = S.applyValues(c, { token: '' }, { HOST: 'new.example.com', token: 't', off: 'y', fresh: 'z' });
+    expect(c.variable[0].value).toBe('new.example.com');
+    expect(c.variable[1].value).toBe('x');
+    expect(env).toEqual({ token: 't', off: 'y', fresh: 'z' });
+  });
+  test('applyValues: nothing given → the environment untouched (even none)', () => {
+    const e = { a: '1' };
+    expect(S.applyValues({}, e, null)).toBe(e);
+    expect(S.applyValues({}, null, undefined)).toBeNull();
+    expect(S.applyValues(null, null, { a: '1' })).toEqual({ a: '1' });
+  });
+});
+
 describe('the generators take the chosen server names', () => {
   const H = (key, value) => ({ key, value });
   const reqs = () => [

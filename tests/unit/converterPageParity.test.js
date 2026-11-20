@@ -116,4 +116,21 @@ describe('Converter panels — the preview', () => {
     const addTo = pv.slice(pv.indexOf('function addTo(fd)'), pv.indexOf('function update()'));
     expect(addTo.indexOf('if (!updating)')).toBeLessThan(addTo.indexOf('fd.append("scriptName"'));
   });
+  // part 4: values given on the page (both converters), Plan the load (the Workload Modeller's own entry point), and the
+  // result kept when the same converter panel is opened again (back from another tool)
+  test('values, Plan the load, the result kept on the same panel', () => {
+    const cc = fs.readFileSync(path.resolve(__dirname, '../../src/tools/collection-converter/index.js'), 'utf-8');
+    const jc = fs.readFileSync(path.resolve(__dirname, '../../src/tools/jmx-converter/index.js'), 'utf-8');
+    expect(cc.split('applyValues(parser.collection, await this.loadEnvironmentFile(), this.options.values)').length - 1).toBe(2);
+    expect(jc).toContain('Object.assign(environmentVars, applyValues(collection, environmentVars, this.options.values));');
+    const pv = fs.readFileSync(path.resolve(__dirname, '../../src/web/public/portal/convert-preview.js'), 'utf-8');
+    const addTo = pv.slice(pv.indexOf('function addTo(fd)'), pv.indexOf('function update()'));
+    expect(addTo.indexOf('if (!updating)')).toBeLessThan(addTo.indexOf('fd.append("values"'));
+    expect(pv).toContain('w.WorkloadModeller.addScripts([fileObj])');
+    const wm = fs.readFileSync(path.resolve(__dirname, '../../workload-modeller/web/page.js'), 'utf-8');
+    expect(wm).toContain('window.WorkloadModeller = Object.assign(window.WorkloadModeller || {}, { addScripts: (files) => fill(files) });');
+    const sw = index.slice(index.indexOf('function switchTab(tab)'), index.indexOf('/* ── Protocol selectors'));
+    expect(sw).toContain("const same = document.getElementById('panel-' + tab).style.display !== 'none';");
+    expect(sw).toContain('if (!same) hideResults();');
+  });
 });

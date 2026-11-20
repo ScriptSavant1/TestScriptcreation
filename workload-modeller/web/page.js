@@ -429,6 +429,8 @@ async function fill(files) {
   if (scripts.length || xlRes.length) used("fill", scripts.length + xlRes.reduce((a, x) => a + x.rows.length, 0));
 }
 $("#in-fill").addEventListener("change", (e) => { fill(e.target.files); e.target.value = ""; });
+// the portal hands scripts over (the converters' Plan the load): the same as choosing the files here
+window.WorkloadModeller = Object.assign(window.WorkloadModeller || {}, { addScripts: (files) => fill(files) });
 const pick = () => $("#in-fill").click();
 $("#dropzone").addEventListener("click", pick);
 [$("#dropzone"), $("#btn-fill")].forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }));

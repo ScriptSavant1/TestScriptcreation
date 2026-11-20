@@ -110,6 +110,11 @@ describe('convertPreview (server)', () => {
     expect(by.HOST.file).toBe('u.csv');
     expect(by.base.value).toBe('https://api.example.com');
   });
+  test('buildPreview: a value given on the page is marked given', () => {
+    const pv = C.buildPreview({ kind: 'pm', requests: [{ name: 'a', url: '{{base}}/x' }], environmentVars: { base: 'https://api.example.com' }, given: ['base'], files: new Map(), outputDir: OUT });
+    expect(pv.variables).toEqual([expect.objectContaining({ name: 'base', source: 'environment', given: true })]);
+    expect(pv.hosts[0].state).toBe('resolved');
+  });
   test('buildPreview: a server parameter only when the script writes it; the script name', () => {
     const reqs = [{ name: 'a', url: 'https://api.example.com/a' }, { name: 'b', url: 'https://cdn.example.com/b' }];
     const pv = C.buildPreview({
@@ -177,6 +182,16 @@ describe('convert-preview (page helpers)', () => {
     expect(P.changesOf(base)).toEqual([]);
     expect(P.changesOf({ ...base, out: new Set(), name: 'B', tt: 5, renamed: 2 })).toEqual(['the requests', 'the script name', 'the think time', '2 server names']);
     expect(P.changesOf({ ...base, tt: '3' })).toEqual([]);
+  });
+  test('changesOf: the environment, given values, the workload workbook', () => {
+    const base = { out: new Set(), gen: new Set(), name: 'A', genName: 'A', tt: 1, genTT: 1, renamed: 0 };
+    expect(P.changesOf({ ...base, env: true, values: 1, wlm: true })).toEqual(['the environment', 'a value', 'the workload workbook']);
+    expect(P.changesOf({ ...base, values: 3 })).toEqual(['3 values']);
+  });
+  test('tgText: a JMeter thread group in words', () => {
+    expect(P.tgText({ type: 'Standard', virtualUsers: 10, rampUpSec: 10, holdSec: 300, iterations: 'Infinite', enabled: true })).toBe('10 users · ramp-up 10 s · hold 5 min · loops until stopped');
+    expect(P.tgText({ type: 'SetUp', virtualUsers: 1, rampUpSec: 0, holdSec: 0, iterations: 1 })).toBe('setUp · 1 user · 1 loop');
+    expect(P.tgText({ virtualUsers: 5, iterations: 3, holdSec: 90, enabled: false })).toBe('5 users · hold 90 s · 3 loops · off in the test plan');
   });
   test('sortValues: no value first, then empty, then in order of use', () => {
     const v = [{ name: 'a', source: 'set' }, { name: 'b', source: 'empty' }, { name: 'c', source: 'missing' }, { name: 'd', source: 'environment' }];

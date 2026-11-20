@@ -97,13 +97,16 @@
   // how a server is compared (scriptSettings.js serverKey)
   function serverKey(host) { return String(host || "").trim().toLowerCase().replace(/:(443|80)$/, ""); }
 
-  // what differs from the ZIP: [label] — st = { out, gen, name, genName, tt, genTT, renamed }
+  // what differs from the ZIP: [label] — st = { out, gen, name, genName, tt, genTT, renamed, env, values, wlm }
   function changesOf(st) {
     var c = [];
     if (!sameSet(st.out, st.gen)) c.push("the requests");
     if (st.name !== st.genName) c.push("the script name");
     if (st.tt != null && st.genTT != null && Number(st.tt) !== Number(st.genTT)) c.push("the think time");
     if (st.renamed) c.push(st.renamed === 1 ? "a server name" : st.renamed + " server names");
+    if (st.env) c.push("the environment");
+    if (st.values) c.push(st.values === 1 ? "a value" : st.values + " values");
+    if (st.wlm) c.push("the workload workbook");
     return c;
   }
 
@@ -116,7 +119,19 @@
     }).map(function (x) { return x.v; });
   }
 
-  var api = { filterRequests: filterRequests, groupRequests: groupRequests, defaultFile: defaultFile, fileGroups: fileGroups, stateOf: stateOf, sameSet: sameSet, needed: needed, cleanName: cleanName, serverKey: serverKey, changesOf: changesOf, sortValues: sortValues };
+  // a JMeter thread group's settings in words: "setUp · 10 users · ramp-up 10 s · hold 300 s · loops until stopped"
+  function tgText(t) {
+    var p = [], s = function (n) { return Number(n) >= 120 && Number(n) % 60 === 0 ? Number(n) / 60 + " min" : n + " s"; };
+    if (t.type && /^(setup|teardown)$/i.test(t.type)) p.push(/^setup$/i.test(t.type) ? "setUp" : "tearDown");
+    if (t.virtualUsers != null) p.push(t.virtualUsers + (Number(t.virtualUsers) === 1 ? " user" : " users"));
+    if (Number(t.rampUpSec) > 0) p.push("ramp-up " + s(t.rampUpSec));
+    if (Number(t.holdSec) > 0) p.push("hold " + s(t.holdSec));
+    if (t.iterations != null && t.iterations !== "") p.push(/^infinite$/i.test(String(t.iterations)) || Number(t.iterations) < 0 ? "loops until stopped" : t.iterations + (Number(t.iterations) === 1 ? " loop" : " loops"));
+    if (t.enabled === false) p.push("off in the test plan");
+    return p.join(" · ");
+  }
+
+  var api = { tgText: tgText, filterRequests: filterRequests, groupRequests: groupRequests, defaultFile: defaultFile, fileGroups: fileGroups, stateOf: stateOf, sameSet: sameSet, needed: needed, cleanName: cleanName, serverKey: serverKey, changesOf: changesOf, sortValues: sortValues };
   if (typeof document === "undefined") return api;
 
   // ── the page ──
@@ -129,8 +144,11 @@
   var updating = false, keepView = false, source = null;
   var tab = "files", vf = "", ren = "", renErr = "", renVal = "";   // right pane tab, a value's requests shown, the server being renamed
   // the user's script settings — kept over updates and sent with each one; orig = the converter's own choices
-  var chosen = { name: "", names: {} }, atGen = { name: "", names: {} }, orig = { name: "", params: {} };
-  var sentTT = null, genTT = null;
+  var chosen = { name: "", names: {}, values: {} }, atGen = { name: "", names: {}, values: {} }, orig = { name: "", params: {} };
+  var sentTT = null, genTT = null, sentEnv = null, genEnv = null, sentWlm = null, genWlm = null;
+  var editV = "", editVal = "";                // the value being given in the Values tab
+  var TG = {};                                 // JMeter: the thread groups' settings by name (data.threadGroups)
+  var blobUrl = "", zipFile = null, handAfter = false;   // the ZIP kept in the browser once handed to the Workload Modeller
   var ICON = {
     server: '<path d="M4 5h16v6H4zM4 13h16v6H4z"/><path d="M8 8h.01M8 16h.01"/>',
     list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
@@ -142,6 +160,7 @@
     copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
     redo: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
     pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    chart: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
   };
   var ico = function (k) { return '<svg class="cv-pv-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[k] + "</svg>"; };
@@ -164,7 +183,8 @@
     el.addEventListener("input", onInput);
     el.addEventListener("keydown", onKey);
     // the form's think time and the strip's stay in step (the form's setters are the source of truth)
-    ["setTT", "setJmxTT"].forEach(function (fn) {
+    document.addEventListener("change", function (e) { if (P && e.target && e.target.id === "fi-env") setTimeout(function () { drawSet(); drawBar(); }, 0); });
+    ["setTT", "setJmxTT", "setJmxWlm", "clearFile", "attachFile"].forEach(function (fn) {
       var o = window[fn];
       if (typeof o !== "function" || o._cvPv) return;
       window[fn] = function () { var r = o.apply(this, arguments); if (P) { drawSet(); drawBar(); } return r; };
@@ -182,11 +202,20 @@
     var fn = kind === "jmx" ? window.setJmxTT : window.setTT;
     if (typeof fn === "function") fn(t);
   }
+  function curEnv() { try { return typeof F !== "undefined" ? F.environment || null : null; } catch (e) { return null; } }
+  function curWlm() { try { return typeof JX !== "undefined" ? String(!!JX.wlm) : null; } catch (e) { return null; } }
+  function valuesChanged() {
+    var a = chosen.values, b = atGen.values, n = 0;
+    Object.keys(a).forEach(function (k) { if (a[k] !== b[k]) n++; });
+    Object.keys(b).forEach(function (k) { if (!(k in a)) n++; });
+    return n;
+  }
   var nameNow = function () { return chosen.name || orig.name; };
   var paramNow = function (h) { return chosen.names[serverKey(h.host)] || orig.params[serverKey(h.host)] || h.param; };
   function renamedCount() { return P.hosts.filter(function (h) { return h.param && paramNow(h) !== h.param; }).length; }
   function changes() {
-    return changesOf({ out: out, gen: gen, name: nameNow(), genName: P.scriptName, tt: curTT(), genTT: genTT, renamed: renamedCount() });
+    return changesOf({ out: out, gen: gen, name: nameNow(), genName: P.scriptName, tt: curTT(), genTT: genTT, renamed: renamedCount(),
+      env: kind === "pm" && curEnv() !== genEnv, wlm: kind === "jmx" && genWlm != null && curWlm() !== genWlm, values: valuesChanged() });
   }
 
   function show(data, k) {
@@ -195,20 +224,26 @@
     P = data && data.preview; kind = k === "jmx" ? "jmx" : "pm";
     if (!keep) {
       host = ""; q = ""; folded = {}; showAll = {}; file = null; tab = "files"; vf = "";
-      chosen = { name: "", names: {} };
+      chosen = { name: "", names: {}, values: {} };
       orig = { name: P ? P.scriptName || "" : "", params: {} };
       if (P && P.hosts) P.hosts.forEach(function (h) { if (h.param) orig.params[serverKey(h.host)] = h.param; });
     }
-    ren = ""; renErr = "";
+    ren = ""; renErr = ""; editV = ""; editVal = "";
     used = false; expired = false;
-    if (!P || !P.requests) { el.hidden = true; el.innerHTML = ""; return; }
+    if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch (e) { /* gone */ } }
+    blobUrl = ""; zipFile = null;
+    TG = {};
+    ((data && data.threadGroups) || []).forEach(function (t) { if (t && t.name) TG[t.name] = t; });
+    if (!P || !P.requests) { el.hidden = true; el.innerHTML = ""; handAfter = false; return; }
     gen = new Set(P.requests.filter(function (r) { return r.out; }).map(function (r) { return r.n; }));
     out = new Set(gen);
     genTT = sentTT != null ? sentTT : curTT();
+    genEnv = kind === "pm" ? sentEnv : null;
+    genWlm = kind === "jmx" ? (sentWlm != null ? sentWlm : curWlm()) : null;
     // the server's verdict wins: a name it did not take is dropped from the choice
     if (chosen.name && chosen.name !== P.scriptName) chosen.name = P.scriptName === orig.name ? "" : P.scriptName;
     P.hosts.forEach(function (h) { var key = serverKey(h.host); if (chosen.names[key] && h.param && chosen.names[key] !== h.param) delete chosen.names[key]; });
-    atGen = { name: chosen.name, names: Object.assign({}, chosen.names) };
+    atGen = { name: chosen.name, names: Object.assign({}, chosen.names), values: Object.assign({}, chosen.values) };
     if (vf && !(P.variables || []).some(function (v) { return v.name === vf; })) vf = "";
     source = currentFile();
     if (!file || !P.files.some(function (f) { return f.path === file; })) file = defaultFile(P.files);
@@ -216,7 +251,9 @@
     var missingHosts = P.hosts.filter(function (h) { return (h.state || (h.resolved ? "resolved" : "missing")) === "missing"; });
     el.innerHTML =
       '<div class="cv-pv-head"><div><h3>What the script contains</h3><p>Untick what the script should leave out, change its settings, then <b>Update the script</b>. ' +
-        (kind === "jmx" ? "Requests are grouped by thread group." : "Requests are grouped by folder.") + "</p></div></div>" +
+        (kind === "jmx" ? "Requests are grouped by thread group." : "Requests are grouped by folder.") + "</p></div>" +
+        (window.PerfxShell ? '<button type="button" class="cv-pv-btn" id="cv-pv-wm" title="Open this ZIP in the Workload Modeller to work out the Vusers, pacing and load generators">' + ico("chart") + "Plan the load in Workload Modeller</button>" : "") +
+        "</div>" +
       (missingHosts.length ? '<div class="cv-pv-warn" role="note">' + ico("warn") + "<span><b>" + (missingHosts.length === 1 ? "1 server is a variable with no value" : missingHosts.length + " servers are variables with no value") + "</b> (" +
         missingHosts.map(function (h) { return "<code>" + esc(h.host) + "</code>"; }).join(", ") + "): " +
         (kind === "jmx" ? "the test plan does not give it one, so the script calls it as written." : "add the environment file that defines it, or the script calls it as written.") + "</span></div>" : "") +
@@ -245,7 +282,8 @@
     el.hidden = false;
     drawSet(); drawAll(); drawFiles(); drawFile(); drawValues(); drawTab();
     watchDownload();
-    if (keep) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
+    if (handAfter) { handAfter = false; handOff(); }
+    else if (keep) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
   }
   function hide() {
     var el = document.getElementById("cv-pv");
@@ -257,13 +295,20 @@
   // the form of the next conversion: notes the think time sent; on an update, the choice (only what was chosen — a
   // plain conversion sends exactly what it always sent)
   function addTo(fd) {
-    try { if (fd && fd.get) { var t = Number(fd.get("thinkTime")); sentTT = isFinite(t) ? t : null; } } catch (e) { sentTT = null; }
+    try {
+      if (fd && fd.get) {
+        var t = Number(fd.get("thinkTime")); sentTT = isFinite(t) ? t : null;
+        sentEnv = fd.get("environment") || null;
+        var w = fd.get("generateWlmExcel"); sentWlm = w == null ? null : String(w === true || w === "true");
+      }
+    } catch (e) { sentTT = null; sentEnv = null; sentWlm = null; }
     if (!updating) { keepView = false; return; }
     updating = false; keepView = true;
     if (!fd || !fd.append) return;
     if (out.size) fd.append("leaveOut", JSON.stringify(Array.from(out).sort(function (a, b) { return a - b; })));
     if (chosen.name) fd.append("scriptName", chosen.name);
     if (Object.keys(chosen.names).length) fd.append("serverNames", JSON.stringify(chosen.names));
+    if (Object.keys(chosen.values).length) fd.append("values", JSON.stringify(chosen.values));
   }
   function update() {
     if (!P) return;
@@ -275,9 +320,15 @@
   }
   function undo() {
     out = new Set(gen);
-    chosen = { name: atGen.name, names: Object.assign({}, atGen.names) };
-    ren = ""; renErr = "";
+    chosen = { name: atGen.name, names: Object.assign({}, atGen.names), values: Object.assign({}, atGen.values) };
+    ren = ""; renErr = ""; editV = "";
     if (genTT != null && Number(curTT()) !== Number(genTT)) setTTNow(genTT);
+    if (kind === "jmx" && genWlm != null && curWlm() !== genWlm && typeof window.setJmxWlm === "function") window.setJmxWlm(genWlm === "true");
+    if (kind === "pm" && curEnv() !== genEnv) {
+      if (genEnv && typeof window.attachFile === "function") window.attachFile("dz-env", "environment", genEnv);
+      else if (!genEnv && typeof window.clearFile === "function") window.clearFile("dz-env", "environment");
+    }
+    drawValues();
     drawSet(); drawAll();
   }
 
@@ -311,12 +362,25 @@
         '<div class="seg-btns" role="group" aria-labelledby="cv-pv-l-tt">' + TT.map(function (n) {
           return '<button type="button" class="seg-btn' + (n === tt ? " active" : "") + '" data-tt="' + n + '" aria-pressed="' + (n === tt) + '">' + n + "s</button>";
         }).join("") + "</div></div>" +
+      (kind === "pm" ? (function () {
+        var env = curEnv();
+        return '<div class="cv-pv-field"><span class="cv-pv-flabel" id="cv-pv-l-env">Environment</span><div class="cv-pv-env" role="group" aria-labelledby="cv-pv-l-env">' +
+          '<span class="cv-pv-envname' + (env ? "" : " none") + '" title="' + esc(env ? env.name : "") + '">' + esc(env ? env.name : "None") + "</span>" +
+          '<button type="button" class="cv-pv-btn" data-env-pick>' + (env ? "Change" : "Choose") + "…</button>" +
+          (env ? '<button type="button" class="cv-pv-btn" data-env-clear>Remove</button>' : "") + "</div></div>";
+      })() : (function () {
+        var w = curWlm() === "true";
+        return '<div class="cv-pv-field"><span class="cv-pv-flabel" id="cv-pv-l-wlm">Workload workbook</span><div class="seg-btns" role="group" aria-labelledby="cv-pv-l-wlm">' +
+          '<button type="button" class="seg-btn' + (w ? " active" : "") + '" data-wlm="1" aria-pressed="' + w + '">Include</button>' +
+          '<button type="button" class="seg-btn' + (w ? "" : " active") + '" data-wlm="0" aria-pressed="' + !w + '">Leave out</button></div></div>';
+      })()) +
       '<p class="cv-pv-muted cv-pv-fhelp" id="cv-pv-name-h">The name is given to the .usr file' + (P.files.some(function (f) { return f.path.indexOf("/") !== -1; }) ? " of every script" : "") + " and to the ZIP; the think time is the pause between steps.</p>";
-    if (active) {   // typing in the name: redraw the rest, keep the field
-      Array.prototype.forEach.call(box.querySelectorAll("[data-tt]"), function (b) { var on = +b.getAttribute("data-tt") === tt; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on)); });
-      return;
-    }
+    var typed = active ? document.getElementById("cv-pv-name") : null, v = typed && typed.value, at = typed && typed.selectionStart;
     box.innerHTML = html;
+    if (typed) {   // typing in the name: the field keeps what is typed, the focus and the caret
+      var i = document.getElementById("cv-pv-name");
+      i.value = v; i.focus(); try { i.setSelectionRange(at, at); } catch (e) { /* not a text field */ }
+    }
   }
 
   function drawHosts() {
@@ -375,7 +439,8 @@
       return '<div class="cv-pv-grp' + (f ? " folded" : "") + (gs === "none" ? " is-out" : "") + '"><div class="cv-pv-gh">' +
         tick('data-tick-group="' + esc(g.name) + '"', gs, "Every request in " + g.name) +
         '<button type="button" class="cv-pv-gb" data-group="' + esc(g.name) + '" aria-expanded="' + !f + '">' + ico("chev") +
-        '<b>' + esc(g.name) + '</b><span class="cv-pv-muted">' + plural(g.requests.length, "request") + "</span></button></div>" +
+        '<b>' + esc(g.name) + '</b><span class="cv-pv-muted">' + plural(g.requests.length, "request") + "</span>" +
+        (TG[g.name] ? '<span class="cv-pv-tg">' + esc(tgText(TG[g.name])) + "</span>" : "") + "</button></div>" +
         (f ? "" : '<ol class="cv-pv-rows">' + rows.map(function (r) {
           var o = out.has(r.n);
           return '<li class="cv-pv-row' + (o ? " is-out" : "") + '">' + tick('data-tick-req="' + r.n + '"', o ? "none" : "all", r.name) +
@@ -414,15 +479,35 @@
     if (!vars.length) { box.innerHTML = '<p class="cv-pv-empty">The requests send no variables.</p>'; return; }
     box.innerHTML = '<ul class="cv-pv-vars">' + vars.map(function (v) {
       var s = (SRC[v.source] || SRC.missing)(v), val = v.hidden ? "hidden (looks like a secret)" : v.value != null ? v.value : "";
-      var sent = v.usedBy.length;
+      var sent = v.usedBy.length, mine = Object.prototype.hasOwnProperty.call(chosen.values, v.name);
+      var pend = mine ? chosen.values[v.name] !== atGen.values[v.name] : Object.prototype.hasOwnProperty.call(atGen.values, v.name);
+      var canGive = GIVE[v.source] || mine || v.given;
       return '<li class="cv-pv-var s-' + esc(v.source) + (vf === v.name ? " on" : "") + '"><div class="cv-pv-vh"><code class="cv-pv-vn">' + esc(v.name) + "</code>" +
-        '<span class="cv-pv-src">' + (v.source === "missing" ? ico("warn") : "") + esc(s[0]) + "</span></div>" +
-        (s[1] ? '<div class="cv-pv-vd">' + esc(s[1]) + "</div>" : "") +
-        (val !== "" ? '<div class="cv-pv-vd">' + (v.source === "set" ? "Starts as " : "Value ") + (v.hidden ? '<span class="cv-pv-muted">' + esc(val) + "</span>" : "<code>" + esc(val) + "</code>") + "</div>" : "") +
+        (v.given || mine ? '<span class="cv-pv-gtag">Given here</span>' : "") +
+        '<span class="cv-pv-src">' + (v.source === "missing" && !mine ? ico("warn") : "") + esc(s[0]) + "</span></div>" +
+        (s[1] && !(v.given || mine) ? '<div class="cv-pv-vd">' + esc(s[1]) + "</div>" : "") +
+        (pend ? '<div class="cv-pv-vd cv-pv-vnew">' + (mine ? "New value <code>" + esc(chosen.values[v.name]) + "</code>" : "Back to the value from the file") + " — Update the script to use it</div>"
+          : val !== "" ? '<div class="cv-pv-vd">' + (v.source === "set" ? "Starts as " : "Value ") + (v.hidden ? '<span class="cv-pv-muted">' + esc(val) + "</span>" : "<code>" + esc(val) + "</code>") + "</div>" : "") +
+        (editV === v.name ? '<div class="cv-pv-vedit"><label class="cv-pv-flabel" for="cv-pv-val">Value for <code>' + esc(v.name) + "</code></label>" +
+          '<input id="cv-pv-val" type="text" spellcheck="false" autocomplete="off" value="' + esc(editVal) + '" />' +
+          '<button type="button" class="cv-pv-btn primary" data-give-ok="' + esc(v.name) + '">Save</button><button type="button" class="cv-pv-btn" data-give-cancel>Cancel</button></div>' : "") +
+        '<div class="cv-pv-vact">' +
         (sent || v.setBy.length ? '<button type="button" class="cv-pv-vuse" data-vf="' + esc(v.name) + '" aria-pressed="' + (vf === v.name) + '">' +
           (sent ? "Sent by " + plural(sent, "request") : "Not sent by any request") + "</button>" : "") +
-        "</li>";
+        (canGive && editV !== v.name ? '<button type="button" class="cv-pv-vuse" data-give="' + esc(v.name) + '">' + (mine || v.source === "environment" || v.source === "collection" ? "Change the value" : "Give a value") + "</button>" : "") +
+        (mine ? '<button type="button" class="cv-pv-vuse" data-ungive="' + esc(v.name) + '">Use the file\'s value</button>' : "") +
+        "</div></li>";
     }).join("") + "</ul>";
+    if (editV) { var i = document.getElementById("cv-pv-val"); if (i) { i.focus(); i.select(); } }
+  }
+  // a value given here goes where the script reads it (src/core/scriptSettings.js applyValues); set while it runs, a
+  // data file column or a value the tool makes cannot be given
+  var GIVE = { missing: 1, empty: 1, environment: 1, collection: 1 };
+  function saveValue(name) {
+    var i = document.getElementById("cv-pv-val"); if (!i) return;
+    chosen.values[name] = i.value;
+    editV = ""; editVal = "";
+    drawValues(); drawBar();
   }
 
   function drawFiles() {
@@ -462,6 +547,7 @@
     if (t.id === "cv-pv-q") { q = t.value; drawRequests(); }
     else if (t.id === "cv-pv-name") { var c = cleanName(t.value); chosen.name = c === orig.name ? "" : c; drawBar(); }
     else if (t.id === "cv-pv-ren-in") renVal = t.value;
+    else if (t.id === "cv-pv-val") editVal = t.value;
     if (t.id === "cv-pv-ren-in" && renErr) { renErr = ""; var p = document.getElementById("cv-pv-ren-err"); if (p) p.textContent = ""; t.removeAttribute("aria-invalid"); }
   }
   function onKey(e) {
@@ -470,6 +556,8 @@
       if (e.key === "Enter") { e.preventDefault(); saveRename(serverKey(ren)); }
       else if (e.key === "Escape") { e.preventDefault(); var h = ren; ren = ""; renErr = ""; drawHosts(); var b = document.querySelector('#cv-pv [data-rename="' + (window.CSS && CSS.escape ? CSS.escape(h) : h) + '"]'); if (b) b.focus(); }
     } else if (t.id === "cv-pv-name" && e.key === "Enter") { e.preventDefault(); t.value = nameNow(); }
+    else if (t.id === "cv-pv-val" && e.key === "Enter") { e.preventDefault(); saveValue(editV); }
+    else if (t.id === "cv-pv-val" && e.key === "Escape") { e.preventDefault(); var gn = editV; editV = ""; drawValues(); var gb = document.querySelector('#cv-pv [data-give="' + (window.CSS && CSS.escape ? CSS.escape(gn) : gn) + '"]'); if (gb) gb.focus(); }
     else if (t.getAttribute && t.getAttribute("role") === "tab" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
       e.preventDefault(); tab = tab === "files" ? "values" : "files"; drawTab(); document.getElementById("cv-pv-tab-" + tab).focus();
     }
@@ -480,6 +568,19 @@
     else if (b.hasAttribute("data-group")) { var g = b.getAttribute("data-group"); folded[g] = !folded[g]; drawRequests(); }
     else if (b.hasAttribute("data-all")) { showAll[b.getAttribute("data-all")] = true; drawRequests(); }
     else if (b.hasAttribute("data-tt")) setTTNow(+b.getAttribute("data-tt"));
+    else if (b.hasAttribute("data-wlm")) { if (typeof window.setJmxWlm === "function") window.setJmxWlm(b.getAttribute("data-wlm") === "1"); }
+    else if (b.hasAttribute("data-env-pick")) { var fi = document.getElementById("fi-env"); if (fi) fi.click(); }
+    else if (b.hasAttribute("data-env-clear")) { if (typeof window.clearFile === "function") window.clearFile("dz-env", "environment"); }
+    else if (b.hasAttribute("data-give")) {
+      editV = b.getAttribute("data-give");
+      var gv = (P.variables || []).filter(function (x) { return x.name === editV; })[0];
+      editVal = Object.prototype.hasOwnProperty.call(chosen.values, editV) ? chosen.values[editV] : gv && !gv.hidden && gv.value != null ? gv.value : "";
+      drawValues();
+    }
+    else if (b.hasAttribute("data-give-ok")) saveValue(b.getAttribute("data-give-ok"));
+    else if (b.hasAttribute("data-give-cancel")) { editV = ""; drawValues(); }
+    else if (b.hasAttribute("data-ungive")) { delete chosen.values[b.getAttribute("data-ungive")]; drawValues(); drawBar(); }
+    else if (b.id === "cv-pv-wm") handOff();
     else if (b.hasAttribute("data-rename")) { ren = b.getAttribute("data-rename"); renErr = ""; var rh = P.hosts.filter(function (x) { return x.host === ren; })[0]; renVal = rh ? paramNow(rh) : ""; drawHosts(); }
     else if (b.hasAttribute("data-ren-ok")) saveRename(b.getAttribute("data-ren-ok"));
     else if (b.hasAttribute("data-ren-cancel")) { ren = ""; renErr = ""; drawHosts(); }
@@ -513,6 +614,7 @@
           if (up && !up.disabled) up.focus();
           return;
         }
+        if (blobUrl) return;                       // the ZIP is kept in the browser: download it as often as needed
         if (used || expired) { e.preventDefault(); update(); return; }
         used = true;
         setTimeout(function () { setAgain("Downloaded. The link works once: Convert again to download it again."); }, 400);
@@ -531,8 +633,50 @@
   function resetDownload() {
     var a = dl(); if (!a) return;
     a.classList.remove("cv-pv-wait"); a.removeAttribute("aria-disabled");
+    if (a._cvBlob) { a._cvBlob = false; a.setAttribute("download", ""); }
     if (!a._cvLabel) return;
     a.innerHTML = a._cvLabel; a.classList.remove("cv-pv-again"); a.setAttribute("download", ""); a.removeAttribute("title");
+  }
+
+  // Plan the load in Workload Modeller: the generated ZIP, handed to the Workload Modeller page in the portal
+  // (window.WorkloadModeller.addScripts — the same as choosing the file there). The single-use link is read once and
+  // the ZIP kept in this browser, so Download goes on working from it. A used or expired link converts again first.
+  function handOff() {
+    if (!P) return;
+    var btn = document.getElementById("cv-pv-wm");
+    if (changes().length) { var bar = document.getElementById("cv-pv-bar"); if (bar) { bar.classList.remove("flash"); void bar.offsetWidth; bar.classList.add("flash"); } return; }
+    if (zipFile) { send(zipFile); return; }
+    if (used || expired) { handAfter = true; update(); return; }
+    var a = dl(); if (!a || !a.href) return;
+    if (btn) { btn.disabled = true; btn.lastChild.textContent = "Reading the ZIP…"; }
+    fetch(a.href).then(function (r) {
+      if (!r.ok) throw new Error("gone");
+      var cd = r.headers.get("content-disposition") || "", m = /filename="([^"]+)"/.exec(cd), name = m ? m[1] : "loadrunner_script.zip";
+      return r.blob().then(function (blob) { return { blob: blob, name: name }; });
+    }).then(function (z) {
+      zipFile = new File([z.blob], z.name, { type: "application/zip" });
+      blobUrl = URL.createObjectURL(z.blob);
+      clearTimeout(timer); used = false; expired = false;
+      a.href = blobUrl; a.setAttribute("download", z.name); a._cvBlob = true;
+      if (btn) { btn.disabled = false; btn.lastChild.textContent = "Plan the load in Workload Modeller"; }
+      send(zipFile);
+    }).catch(function () {
+      if (btn) { btn.disabled = false; btn.lastChild.textContent = "Plan the load in Workload Modeller"; }
+      handAfter = true; update();               // the link was used or expired meanwhile: convert again, then hand over
+    });
+  }
+  function send(fileObj) {
+    var shell = window.PerfxShell; if (!shell) return;
+    shell.go("workload");
+    var tries = 0;
+    (function poll() {
+      var w = null;
+      try { var fr = document.getElementById("iframe-workload"); w = fr && fr.contentWindow; } catch (e) { w = null; }
+      var api2 = null;
+      try { api2 = w && w.document.readyState === "complete" && w.WorkloadModeller && w.WorkloadModeller.addScripts; } catch (e) { api2 = null; }
+      if (api2) { w.WorkloadModeller.addScripts([fileObj]); return; }
+      if (++tries < 200) setTimeout(poll, 100);
+    })();
   }
 
   api.show = show; api.hide = hide; api.addTo = addTo; api.update = update;

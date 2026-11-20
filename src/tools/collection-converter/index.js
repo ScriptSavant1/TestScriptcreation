@@ -3,7 +3,7 @@
  * Entry point for programmatic usage
  */
 
-const { applyScriptName, noteGenerated } = require("../../core/scriptSettings");
+const { applyScriptName, noteGenerated, applyValues } = require("../../core/scriptSettings");
 const { keepSelected, readLeaveOut } = require("../../core/requestSelection");
 const BrunoParser = require("../../parsers/brunoParser");
 const AdvancedScriptGenerator = require("../../generators/devweb/scriptGenerator");
@@ -70,9 +70,10 @@ class BrunoDevWebConverter {
       );
 
       // Step 1b: Load environment file if provided
-      const environmentVars = await this.loadEnvironmentFile();
+      // values given on the page go where the script reads them (src/core/scriptSettings.js applyValues; none → as before)
+      const environmentVars = applyValues(parser.collection, await this.loadEnvironmentFile(), this.options.values);
       // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
-      this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars };
+      this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars, given: Object.keys(this.options.values || {}) };
 
       // Step 2: Select generator based on protocol
       const isWebHttp = this.options.protocol === "web-http";
@@ -180,9 +181,10 @@ class BrunoDevWebConverter {
       );
 
       // Step 2: Load environment file if provided
-      const environmentVars = await this.loadEnvironmentFile();
+      // values given on the page go where the script reads them (src/core/scriptSettings.js applyValues; none → as before)
+      const environmentVars = applyValues(parser.collection, await this.loadEnvironmentFile(), this.options.values);
       // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
-      this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars };
+      this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars, given: Object.keys(this.options.values || {}) };
 
       // Step 3: Group requests by top-level folder
       const folderGroups = this.groupByTopLevelFolder(requests);

@@ -141,7 +141,7 @@ function variablesList({ requests, collection, environmentVars, correlations, se
   });
 }
 
-function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations }) {
+function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations, given }) {
   const out = leftOut instanceof Set ? leftOut : new Set(leftOut || []);
   const declared = new Set();
   const vars = variablesOf(collection, environmentVars, declared);
@@ -199,7 +199,7 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
     files: fileList,
     truncated,
     scriptName: String((collection && ((collection.info && collection.info.name) || collection.name)) || ''),
-    variables: variablesList({ requests, collection, environmentVars, correlations, sets: setsList }),
+    variables: variablesList({ requests, collection, environmentVars, correlations, sets: setsList }).map((v) => ((given || []).includes(v.name) ? Object.assign(v, { given: true }) : v)),
   };
 }
 
