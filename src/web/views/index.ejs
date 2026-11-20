@@ -2022,6 +2022,7 @@ async function doConvert() {
   fd.append('useParameterization', document.getElementById('opt-param').checked);
   fd.append('useAuthentication',   document.getElementById('opt-auth').checked);
   fd.append('addComments',         document.getElementById('opt-cmt').checked);
+  if (window.ConvertPreview) ConvertPreview.addTo(fd);   // Update the script: the requests left out
 
   try {
     const r = await fetch(BASE_PATH + '/convert', { method: 'POST', body: fd });
@@ -2067,6 +2068,7 @@ async function doConvertJmx() {
   // Attach CSV and cert/JAR supporting files
   for (const f of JX.csvFiles)  fd.append('csvFiles',  f);
   for (const f of JX.certFiles) fd.append('certFiles', f);
+  if (window.ConvertPreview) ConvertPreview.addTo(fd);   // Update the script: the requests left out
 
   try {
     const r = await fetch(BASE_PATH + '/convert-jmx', { method: 'POST', body: fd });

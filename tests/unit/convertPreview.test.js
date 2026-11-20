@@ -74,6 +74,21 @@ describe('convertPreview (server)', () => {
     });
     expect(pv.requests.map((r) => [r.group, r.host, r.state])).toEqual([['Buyers', 'shop.example.com', 'resolved'], ['Browsers', '{{T}}', 'runtime']]);
   });
+  test('buildPreview: every request listed, the ones left out on the page marked out', () => {
+    const reqs = [{ name: 'a', url: 'https://x.example.com/a' }, { name: 'b', url: 'https://x.example.com/b' }, { name: 'c', url: 'https://y.example.com/c' }];
+    const pv = C.buildPreview({ kind: 'pm', requests: reqs, leftOut: new Set([2]), files: new Map(), outputDir: OUT });
+    expect(pv.requests.map((r) => [r.n, r.out])).toEqual([[1, false], [2, true], [3, false]]);
+    expect(C.buildPreview({ kind: 'pm', requests: reqs, files: new Map(), outputDir: OUT }).requests.every((r) => r.out === false)).toBe(true);
+  });
+  test('buildPreview: what a request sets and the set values it sends (only when any)', () => {
+    const reqs = [
+      { name: 'token', url: '{{base}}/token', tests: [{ listen: 'test', script: { exec: ['pm.environment.set("access_token", j.t);'] } }] },
+      { name: 'use', url: '{{base}}/a', headers: [{ key: 'Authorization', value: 'Bearer {{access_token}}' }] },
+      { name: 'jmx', url: 'https://${HOST}/b?id=${orderId}', extractors: [{ extractor: { name: 'orderId' } }] },
+    ];
+    const pv = C.buildPreview({ kind: 'pm', requests: reqs, collection: { variable: [{ key: 'base', value: 'https://api.example.com' }] }, files: new Map(), outputDir: OUT });
+    expect(pv.requests.map((r) => [r.sets, r.uses])).toEqual([[['access_token'], undefined], [undefined, ['access_token']], [['orderId'], ['orderId']]]);
+  });
   test('large files are listed but not shown, and the preview says so', () => {
     const big = 'x'.repeat(500 * 1024);
     const pv = C.buildPreview({ kind: 'pm', requests: [], files: files({ 'Action.c': big }), outputDir: OUT });
@@ -105,6 +120,26 @@ describe('convert-preview (page helpers)', () => {
     expect(P.defaultFile([{ path: 'a.usr', text: 'x' }, { path: 'Action.c', text: 'y' }])).toBe('Action.c');
     expect(P.defaultFile([{ path: 'k.pem', text: null }, { path: 'r.md', text: 'z' }])).toBe('r.md');
     expect(P.defaultFile([])).toBeNull();
+  });
+  test('stateOf: a tick for several requests — all in, none in, some', () => {
+    expect(P.stateOf([1, 2], new Set())).toBe('all');
+    expect(P.stateOf([1, 2], new Set([1, 2, 5]))).toBe('none');
+    expect(P.stateOf([1, 2], new Set([2]))).toBe('some');
+  });
+  test('sameSet: the choice equals the ZIP (no Update needed)', () => {
+    expect(P.sameSet(new Set([1, 2]), new Set([2, 1]))).toBe(true);
+    expect(P.sameSet(new Set([1]), new Set([2]))).toBe(false);
+    expect(P.sameSet(new Set(), new Set([2]))).toBe(false);
+  });
+  test('needed: a value set only by left-out requests and sent by a kept one', () => {
+    const list = [
+      { n: 1, sets: ['token'] }, { n: 2, uses: ['token'] }, { n: 3, sets: ['id'] }, { n: 4, sets: ['id'], uses: ['id'] }, { n: 5, uses: ['token', 'id'] },
+    ];
+    expect(P.needed(list, new Set())).toEqual([]);
+    expect(P.needed(list, new Set([1]))).toEqual([{ name: 'token', by: [1], usedBy: [2, 5] }]);
+    expect(P.needed(list, new Set([3]))).toEqual([]);                       // request 4 still sets id
+    expect(P.needed(list, new Set([1, 2, 5]))).toEqual([]);                 // nobody kept sends token
+    expect(P.needed(list, new Set([3, 4])).map((x) => [x.name, x.usedBy])).toEqual([['id', [5]]]);
   });
   test('fileGroups: the root first, then one group per script folder', () => {
     expect(P.fileGroups([{ path: 'B/main.js' }, { path: 'a.md' }, { path: 'A/main.js' }]).map((g) => g.dir)).toEqual(['', 'A', 'B']);

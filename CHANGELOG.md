@@ -291,6 +291,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### The converters: choose what goes into the script
+
+- Postman / Bruno and JMeter: in What the script contains, every server, folder / thread group and request has a tick. Untick what the script should leave out, then Update the script: the same files and options are converted again without those requests (the panel's own Convert, with the numbers of the requests left out — dropped right after reading the collection or test plan). The view (filter, folds, file shown) stays; left-out requests stay listed, struck through, so they can be put back. A JMeter thread group with every request left out gets no script.
+- While a change is not applied, Download waits (a click points to Update the script); Undo changes and Put all back. When a kept request sends a value that only left-out requests set (a token, an id), a note names it and the requests — the script would send it empty.
+- A conversion without a choice is exactly as before (converter golden harness: every ZIP and request identical; the answers only gain each request's `out`, `sets`, `uses`). The transactions after a left-out request are numbered on, with no gap.
+
 #### The converters show what the script contains before the download
 
 - Postman / Bruno and JMeter: after a conversion, What the script contains shows the servers the requests call (addresses resolved with the collection and environment variables; one that is still a variable with no value is flagged, one a script or an extractor sets while it runs is marked so), every request grouped by folder or thread group (filter by name or address, a click on a server shows only its requests) and the generated files with their code — the panel layout of Script Studio. Read-only: the ZIP is exactly as before (converter golden harness: every ZIP and request identical; the answers only gain `preview`).

@@ -56,6 +56,7 @@ const BrunoDevWebConverter      = require("../tools/collection-converter");
 const JmxConverter              = require("../tools/jmx-converter");
 const JmxDependencyResolver     = require("../lib/jmxDependencyResolver");
 const { safePreview }           = require("./convertPreview");
+const { leaveOutOption }        = require("../core/requestSelection");
 
 // Analytics — lazy-loaded so a missing DB never crashes the server
 let analytics, adminReports, csvExporter, xlsxExporter, docxExporter;
@@ -445,6 +446,7 @@ class WebServer {
             addComments:          req.body.addComments !== "false",
             logLevel,
             csvFilePaths,
+            ...leaveOutOption(req.body.leaveOut),   // the requests left out on the page (none → no option: the answer as before)
           };
 
           const converter = new BrunoDevWebConverter(options);
@@ -481,6 +483,7 @@ class WebServer {
 
         } catch (err) {
           // Log full error server-side; send generic code to client (F-07)
+          if (err.code === "nothing_selected") { _evtResult = "failed"; _evtErrCode = "nothing_selected"; return res.status(400).json({ error: "nothing_selected" }); }
           console.error("[convert-error]", err.message, err.isTimeout ? "(timeout)" : "");
           const status    = err.isTimeout ? 408 : 500;
           const code      = err.isTimeout ? "conversion_timeout" : "conversion_failed";
@@ -612,6 +615,7 @@ class WebServer {
             logLevel,
             generateWlmExcel:     req.body.generateWlmExcel !== "false",
             csvFilePaths,
+            ...leaveOutOption(req.body.leaveOut),   // the requests left out on the page (none → no option: the answer as before)
           };
 
           const converter = new JmxConverter(options);
@@ -652,6 +656,7 @@ class WebServer {
           });
 
         } catch (err) {
+          if (err.code === "nothing_selected") { _evtJResult = "failed"; _evtJErrCode = "nothing_selected"; return res.status(400).json({ error: "nothing_selected" }); }
           console.error("[convert-jmx-error]", err.message, err.isTimeout ? "(timeout)" : "");
           const status     = err.isTimeout ? 408 : 500;
           const code       = err.isTimeout ? "conversion_timeout" : "conversion_failed";

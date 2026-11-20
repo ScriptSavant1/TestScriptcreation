@@ -3,6 +3,7 @@
  * Entry point for programmatic usage
  */
 
+const { keepSelected, readLeaveOut } = require("../../core/requestSelection");
 const BrunoParser = require("../../parsers/brunoParser");
 const AdvancedScriptGenerator = require("../../generators/devweb/scriptGenerator");
 const WebHttpScriptGenerator = require("../../generators/vugen/scriptGenerator");
@@ -56,7 +57,9 @@ class BrunoDevWebConverter {
       // Step 1: Parse collection
       console.log(`📖 Parsing collection: ${this.options.inputFile}`);
       const parser = new BrunoParser(this.options.inputFile);
-      const requests = await parser.parse();
+      const parsed = await parser.parse();
+      // the requests the user left out on the page (by number) are dropped here, before anything reads the list
+      const requests = keepSelected(parsed, this.options.leaveOut);
       const metadata = parser.getMetadata();
 
       console.log(
@@ -66,7 +69,7 @@ class BrunoDevWebConverter {
       // Step 1b: Load environment file if provided
       const environmentVars = await this.loadEnvironmentFile();
       // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
-      this.previewSource = { requests, collection: parser.collection, environmentVars };
+      this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars };
 
       // Step 2: Select generator based on protocol
       const isWebHttp = this.options.protocol === "web-http";
@@ -162,7 +165,9 @@ class BrunoDevWebConverter {
       // Step 1: Parse collection
       console.log(`📖 Parsing collection: ${this.options.inputFile}`);
       const parser = new BrunoParser(this.options.inputFile);
-      const requests = await parser.parse();
+      const parsed = await parser.parse();
+      // the requests the user left out on the page (by number) are dropped here, before anything reads the list
+      const requests = keepSelected(parsed, this.options.leaveOut);
       const metadata = parser.getMetadata();
       console.log(
         `✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`,
@@ -171,7 +176,7 @@ class BrunoDevWebConverter {
       // Step 2: Load environment file if provided
       const environmentVars = await this.loadEnvironmentFile();
       // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
-      this.previewSource = { requests, collection: parser.collection, environmentVars };
+      this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars };
 
       // Step 3: Group requests by top-level folder
       const folderGroups = this.groupByTopLevelFolder(requests);

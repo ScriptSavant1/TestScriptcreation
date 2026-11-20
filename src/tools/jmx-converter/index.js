@@ -11,6 +11,7 @@
 
 'use strict';
 
+const { keepSelected, readLeaveOut } = require('../../core/requestSelection');
 const path                  = require('path');
 const fs                    = require('fs').promises;
 const JmxParser             = require('../../parsers/jmxParser');
@@ -42,13 +43,13 @@ class JmxConverter {
   async convert() {
     // 1. Parse JMX
     const parser       = new JmxParser(this.options.inputFile, this.options);
-    const requests     = await parser.parse();
+    const parsed       = await parser.parse();
     const metadata     = parser.getMetadata();
     const collection   = parser.getCollection();
     const threadGroups = parser.getThreadGroups();
     const csvDataSets  = parser.getCsvDataSets();
 
-    if (!requests.length) {
+    if (!parsed.length) {
       const tags = parser.getDiagnosticTags();
       const tgTags   = tags.filter(t => /ThreadGroup/i.test(t));
       const samplers = tags.filter(t => /Sampler/i.test(t) && t !== 'JSR223Sampler' && t !== 'BeanShellSampler');
@@ -65,6 +66,9 @@ class JmxConverter {
       if (tags.length) hint += ` Elements seen: ${tags.slice(0, 15).join(', ')}${tags.length > 15 ? '…' : ''}.`;
       throw new Error(`No HTTP requests found in this JMX file.${hint}`);
     }
+
+    // the requests the user left out on the page (by number) are dropped here, before anything reads the list
+    const requests = keepSelected(parsed, this.options.leaveOut);
 
     // 2. Resolve CSVDataSet filenames that reference JMX variables
     //    e.g. filename="{{csvFile1}}" where csvFile1="users.csv" in UDVs
@@ -88,7 +92,7 @@ class JmxConverter {
     this.injectRequestVariables(requests, environmentVars);
     this.injectProxyVariables(collection, environmentVars);
     // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
-    this.previewSource = { requests, collection, environmentVars };
+    this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection, environmentVars };
 
     // 3. Prepare root output dir
     await fs.mkdir(this.options.outputDir, { recursive: true });
@@ -173,10 +177,12 @@ class JmxConverter {
     const GeneratorClass = isWebHttp ? WebHttpScriptGenerator : AdvancedScriptGenerator;
 
     const tgRequestsMap = parser.getThreadGroupRequests();
+    const kept          = new Set(requests);   // the requests left in (all, unless some were left out on the page)
     const scripts       = [];
     let   firstAnalysis = null;
 
-    for (const [tgName, tgReqs] of tgRequestsMap) {
+    for (const [tgName, tgAll] of tgRequestsMap) {
+      const tgReqs = tgAll.filter(r => kept.has(r));
       if (!tgReqs.length) continue;
 
       // Resolve which thread group index these requests belong to

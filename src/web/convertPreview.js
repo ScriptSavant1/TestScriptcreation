@@ -11,7 +11,9 @@
  *     environmentVars { key: value } — the environment file (it wins over the collection's variables)
  *     files           the converter's in-memory files: Map(path → string | Buffer)
  *     outputDir       the folder the files are under (the ZIP's paths are relative to it, as the download names them)
- *   → { requests: [{ n, name, folder, group, method, url, address, host, resolved, state }],
+ *     leftOut         the numbers of the requests left out on the page (src/core/requestSelection.js): listed, marked out
+ *   → { requests: [{ n, name, folder, group, method, url, address, host, resolved, state, out, sets?, uses? }],
+ *       sets / uses: the names a request sets while the script runs / the ones it sends that a request sets (only when any)
  *       hosts: [{ host, count, resolved, state }], groups: [{ name, count }],
  *     state: "resolved" (a real server), "runtime" (a variable the script sets while it runs — by a script or a JMeter
  *     extractor, or declared with no value yet), "missing" (a variable nothing gives a value: the script calls it as written)
@@ -54,6 +56,13 @@ function runtimeNames(requests, declared) {
   }
   return names;
 }
+// what one request needs from another: the names it sets (its scripts, its extractors) and the variables it sends (address,
+// headers, body, auth) that some request sets — so the page can warn before a request is left out that others need
+function setsOf(r) { return [...runtimeNames([r])]; }
+function usesOf(r, setSomewhere) {
+  const sent = JSON.stringify({ url: r.url, headers: r.headers, body: r.body, auth: r.auth }) || '';
+  return [...new Set(varNames(sent))].filter((k) => setSomewhere.has(k));
+}
 const varNames = (s) => { const out = []; String(s).replace(/\{\{\s*([^{}\s]+)\s*\}\}|\$\{([^{}]+)\}/g, (m, a, b) => { out.push(a || b); return m; }); return out; };
 
 // {{name}} (Postman / Bruno) and ${name} (JMeter) replaced by their value when known — a few rounds, for a variable
@@ -85,10 +94,12 @@ function hostOf(address) {
 
 const isVariable = (h) => /\{\{|\$\{/.test(h);
 
-function buildPreview({ kind, requests, collection, environmentVars, files, outputDir }) {
+function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir }) {
+  const out = leftOut instanceof Set ? leftOut : new Set(leftOut || []);
   const declared = new Set();
   const vars = variablesOf(collection, environmentVars, declared);
   const runtime = runtimeNames(requests, declared);
+  const setByScript = runtimeNames(requests);
   const stateOf = (h) => !isVariable(h) ? 'resolved' : varNames(h).every((k) => runtime.has(k)) ? 'runtime' : 'missing';
   const list = (requests || []).map((r, i) => {
     const url = typeof r.url === 'string' ? r.url : (r.url && (r.url.raw || r.url.url)) || '';
@@ -96,7 +107,11 @@ function buildPreview({ kind, requests, collection, environmentVars, files, outp
     const host = hostOf(address);
     const folder = String(r.folder || '');
     const group = kind === 'jmx' ? (r.threadGroupName || 'Test plan') : (folder.split('/')[0] || '(no folder)');
-    return { n: i + 1, name: String(r.name || ''), folder, group, method: String(r.method || 'GET').toUpperCase(), url, address, host, resolved: !isVariable(host), state: stateOf(host) };
+    const row = { n: i + 1, name: String(r.name || ''), folder, group, method: String(r.method || 'GET').toUpperCase(), url, address, host, resolved: !isVariable(host), state: stateOf(host), out: out.has(i + 1) };
+    const sets = setsOf(r), uses = usesOf(r, setByScript);
+    if (sets.length) row.sets = sets;
+    if (uses.length) row.uses = uses;
+    return row;
   });
 
   const hostMap = new Map(), groupMap = new Map();
@@ -108,7 +123,7 @@ function buildPreview({ kind, requests, collection, environmentVars, files, outp
 
   // the files, named as the ZIP names them (relative to the output folder)
   const prefix = String(outputDir || '').replace(/\\/g, '/').replace(/\/$/, '');
-  const out = [];
+  const fileList = [];
   let total = 0, truncated = false;
   for (const [filePath, content] of files || []) {
     const p = String(filePath).replace(/\\/g, '/');
@@ -119,15 +134,15 @@ function buildPreview({ kind, requests, collection, environmentVars, files, outp
       if (buf.length <= MAX_FILE && total + buf.length <= MAX_TOTAL) { text = buf.toString('utf8'); total += buf.length; }
       else truncated = true;
     }
-    out.push({ path: rel, size: buf.length, text });
+    fileList.push({ path: rel, size: buf.length, text });
   }
-  out.sort((a, b) => a.path.localeCompare(b.path));
+  fileList.sort((a, b) => a.path.localeCompare(b.path));
 
   return {
     requests: list,
     hosts: [...hostMap.values()].sort((a, b) => b.count - a.count || a.host.localeCompare(b.host)),
     groups: [...groupMap.entries()].map(([name, count]) => ({ name, count })),
-    files: out,
+    files: fileList,
     truncated,
   };
 }
@@ -137,4 +152,4 @@ function safePreview(input) {
   try { return buildPreview(input); } catch (e) { console.warn('[convert-preview]', e.message); return null; }
 }
 
-module.exports = { buildPreview, safePreview, resolve, hostOf, variablesOf, runtimeNames };
+module.exports = { buildPreview, safePreview, resolve, hostOf, variablesOf, runtimeNames, setsOf, usesOf };

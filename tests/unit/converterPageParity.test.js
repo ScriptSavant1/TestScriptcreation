@@ -78,4 +78,20 @@ describe('Converter panels — the preview', () => {
     expect(server).toContain('preview:     safePreview({ kind: "jmx", ...(converter.previewSource || {}), files, outputDir }),');
     expect(partial).toContain('id="btn-dl"');
   });
+  // part 2: choosing what goes in — the panel's own doConvert / doConvertJmx again, with leaveOut only on an update
+  test('Update the script: both converts add the choice; the server reads it; the converters drop it after parsing', () => {
+    const line = 'if (window.ConvertPreview) ConvertPreview.addTo(fd);';
+    expect(index.split(line).length - 1).toBe(2);
+    const dc = index.slice(index.indexOf('async function doConvert()'), index.indexOf('function resetBtn()'));
+    const dj = index.slice(index.indexOf('async function doConvertJmx()'), index.indexOf('function resetJmxBtn()'));
+    [dc, dj].forEach((body) => expect(body.indexOf(line)).toBeLessThan(body.indexOf('await fetch(')));
+    const server = fs.readFileSync(path.resolve(__dirname, '../../src/web/server.js'), 'utf-8');
+    expect(server.split('...leaveOutOption(req.body.leaveOut),').length - 1).toBe(2);
+    expect(server.split('err.code === "nothing_selected"').length - 1).toBe(2);
+    const cc = fs.readFileSync(path.resolve(__dirname, '../../src/tools/collection-converter/index.js'), 'utf-8');
+    const jc = fs.readFileSync(path.resolve(__dirname, '../../src/tools/jmx-converter/index.js'), 'utf-8');
+    expect(cc.split('keepSelected(parsed, this.options.leaveOut)').length - 1).toBe(2);
+    expect(jc).toContain('keepSelected(parsed, this.options.leaveOut)');
+    expect(jc).toContain('const tgReqs = tgAll.filter(r => kept.has(r));');
+  });
 });
