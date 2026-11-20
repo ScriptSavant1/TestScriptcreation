@@ -170,3 +170,20 @@ describe('Script Studio — list options in the editor', () => {
     expect(corr).toContain('if (b) { if (window.SSE) SSE.open(b.getAttribute("data-opts")); }');
   });
 });
+
+// Fit to the window: steps 2, 3 and 4 use the whole width beside the sidebar (no cap, not centred); step 4 shows the
+// script files with their code, read from the engine's S.scripts only (nothing written to the engine)
+describe('Script Studio — steps fit the window', () => {
+  const css = read('portal/studio.css'), page = read('portal/studio-page.js'), html = read('Studio.html');
+  test('no width cap on Correlate, Test data or Download', () => {
+    expect(css).not.toMatch(/#ss-t-(corr|data) \{[^}]*max-width: 1500px/);
+    expect(css).not.toMatch(/\.ss-done-card \{[^}]*max-width/);
+    expect(css).toContain('body.ss-step-wide #ss-t-corr:not(.ss-cr-cards):not(.ss-cr-editing) > #ss-corr { height: 100%;');
+  });
+  test('step 4: the files and their code beside the Ready list, every old id kept', () => {
+    ['ss-done-list', 'ss-done-fh', 'ss-done-files', 'ss-done-dl', 'ss-done-ftabs', 'ss-done-pre', 'ss-done-copy'].forEach((id) => expect(html).toContain('id="' + id + '"'));
+    const fn = page.slice(page.indexOf('function doneFiles()'), page.indexOf('$("#ss-done-ftabs").addEventListener("click"'));
+    expect(fn).toContain('S.scripts[doneKey]');
+    expect(fn).not.toMatch(/S\.\w+\s*=[^=]/);
+  });
+});

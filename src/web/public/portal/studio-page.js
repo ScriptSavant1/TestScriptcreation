@@ -415,7 +415,50 @@
     var files = $$("#code-tabs .code-tab").map(function (t) { return t.textContent.trim(); }).filter(Boolean);
     $("#ss-done-fh").textContent = "Files in " + SS.scriptName() + ".zip";
     $("#ss-done-files").textContent = (files.length ? files.join(", ") + ", " : "") + "and the project files VuGen and LoadRunner Enterprise need (.usr, run-time settings" + ((S.params || []).length ? ", the test data files" : "") + ").";
+    doneFiles();
   }
+  // step 4, right column: the script files with their code — the Script tab's own files (#code-tabs: each calls
+  // switchTab(this, key)) read from the engine's S.scripts[key]; nothing is written to the engine
+  var doneKey = "";
+  function doneTabs() {
+    return $$("#code-tabs .code-tab").map(function (t) {
+      var m = /switchTab\(\s*this\s*,\s*'([^']+)'\s*\)/.exec(t.getAttribute("onclick") || "");
+      return m ? { key: m[1], name: t.textContent.trim() } : null;
+    }).filter(function (x) { return x && x.name; });
+  }
+  function doneFiles() {
+    var tabs = doneTabs();
+    if (!tabs.some(function (x) { return x.key === doneKey; })) doneKey = tabs.length ? tabs[0].key : "";
+    $("#ss-done-ftabs").innerHTML = tabs.map(function (x) {
+      var on = x.key === doneKey;
+      return '<button type="button" role="tab" id="ss-done-ft-' + esc(x.key) + '" aria-selected="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-file="' + esc(x.key) + '">' + esc(x.name) + "</button>";
+    }).join("");
+    var pre = $("#ss-done-pre"), text = doneKey && S.scripts ? S.scripts[doneKey] || "" : "";
+    pre.setAttribute("aria-labelledby", "ss-done-ft-" + doneKey);
+    pre.textContent = "";
+    var frag = text && text.length < 400000 ? colour(text) : null;
+    if (frag) pre.appendChild(frag); else pre.textContent = text || "Nothing generated yet.";
+    pre.scrollTop = 0;
+    $("#ss-done-copy").disabled = !text;
+  }
+  $("#ss-done-ftabs").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-file]"); if (!b) return;
+    doneKey = b.getAttribute("data-file"); doneFiles();
+    var nb = $("#ss-done-ft-" + doneKey); if (nb) nb.focus();
+  });
+  $("#ss-done-ftabs").addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    var tabs = doneTabs(), i = tabs.findIndex(function (x) { return x.key === doneKey; });
+    if (i < 0 || !tabs.length) return;
+    e.preventDefault();
+    doneKey = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length].key; doneFiles();
+    var nb = $("#ss-done-ft-" + doneKey); if (nb) nb.focus();
+  });
+  $("#ss-done-copy").addEventListener("click", function () {
+    var text = doneKey && S.scripts ? S.scripts[doneKey] : "", b = this;
+    if (!text || !navigator.clipboard) return;
+    navigator.clipboard.writeText(text).then(function () { var l = b.lastChild; l.textContent = "Copied"; setTimeout(function () { l.textContent = "Copy"; }, 1500); });
+  });
   $("#ss-done-dl").addEventListener("click", function () { $("#ss-dl").click(); });
   $("#ss-done-list").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (b) go(b.getAttribute("data-go")); });
   step(1);

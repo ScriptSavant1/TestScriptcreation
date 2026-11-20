@@ -89,6 +89,15 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio: every step fits the window
+
+- Correlate, Test data and Download use the whole width beside the sidebar, lined up with the step bar (they were capped at 1500 px, Download at 920 px, and centred). The Value column of Correlate widens with the window.
+- Correlate fills the height: its table scrolls inside the card and the bar with Add to the script stays in view; the correlation editor and Add manual correlation fill the height too, each column scrolling on its own and the response growing with the window.
+- Test data scrolls once (no box inside a box); its column headings stay at the top.
+- Download: the Ready list beside the script files with their code (file tabs, Copy).
+- Below 900 px the step bar keeps the same side margin as the panels.
+- Layout only: the Studio golden harness (one browser at a time) gives byte-identical scripts and ZIPs.
+
 #### Select options written any way, editing a correlation in the script, manual correlations in the table
 
 - A <select> whose options are written with other attributes first (`<option selected="selected" value="Denver">`) is a list too: options are read by a regular expression with every match (`<option\b[^>]*?\svalue="([^"]*)"`; VuGen `Ordinal=ALL`, DevWeb `occurrence: load.ExtractorOccurrenceType.All`) — in the editor (click an option and List, or select the whole <select>) and in the Correlation Advisor's own select lists. Proved on both engines with the first option selected and plain city names (`studioextract.js` select-city-random).

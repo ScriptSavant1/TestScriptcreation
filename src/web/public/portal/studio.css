@@ -895,14 +895,14 @@ body:is(.ss-step-wide, .ss-step-4) :is(#ss-setbar, #ss-fbar, #ss-p-dom, #ss-p-re
 body.ss-step-wide .ss-cols, body.ss-step-wide.ss-dock.ss-det-open .ss-cols { grid-template-columns: minmax(0, 1fr); }
 body.ss-step-wide #ss-p-right, body.ss-step-wide.ss-dock.ss-det-open #ss-p-right { grid-column: 1; }
 body.ss-step-wide .ss-tabs { display: none; }
-body.ss-step-wide #ss-t-corr { width: 100%; max-width: 1500px; margin: 0 auto; }
+body.ss-step-wide #ss-t-corr { width: 100%; }
 body.ss-step-wide.ss-dock.ss-det-open .ss-cols { grid-template-columns: minmax(0, 1fr) 10px minmax(560px, 0.8fr); }
 body.ss-step-wide.ss-dock.ss-det-open #ss-det { grid-column: 3; }
 /* step 4 */
 body.ss-step-4 .ss-cols { display: none; }
 .ss-done { flex: 1; min-height: 0; overflow: auto; padding: 16px var(--ds-page-x) 20px; }
 .ss-done[hidden] { display: none; }
-.ss-done-card { max-width: 920px; margin: 0 auto; padding: 20px 24px 22px; }
+.ss-done-card { padding: 20px 24px 22px; }
 .ss-done-top { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 16px; }
 .ss-done-top h2 { margin: 0 0 2px; font-size: var(--ds-fs-lg); font-weight: 700; }
 .ss-done-top p { margin: 0; }
@@ -922,7 +922,7 @@ body.ss-step-4 .ss-cols { display: none; }
 }
 /* narrow: the four steps on their own row (only the current one named), Back / Next below */
 @media (max-width: 900px) {
-  .ss-steps { flex-wrap: wrap; padding: 8px 16px; }
+  .ss-steps { flex-wrap: wrap; padding: 8px var(--ds-page-x); }   /* the same side margin as the file bar and the panels */
   .ss-steps ol { width: 100%; }
   .ss-steps [data-step] { padding: 5px 10px 5px 5px; }
   .ss-steps [data-step]:not([aria-current="step"]) b { display: none; }
@@ -930,6 +930,7 @@ body.ss-step-4 .ss-cols { display: none; }
 }
 @media (max-width: 600px) {
   .ss-done { padding: 12px 16px 16px; }
+  .ss-steps { padding: 8px 16px; }
   .ss-done-card { padding: 16px; }
 }
 /* step 1: the script's settings — name and think time */
@@ -1026,7 +1027,7 @@ body.ss-step-4 .ss-cols { display: none; }
 /* step 3: a heading as on step 2, the same width */
 .ss-step-h { display: none; }
 body.ss-step-3 .ss-step-h { display: flex; }
-body.ss-step-wide #ss-t-data { width: 100%; max-width: 1500px; margin: 0 auto; }
+body.ss-step-wide #ss-t-data { width: 100%; }
 
 /* the editor's add screen (Add manual correlation) and the response's Body / Headers */
 .ss-ed-sec { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
@@ -1154,3 +1155,48 @@ body.ss-step-wide #ss-p-right { background: transparent; border-color: transpare
 #corr-list .corr-item:hover { background: var(--br-sel); }
 #corr-list .corr-item::after { content: "Edit"; position: absolute; right: 8px; top: 10px; padding: 2px 10px; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-accent-line); background: var(--ds-accent-soft); color: var(--ds-accent-text); font-size: var(--ds-fs-xs); font-weight: 600; opacity: 0; transition: opacity .15s var(--ds-ease); }
 #corr-list .corr-item:hover::after { opacity: 1; }
+
+/* Fit to the window — steps 2, 3 and 4 use the whole width beside the sidebar, lined up with the step bar (no cap,
+   not centred); paragraphs keep their reading width. Step 2: the Correlate card fills the height, its table scrolls
+   inside and the Add bar stays in view (Correlation details and the second recording below). Step 3: one scroll (the
+   step's own), the table's headings stay in view. Step 4: the Ready list beside the script files with their code. */
+body.ss-step-wide :is(#ss-t-corr, #ss-t-data) { padding-left: 0; padding-right: 0; }
+body.ss-step-wide #ss-t-corr:not(.ss-cr-cards):not(.ss-cr-editing) > #ss-corr { height: 100%; min-height: 440px; }
+body.ss-step-wide #ss-t-corr:not(.ss-cr-cards) #ss-cr-wrap { flex: 1 1 auto; min-height: 0; }
+body.ss-step-wide .ss-cr-val { max-width: clamp(300px, 26vw, 640px); }
+@media (min-width: 1100px) {
+  body.ss-step-wide .ss-td-wrap { overflow: visible; }
+  body.ss-step-wide .ss-td th { position: sticky; top: -12px; z-index: 1; }   /* -12px: the step's top padding, so nothing shows above the headings */
+  body.ss-step-wide .ss-td th:first-child { border-top-left-radius: var(--ds-r-tile); }
+  body.ss-step-wide .ss-td th:last-child { border-top-right-radius: var(--ds-r-tile); }
+}
+.ss-done:not([hidden]) { display: flex; flex-direction: column; }
+.ss-done-card { flex: 1 1 auto; min-height: 520px; display: flex; flex-direction: column; }
+.ss-done-cols { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(340px, 0.85fr) minmax(0, 1.5fr); gap: 16px; }
+.ss-done-main { min-height: 0; overflow: auto; }
+.ss-done-main > h3:first-of-type { margin-top: 18px; }
+.ss-done-code { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-tile); overflow: hidden; }
+.ss-done-fbar { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-bottom: 1px solid var(--ds-border-2); background: var(--br-head); }
+.ss-done-ftabs { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; min-width: 0; }
+.ss-done-ftabs button { height: 30px; padding: 0 10px; border: 0; border-radius: var(--ds-r-sm); background: transparent; color: var(--ds-text-2); font-family: var(--ds-mono); font-size: 12px; font-weight: 600; cursor: pointer; }
+.ss-done-ftabs button:hover { color: var(--ds-text); background: var(--ds-surface-2); }
+.ss-done-ftabs button[aria-selected="true"] { background: var(--ds-surface); color: var(--ds-accent-text); box-shadow: inset 0 -2px 0 var(--ds-accent), 0 0 0 1px var(--ds-border-2); }
+.ss-done-ftabs button:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 1px; }
+.ss-done-pre { flex: 1 1 0; min-height: 260px; margin: 0; padding: 14px 16px; overflow: auto; font-family: var(--ds-mono); font-size: 12.5px; line-height: 1.6; white-space: pre; tab-size: 4; background: var(--ds-code-bg); color: var(--ds-code-text); }
+.ss-done-pre:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: -2px; }
+#ss-done-pre .k { color: var(--ds-syn-key); } #ss-done-pre .s { color: var(--ds-syn-str); } #ss-done-pre .c { color: var(--ds-syn-com); font-style: italic; } #ss-done-pre .f { color: var(--ds-syn-fn); }
+@media (max-width: 1100px) {
+  .ss-done-card { min-height: 0; }
+  .ss-done-cols { grid-template-columns: minmax(0, 1fr); }
+  .ss-done-pre { flex: none; height: 60vh; }
+}
+/* step 2's editor (and Add manual correlation) fills the height as the table does: each column scrolls on its own,
+   the response grows with the window, the editor's buttons stay in view; Cards view fills the rest of the step */
+@media (min-width: 1100px) {
+  body.ss-step-wide #ss-t-corr.ss-cr-editing > #ss-ed { height: 100%; min-height: 520px; }
+  body.ss-step-wide #ss-ed .ss-ed-cols { flex: 1 1 auto; grid-template-rows: minmax(0, 1fr); }
+  body.ss-step-wide #ss-ed :is(.ss-ed-left, .ss-ed-right) { min-height: 0; overflow: auto; }
+  body.ss-step-wide #ss-ed :is(.ss-ed-left, .ss-ed-right) > * { flex-shrink: 0; }   /* the columns scroll; nothing in them is squashed */
+  body.ss-step-wide #ss-ed :is(.ss-ed-body, .ss-ed-hdrs) { flex: 1 1 260px; height: auto; min-height: 260px; }
+}
+body.ss-step-wide #ss-t-corr.ss-cr-cards > #adv-panel { flex: 1 0 auto; }

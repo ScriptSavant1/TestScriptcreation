@@ -581,9 +581,21 @@
               <div class="ss-grow"><h2 id="ss-done-h">Ready to download?</h2><p class="ss-muted">Worth a look first. The download is never blocked.</p></div>
               <button class="ds-btn ds-btn-primary ds-btn-lg" type="button" id="ss-done-dl"><svg class="i"><use href="#i-down"/></svg>Download ZIP</button>
             </div>
-            <div class="ss-done-list" id="ss-done-list"></div>
-            <h3 id="ss-done-fh">Files in the ZIP</h3>
-            <p class="ss-muted ss-done-files" id="ss-done-files"></p>
+            <div class="ss-done-cols">
+              <div class="ss-done-main">
+                <div class="ss-done-list" id="ss-done-list"></div>
+                <h3 id="ss-done-fh">Files in the ZIP</h3>
+                <p class="ss-muted ss-done-files" id="ss-done-files"></p>
+              </div>
+              <!-- the script files with their code (read from the engine's S.scripts, the same as the Script tab) -->
+              <div class="ss-done-code" aria-label="The script files">
+                <div class="ss-done-fbar">
+                  <div class="ss-done-ftabs" id="ss-done-ftabs" role="tablist" aria-label="Script files"></div>
+                  <button class="ds-btn ds-btn-sm" type="button" id="ss-done-copy" title="Copy this file"><svg class="i"><use href="#i-copy"/></svg>Copy</button>
+                </div>
+                <pre class="ss-done-pre" id="ss-done-pre" role="tabpanel" tabindex="0"></pre>
+              </div>
+            </div>
           </div>
         </section>
       </div>
