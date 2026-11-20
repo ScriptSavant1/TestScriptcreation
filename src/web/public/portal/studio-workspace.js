@@ -831,6 +831,19 @@
       if (which === "dom") delete prefs.wDom; else delete prefs.wRight;
       SS.save();
     });
+    // the keyboard: the arrow keys move the bar (Shift: further), Enter puts the width back — as the drag
+    rs.addEventListener("keydown", function (e) {
+      var which = rs.getAttribute("data-rs"), pane = which === "dom" ? $("#ss-p-dom") : $("#ss-p-right");
+      if (e.key === "Enter") { rs.dispatchEvent(new MouseEvent("dblclick")); e.preventDefault(); return; }
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      var step = (e.shiftKey ? 96 : 24) * (e.key === "ArrowRight" ? 1 : -1) * (which === "dom" ? 1 : -1);
+      var w = Math.round(pane.getBoundingClientRect().width + step);
+      w = Math.max(which === "dom" ? 200 : 320, Math.min(which === "dom" ? 520 : 1400, w));
+      cols.style.setProperty(which === "dom" ? "--ss-dw" : "--ss-rw", w + "px");
+      if (which === "dom") prefs.wDom = w; else prefs.wRight = w;
+      SS.save(); draw();
+    });
   });
   panes();
   if (window.ResizeObserver) new ResizeObserver(function () { if (W.rows.length) draw(); }).observe(box);

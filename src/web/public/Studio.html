@@ -288,10 +288,10 @@
         <!-- the four steps (portal/studio-page.js): each one is a view of the same workspace; none blocks another -->
         <nav class="ss-steps" id="ss-steps" aria-label="Steps">
           <ol>
-            <li><button type="button" data-step="1" aria-current="step"><i>1</i><span><b>Requests</b><small id="ss-st-1">Domains, requests, the script</small></span></button></li>
-            <li><button type="button" data-step="2" aria-current="false"><i>2</i><span><b>Correlate</b><small id="ss-st-2">Values the server changes</small></span></button></li>
-            <li><button type="button" data-step="3" aria-current="false"><i>3</i><span><b>Test data</b><small id="ss-st-3">Values per user</small></span></button></li>
-            <li><button type="button" data-step="4" aria-current="false"><i>4</i><span><b>Download</b><small id="ss-st-4">Check and download</small></span></button></li>
+            <li><button type="button" data-step="1" aria-label="Step 1: Requests" aria-describedby="ss-st-1" aria-current="step"><i>1</i><span><b>Requests</b><small id="ss-st-1">Domains, requests, the script</small></span></button></li>
+            <li><button type="button" data-step="2" aria-label="Step 2: Correlate" aria-describedby="ss-st-2" aria-current="false"><i>2</i><span><b>Correlate</b><small id="ss-st-2">Values the server changes</small></span></button></li>
+            <li><button type="button" data-step="3" aria-label="Step 3: Test data" aria-describedby="ss-st-3" aria-current="false"><i>3</i><span><b>Test data</b><small id="ss-st-3">Values per user</small></span></button></li>
+            <li><button type="button" data-step="4" aria-label="Step 4: Download" aria-describedby="ss-st-4" aria-current="false"><i>4</i><span><b>Download</b><small id="ss-st-4">Check and download</small></span></button></li>
           </ol>
           <span class="ss-grow"></span>
           <button class="ds-btn" type="button" id="ss-step-back" hidden><svg class="i"><use href="#i-left"/></svg><span>Back</span></button>
@@ -364,7 +364,7 @@
             <div class="ss-pane-tools"><label class="ss-search"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-dq" type="search" placeholder="Search domains…" aria-label="Search domains" /></label></div>
             <div class="ss-pane-b" id="ss-domains"></div>
           </section>
-          <div class="ss-rs" data-rs="dom" title="Drag to resize" aria-hidden="true"></div>
+          <div class="ss-rs" data-rs="dom" title="Drag to resize (double-click puts it back)" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Width of Domains: drag, or the arrow keys; Enter puts it back"></div>
 
           <!-- Requests -->
           <section class="ss-pane" id="ss-p-req" aria-label="Requests">
@@ -383,7 +383,7 @@
             <div class="ss-pane-b ss-reqs" id="ss-reqs" tabindex="0" role="list" aria-label="Requests in the recording"><div class="ss-reqs-in" id="ss-reqs-in"></div></div>
             <div class="ss-selbar" id="ss-selbar" hidden><b id="ss-sel-n">0 selected</b><span class="ss-muted">Esc to stop</span><button class="ds-btn ds-btn-sm" type="button" id="ss-sel-clear">Cancel</button><button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-sel-group"><svg class="i"><use href="#i-plus"/></svg>Create transaction</button></div>
           </section>
-          <div class="ss-rs" data-rs="right" title="Drag to resize" aria-hidden="true"></div>
+          <div class="ss-rs" data-rs="right" title="Drag to resize (double-click puts it back)" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Width of the script panel: drag, or the arrow keys; Enter puts it back"></div>
 
           <!-- request details: a sheet over the workspace; docked as a panel on desktops 2400 px and wider (portal/request-details.js) -->
           <aside class="ss-det" id="ss-det" role="dialog" aria-modal="false" aria-labelledby="ss-det-h" hidden>

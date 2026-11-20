@@ -204,3 +204,15 @@ describe('Script Studio — Plan the load', () => {
     expect(page).toContain('var canPlan = !!(window.PerfxPlanLoad && PerfxPlanLoad.available());');
   });
 });
+
+// the review (regression-tests/tools/audit/review.js) findings fixed: every step button is named, a long notice is
+// cut instead of widening the page, and step 1's resize bars take the keyboard
+describe('Script Studio — review fixes', () => {
+  const html = read('Studio.html'), css = read('portal/studio.css'), ws = read('portal/studio-workspace.js');
+  test('step buttons named; notices cannot widen the page; step 1 bars are keyboard separators', () => {
+    ['Requests', 'Correlate', 'Test data', 'Download'].forEach((n, i) => expect(html).toContain('data-step="' + (i + 1) + '" aria-label="Step ' + (i + 1) + ': ' + n + '" aria-describedby="ss-st-' + (i + 1) + '"'));
+    expect(css).toContain('.ss-notices { flex: none; display: grid; grid-template-columns: minmax(0, 1fr);');
+    expect(html.match(/class="ss-rs"[^>]*role="separator"[^>]*tabindex="0"/g).length).toBe(2);
+    expect(ws).toContain('rs.addEventListener("keydown"');
+  });
+});

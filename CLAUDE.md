@@ -402,7 +402,7 @@ actions (one primary button per area), tool colours only on icons, sentence case
 beside the sidebar (`--ds-page-max: 100%`), no emoji in the interface (SVG line icons).
 The admin pages use it too: `src/web/views/admin.ejs` links `portal/ds.css` (prefix from `adminBase`); the sign-in page
 (`adminLoginHtml()` in server.js) carries the same tokens inline. Admin reports: `src/analytics/exporters/{xlsx,docx}.js`.
-Portal design rules (checked by the design audit — `regression-tests/tools/audit/audit.js`, every section, both themes):
+Portal design rules (checked by the design audit — `regression-tests/tools/audit/audit.js`, every section, both themes; controls checked one by one — overlap, clipped text, names, keyboard focus, sideways scroll — by `regression-tests/tools/audit/review.js` at five widths, both themes; run its `--selftest` after changing it):
 - One text font (system: Segoe UI on Windows) + one code font (Cascadia Code / Consolas); no web-font requests.
   One agreed exception: the Home picture caption uses Windows' handwriting font (Segoe Print — installed, not downloaded).
 - Font weights 400 / 600 / 700 ONLY. Segoe UI has no 500/650/750/800/850 face — 750+ renders as Segoe UI Black (blocky).
