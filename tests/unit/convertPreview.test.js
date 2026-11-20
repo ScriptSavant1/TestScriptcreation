@@ -89,6 +89,37 @@ describe('convertPreview (server)', () => {
     const pv = C.buildPreview({ kind: 'pm', requests: reqs, collection: { variable: [{ key: 'base', value: 'https://api.example.com' }] }, files: new Map(), outputDir: OUT });
     expect(pv.requests.map((r) => [r.sets, r.uses])).toEqual([[['access_token'], undefined], [undefined, ['access_token']], [['orderId'], ['orderId']]]);
   });
+  test('buildPreview: every value the requests send or set, and where it comes from', () => {
+    const reqs = [
+      { name: 'a', url: '{{base}}/x?id={{$guid}}&e={{blank}}', headers: [{ key: 'Authorization', value: 'Bearer {{access_token}}' }, { key: 'K', value: '{{api_key}}' }],
+        tests: [{ script: { exec: ['pm.environment.set("next", 1)'] } }] },
+      { name: 'b', url: 'https://${HOST}/{{next}}/{{nope}}?t=${__time()}&u={{token_url}}', extractors: [{ extractor: { type: 'jsonpath', name: 'access_token', jsonPath: '$.t' } }] },
+    ];
+    const pv = C.buildPreview({
+      kind: 'pm', requests: reqs, files: new Map(), outputDir: OUT,
+      collection: { variable: [{ key: 'base', value: 'https://api.example.com' }], csvDataSets: [{ filename: 'u.csv', variableNames: 'HOST' }] },
+      environmentVars: { access_token: 'abc', api_key: 'k-123', blank: '', token_url: 'https://id.example.com/token' },
+    });
+    const by = Object.fromEntries(pv.variables.map((v) => [v.name, v]));
+    expect(Object.fromEntries(pv.variables.map((v) => [v.name, v.source]))).toEqual({
+      base: 'collection', $guid: 'builtin', blank: 'empty', access_token: 'set', api_key: 'environment', next: 'set', HOST: 'data', nope: 'missing', '__time()': 'builtin', token_url: 'environment',
+    });
+    expect([by.access_token.setBy, by.access_token.usedBy, by.access_token.how]).toEqual([[2], [1], 'jsonpath $.t']);
+    expect([by.api_key.value, by.api_key.hidden]).toEqual([null, true]);              // looks secret: not shown
+    expect([by.token_url.value, by.token_url.hidden]).toEqual(['https://id.example.com/token', undefined]);   // an address is not
+    expect(by.HOST.file).toBe('u.csv');
+    expect(by.base.value).toBe('https://api.example.com');
+  });
+  test('buildPreview: a server parameter only when the script writes it; the script name', () => {
+    const reqs = [{ name: 'a', url: 'https://api.example.com/a' }, { name: 'b', url: 'https://cdn.example.com/b' }];
+    const pv = C.buildPreview({
+      kind: 'pm', requests: reqs, outputDir: OUT, collection: { info: { name: 'Shop' } },
+      servers: { 'api.example.com': 'Api_Server', 'cdn.example.com': 'Cdn_Server' },
+      files: files({ 'main.js': "const Api_Server = load.config.user.args[\"Api_Server\"] || 'api.example.com';" }),
+    });
+    expect(pv.hosts.map((h) => [h.host, h.param])).toEqual([['api.example.com', 'Api_Server'], ['cdn.example.com', undefined]]);
+    expect(pv.scriptName).toBe('Shop');
+  });
   test('large files are listed but not shown, and the preview says so', () => {
     const big = 'x'.repeat(500 * 1024);
     const pv = C.buildPreview({ kind: 'pm', requests: [], files: files({ 'Action.c': big }), outputDir: OUT });
@@ -140,6 +171,16 @@ describe('convert-preview (page helpers)', () => {
     expect(P.needed(list, new Set([3]))).toEqual([]);                       // request 4 still sets id
     expect(P.needed(list, new Set([1, 2, 5]))).toEqual([]);                 // nobody kept sends token
     expect(P.needed(list, new Set([3, 4])).map((x) => [x.name, x.usedBy])).toEqual([['id', [5]]]);
+  });
+  test('changesOf: what differs from the ZIP, in words', () => {
+    const base = { out: new Set([1]), gen: new Set([1]), name: 'A', genName: 'A', tt: 3, genTT: 3, renamed: 0 };
+    expect(P.changesOf(base)).toEqual([]);
+    expect(P.changesOf({ ...base, out: new Set(), name: 'B', tt: 5, renamed: 2 })).toEqual(['the requests', 'the script name', 'the think time', '2 server names']);
+    expect(P.changesOf({ ...base, tt: '3' })).toEqual([]);
+  });
+  test('sortValues: no value first, then empty, then in order of use', () => {
+    const v = [{ name: 'a', source: 'set' }, { name: 'b', source: 'empty' }, { name: 'c', source: 'missing' }, { name: 'd', source: 'environment' }];
+    expect(P.sortValues(v).map((x) => x.name)).toEqual(['c', 'b', 'a', 'd']);
   });
   test('fileGroups: the root first, then one group per script folder', () => {
     expect(P.fileGroups([{ path: 'B/main.js' }, { path: 'a.md' }, { path: 'A/main.js' }]).map((g) => g.dir)).toEqual(['', 'A', 'B']);

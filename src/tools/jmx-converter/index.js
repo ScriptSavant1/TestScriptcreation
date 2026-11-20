@@ -11,6 +11,7 @@
 
 'use strict';
 
+const { applyScriptName, noteGenerated } = require('../../core/scriptSettings');
 const { keepSelected, readLeaveOut } = require('../../core/requestSelection');
 const path                  = require('path');
 const fs                    = require('fs').promises;
@@ -46,6 +47,9 @@ class JmxConverter {
     const parsed       = await parser.parse();
     const metadata     = parser.getMetadata();
     const collection   = parser.getCollection();
+    // the script name chosen on the page (none → the test plan's own name)
+    applyScriptName(collection, this.options.scriptName);
+    if (this.options.scriptName) metadata.name = this.options.scriptName;   // the workload workbook too
     const threadGroups = parser.getThreadGroups();
     const csvDataSets  = parser.getCsvDataSets();
 
@@ -146,6 +150,7 @@ class JmxConverter {
       throw new Error(`Generator class ${GeneratorClass.name} does not expose a generate() method. Check that the module exported correctly.`);
     }
     const { script, analysis } = await generator.generate(this.options.outputDir);
+    noteGenerated(this.previewSource, generator, analysis);
 
     if (!isWebHttp) {
       const scriptPath = path.join(this.options.outputDir, 'main.js');
@@ -268,6 +273,7 @@ class JmxConverter {
         throw new Error(`Generator class ${GeneratorClass.name} does not expose a generate() method. Check that the module exported correctly.`);
       }
       const { script, analysis } = await generator.generate(tgOutputDir);
+      noteGenerated(this.previewSource, generator, analysis);
       if (!firstAnalysis) firstAnalysis = analysis;
 
       if (!isWebHttp) {

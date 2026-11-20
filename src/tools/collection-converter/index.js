@@ -3,6 +3,7 @@
  * Entry point for programmatic usage
  */
 
+const { applyScriptName, noteGenerated } = require("../../core/scriptSettings");
 const { keepSelected, readLeaveOut } = require("../../core/requestSelection");
 const BrunoParser = require("../../parsers/brunoParser");
 const AdvancedScriptGenerator = require("../../generators/devweb/scriptGenerator");
@@ -61,6 +62,8 @@ class BrunoDevWebConverter {
       // the requests the user left out on the page (by number) are dropped here, before anything reads the list
       const requests = keepSelected(parsed, this.options.leaveOut);
       const metadata = parser.getMetadata();
+      // the script name chosen on the page (none → the collection's own name)
+      applyScriptName(parser.collection, this.options.scriptName);
 
       console.log(
         `✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`,
@@ -88,6 +91,7 @@ class BrunoDevWebConverter {
       const { script, analysis } = await generator.generate(
         this.options.outputDir,
       );
+      noteGenerated(this.previewSource, generator, analysis);
 
       let scriptPath;
       if (isWebHttp) {
@@ -169,6 +173,8 @@ class BrunoDevWebConverter {
       // the requests the user left out on the page (by number) are dropped here, before anything reads the list
       const requests = keepSelected(parsed, this.options.leaveOut);
       const metadata = parser.getMetadata();
+      // the script name chosen on the page (none → the collection's own name)
+      applyScriptName(parser.collection, this.options.scriptName);
       console.log(
         `✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`,
       );
@@ -234,6 +240,7 @@ class BrunoDevWebConverter {
 
         // Generate script and mandatory files
         const { script, analysis } = await generator.generate(scriptOutputDir);
+        noteGenerated(this.previewSource, generator, analysis);
 
         let mainScriptPath;
         if (isWebHttp) {

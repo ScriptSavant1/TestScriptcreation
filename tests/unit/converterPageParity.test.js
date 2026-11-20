@@ -94,4 +94,26 @@ describe('Converter panels — the preview', () => {
     expect(jc).toContain('keepSelected(parsed, this.options.leaveOut)');
     expect(jc).toContain('const tgReqs = tgAll.filter(r => kept.has(r));');
   });
+  // part 3: script settings — sent only on an update (addTo), read by the server, honoured by both converters and
+  // both generators; the shared server-name rules are loaded before the preview
+  test('script settings: the server reads them, the converters and the generators use them', () => {
+    const server = fs.readFileSync(path.resolve(__dirname, '../../src/web/server.js'), 'utf-8');
+    expect(server.split('...settingsOptions(req.body),').length - 1).toBe(2);
+    expect(server.split('zipName: safeZipName(options.scriptName)').length - 1).toBe(2);
+    const cc = fs.readFileSync(path.resolve(__dirname, '../../src/tools/collection-converter/index.js'), 'utf-8');
+    const jc = fs.readFileSync(path.resolve(__dirname, '../../src/tools/jmx-converter/index.js'), 'utf-8');
+    expect(cc.split('applyScriptName(parser.collection, this.options.scriptName);').length - 1).toBe(2);
+    expect(cc.split('noteGenerated(this.previewSource, generator, analysis);').length - 1).toBe(2);
+    expect(jc).toContain('applyScriptName(collection, this.options.scriptName);');
+    expect(jc.split('noteGenerated(this.previewSource, generator, analysis);').length - 1).toBe(2);
+    ['vugen', 'devweb'].forEach((g) => {
+      const src = fs.readFileSync(path.resolve(__dirname, '../../src/generators/' + g + '/scriptGenerator.js'), 'utf-8');
+      expect(src).toContain('ScriptSettings.applyServerNames(this.hostVarMap, this.options.serverNames, [');
+    });
+    expect(index.indexOf('shared/host-params.js')).toBeGreaterThan(-1);
+    expect(index.indexOf('shared/host-params.js')).toBeLessThan(index.indexOf('portal/convert-preview.js'));
+    const pv = fs.readFileSync(path.resolve(__dirname, '../../src/web/public/portal/convert-preview.js'), 'utf-8');
+    const addTo = pv.slice(pv.indexOf('function addTo(fd)'), pv.indexOf('function update()'));
+    expect(addTo.indexOf('if (!updating)')).toBeLessThan(addTo.indexOf('fd.append("scriptName"'));
+  });
 });

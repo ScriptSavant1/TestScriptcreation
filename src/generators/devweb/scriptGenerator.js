@@ -12,6 +12,7 @@ const MandatoryFilesGenerator = require("./filesGenerator");
 const _u = require("../../core/utils");
 const _vc = require("../../core/variableClassifier");
 const HostParams = require("../../web/public/shared/host-params");
+const ScriptSettings = require("../../core/scriptSettings");
 
 class AdvancedScriptGenerator {
   constructor(requests, collection, options = {}) {
@@ -3372,6 +3373,11 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     const names = HostParams.defaultNames(sorted.map(([h]) => h));
     this.hostVarMap = new Map();
     for (const [host] of sorted) this.hostVarMap.set(host, names[host]);
+    // names chosen on the page after a conversion (src/core/scriptSettings.js); none → the defaults above
+    ScriptSettings.applyServerNames(this.hostVarMap, this.options.serverNames, [
+      ...(this.variableMap ? [...this.variableMap.keys()] : []),
+      ...Object.keys(this.options.environmentVars || {}),
+    ]);
   }
 
   /**

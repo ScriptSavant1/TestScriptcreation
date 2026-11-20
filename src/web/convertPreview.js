@@ -4,7 +4,7 @@
  * every request (grouped by top-level folder, or by thread group for JMeter), the servers they call and the files.
  * Read-only: built from what the converter already parsed and generated; nothing is generated again here.
  *
- *   buildPreview({ kind, requests, collection, environmentVars, files, outputDir })
+ *   buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations })
  *     kind            "pm" (Postman / Bruno) | "jmx"
  *     requests        the parser's requests: { name, folder, method, url, threadGroupName? }
  *     collection      the parser's collection (its variables help resolve {{baseUrl}} / ${host})
@@ -12,8 +12,13 @@
  *     files           the converter's in-memory files: Map(path → string | Buffer)
  *     outputDir       the folder the files are under (the ZIP's paths are relative to it, as the download names them)
  *     leftOut         the numbers of the requests left out on the page (src/core/requestSelection.js): listed, marked out
+ *     servers         { server: parameter name } and correlations [{ name, extractorType, extractPath }] — what the
+ *                     generators decided (src/core/scriptSettings.js noteGenerated)
  *   → { requests: [{ n, name, folder, group, method, url, address, host, resolved, state, out, sets?, uses? }],
  *       sets / uses: the names a request sets while the script runs / the ones it sends that a request sets (only when any)
+ *       hosts[].param: the server's parameter name in the script (servers: from the generators, via
+ *         src/core/scriptSettings.js noteGenerated); scriptName: the name the script is given;
+ *       variables: [{ name, source, setBy, usedBy, how?, value?, hidden?, file? }] — see variablesList
  *       hosts: [{ host, count, resolved, state }], groups: [{ name, count }],
  *     state: "resolved" (a real server), "runtime" (a variable the script sets while it runs — by a script or a JMeter
  *     extractor, or declared with no value yet), "missing" (a variable nothing gives a value: the script calls it as written)
@@ -24,6 +29,7 @@
  */
 
 const path = require('path');
+const { serverKey } = require('../core/scriptSettings');
 
 const MAX_FILE = 400 * 1024;        // one file shown up to this size
 const MAX_TOTAL = 3 * 1024 * 1024;  // all files together
@@ -94,13 +100,55 @@ function hostOf(address) {
 
 const isVariable = (h) => /\{\{|\$\{/.test(h);
 
-function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir }) {
+// every variable the requests send or set, and where its value comes from:
+//   set (a script or an extractor of request n — how: the extractor), environment / collection (a value), data (a CSV
+//   data set column), builtin (made by the tool: {{$guid}}, ${__time()}), empty (declared with no value), missing
+//   (nothing gives it a value)
+// value: shown for environment / collection values, hidden for names that look secret, cut to 80 characters
+const SECRET_NAME = /key|secret|pass|pwd|token|private|pem|cert|cookie|session|auth/i;
+function variablesList({ requests, collection, environmentVars, correlations, sets }) {
+  const env = {}, col = {}, data = {}, empty = new Set();
+  Object.keys(environmentVars || {}).forEach((k) => { const v = environmentVars[k]; if (v != null && v !== '') env[k] = String(v); else empty.add(k); });
+  const cv = collection && (collection.variable || collection.variables);
+  if (Array.isArray(cv)) cv.forEach((v) => { const k = v && (v.key || v.name); if (k && v.disabled !== true && v.enabled !== false) { if (v.value != null && v.value !== '') col[k] = String(v.value); else empty.add(k); } });
+  else if (cv && typeof cv === 'object') Object.keys(cv).forEach((k) => { if (cv[k] != null && cv[k] !== '') col[k] = String(cv[k]); else empty.add(k); });
+  ((collection && collection.csvDataSets) || []).forEach((ds) => String(ds.variableNames || '').split(',').map((x) => x.trim()).filter(Boolean).forEach((k) => { data[k] = String(ds.filename || ''); }));
+  const how = {};
+  (correlations || []).forEach((c) => { if (c && c.name && !how[c.name]) how[c.name] = [c.extractorType, c.extractPath || c.regex || c.expression].filter(Boolean).join(' '); });
+  (requests || []).forEach((r) => (r.extractors || []).forEach((x) => {
+    const e = (x && x.extractor) || x || {};
+    const n = e.name || e.refName;
+    if (n && !how[n]) how[n] = [e.type, e.jsonPath || e.regex || e.xpath || e.expression || (e.leftBoundary != null ? e.leftBoundary + ' … ' + e.rightBoundary : '')].filter(Boolean).join(' ');
+  }));
+  const by = new Map();
+  const get = (k) => { if (!by.has(k)) by.set(k, { name: k, setBy: [], usedBy: [] }); return by.get(k); };
+  (requests || []).forEach((r, i) => {
+    const sent = JSON.stringify({ url: r.url, headers: r.headers, body: r.body, auth: r.auth }) || '';
+    [...new Set(varNames(sent))].forEach((k) => get(k).usedBy.push(i + 1));
+    (sets[i] || []).forEach((k) => get(k).setBy.push(i + 1));
+  });
+  return [...by.values()].map((v) => {
+    const k = v.name;
+    const source = /^(\$|__)/.test(k) ? 'builtin' : v.setBy.length ? 'set' : env[k] != null ? 'environment' : col[k] != null ? 'collection' : data[k] != null ? 'data' : empty.has(k) ? 'empty' : 'missing';
+    const raw = env[k] != null ? env[k] : col[k];
+    if (source === 'set' && how[k]) v.how = how[k];
+    if (source === 'data') v.file = data[k];
+    const secret = raw != null && SECRET_NAME.test(k) && !/^https?:\/\//i.test(raw);   // an address is never a secret
+    if (raw != null && (source === 'environment' || source === 'collection' || source === 'set')) v.value = secret ? null : raw.length > 80 ? raw.slice(0, 79) + '…' : raw;
+    if (secret) v.hidden = true;
+    v.source = source;
+    return v;
+  });
+}
+
+function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations }) {
   const out = leftOut instanceof Set ? leftOut : new Set(leftOut || []);
   const declared = new Set();
   const vars = variablesOf(collection, environmentVars, declared);
   const runtime = runtimeNames(requests, declared);
   const setByScript = runtimeNames(requests);
   const stateOf = (h) => !isVariable(h) ? 'resolved' : varNames(h).every((k) => runtime.has(k)) ? 'runtime' : 'missing';
+  const setsList = [];
   const list = (requests || []).map((r, i) => {
     const url = typeof r.url === 'string' ? r.url : (r.url && (r.url.raw || r.url.url)) || '';
     const address = resolve(url, vars);
@@ -109,14 +157,20 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
     const group = kind === 'jmx' ? (r.threadGroupName || 'Test plan') : (folder.split('/')[0] || '(no folder)');
     const row = { n: i + 1, name: String(r.name || ''), folder, group, method: String(r.method || 'GET').toUpperCase(), url, address, host, resolved: !isVariable(host), state: stateOf(host), out: out.has(i + 1) };
     const sets = setsOf(r), uses = usesOf(r, setByScript);
+    setsList[i] = sets;
     if (sets.length) row.sets = sets;
     if (uses.length) row.uses = uses;
     return row;
   });
 
+  // a server parameter is written as {Name} (VuGen) or load.config.user.args["Name"] (DevWeb)
+  const code = [...(files || [])].filter(([p]) => /\.(c|js)$/.test(String(p))).map(([, c]) => String(c)).join('\n');
+  const writes = (n) => code.includes("{" + n + "}") || code.includes("args[\"" + n + "\"]");
   const hostMap = new Map(), groupMap = new Map();
   for (const r of list) {
-    const h = hostMap.get(r.host) || { host: r.host, count: 0, resolved: r.resolved, state: r.state };
+    const p0 = r.resolved && servers ? servers[serverKey(r.host)] : null;
+    const param = p0 && writes(p0) ? p0 : null;   // only a server parameter the script really writes
+    const h = hostMap.get(r.host) || Object.assign({ host: r.host, count: 0, resolved: r.resolved, state: r.state }, param ? { param } : {});
     h.count++; hostMap.set(r.host, h);
     groupMap.set(r.group, (groupMap.get(r.group) || 0) + 1);
   }
@@ -144,6 +198,8 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
     groups: [...groupMap.entries()].map(([name, count]) => ({ name, count })),
     files: fileList,
     truncated,
+    scriptName: String((collection && ((collection.info && collection.info.name) || collection.name)) || ''),
+    variables: variablesList({ requests, collection, environmentVars, correlations, sets: setsList }),
   };
 }
 

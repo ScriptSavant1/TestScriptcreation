@@ -1,17 +1,23 @@
 /* The converters' preview (Postman / Bruno and JMeter panels): after a conversion, what the ZIP holds — the servers
- * the requests call, every request grouped by folder (or thread group), and the generated files with their code —
- * in the same panel layout as Script Studio (data.preview from the server, src/web/convertPreview.js).
- * Choosing what goes in: a tick on each server, folder / thread group and request; the summary bar says how many are in
- * and, once the choice differs from the ZIP, offers Update the script — the panel's own doConvert / doConvertJmx again,
- * with the numbers of the requests left out (form field leaveOut, read by src/core/requestSelection.js: the converters
- * drop them right after parsing). The view (filter, folds, file) stays. While a change is not applied, Download waits.
+ * the requests call, every request grouped by folder (or thread group), the generated files with their code and the
+ * values the requests send — in the same panel layout as Script Studio (data.preview from the server,
+ * src/web/convertPreview.js).
+ * Choosing what goes in: a tick on each server, folder / thread group and request; script settings — the script name,
+ * the think time (the form's own setTT / setJmxTT, kept in step) and a server parameter's name (Rename, checked with
+ * shared/host-params.js validName). Once anything differs from the ZIP, the summary bar offers Update the script — the
+ * panel's own doConvert / doConvertJmx again, with the form fields leaveOut (src/core/requestSelection.js), scriptName
+ * and serverNames (src/core/scriptSettings.js). The view (filter, folds, file, tab) stays. While a change is not
+ * applied, Download waits.
+ * Values tab: every variable the requests send or set, where its value comes from, which requests send it (a click
+ * shows them); the ones with no value are named at the top.
  * Also: the download link is single-use and kept 5 minutes on the server; once used or expired, the button becomes
  * Convert again (the same choice).
  *   ConvertPreview.show(data, kind)   kind "pm" | "jmx" — called by showResult / showJmxResult (index.ejs)
  *   ConvertPreview.hide()             called by hideResults
- *   ConvertPreview.addTo(formData)    called by doConvert / doConvertJmx: adds leaveOut on an update, nothing otherwise
+ *   ConvertPreview.addTo(formData)    called by doConvert / doConvertJmx: notes the think time sent; on an update adds
+ *                                     the choice (nothing otherwise — a plain conversion sends what it always sent)
  * Pure helpers (UMD, tests/unit/convertPreview.test.js): filterRequests, groupRequests, defaultFile, fileGroups,
- * stateOf, sameSet. */
+ * stateOf, sameSet, needed, cleanName, serverKey, changesOf, sortValues. */
 (function (root, factory) {
   var api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -83,31 +89,67 @@
     }).filter(function (x) { return x.usedBy.length; });
   }
 
-  var api = { filterRequests: filterRequests, groupRequests: groupRequests, defaultFile: defaultFile, fileGroups: fileGroups, stateOf: stateOf, sameSet: sameSet, needed: needed };
+  // the script name as the server keeps it (src/core/scriptSettings.js cleanScriptName — keep the two in step)
+  function cleanName(text) {
+    var s = String(text == null ? "" : text).replace(/[^A-Za-z0-9 _.-]/g, "_").replace(/\s+/g, " ").trim().slice(0, 60);
+    return /[A-Za-z0-9]/.test(s) ? s : "";
+  }
+  // how a server is compared (scriptSettings.js serverKey)
+  function serverKey(host) { return String(host || "").trim().toLowerCase().replace(/:(443|80)$/, ""); }
+
+  // what differs from the ZIP: [label] — st = { out, gen, name, genName, tt, genTT, renamed }
+  function changesOf(st) {
+    var c = [];
+    if (!sameSet(st.out, st.gen)) c.push("the requests");
+    if (st.name !== st.genName) c.push("the script name");
+    if (st.tt != null && st.genTT != null && Number(st.tt) !== Number(st.genTT)) c.push("the think time");
+    if (st.renamed) c.push(st.renamed === 1 ? "a server name" : st.renamed + " server names");
+    return c;
+  }
+
+  // the Values tab's order: no value first, then empty, then as the requests first send them
+  var RANK = { missing: 0, empty: 1 };
+  function sortValues(list) {
+    return (list || []).map(function (v, i) { return { v: v, i: i }; }).sort(function (a, b) {
+      var ra = RANK[a.v.source] != null ? RANK[a.v.source] : 2, rb = RANK[b.v.source] != null ? RANK[b.v.source] : 2;
+      return ra - rb || a.i - b.i;
+    }).map(function (x) { return x.v; });
+  }
+
+  var api = { filterRequests: filterRequests, groupRequests: groupRequests, defaultFile: defaultFile, fileGroups: fileGroups, stateOf: stateOf, sameSet: sameSet, needed: needed, cleanName: cleanName, serverKey: serverKey, changesOf: changesOf, sortValues: sortValues };
   if (typeof document === "undefined") return api;
 
   // ── the page ──
   var esc = function (s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); };
   var plural = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
   var KEEP_MS = 5 * 60 * 1000 - 15000;   // the server keeps the download 5 minutes; a little earlier, to be safe
+  var TT = [1, 2, 3, 5];                 // the form's think-time choices
   var P = null, kind = "pm", host = "", q = "", file = null, folded = {}, showAll = {}, timer = null, used = false, expired = false;
   var out = new Set(), gen = new Set();       // left out now (the ticks) / left out in the ZIP
   var updating = false, keepView = false, source = null;
+  var tab = "files", vf = "", ren = "", renErr = "", renVal = "";   // right pane tab, a value's requests shown, the server being renamed
+  // the user's script settings — kept over updates and sent with each one; orig = the converter's own choices
+  var chosen = { name: "", names: {} }, atGen = { name: "", names: {} }, orig = { name: "", params: {} };
+  var sentTT = null, genTT = null;
   var ICON = {
     server: '<path d="M4 5h16v6H4zM4 13h16v6H4z"/><path d="M8 8h.01M8 16h.01"/>',
     list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
+    vars: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
     chev: '<path d="m6 9 6 6 6-6"/>',
     warn: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
     copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
     redo: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+    pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
   };
   var ico = function (k) { return '<svg class="cv-pv-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[k] + "</svg>"; };
   var nums = function (list) { return list.map(function (r) { return r.n; }); };
   var tick = function (attr, st, label) {
     return '<input type="checkbox" class="cv-pv-cb" ' + attr + (st === "all" ? " checked" : "") + (st === "some" ? " data-some" : "") + ' aria-label="' + esc(label) + '" />';
   };
+  var listN = function (a) { return a.length > 4 ? a.slice(0, 4).join(", ") + " and " + (a.length - 4) + " more" : a.join(", "); };
 
   function box() {
     var el = document.getElementById("cv-pv");
@@ -119,45 +161,89 @@
     ok.insertBefore(el, act || null);
     el.addEventListener("click", onClick);
     el.addEventListener("change", onChange);
-    el.addEventListener("input", function (e) { if (e.target.id === "cv-pv-q") { q = e.target.value; drawRequests(); } });
+    el.addEventListener("input", onInput);
+    el.addEventListener("keydown", onKey);
+    // the form's think time and the strip's stay in step (the form's setters are the source of truth)
+    ["setTT", "setJmxTT"].forEach(function (fn) {
+      var o = window[fn];
+      if (typeof o !== "function" || o._cvPv) return;
+      window[fn] = function () { var r = o.apply(this, arguments); if (P) { drawSet(); drawBar(); } return r; };
+      window[fn]._cvPv = true;
+    });
     return el;
   }
   function currentFile() {
     try { return kind === "jmx" ? (typeof JX !== "undefined" && JX.file) : (typeof F !== "undefined" && F.collection); } catch (e) { return null; }
+  }
+  function curTT() {
+    try { return kind === "jmx" ? (typeof JX !== "undefined" ? JX.tt : null) : (typeof S !== "undefined" ? S.tt : null); } catch (e) { return null; }
+  }
+  function setTTNow(t) {
+    var fn = kind === "jmx" ? window.setJmxTT : window.setTT;
+    if (typeof fn === "function") fn(t);
+  }
+  var nameNow = function () { return chosen.name || orig.name; };
+  var paramNow = function (h) { return chosen.names[serverKey(h.host)] || orig.params[serverKey(h.host)] || h.param; };
+  function renamedCount() { return P.hosts.filter(function (h) { return h.param && paramNow(h) !== h.param; }).length; }
+  function changes() {
+    return changesOf({ out: out, gen: gen, name: nameNow(), genName: P.scriptName, tt: curTT(), genTT: genTT, renamed: renamedCount() });
   }
 
   function show(data, k) {
     var el = box(); if (!el) return;
     var keep = keepView; keepView = false;
     P = data && data.preview; kind = k === "jmx" ? "jmx" : "pm";
-    if (!keep) { host = ""; q = ""; folded = {}; showAll = {}; file = null; }
+    if (!keep) {
+      host = ""; q = ""; folded = {}; showAll = {}; file = null; tab = "files"; vf = "";
+      chosen = { name: "", names: {} };
+      orig = { name: P ? P.scriptName || "" : "", params: {} };
+      if (P && P.hosts) P.hosts.forEach(function (h) { if (h.param) orig.params[serverKey(h.host)] = h.param; });
+    }
+    ren = ""; renErr = "";
     used = false; expired = false;
     if (!P || !P.requests) { el.hidden = true; el.innerHTML = ""; return; }
     gen = new Set(P.requests.filter(function (r) { return r.out; }).map(function (r) { return r.n; }));
     out = new Set(gen);
+    genTT = sentTT != null ? sentTT : curTT();
+    // the server's verdict wins: a name it did not take is dropped from the choice
+    if (chosen.name && chosen.name !== P.scriptName) chosen.name = P.scriptName === orig.name ? "" : P.scriptName;
+    P.hosts.forEach(function (h) { var key = serverKey(h.host); if (chosen.names[key] && h.param && chosen.names[key] !== h.param) delete chosen.names[key]; });
+    atGen = { name: chosen.name, names: Object.assign({}, chosen.names) };
+    if (vf && !(P.variables || []).some(function (v) { return v.name === vf; })) vf = "";
     source = currentFile();
     if (!file || !P.files.some(function (f) { return f.path === file; })) file = defaultFile(P.files);
-    var missing = P.hosts.filter(function (h) { return (h.state || (h.resolved ? "resolved" : "missing")) === "missing"; });
+    var vars = P.variables || [], noValue = vars.filter(function (v) { return v.source === "missing"; });
+    var missingHosts = P.hosts.filter(function (h) { return (h.state || (h.resolved ? "resolved" : "missing")) === "missing"; });
     el.innerHTML =
-      '<div class="cv-pv-head"><div><h3>What the script contains</h3><p>Untick what the script should leave out, then <b>Update the script</b>. ' +
+      '<div class="cv-pv-head"><div><h3>What the script contains</h3><p>Untick what the script should leave out, change its settings, then <b>Update the script</b>. ' +
         (kind === "jmx" ? "Requests are grouped by thread group." : "Requests are grouped by folder.") + "</p></div></div>" +
-      (missing.length ? '<div class="cv-pv-warn" role="note">' + ico("warn") + "<span><b>" + (missing.length === 1 ? "1 server is a variable with no value" : missing.length + " servers are variables with no value") + "</b> (" +
-        missing.map(function (h) { return "<code>" + esc(h.host) + "</code>"; }).join(", ") + "): " +
+      (missingHosts.length ? '<div class="cv-pv-warn" role="note">' + ico("warn") + "<span><b>" + (missingHosts.length === 1 ? "1 server is a variable with no value" : missingHosts.length + " servers are variables with no value") + "</b> (" +
+        missingHosts.map(function (h) { return "<code>" + esc(h.host) + "</code>"; }).join(", ") + "): " +
         (kind === "jmx" ? "the test plan does not give it one, so the script calls it as written." : "add the environment file that defines it, or the script calls it as written.") + "</span></div>" : "") +
+      (noValue.length ? '<div class="cv-pv-warn" role="note">' + ico("warn") + "<span><b>" + (noValue.length === 1 ? "1 value has" : noValue.length + " values have") + " nothing that gives " + (noValue.length === 1 ? "it" : "them") + " a value</b> (" +
+        noValue.slice(0, 6).map(function (v) { return "<code>" + esc(v.name) + "</code>"; }).join(", ") + (noValue.length > 6 ? " …" : "") + "): the script sends " + (noValue.length === 1 ? "it" : "them") + " as written. " +
+        '<button type="button" class="cv-pv-link" data-tab="values">See Values</button></span></div>' : "") +
       '<div class="cv-pv-bar" id="cv-pv-bar" role="status" aria-live="polite"></div>' +
+      '<div class="cv-pv-set" id="cv-pv-set"></div>' +
       '<div class="cv-pv-cols">' +
         '<div class="cv-pv-pane" id="cv-pv-hosts"><div class="cv-pv-ph">' + ico("server") + '<h4>Servers</h4><span class="cv-pv-n">' + P.hosts.length + "</span></div>" +
           '<div class="cv-pv-body" id="cv-pv-hlist"></div></div>' +
         '<div class="cv-pv-pane" id="cv-pv-reqs"><div class="cv-pv-ph">' + ico("list") + '<h4>Requests</h4><span class="cv-pv-n" id="cv-pv-rn"></span>' +
-          '<label class="cv-pv-search">' + ico("search") + '<input id="cv-pv-q" type="search" placeholder="Filter by name or address" aria-label="Filter the requests" value="' + esc(q) + '" /></label></div>' +
+          '<label class="cv-pv-search">' + ico("search") + '<input id="cv-pv-q" type="search" placeholder="Filter by name or address" aria-label="Filter the requests" value="' + esc(q) + '" /></label>' +
+          '<span id="cv-pv-vfchip"></span></div>' +
           '<div class="cv-pv-body" id="cv-pv-rlist"></div></div>' +
-        '<div class="cv-pv-pane" id="cv-pv-files"><div class="cv-pv-ph">' + ico("file") + '<h4>Files</h4><span class="cv-pv-n">' + P.files.length + "</span>" +
-          '<select id="cv-pv-file" class="cv-pv-sel" aria-label="File to show"></select>' +
-          '<button type="button" class="cv-pv-btn" id="cv-pv-copy" title="Copy this file">' + ico("copy") + "Copy</button></div>" +
-          '<div class="cv-pv-body cv-pv-codebox"><pre class="cv-pv-code" id="cv-pv-code" tabindex="0"></pre></div></div>' +
+        '<div class="cv-pv-pane" id="cv-pv-files"><div class="cv-pv-ph">' +
+          '<div class="cv-pv-tabs" role="tablist" aria-label="Files and values">' +
+            '<button type="button" role="tab" class="cv-pv-tab" id="cv-pv-tab-files" data-tab="files" aria-controls="cv-pv-fbody">' + ico("file") + 'Files <span class="cv-pv-n">' + P.files.length + "</span></button>" +
+            '<button type="button" role="tab" class="cv-pv-tab" id="cv-pv-tab-values" data-tab="values" aria-controls="cv-pv-vlist">' + ico("vars") + 'Values <span class="cv-pv-n' + (noValue.length ? " warn" : "") + '">' + vars.length + "</span></button>" +
+          "</div>" +
+          '<span class="cv-pv-ftools"><select id="cv-pv-file" class="cv-pv-sel" aria-label="File to show"></select>' +
+          '<button type="button" class="cv-pv-btn" id="cv-pv-copy" title="Copy this file">' + ico("copy") + "Copy</button></span></div>" +
+          '<div class="cv-pv-body cv-pv-codebox" id="cv-pv-fbody" role="tabpanel" aria-labelledby="cv-pv-tab-files"><pre class="cv-pv-code" id="cv-pv-code" tabindex="0"></pre></div>' +
+          '<div class="cv-pv-body" id="cv-pv-vlist" role="tabpanel" aria-labelledby="cv-pv-tab-values"></div></div>' +
       "</div>";
     el.hidden = false;
-    drawAll(); drawFiles(); drawFile();
+    drawSet(); drawAll(); drawFiles(); drawFile(); drawValues(); drawTab();
     watchDownload();
     if (keep) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
   }
@@ -168,11 +254,16 @@
     if (el) { el.hidden = true; el.innerHTML = ""; }
     P = null; keepView = false; out = new Set(); gen = new Set(); resetDownload();
   }
-  // the form of the next conversion: on an update, the requests left out (none → the field is not sent, as before)
+  // the form of the next conversion: notes the think time sent; on an update, the choice (only what was chosen — a
+  // plain conversion sends exactly what it always sent)
   function addTo(fd) {
+    try { if (fd && fd.get) { var t = Number(fd.get("thinkTime")); sentTT = isFinite(t) ? t : null; } } catch (e) { sentTT = null; }
     if (!updating) { keepView = false; return; }
     updating = false; keepView = true;
-    if (out.size && fd && fd.append) fd.append("leaveOut", JSON.stringify(Array.from(out).sort(function (a, b) { return a - b; })));
+    if (!fd || !fd.append) return;
+    if (out.size) fd.append("leaveOut", JSON.stringify(Array.from(out).sort(function (a, b) { return a - b; })));
+    if (chosen.name) fd.append("scriptName", chosen.name);
+    if (Object.keys(chosen.names).length) fd.append("serverNames", JSON.stringify(chosen.names));
   }
   function update() {
     if (!P) return;
@@ -182,24 +273,50 @@
     else if (typeof window.doConvert === "function") window.doConvert();
     else updating = false;
   }
+  function undo() {
+    out = new Set(gen);
+    chosen = { name: atGen.name, names: Object.assign({}, atGen.names) };
+    ren = ""; renErr = "";
+    if (genTT != null && Number(curTT()) !== Number(genTT)) setTTNow(genTT);
+    drawSet(); drawAll();
+  }
 
   function drawAll() { drawBar(); drawHosts(); drawRequests(); }
   function drawBar() {
-    var total = P.requests.length, inn = total - out.size, pending = !sameSet(out, gen);
+    var total = P.requests.length, inn = total - out.size, ch = changes(), pending = ch.length > 0;
     var bar = document.getElementById("cv-pv-bar");
     bar.className = "cv-pv-bar" + (pending ? " pending" : "");
     bar.innerHTML = '<span class="cv-pv-sum"><b>' + inn + " of " + total + "</b> " + (total === 1 ? "request" : "requests") + " in the script" +
       (gen.size && !pending ? ' <span class="cv-pv-muted">· ' + gen.size + " left out</span>" : "") + "</span>" +
-      (pending ? '<span class="cv-pv-note">' + (inn ? "Changed — the ZIP does not have it yet." : "Keep at least one request.") + "</span>" +
+      (pending ? '<span class="cv-pv-note">' + (inn ? "Changed: " + ch.join(", ") + " — the ZIP does not have it yet." : "Keep at least one request.") + "</span>" +
         '<span class="cv-pv-grow"></span><button type="button" class="cv-pv-btn" id="cv-pv-undo">Undo changes</button>' +
         '<button type="button" class="cv-pv-btn primary" id="cv-pv-update"' + (inn ? "" : " disabled") + ">" + ico("redo") + "Update the script</button>"
         : gen.size ? '<span class="cv-pv-grow"></span><button type="button" class="cv-pv-btn" id="cv-pv-all">Put all back</button>' : "");
-    var need = needed(P.requests, out), listN = function (a) { return a.length > 4 ? a.slice(0, 4).join(", ") + " and " + (a.length - 4) + " more" : a.join(", "); };
+    var need = needed(P.requests, out);
     if (need.length) bar.innerHTML += '<div class="cv-pv-need" role="note">' + ico("warn") + "<span>" + need.slice(0, 3).map(function (x) {
       return "<code>" + esc(x.name) + "</code> is set by " + (x.by.length === 1 ? "request " : "requests ") + listN(x.by) + " (left out) and sent by " + (x.usedBy.length === 1 ? "request " : "requests ") + listN(x.usedBy);
     }).join("; ") + (need.length > 3 ? "; and " + (need.length - 3) + " more values" : "") + ". Without " + (need.length === 1 ? "it" : "them") + " the script sends " + (need.length === 1 ? "it" : "them") + " empty — keep the request that sets " + (need.length === 1 ? "it" : "them") + ", or give " + (need.length === 1 ? "it a value" : "them values") + " in the " + (kind === "jmx" ? "test plan" : "environment") + ".</span></div>";
     var dl = document.getElementById("btn-dl");
     if (dl) { dl.classList.toggle("cv-pv-wait", pending); if (pending) dl.setAttribute("aria-disabled", "true"); else dl.removeAttribute("aria-disabled"); }
+  }
+
+  // the script settings: name (the .usr, the metadata and the ZIP — every script of a multi-script ZIP), think time
+  function drawSet() {
+    var box = document.getElementById("cv-pv-set"); if (!box || !P) return;
+    var tt = Number(curTT()), active = document.activeElement && document.activeElement.id === "cv-pv-name";
+    var html =
+      '<label class="cv-pv-field cv-pv-fname"><span class="cv-pv-flabel">Script name</span>' +
+        '<input id="cv-pv-name" type="text" maxlength="60" spellcheck="false" autocomplete="off" placeholder="' + esc(orig.name || "Script") + '" value="' + esc(nameNow()) + '" aria-describedby="cv-pv-name-h" /></label>' +
+      '<div class="cv-pv-field"><span class="cv-pv-flabel" id="cv-pv-l-tt">Think time</span>' +
+        '<div class="seg-btns" role="group" aria-labelledby="cv-pv-l-tt">' + TT.map(function (n) {
+          return '<button type="button" class="seg-btn' + (n === tt ? " active" : "") + '" data-tt="' + n + '" aria-pressed="' + (n === tt) + '">' + n + "s</button>";
+        }).join("") + "</div></div>" +
+      '<p class="cv-pv-muted cv-pv-fhelp" id="cv-pv-name-h">The name is given to the .usr file' + (P.files.some(function (f) { return f.path.indexOf("/") !== -1; }) ? " of every script" : "") + " and to the ZIP; the think time is the pause between steps.</p>";
+    if (active) {   // typing in the name: redraw the rest, keep the field
+      Array.prototype.forEach.call(box.querySelectorAll("[data-tt]"), function (b) { var on = +b.getAttribute("data-tt") === tt; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on)); });
+      return;
+    }
+    box.innerHTML = html;
   }
 
   function drawHosts() {
@@ -209,20 +326,50 @@
         '<button type="button" class="cv-pv-hb" data-host="" aria-pressed="' + !host + '"><span class="cv-pv-hn">All servers</span><span class="cv-pv-c">' + P.requests.length + "</span></button></div>" +
       P.hosts.map(function (h) {
         var st = h.state || (h.resolved ? "resolved" : "missing"), hn = nums(P.requests.filter(function (r) { return r.host === h.host; }));
-        return '<div class="cv-pv-host' + (h.host === host ? " on" : "") + (st === "missing" ? " var" : "") + (stateOf(hn, out) === "none" ? " is-out" : "") + '">' +
+        var key = serverKey(h.host), pn = h.param ? paramNow(h) : "";
+        return '<div class="cv-pv-hwrap"><div class="cv-pv-host' + (h.host === host ? " on" : "") + (st === "missing" ? " var" : "") + (stateOf(hn, out) === "none" ? " is-out" : "") + '">' +
           tick('data-tick-host="' + esc(h.host) + '"', stateOf(hn, out), "Requests to " + h.host) +
           '<button type="button" class="cv-pv-hb" data-host="' + esc(h.host) + '" aria-pressed="' + (h.host === host) + '"' +
           (st === "missing" ? ' title="A variable nothing gives a value: the script calls it as written"' : st === "runtime" ? ' title="Set while the script runs (by a script or an extractor)"' : ' title="Show only its requests"') +
           '><span class="cv-pv-hn">' + (st === "missing" ? ico("warn") : "") + esc(h.host) +
-          (st === "runtime" ? '<small class="cv-pv-rtag">set while the script runs</small>' : "") + '</span><span class="cv-pv-c">' + h.count + "</span></button></div>";
+          (st === "runtime" ? '<small class="cv-pv-rtag">set while the script runs</small>' : "") +
+          (pn ? '<small class="cv-pv-param">Parameter <code>' + esc(pn) + "</code>" + (pn !== h.param ? ' <span class="cv-pv-chg">changed</span>' : "") + "</small>" : "") +
+          '</span><span class="cv-pv-c">' + h.count + "</span></button>" +
+          (pn ? '<button type="button" class="cv-pv-ibtn" data-rename="' + esc(h.host) + '" title="Rename the parameter ' + esc(pn) + '" aria-label="Rename the parameter ' + esc(pn) + '">' + ico("pen") + "</button>" : "") +
+          "</div>" +
+          (ren === h.host ? '<div class="cv-pv-ren"><label class="cv-pv-flabel" for="cv-pv-ren-in">Parameter name</label>' +
+            '<input id="cv-pv-ren-in" type="text" maxlength="40" spellcheck="false" autocomplete="off" value="' + esc(renVal) + '" aria-describedby="cv-pv-ren-err"' + (renErr ? ' aria-invalid="true"' : "") + " />" +
+            '<button type="button" class="cv-pv-btn primary" data-ren-ok="' + esc(key) + '">Save</button><button type="button" class="cv-pv-btn" data-ren-cancel>Cancel</button>' +
+            '<p class="cv-pv-err" id="cv-pv-ren-err" role="alert">' + esc(renErr) + "</p></div>" : "") +
+          "</div>";
       }).join("");
     someMarks("cv-pv-hlist");
+    if (ren) { var i = document.getElementById("cv-pv-ren-in"); if (i) { i.focus(); i.select(); } }
+  }
+  function saveRename(key) {
+    var input = document.getElementById("cv-pv-ren-in"), h = P.hosts.filter(function (x) { return serverKey(x.host) === key; })[0];
+    if (!input || !h) return;
+    var name = input.value.trim(), taken = {};
+    P.hosts.forEach(function (x) { if (x.param && x !== h) taken[x.host] = paramNow(x); });
+    var extra = (P.variables || []).map(function (v) { return v.name; });
+    var err = window.HostParams && window.HostParams.validName ? window.HostParams.validName(name, h.host, taken, extra)
+      : (/^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(name) ? "" : "Use letters, numbers and underscores only, starting with a letter or an underscore.");
+    if (err) { renErr = err; drawHosts(); return; }
+    if (name === orig.params[key]) delete chosen.names[key]; else chosen.names[key] = name;
+    ren = ""; renErr = "";
+    drawAll();
   }
 
   var MAX_ROWS = 300;   // per group, before "Show all"
+  function visible() {
+    var list = P.requests;
+    if (vf) { var v = (P.variables || []).filter(function (x) { return x.name === vf; })[0], set = new Set(v ? v.usedBy.concat(v.setBy) : []); list = list.filter(function (r) { return set.has(r.n); }); }
+    return filterRequests(list, host, q);
+  }
   function drawRequests() {
-    var list = filterRequests(P.requests, host, q), groups = groupRequests(list);
+    var list = visible(), groups = groupRequests(list);
     document.getElementById("cv-pv-rn").textContent = list.length === P.requests.length ? String(list.length) : list.length + " of " + P.requests.length;
+    document.getElementById("cv-pv-vfchip").innerHTML = vf ? '<button type="button" class="cv-pv-chip" data-vf-clear title="Show every request">Using <code>' + esc(vf) + "</code>" + ico("x") + "</button>" : "";
     var html = groups.map(function (g) {
       var f = !!folded[g.name], rows = showAll[g.name] ? g.requests : g.requests.slice(0, MAX_ROWS), gs = stateOf(nums(g.requests), out);
       return '<div class="cv-pv-grp' + (f ? " folded" : "") + (gs === "none" ? " is-out" : "") + '"><div class="cv-pv-gh">' +
@@ -242,6 +389,41 @@
     someMarks("cv-pv-rlist");
   }
   function someMarks(id) { Array.prototype.forEach.call(document.querySelectorAll("#" + id + " [data-some]"), function (x) { x.indeterminate = true; }); }
+
+  function drawTab() {
+    ["files", "values"].forEach(function (t) {
+      var b = document.getElementById("cv-pv-tab-" + t); if (!b) return;
+      b.setAttribute("aria-selected", String(tab === t)); b.tabIndex = tab === t ? 0 : -1; b.classList.toggle("on", tab === t);
+    });
+    document.getElementById("cv-pv-fbody").hidden = tab !== "files";
+    document.getElementById("cv-pv-vlist").hidden = tab !== "values";
+    document.querySelector("#cv-pv .cv-pv-ftools").hidden = tab !== "files";
+  }
+  // where a value comes from, in words
+  var SRC = {
+    set: function (v) { return ["Set while it runs", "by " + (v.setBy.length === 1 ? "request " : "requests ") + listN(v.setBy) + (v.how ? " · " + v.how : "")]; },
+    environment: function () { return ["Environment", ""]; },
+    collection: function () { return [kind === "jmx" ? "Test plan" : "Collection", ""]; },
+    data: function (v) { return ["Data file", v.file ? "a column of " + v.file : ""]; },
+    builtin: function () { return ["Made by the tool", "a new value each time it is sent"]; },
+    empty: function () { return ["Empty", "declared with no value — the script sends it empty unless the run gives it one"]; },
+    missing: function () { return ["No value", "nothing gives it a value — the script sends it as written"]; },
+  };
+  function drawValues() {
+    var box = document.getElementById("cv-pv-vlist"), vars = sortValues(P.variables || []);
+    if (!vars.length) { box.innerHTML = '<p class="cv-pv-empty">The requests send no variables.</p>'; return; }
+    box.innerHTML = '<ul class="cv-pv-vars">' + vars.map(function (v) {
+      var s = (SRC[v.source] || SRC.missing)(v), val = v.hidden ? "hidden (looks like a secret)" : v.value != null ? v.value : "";
+      var sent = v.usedBy.length;
+      return '<li class="cv-pv-var s-' + esc(v.source) + (vf === v.name ? " on" : "") + '"><div class="cv-pv-vh"><code class="cv-pv-vn">' + esc(v.name) + "</code>" +
+        '<span class="cv-pv-src">' + (v.source === "missing" ? ico("warn") : "") + esc(s[0]) + "</span></div>" +
+        (s[1] ? '<div class="cv-pv-vd">' + esc(s[1]) + "</div>" : "") +
+        (val !== "" ? '<div class="cv-pv-vd">' + (v.source === "set" ? "Starts as " : "Value ") + (v.hidden ? '<span class="cv-pv-muted">' + esc(val) + "</span>" : "<code>" + esc(val) + "</code>") + "</div>" : "") +
+        (sent || v.setBy.length ? '<button type="button" class="cv-pv-vuse" data-vf="' + esc(v.name) + '" aria-pressed="' + (vf === v.name) + '">' +
+          (sent ? "Sent by " + plural(sent, "request") : "Not sent by any request") + "</button>" : "") +
+        "</li>";
+    }).join("") + "</ul>";
+  }
 
   function drawFiles() {
     document.getElementById("cv-pv-file").innerHTML = fileGroups(P.files).map(function (g) {
@@ -271,17 +453,41 @@
     var t = e.target;
     if (t.id === "cv-pv-file") { file = t.value; drawFile(); return; }
     if (t.hasAttribute("data-tick-req")) setOut([+t.getAttribute("data-tick-req")], t.checked);
-    else if (t.hasAttribute("data-tick-group")) { var g = t.getAttribute("data-tick-group"); setOut(nums(filterRequests(P.requests, host, q).filter(function (r) { return r.group === g; })), t.checked); }
+    else if (t.hasAttribute("data-tick-group")) { var g = t.getAttribute("data-tick-group"); setOut(nums(visible().filter(function (r) { return r.group === g; })), t.checked); }
     else if (t.hasAttribute("data-tick-host")) { var h = t.getAttribute("data-tick-host"); setOut(nums(P.requests.filter(function (r) { return r.host === h; })), t.checked); }
     else if (t.hasAttribute("data-tick-all")) setOut(nums(P.requests), t.checked);
+  }
+  function onInput(e) {
+    var t = e.target;
+    if (t.id === "cv-pv-q") { q = t.value; drawRequests(); }
+    else if (t.id === "cv-pv-name") { var c = cleanName(t.value); chosen.name = c === orig.name ? "" : c; drawBar(); }
+    else if (t.id === "cv-pv-ren-in") renVal = t.value;
+    if (t.id === "cv-pv-ren-in" && renErr) { renErr = ""; var p = document.getElementById("cv-pv-ren-err"); if (p) p.textContent = ""; t.removeAttribute("aria-invalid"); }
+  }
+  function onKey(e) {
+    var t = e.target;
+    if (t.id === "cv-pv-ren-in") {
+      if (e.key === "Enter") { e.preventDefault(); saveRename(serverKey(ren)); }
+      else if (e.key === "Escape") { e.preventDefault(); var h = ren; ren = ""; renErr = ""; drawHosts(); var b = document.querySelector('#cv-pv [data-rename="' + (window.CSS && CSS.escape ? CSS.escape(h) : h) + '"]'); if (b) b.focus(); }
+    } else if (t.id === "cv-pv-name" && e.key === "Enter") { e.preventDefault(); t.value = nameNow(); }
+    else if (t.getAttribute && t.getAttribute("role") === "tab" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault(); tab = tab === "files" ? "values" : "files"; drawTab(); document.getElementById("cv-pv-tab-" + tab).focus();
+    }
   }
   function onClick(e) {
     var b = e.target.closest("button"); if (!b) return;
     if (b.hasAttribute("data-host")) { var h = b.getAttribute("data-host"); host = host === h ? "" : h; drawHosts(); drawRequests(); }
     else if (b.hasAttribute("data-group")) { var g = b.getAttribute("data-group"); folded[g] = !folded[g]; drawRequests(); }
     else if (b.hasAttribute("data-all")) { showAll[b.getAttribute("data-all")] = true; drawRequests(); }
+    else if (b.hasAttribute("data-tt")) setTTNow(+b.getAttribute("data-tt"));
+    else if (b.hasAttribute("data-rename")) { ren = b.getAttribute("data-rename"); renErr = ""; var rh = P.hosts.filter(function (x) { return x.host === ren; })[0]; renVal = rh ? paramNow(rh) : ""; drawHosts(); }
+    else if (b.hasAttribute("data-ren-ok")) saveRename(b.getAttribute("data-ren-ok"));
+    else if (b.hasAttribute("data-ren-cancel")) { ren = ""; renErr = ""; drawHosts(); }
+    else if (b.hasAttribute("data-tab")) { tab = b.getAttribute("data-tab"); drawTab(); if (b.classList.contains("cv-pv-link")) document.getElementById("cv-pv-files").scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    else if (b.hasAttribute("data-vf")) { var n = b.getAttribute("data-vf"); vf = vf === n ? "" : n; drawValues(); drawRequests(); }
+    else if (b.hasAttribute("data-vf-clear")) { vf = ""; drawValues(); drawRequests(); }
     else if (b.id === "cv-pv-update") update();
-    else if (b.id === "cv-pv-undo") { out = new Set(gen); drawAll(); }
+    else if (b.id === "cv-pv-undo") undo();
     else if (b.id === "cv-pv-all") { out = new Set(); drawAll(); }
     else if (b.id === "cv-pv-copy") {
       var f = P.files.filter(function (x) { return x.path === file; })[0];
@@ -300,7 +506,7 @@
       a._cvWatched = true;
       a.addEventListener("click", function (e) {
         if (!P) return;
-        if (!sameSet(out, gen)) {
+        if (changes().length) {
           e.preventDefault();
           var bar = document.getElementById("cv-pv-bar"), up = document.getElementById("cv-pv-update");
           if (bar) { bar.classList.remove("flash"); void bar.offsetWidth; bar.classList.add("flash"); bar.scrollIntoView({ behavior: "smooth", block: "center" }); }

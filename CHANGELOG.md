@@ -291,6 +291,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### The converters: script settings and the values the requests send
+
+- Postman / Bruno and JMeter, What the script contains: a settings strip — Script name (the .usr of every script, the upload metadata, the JMeter workload workbook and the ZIP's file name) and Think time (the form's own choice, kept in step both ways) — and Rename on a server whose parameter the script writes (checked as in Script Studio: not a name the script or a value already uses). Applied with Update the script; Undo changes puts them back; the choice is kept over later updates.
+- Values tab beside Files: every variable the requests send or set, where its value comes from (set while it runs — by which request and extractor; environment, collection or test plan; a data file column; made by the tool; empty; no value), its value (hidden when the name looks secret) and the requests that send it (a click shows only them). Values nothing gives a value are named at the top.
+- Nothing changes without a choice: converter golden harness — every ZIP and every request identical; the answers only gain preview fields.
+
 #### The converters: choose what goes into the script
 
 - Postman / Bruno and JMeter: in What the script contains, every server, folder / thread group and request has a tick. Untick what the script should leave out, then Update the script: the same files and options are converted again without those requests (the panel's own Convert, with the numbers of the requests left out — dropped right after reading the collection or test plan). The view (filter, folds, file shown) stays; left-out requests stay listed, struck through, so they can be put back. A JMeter thread group with every request left out gets no script.

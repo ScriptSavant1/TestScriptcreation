@@ -57,6 +57,7 @@ const JmxConverter              = require("../tools/jmx-converter");
 const JmxDependencyResolver     = require("../lib/jmxDependencyResolver");
 const { safePreview }           = require("./convertPreview");
 const { leaveOutOption }        = require("../core/requestSelection");
+const { settingsOptions, safeZipName } = require("../core/scriptSettings");
 
 // Analytics — lazy-loaded so a missing DB never crashes the server
 let analytics, adminReports, csvExporter, xlsxExporter, docxExporter;
@@ -447,6 +448,7 @@ class WebServer {
             logLevel,
             csvFilePaths,
             ...leaveOutOption(req.body.leaveOut),   // the requests left out on the page (none → no option: the answer as before)
+            ...settingsOptions(req.body),           // script name, server names chosen on the page (none → no option)
           };
 
           const converter = new BrunoDevWebConverter(options);
@@ -463,7 +465,7 @@ class WebServer {
 
           // Issue a cryptographically strong single-use download token (F-05)
           const token = crypto.randomBytes(32).toString("hex");
-          this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
+          this.pendingDownloads.set(token, { files, outputDir, zipName: safeZipName(options.scriptName), expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
           _evtResult   = "success";
@@ -514,12 +516,12 @@ class WebServer {
       }
 
       this.pendingDownloads.delete(req.params.token); // single-use
-      const { files, outputDir } = entry;
+      const { files, outputDir, zipName } = entry;
 
       // application/octet-stream — generic binary avoids stricter scanning on
       // some corporate networks that inspect application/zip differently.
       res.setHeader("Content-Type", "application/octet-stream");
-      res.setHeader("Content-Disposition", 'attachment; filename="loadrunner_script.zip"');
+      res.setHeader("Content-Disposition", 'attachment; filename="' + (zipName || "loadrunner_script.zip") + '"');
       // No Content-Length — chunked transfer encoding bypasses proxy size limits.
 
       const archive = archiver("zip", { zlib: { level: 9 } });
@@ -616,6 +618,7 @@ class WebServer {
             generateWlmExcel:     req.body.generateWlmExcel !== "false",
             csvFilePaths,
             ...leaveOutOption(req.body.leaveOut),   // the requests left out on the page (none → no option: the answer as before)
+            ...settingsOptions(req.body),           // script name, server names chosen on the page (none → no option)
           };
 
           const converter = new JmxConverter(options);
@@ -633,7 +636,7 @@ class WebServer {
           }
 
           const token = crypto.randomBytes(32).toString("hex");
-          this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
+          this.pendingDownloads.set(token, { files, outputDir, zipName: safeZipName(options.scriptName), expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
           _evtJResult   = "success";
