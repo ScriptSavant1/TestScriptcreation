@@ -57,6 +57,7 @@ Do NOT recreate it — all its functions exist in the three split files above.
 | `src/web/public/portal/{shell,home}.css` | Styles; tool colours `--c-convert/-jmeter/-record/-studio/-results/-help` |
 | `src/web/public/portal/palette.js` | Quick search (Ctrl+K / ⌘K, top-bar Search): tools, Help sections + text, FAQ questions, actions (incl. "Start recording" → Script Studio, `SS.view("home")` + `PerfxRecordLive.open()` in its iframe; a title equal to the typed words ranks first); read from the page; also hooks Ctrl+K inside the tool iframes |
 | `src/web/public/portal/drop-anywhere.js` | `PerfxDrop.attach({ when, label, route })` — a page-wide drop hands files to the page's own file inputs (used by converter.js, studio-page.js); drops on a box that handles them itself are left alone |
+| `src/web/public/portal/plan-load.js` | `PerfxPlanLoad.available(win)` / `send(files, win)`: Plan the load in Workload Modeller — opens the portal page `workload` and calls its `window.WorkloadModeller.addScripts(files)`; used by the converters (`convert-preview.js`) and Script Studio (`studio-page.js` `planLoad`: `dlZip(fmt, { collect })` — the ZIP built, not downloaded; buttons `#ss-wm`, `#ss-done-wm`, shown only inside the portal) |
 | `src/web/public/portal/track.js` | `PerfxTrack.send({...})` — usage ping of the browser tools (Script Studio for recordings made with Start recording, HAR Explorer, Results Analyser) to …/analytics/track; Script Studio pings from studio-app.js |
 
 Usage statistics: tools `recorder`, `explorer`, `studio`, `converter`, `jmx`, `workload`, `analyser` (each list: server.js BROWSER_TOOLS, analytics/reports.js, exporters/{xlsx,docx}.js, views/admin.ejs). Machine = reverse DNS of `req.ip`, else the IP (anonymous IIS authentication — no user names).
@@ -78,7 +79,7 @@ Rule: the old switchers in index.ejs stay the source of truth; the shell only wr
 11. `analytics-device.js` (deferred)
 
 Then `Studio.html` loads its own page scripts: `portal/track.js`, `portal/drop-anywhere.js`, `portal/record-live.js`, `portal/studio-txn.js`,
-`portal/studio-page.js`, `portal/studio-workspace.js`.
+`portal/plan-load.js`, `portal/studio-page.js`, `portal/studio-workspace.js`.
 
 All share global state object `S` (defined in `studio-app.js`).
 

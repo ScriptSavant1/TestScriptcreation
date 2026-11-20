@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio: Plan the load in Workload Modeller
+
+- Script Studio has **Plan the load** in the file bar and in step 4, as the converters do: the same ZIP as Download ZIP (built in the browser, nothing downloaded) opens in the Workload Modeller with the script filled in. The hand-over is one shared helper for Studio and both converters (`portal/plan-load.js`).
+
 #### Script Studio, Correlate: every correlation editable, Test, panels that resize
 
 - The correlations Studio's own engines find (pattern, second recording, value-based, PKCE) are listed in the Correlate table with the Advisor's values, "Found by Studio", already in the script. Correlation details has **Edit** and **Remove** on every correlation (Edit opens the editor with the response, as for the Advisor's values; Remove with Undo); a removed one stays out when the recording is read again. Before, a click on one only said to use the Cards view. PKCE values are labelled made while the script runs and open read-only.

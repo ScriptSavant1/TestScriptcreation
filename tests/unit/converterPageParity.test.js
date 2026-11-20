@@ -126,7 +126,10 @@ describe('Converter panels — the preview', () => {
     const pv = fs.readFileSync(path.resolve(__dirname, '../../src/web/public/portal/convert-preview.js'), 'utf-8');
     const addTo = pv.slice(pv.indexOf('function addTo(fd)'), pv.indexOf('function update()'));
     expect(addTo.indexOf('if (!updating)')).toBeLessThan(addTo.indexOf('fd.append("values"'));
-    expect(pv).toContain('w.WorkloadModeller.addScripts([fileObj])');
+    expect(pv).toContain('window.PerfxPlanLoad.send([fileObj])');
+    const pl = fs.readFileSync(path.resolve(__dirname, '../../src/web/public/portal/plan-load.js'), 'utf-8');
+    expect(pl).toContain('w.WorkloadModeller.addScripts(files)');
+    expect(index.indexOf('portal/plan-load.js')).toBeLessThan(index.indexOf('portal/convert-preview.js'));
     const wm = fs.readFileSync(path.resolve(__dirname, '../../workload-modeller/web/page.js'), 'utf-8');
     expect(wm).toContain('window.WorkloadModeller = Object.assign(window.WorkloadModeller || {}, { addScripts: (files) => fill(files) });');
     const sw = index.slice(index.indexOf('function switchTab(tab)'), index.indexOf('/* ── Protocol selectors'));

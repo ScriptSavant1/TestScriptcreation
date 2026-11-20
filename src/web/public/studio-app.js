@@ -5,7 +5,16 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ZIP DOWNLOAD
 // ═══════════════════════════════════════════════════════════════════════════
-async function dlZip(fmt) {
+// opts.collect (an array): the ZIPs are added to it as { name, blob } instead of being downloaded — the Script Studio
+// page hands them to the Workload Modeller (Plan the load). Without it: downloaded, as always.
+async function dlZip(fmt, opts) {
+  const deliver = (blob, name) => {
+    if (opts && Array.isArray(opts.collect)) { opts.collect.push({ name, blob }); return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+  };
   if (!S.scripts.ac && !S.scripts.mj) {
     showToast("No scripts generated yet.", "warning");
     return;
@@ -56,10 +65,7 @@ async function dlZip(fmt) {
       type: "blob",
       mimeType: "application/zip",
     });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = nm + ".zip";
-    a.click();
+    deliver(blob, nm + ".zip");
   }
 
   async function makeDevWebZip() {
@@ -116,10 +122,7 @@ async function dlZip(fmt) {
       type: "blob",
       mimeType: "application/zip",
     });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = nm + ".zip";
-    a.click();
+    deliver(blob, nm + ".zip");
   }
 
   if (isWeb) await makeWebHttpZip();

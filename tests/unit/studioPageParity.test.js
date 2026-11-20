@@ -20,7 +20,7 @@ describe('Script Studio redesign — same scripts as the classic page', () => {
   test('Studio.html loads the classic scripts unchanged, in the same order, then its layout script', () => {
     const engine = scripts(classic);
     expect(scripts(page).slice(0, engine.length)).toEqual(engine);
-    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js', 'portal/studio-corr.js', 'portal/studio-editor.js']);
+    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/plan-load.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js', 'portal/studio-corr.js', 'portal/studio-editor.js']);
   });
 
   test('the classic stylesheet is still loaded (it styles what the scripts draw), then the new one', () => {
@@ -185,5 +185,22 @@ describe('Script Studio — steps fit the window', () => {
     const fn = page.slice(page.indexOf('function doneFiles()'), page.indexOf('$("#ss-done-ftabs").addEventListener("click"'));
     expect(fn).toContain('S.scripts[doneKey]');
     expect(fn).not.toMatch(/S\.\w+\s*=[^=]/);
+  });
+});
+
+// Plan the load in Workload Modeller: the same ZIP as Download ZIP, built with a collector (nothing downloaded) and
+// handed over by the shared helper; without a collector dlZip downloads, as always
+describe('Script Studio — Plan the load', () => {
+  const app = read('studio-app.js'), page = read('portal/studio-page.js'), html = read('Studio.html');
+  test('dlZip(fmt, opts): a collector gets the ZIPs; the download is the default', () => {
+    expect(app).toContain('async function dlZip(fmt, opts) {');
+    expect(app).toContain('if (opts && Array.isArray(opts.collect)) { opts.collect.push({ name, blob }); return; }');
+    expect(app.split('deliver(blob, nm + ".zip");').length - 1).toBe(2);
+  });
+  test('the buttons, only inside the portal, through portal/plan-load.js', () => {
+    ['ss-wm', 'ss-done-wm'].forEach((id) => expect(html).toContain('id="' + id + '"'));
+    expect(page).toContain('dlZip(S.format, { collect: files })');
+    expect(page).toContain('PerfxPlanLoad.send(');
+    expect(page).toContain('var canPlan = !!(window.PerfxPlanLoad && PerfxPlanLoad.available());');
   });
 });

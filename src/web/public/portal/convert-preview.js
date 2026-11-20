@@ -665,18 +665,9 @@
       handAfter = true; update();               // the link was used or expired meanwhile: convert again, then hand over
     });
   }
+  // the hand-over itself is shared with Script Studio (portal/plan-load.js)
   function send(fileObj) {
-    var shell = window.PerfxShell; if (!shell) return;
-    shell.go("workload");
-    var tries = 0;
-    (function poll() {
-      var w = null;
-      try { var fr = document.getElementById("iframe-workload"); w = fr && fr.contentWindow; } catch (e) { w = null; }
-      var api2 = null;
-      try { api2 = w && w.document.readyState === "complete" && w.WorkloadModeller && w.WorkloadModeller.addScripts; } catch (e) { api2 = null; }
-      if (api2) { w.WorkloadModeller.addScripts([fileObj]); return; }
-      if (++tries < 200) setTimeout(poll, 100);
-    })();
+    if (window.PerfxPlanLoad) window.PerfxPlanLoad.send([fileObj]);
   }
 
   api.show = show; api.hide = hide; api.addTo = addTo; api.update = update;

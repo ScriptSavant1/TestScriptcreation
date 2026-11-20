@@ -460,6 +460,26 @@
     navigator.clipboard.writeText(text).then(function () { var l = b.lastChild; l.textContent = "Copied"; setTimeout(function () { l.textContent = "Copy"; }, 1500); });
   });
   $("#ss-done-dl").addEventListener("click", function () { $("#ss-dl").click(); });
+
+  // Plan the load in Workload Modeller (file bar and step 4): the same ZIP as Download ZIP — dlZip with a collector,
+  // nothing downloaded — handed to the Workload Modeller in the portal (portal/plan-load.js). Only inside the portal.
+  var canPlan = !!(window.PerfxPlanLoad && PerfxPlanLoad.available());
+  $("#ss-wm").hidden = $("#ss-done-wm").hidden = !canPlan;
+  function planLoad(btn) {
+    if (!canPlan || btn.disabled) return;
+    var files = [];
+    btn.disabled = true; btn.setAttribute("aria-busy", "true");
+    Promise.resolve(typeof dlZip === "function" ? dlZip(S.format, { collect: files }) : null).then(function () {
+      if (!files.length) return false;
+      return PerfxPlanLoad.send(files.map(function (f) { return new File([f.blob], f.name, { type: "application/zip" }); }));
+    }).then(function (ok) {
+      if (ok === false && typeof showToast === "function" && files.length) showToast("The Workload Modeller did not open: open it from the sidebar and add the ZIP there.", "warning", 6000);
+    }).catch(function (e) {
+      if (typeof showToast === "function") showToast("Could not make the ZIP: " + e.message, "error", 6000);
+    }).then(function () { btn.disabled = false; btn.removeAttribute("aria-busy"); });
+  }
+  $("#ss-wm").addEventListener("click", function () { planLoad(this); });
+  $("#ss-done-wm").addEventListener("click", function () { planLoad(this); });
   $("#ss-done-list").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (b) go(b.getAttribute("data-go")); });
   step(1);
 
