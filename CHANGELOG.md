@@ -312,6 +312,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### The converters: panels that hide and resize, a calmer top
+
+- Postman / Bruno and JMeter, What the script contains: Servers, Requests and Files · Values can be hidden to a rail and resized (drag the bar between two, or its arrow keys; double-click puts it back) — remembered in the browser, the last panel shown always stays; the panels fill the window's height. Narrow windows stack them as before.
+- One warning instead of two: the values nothing gives a value, with the servers among them named. The summary bar appears only when it has something to say (a change not applied, requests left out).
+
 #### The converters: environment, values, thread groups and Plan the load
 
 - Postman / Bruno: the settings strip shows the environment file with Choose / Change and Remove (the panel's own file box, kept in step); a new or removed environment is applied with Update the script.

@@ -161,6 +161,7 @@
     redo: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
     pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     chart: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>',
+    panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
   };
   var ico = function (k) { return '<svg class="cv-pv-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[k] + "</svg>"; };
@@ -181,7 +182,10 @@
     el.addEventListener("click", onClick);
     el.addEventListener("change", onChange);
     el.addEventListener("input", onInput);
-    el.addEventListener("keydown", onKey);
+    el.addEventListener("keydown", function (e) { if (!onRsKey(e)) onKey(e); });
+    el.addEventListener("pointerdown", onRsDown);
+    el.addEventListener("dblclick", function (e) { var r = e.target.closest(".cv-pv-rs"); if (!r) return; if (r.getAttribute("data-pv-rs") === "hosts") delete lay.w1; else delete lay.w3; laySave(); layout(); });
+    window.addEventListener("resize", function () { if (P) layout(); });
     // the form's think time and the strip's stay in step (the form's setters are the source of truth)
     document.addEventListener("change", function (e) { if (P && e.target && e.target.id === "fi-env") setTimeout(function () { drawSet(); drawBar(); }, 0); });
     ["setTT", "setJmxTT", "setJmxWlm", "clearFile", "attachFile"].forEach(function (fn) {
@@ -254,37 +258,116 @@
         (kind === "jmx" ? "Requests are grouped by thread group." : "Requests are grouped by folder.") + "</p></div>" +
         (window.PerfxShell ? '<button type="button" class="cv-pv-btn" id="cv-pv-wm" title="Open this ZIP in the Workload Modeller to work out the Vusers, pacing and load generators">' + ico("chart") + "Plan the load in Workload Modeller</button>" : "") +
         "</div>" +
-      (missingHosts.length ? '<div class="cv-pv-warn" role="note">' + ico("warn") + "<span><b>" + (missingHosts.length === 1 ? "1 server is a variable with no value" : missingHosts.length + " servers are variables with no value") + "</b> (" +
-        missingHosts.map(function (h) { return "<code>" + esc(h.host) + "</code>"; }).join(", ") + "): " +
-        (kind === "jmx" ? "the test plan does not give it one, so the script calls it as written." : "add the environment file that defines it, or the script calls it as written.") + "</span></div>" : "") +
-      (noValue.length ? '<div class="cv-pv-warn" role="note">' + ico("warn") + "<span><b>" + (noValue.length === 1 ? "1 value has" : noValue.length + " values have") + " nothing that gives " + (noValue.length === 1 ? "it" : "them") + " a value</b> (" +
-        noValue.slice(0, 6).map(function (v) { return "<code>" + esc(v.name) + "</code>"; }).join(", ") + (noValue.length > 6 ? " …" : "") + "): the script sends " + (noValue.length === 1 ? "it" : "them") + " as written. " +
-        '<button type="button" class="cv-pv-link" data-tab="values">See Values</button></span></div>' : "") +
+      warnHtml(missingHosts, noValue) +
       '<div class="cv-pv-bar" id="cv-pv-bar" role="status" aria-live="polite"></div>' +
       '<div class="cv-pv-set" id="cv-pv-set"></div>' +
-      '<div class="cv-pv-cols">' +
-        '<div class="cv-pv-pane" id="cv-pv-hosts"><div class="cv-pv-ph">' + ico("server") + '<h4>Servers</h4><span class="cv-pv-n">' + P.hosts.length + "</span></div>" +
+      '<div class="cv-pv-cols" id="cv-pv-cols">' +
+        '<div class="cv-pv-pane" id="cv-pv-hosts">' + rail("hosts", "server", "Servers", P.hosts.length) + '<div class="cv-pv-ph">' + ico("server") + '<h4>Servers</h4><span class="cv-pv-n">' + P.hosts.length + "</span>" + hideBtn("hosts", "Servers") + "</div>" +
           '<div class="cv-pv-body" id="cv-pv-hlist"></div></div>' +
-        '<div class="cv-pv-pane" id="cv-pv-reqs"><div class="cv-pv-ph">' + ico("list") + '<h4>Requests</h4><span class="cv-pv-n" id="cv-pv-rn"></span>' +
+        rsBar("hosts", "Width of Servers") +
+        '<div class="cv-pv-pane" id="cv-pv-reqs">' + rail("reqs", "list", "Requests", P.requests.length) + '<div class="cv-pv-ph">' + ico("list") + '<h4>Requests</h4><span class="cv-pv-n" id="cv-pv-rn"></span>' +
           '<label class="cv-pv-search">' + ico("search") + '<input id="cv-pv-q" type="search" placeholder="Filter by name or address" aria-label="Filter the requests" value="' + esc(q) + '" /></label>' +
-          '<span id="cv-pv-vfchip"></span></div>' +
+          '<span id="cv-pv-vfchip"></span>' + hideBtn("reqs", "Requests") + "</div>" +
           '<div class="cv-pv-body" id="cv-pv-rlist"></div></div>' +
-        '<div class="cv-pv-pane" id="cv-pv-files"><div class="cv-pv-ph">' +
+        rsBar("files", "Width of Files and Values") +
+        '<div class="cv-pv-pane" id="cv-pv-files">' + rail("files", "file", "Files · Values", P.files.length) + '<div class="cv-pv-ph">' +
           '<div class="cv-pv-tabs" role="tablist" aria-label="Files and values">' +
             '<button type="button" role="tab" class="cv-pv-tab" id="cv-pv-tab-files" data-tab="files" aria-controls="cv-pv-fbody">' + ico("file") + 'Files <span class="cv-pv-n">' + P.files.length + "</span></button>" +
             '<button type="button" role="tab" class="cv-pv-tab" id="cv-pv-tab-values" data-tab="values" aria-controls="cv-pv-vlist">' + ico("vars") + 'Values <span class="cv-pv-n' + (noValue.length ? " warn" : "") + '">' + vars.length + "</span></button>" +
           "</div>" +
           '<span class="cv-pv-ftools"><select id="cv-pv-file" class="cv-pv-sel" aria-label="File to show"></select>' +
-          '<button type="button" class="cv-pv-btn" id="cv-pv-copy" title="Copy this file">' + ico("copy") + "Copy</button></span></div>" +
+          '<button type="button" class="cv-pv-btn" id="cv-pv-copy" title="Copy this file">' + ico("copy") + "Copy</button></span>" + hideBtn("files", "Files and Values") + "</div>" +
           '<div class="cv-pv-body cv-pv-codebox" id="cv-pv-fbody" role="tabpanel" aria-labelledby="cv-pv-tab-files"><pre class="cv-pv-code" id="cv-pv-code" tabindex="0"></pre></div>' +
           '<div class="cv-pv-body" id="cv-pv-vlist" role="tabpanel" aria-labelledby="cv-pv-tab-values"></div></div>' +
       "</div>";
     el.hidden = false;
-    drawSet(); drawAll(); drawFiles(); drawFile(); drawValues(); drawTab();
+    drawSet(); drawAll(); drawFiles(); drawFile(); drawValues(); drawTab(); layout();
     watchDownload();
     if (handAfter) { handAfter = false; handOff(); }
     else if (keep) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
   }
+  // ── the three panels: hide one to a rail, drag the bar between two (or its arrow keys; double-click puts it back) —
+  //    remembered in this browser (localStorage perfx-cv-pv); never all hidden; on narrow screens they stack, all shown ──
+  var LKEY = "perfx-cv-pv", lay = { hide: {} };
+  try { lay = JSON.parse(localStorage.getItem(LKEY) || "{}") || {}; } catch (e) { lay = {}; }
+  lay.hide = lay.hide || {};
+  function laySave() { try { localStorage.setItem(LKEY, JSON.stringify(lay)); } catch (e) { /* private window */ } }
+  var PANES = { hosts: "cv-pv-hosts", reqs: "cv-pv-reqs", files: "cv-pv-files" };
+  function hideBtn(k, name) {
+    return '<button type="button" class="cv-pv-ibtn cv-pv-hide" data-pv-hide="' + k + '" title="Hide this panel (the others get the space)" aria-label="Hide ' + name + '">' + ico("panel") + "</button>";
+  }
+  function rail(k, icon, name, n) {
+    return '<button type="button" class="cv-pv-rail" data-pv-show="' + k + '" title="Show ' + name + '">' + ico(icon) + "<span>" + name + '</span><span class="cv-pv-n">' + n + "</span></button>";
+  }
+  function rsBar(k, label) {
+    return '<div class="cv-pv-rs" data-pv-rs="' + k + '" role="separator" aria-orientation="vertical" tabindex="0" aria-label="' + label + ': drag, or the arrow keys; double-click puts it back" title="Drag to resize (double-click puts it back)"></div>';
+  }
+  function layout() {
+    var cols = document.getElementById("cv-pv-cols"); if (!cols) return;
+    var h = lay.hide;
+    if (h.hosts && h.reqs && h.files) h.reqs = false;
+    Object.keys(PANES).forEach(function (k) { var p = document.getElementById(PANES[k]); if (p) p.classList.toggle("is-hidden", !!h[k]); });
+    var c1 = h.hosts ? "44px" : lay.w1 ? lay.w1 + "px" : "minmax(200px, 260px)";
+    var c3 = h.files ? "44px" : h.reqs ? "minmax(0, 1fr)" : lay.w3 ? lay.w3 + "px" : "minmax(0, 1.15fr)";
+    var c2 = h.reqs ? "44px" : "minmax(0, 1fr)";
+    if (h.reqs && h.files) c2 = "minmax(0, 1fr)";
+    cols.style.setProperty("--cv-cols", c1 + " 12px " + c2 + " 12px " + c3);
+    // the last panel shown cannot be hidden
+    Object.keys(PANES).forEach(function (k) {
+      var hb = cols.querySelector('[data-pv-hide="' + k + '"]'), last = Object.keys(PANES).every(function (x) { return x === k || h[x]; });
+      if (hb) { hb.disabled = last; hb.title = last ? "The last panel shown stays" : "Hide this panel (the others get the space)"; }
+    });
+    Array.prototype.forEach.call(cols.querySelectorAll(".cv-pv-rs"), function (r) {
+      var k = r.getAttribute("data-pv-rs"), off = k === "hosts" ? !!(h.hosts || h.reqs) : !!(h.files || h.reqs);
+      r.classList.toggle("off", off); r.tabIndex = off ? -1 : 0;
+      var pane = document.getElementById(PANES[k]);
+      if (pane) r.setAttribute("aria-valuenow", String(Math.round(pane.getBoundingClientRect().width)));
+    });
+  }
+  function setPane(k, on) {
+    var others = Object.keys(PANES).filter(function (x) { return x !== k; });
+    if (!on && others.every(function (x) { return lay.hide[x]; })) return;   // the last panel shown stays
+    lay.hide[k] = !on;
+    laySave(); layout();
+    var b = document.querySelector('#cv-pv [data-pv-' + (on ? "hide" : "show") + '="' + k + '"]'); if (b) b.focus();
+  }
+  function setW(k, w) {
+    var cols = document.getElementById("cv-pv-cols"); if (!cols) return;
+    var total = cols.getBoundingClientRect().width, max = Math.max(260, total - 520);
+    w = Math.max(k === "hosts" ? 180 : 300, Math.min(max, Math.round(w)));
+    if (k === "hosts") lay.w1 = w; else lay.w3 = w;
+    layout();
+  }
+  function onRsDown(e) {
+    var r = e.target.closest(".cv-pv-rs"); if (!r || r.classList.contains("off")) return;
+    var k = r.getAttribute("data-pv-rs"), pane = document.getElementById(PANES[k]), x0 = e.clientX, w0 = pane.getBoundingClientRect().width;
+    e.preventDefault(); r.setPointerCapture(e.pointerId); r.classList.add("on");
+    function move(ev) { setW(k, k === "hosts" ? w0 + (ev.clientX - x0) : w0 - (ev.clientX - x0)); }
+    function up() { r.removeEventListener("pointermove", move); r.removeEventListener("pointerup", up); r.classList.remove("on"); laySave(); }
+    r.addEventListener("pointermove", move); r.addEventListener("pointerup", up);
+  }
+  function onRsKey(e) {
+    var r = e.target.closest && e.target.closest(".cv-pv-rs"); if (!r || r.classList.contains("off")) return false;
+    var k = r.getAttribute("data-pv-rs"), w = document.getElementById(PANES[k]).getBoundingClientRect().width, step = e.shiftKey ? 96 : 24;
+    var grow = k === "hosts" ? 1 : -1;   // the Files bar: the arrow points the way the bar moves
+    if (e.key === "ArrowRight") setW(k, w + grow * step);
+    else if (e.key === "ArrowLeft") setW(k, w - grow * step);
+    else if (e.key === "Enter") { if (k === "hosts") delete lay.w1; else delete lay.w3; layout(); }
+    else return false;
+    e.preventDefault(); laySave(); return true;
+  }
+  // the warning above the panels: the values nothing gives a value, the servers among them named
+  function warnHtml(missingHosts, noValue) {
+    if (!missingHosts.length && !noValue.length) return "";
+    var names = noValue.slice(0, 6).map(function (v) { return "<code>" + esc(v.name) + "</code>"; }).join(", ") + (noValue.length > 6 ? " …" : "");
+    var hosts = missingHosts.map(function (h) { return "<code>" + esc(h.host) + "</code>"; }).join(", ");
+    var n = noValue.length || missingHosts.length;
+    return '<div class="cv-pv-warn" role="note">' + ico("warn") + "<span><b>" + (n === 1 ? "1 value has" : n + " values have") + " nothing that gives " + (n === 1 ? "it" : "them") + " a value</b>" +
+      (names ? " (" + names + ")" : "") + (hosts ? " — " + (missingHosts.length === 1 ? "the server " : "the servers ") + hosts + (missingHosts.length === 1 ? " is" : " are") + " among them" : "") +
+      ": the script sends " + (n === 1 ? "it" : "them") + " as written. " + (kind === "jmx" ? "Give " + (n === 1 ? "it a value" : "them values") + " in Values." : "Add the environment file that defines " + (n === 1 ? "it" : "them") + ", or give " + (n === 1 ? "it a value" : "them values") + " in Values.") +
+      ' <button type="button" class="cv-pv-link" data-tab="values">See Values</button></span></div>';
+  }
+
   function hide() {
     var el = document.getElementById("cv-pv");
     clearTimeout(timer);
@@ -337,6 +420,7 @@
     var total = P.requests.length, inn = total - out.size, ch = changes(), pending = ch.length > 0;
     var bar = document.getElementById("cv-pv-bar");
     bar.className = "cv-pv-bar" + (pending ? " pending" : "");
+    bar.hidden = !pending && !gen.size && !out.size;
     bar.innerHTML = '<span class="cv-pv-sum"><b>' + inn + " of " + total + "</b> " + (total === 1 ? "request" : "requests") + " in the script" +
       (gen.size && !pending ? ' <span class="cv-pv-muted">· ' + gen.size + " left out</span>" : "") + "</span>" +
       (pending ? '<span class="cv-pv-note">' + (inn ? "Changed: " + ch.join(", ") + " — the ZIP does not have it yet." : "Keep at least one request.") + "</span>" +
@@ -581,6 +665,8 @@
     else if (b.hasAttribute("data-give-cancel")) { editV = ""; drawValues(); }
     else if (b.hasAttribute("data-ungive")) { delete chosen.values[b.getAttribute("data-ungive")]; drawValues(); drawBar(); }
     else if (b.id === "cv-pv-wm") handOff();
+    else if (b.hasAttribute("data-pv-hide")) setPane(b.getAttribute("data-pv-hide"), false);
+    else if (b.hasAttribute("data-pv-show")) setPane(b.getAttribute("data-pv-show"), true);
     else if (b.hasAttribute("data-rename")) { ren = b.getAttribute("data-rename"); renErr = ""; var rh = P.hosts.filter(function (x) { return x.host === ren; })[0]; renVal = rh ? paramNow(rh) : ""; drawHosts(); }
     else if (b.hasAttribute("data-ren-ok")) saveRename(b.getAttribute("data-ren-ok"));
     else if (b.hasAttribute("data-ren-cancel")) { ren = ""; renErr = ""; drawHosts(); }

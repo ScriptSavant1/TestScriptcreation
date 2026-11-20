@@ -307,7 +307,26 @@ body.has-shell #portal-converter .cv-pv-head h3 { margin: 0 0 2px; font-size: va
 body.has-shell #portal-converter .cv-pv-head p { margin: 0 0 10px; font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
 body.has-shell #portal-converter .cv-pv-warn { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 9px 12px; border-radius: var(--ds-r-tile); background: var(--ds-warn-soft); font-size: var(--ds-fs-sm); }
 body.has-shell #portal-converter .cv-pv-warn > .cv-pv-i { flex: none; color: var(--ds-warn); margin-top: 2px; }
-body.has-shell #portal-converter .cv-pv-cols { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr) minmax(0, 1.15fr); gap: 12px; height: min(68vh, 640px); }
+body.has-shell #portal-converter .cv-pv-cols { display: grid; grid-template-columns: var(--cv-cols, minmax(200px, 260px) 12px minmax(0, 1fr) 12px minmax(0, 1.15fr)); gap: 0; height: max(480px, calc(100vh - var(--tb-h, 60px) - 40px)); }   /* the window's height (convert-preview.js layout) */
+body.has-shell #portal-converter .cv-pv-bar[hidden] { display: none; }
+/* the panels: resize bars between them, hidden to rails (convert-preview.js layout; wide screens only) */
+body.has-shell #portal-converter .cv-pv-rs { position: relative; cursor: col-resize; touch-action: none; }
+body.has-shell #portal-converter .cv-pv-rs::after { content: ""; position: absolute; left: 5px; top: 40%; height: 46px; width: 2px; border-radius: 2px; background: var(--ds-border-2); }
+body.has-shell #portal-converter :is(.cv-pv-rs:hover, .cv-pv-rs.on, .cv-pv-rs:focus-visible)::after { background: var(--ds-accent-text); }
+body.has-shell #portal-converter .cv-pv-rs:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: -2px; border-radius: 4px; }
+body.has-shell #portal-converter .cv-pv-rs.off { pointer-events: none; }
+body.has-shell #portal-converter .cv-pv-rs.off::after { display: none; }
+body.has-shell #portal-converter .cv-pv-ph > .cv-pv-hide { margin: 0 -4px 0 auto; }
+body.has-shell #portal-converter .cv-pv-rail { display: none; writing-mode: vertical-rl; transform: rotate(180deg); align-items: center; justify-content: flex-end; gap: 8px; flex: 1; width: 100%; padding: 14px 0; margin: 0; border: 0; background: none; color: var(--ds-text); font: inherit; font-weight: 700; cursor: pointer; }
+body.has-shell #portal-converter .cv-pv-rail .cv-pv-i { transform: rotate(90deg); color: var(--ds-accent-text); }
+body.has-shell #portal-converter .cv-pv-rail .cv-pv-n { writing-mode: horizontal-tb; transform: rotate(180deg); }
+body.has-shell #portal-converter .cv-pv-rail:hover { color: var(--ds-accent-text); }
+body.has-shell #portal-converter .cv-pv-rail:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: -4px; }
+@media (min-width: 1101px) {
+  body.has-shell #portal-converter .cv-pv-pane.is-hidden { background: var(--ds-surface-2); }
+  body.has-shell #portal-converter .cv-pv-pane.is-hidden > :not(.cv-pv-rail) { display: none !important; }
+  body.has-shell #portal-converter .cv-pv-pane.is-hidden > .cv-pv-rail { display: flex; }
+}
 body.has-shell #portal-converter .cv-pv-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--ds-surface); border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-card); }
 body.has-shell #portal-converter .cv-pv-ph { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 10px 8px 14px; min-height: 46px; background: var(--br-head); border-bottom: 1px solid var(--ds-border-2); }
 body.has-shell #portal-converter .cv-pv-ph h4 { margin: 0; font-size: var(--ds-fs); font-weight: 700; }
@@ -436,7 +455,8 @@ body.has-shell #portal-converter #cv-pv-val { flex: 1 1 180px; min-width: 0; hei
 body.has-shell #portal-converter #cv-pv-val:focus { outline: 0; border-color: var(--ds-accent); box-shadow: 0 0 0 3px var(--ds-accent-soft); }
 body.has-shell #portal-converter .cv-pv-vact { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 @media (max-width: 1100px) {
-  body.has-shell #portal-converter .cv-pv-cols { grid-template-columns: minmax(0, 1fr); height: auto; }
+  body.has-shell #portal-converter .cv-pv-cols { grid-template-columns: minmax(0, 1fr); gap: 12px; height: auto; }
+  body.has-shell #portal-converter :is(.cv-pv-rs, .cv-pv-hide, .cv-pv-rail) { display: none !important; }
   body.has-shell #portal-converter .cv-pv-pane { max-height: 60vh; }
   body.has-shell #portal-converter #cv-pv-hosts { max-height: 240px; }
 }

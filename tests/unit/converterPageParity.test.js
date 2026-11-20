@@ -137,3 +137,14 @@ describe('Converter panels — the preview', () => {
     expect(sw).toContain('if (!same) hideResults();');
   });
 });
+
+// the preview panels: hide to a rail, resize, remembered; the last one shown stays; wide screens only
+describe('Converter panels — hide and resize', () => {
+  const pv = fs.readFileSync(path.resolve(__dirname, '../../src/web/public/portal/convert-preview.js'), 'utf-8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../../src/web/public/portal/converter.css'), 'utf-8');
+  test('hide / show / resize, prefs, last panel stays', () => {
+    ['data-pv-hide', 'data-pv-show', 'data-pv-rs', 'perfx-cv-pv', '--cv-cols'].forEach((s) => expect(pv).toContain(s));
+    expect(pv).toContain('if (!on && others.every(function (x) { return lay.hide[x]; })) return;   // the last panel shown stays');
+    expect(css).toMatch(/@media \(min-width: 1101px\) \{[\s\S]*?\.cv-pv-pane\.is-hidden > :not\(\.cv-pv-rail\) \{ display: none !important; \}/);
+  });
+});
