@@ -89,6 +89,14 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio, Correlate: every correlation editable, Test, panels that resize
+
+- The correlations Studio's own engines find (pattern, second recording, value-based, PKCE) are listed in the Correlate table with the Advisor's values, "Found by Studio", already in the script. Correlation details has **Edit** and **Remove** on every correlation (Edit opens the editor with the response, as for the Advisor's values; Remove with Undo); a removed one stays out when the recording is read again. Before, a click on one only said to use the Cards view. PKCE values are labelled made while the script runs and open read-only.
+- **Test** in the editor and in the table's footer (the ticked values, else the ones in the script): what each extractor reads from the recorded response, whether every place it is sent back sent that value, several different matches, and with a second recording whether the value changes. Checked against the recording only.
+- The editor's two panels can be resized (drag the bar between them, or its arrow keys; double-click puts it back) and each hidden to a rail; remembered. Values read from a response header open on the Headers tab; the live check reads header query values and HTML elements too.
+- Fixed: content showed in a 14 px strip under the editor's sticky buttons when the left column scrolled.
+- The script is unchanged by all this (Studio golden harness, one browser at a time: every script and ZIP identical; the usage statistics count the engines' correlations once).
+
 #### Script Studio: every step fits the window
 
 - Correlate, Test data and Download use the whole width beside the sidebar, lined up with the step bar (they were capped at 1500 px, Download at 920 px, and centred). The Value column of Correlate widens with the window.

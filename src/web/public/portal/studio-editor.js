@@ -323,7 +323,104 @@
   function laterValues(entries, i, idx) {
     return valuesOf(entries[i]).filter(function (v) { return idx.later(v.value, i); });
   }
-  return { jget: jget, listValues: listValues, jsonAll: jsonAll, boundAll: boundAll, regexAll: regexAll, attrPattern: attrPattern, listFrom: listFrom, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
+  // Test (Correlate): one correlation checked against the recording — what it reads from its response, how many
+  // matches its boundaries / pattern have, and for every place it is sent back whether that request sent the value read;
+  // with a second recording, what it reads from the same response there (a value worth correlating changes).
+  // o = { entries, corr: { extractorType, extractorConfig, sourceIdx, usages: [{ reqIdx, tokenValue, location, key }] },
+  //       firstMatch, xp, entries2 }
+  // → { verdict: ok | differs | none | bad | unknown | runtime, value, values (a list), matches, distinct,
+  //     places: [{ reqIdx, sent, same }], second: null | { found, value, differs }, why }
+  function sameReq(entries, i, entries2) {
+    var key = function (x) { return String(x.method || "") + " " + String(x.url || "").split("?")[0]; };
+    var e = entries[i]; if (!e) return null;
+    var want = key(e), k = 0, n = 0;
+    for (var j = 0; j < i; j++) if (entries[j] && !entries[j].isMarker && key(entries[j]) === want) k++;
+    for (var m = 0; m < (entries2 || []).length; m++) {
+      var x = entries2[m];
+      if (x && !x.isMarker && key(x) === want) { if (n === k) return x; n++; }
+    }
+    return null;
+  }
+  function uniq(a) { var s = {}, o = []; a.forEach(function (v) { if (!s[v]) { s[v] = 1; o.push(v); } }); return o; }
+  function check(o) {
+    var corr = (o && o.corr) || {}, entries = (o && o.entries) || [], t = corr.extractorType, cfg = corr.extractorConfig || {};
+    var res = { verdict: "ok", value: null, values: null, matches: null, distinct: null, places: [], second: null, why: "" };
+    if (t === "pkce" || t === "array_reconstruct") { res.verdict = "runtime"; return res; }
+    var src = corr.sourceIdx >= 0 ? entries[corr.sourceIdx] : null;
+    if (!src) { res.verdict = "none"; res.why = "no response"; return res; }
+    var body = String(src.respBody || ""), list = !!(cfg.selectAll || cfg.all);
+    function read(entry) {
+      var b = String(entry.respBody || "");
+      // a value in a response header, between boundaries other than the line end: a query value of a redirect
+      // (state=…&) is read as the generators write it — a regular expression on the headers (BUG-125, BUG-126)
+      if (t === "boundary_header" && !/^[\r\n]*$/.test(cfg.rb || "")) {
+        var hm = entry.respHdrsMap || {}, ht = Object.keys(hm).map(function (k) { return k + ": " + hm[k]; }).join("\r\n");
+        var lb = String(cfg.lb || ""), rb = String(cfg.rb || "");
+        if (/=$/.test(lb) && rb === "&") {
+          var hq = new RegExp("(?:^|[?&;\\s])" + lb.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^&\\r\\n]*)").exec(ht);
+          return hq ? { value: hq[1] } : { none: true };
+        }
+        var hv = o.firstMatch ? o.firstMatch(ht, lb, rb) : null;
+        return hv == null ? { none: true } : { value: hv };
+      }
+      // an element of the page (a CSS selector and its attribute): read by the page's own parser when it gives one
+      if (t === "html") return o.html ? o.html(b, cfg.selector, cfg.attr) : { unknown: true };
+      if (list) {
+        var vs = t === "jsonpath" ? jsonAll(b, cfg.path) : t === "boundary" ? boundAll(b, cfg.lb, cfg.rb) : t === "regexp" ? regexAll(b, cfg.pattern) : null;
+        return vs ? { values: vs } : { unknown: true };
+      }
+      return readWith(entry, corr, o.firstMatch, o.xp);
+    }
+    var r = read(src);
+    if (r.bad) { res.verdict = "bad"; res.why = r.bad; return res; }
+    if (r.unknown) { res.verdict = "unknown"; return res; }
+    if (list) {
+      res.values = r.values; res.matches = r.values.length; res.distinct = uniq(r.values).length;
+      if (!r.values.length) { res.verdict = "none"; return res; }
+    } else {
+      if (r.none) { res.verdict = "none"; res.why = r.why || ""; return res; }
+      res.value = String(r.value);
+      var ms = t === "boundary" && cfg.lb && cfg.rb ? boundAll(body, cfg.lb, cfg.rb) : t === "regexp" && cfg.pattern ? regexAll(body, cfg.pattern) : null;
+      if (ms) { res.matches = ms.length; res.distinct = uniq(ms).length; } else res.matches = 1;
+    }
+    (corr.usages || []).forEach(function (u) {
+      var sent = u.tokenValue != null ? String(u.tokenValue) : u.originalValue != null ? String(u.originalValue) : null;
+      // a value sent in a URL or a form may be URL-encoded where it was read plain (or the other way round)
+      var dec = function (v) { try { return decodeURIComponent(String(v).replace(/\+/g, " ")); } catch (e) { return String(v); } };
+      var hit = function (v) { return v === sent || dec(v) === dec(sent); };
+      res.places.push({ reqIdx: u.reqIdx, sent: sent, same: sent == null ? null : list ? res.values.some(hit) : hit(res.value) });
+    });
+    if (o.entries2 && o.entries2.length) {
+      var e2 = sameReq(entries, corr.sourceIdx, o.entries2);
+      if (!e2) res.second = { found: false };
+      else {
+        var r2 = read(e2), v2 = list ? (r2.values && r2.values.length ? r2.values.join(", ") : null) : r2 && r2.value != null ? String(r2.value) : null;
+        res.second = { found: true, value: v2, differs: v2 != null && v2 !== (list ? res.values.join(", ") : res.value) };
+      }
+    }
+    if (res.places.some(function (p) { return p.same === false; })) res.verdict = "differs";
+    return res;
+  }
+  // the result in words (the editor and the Test list share it): { cls: good | warn | bad, title, notes: [] }
+  function checkText(res, short) {
+    var sv = function (v) { v = String(v); return v.length > 60 ? v.slice(0, 59) + "…" : v; };
+    var places = (res.places || []).filter(function (p) { return p.same !== null; }), same = places.filter(function (p) { return p.same; }).length, notes = [];
+    var unknown = (res.places || []).length - places.length;
+    if (res.verdict === "runtime") return { cls: "good", title: "Made while the script runs", notes: ["Not read from a response — nothing to test here."] };
+    if (res.verdict === "unknown") return { cls: "warn", title: "Not tried here", notes: ["This way of reading is only run by VuGen / DevWeb."] };
+    if (res.verdict === "bad") return { cls: "bad", title: "The pattern is not valid", notes: [res.why] };
+    if (res.verdict === "none") return { cls: "bad", title: res.why === "no response" ? "No response to read from" : "Reads nothing", notes: [res.why === "not JSON" ? "The response is not JSON." : res.why === "not XML" ? "The response is not XML." : "Nothing in the response matches."] };
+    var title = res.values ? "Reads a list of " + res.values.length + " value" + (res.values.length === 1 ? "" : "s") : "Reads " + sv(res.value);
+    if (places.length) notes.push(same + " of " + places.length + " place" + (places.length === 1 ? "" : "s") + " sent " + (res.values ? "one of these values" : "this value") + " back" + (same === places.length ? "." : " — the others sent another value."));
+    else if (!unknown) notes.push("No later request sends it back.");
+    if (unknown) notes.push(unknown + " place" + (unknown === 1 ? "" : "s") + " where the value sent was not recorded.");
+    if (!res.values && res.distinct > 1) notes.push(res.matches + " matches with " + res.distinct + " different values: the first one is used.");
+    if (res.second) notes.push(!res.second.found ? "The second recording has no such response." : res.second.value == null ? "Reads nothing in the second recording." : res.second.differs ? "The second recording gives another value (" + sv(res.second.value) + "): it changes, as it should." : "The second recording gives the same value: check that it really changes for each user.");
+    var cls = res.verdict === "differs" || !(res.places || []).length ? "warn" : res.second && res.second.found && !res.second.differs ? "warn" : !res.values && res.distinct > 1 ? "warn" : "good";
+    if (short) notes = notes.slice(0, 1);
+    return { cls: cls, title: title, notes: notes };
+  }
+  return { check: check, checkText: checkText, sameReq: sameReq, jget: jget, listValues: listValues, jsonAll: jsonAll, boundAll: boundAll, regexAll: regexAll, attrPattern: attrPattern, listFrom: listFrom, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
 });
 
 (function () {
@@ -341,8 +438,11 @@
       '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost ss-icon" id="ss-ed-prev" title="Previous value" aria-label="Previous value"><svg class="i" style="transform:rotate(180deg)"><use href="#i-chev"/></svg></button>' +
       '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost ss-icon" id="ss-ed-next" title="Next value" aria-label="Next value"><svg class="i"><use href="#i-chev"/></svg></button>' +
     "</div>" +
-    '<div class="ss-ed-cols">' +
-      '<div class="ss-ed-left">' +
+    '<div class="ss-ed-cols" id="ss-ed-cols">' +
+      '<div class="ss-ed-left" id="ss-ed-left">' +
+        '<button type="button" class="ss-ed-rail" data-ed-show="left" title="Show how it is read"><svg class="i"><use href="#i-panel"/></svg>How it is read</button>' +
+        '<div class="ss-ed-lh"><b id="ss-ed-lt">How it is read</b><span class="ss-grow"></span>' +
+          '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" data-ed-hide="left" title="Hide this panel (the response gets the space)" aria-label="Hide how it is read"><svg class="i"><use href="#i-panel"/></svg></button></div>' +
         '<p class="ss-ed-why" id="ss-ed-why"></p>' +
         '<div class="ss-ed-tray" id="ss-ed-tray" hidden><div class="ss-ed-tray-h"><b>Values to add</b><span class="ss-muted" id="ss-ed-tray-n"></span></div><ul id="ss-ed-tray-l"></ul></div>' +
         '<div class="ss-ed-sec"><span class="ss-ed-num">1</span><label class="ss-fld" for="ss-ed-src" id="ss-ed-src-l">Read from the response of</label></div>' +
@@ -363,18 +463,23 @@
           '<button type="button" data-kind="list" aria-pressed="false" title="Every value like this one (the options of a select, the items of a JSON list): a list">List</button></span>' +
         '<div class="ss-ed-expr" id="ss-ed-expr"></div>' +
         '<p class="ss-ed-test" id="ss-ed-test" role="status" aria-live="polite"></p>' +
+        '<div class="ss-ed-res" id="ss-ed-res" role="status" aria-live="polite" hidden></div>' +
         '<div class="ss-ed-sec"><span class="ss-ed-num">3</span><label class="ss-fld" for="ss-ed-name">Name in the script</label></div>' +
         '<input class="ss-field ss-ed-name" id="ss-ed-name" spellcheck="false" autocomplete="off" />' +
         '<p class="ss-ed-err" id="ss-ed-nerr" hidden></p>' +
         '<span class="ss-fld">The code</span><pre class="ss-ed-code" id="ss-ed-code"></pre>' +
         '<div class="ss-ed-act"><button type="button" class="ds-btn ds-btn-primary" id="ss-ed-accept"><svg class="i"><use href="#i-ok"/></svg><span id="ss-ed-accept-t">Accept &amp; next</span></button>' +
           '<button type="button" class="ds-btn ss-btn-accent" id="ss-ed-keep" hidden title="Keep this value and choose another one; add them all at once"><svg class="i"><use href="#i-plus"/></svg>Keep, pick another</button>' +
-          '<button type="button" class="ds-btn" id="ss-ed-skip">Skip</button><span class="ss-grow"></span>' +
+          '<button type="button" class="ds-btn" id="ss-ed-skip">Skip</button>' +
+          '<button type="button" class="ds-btn" id="ss-ed-run" title="Check it against the recording: what it reads, and every place it is sent back"><svg class="i"><use href="#i-play"/></svg>Test</button><span class="ss-grow"></span>' +
           '<button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" id="ss-ed-reset" title="Back to what the Correlation Advisor chose">Undo my changes</button></div>' +
       "</div>" +
-      '<div class="ss-ed-right">' +
+      '<div class="ss-ed-rs" id="ss-ed-rs" role="separator" aria-orientation="vertical" tabindex="0" aria-controls="ss-ed-left" aria-label="Width of the panels: drag, or the arrow keys; double-click puts it back" title="Drag to resize (double-click puts it back)"></div>' +
+      '<div class="ss-ed-right" id="ss-ed-right">' +
+        '<button type="button" class="ss-ed-rail" data-ed-show="right" title="Show the response"><svg class="i"><use href="#i-panel"/></svg>The response</button>' +
         '<div class="ss-ed-rh"><b id="ss-ed-rt">The response</b>' +
           '<span class="ss-seg ss-ed-rtab" id="ss-ed-rtab" role="group" aria-label="Show"><button type="button" data-rv="body" aria-pressed="true">Body</button><button type="button" data-rv="headers" aria-pressed="false">Headers</button></span>' +
+          '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon ss-ed-rhide" data-ed-hide="right" title="Hide this panel (how it is read gets the space)" aria-label="Hide the response"><svg class="i"><use href="#i-panel"/></svg></button>' +
           '<span class="ss-muted" id="ss-ed-hint">Select a value (or double-click it) to read it from here.</span></div>' +
         '<p class="ss-ed-legend" id="ss-ed-legend" hidden><mark class="later">value</mark> sent back by a later request — click one to use it</p>' +
         '<pre class="ss-ed-body" id="ss-ed-body" tabindex="0"></pre>' +
@@ -385,6 +490,52 @@
       "</div>" +
     "</div>";
   tab.appendChild(box);
+
+  // the two panels (how it is read · the response): drag the bar between them (or its arrow keys) to resize, hide one
+  // to a rail — remembered in this browser (SS.prefs edW, edHide); never both hidden
+  var EP = SS.prefs, edCols = $("#ss-ed-cols"), edRs = $("#ss-ed-rs"), MINL = 300;
+  EP.edHide = EP.edHide || {};
+  function edMax() { return Math.max(MINL, Math.round(edCols.getBoundingClientRect().width - 380)); }
+  function edLayout() {
+    if (EP.edHide.left && EP.edHide.right) EP.edHide.right = false;
+    edCols.classList.toggle("no-left", !!EP.edHide.left);
+    edCols.classList.toggle("no-right", !!EP.edHide.right);
+    if (EP.edW) edCols.style.setProperty("--ss-edl", EP.edW + "px"); else edCols.style.removeProperty("--ss-edl");
+    edRs.setAttribute("aria-valuemin", String(MINL));
+    edRs.setAttribute("aria-valuemax", String(edMax()));
+    edRs.setAttribute("aria-valuenow", String(Math.round($("#ss-ed-left").getBoundingClientRect().width)));
+  }
+  function edSetW(w) { EP.edW = Math.max(MINL, Math.min(edMax(), Math.round(w))); edLayout(); }
+  edCols.addEventListener("click", function (e) {
+    var hb = e.target.closest("[data-ed-hide]"), sb = e.target.closest("[data-ed-show]"), s;
+    if (hb) {
+      s = hb.getAttribute("data-ed-hide"); EP.edHide[s] = true;
+      if (EP.edHide.left && EP.edHide.right) EP.edHide[s === "left" ? "right" : "left"] = false;
+      SS.save(); edLayout();
+      var rb = edCols.querySelector('[data-ed-show="' + s + '"]'); if (rb) rb.focus();
+    } else if (sb) {
+      s = sb.getAttribute("data-ed-show"); EP.edHide[s] = false; SS.save(); edLayout();
+      var hb2 = edCols.querySelector('[data-ed-hide="' + s + '"]'); if (hb2) hb2.focus();
+    }
+  });
+  edRs.addEventListener("pointerdown", function (e) {
+    var x0 = e.clientX, w0 = $("#ss-ed-left").getBoundingClientRect().width;
+    edRs.setPointerCapture(e.pointerId); edRs.classList.add("on");
+    function move(ev) { edSetW(w0 + (ev.clientX - x0)); }
+    function up() { edRs.removeEventListener("pointermove", move); edRs.removeEventListener("pointerup", up); edRs.classList.remove("on"); SS.save(); }
+    edRs.addEventListener("pointermove", move); edRs.addEventListener("pointerup", up);
+  });
+  edRs.addEventListener("dblclick", function () { delete EP.edW; SS.save(); edLayout(); });
+  edRs.addEventListener("keydown", function (e) {
+    var w = $("#ss-ed-left").getBoundingClientRect().width, step = e.shiftKey ? 96 : 24;
+    if (e.key === "ArrowLeft") edSetW(w - step);
+    else if (e.key === "ArrowRight") edSetW(w + step);
+    else if (e.key === "Home") edSetW(MINL);
+    else if (e.key === "End") edSetW(edMax());
+    else if (e.key === "Enter") { delete EP.edW; edLayout(); }
+    else return;
+    e.preventDefault(); SS.save();
+  });
 
   var cur = null, kind = "auto", draft = null, srcIdx = null, rview = "body";
   // add mode: the new correlation being made (not in the Advisor's list until it is added)
@@ -484,7 +635,9 @@
     cur = id; srcIdx = c._edit && c._edit.sourceIdx != null ? c._edit.sourceIdx : c.source ? c.source.entryIdx : null;
     draft = c._edit ? JSON.parse(JSON.stringify(c._edit)) : null;
     kind = draft ? (draft.extractorType === "boundary_header" ? "header" : draft.extractorType) : "auto";
-    rview = kind === "header" ? "headers" : "body";
+    // a value read from a response header opens on the Headers (also when Auto reads it from one)
+    var ax = null; try { ax = draft || auto(c); } catch (e) { ax = null; }
+    rview = kind === "header" || (ax && ax.extractorType === "boundary_header") ? "headers" : "body";
     show();
   }
   // Add manual correlation: the same screen for a value the Correlation Advisor did not list
@@ -501,6 +654,7 @@
     tab.classList.add("ss-cr-editing"); box.hidden = false; box.classList.toggle("is-adding", adding);
     shownBody = null;
     draw();
+    edLayout();
     if (!adding) $("#ss-ed-back").focus();
     var ws = $("#ss-t-corr"); if (ws.scrollTop) ws.scrollTop = 0;
   }
@@ -565,7 +719,7 @@
     var c = cand(cur); if (!c) { close(); return; }
     var lock = locked(c), us = c.usages || [], list = window.SSC && !adding ? SSC.list() : [], at = list.indexOf(cur);
     $("#ss-ed-h").textContent = adding ? (c.varName || "New correlation") : c.varName;
-    $("#ss-ed-tag").textContent = adding ? "Manual" : c._applied ? "In the script" : isList(c) ? "List" : c._edit ? "Changed by you" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : "";
+    $("#ss-ed-tag").textContent = adding ? "Manual" : c._applied ? (c._engineCorr ? (c._fixed ? "In the script · made while it runs" : "In the script · found by Studio") : "In the script") : isList(c) ? "List" : c._edit ? "Changed by you" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : "";
     $("#ss-ed-pos").textContent = at >= 0 ? (at + 1) + " of " + list.length : "";
     $("#ss-ed-prev").hidden = $("#ss-ed-next").hidden = adding;
     $("#ss-ed-prev").disabled = at <= 0; $("#ss-ed-next").disabled = at < 0 || at >= list.length - 1;
@@ -576,12 +730,14 @@
     else {
       why = !us.length ? "<b>No later request sends this value back</b>, so there is nothing to correlate. Skip it."
         : editing && editing.id === c.id ? "<b>Changing it.</b> It is out of the script until you click <b>Save to the script</b>; <b>Cancel</b> puts it back as it was."
+        : c._fixed && c._applied ? "<b>Made while the script runs.</b> The script creates this value itself (a PKCE code verifier or challenge, or a list it rebuilds) — it is not read from a response, so there is nothing to change here. Sent in " + plural(us.length, "place") + "; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
         : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + ". Click <b>Edit</b> to change how it is read, its name or its response; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
         : c.confidence === "high" ? "<b>An earlier response sends this value</b> and " + plural(us.length, "later place") + " send it back. A new user gets a new value, so the script must read it from the response each time."
         : "<b>It looks like a " + esc(String(c.valueType || "token")) + "</b> by its shape, and " + plural(us.length, "later place") + " send it back. No earlier response was found that sends it: check the response, or use Can't find a value?";
       if (isList(c)) why += " It is a list: its options are below.";
     }
     $("#ss-ed-why").innerHTML = why;
+    $("#ss-ed-lt").textContent = adding ? "The value" : "How it is read";
     $("#ss-ed-src-l").textContent = adding ? "Comes from (the request whose response has the value)" : "Read from the response of";
     $("#ss-ed-find").hidden = !adding;
     sources(c, lock, us);
@@ -618,9 +774,9 @@
     } else {
       var last = us.length ? Math.min.apply(null, us.map(function (u) { return u.entryIdx; })) : (S.entries1 || []).length;
       (S.entries1 || []).forEach(function (e, i) { if (i < last && !e.isMarker && !e.filtered) opts.push(i); });
-      if (srcIdx != null && opts.indexOf(srcIdx) === -1) opts.push(srcIdx);
+      if (srcIdx != null && entry(srcIdx) && opts.indexOf(srcIdx) === -1) opts.push(srcIdx);   // (a value made while the script runs has no response)
     }
-    sel.innerHTML = (srcIdx == null ? '<option value="">' + (opts.length ? "— choose a request (" + opts.length + ") —" : "— no request matches —") + "</option>" : "") + opts.map(function (i) {
+    sel.innerHTML = (srcIdx != null && !entry(srcIdx) ? '<option value="">— none: made while the script runs —</option>' : "") + (srcIdx == null ? '<option value="">' + (opts.length ? "— choose a request (" + opts.length + ") —" : "— no request matches —") + "</option>" : "") + opts.map(function (i) {
       var e = entry(i), p = String(e.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "") || "/";
       var note = adding ? (later(i).length ? "  · " + plural(later(i).length, "value") + " sent back later" : "")
         : (String(e.respBody || "").indexOf(c.value) !== -1 || E.headersWith(e, c.value).length ? "  · has the value" : "");
@@ -635,6 +791,7 @@
     var c = cand(cur); if (!c) return;
     var lock = locked(c), us = c.usages || [], e = srcIdx != null ? entry(srcIdx) : null;
     test(c, e);
+    staleTest(c);
     var nm = $("#ss-ed-name"); if (document.activeElement !== nm) nm.value = c.varName; nm.disabled = !adding && !!c._applied;
     nm.placeholder = adding ? "Filled in when you choose a value" : "";
     var nameBad = adding && (!c.varName ? "" : taken(c.varName) ? "That name is in use: choose another." : "");
@@ -651,7 +808,7 @@
     } else {
       var ed = editing && editing.id === c.id;
       $("#ss-ed-accept-t").textContent = ed ? "Save to the script" : c._applied ? "Edit" : "Accept & next";
-      acc.disabled = ed ? !us.length || !testOk : c._applied ? false : !us.length || !testOk;
+      acc.disabled = ed ? !us.length || !testOk : c._applied ? !!c._fixed : !us.length || !testOk;
       acc.title = c._applied ? "Change how it is read, its name or its response — it is put back as it was if you cancel"
         : !us.length ? "No later request sends this value back" : !testOk ? "The way to read it does not give the value yet" : ed ? "Put the changed correlation in the script" : "Tick it and go to the next value";
     }
@@ -671,13 +828,17 @@
     }).join("") : '<li class="ss-muted">' + (adding && !c.value ? "Choose a value to see where it is sent back." : "No later request sends it back.") + "</li>";
   }
   // the code the script gets (the generators' own functions, on the correlation the engine builds)
+  // the correlation the editor would put in the script now (its choice of response and extractor)
+  function draftCorr(c) {
+    var tmp = Object.assign({}, c); if (!adding && kind === "auto") delete tmp._edit; else if (draft) tmp._edit = { extractorType: draft.extractorType, extractorConfig: draft.extractorConfig, sourceIdx: srcIdx };
+    if (!tmp.varName) tmp.varName = "value";
+    return advisorToCorrelation(tmp);
+  }
   function code(c) {
     var s = "";
     try {
       if (adding && !draft) throw new Error("none");
-      var tmp = Object.assign({}, c); if (!adding && kind === "auto") delete tmp._edit; else if (draft) tmp._edit = { extractorType: draft.extractorType, extractorConfig: draft.extractorConfig, sourceIdx: srcIdx };
-      if (!tmp.varName) tmp.varName = "value";
-      var corr = advisorToCorrelation(tmp);
+      var corr = draftCorr(c);
       s = S.format === "webhttp" ? webHttpCorrCode(corr, "") : devwebExtractorDecl(corr);
     } catch (x) { s = "// The code is shown once a response and a value are chosen."; }
     $("#ss-ed-code").textContent = s;
@@ -814,13 +975,55 @@
     if (isList(c)) { testOk = true; p.className = "ss-ed-test"; p.textContent = "A list: every match is read when the script runs."; return; }
     try { r = E.readWith(e, x, _advFirstMatch, xp); } catch (err) { r = { unknown: true }; }
     if (r.bad) { p.className = "ss-ed-test bad"; p.textContent = r.bad; return; }
-    if (r.unknown) { testOk = true; p.className = "ss-ed-test"; p.textContent = "Read when the script runs (this way of reading is not tried here)."; return; }
+    if (r.unknown) {
+      // a way of reading readWith does not know (a query value of a header, an HTML element): read as Test reads it
+      var full = null;
+      try { full = E.check({ entries: S.entries1 || [], corr: Object.assign({}, draftCorr(c), { usages: [] }), firstMatch: _advFirstMatch, xp: xp, html: htmlRead }); } catch (err) { full = null; }
+      if (full && full.value != null) r = { value: full.value };
+      else if (full && full.verdict === "none") r = { none: true, why: full.why };
+      else { testOk = true; p.className = "ss-ed-test"; p.textContent = "Read when the script runs (this way of reading is not tried here)."; return; }
+    }
     if (r.none) { p.className = "ss-ed-test bad"; p.textContent = r.why === "not JSON" ? "This response is not JSON." : r.why === "not XML" ? "This response is not XML." : "Nothing found in this response."; return; }
     if (r.value === c.value) { testOk = true; p.className = "ss-ed-test good"; p.innerHTML = '<svg class="i"><use href="#i-ok"/></svg><span>Reads <code>' + esc(short(r.value)) + "</code>, the value that is sent back.</span>"; return; }
     p.className = "ss-ed-test bad";
     p.innerHTML = '<svg class="i"><use href="#i-warn"/></svg><span>Reads <code>' + esc(short(r.value)) + "</code>, not the value sent back (<code>" + esc(short(c.value)) + "</code>).</span>";
   }
   function short(v) { v = String(v); return v.length > 80 ? v.slice(0, 79) + "…" : v; }
+
+  // Test: the correlation as the editor would put it in the script, checked against the recording (StudioEdit.check):
+  // what it reads, every place it is sent back, the second recording — shown until the choice changes
+  var testedFor = null;
+  // an element of an HTML page (an engine's html extractor: a CSS selector and its attribute), read with the browser's parser
+  function htmlRead(body, sel, attr) {
+    try {
+      var d = new DOMParser().parseFromString(String(body || ""), "text/html"), el = sel ? d.querySelector(sel) : null;
+      if (!el) return { none: true };
+      var v = attr ? el.getAttribute(attr) : el.textContent;
+      return v == null ? { none: true } : { value: v };
+    } catch (e) { return { unknown: true }; }
+  }
+  function draftKey(c) { try { var x = draftCorr(c); return JSON.stringify([c.id, x.extractorType, x.extractorConfig, x.sourceIdx]); } catch (e) { return ""; } }
+  function runTest(c) {
+    var box = $("#ss-ed-res"), corr = null;
+    try { corr = draftCorr(c); } catch (e) { corr = null; }
+    if (!corr) { box.hidden = false; box.className = "ss-ed-res bad"; box.textContent = "Choose a response and how to read the value first."; return; }
+    var res = E.check({ entries: S.entries1 || [], corr: corr, firstMatch: _advFirstMatch, xp: xp, html: htmlRead, entries2: S.entries2 && S.entries2.length ? S.entries2 : null });
+    var tx = E.checkText(res), ents = S.entries1 || [];
+    var rows = (res.places || []).slice(0, 12).map(function (p) {
+      var e = ents[p.reqIdx], path = e ? String(e.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split("?")[0] : "?";
+      return '<li class="' + (p.same === false ? "no" : "yes") + '"><svg class="i"><use href="#i-' + (p.same === false ? "warn" : "ok") + '"/></svg>' +
+        "<span>#" + esc(e ? e.id : p.reqIdx) + " " + esc(e ? e.method : "") + " " + esc(path.length > 48 ? path.slice(0, 47) + "…" : path) +
+        (p.same === false ? " <small>sent <code>" + esc(short(p.sent)) + "</code></small>" : "") + "</span></li>";
+    }).join("");
+    box.hidden = false; box.className = "ss-ed-res " + tx.cls;
+    box.innerHTML = '<div class="ss-ed-res-h"><svg class="i"><use href="#i-' + (tx.cls === "good" ? "ok" : "warn") + '"/></svg><b>' + esc(tx.title) + "</b>" +
+      '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" data-res-x title="Close the result" aria-label="Close the test result"><svg class="i"><use href="#i-x"/></svg></button></div>' +
+      tx.notes.map(function (n) { return "<p>" + esc(n) + "</p>"; }).join("") + (rows ? "<ul>" + rows + "</ul>" : "") +
+      ((res.places || []).length > 12 ? '<p class="ss-muted">… and ' + (res.places.length - 12) + " more places</p>" : "") +
+      '<p class="ss-muted">Checked against the recording. A real run needs VuGen or DevWeb.</p>';
+    testedFor = draftKey(c);
+  }
+  function staleTest(c) { var box = $("#ss-ed-res"); if (!box.hidden && testedFor !== draftKey(c)) { box.hidden = true; box.innerHTML = ""; } }
 
   // the response: Body (the value marked; in add mode also the values a later request sends back) or Headers.
   // Long bodies are cut for the screen (the test reads the whole body).
@@ -949,6 +1152,8 @@
     else if (t.hasAttribute("data-h")) { setHeader(t.getAttribute("data-h")); }
     else if (t.hasAttribute("data-known")) { if (!tray.length) open(t.getAttribute("data-known")); else if (typeof showToast === "function") showToast("Add or remove the kept values first.", "info", 3000); }
     else if (t.id === "ss-ed-keep") keep();
+    else if (t.id === "ss-ed-run") runTest(c);
+    else if (t.hasAttribute("data-res-x")) { $("#ss-ed-res").hidden = true; $("#ss-ed-run").focus(); }
     else if (t.hasAttribute("data-untray")) { tray.splice(+t.getAttribute("data-untray"), 1); shownBody = null; rest(); }
     else if (t.id === "ss-ed-accept") { if (adding) addNow(); else if (editing && editing.id === c.id) saveEdit(c); else if (c._applied) startEdit(c); else { save(); if (c.status !== "accepted") advisorAccept(c.id); var l2 = SSC.list(), k = l2.indexOf(cur), nx = l2[k + 1]; if (nx) open(nx); else close(); } }
     else if (t.id === "ss-ed-skip") { advisorSkip(c.id); draw(); }
@@ -1104,17 +1309,55 @@
     if (ev.key === "Escape" && !document.querySelector("dialog[open]") && !ev.target.closest("input, select, textarea")) close();
   });
 
-  // Correlation details (the engine's list under the table): a click on an item opens it in the editor, to change it
+  // Correlation details (the engine's list under the table, one item per correlation in S.correlations): every item
+  // has Edit (the editor, as for the table's values) and Remove (the table's Take out, with Undo). The correlations
+  // Studio's own engines found are candidates too (advisorMirrorEngine), so every item has one.
+  function forCorr(corr) {
+    var cs = S.advisorCandidates || [];
+    return cs.filter(function (x) { return x._engineCorr === corr && x._applied; })[0] ||
+      cs.filter(function (x) { return x._applied && x.varName === corr.name; })[0] || null;
+  }
+  function itemCorr(it) {
+    var items = Array.prototype.slice.call(document.querySelectorAll("#corr-list .corr-item"));
+    return (S.correlations || [])[items.indexOf(it)] || null;
+  }
+  function decorate() {
+    var items = document.querySelectorAll("#corr-list .corr-item");
+    // one look-up for every item (a recording can have a thousand correlations)
+    var byCorr = new Map(), byName = new Map();
+    (S.advisorCandidates || []).forEach(function (x) {
+      if (!x._applied) return;
+      if (x._engineCorr && !byCorr.has(x._engineCorr)) byCorr.set(x._engineCorr, x);
+      if (!byName.has(x.varName)) byName.set(x.varName, x);
+    });
+    Array.prototype.forEach.call(items, function (it, i) {
+      var corr = (S.correlations || [])[i], c = corr ? byCorr.get(corr) || byName.get(corr.name) || null : null, has = it.querySelector(".ss-ci-act");
+      if (!c) { if (has) has.remove(); it.classList.remove("ss-ci"); return; }
+      if (has && has.getAttribute("data-id") === c.id) return;
+      if (has) has.remove();
+      var a = document.createElement("span");
+      a.className = "ss-ci-act"; a.setAttribute("data-id", c.id);
+      a.innerHTML = '<button type="button" class="ds-btn ds-btn-xs" data-ci-edit title="' + (c._fixed ? "Open it: made while the script runs" : "Change how it is read, its response or its name") + '">' +
+          '<svg class="i"><use href="#i-' + (c._fixed ? "eye" : "edit") + '"/></svg>' + (c._fixed ? "Open" : "Edit") + "</button>" +
+        '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-ci-out title="Take it out of the script (Undo brings it back)">Remove</button>';
+      it.classList.add("ss-ci");
+      it.appendChild(a);
+    });
+  }
+  var cl = document.getElementById("corr-list");
+  if (cl) new MutationObserver(function () { decorate(); }).observe(cl, { childList: true });
+  decorate();
   document.addEventListener("click", function (ev) {
     var it = ev.target.closest && ev.target.closest("#corr-list .corr-item");
-    if (!it || ev.target.closest("button, input, a, select")) return;
-    var items = Array.prototype.slice.call(document.querySelectorAll("#corr-list .corr-item")), corr = (S.correlations || [])[items.indexOf(it)];
-    if (!corr) return;
-    var c = (S.advisorCandidates || []).filter(function (x) { return x._applied && x.varName === corr.name; })[0];
-    if (!c) { if (typeof showToast === "function") showToast(corr.name + " was not made from a suggestion (it comes from the second recording): change it in the Cards view.", "info", 5000); return; }
+    if (!it) return;
+    var bOut = ev.target.closest("[data-ci-out]"), bEd = ev.target.closest("[data-ci-edit]");
+    if (!bOut && !bEd && ev.target.closest("button, input, a, select")) return;
+    var corr = itemCorr(it); if (!corr) return;
+    var c = forCorr(corr); if (!c) return;
+    if (bOut) { if (SS.corrTakeOut) SS.corrTakeOut(c.id); return; }
     if (SS.curStep && SS.curStep() !== 2) SS.step(2, true);
     open(c.id);
   });
 
-  window.SSE = { open: open, add: add, close: close, isOpen: function () { return !!cur; }, isAdding: function () { return adding; }, redraw: function () { if (cur) { shownBody = null; draw(); } } };
+  window.SSE = { xp: xp, htmlRead: htmlRead, open: open, add: add, close: close, isOpen: function () { return !!cur; }, isAdding: function () { return adding; }, redraw: function () { if (cur) { shownBody = null; draw(); } } };
 })();

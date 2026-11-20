@@ -29,7 +29,8 @@
 
   // ── read the recording again after a change. Correlations applied in the Advisor do not survive a new reading
   //    (the Advisor scans again), so the user is asked first. ──
-  function applied() { return (S.advisorCandidates || []).filter(function (c) { return c._applied; }).length; }
+  //    The engines' own correlations come back by themselves unless the user changed one (advisorEngineUntouched).
+  function applied() { return (S.advisorCandidates || []).filter(function (c) { return c._applied && !(typeof advisorEngineUntouched === "function" && advisorEngineUntouched(c)); }).length; }
   function change(fn) {
     var n = applied();
     var go = function () { fn(); again(); };

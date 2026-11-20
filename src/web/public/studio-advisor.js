@@ -1257,6 +1257,10 @@ function advisorToCorrelation(candidate) {
     // Chosen in Script Studio's correlation editor (how to read it, and from which response): the user's choice wins
     extractorType = candidate._edit.extractorType;
     extractorConfig = candidate._edit.extractorConfig;
+  } else if (candidate._engineCorr) {
+    // Found by Studio's own correlation engines (advisorMirrorEngine): their extractor, exactly
+    extractorType = candidate._engineCorr.extractorType;
+    extractorConfig = candidate._engineCorr.extractorConfig;
   } else if (candidate._manual && exact && exact.extractorType) {
     // Handed over by the HAR Explorer, or built by Paste & Detect: the exact extractor (same types and config as Studio's own)
     extractorType = exact.extractorType;
@@ -1311,7 +1315,65 @@ function advisorToCorrelation(candidate) {
     if (pick === 'nth') out.list.nth = Math.max(1, parseInt(candidate._nth, 10) || 1);
     if (candidate._range && candidate._range.from) { out.list.from = candidate._range.from; out.list.to = candidate._range.to; }
   }
+  // Found by Studio's own engines: their own uses (a Bearer prefix, the header and body forms they found) and their
+  // other settings — only the extractor, its response and the name can be changed in the editor. Uses before the
+  // response it is read from are dropped (the value does not exist yet there).
+  const eng = candidate._engineCorr;
+  if (eng) {
+    out.usages = (eng.usages || []).filter(u => !(out.sourceIdx >= 0) || u.reqIdx > out.sourceIdx).map(u => Object.assign({}, u));
+    Object.keys(eng).forEach(k => { if (!(k in out) && k !== '_suppressed' && k !== '_suppressedBy') out[k] = eng[k]; });
+    if (!eng._fromAdvisor) delete out._fromAdvisor;
+  }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC: the correlations Studio's own engines found (pattern, second recording, value-based, PKCE) listed as
+// candidates already in the script — so the Correlate table, the editor, Take out and Undo work for them as for the
+// Advisor's own. The script does not change: each candidate points at the engine's correlation (_engineCorr), which
+// stays in S.correlations until the user takes it out or saves a change (the editor). Values made while the script
+// runs (PKCE) or rebuilt arrays cannot be read from a response: _fixed (Take out only).
+// outKeys — advisorEngineKey()s the user took out before this reading: taken out again (listed under Skipped).
+// ---------------------------------------------------------------------------
+function advisorEngineKey(corr, entries) {
+  const e = (entries || S.entries1 || [])[corr.sourceIdx];
+  return corr.name + '|' + (e ? (e.method || '') + ' ' + String(e.url || '').split('?')[0] : corr.extractorType);
+}
+function advisorMirrorEngine(outKeys) {
+  const out = new Set(outKeys || []);
+  const ents = S.entries1 || [];
+  (S.correlations || []).slice().forEach(corr => {
+    if (!corr || corr._suppressed || corr._fromAdvisor) return;
+    if ((S.advisorCandidates || []).some(c => c._engineCorr === corr)) return;
+    const u0 = (corr.usages || [])[0] || {};
+    const value = String(u0.tokenValue || u0.originalValue || '');
+    const src = corr.sourceIdx >= 0 ? ents[corr.sourceIdx] : null;
+    const cand = {
+      id: 'adv-' + S.advisorCandidates.length,
+      value: value || '(made while the script runs)',
+      preview: value.length > 40 ? value.slice(0, 40) + '…' : value,
+      valueType: 'token',
+      confidence: 'high',
+      varName: corr.name,
+      source: { entryIdx: corr.sourceIdx, url: src ? _advShortUrl(src) : '', jsonPath: corr.extractorType === 'jsonpath' && corr.extractorConfig ? corr.extractorConfig.path || null : null },
+      usages: (corr.usages || []).map(u => ({ entryIdx: u.reqIdx, url: ents[u.reqIdx] ? _advShortUrl(ents[u.reqIdx]) : '', location: u.location, jsonPath: u.key, tokenValue: u.tokenValue })),
+      status: 'accepted',
+      _applied: true,
+      _engineCorr: corr,
+      _engineKey: advisorEngineKey(corr, ents),
+      _fixed: !src || corr.extractorType === 'pkce' || corr.extractorType === 'array_reconstruct',
+    };
+    S.advisorCandidates.push(cand);
+    if (out.has(cand._engineKey)) {
+      const i = S.correlations.indexOf(corr);
+      if (i >= 0) S.correlations.splice(i, 1);
+      cand._outAt = i; cand._applied = false; cand.status = 'skipped';
+    }
+  });
+}
+// A candidate found by Studio's engines and not changed by the user: its own correlation is still in the script
+function advisorEngineUntouched(c) {
+  return !!(c && c._engineCorr && (S.correlations || []).indexOf(c._engineCorr) >= 0);
 }
 
 // ---------------------------------------------------------------------------

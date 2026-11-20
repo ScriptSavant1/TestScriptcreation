@@ -50,6 +50,7 @@
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
       <symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></symbol>
       <symbol id="i-q" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></symbol>
       <symbol id="i-ok" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -452,6 +453,7 @@
                 <div class="ss-corr-foot" id="ss-cr-foot">
                   <span id="ss-cr-n" class="ss-muted"></span>
                   <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-more" title="Values under 10 characters, numbers, and those past the first 20: suggested as Medium, not ticked"><svg class="i"><use href="#i-search"/></svg>Also suggest other repeated values</button>
+                  <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-test" title="Check the ticked values (none ticked: the ones in the script) against the recording"><svg class="i"><use href="#i-play"/></svg>Test</button>
                   <span class="ss-grow"></span>
                   <button class="ds-btn ds-btn-primary" type="button" id="ss-cr-apply"><svg class="i"><use href="#i-ok"/></svg><span>Add to the script</span></button>
                 </div>
@@ -684,6 +686,15 @@
         <div class="ss-dlg-h"><h2 id="ss-ask-h"></h2></div>
         <div class="ss-dlg-b"><p id="ss-ask-t"></p></div>
         <div class="ss-dlg-f"><button class="ds-btn" value="no" id="ss-ask-no">Cancel</button><button class="ds-btn ds-btn-primary" value="yes" id="ss-ask-yes">Continue</button></div>
+      </form>
+    </dialog>
+
+    <!-- Test (step 2): every value checked against the recording (portal/studio-corr.js, StudioEdit.check) -->
+    <dialog class="ss-dlg ss-test-dlg" id="ss-test-dlg" aria-labelledby="ss-test-h">
+      <form method="dialog" class="ss-dlg-in">
+        <div class="ss-dlg-h"><h2 id="ss-test-h">Test</h2><p class="ss-muted" id="ss-test-sub"></p></div>
+        <div class="ss-dlg-b" id="ss-test-b"></div>
+        <div class="ss-dlg-f"><button class="ds-btn ds-btn-primary" value="ok" id="ss-test-ok">Close</button></div>
       </form>
     </dialog>
 

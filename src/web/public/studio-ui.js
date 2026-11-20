@@ -450,6 +450,8 @@ function renderCorrelations() {
         const typeLabel =
           _lst
             ? (c.list && c.list.pick === "random" ? "Random" : c.list && c.list.pick === "rotate" ? "Next" : c.list && c.list.pick === "nth" ? "No. " + c.list.nth : "List")
+            : c.extractorType === "pkce"
+            ? "PKCE"
             : c.extractorType === "jsonpath"
             ? "JSON"
             : _corrIsRnd(c)
@@ -482,7 +484,7 @@ function renderCorrelations() {
   <span class="corr-badge ${typeClass}">${typeLabel}</span>
   <div class="corr-detail">
     <div class="corr-name">${esc(c.name)}${advisorBadge}${randBtn}</div>
-    <div class="corr-src">Extracted from: …${esc(srcUrl.slice(-50))}</div>
+    <div class="corr-src">${c.extractorType === "pkce" ? "Made while the script runs (PKCE)" : "Extracted from: …" + esc(srcUrl.slice(-50))}</div>
     <div class="corr-usage">Used in ${usageCount} request${usageCount !== 1 ? "s" : ""}</div>
   </div>
 </div>`;
@@ -1520,14 +1522,21 @@ function advisorApplyOne(cand) {
       JSON.stringify(ex.extractorConfig) === JSON.stringify(nc.extractorConfig)
     );
   });
-  if (!dup) S.correlations = (S.correlations || []).concat([nc]);
+  // a correlation changed in the editor (taken out by advisorRemoveFromScript, which noted its place) goes back to its
+  // place, so the extractors keep their order; any other is added at the end
+  var at = cand._outAt;
+  delete cand._outAt;
+  if (!dup) {
+    if (at >= 0 && at <= (S.correlations || []).length) S.correlations.splice(at, 0, nc);
+    else S.correlations = (S.correlations || []).concat([nc]);
+  }
   cand._applied = true;
   return nc;
 }
 
 function advisorApplyAndRegen() {
   var accepted = (S.advisorCandidates || []).filter(function (c) {
-    return c.status === "accepted";
+    return c.status === "accepted" && !(c._engineCorr && c._applied);
   });
   if (!accepted.length) {
     showToast("Accept at least one correlation first.", "warning");
@@ -1630,8 +1639,9 @@ function _advUpdateFooter() {
   if (!footer || !summary || !regen) return;
 
   var candidates = S.advisorCandidates || [];
+  // (a correlation the engines found and still in the script — listed by the Script Studio page — is not waiting)
   var accepted = candidates.filter(function (c) {
-    return c.status === "accepted";
+    return c.status === "accepted" && !(c._engineCorr && c._applied);
   }).length;
   var skipped = candidates.filter(function (c) {
     return c.status === "skipped";

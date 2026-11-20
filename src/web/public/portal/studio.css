@@ -1133,7 +1133,7 @@ body.ss-step-wide #ss-p-right { background: transparent; border-color: transpare
 .ss-ed-tray li .ss-muted { flex: 1; min-width: 0; font-size: var(--ds-fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-ed-body mark.kept { background: var(--ds-ok-soft); box-shadow: inset 0 -2px 0 var(--ds-ok); color: var(--ds-text); border-radius: 3px; }
 /* the editor's buttons stay in view while the left column scrolls */
-.ss-ed-left > .ss-ed-act { position: sticky; bottom: 0; z-index: 1; margin: 12px -16px 0; padding: 12px 16px; background: var(--ds-surface); border-top: 1px solid var(--ds-border); box-shadow: 0 -6px 12px -8px rgba(15, 23, 42, .25); }
+.ss-ed-left > .ss-ed-act { position: sticky; bottom: -14px; z-index: 1;   /* -14px: the column's bottom padding, so nothing shows under the bar */ margin: 12px -16px 0; padding: 12px 16px; background: var(--ds-surface); border-top: 1px solid var(--ds-border); box-shadow: 0 -6px 12px -8px rgba(15, 23, 42, .25); }
 #ss-t-corr.ss-cr-editing { padding-bottom: 0; }
 /* a list in the editor: its values, and "always the same one" with its position */
 .ss-ed-vals { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
@@ -1153,8 +1153,11 @@ body.ss-step-wide #ss-p-right { background: transparent; border-color: transpare
 .ss-cr-row.is-new td { animation: ss-new 2.4s var(--ds-ease) 1; }
 #corr-list .corr-item { position: relative; cursor: pointer; border-radius: 8px; transition: background .15s var(--ds-ease); }
 #corr-list .corr-item:hover { background: var(--br-sel); }
-#corr-list .corr-item::after { content: "Edit"; position: absolute; right: 8px; top: 10px; padding: 2px 10px; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-accent-line); background: var(--ds-accent-soft); color: var(--ds-accent-text); font-size: var(--ds-fs-xs); font-weight: 600; opacity: 0; transition: opacity .15s var(--ds-ease); }
-#corr-list .corr-item:hover::after { opacity: 1; }
+/* Correlation details: Edit and Remove on every correlation (studio-editor.js decorate) */
+#corr-list .corr-item.ss-ci { display: flex; align-items: flex-start; gap: 10px; }
+#corr-list .corr-item.ss-ci > .corr-detail { flex: 1; min-width: 0; }
+#corr-list .ss-ci-act { display: inline-flex; flex: none; gap: 4px; align-items: center; margin-left: auto; }
+#corr-list .ss-ci-act .ds-btn svg.i { width: 14px; height: 14px; }
 
 /* Fit to the window — steps 2, 3 and 4 use the whole width beside the sidebar, lined up with the step bar (no cap,
    not centred); paragraphs keep their reading width. Step 2: the Correlate card fills the height, its table scrolls
@@ -1200,3 +1203,57 @@ body.ss-step-wide .ss-cr-val { max-width: clamp(300px, 26vw, 640px); }
   body.ss-step-wide #ss-ed :is(.ss-ed-body, .ss-ed-hdrs) { flex: 1 1 260px; height: auto; min-height: 260px; }
 }
 body.ss-step-wide #ss-t-corr.ss-cr-cards > #adv-panel { flex: 1 0 auto; }
+/* the editor's two panels: a header on "how it is read" (stays in view), the bar between them to resize (drag or arrow
+   keys), each one hidden to a rail (studio-editor.js edLayout) — on wide screens; narrow screens stack them as before */
+.ss-ed-lh { display: flex; align-items: center; gap: 8px; margin: -14px -16px 4px; padding: 8px 10px 8px 16px; min-height: 44px; border-bottom: 1px solid var(--ds-border); background: var(--ds-surface); position: sticky; top: -14px; z-index: 2; }
+.ss-ed-lh b { font-size: var(--ds-fs-sm); font-weight: 700; }
+.ss-ed-rail { display: none; writing-mode: vertical-rl; transform: rotate(180deg); align-items: center; justify-content: flex-end; gap: 8px; flex: 1; width: 100%; padding: 14px 0; margin: 0; border: 0; background: none; color: var(--ds-text); font: inherit; font-weight: 700; cursor: pointer; }
+.ss-ed-rail svg.i { transform: rotate(90deg); }
+.ss-ed-rail:hover { color: var(--ds-accent-text); }
+.ss-ed-rail:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: -4px; }
+.ss-ed-rs { display: none; }
+@media (min-width: 1101px) {
+  .ss-ed-cols { grid-template-columns: var(--ss-edl, minmax(360px, 520px)) 10px minmax(0, 1fr); }
+  .ss-ed-left { border-right: 0; }
+  .ss-ed-rs { display: block; position: relative; cursor: col-resize; touch-action: none; background: linear-gradient(var(--ds-border), var(--ds-border)) center / 1px 100% no-repeat; }
+  .ss-ed-rs::after { content: ""; position: absolute; left: 4px; top: 40%; height: 46px; width: 2px; border-radius: 2px; background: var(--ds-border-2); }
+  .ss-ed-rs:hover::after, .ss-ed-rs.on::after, .ss-ed-rs:focus-visible::after { background: var(--ds-accent-text); }
+  .ss-ed-rs:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: -2px; }
+  .ss-ed-cols.no-left { grid-template-columns: 44px 0 minmax(0, 1fr); }
+  .ss-ed-cols.no-right { grid-template-columns: minmax(0, 1fr) 0 44px; }
+  .ss-ed-cols:is(.no-left, .no-right) > .ss-ed-rs { visibility: hidden; }
+  .ss-ed-cols.no-left > .ss-ed-left, .ss-ed-cols.no-right > .ss-ed-right { padding: 0; overflow: hidden; background: var(--ds-surface-2); }
+  .ss-ed-cols.no-left > .ss-ed-left > :not(.ss-ed-rail), .ss-ed-cols.no-right > .ss-ed-right > :not(.ss-ed-rail) { display: none !important; }
+  .ss-ed-cols.no-left > .ss-ed-left > .ss-ed-rail, .ss-ed-cols.no-right > .ss-ed-right > .ss-ed-rail { display: flex; }
+}
+@media (max-width: 1100px) { .ss-ed-lh [data-ed-hide], .ss-ed-rhide { display: none; } }
+/* Test (step 2): the editor's result (studio-editor.js runTest) and the list's dialog (studio-corr.js testList) */
+.ss-ed-res { margin: 8px 0 0; padding: 10px 12px; border-radius: var(--ds-r-tile); border: 1px solid var(--ds-border-2); background: var(--ds-surface-2); font-size: var(--ds-fs-sm); }
+.ss-ed-res[hidden] { display: none; }
+.ss-ed-res.good { border-color: color-mix(in srgb, var(--ds-ok) 45%, transparent); background: var(--ds-ok-soft); }
+.ss-ed-res:is(.warn, .bad) { border-color: color-mix(in srgb, var(--ds-warn) 45%, transparent); background: var(--ds-warn-soft); }
+.ss-ed-res-h { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ss-ed-res-h b { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.ss-ed-res-h > svg.i { flex: none; }
+.ss-ed-res.good .ss-ed-res-h > svg.i { color: var(--ds-ok); }
+.ss-ed-res:is(.warn, .bad) .ss-ed-res-h > svg.i { color: var(--ds-warn); }
+.ss-ed-res p { margin: 2px 0 0; }
+.ss-ed-res ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.ss-ed-res li { display: flex; gap: 6px; align-items: flex-start; font-family: var(--ds-mono); font-size: 12px; overflow-wrap: anywhere; }
+.ss-ed-res li svg.i { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--ds-ok); }
+.ss-ed-res li.no svg.i { color: var(--ds-warn); }
+.ss-ed-res li small { font-family: var(--ds-font); color: var(--ds-text-2); }
+.ss-test-dlg { width: min(980px, calc(100vw - 32px)); }
+.ss-test-dlg .ss-dlg-h { flex-wrap: wrap; }
+.ss-test-dlg .ss-dlg-h p { flex-basis: 100%; margin: 0; font-size: var(--ds-fs-sm); }
+.ss-test-dlg .ss-dlg-b { max-height: 65vh; overflow: auto; }
+.ss-test-t { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-sm); }
+.ss-test-t th { position: sticky; top: 0; padding: 7px 10px; text-align: left; font-size: var(--ds-fs-xs); font-weight: 600; color: var(--ds-text-2); background: var(--br-head); border-bottom: 1px solid var(--ds-border-2); }
+.ss-test-t td { padding: 8px 10px; border-bottom: 1px solid var(--ds-border); vertical-align: top; }
+.ss-test-t td small { display: block; margin-top: 2px; color: var(--ds-text-2); font-size: var(--ds-fs-xs); }
+.ss-test-t code { font-family: var(--ds-mono); font-size: 12px; }
+.ss-tres { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px 1px 7px; border-radius: var(--ds-r-pill); font-size: var(--ds-fs-xs); font-weight: 600; white-space: nowrap; color: var(--ds-text); }
+.ss-tres svg.i { width: 13px; height: 13px; }
+.ss-tres.good { background: var(--ds-ok-soft); } .ss-tres.good svg.i { color: var(--ds-ok); }
+.ss-tres:is(.warn, .bad) { background: var(--ds-warn-soft); } .ss-tres:is(.warn, .bad) svg.i { color: var(--ds-warn); }
+.ss-test-note { margin: 10px 0 0 !important; font-size: var(--ds-fs-xs); }

@@ -161,6 +161,8 @@ async function analyze() {
 
     // Quality / source warnings
     S.candidates = [];
+    // the Script Studio page notes what the user took out of the previous reading (kept over this one)
+    if (typeof studioBeforeRead === "function") studioBeforeRead();
     S.advisorCandidates = [];
     S.harWarning = "";
 
@@ -582,6 +584,8 @@ async function analyze() {
       console.warn("[Advisor] Non-fatal scan error:", advErr);
       S.advisorCandidates = [];
     }
+    // the Script Studio page lists the engines' own correlations with the Advisor's (advisorMirrorEngine)
+    if (typeof studioAfterAdvisor === "function") studioAfterAdvisor();
 
     // ── Phase 4: Background review gate ─────────────────────────────────────
     // If this HAR was recorded by the extension and has periodic entries,
@@ -734,8 +738,9 @@ async function _generateAndRenderScripts() {
     const _corrs = (S.correlations || []).filter(function (c) {
       return !c._suppressed;
     });
+    // (the engines' own correlations listed as candidates — _engineCorr — are counted once, in _corrs)
     const _found =
-      (S.advisorCandidates || S.candidates || []).length + _corrs.length ||
+      (S.advisorCandidates || S.candidates || []).filter((c) => !c._engineCorr).length + _corrs.length ||
       null;
     const _trackBase = window.location.pathname.replace(
       /\/studio$|\/[^/]*\.html$/,

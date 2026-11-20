@@ -16,8 +16,19 @@
   var KIND = { jwt: "Sign-in token (JWT)", uuid: "Id (UUID)", hex: "Token (hex)", token: "Token", array: "List of values", list: "List of values", json: "JSON value", xml: "XML value", html: "HTML value", text: "Text", unknown: "Value" };
   function kind(c) { return KIND[c.valueType] || (c.valueType ? String(c.valueType).charAt(0).toUpperCase() + String(c.valueType).slice(1) : "Value"); }
   function tag(c) {
-    return c._edit && !c._applied ? "Changed by you" : c._more ? "Repeated value" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : c._arrayReconstruct ? "Array rebuild" : c._select ? "Options of a select" : c._selectAll ? "List" : "";
+    return c._edit && !c._applied ? "Changed by you" : c._engineCorr ? (c._fixed ? "Made while it runs" : "Found by Studio") : c._more ? "Repeated value" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : c._arrayReconstruct ? "Array rebuild" : c._select ? "Options of a select" : c._selectAll ? "List" : "";
   }
+  // the correlations Studio's own engines found are listed here too (advisorMirrorEngine, studio-advisor.js), after
+  // every reading; what the user took out of them stays out over later readings of the same recording (by name and
+  // response — the hooks analyze() calls before and after the Advisor's scan)
+  var engineOut = { har: null, keys: [] };
+  window.studioBeforeRead = function () {
+    var prev = S.advisorCandidates || [];
+    engineOut = { har: S.har1, keys: prev.filter(function (c) { return c._engineKey && !c._applied; }).map(function (c) { return c._engineKey; }) };
+  };
+  window.studioAfterAdvisor = function () {
+    if (typeof advisorMirrorEngine === "function") advisorMirrorEngine(engineOut.har === S.har1 ? engineOut.keys : []);
+  };
   function all() { return S.advisorCandidates || []; }
   function ticked() { return all().filter(function (c) { return c.status === "accepted" && !c._applied; }); }
   SS.corrTicked = function () { return ticked().length; };
@@ -244,6 +255,47 @@
     else if (typeof showToast === "function") showToast(msg, "info", 4000);
   }
   SS.corrTakeOut = takeOut;
+
+  // Test: the ticked values (none ticked: the ones in the script), each as the engine would put it in the script
+  // (advisorToCorrelation), checked against the recording with the editor's StudioEdit.check — read only
+  function testList() {
+    var list = ticked(), what = "ticked";
+    if (!list.length) { list = all().filter(function (c) { return c._applied; }); what = "in the script"; }
+    var E = window.StudioEdit, dlg = $("#ss-test-dlg"), b = $("#ss-test-b"), sub = $("#ss-test-sub");
+    var two = !!(S.entries2 && S.entries2.length);
+    if (!list.length || !E) {
+      sub.textContent = "";
+      b.innerHTML = '<p class="ss-empty">Tick values in the list first, or add some to the script.</p>';
+    } else {
+      var rows = list.map(function (c) {
+        var corr = null;
+        try { corr = advisorToCorrelation(c); } catch (e) { corr = null; }
+        var res = corr ? E.check({ entries: S.entries1 || [], corr: corr, firstMatch: _advFirstMatch, xp: window.SSE && SSE.xp, html: window.SSE && SSE.htmlRead, entries2: two ? S.entries2 : null }) : { verdict: "none", places: [] };
+        return { c: c, tx: E.checkText(res) };
+      });
+      var n = { good: 0, warn: 0, bad: 0 };
+      rows.forEach(function (r) { n[r.tx.cls]++; });
+      var LABEL = { good: "OK", warn: "Check", bad: "Fails" };
+      sub.textContent = plural(rows.length, "value") + " " + what + " — " + n.good + " OK" + (n.warn ? ", " + n.warn + " to check" : "") + (n.bad ? ", " + n.bad + " failing" : "") + ".";
+      b.innerHTML = '<table class="ss-test-t"><thead><tr><th>Name</th><th>Result</th><th>What it found</th><th><span class="ss-vh">Open</span></th></tr></thead><tbody>' +
+        rows.map(function (r) {
+          return '<tr class="t-' + r.tx.cls + '"><td><code>' + esc(r.c.varName) + "</code></td>" +
+            '<td><span class="ss-tres ' + r.tx.cls + '"><svg class="i"><use href="#i-' + (r.tx.cls === "good" ? "ok" : "warn") + '"/></svg>' + LABEL[r.tx.cls] + "</span></td>" +
+            "<td><b>" + esc(r.tx.title) + "</b>" + r.tx.notes.map(function (x) { return "<small>" + esc(x) + "</small>"; }).join("") + "</td>" +
+            '<td><button type="button" class="ds-btn ds-btn-xs" data-test-open="' + esc(r.c.id) + '">Open</button></td></tr>';
+        }).join("") + "</tbody></table>" +
+        '<p class="ss-muted ss-test-note">Checked against the recording' + (two ? " and the second recording" : "") + ". A real run needs VuGen or DevWeb.</p>";
+    }
+    if (dlg.open) dlg.close();
+    dlg.showModal();
+  }
+  $("#ss-cr-test").addEventListener("click", testList);
+  $("#ss-test-b").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-test-open]"); if (!b) return;
+    $("#ss-test-dlg").close();
+    if (window.SSE) SSE.open(b.getAttribute("data-test-open"));
+  });
+  SS.corrTest = testList;
 
   // also suggest the values the Advisor leaves out (short ones, numbers, past the first 20)
   $("#ss-cr-more").addEventListener("click", function () {
