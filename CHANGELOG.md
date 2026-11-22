@@ -95,6 +95,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - A list that is part of the matches (the options of one `<select>` on a page with several) is tested with its own values — before, Test counted every option of the page (14) while the editor said 7; the window says which matches the list is.
 - Up / Down, Page Up / Down, Home and End scroll the editor's column even when the focus is not in it (on Cancel, after a click on its edge): the column the pointer was over, else the left one.
 - "Which value is sent back" (a list's use) is compact: one line per choice, the chosen one explains itself.
+- Test shows what a list sends, iteration by iteration, for the choice made: one at random (a sample, Pick again), the next one each iteration, or always value N (a position past the end of the list fails the test).
+- Script Studio's dialogs open centred (the classic stylesheet's reset had put them in the top-left corner) and move by their title bar.
 - The sidebar's CDP Recorder badge (Running / REC) reads at 4.5:1 in the light theme.
 
 #### Script Studio: Plan the load in Workload Modeller

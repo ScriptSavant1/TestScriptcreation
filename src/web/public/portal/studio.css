@@ -1257,4 +1257,14 @@ body.ss-step-wide #ss-t-corr.ss-cr-cards > #adv-panel { flex: 1 0 auto; }
 .ss-tv { display: grid; gap: 6px; }
 .ss-tv > b, .ss-tr-sub { font-size: var(--ds-fs-sm); font-weight: 700; margin-top: 4px; }
 .ss-tv-l { display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow: auto; }
-.ss-tv-l code { padding: 1px 7px; border-radius: 6px; border: 1px solid var(--ds-border); background: var(--ds-surface-2); font-family: var(--ds-mono); font-size: 12px; }
+.ss-tv-l code { padding: 1px 7px; border-radius: 6px; border: 1px solid var(--ds-border); background: var(--ds-surface-2); font-family: var(--ds-mono); font-size: 12px; }/* dialogs move by their title bar (studio-page.js); a list's sends in the Test window (studio-editor.js picksHtml) */
+.ss-dlg[open] .ss-dlg-h { cursor: move; user-select: none; }
+.ss-dlg[open] .ss-dlg-h :is(button, input, select, a) { cursor: pointer; }
+.ss-dlg.ss-moving { box-shadow: var(--ds-shadow-2), 0 0 0 2px var(--ds-accent-line); }
+.ss-tp { padding: 10px 12px; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-tile); background: var(--ds-surface-2); justify-items: start; }
+.ss-tp > .ss-muted { font-size: var(--ds-fs-sm); }
+.ss-tp-l { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.ss-tp-l li { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 10px; border: 1px solid var(--ds-border); border-radius: var(--ds-r-pill); background: var(--ds-surface); font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+.ss-tp-l li code { font-family: var(--ds-mono); font-size: 12px; color: var(--ds-text); }
+/* every dialog opens centred: the classic stylesheet's reset (* { margin: 0 }) took away the browser's margin: auto */
+dialog.ss-dlg { margin: auto; }

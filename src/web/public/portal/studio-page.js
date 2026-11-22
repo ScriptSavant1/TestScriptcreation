@@ -461,6 +461,22 @@
   });
   $("#ss-done-dl").addEventListener("click", function () { $("#ss-dl").click(); });
 
+  // every dialog of the page (.ss-dlg) moves by its title bar — kept on screen; it opens centred again next time
+  document.addEventListener("pointerdown", function (e) {
+    var h = e.target.closest && e.target.closest("dialog.ss-dlg[open] .ss-dlg-h");
+    if (!h || e.button !== 0 || e.target.closest("button, input, select, textarea, a")) return;
+    var d = h.closest("dialog"), r = d.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+    e.preventDefault(); h.setPointerCapture(e.pointerId); d.classList.add("ss-moving");
+    function move(ev) {
+      var x = Math.max(120 - r.width, Math.min(innerWidth - 120, ev.clientX - dx)), y = Math.max(0, Math.min(innerHeight - 48, ev.clientY - dy));
+      d.style.margin = "0"; d.style.inset = "auto"; d.style.left = Math.round(x) + "px"; d.style.top = Math.round(y) + "px";
+    }
+    function up() { h.removeEventListener("pointermove", move); h.removeEventListener("pointerup", up); d.classList.remove("ss-moving"); }
+    h.addEventListener("pointermove", move); h.addEventListener("pointerup", up);
+    if (!d._ssMove) { d._ssMove = true; d.addEventListener("close", function () { ["margin", "inset", "left", "top"].forEach(function (k) { d.style[k] = ""; }); }); }
+  });
+  $$("dialog.ss-dlg .ss-dlg-h").forEach(function (h) { if (!h.title) h.title = "Drag to move"; });
+
   // Plan the load in Workload Modeller (file bar and step 4): the same ZIP as Download ZIP — dlZip with a collector,
   // nothing downloaded — handed to the Workload Modeller in the portal (portal/plan-load.js). Only inside the portal.
   var canPlan = !!(window.PerfxPlanLoad && PerfxPlanLoad.available());

@@ -424,7 +424,19 @@
     if (short) notes = notes.slice(0, 1);
     return { cls: cls, title: title, notes: notes };
   }
-  return { check: check, checkText: checkText, sameReq: sameReq, jget: jget, listValues: listValues, jsonAll: jsonAll, boundAll: boundAll, regexAll: regexAll, attrPattern: attrPattern, listFrom: listFrom, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
+  // what a list sends, iteration by iteration (Test): "random" — one at random (a sample; rnd defaults to Math.random),
+  // "rotate" — the next one each iteration and round again, "nth" — always value nth (null when the list is shorter),
+  // "all" — each place its own position (no per-iteration choice: null) → [{ iter, value }] | null
+  function picksOf(values, pick, nth, iters, rnd) {
+    var v = values || [], n = v.length, out = [];
+    if (!n || !pick || pick === "all") return null;
+    rnd = rnd || Math.random;
+    for (var i = 1; i <= (iters || 5); i++) {
+      out.push({ iter: i, value: pick === "random" ? v[Math.floor(rnd() * n)] : pick === "rotate" ? v[(i - 1) % n] : pick === "nth" ? (nth >= 1 && nth <= n ? v[nth - 1] : null) : null });
+    }
+    return out;
+  }
+  return { picksOf: picksOf, check: check, checkText: checkText, sameReq: sameReq, jget: jget, listValues: listValues, jsonAll: jsonAll, boundAll: boundAll, regexAll: regexAll, attrPattern: attrPattern, listFrom: listFrom, readWith: readWith, headersWith: headersWith, fromSelection: fromSelection, compile: compile, rx: rx, readable: readable, nameBefore: nameBefore, nameOfXpath: nameOfXpath, valuesOf: valuesOf, sentIndex: sentIndex, laterValues: laterValues };
 });
 
 (function () {
@@ -1018,8 +1030,25 @@
       return v == null ? { none: true } : { value: v };
     } catch (e) { return { unknown: true }; }
   }
+  // a list's sends, iteration by iteration (Pick again draws a new random sample)
+  var testPicks = null;
+  function picksHtml() {
+    var p = testPicks; if (!p) return "";
+    var it = E.picksOf(p.values, p.pick, p.nth, p.pick === "rotate" ? Math.min(p.values.length + 2, 10) : p.pick === "nth" ? 3 : 6);
+    var lead = p.pick === "random" ? "One value at random each iteration — for example:" : p.pick === "rotate" ? "The next value each iteration, then round again:" : "The same value every iteration:";
+    return '<div class="ss-tv ss-tp" id="ss-tp"><b>What the script sends</b><span class="ss-muted">' + lead + "</span>" +
+      '<ol class="ss-tp-l">' + (it || []).map(function (x) {
+        return "<li><span>Iteration " + x.iter + "</span>" + (x.value == null ? '<span class="ss-muted">no value</span>' : "<code>" + esc(short(x.value)) + "</code>") + "</li>";
+      }).join("") + "</ol>" +
+      (p.pick === "random" ? '<button type="button" class="ds-btn ds-btn-xs" data-repick><svg class="i"><use href="#i-reset"/></svg>Pick again</button>' : "") + "</div>";
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("#ss-test-b [data-repick]"); if (!b) return;
+    var box = $("#ss-tp"); if (box) box.outerHTML = picksHtml();
+    var nb = document.querySelector("#ss-test-b [data-repick]"); if (nb) nb.focus();
+  });
   // the result opens in the Test dialog (#ss-test-dlg, shared with the table's Test): what it reads, every value of a
-  // list, every place it is sent back with the value that place sent, the second recording
+  // list, what a list sends each iteration, every place it is sent back with the value that place sent, the second recording
   function runTest(c) {
     var corr = null, dlg = $("#ss-test-dlg"), body = $("#ss-test-b");
     try { corr = draftCorr(c); } catch (e) { corr = null; }
@@ -1036,8 +1065,16 @@
     var tx = E.checkText(res), ents = S.entries1 || [], LABEL = { good: "OK", warn: "Check", bad: "Fails" };
     var src = ents[corr.sourceIdx], srcPath = src ? "#" + src.id + " " + src.method + " " + (String(src.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split("?")[0] || "/") : "";
     $("#ss-test-sub").textContent = (src ? "Read from the response of " + srcPath + " — " : "") + "checked against the recording" + (S.entries2 && S.entries2.length ? " and the second recording" : "") + ".";
-    var vals = res.values ? '<div class="ss-tv"><b>The values</b><div class="ss-tv-l">' + res.values.slice(0, 40).map(function (v) { return "<code>" + esc(short(v)) + "</code>"; }).join("") +
-      (res.values.length > 40 ? '<span class="ss-muted">+' + (res.values.length - 40) + " more</span>" : "") + "</div></div>" : "";
+    // a list: what the script sends, iteration by iteration (the choice "Which value is sent back")
+    var pk = adding && listSt ? listSt.pick : c._pick || "all", nth = adding && listSt ? +listSt.nth || 1 : +c._nth || 1;
+    if (res.values && pk && pk !== "all") {
+      var PK = { random: "one at random each iteration", rotate: "the next one each iteration", nth: "always value " + nth };
+      tx = Object.assign({}, tx, { title: tx.title + " — sends " + PK[pk] });
+      if (pk === "nth" && nth > res.values.length) tx = Object.assign({}, tx, { cls: "bad", notes: ["There is no value " + nth + ": the list has " + res.values.length + "."].concat(tx.notes) });
+    }
+    testPicks = res.values && pk !== "all" ? { values: res.values, pick: pk, nth: nth } : null;
+    var vals = picksHtml() + (res.values ? '<div class="ss-tv"><b>The values</b><div class="ss-tv-l">' + res.values.slice(0, 40).map(function (v) { return "<code>" + esc(short(v)) + "</code>"; }).join("") +
+      (res.values.length > 40 ? '<span class="ss-muted">+' + (res.values.length - 40) + " more</span>" : "") + "</div></div>" : "");
     var places = (res.places || []).slice(0, 60).map(function (p) {
       var e = ents[p.reqIdx], path = e ? String(e.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split("?")[0] : "?";
       var st = p.same === false ? "warn" : p.same ? "good" : "info";

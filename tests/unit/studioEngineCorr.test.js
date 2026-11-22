@@ -148,6 +148,16 @@ describe('Test — StudioEdit.check / checkText', () => {
     expect([res.values, res.matches, res.verdict]).toEqual([['P', 'Q'], 3, 'ok']);
     expect(E.checkText(res).notes[0]).toBe('Matches 1–2 of the 3 the pattern finds in this response.');
   });
+  test('picksOf: what a list sends each iteration — random, the next one, always the Nth; as recorded has no per-iteration choice', () => {
+    const v = ['a', 'b', 'c'];
+    let k = 0; const seq = [0.9, 0.1, 0.5];
+    expect(E.picksOf(v, 'random', 1, 3, () => seq[k++])).toEqual([{ iter: 1, value: 'c' }, { iter: 2, value: 'a' }, { iter: 3, value: 'b' }]);
+    expect(E.picksOf(v, 'rotate', 1, 5).map((x) => x.value)).toEqual(['a', 'b', 'c', 'a', 'b']);
+    expect(E.picksOf(v, 'nth', 2, 2).map((x) => x.value)).toEqual(['b', 'b']);
+    expect(E.picksOf(v, 'nth', 9, 1)).toEqual([{ iter: 1, value: null }]);
+    expect(E.picksOf(v, 'all', 1, 3)).toBeNull();
+    expect(E.picksOf([], 'random', 1, 3)).toBeNull();
+  });
   test('nothing read, made while it runs, a kind not tried here', () => {
     expect(E.check({ entries, corr: { extractorType: 'jsonpath', extractorConfig: { path: '$.nope' }, sourceIdx: 0, usages: [] } }).verdict).toBe('none');
     expect(E.check({ entries, corr: { extractorType: 'pkce', sourceIdx: -1 } }).verdict).toBe('runtime');
