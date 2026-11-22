@@ -176,7 +176,8 @@ async function selftest(b) {
     await run('Studio 1 requests', 'studio');
     await f.click('#ss-steps [data-step="2"]'); await run('Studio 2 correlate', 'studio');
     await f.evaluate(() => { const c = PerfxStudio.state().advisorCandidates.find((x) => x.varName === 'State') || PerfxStudio.state().advisorCandidates[0]; if (c) SSE.open(c.id); });
-    await f.click('#ss-ed-run').catch(() => {}); await run('Studio editor', 'studio');
+    await run('Studio editor', 'studio');
+    await f.click('#ss-ed-run').catch(() => {}); await run('Studio editor test', 'studio'); await f.click('#ss-test-ok').catch(() => {});
     await f.evaluate(() => SSE.close()); await f.evaluate(() => SSE.add()); await run('Studio add manual', 'studio'); await f.evaluate(() => SSE.close());
     await f.click('#ss-cr-test'); await run('Studio test dialog', 'studio'); await f.click('#ss-test-ok');
     await f.evaluate(() => document.getElementById('corr-panel').scrollIntoView()); await run('Studio correlation details', 'studio');

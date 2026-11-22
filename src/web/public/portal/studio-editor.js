@@ -375,7 +375,10 @@
     if (r.bad) { res.verdict = "bad"; res.why = r.bad; return res; }
     if (r.unknown) { res.verdict = "unknown"; return res; }
     if (list) {
-      res.values = r.values; res.matches = r.values.length; res.distinct = uniq(r.values).length;
+      // a list that is part of the matches (the options of one <select>: o.range or the list's own from / to)
+      var rg = o.range || (corr.list && corr.list.from ? corr.list : null);
+      res.values = rg && rg.from ? r.values.slice(rg.from - 1, rg.to) : r.values; res.matches = r.values.length; res.distinct = uniq(res.values).length;
+      if (rg && rg.from) res.range = { from: rg.from, to: rg.to };
       if (!r.values.length) { res.verdict = "none"; return res; }
     } else {
       if (r.none) { res.verdict = "none"; res.why = r.why || ""; return res; }
@@ -394,7 +397,7 @@
       var e2 = sameReq(entries, corr.sourceIdx, o.entries2);
       if (!e2) res.second = { found: false };
       else {
-        var r2 = read(e2), v2 = list ? (r2.values && r2.values.length ? r2.values.join(", ") : null) : r2 && r2.value != null ? String(r2.value) : null;
+        var r2 = read(e2), v2s = list && r2.values ? (res.range ? r2.values.slice(res.range.from - 1, res.range.to) : r2.values) : null, v2 = list ? (v2s && v2s.length ? v2s.join(", ") : null) : r2 && r2.value != null ? String(r2.value) : null;
         res.second = { found: true, value: v2, differs: v2 != null && v2 !== (list ? res.values.join(", ") : res.value) };
       }
     }
@@ -411,6 +414,7 @@
     if (res.verdict === "bad") return { cls: "bad", title: "The pattern is not valid", notes: [res.why] };
     if (res.verdict === "none") return { cls: "bad", title: res.why === "no response" ? "No response to read from" : "Reads nothing", notes: [res.why === "not JSON" ? "The response is not JSON." : res.why === "not XML" ? "The response is not XML." : "Nothing in the response matches."] };
     var title = res.values ? "Reads a list of " + res.values.length + " value" + (res.values.length === 1 ? "" : "s") : "Reads " + sv(res.value);
+    if (res.range && res.matches > res.values.length) notes.push("Matches " + res.range.from + "–" + res.range.to + " of the " + res.matches + " the pattern finds in this response.");
     if (places.length) notes.push(same + " of " + places.length + " place" + (places.length === 1 ? "" : "s") + " sent " + (res.values ? "one of these values" : "this value") + " back" + (same === places.length ? "." : " — the others sent another value."));
     else if (!unknown) notes.push("No later request sends it back.");
     if (unknown) notes.push(unknown + " place" + (unknown === 1 ? "" : "s") + " where the value sent was not recorded.");
@@ -463,7 +467,6 @@
           '<button type="button" data-kind="list" aria-pressed="false" title="Every value like this one (the options of a select, the items of a JSON list): a list">List</button></span>' +
         '<div class="ss-ed-expr" id="ss-ed-expr"></div>' +
         '<p class="ss-ed-test" id="ss-ed-test" role="status" aria-live="polite"></p>' +
-        '<div class="ss-ed-res" id="ss-ed-res" role="status" aria-live="polite" hidden></div>' +
         '<div class="ss-ed-sec"><span class="ss-ed-num">3</span><label class="ss-fld" for="ss-ed-name">Name in the script</label></div>' +
         '<input class="ss-field ss-ed-name" id="ss-ed-name" spellcheck="false" autocomplete="off" />' +
         '<p class="ss-ed-err" id="ss-ed-nerr" hidden></p>' +
@@ -526,6 +529,22 @@
     edRs.addEventListener("pointermove", move); edRs.addEventListener("pointerup", up);
   });
   edRs.addEventListener("dblclick", function () { delete EP.edW; SS.save(); edLayout(); });
+  // the keyboard scrolls a column even when the focus is not in it (on Cancel, the head, after a click on its edge):
+  // the column the pointer was last over, else the left one. Inside a column, a field or the response: the browser's own.
+  var edLast = null;
+  edCols.addEventListener("pointermove", function (e) { var col = e.target.closest(".ss-ed-left, .ss-ed-right"); if (col) edLast = col; });
+  box.addEventListener("keydown", function (e) {
+    var k = e.key, t = e.target;
+    if (!/^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End)$/.test(k) || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (t.closest("input, select, textarea, [contenteditable], [role=separator], [role=radiogroup], [role=group], .ss-ed-left, .ss-ed-right")) return;
+    var col = edLast && !edLast.closest(".no-left, .no-right") ? edLast : $("#ss-ed-left");
+    if (edCols.classList.contains("no-left") && col.id === "ss-ed-left") col = $("#ss-ed-right");
+    if (!col || col.scrollHeight <= col.clientHeight) return;
+    var page = col.clientHeight * 0.9;
+    var by = { ArrowUp: -48, ArrowDown: 48, PageUp: -page, PageDown: page }[k];
+    if (k === "Home") col.scrollTop = 0; else if (k === "End") col.scrollTop = col.scrollHeight; else col.scrollTop += by;
+    e.preventDefault();
+  });
   edRs.addEventListener("keydown", function (e) {
     var w = $("#ss-ed-left").getBoundingClientRect().width, step = e.shiftKey ? 96 : 24;
     if (e.key === "ArrowLeft") edSetW(w - step);
@@ -791,7 +810,6 @@
     var c = cand(cur); if (!c) return;
     var lock = locked(c), us = c.usages || [], e = srcIdx != null ? entry(srcIdx) : null;
     test(c, e);
-    staleTest(c);
     var nm = $("#ss-ed-name"); if (document.activeElement !== nm) nm.value = c.varName; nm.disabled = !adding && !!c._applied;
     nm.placeholder = adding ? "Filled in when you choose a value" : "";
     var nameBad = adding && (!c.varName ? "" : taken(c.varName) ? "That name is in use: choose another." : "");
@@ -847,7 +865,7 @@
   // how a list is used: every value as recorded, one at random, the next each iteration, always the Nth
   function pickHtml(pick, nth, n, note) {
     pick = pick || "all";
-    var opt = function (k, title, text) { return '<button type="button" role="radio" data-pick="' + k + '" aria-checked="' + (pick === k) + '"><b>' + title + "</b><small>" + text + "</small></button>"; };
+    var opt = function (k, title, text) { return '<button type="button" role="radio" data-pick="' + k + '" aria-checked="' + (pick === k) + '" title="' + text + '"><b>' + title + "</b><small>" + text + "</small></button>"; };
     return '<div class="ss-ed-pick" role="radiogroup" aria-label="Which value is sent back">' +
       opt("all", "Every value, as recorded", "Each place sends back the value at the position it used in the recording.") +
       opt("random", "One at random each iteration", "A list the user picks from (a product, a flight): another one each iteration.") +
@@ -990,9 +1008,7 @@
   }
   function short(v) { v = String(v); return v.length > 80 ? v.slice(0, 79) + "…" : v; }
 
-  // Test: the correlation as the editor would put it in the script, checked against the recording (StudioEdit.check):
-  // what it reads, every place it is sent back, the second recording — shown until the choice changes
-  var testedFor = null;
+  // Test: the correlation as the editor would put it in the script, checked against the recording (StudioEdit.check)
   // an element of an HTML page (an engine's html extractor: a CSS selector and its attribute), read with the browser's parser
   function htmlRead(body, sel, attr) {
     try {
@@ -1002,28 +1018,42 @@
       return v == null ? { none: true } : { value: v };
     } catch (e) { return { unknown: true }; }
   }
-  function draftKey(c) { try { var x = draftCorr(c); return JSON.stringify([c.id, x.extractorType, x.extractorConfig, x.sourceIdx]); } catch (e) { return ""; } }
+  // the result opens in the Test dialog (#ss-test-dlg, shared with the table's Test): what it reads, every value of a
+  // list, every place it is sent back with the value that place sent, the second recording
   function runTest(c) {
-    var box = $("#ss-ed-res"), corr = null;
+    var corr = null, dlg = $("#ss-test-dlg"), body = $("#ss-test-b");
     try { corr = draftCorr(c); } catch (e) { corr = null; }
-    if (!corr) { box.hidden = false; box.className = "ss-ed-res bad"; box.textContent = "Choose a response and how to read the value first."; return; }
-    var res = E.check({ entries: S.entries1 || [], corr: corr, firstMatch: _advFirstMatch, xp: xp, html: htmlRead, entries2: S.entries2 && S.entries2.length ? S.entries2 : null });
-    var tx = E.checkText(res), ents = S.entries1 || [];
-    var rows = (res.places || []).slice(0, 12).map(function (p) {
+    $("#ss-test-h").textContent = "Test: " + (c.varName || "new correlation");
+    if (!corr || (adding && !draft && !listSt)) {
+      $("#ss-test-sub").textContent = "";
+      body.innerHTML = '<p class="ss-empty">Choose the response and how to read the value first.</p>';
+      if (dlg.open) dlg.close(); dlg.showModal(); return;
+    }
+    var range = adding && listSt ? { from: listSt.from, to: listSt.to } : c._range && c._range.from ? c._range : null;
+    // a list being made: each use keeps the value its request really sent (the candidate's value is the list's label)
+    if (adding && listSt) corr = Object.assign({}, corr, { usages: (c.usages || []).map(function (u) { return { reqIdx: u.entryIdx, location: u.location, tokenValue: u.tokenValue }; }) });
+    var res = E.check({ entries: S.entries1 || [], corr: corr, firstMatch: _advFirstMatch, xp: xp, html: htmlRead, range: range, entries2: S.entries2 && S.entries2.length ? S.entries2 : null });
+    var tx = E.checkText(res), ents = S.entries1 || [], LABEL = { good: "OK", warn: "Check", bad: "Fails" };
+    var src = ents[corr.sourceIdx], srcPath = src ? "#" + src.id + " " + src.method + " " + (String(src.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split("?")[0] || "/") : "";
+    $("#ss-test-sub").textContent = (src ? "Read from the response of " + srcPath + " — " : "") + "checked against the recording" + (S.entries2 && S.entries2.length ? " and the second recording" : "") + ".";
+    var vals = res.values ? '<div class="ss-tv"><b>The values</b><div class="ss-tv-l">' + res.values.slice(0, 40).map(function (v) { return "<code>" + esc(short(v)) + "</code>"; }).join("") +
+      (res.values.length > 40 ? '<span class="ss-muted">+' + (res.values.length - 40) + " more</span>" : "") + "</div></div>" : "";
+    var places = (res.places || []).slice(0, 60).map(function (p) {
       var e = ents[p.reqIdx], path = e ? String(e.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split("?")[0] : "?";
-      return '<li class="' + (p.same === false ? "no" : "yes") + '"><svg class="i"><use href="#i-' + (p.same === false ? "warn" : "ok") + '"/></svg>' +
-        "<span>#" + esc(e ? e.id : p.reqIdx) + " " + esc(e ? e.method : "") + " " + esc(path.length > 48 ? path.slice(0, 47) + "…" : path) +
-        (p.same === false ? " <small>sent <code>" + esc(short(p.sent)) + "</code></small>" : "") + "</span></li>";
+      var st = p.same === false ? "warn" : p.same ? "good" : "info";
+      return '<tr><td><code>#' + esc(e ? e.id : p.reqIdx) + " " + esc(e ? e.method : "") + " " + esc(path.length > 56 ? path.slice(0, 55) + "…" : path) + "</code></td>" +
+        "<td>" + (p.sent == null ? '<span class="ss-muted">not recorded</span>' : "<code>" + esc(short(p.sent)) + "</code>") + "</td>" +
+        '<td><span class="ss-tres ' + (st === "info" ? "warn" : st) + '"><svg class="i"><use href="#i-' + (st === "good" ? "ok" : "warn") + '"/></svg>' + (st === "good" ? "Same" : st === "warn" ? "Another value" : "Unknown") + "</span></td></tr>";
     }).join("");
-    box.hidden = false; box.className = "ss-ed-res " + tx.cls;
-    box.innerHTML = '<div class="ss-ed-res-h"><svg class="i"><use href="#i-' + (tx.cls === "good" ? "ok" : "warn") + '"/></svg><b>' + esc(tx.title) + "</b>" +
-      '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" data-res-x title="Close the result" aria-label="Close the test result"><svg class="i"><use href="#i-x"/></svg></button></div>' +
-      tx.notes.map(function (n) { return "<p>" + esc(n) + "</p>"; }).join("") + (rows ? "<ul>" + rows + "</ul>" : "") +
-      ((res.places || []).length > 12 ? '<p class="ss-muted">… and ' + (res.places.length - 12) + " more places</p>" : "") +
-      '<p class="ss-muted">Checked against the recording. A real run needs VuGen or DevWeb.</p>';
-    testedFor = draftKey(c);
+    body.innerHTML =
+      '<div class="ss-tr-h"><span class="ss-tres ' + tx.cls + '"><svg class="i"><use href="#i-' + (tx.cls === "good" ? "ok" : "warn") + '"/></svg>' + LABEL[tx.cls] + "</span><b>" + esc(tx.title) + "</b></div>" +
+      '<ul class="ss-tr-notes">' + tx.notes.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + "</ul>" + vals +
+      (places ? '<b class="ss-tr-sub">Sent back in</b><table class="ss-test-t"><thead><tr><th>Request</th><th>The value it sent</th><th>Result</th></tr></thead><tbody>' + places + "</tbody></table>" +
+        ((res.places || []).length > 60 ? '<p class="ss-muted">… and ' + (res.places.length - 60) + " more places</p>" : "") : "") +
+      '<p class="ss-muted ss-test-note">A real run needs VuGen or DevWeb.</p>';
+    if (dlg.open) dlg.close();
+    dlg.showModal();
   }
-  function staleTest(c) { var box = $("#ss-ed-res"); if (!box.hidden && testedFor !== draftKey(c)) { box.hidden = true; box.innerHTML = ""; } }
 
   // the response: Body (the value marked; in add mode also the values a later request sends back) or Headers.
   // Long bodies are cut for the screen (the test reads the whole body).
@@ -1153,7 +1183,6 @@
     else if (t.hasAttribute("data-known")) { if (!tray.length) open(t.getAttribute("data-known")); else if (typeof showToast === "function") showToast("Add or remove the kept values first.", "info", 3000); }
     else if (t.id === "ss-ed-keep") keep();
     else if (t.id === "ss-ed-run") runTest(c);
-    else if (t.hasAttribute("data-res-x")) { $("#ss-ed-res").hidden = true; $("#ss-ed-run").focus(); }
     else if (t.hasAttribute("data-untray")) { tray.splice(+t.getAttribute("data-untray"), 1); shownBody = null; rest(); }
     else if (t.id === "ss-ed-accept") { if (adding) addNow(); else if (editing && editing.id === c.id) saveEdit(c); else if (c._applied) startEdit(c); else { save(); if (c.status !== "accepted") advisorAccept(c.id); var l2 = SSC.list(), k = l2.indexOf(cur), nx = l2[k + 1]; if (nx) open(nx); else close(); } }
     else if (t.id === "ss-ed-skip") { advisorSkip(c.id); draw(); }

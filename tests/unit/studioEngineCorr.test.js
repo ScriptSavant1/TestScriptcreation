@@ -141,6 +141,13 @@ describe('Test — StudioEdit.check / checkText', () => {
     expect([res.verdict, res.values]).toEqual(['ok', ['a1', 'a2']]);
     expect(E.checkText(res).title).toBe('Reads a list of 2 values');
   });
+  test('a list that is part of the matches (the options of one select): only its values; the note says which matches', () => {
+    const page = { method: 'GET', url: 'https://a.example.com/', respBody: '<option value="P">P</option><option value="Q">Q</option><option value="X">X</option>' };
+    const corr = { extractorType: 'regexp', extractorConfig: { pattern: '<option\\b[^>]*?\\svalue="([^"]*)"', all: true }, sourceIdx: 0, usages: [{ reqIdx: 1, tokenValue: 'Q' }] };
+    const res = E.check({ entries: [page, { method: 'POST', url: 'https://a.example.com/r' }], corr, range: { from: 1, to: 2 } });
+    expect([res.values, res.matches, res.verdict]).toEqual([['P', 'Q'], 3, 'ok']);
+    expect(E.checkText(res).notes[0]).toBe('Matches 1–2 of the 3 the pattern finds in this response.');
+  });
   test('nothing read, made while it runs, a kind not tried here', () => {
     expect(E.check({ entries, corr: { extractorType: 'jsonpath', extractorConfig: { path: '$.nope' }, sourceIdx: 0, usages: [] } }).verdict).toBe('none');
     expect(E.check({ entries, corr: { extractorType: 'pkce', sourceIdx: -1 } }).verdict).toBe('runtime');

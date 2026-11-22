@@ -1229,21 +1229,6 @@ body.ss-step-wide #ss-t-corr.ss-cr-cards > #adv-panel { flex: 1 0 auto; }
 }
 @media (max-width: 1100px) { .ss-ed-lh [data-ed-hide], .ss-ed-rhide { display: none; } }
 /* Test (step 2): the editor's result (studio-editor.js runTest) and the list's dialog (studio-corr.js testList) */
-.ss-ed-res { margin: 8px 0 0; padding: 10px 12px; border-radius: var(--ds-r-tile); border: 1px solid var(--ds-border-2); background: var(--ds-surface-2); font-size: var(--ds-fs-sm); }
-.ss-ed-res[hidden] { display: none; }
-.ss-ed-res.good { border-color: color-mix(in srgb, var(--ds-ok) 45%, transparent); background: var(--ds-ok-soft); }
-.ss-ed-res:is(.warn, .bad) { border-color: color-mix(in srgb, var(--ds-warn) 45%, transparent); background: var(--ds-warn-soft); }
-.ss-ed-res-h { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.ss-ed-res-h b { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
-.ss-ed-res-h > svg.i { flex: none; }
-.ss-ed-res.good .ss-ed-res-h > svg.i { color: var(--ds-ok); }
-.ss-ed-res:is(.warn, .bad) .ss-ed-res-h > svg.i { color: var(--ds-warn); }
-.ss-ed-res p { margin: 2px 0 0; }
-.ss-ed-res ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 3px; }
-.ss-ed-res li { display: flex; gap: 6px; align-items: flex-start; font-family: var(--ds-mono); font-size: 12px; overflow-wrap: anywhere; }
-.ss-ed-res li svg.i { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--ds-ok); }
-.ss-ed-res li.no svg.i { color: var(--ds-warn); }
-.ss-ed-res li small { font-family: var(--ds-font); color: var(--ds-text-2); }
 .ss-test-dlg { width: min(980px, calc(100vw - 32px)); }
 .ss-test-dlg .ss-dlg-h { flex-wrap: wrap; }
 .ss-test-dlg .ss-dlg-h p { flex-basis: 100%; margin: 0; font-size: var(--ds-fs-sm); }
@@ -1258,3 +1243,18 @@ body.ss-step-wide #ss-t-corr.ss-cr-cards > #adv-panel { flex: 1 0 auto; }
 .ss-tres.good { background: var(--ds-ok-soft); } .ss-tres.good svg.i { color: var(--ds-ok); }
 .ss-tres:is(.warn, .bad) { background: var(--ds-warn-soft); } .ss-tres:is(.warn, .bad) svg.i { color: var(--ds-warn); }
 .ss-test-note { margin: 10px 0 0 !important; font-size: var(--ds-fs-xs); }
+/* a list's use, compact: one line per choice, the chosen one explains itself (the others in their tooltip) */
+.ss-ed-pick { gap: 4px; }
+.ss-ed-pick button { padding: 7px 10px 7px 34px; gap: 2px; }
+.ss-ed-pick button::before { left: 10px; top: 9px; }
+.ss-ed-pick button:not([aria-checked="true"]) small { display: none; }
+.ss-ed-nth.on .ss-ed-nthl { padding-left: 34px; }
+
+/* the Test dialog for one value (studio-editor.js runTest): the result, the values of a list, every place */
+.ss-tr-h { display: flex; align-items: center; gap: 10px; }
+.ss-tr-h b { font-size: var(--ds-fs-md); font-weight: 700; overflow-wrap: anywhere; }
+.ss-tr-notes { margin: 0; padding-left: 18px; display: grid; gap: 3px; color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
+.ss-tv { display: grid; gap: 6px; }
+.ss-tv > b, .ss-tr-sub { font-size: var(--ds-fs-sm); font-weight: 700; margin-top: 4px; }
+.ss-tv-l { display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow: auto; }
+.ss-tv-l code { padding: 1px 7px; border-radius: 6px; border: 1px solid var(--ds-border); background: var(--ds-surface-2); font-family: var(--ds-mono); font-size: 12px; }

@@ -89,6 +89,14 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio, correlation editor: Test in a window, a calmer column
+
+- Test opens its result in a window: what it reads (every value of a list), every place the value is sent back with the value that request sent (Same / Another value), the second recording. The editor's column keeps one status line.
+- A list that is part of the matches (the options of one `<select>` on a page with several) is tested with its own values — before, Test counted every option of the page (14) while the editor said 7; the window says which matches the list is.
+- Up / Down, Page Up / Down, Home and End scroll the editor's column even when the focus is not in it (on Cancel, after a click on its edge): the column the pointer was over, else the left one.
+- "Which value is sent back" (a list's use) is compact: one line per choice, the chosen one explains itself.
+- The sidebar's CDP Recorder badge (Running / REC) reads at 4.5:1 in the light theme.
+
 #### Script Studio: Plan the load in Workload Modeller
 
 - Script Studio has **Plan the load** in the file bar and in step 4, as the converters do: the same ZIP as Download ZIP (built in the browser, nothing downloaded) opens in the Workload Modeller with the script filled in. The hand-over is one shared helper for Studio and both converters (`portal/plan-load.js`).
