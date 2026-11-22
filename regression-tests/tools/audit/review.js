@@ -4,6 +4,8 @@
 //   - unnamed: a button or field with no accessible name (text, aria-label, title, a label)
 //   - focus: a control that shows nothing when it has the keyboard focus
 //   - sideways: the page (or a panel) scrolls sideways
+//   - plain: a button with words but no border, no background and no underline — it cannot be told from text
+//   - dismiss: an open pop-up (dialog) that a click outside it does not close
 // At 1366, 1920 and 2560 px wide, dark and light; a JPEG of each screen and report.json for the gallery.
 //   node review.js [outDir] [--sizes=1366,1920,2560] [--themes=dark,light] [--only=substr]
 'use strict';
@@ -37,7 +39,7 @@ function inspect() {
   const modal = [...document.querySelectorAll('dialog[open]')].find((d) => d.matches(':modal'));
   const label = (e) => { const t = (e.getAttribute('aria-label') || e.getAttribute('title') || e.innerText || e.value || e.placeholder || '').trim().replace(/\s+/g, ' '); return (e.id ? '#' + e.id + ' ' : '') + e.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : ''); };
   const where = (e) => { const s = []; let n = e; while (n && n !== document.body && s.length < 4) { s.unshift(n.id ? '#' + n.id : n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : '')); if (n.id) break; n = n.parentElement; } return s.join(' > '); };
-  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [] };
+  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [] };
   const ctrls = [...(modal || document).querySelectorAll('button, a[href], input:not([type=hidden]), select, textarea, [role=tab], [role=button], [role=separator][tabindex], summary')].filter(vis);
   // overlap: centre and corners (inset 3 px) belong to the control
   ctrls.forEach((e) => {
@@ -64,10 +66,65 @@ function inspect() {
     const name = (e.getAttribute('aria-label') || e.getAttribute('aria-labelledby') || e.getAttribute('title') || (e.innerText || '').trim() || (e.labels && e.labels.length) || e.getAttribute('placeholder') || (e.tagName === 'INPUT' && /^(submit|button)$/.test(e.type) && e.value));
     if (!name) out.unnamed.push(where(e));
   });
+  // looks like text: words, but no border, no background (other than what is behind it) and no underline. Not judged:
+  // tabs, choices in a group (radio, segmented, pressed / selected / current), menu items, fold toggles, navigation
+  const CLEAR = /rgba\(0, 0, 0, 0\)|transparent/;
+  const behind = (n) => { for (; n; n = n.parentElement) { const b = getComputedStyle(n).backgroundColor; if (!CLEAR.test(b)) return b; } return 'rgb(255, 255, 255)'; };
+  ctrls.filter((e) => e.tagName === 'BUTTON' || e.getAttribute('role') === 'button').forEach((e) => {
+    if (e.matches('[role=tab],[role=radio],[role=menuitem],[role=menuitemradio],[role=switch],[aria-pressed],[aria-selected],[aria-current],[aria-expanded]')) return;
+    // the sidebar logo (goes Home), file tabs (the current one underlined), rows of a list (the row is the control)
+    if (e.matches('.sb-brand, .code-tab, .ss-ed-hrow')) return;
+    if (e.closest('nav, [role=navigation], [role=tablist], [role=radiogroup], [role=menu], [role=listbox], [role=group]')) return;
+    const txt = (e.innerText || '').trim(); if (!/[\p{L}\p{N}]/u.test(txt)) return;   // no words: an icon (✕ included)
+    const cs = getComputedStyle(e);
+    const border = ['Top', 'Right', 'Bottom', 'Left'].some((s) => parseFloat(cs['border' + s + 'Width']) > 0 && !CLEAR.test(cs['border' + s + 'Color']));
+    const fill = !CLEAR.test(cs.backgroundColor) && cs.backgroundColor !== behind(e.parentElement);
+    const under = [e, ...e.querySelectorAll('*')].some((x) => /underline/.test(getComputedStyle(x).textDecorationLine));
+    if (!border && !fill && !under) out.plain.push(where(e) + ' "' + txt.slice(0, 30) + '"');
+  });
   // sideways scroll: the page, or a panel whose content is wider than it (not code and tables, which scroll on purpose)
   const de = document.documentElement;
   if (de.scrollWidth > de.clientWidth + 2) out.sideways.push('page +' + (de.scrollWidth - de.clientWidth) + 'px');
+  // a panel that scrolls sideways may hold wide content, but never a control that can only be reached by scrolling it
+  [...document.querySelectorAll('*')].forEach((n) => {
+    if (n.scrollWidth <= n.clientWidth + 2 || !/auto|scroll/.test(getComputedStyle(n).overflowX) || !n.offsetParent) return;
+    const r = n.getBoundingClientRect(); if (r.width < 40 || r.bottom < 0 || r.top > innerHeight) return;
+    const cut = [...n.querySelectorAll('button, a[href], input:not([type=hidden]), select, [role=button]')].filter((c) => {
+      const q = c.getBoundingClientRect(); if (!q.width || q.bottom < r.top || q.top > r.bottom) return false;
+      return q.right > r.left + n.clientWidth + 1 || q.left < r.left - 1;
+    });
+    if (cut.length) out.sideways.push(where(n) + ' hides ' + cut.length + ' control(s) sideways, e.g. ' + where(cut[0]));
+  });
   return out;
+}
+
+// the open pop-up of a document (a modal <dialog>, or an engine overlay with role=dialog aria-modal): where to click
+// outside it → { x, y, id } in that document's coordinates, or null
+function popupOf() {
+  const d = [...document.querySelectorAll('dialog[open]')].find((x) => x.matches(':modal'));
+  const o = d || [...document.querySelectorAll('[role=dialog][aria-modal=true]')].find((x) => x.offsetParent && x.getBoundingClientRect().width > 0);
+  if (!o) return null;
+  const r = o.getBoundingClientRect();
+  const x = r.left > 40 ? 12 : r.right < innerWidth - 40 ? innerWidth - 12 : r.left + r.width / 2;
+  const y = r.top > 40 ? 12 : r.bottom < innerHeight - 40 ? innerHeight - 12 : r.top + r.height / 2;
+  return { x, y, id: o.id || o.getAttribute('aria-label') || o.className };
+}
+function popupOpen(id) {
+  const o = document.getElementById(id) || [...document.querySelectorAll('[role=dialog][aria-modal=true]')].find((x) => (x.getAttribute('aria-label') || x.className) === id);
+  if (!o) return false;
+  return o.tagName === 'DIALOG' ? o.open : !!o.offsetParent;
+}
+const POPUPS = new Set();   // the pop-ups the dismiss check clicked outside of (printed, so a skipped one shows)
+async function dismissCheck(p, frameId) {
+  const fr = frameId ? await (await p.$('#iframe-' + frameId)).contentFrame() : p.mainFrame();
+  const at = await fr.evaluate(popupOf);
+  if (!at) return [];
+  POPUPS.add(String(at.id).slice(0, 40));
+  let ox = 0, oy = 0;
+  if (frameId) { const b = await (await p.$('#iframe-' + frameId)).boundingBox(); ox = b.x; oy = b.y; }
+  await p.mouse.click(ox + at.x, oy + at.y);
+  await p.waitForTimeout(250);
+  return (await fr.evaluate(popupOpen, at.id)) ? ['"' + String(at.id).slice(0, 40) + '" stays open after a click outside it'] : [];
 }
 
 async function focusCheck(p, max) {
@@ -109,16 +166,21 @@ const PLANTED = `<!doctype html><html><head><style>
   <button id="noname"><svg width="10" height="10"></svg></button>
   <button id="nofocus" class="nofocus" style="border:1px solid #888;background:#fff">No focus ring</button>
   <div class="wide"></div>
+  <div id="strip" style="width:120px;overflow-x:auto;white-space:nowrap"><span style="display:inline-block;width:300px">Wide</span><button>Past the edge</button></div>
+  <button id="flat" style="border:0;background:none;font:inherit">Take out</button>
+  <dialog id="stay"><p>A pop-up</p><button>Close</button></dialog>
 </body></html>`;
 async function selftest(b) {
   const p = await b.newPage({ viewport: { width: 1200, height: 800 } });
   await p.setContent(PLANTED);
   const r = await p.evaluate(inspect);
   r.focus = await focusCheck(p, 20);
-  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/ };
+  await p.evaluate(() => document.getElementById('stay').showModal());
+  r.dismiss = await dismissCheck(p, null);
+  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/ };
   let fail = 0;
   for (const k of Object.keys(want)) {
-    const hit = (r[k] || []).some((x) => want[k].test(x));
+    const hit = (r[k === 'panel' ? 'sideways' : k] || []).some((x) => want[k].test(x));
     console.log((hit ? 'PASS ' : 'FAIL ') + k + ' finds its planted problem' + (hit ? '' : ' — got ' + JSON.stringify(r[k])));
     if (!hit) fail++;
   }
@@ -149,6 +211,7 @@ async function selftest(b) {
       await p.screenshot({ path: path.join(OUT, file), type: 'jpeg', quality: 55 });
       const merge = {}; Object.keys(shell).forEach((k) => { merge[k] = shell[k].concat(inner ? inner[k] : []); });
       merge.focus = await focusCheck(p, 80);
+      merge.dismiss = await dismissCheck(p, frameId);
       report.push({ theme, w, name, file, ...merge });
       process.stdout.write('.');
     };
@@ -174,12 +237,27 @@ async function selftest(b) {
     await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 });
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1000); }
     await run('Studio 1 requests', 'studio');
+    // every Studio pop-up once, so the dismiss check clicks outside each of them (closed again if it stayed open)
+    const shut = () => f.evaluate(() => {
+      document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+      ['closeHostRename', 'closeAdvisorModal', 'closePasteCorrelate'].forEach((k) => { try { if (document.querySelector('.adv-modal-overlay[style*="flex"], .adv-modal-overlay[style*="block"]')) window[k](); } catch (e) { /* closed */ } });
+    });
+    const pops = [
+      ['Studio new transaction', () => { const b = document.getElementById('ss-sel-group'); b.disabled = false; b.click(); }],
+      ['Studio question', () => SS.ask('Leave this step?', 'A question the page asks.', 'Leave', () => {})],
+      ['Studio server rename', () => openHostRename(Object.keys(PerfxStudio.state().hostParams.map)[0])],
+      ['Studio every place', () => advisorShowUses(PerfxStudio.state().advisorCandidates[0].id)],
+      ['Studio add custom correlation', () => openAdvisorModal()],
+    ];
+    for (const [name, open] of pops) { await f.evaluate(open); await run(name, 'studio'); await shut(); }
     await f.click('#ss-steps [data-step="2"]'); await run('Studio 2 correlate', 'studio');
+    await f.click('#ss-cr-show [data-show="script"]'); await run('Studio 2 in the script', 'studio'); await f.click('#ss-cr-show [data-show="review"]');
     await f.evaluate(() => { const c = PerfxStudio.state().advisorCandidates.find((x) => x.varName === 'State') || PerfxStudio.state().advisorCandidates[0]; if (c) SSE.open(c.id); });
     await run('Studio editor', 'studio');
-    await f.click('#ss-ed-run').catch(() => {}); await run('Studio editor test', 'studio'); await f.click('#ss-test-ok').catch(() => {});
+    await f.click('#ss-ed-run').catch(() => {}); await run('Studio editor test', 'studio'); await f.evaluate(() => { const d = document.getElementById('ss-test-dlg'); if (d.open) d.close(); });
     await f.evaluate(() => SSE.close()); await f.evaluate(() => SSE.add()); await run('Studio add manual', 'studio'); await f.evaluate(() => SSE.close());
-    await f.click('#ss-cr-test'); await run('Studio test dialog', 'studio'); await f.click('#ss-test-ok');
+    await f.evaluate(() => openPasteCorrelate()); await run('Studio paste and detect', 'studio'); await f.evaluate(() => { try { closePasteCorrelate(); } catch (e) { /* closed */ } });
+    await f.click('#ss-cr-test'); await run('Studio test dialog', 'studio'); await f.evaluate(() => { const d = document.getElementById('ss-test-dlg'); if (d.open) d.close(); });
     await f.evaluate(() => document.getElementById('corr-panel').scrollIntoView()); await run('Studio correlation details', 'studio');
     await f.click('#ss-steps [data-step="3"]'); await p.waitForTimeout(200);
     if (await f.isVisible('#ss-ask')) await f.click('#ss-ask-no');
@@ -200,10 +278,11 @@ async function selftest(b) {
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 1));
   // summary: each finding once (by screen), with the sizes / themes it was seen at
   const by = new Map();
-  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways'].forEach((k) => (r[k] || []).forEach((x) => {
+  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss'].forEach((k) => (r[k] || []).forEach((x) => {
     const key = r.name + '|' + k + '|' + x; if (!by.has(key)) by.set(key, []); by.get(key).push(r.theme + ' ' + r.w);
   })));
-  console.log('\n' + by.size + ' distinct findings');
+  console.log('\npop-ups checked for a click outside: ' + ([...POPUPS].join(' · ') || 'none'));
+  console.log(by.size + ' distinct findings');
   [...by.entries()].sort().forEach(([k, at]) => { const [n, kind, x] = k.split('|'); console.log(`${n.padEnd(26)} ${kind.padEnd(8)} ${x}  [${at.length === SIZES.length * THEMES.length ? 'all' : at.join(', ')}]`); });
   report.filter((r) => r.name === '_errors' && r.errs.length).forEach((r) => console.log(`page errors ${r.theme} ${r.w}: ${r.errs.join(' | ')}`));
 })();

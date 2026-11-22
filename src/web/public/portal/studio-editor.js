@@ -1403,9 +1403,9 @@
       if (has) has.remove();
       var a = document.createElement("span");
       a.className = "ss-ci-act"; a.setAttribute("data-id", c.id);
-      a.innerHTML = '<button type="button" class="ds-btn ds-btn-xs" data-ci-edit title="' + (c._fixed ? "Open it: made while the script runs" : "Change how it is read, its response or its name") + '">' +
+      a.innerHTML = '<button type="button" class="ds-btn ds-btn-sm ss-btn-accent" data-ci-edit title="' + (c._fixed ? "Open it: made while the script runs" : "Change how it is read, its response or its name") + '">' +
           '<svg class="i"><use href="#i-' + (c._fixed ? "eye" : "edit") + '"/></svg>' + (c._fixed ? "Open" : "Edit") + "</button>" +
-        '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-ci-out title="Take it out of the script (Undo brings it back)">Remove</button>';
+        '<button type="button" class="ds-btn ds-btn-sm" data-ci-out title="Take it out of the script (Undo brings it back)"><svg class="i"><use href="#i-x"/></svg>Remove</button>';
       it.classList.add("ss-ci");
       it.appendChild(a);
     });

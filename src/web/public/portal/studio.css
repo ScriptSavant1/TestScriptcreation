@@ -253,7 +253,7 @@ html #ph-res .corr-list :is(.corr-type, .adv-type-badge) { color: var(--ds-text-
 #ph-res .code-tab.act { color: var(--ds-text); background: none; box-shadow: none; border-bottom: 0; }
 #ph-res .code-tab.act::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 0; height: 2px; border-radius: 2px; background: var(--ds-accent-text); }
 #ph-res .code-tab:focus-visible { outline-offset: -2px; }
-#ph-res .btn-copy { position: relative; flex: none; height: 30px; margin: 0; padding: 0 10px 0 30px; border-radius: var(--ds-r-sm); border: 0; background: transparent; color: var(--ds-text-2); font-size: 0; cursor: pointer; }
+#ph-res .btn-copy { position: relative; flex: none; height: 30px; margin: 0; padding: 0 10px 0 30px; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-border-2); background: transparent; color: var(--ds-text-2); font-size: 0; cursor: pointer; }
 #ph-res .btn-copy:hover { background: var(--ds-surface-2); color: var(--ds-text); }
 #ph-res .btn-copy::before { content: ""; position: absolute; left: 10px; top: 50%; width: 14px; height: 14px; margin-top: -7px; background: currentColor; -webkit-mask: var(--i-copy) center / contain no-repeat; mask: var(--i-copy) center / contain no-repeat; }
 #ph-res .btn-copy::after { content: "Copy"; font-size: var(--ds-fs-xs); font-weight: 600; }
@@ -736,7 +736,7 @@ body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10
 @media (max-width: 600px) { .ss-det { top: 0; right: 0; bottom: 0; width: 100vw; border-radius: 0; } .ss-inl { display: none; } }
 
 /* Correlation Advisor: Source / Replaced in (studio-ui.js) — a request opens its details; "+n more" lists every place */
-.adv-req-link { display: inline; padding: 0 2px; border: 0; background: none; color: var(--ds-accent-text); font: inherit; font-family: var(--ds-mono); font-size: 12px; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+.adv-req-link { display: inline; padding: 0 2px; border: 0; background: none; color: var(--ds-accent-text); font: inherit; font-family: var(--ds-mono); font-size: 12px; cursor: pointer; text-align: left; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 2px; }
 .adv-req-link:hover { text-decoration: underline; }
 .adv-where { color: var(--ds-text-2); }
 .adv-more { margin-left: 4px; padding: 0 8px; height: 22px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-accent-line); background: var(--ds-accent-soft); color: var(--ds-accent-text); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
@@ -916,9 +916,12 @@ body.ss-step-4 .ss-cols { display: none; }
 .ss-done-go { flex: none; transform: rotate(180deg); color: var(--ds-text-3); }
 .ss-done-card h3 { margin: 18px 0 4px; font-size: var(--ds-fs); font-weight: 700; }
 .ss-done-files { margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 1100px) {
+/* the steps' status lines go first when the four steps and Back / Next no longer fit on one line (each step's panel says it too) */
+@media (max-width: 1300px) {
   .ss-steps [data-step] small { display: none; }
   .ss-steps li + li::before { width: 18px; margin: 0 4px; }
+}
+@media (max-width: 1100px) {
   body.ss-step-wide #ss-p-right { height: auto; min-height: 70vh; }
 }
 /* narrow: the four steps on their own row (only the current one named), Back / Next below */
@@ -974,12 +977,21 @@ body.ss-step-4 .ss-cols { display: none; }
 .ss-conf.hi::before { background: var(--ds-ok); }
 .ss-conf.md::before { background: var(--ds-warn); }
 .ss-cr-act { white-space: nowrap; text-align: right; }
-.ss-cr-act .ds-btn + .ds-btn { margin-left: 4px; }
-.ss-cr-in { display: inline-flex; gap: 4px; align-items: center; color: var(--ds-ok); font-weight: 600; }
+.ss-cr-act > * + * { margin-left: 6px; }
+.ss-cr-act > * { vertical-align: middle; }
+.ss-cr-in { display: inline-flex; gap: 4px; align-items: center; padding: 3px 10px 3px 8px; border-radius: var(--ds-r-pill); background: var(--ds-ok-soft); color: color-mix(in srgb, var(--ds-ok) 62%, var(--ds-text)); font-size: var(--ds-fs-xs); font-weight: 600; }   /* a state, not a button */
 #ss-cr-empty { padding: 18px 16px; margin: 0; }
 .ss-corr-foot { position: sticky; bottom: 0; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--ds-border-2); background: var(--ds-surface); border-radius: 0 0 var(--ds-r-card) var(--ds-r-card); }
 #ss-cr-cant-m b { font-weight: 700; }
 @media (max-width: 1100px) { .ss-cr-q { width: 100%; } .ss-corr-h { flex-wrap: wrap; } }
+/* a narrower window: a row's actions stack, so the table fits and Take out is never behind a sideways scroll */
+@media (max-width: 1500px) {
+  .ss-cr-act { white-space: normal; width: 1%; }
+  .ss-cr-act > * { display: flex; width: 100%; min-width: 104px; justify-content: center; box-sizing: border-box; margin: 0 0 6px; }
+  .ss-cr-act > * + * { margin-left: 0; }
+  .ss-cr-name { width: 150px; }
+  .ss-cr-val { max-width: 220px; }
+}
 /* step 2: the correlation editor (portal/studio-editor.js) — takes the place of the table while open */
 #ss-t-corr.ss-cr-editing > :not(#ss-ed) { display: none !important; }
 .ss-ed { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-card); background: var(--ds-surface); }

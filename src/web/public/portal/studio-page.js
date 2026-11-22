@@ -476,6 +476,17 @@
     if (!d._ssMove) { d._ssMove = true; d.addEventListener("close", function () { ["margin", "inset", "left", "top"].forEach(function (k) { d.style[k] = ""; }); }); }
   });
   $$("dialog.ss-dlg .ss-dlg-h").forEach(function (h) { if (!h.title) h.title = "Drag to move"; });
+  // a click outside a dialog closes it, as Esc does (the same cancel step, so a dialog that asks first still asks) —
+  // only when the press and the release are both outside (a text selection dragged out of it does not close it)
+  var downOut = null;
+  function outside(d, e) { var r = d.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; }
+  document.addEventListener("pointerdown", function (e) { var d = e.target; downOut = d && d.matches && d.matches("dialog.ss-dlg[open]") && outside(d, e) ? d : null; }, true);
+  document.addEventListener("click", function (e) {
+    var d = downOut; downOut = null;
+    if (!d || e.target !== d || !d.open || !outside(d, e)) return;
+    var ev = new Event("cancel", { cancelable: true });
+    if (d.dispatchEvent(ev)) d.close();
+  });
 
   // Plan the load in Workload Modeller (file bar and step 4): the same ZIP as Download ZIP — dlZip with a collector,
   // nothing downloaded — handed to the Workload Modeller in the portal (portal/plan-load.js). Only inside the portal.

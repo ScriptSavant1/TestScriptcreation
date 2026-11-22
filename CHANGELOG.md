@@ -322,6 +322,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### Buttons that look like buttons, pop-ups that close from outside
+
+- Buttons with words always show a button's outline: the design system's ghost buttons (Collapse all, Copy URL, Rename, All / None, Reset, Clear all …) had no border and read as plain text; link-style buttons (a request's #2 GET link, View all tools, Not set up yet?) are underlined. In Script Studio's Correlate table the row actions are buttons (Open, Take out, Put back, Skip, Options) and In the script is a state, not a button.
+- Every Script Studio pop-up closes with a click outside it (Test, a question, New transaction, every place a value is used), as the engine's pop-ups already did.
+- Nothing is hidden behind a panel's sideways scroll: Correlate's row actions stack in narrower windows (Take out was out of sight at 1366 px), the step bar keeps step 4 in view, and the request details' tabs wrap to a second row (Dynamic values was out of sight).
+- The screen review checks these on every screen from now on: a button that looks like text, a pop-up a click outside does not close (each pop-up it tested is listed), a control only reachable by scrolling a panel sideways — each check proved on a planted problem (`review.js --selftest`).
+
 #### Every screen reviewed, control by control
 
 - A review of every screen of every tool in a real browser — at 1100, 1280, 1366, 1920 and 2560 px, dark and light (210 screen checks): no control covered by another, no clipped text, every control named, keyboard focus visible on every control, no sideways scroll; the tool proves each check on planted problems first (`regression-tests/tools/audit/review.js --selftest`).

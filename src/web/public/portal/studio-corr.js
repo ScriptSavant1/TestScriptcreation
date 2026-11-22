@@ -79,8 +79,8 @@
     var c = g[0], ticked = g.filter(function (x) { return x.status === "accepted" || x._applied; }).length, uses = 0;
     g.forEach(function (x) { uses += (x.usages || []).length; });
     var conf = g.some(function (x) { return x.confidence === "high"; }) ? '<span class="ss-conf hi" title="Traced: earlier responses send these values">High</span>' : '<span class="ss-conf md" title="Found by shape only">Medium</span>';
-    var act = '<button type="button" class="ds-btn ds-btn-xs" data-gexp="' + gid + '" aria-expanded="' + open + '">' + (open ? "Hide the " : "Show the ") + g.length + "</button>" +
-      (c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span>' : '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-gskip="' + gid + '" title="Skip every renewal">Skip all</button>');
+    var act = '<button type="button" class="ds-btn ds-btn-sm" data-gexp="' + gid + '" aria-expanded="' + open + '">' + (open ? "Hide the " : "Show the ") + g.length + "</button>" +
+      (c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span>' : '<button type="button" class="ds-btn ds-btn-sm" data-gskip="' + gid + '" title="Skip every renewal">Skip all</button>');
     return '<tr class="ss-cr-row ss-cr-grp' + (ticked === g.length && !c._applied ? " is-tick" : "") + (c._applied ? " is-in" : "") + '" data-gid="' + gid + '">' +
       '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-gtick' + (ticked === g.length ? " checked" : "") + (ticked && ticked < g.length ? " data-mixed" : "") + (c._applied ? " disabled" : "") + ' aria-label="Add every renewal of ' + esc(c.varName) + ' to the script" /></td>' +
       '<td><input class="ss-field ss-cr-name" data-gname value="' + esc(c.varName) + '" spellcheck="false" aria-label="Name of ' + esc(c.varName) + '"' + (c._applied ? " disabled" : "") + " /></td>" +
@@ -112,11 +112,11 @@
       ? '<span class="ss-conf hi" title="Traced: an earlier response sends this value">High</span>'
       : c._more ? '<span class="ss-conf md" title="A response sends it and a later request sends it back: check that it changes for each user">Medium</span>'
       : '<span class="ss-conf md" title="Found by its shape only (JWT, UUID, token): no earlier response was found that sends it">Medium</span>';
-    var act = c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span><button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-out="' + esc(c.id) + '" title="Take it out of the script (Undo brings it back)">Take out</button>'
-      : c.status === "skipped" ? '<button type="button" class="ds-btn ds-btn-xs" data-skip="' + esc(c.id) + '" title="Back to the list to review">Put back</button>'
-      : '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-skip="' + esc(c.id) + '" title="Not a value to correlate: hide it from the list">Skip</button>';
-    act = '<button type="button" class="ds-btn ds-btn-xs" data-edit="' + esc(c.id) + '" title="Open it: how it is read, the response, every place it is sent back">' + (c._applied ? "Open" : "Review") + "</button>" + act;
-    if (c._arrayReconstruct || c._selectAll) act += '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost" data-opts="' + esc(c.id) + '" title="The list options (every value or one at random, or how it is rebuilt): in the editor">Options</button>';
+    var act = c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span><button type="button" class="ds-btn ds-btn-sm" data-out="' + esc(c.id) + '" title="Take it out of the script (Undo brings it back)"><svg class="i"><use href="#i-x"/></svg>Take out</button>'
+      : c.status === "skipped" ? '<button type="button" class="ds-btn ds-btn-sm" data-skip="' + esc(c.id) + '" title="Back to the list to review"><svg class="i"><use href="#i-reset"/></svg>Put back</button>'
+      : '<button type="button" class="ds-btn ds-btn-sm" data-skip="' + esc(c.id) + '" title="Not a value to correlate: hide it from the list">Skip</button>';
+    act = '<button type="button" class="ds-btn ds-btn-sm ss-btn-accent" data-edit="' + esc(c.id) + '" title="Open it: how it is read, the response, every place it is sent back"><svg class="i"><use href="#i-' + (c._applied ? "eye" : "edit") + '"/></svg>' + (c._applied ? "Open" : "Review") + "</button>" + act;
+    if (c._arrayReconstruct || c._selectAll) act += '<button type="button" class="ds-btn ds-btn-sm" data-opts="' + esc(c.id) + '" title="The list options (every value or one at random, or how it is rebuilt): in the editor">Options</button>';
     return '<tr class="' + cls + '" data-id="' + esc(c.id) + '">' +
       '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-tick' + (c.status === "accepted" || c._applied ? " checked" : "") + (c._applied ? " disabled" : "") + ' aria-label="Add ' + esc(c.varName) + ' to the script" /></td>' +
       '<td><input class="ss-field ss-cr-name" data-name value="' + esc(c.varName) + '" spellcheck="false" aria-label="Name of ' + esc(c.varName) + '"' + (c._applied ? " disabled title=\"In the script: the name is fixed\"" : "") + " /></td>" +
@@ -282,7 +282,7 @@
           return '<tr class="t-' + r.tx.cls + '"><td><code>' + esc(r.c.varName) + "</code></td>" +
             '<td><span class="ss-tres ' + r.tx.cls + '"><svg class="i"><use href="#i-' + (r.tx.cls === "good" ? "ok" : "warn") + '"/></svg>' + LABEL[r.tx.cls] + "</span></td>" +
             "<td><b>" + esc(r.tx.title) + "</b>" + r.tx.notes.map(function (x) { return "<small>" + esc(x) + "</small>"; }).join("") + "</td>" +
-            '<td><button type="button" class="ds-btn ds-btn-xs" data-test-open="' + esc(r.c.id) + '">Open</button></td></tr>';
+            '<td><button type="button" class="ds-btn ds-btn-sm ss-btn-accent" data-test-open="' + esc(r.c.id) + '">Open</button></td></tr>';
         }).join("") + "</tbody></table>" +
         '<p class="ss-muted ss-test-note">Checked against the recording' + (two ? " and the second recording" : "") + ". A real run needs VuGen or DevWeb.</p>";
     }

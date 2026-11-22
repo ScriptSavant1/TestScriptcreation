@@ -14,7 +14,7 @@
 .ds-chip.rec .dot { animation: rl-pulse 1.2s ease-in-out infinite; }
 @keyframes rl-pulse { 50% { opacity: .25; } }
 @keyframes rl-spin { to { transform: rotate(360deg); } }
-.rl-lnk { border: 0; background: none; padding: 0; color: var(--ds-accent-text); font: inherit; font-size: var(--ds-fs-xs); font-weight: 600; cursor: pointer; text-decoration: none; }
+.rl-lnk { border: 0; background: none; padding: 0; color: var(--ds-accent-text); font: inherit; font-size: var(--ds-fs-xs); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .rl-lnk:hover { text-decoration: underline; }
 
 /* ── the Start recording window ── */

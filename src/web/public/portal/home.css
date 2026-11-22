@@ -14,7 +14,7 @@ body.has-shell #portal-home.hm { width: 100%; max-width: var(--ds-page-max); mar
 .hm button:not(.ds-btn) { font: inherit; color: inherit; }
 
 /* links ("View all tools →", "Learn more →") */
-.hm-link { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 4px 6px; border: 0; border-radius: var(--ds-r-sm); background: none; cursor: pointer; font-size: var(--ds-fs); font-weight: 600; color: var(--ds-accent-text) !important; white-space: nowrap; }
+.hm-link { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 4px 6px; border: 0; border-radius: var(--ds-r-sm); background: none; cursor: pointer; font-size: var(--ds-fs); font-weight: 600; color: var(--ds-accent-text) !important; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; }
 .hm-link:hover { background: var(--ds-accent-soft); }
 .hm-link svg { width: 16px; height: 16px; transition: transform .15s var(--ds-ease); }
 .hm-link:hover svg { transform: translateX(3px); }
