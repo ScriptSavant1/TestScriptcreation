@@ -49,6 +49,7 @@
 
   // the engine's helpers draw the request links (#id METHOD /path, a click opens its details)
   function from(c) {
+    if (c._gen) return '<span class="ss-cr-browser" title="The script makes a new UUID before the first request that sends it">A new UUID</span><small class="ss-muted">made by the script</small>';
     if (c._browser) return '<span class="ss-cr-browser" title="No response sends it before it is first sent: a script in the page made it, so the script cannot read it">Made in the browser</span><small class="ss-muted">not read from a response</small>';
     if (!c.source) return '<span class="ss-muted">Not in an earlier response</span>';
     return (typeof _advReqLink === "function" ? _advReqLink(c.source.entryIdx, c.source.url) : esc(c.source.url || "")) +
@@ -76,20 +77,30 @@
       return grow(gid, g, !!openG[k]) + (openG[k] ? g.map(function (c) { return row(c, true); }).join("") : "");
     }).join("");
   }
+  // Generate a UUID (a value made in the browser, BUG-151): the script makes a new one before the first request that sends it
+  function genBtn(on, attr, n) {
+    return '<button type="button" class="ds-btn ds-btn-sm' + (on ? "" : " ss-btn-accent") + '" ' + attr + ' aria-pressed="' + !!on + '" title="' +
+      (on ? "Back as it was: not in the script" : "The script makes a new UUID before the first request that sends " + (n > 1 ? "each of them" : "it") + " — then add it as any other value") + '">' +
+      (on ? "Don't generate" : n > 1 ? "Generate UUIDs" : "Generate a UUID") + "</button>";
+  }
   function grow(gid, g, open) {
     var c = g[0], ticked = g.filter(function (x) { return x.status === "accepted" || x._applied; }).length, uses = 0;
     g.forEach(function (x) { uses += (x.usages || []).length; });
     var conf = g.some(function (x) { return x.confidence === "high"; }) ? '<span class="ss-conf hi" title="Traced: earlier responses send these values">High</span>' : '<span class="ss-conf md" title="Found by shape only">Medium</span>';
-    var act = '<button type="button" class="ds-btn ds-btn-sm" data-gexp="' + gid + '" aria-expanded="' + open + '">' + (open ? "Hide the " : "Show the ") + g.length + "</button>" +
-      (c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span>' : '<button type="button" class="ds-btn ds-btn-sm" data-gskip="' + gid + '" title="Skip every renewal">Skip all</button>');
-    // made in the browser, every one (BUG-151): a new value each time, from no response — nothing to tick
+    // made in the browser, every one (BUG-151): a new value each time, from no response — nothing to tick, unless the
+    // script generates them (Generate UUIDs)
     var made = g.every(function (x) { return !advisorCanAccept(x); });
+    var canGen = !c._applied && g.every(function (x) { return advisorCanGenerate(x) && x.status !== "skipped"; }), allGen = canGen && g.every(function (x) { return x._gen; });
+    if (allGen) made = false;
+    var newEach = made || canGen || g.every(function (x) { return x._gen; });   // the wording: a new value each time, not renewed by the server
+    var act = (canGen ? genBtn(allGen, 'data-ggen="' + gid + '"', g.length) : "") + '<button type="button" class="ds-btn ds-btn-sm" data-gexp="' + gid + '" aria-expanded="' + open + '">' + (open ? "Hide the " : "Show the ") + g.length + "</button>" +
+      (c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span>' : '<button type="button" class="ds-btn ds-btn-sm" data-gskip="' + gid + '" title="Skip every renewal">Skip all</button>');
     return '<tr class="ss-cr-row ss-cr-grp' + (ticked === g.length && !c._applied ? " is-tick" : "") + (c._applied ? " is-in" : "") + '" data-gid="' + gid + '">' +
       '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-gtick' + (ticked === g.length ? " checked" : "") + (ticked && ticked < g.length ? " data-mixed" : "") + (c._applied || made ? " disabled" : "") + ' aria-label="Add every renewal of ' + esc(c.varName) + ' to the script"' + (made ? ' title="Made in the browser: nothing to read it from"' : "") + " /></td>" +
       '<td><input class="ss-field ss-cr-name" data-gname value="' + esc(c.varName) + '" spellcheck="false" aria-label="Name of ' + esc(c.varName) + '"' + (c._applied ? " disabled" : "") + " /></td>" +
-      "<td>" + esc(kind(c)) + '<small class="ss-cr-tag">' + (made ? "New each time" : "Renewed") + "</small></td>" +
-      '<td><code class="ss-cr-val">' + esc(String(c.preview || c.value).slice(0, 47)) + '</code><small class="ss-muted">' + g.length + (made ? " values: a new one each time" : " values: the server renews it") + "</small></td>" +
-      "<td>" + from(c) + (made ? "" : '<small class="ss-muted">and ' + plural(g.length - 1, "later response") + "</small>") + "</td>" +
+      "<td>" + esc(kind(c)) + '<small class="ss-cr-tag">' + (newEach ? "New each time" : "Renewed") + "</small></td>" +
+      '<td><code class="ss-cr-val">' + esc(String(c.preview || c.value).slice(0, 47)) + '</code><small class="ss-muted">' + g.length + (newEach ? " values: a new one each time" : " values: the server renews it") + "</small></td>" +
+      "<td>" + from(c) + (newEach ? "" : '<small class="ss-muted">and ' + plural(g.length - 1, "later response") + "</small>") + "</td>" +
       "<td>" + plural(uses, "place") + '<small class="ss-muted">each renewal where it is sent back</small></td><td>' + conf + '</td><td class="ss-cr-act">' + act + "</td></tr>";
   }
 
@@ -118,6 +129,7 @@
     var act = c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span><button type="button" class="ds-btn ds-btn-sm" data-out="' + esc(c.id) + '" title="Take it out of the script (Undo brings it back)"><svg class="i"><use href="#i-x"/></svg>Take out</button>'
       : c.status === "skipped" ? '<button type="button" class="ds-btn ds-btn-sm" data-skip="' + esc(c.id) + '" title="Back to the list to review"><svg class="i"><use href="#i-reset"/></svg>Put back</button>'
       : '<button type="button" class="ds-btn ds-btn-sm" data-skip="' + esc(c.id) + '" title="Not a value to correlate: hide it from the list">Skip</button>';
+    if (!c._applied && c.status !== "skipped" && advisorCanGenerate(c)) act = genBtn(c._gen, 'data-gen="' + esc(c.id) + '"', 1) + act;
     act = '<button type="button" class="ds-btn ds-btn-sm ss-btn-accent" data-edit="' + esc(c.id) + '" title="Open it: how it is read, the response, every place it is sent back"><svg class="i"><use href="#i-' + (c._applied ? "eye" : "edit") + '"/></svg>' + (c._applied ? "Open" : "Review") + "</button>" + act;
     if (c._arrayReconstruct || c._selectAll) act += '<button type="button" class="ds-btn ds-btn-sm" data-opts="' + esc(c.id) + '" title="The list options (every value or one at random, or how it is rebuilt): in the editor">Options</button>';
     return '<tr class="' + cls + '" data-id="' + esc(c.id) + '">' +
@@ -212,6 +224,10 @@
     if (b) { var k0 = G[b.getAttribute("data-gexp")], c0 = k0 && all().filter(function (c) { return c.id === k0[0]; })[0]; if (c0) { var gk = gkey(c0); openG[gk] = !openG[gk]; render(); } return; }
     b = e.target.closest("[data-gskip]");
     if (b) { (G[b.getAttribute("data-gskip")] || []).forEach(function (id) { var c = all().filter(function (x) { return x.id === id; })[0]; if (c && c.status !== "skipped") advisorSkip(id); }); return; }
+    b = e.target.closest("[data-gen]");
+    if (b) { advisorSetGenerate(b.getAttribute("data-gen"), b.getAttribute("aria-pressed") !== "true"); render(); return; }
+    b = e.target.closest("[data-ggen]");
+    if (b) { var on = b.getAttribute("aria-pressed") !== "true"; (G[b.getAttribute("data-ggen")] || []).forEach(function (id) { advisorSetGenerate(id, on); }); render(); return; }
     b = e.target.closest("[data-out]");
     if (b) { takeOut(b.getAttribute("data-out")); return; }
     b = e.target.closest("[data-edit]");

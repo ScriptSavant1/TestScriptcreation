@@ -851,6 +851,8 @@ function _advCardHtml(c) {
       (c.source.jsonPath
         ? " &middot; <b>" + _esc(c.source.jsonPath) + "</b>"
         : "")
+    : c._gen
+    ? '<span class="adv-browser" title="The script makes a new UUID before the first request that sends it">A new UUID, made by the script</span>'
     : c._browser
     ? '<span class="adv-browser" title="No response sends it before it is first sent: a script in the page made it, so there is nothing to read it from">Made in the browser &middot; not read from a response</span>'
     : '<span style="color:var(--text-3)">Source not found in HAR</span>';
@@ -1019,6 +1021,11 @@ function _advCardHtml(c) {
     '" onclick="advisorSkip(\'' +
     c.id +
     '\')" title="Dismiss this suggestion">&#x2715; Skip</button>' +
+    (advisorCanGenerate(c)
+      ? '<button class="adv-btn-skip" onclick="advisorSetGenerate(\'' + c.id + "', " + !c._gen + ')" title="' +
+        (c._gen ? "Back as it was: not in the script" : "The script makes a new UUID before the first request that sends it") + '">' +
+        (c._gen ? "Don't generate" : "Generate a UUID") + "</button>"
+      : "") +
     // the request whose response sends the value (as in the mockup)
     (c.source && S.entries1 && S.entries1[c.source.entryIdx] && S.entries1[c.source.entryIdx].id
       ? '<button type="button" class="adv-btn-show" onclick="advisorOpenRequest(' + S.entries1[c.source.entryIdx].id + ')" title="Open the request that sends this value">Show request</button>'
@@ -1099,6 +1106,22 @@ function advisorAcceptAllHigh() {
 // unless the user chose a response and how to read it in the editor (_edit), or chose to generate it (_gen)
 function advisorCanAccept(c) {
   return !!c && !(c._browser && !c._gen && !(c._edit && c._edit.extractorType));
+}
+
+// A UUID made in the browser can be made by the script instead (BUG-151): a new one before the first request that sends
+// each recorded value — advisorToCorrelation turns _gen into a "uuid" correlation
+function advisorCanGenerate(c) {
+  return !!c && !!c._browser && !c._applied && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.value || ""));
+}
+// on = true: generate it (and tick it); false: back as it was (not ticked)
+function advisorSetGenerate(id, on) {
+  var c = _advFindById(id);
+  if (!c || !advisorCanGenerate(c)) return;
+  if (on) { c._gen = { kind: "uuid" }; c.status = "accepted"; }
+  else { delete c._gen; if (c.status === "accepted") c.status = "pending"; }
+  _advRefreshCard(c);
+  _advUpdateBadge();
+  _advUpdateFooter();
 }
 
 function advisorAccept(id) {

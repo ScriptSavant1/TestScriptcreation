@@ -345,7 +345,7 @@
   function check(o) {
     var corr = (o && o.corr) || {}, entries = (o && o.entries) || [], t = corr.extractorType, cfg = corr.extractorConfig || {};
     var res = { verdict: "ok", value: null, values: null, matches: null, distinct: null, places: [], second: null, why: "" };
-    if (t === "pkce" || t === "array_reconstruct") { res.verdict = "runtime"; return res; }
+    if (t === "pkce" || t === "array_reconstruct" || t === "uuid" || t === "generate") { res.verdict = "runtime"; return res; }
     var src = corr.sourceIdx >= 0 ? entries[corr.sourceIdx] : null;
     if (!src) { res.verdict = "none"; res.why = "no response"; return res; }
     var body = String(src.respBody || ""), list = !!(cfg.selectAll || cfg.all);
@@ -574,6 +574,7 @@
   function cand(id) { if (adding) return nc; return (S.advisorCandidates || []).filter(function (c) { return c.id === id; })[0] || null; }
   function isList(c) { return !!(c._arrayReconstruct || c._selectAll); }
   function locked(c) { return !adding && (!!c._applied || isList(c)); }
+  function madeByScript(c) { return !!(c && (c._fixed || c._gen)); }
   function entry(i) { return (S.entries1 || [])[i]; }
   // the extractor the engine would use, without the user's choice
   function auto(c) { var x = Object.assign({}, c); delete x._edit; return advisorToCorrelation(x); }
@@ -750,7 +751,7 @@
     var c = cand(cur); if (!c) { close(); return; }
     var lock = locked(c), us = c.usages || [], list = window.SSC && !adding ? SSC.list() : [], at = list.indexOf(cur);
     $("#ss-ed-h").textContent = adding ? (c.varName || "New correlation") : c.varName;
-    $("#ss-ed-tag").textContent = adding ? "Manual" : c._applied ? (c._engineCorr ? (c._fixed ? "In the script · made while it runs" : "In the script · found by Studio") : "In the script") : isList(c) ? "List" : c._edit ? "Changed by you" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : "";
+    $("#ss-ed-tag").textContent = adding ? "Manual" : c._applied ? (c._engineCorr ? (c._fixed ? "In the script · made while it runs" : "In the script · found by Studio") : c._gen ? "In the script · a new UUID" : "In the script") : c._gen ? "A new UUID" : isList(c) ? "List" : c._edit ? "Changed by you" : c._explorer ? "From HAR Explorer" : c._paste ? "From Paste & Detect" : c._manual ? "Manual" : "";
     $("#ss-ed-pos").textContent = at >= 0 ? (at + 1) + " of " + list.length : "";
     $("#ss-ed-prev").hidden = $("#ss-ed-next").hidden = adding;
     $("#ss-ed-prev").disabled = at <= 0; $("#ss-ed-next").disabled = at < 0 || at >= list.length - 1;
@@ -761,6 +762,7 @@
     else {
       why = !us.length ? "<b>No later request sends this value back</b>, so there is nothing to correlate. Skip it."
         : editing && editing.id === c.id ? "<b>Changing it.</b> It is out of the script until you click <b>Save to the script</b>; <b>Cancel</b> puts it back as it was."
+        : c._gen ? "<b>A new UUID, made by the script.</b> The browser made this value (no response sends it), so the script makes a new one before the first request that sends it — renewed where the recording renewed it, kept where it kept it. Sent in " + plural(us.length, "place") + (c._applied ? "; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).' : ". Add it to the script from the list, or choose Don't generate there.")
         : c._fixed && c._applied ? "<b>Made while the script runs.</b> The script creates this value itself (a PKCE code verifier or challenge, or a list it rebuilds) — it is not read from a response, so there is nothing to change here. Sent in " + plural(us.length, "place") + "; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
         : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + ". Click <b>Edit</b> to change how it is read, its name or its response; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
         : c._browser && !c._gen ? "<b>Made in the browser.</b> No response sends this value before it is first sent — a script in the page made it (a hash, an id), so it is not read from a response. Sent in " + plural(us.length, "place") + ". Skip it; if you know a response that has it, choose it below and select the value."
@@ -839,7 +841,7 @@
     } else {
       var ed = editing && editing.id === c.id;
       $("#ss-ed-accept-t").textContent = ed ? "Save to the script" : c._applied ? "Edit" : "Accept & next";
-      acc.disabled = ed ? !us.length || !testOk : c._applied ? !!c._fixed : !us.length || !testOk;
+      acc.disabled = ed ? !us.length || !testOk : c._applied ? madeByScript(c) : c._gen ? false : !us.length || !testOk;
       acc.title = c._applied ? "Change how it is read, its name or its response — it is put back as it was if you cancel"
         : !us.length ? "No later request sends this value back" : !testOk ? "The way to read it does not give the value yet" : ed ? "Put the changed correlation in the script" : "Tick it and go to the next value";
     }
@@ -871,7 +873,8 @@
       if (adding && !draft) throw new Error("none");
       if (!adding && kind === "auto" && c._browser && !c._gen) { $("#ss-ed-code").textContent = "// Made in the browser: not added to the script."; return; }
       var corr = draftCorr(c);
-      s = S.format === "webhttp" ? webHttpCorrCode(corr, "") : devwebExtractorDecl(corr);
+      s = corr.extractorType === "uuid" ? (S.format === "webhttp" ? webHttpCorrCode(corr, "") : "load.global." + corr.name + " = load.utils.uuid();") + "   // before the first request that sends it"
+        : S.format === "webhttp" ? webHttpCorrCode(corr, "") : devwebExtractorDecl(corr);
     } catch (x) { s = "// The code is shown once a response and a value are chosen."; }
     $("#ss-ed-code").textContent = s;
   }
@@ -941,6 +944,7 @@
     var x = $("#ss-ed-expr"), cfg = draft && draft.extractorConfig || {};
     if (!adding && isList(c)) { listOpts(c); return; }
     if (adding && listSt) { listAddOpts(); return; }
+    if (!adding && kind === "auto" && c._gen) { x.innerHTML = '<p class="ss-muted">Nothing reads it: the script makes a new UUID.</p>'; return; }
     if (!adding && kind === "auto" && c._browser && !c._gen) { x.innerHTML = '<p class="ss-muted">Nothing reads it: no response has it before it is sent.</p>'; return; }
     if (!adding && kind === "auto") {
       var a; try { a = auto(c); } catch (err) { a = null; }
@@ -1004,6 +1008,7 @@
       return;
     }
     p.hidden = false;
+    if (!e && c._gen) { testOk = true; p.className = "ss-ed-test"; p.textContent = "Made by the script: a new UUID before the first request that sends it."; return; }
     if (!e && c._browser && !c._gen) { p.className = "ss-ed-test"; p.textContent = "Made in the browser: nothing to read it from, so it stays out of the script."; return; }
     if (!e) { p.className = "ss-ed-test bad"; p.textContent = "No earlier response was found that sends this value: choose one that has it (marked “has the value”), or use Can't find a value?"; return; }
     if (isList(c)) { testOk = true; p.className = "ss-ed-test"; p.textContent = "A list: every match is read when the script runs."; return; }
@@ -1407,8 +1412,8 @@
       if (has) has.remove();
       var a = document.createElement("span");
       a.className = "ss-ci-act"; a.setAttribute("data-id", c.id);
-      a.innerHTML = '<button type="button" class="ds-btn ds-btn-sm ss-btn-accent" data-ci-edit title="' + (c._fixed ? "Open it: made while the script runs" : "Change how it is read, its response or its name") + '">' +
-          '<svg class="i"><use href="#i-' + (c._fixed ? "eye" : "edit") + '"/></svg>' + (c._fixed ? "Open" : "Edit") + "</button>" +
+      a.innerHTML = '<button type="button" class="ds-btn ds-btn-sm ss-btn-accent" data-ci-edit title="' + (madeByScript(c) ? "Open it: made while the script runs" : "Change how it is read, its response or its name") + '">' +
+          '<svg class="i"><use href="#i-' + (madeByScript(c) ? "eye" : "edit") + '"/></svg>' + (madeByScript(c) ? "Open" : "Edit") + "</button>" +
         '<button type="button" class="ds-btn ds-btn-sm" data-ci-out title="Take it out of the script (Undo brings it back)"><svg class="i"><use href="#i-x"/></svg>Remove</button>';
       it.classList.add("ss-ci");
       it.appendChild(a);
