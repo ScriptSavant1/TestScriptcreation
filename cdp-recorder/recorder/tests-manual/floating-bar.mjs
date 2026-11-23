@@ -72,7 +72,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: join(SHO
 let pw;
 try {
   for (let i = 0; i < 40; i++) { await wait(250); try { await fetch(API + "/api/status"); break; } catch { /* starting */ } }
-  check((await status()).version === "0.3.0", "version 0.3.0");
+  check((await status()).version === "0.3.1", "version 0.3.1");
   const s = await call("POST", "/api/session", { url: site + "/select", browser: browserName, private: true, name: "Booking", firstTx: "T01_Launch", plan: "Launch\nAdd to basket\nCheckout" });
   check(s.status === 200, "Start recording — " + s.status + " " + JSON.stringify(s.json));
 
@@ -162,6 +162,23 @@ try {
   check(/bottom/.test(await bar(".fb").getAttribute("class")), "the bar moved to the bottom");
   await shot(p, "06-bottom");
   await bar(".dockb").click(); await wait(300);
+
+  // drag anywhere (0.3.1): it stays where it is let go — no snapping — and the place is remembered; a double-click on
+  // the grip puts it back at the top, in the middle
+  {
+    await wait(600);
+    const g = await bar(".grip").boundingBox(), f0 = await bar(".fb").boundingBox(), off = g.y + g.height / 2 - f0.y, vw = await p.evaluate(() => innerWidth), vh = await p.evaluate(() => innerHeight);
+    const tx = Math.round(vw * 0.3), ty = Math.round(vh * 0.55);
+    await p.mouse.move(g.x + g.width / 2, g.y + g.height / 2); await p.mouse.down();
+    await p.mouse.move(tx, ty, { steps: 10 }); await p.mouse.up(); await wait(900);
+    const fb = await bar(".fb").boundingBox(), saved = existsSync(barFile) ? JSON.parse(readFileSync(barFile, "utf8")) : {};
+    check(Math.abs(fb.y - (ty - off)) < 12 && fb.y > vh * 0.35, "a dropped bar stays where it is let go (" + Math.round(fb.x) + ", " + Math.round(fb.y) + ")");
+    check(typeof saved.x === "number" && typeof saved.y === "number" && saved.y > 0.3, "the dropped place is remembered (x " + saved.x + ", y " + saved.y + ")");
+    await shot(p, "06b-dropped");
+    await bar(".grip").dblclick(); await wait(900);
+    const back = await bar(".fb").boundingBox(), reset = JSON.parse(readFileSync(barFile, "utf8"));
+    check(back.y < 40 && reset.x === undefined, "a double-click on the grip puts it back at the top");
+  }
 
   // Alt+Shift+H
   await p.keyboard.press("Alt+Shift+H"); await wait(300);

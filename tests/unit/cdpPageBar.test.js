@@ -81,3 +81,15 @@ describe('barScript — the source put into each page', () => {
     expect(B.BAR_WORLD).toBe('perfx-recorder-bar');
   });
 });
+
+describe('barPrefsOf — a place the user dropped the bar (0.3.1)', () => {
+  test('x / y (a share of the window, 0 … 1) are kept with the half and third', () => {
+    expect(B.barPrefsOf({ dock: 'bottom', pos: 'left', x: 0.12345678, y: 0.8 })).toEqual({ dock: 'bottom', pos: 'left', x: 0.1235, y: 0.8 });
+  });
+  test('anything else is not a place: the fixed one, as before', () => {
+    expect(B.barPrefsOf({ dock: 'top', pos: 'center', x: 1.5, y: 0.2 })).toEqual({ dock: 'top', pos: 'center' });
+    expect(B.barPrefsOf({ x: '0.3', y: 0.2 })).toEqual({ dock: 'top', pos: 'center' });
+    expect(B.barPrefsOf({ x: 0.3 })).toEqual({ dock: 'top', pos: 'center' });
+    expect(B.barPrefsOf({ dock: 'bottom', pos: 'right', x: NaN, y: 0.5 })).toEqual({ dock: 'bottom', pos: 'right' });
+  });
+});

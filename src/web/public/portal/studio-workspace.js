@@ -474,6 +474,7 @@
     });
   }
   // keepFind: opened from a Find a value answer (the value stays marked, with a way back)
+  function homeTop(fb) { return window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : ""; }
   function openDet(id, keepFind) {
     if (!keepFind) D.fromFind = null;
     if (D.view !== "req") { D.view = "req"; $("#ss-det-h").textContent = "Request details"; }
@@ -483,7 +484,7 @@
     D.id = id; W.cur = id;
     // over the workspace, below the file bar (Download ZIP and the format stay in reach)
     var fb = $("#ss-filebar").getBoundingClientRect();
-    det.style.top = window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : "";
+    if (!det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
     det.hidden = false;
     document.body.classList.add("ss-det-open");
     renderDet(); draw();
@@ -608,7 +609,37 @@
     }
     scrim.hidden = det.hidden || document.body.classList.contains("ss-dock");
   }
-  if (dockBtn) dockBtn.addEventListener("click", function () { prefs.dock = !prefs.dock; SS.save(); dock(); });
+  if (dockBtn) dockBtn.addEventListener("click", function () { prefs.dock = !prefs.dock; SS.save(); unmove(); dock(); });
+
+  // The pop-up moves by its bar, like every Script Studio window: kept inside the window, it stays where it was put for
+  // the next request; a double-click on the bar puts it back on the right. Not while docked.
+  var bar = det.querySelector(".ss-det-bar");
+  function unmove() { ["left", "right", "bottom", "height"].forEach(function (k) { det.style[k] = ""; }); det.classList.remove("ss-det-moved"); det.style.top = homeTop($("#ss-filebar").getBoundingClientRect()); }
+  function clampDet() {
+    if (!det.classList.contains("ss-det-moved")) return;
+    var r = det.getBoundingClientRect();
+    det.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, r.left)) + "px";
+    det.style.top = Math.max(8, Math.min(window.innerHeight - 60, r.top)) + "px";
+    det.style.height = Math.min(r.height, window.innerHeight - 16) + "px";
+  }
+  if (bar) {
+    bar.title = "Drag to move; double-click puts it back";
+    bar.addEventListener("pointerdown", function (e) {
+      if (e.button !== 0 || document.body.classList.contains("ss-dock") || e.target.closest("button, input, label, select, a")) return;
+      var r = det.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      det.style.height = r.height + "px"; det.style.right = "auto"; det.style.bottom = "auto";
+      det.style.left = r.left + "px"; det.style.top = r.top + "px"; det.classList.add("ss-det-moved");
+      bar.setPointerCapture(e.pointerId); e.preventDefault();
+      function move(ev) {
+        det.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, ev.clientX - dx)) + "px";
+        det.style.top = Math.max(8, Math.min(window.innerHeight - 60, ev.clientY - dy)) + "px";
+      }
+      function up() { bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); bar.removeEventListener("pointercancel", up); }
+      bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up); bar.addEventListener("pointercancel", up);
+    });
+    bar.addEventListener("dblclick", function (e) { if (!e.target.closest("button, input, label, select, a")) unmove(); });
+  }
+  window.addEventListener("resize", clampDet);
   window.addEventListener("resize", dock); dock();
 
   // ── Find a value: where a value comes from and every request that sends it back, in the details sheet. The search runs
@@ -660,7 +691,7 @@
     D.view = "find"; D.id = null;
     det.classList.add("is-find");
     var fb = $("#ss-filebar").getBoundingClientRect();
-    det.style.top = window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : "";
+    if (!det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
     det.hidden = false; document.body.classList.add("ss-det-open");
     $("#ss-det-h").textContent = "Find a value";
     worker();

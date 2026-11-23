@@ -720,6 +720,9 @@ html:not(.embedded) #ph-res { height: calc(100vh - 60px); }
 .ss-det[hidden] { display: none; }
 .ss-det-bar { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 14px; min-height: 46px; background: var(--br-head); border-bottom: 1px solid var(--ds-border-2); }
 .ss-det-bar h3 { margin: 0; font-size: var(--ds-fs); font-weight: 700; white-space: nowrap; }
+body:not(.ss-dock) .ss-det-bar { cursor: move; touch-action: none; }   /* the pop-up moves by its bar */
+body:not(.ss-dock) .ss-det-bar :is(button, input, label, select) { cursor: pointer; }
+body.ss-dock .ss-det.ss-det-moved { left: auto !important; height: auto !important; }
 .ss-det-bar .ss-muted { font-size: var(--ds-fs-xs); white-space: nowrap; }
 .ss-inl { display: inline-flex; gap: 6px; align-items: center; font-size: var(--ds-fs-xs); color: var(--ds-text-2); white-space: nowrap; margin-right: 4px; cursor: pointer; }
 .ss-det-b { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }

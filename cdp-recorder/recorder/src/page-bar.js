@@ -30,10 +30,15 @@ export function planChips(plan, started) {
   });
 }
 
-/** The place of the bar: dock top / bottom, pos left / center / right — anything else falls back to top, center. */
+/** The place of the bar: dock top / bottom, pos left / center / right — anything else falls back to top, center. Where
+ *  the user dropped it: x, y = its top-left corner as a share of the window (0 … 1), kept as it is; dock / pos then say
+ *  which half and third it is in (the details open towards the middle). No x / y: the fixed place, as before. */
 export function barPrefsOf(value) {
   const v = value && typeof value === "object" ? value : {};
-  return { dock: v.dock === "bottom" ? "bottom" : "top", pos: v.pos === "left" || v.pos === "right" ? v.pos : "center" };
+  const out = { dock: v.dock === "bottom" ? "bottom" : "top", pos: v.pos === "left" || v.pos === "right" ? v.pos : "center" };
+  const share = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
+  if (share(v.x) && share(v.y)) { out.x = Math.round(v.x * 10000) / 10000; out.y = Math.round(v.y * 10000) / 10000; }
+  return out;
 }
 
 /** Where Stop saves — shown in the bar's details. */
@@ -244,7 +249,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
     input.value = typed;
     input.dataset.box = "1";
     return h("div", { class: "pill", role: "toolbar", "aria-label": "CDP Recorder" }, [
-      h("span", { class: "grip", title: "Drag to move the bar — top or bottom, left, middle or right" }),
+      h("span", { class: "grip", title: "Drag to move the bar anywhere; double-click puts it back at the top" }),
       h("span", { class: "rec" }, [h("i"), "REC"]), h("span", { class: "time" }, clock()), h("span", { class: "sep" }),
       h("span", { class: "txn" }, [h("small", null, "Running"), h("b", { title: live ? live.name : "no transaction" }, live ? live.name : "—")]),
       h("label", { class: "box", title: "Type a name and press Enter: the running transaction ends, this one starts." + (src === "planned" ? " Enter on an empty box starts the next planned step." : src ? " Tab takes the name from the page title." : "") },
@@ -256,7 +261,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
         h("span", { class: "settle" + (S.settled ? "" : " busy"), title: S.settled ? "Settled — safe to start the next transaction" : "Still loading — wait a moment before the next mark" }, [h("i"), S.settled ? "Settled" : "Loading"])]),
       h("button", { class: "b stop", title: "Stop and save the recording", onclick: stop }, [icon("stop"), h("span", { class: "lbl" }, "Stop and save")]),
       h("button", { class: "b icon" + (S.warning ? " warn" : ""), "aria-expanded": String(V.open), title: V.open ? "Hide the details" : "Transactions, rename, Undo, planned steps", onclick: () => { V.open = !V.open; V.scrollLive = V.open; draw(); } }, icon(V.open ? "up" : (S.warning ? "warn" : "chev"))),
-      h("button", { class: "b icon dockb", title: S.prefs.dock === "bottom" ? "Move the bar to the top" : "Move the bar to the bottom", onclick: () => prefs({ dock: S.prefs.dock === "bottom" ? "top" : "bottom" }) }, icon(S.prefs.dock === "bottom" ? "dockTop" : "dockBottom")),
+      h("button", { class: "b icon dockb", title: S.prefs.dock === "bottom" ? "Move the bar to the top" : "Move the bar to the bottom", onclick: () => prefs({ dock: S.prefs.dock === "bottom" ? "top" : "bottom", x: undefined, y: undefined }) }, icon(S.prefs.dock === "bottom" ? "dockTop" : "dockBottom")),
       h("button", { class: "b icon minb", title: "Minimise to a small REC dot (Alt+Shift+H hides the bar completely)", onclick: () => { V.min = true; V.open = false; draw(); } }, icon("min")),
     ]);
   }
@@ -281,7 +286,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
       h("span", { class: "tiny-only" }, [h("b", null, clock()), " · "]),
       "Running ", h("b", null, S.active ? S.active.name : "—"), " · ", h("b", null, String(S.activeCount)), " active · ", h("b", null, String(S.background)), " background",
       h("span", { class: "small-only" }, [
-        h("button", { class: "b", onclick: () => prefs({ dock: S.prefs.dock === "bottom" ? "top" : "bottom" }) }, S.prefs.dock === "bottom" ? "Move to the top" : "Move to the bottom"),
+        h("button", { class: "b", onclick: () => prefs({ dock: S.prefs.dock === "bottom" ? "top" : "bottom", x: undefined, y: undefined }) }, S.prefs.dock === "bottom" ? "Move to the top" : "Move to the bottom"),
         h("button", { class: "b", onclick: () => { V.min = true; V.open = false; draw(); } }, "Minimise")])]));
     kids.push(h("h4", null, "Transactions"));
     kids.push(all.length ? list : h("div", { class: "note" }, "None yet — type a name in the box and press Enter."));
@@ -310,6 +315,11 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
       if (V.open) fb.append(details());
     }
     wrap.append(fb);
+    if (typeof S.prefs.x === "number" && typeof S.prefs.y === "number") {
+      const r = fb.getBoundingClientRect();
+      const x = Math.max(8, Math.min(innerWidth - r.width - 8, S.prefs.x * innerWidth)), y = Math.max(8, Math.min(innerHeight - r.height - 8, S.prefs.y * innerHeight));
+      fb.style.setProperty("left", x + "px"); fb.style.setProperty("top", y + "px"); fb.style.setProperty("bottom", "auto"); fb.style.setProperty("right", "auto"); fb.style.setProperty("transform", "none");
+    }
     if (msg && Date.now() < msgUntil && !(V.open && S.recording && !V.min) && !V.hidden) wrap.append(h("div", { class: "toast" + (msgBad ? " bad" : "") }, msg));
     else if (msg && Date.now() < msgUntil && V.hidden) wrap.append(h("div", { class: "toast" }, msg));
     const tl = wrap.querySelector(".tl"), lv = tl && tl.querySelector("li.live");
@@ -371,21 +381,27 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
     }
   }, true);
 
-  // drag by the grip: follows the pointer; let go, it snaps to the nearer edge and to the left, middle or right third
+  // drag by the grip: follows the pointer and stays where it is let go (remembered as a share of the window); the
+  // half and third it is in decide which way its details open. A double-click on the grip: back to the top, in the middle
   root.addEventListener("pointerdown", (e) => {
     const g = e.target.closest && e.target.closest(".grip"); if (!g) return;
-    const fb = g.closest(".fb"), r = fb.getBoundingClientRect(), dx = e.clientX - r.left;
+    const fb = g.closest(".fb"), r = fb.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
     e.preventDefault(); g.setPointerCapture(e.pointerId);
     const move = (ev) => {
-      const x = Math.max(8, Math.min(innerWidth - r.width - 8, ev.clientX - dx)), y = Math.max(8, Math.min(innerHeight - 50, ev.clientY - 20));
+      const x = Math.max(8, Math.min(innerWidth - r.width - 8, ev.clientX - dx)), y = Math.max(8, Math.min(innerHeight - r.height - 8, ev.clientY - dy));
       fb.style.setProperty("left", x + "px"); fb.style.setProperty("top", y + "px"); fb.style.setProperty("bottom", "auto"); fb.style.setProperty("right", "auto"); fb.style.setProperty("transform", "none");
     };
     const up = (ev) => {
       g.removeEventListener("pointermove", move); g.removeEventListener("pointerup", up); g.removeEventListener("pointercancel", up);
-      const cx = ev.clientX;
-      prefs({ dock: ev.clientY > innerHeight / 2 ? "bottom" : "top", pos: cx < innerWidth / 3 ? "left" : cx > innerWidth * 2 / 3 ? "right" : "center" });
+      if (Math.abs(ev.clientX - e.clientX) < 4 && Math.abs(ev.clientY - e.clientY) < 4) return;   // a click, not a drag: nothing moved (a double-click must reach the grip)
+      const b = fb.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      prefs({ dock: cy > innerHeight / 2 ? "bottom" : "top", pos: cx < innerWidth / 3 ? "left" : cx > innerWidth * 2 / 3 ? "right" : "center",
+        x: Math.max(0, Math.min(1, b.left / innerWidth)), y: Math.max(0, Math.min(1, b.top / innerHeight)) });
     };
     g.addEventListener("pointermove", move); g.addEventListener("pointerup", up); g.addEventListener("pointercancel", up);
+  });
+  root.addEventListener("dblclick", (e) => {
+    if (e.target.closest && e.target.closest(".grip")) prefs({ dock: "top", pos: "center", x: undefined, y: undefined });
   });
 
   // ask the recorder for its state: at once, then every 700 ms; without an answer for 8 s the bar goes (recorder closed)

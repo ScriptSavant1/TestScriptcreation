@@ -64,6 +64,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### CDP Recorder
 
+#### 0.3.1: the floating bar goes anywhere
+
+- The floating bar stays exactly where you drop it (before: it snapped to the top or bottom, left, middle or right), remembered for the next recordings as a share of the window; a double-click on its grip puts it back at the top, and the dock button still moves it to the top or bottom. A click on the grip without moving no longer moves it.
+
 #### Version 0.3.0: the floating bar inside the recorded pages
 
 - Every page in the recording window — new tabs and pop-ups too — shows a small bar at the top: REC, the time, the running transaction, one box to name the next transaction (Enter or Mark: the running one ends and the next starts — no End on the bar), the counts and Settled, Stop and save. The arrow opens the details: every transaction with its requests, rename (pencil), Undo last mark, the planned steps. The same rules as the page and the toolbar (one `startTx` in `server.ts`).
@@ -352,6 +356,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The Correlation Advisor is shown whenever a recording is loaded, also when it found nothing, so Paste & Detect, Add Manual and the Request Inspector are always at hand (BUG-140).
 
 ### Portal
+
+#### Script Studio: the request details move
+
+- The request details pop-up moves by its bar, as every Script Studio window does; it stays where you put it for the next request, and a double-click on the bar puts it back below the file bar.
 
 #### Large screens: the recording view fills the width; request details a pop-up
 
