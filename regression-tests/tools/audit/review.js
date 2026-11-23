@@ -6,6 +6,7 @@
 //   - sideways: the page (or a panel) scrolls sideways
 //   - plain: a button with words but no border, no background and no underline — it cannot be told from text
 //   - dismiss: an open pop-up (dialog) that a click outside it does not close
+//   - fill: on a wide window, the content ends short of 3/4 of the width (a view shrunk into one column or capped)
 // At 1366, 1920 and 2560 px wide, dark and light; a JPEG of each screen and report.json for the gallery.
 //   node review.js [outDir] [--sizes=1366,1920,2560] [--themes=dark,light] [--only=substr]
 'use strict';
@@ -14,13 +15,13 @@ const path = require('path'), fs = require('fs');
 const args = process.argv.slice(2);
 const OUT = args.find((a) => !a.startsWith('--')) || path.join(__dirname, 'review');
 const opt = (k, d) => ((args.find((a) => a.startsWith('--' + k + '=')) || '').split('=')[1] || d);
-const SIZES = opt('sizes', '1366,1920,2560').split(',').map(Number);
+const SIZES = opt('sizes', '1366,1920,2560,3840').split(',').map(Number);
 const THEMES = opt('themes', 'dark,light').split(',');
 const ONLY = opt('only', '');
 const BASE = 'http://localhost:3999/converter/';
 const FX = path.resolve(__dirname, '../').replace(/\\/g, '/') + '/';
 const COL = path.resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/';
-const HEIGHT = { 1100: 800, 1280: 720, 1366: 768, 1920: 1000, 2560: 1300 };
+const HEIGHT = { 1100: 800, 1280: 720, 1366: 768, 1920: 1000, 2560: 1300, 3840: 1900 };   // 3840: a large monitor at 100 % (the tool beside the sidebar is over 2400 px)
 
 // runs in a document: the checks
 function inspect() {
@@ -39,7 +40,22 @@ function inspect() {
   const modal = [...document.querySelectorAll('dialog[open]')].find((d) => d.matches(':modal'));
   const label = (e) => { const t = (e.getAttribute('aria-label') || e.getAttribute('title') || e.innerText || e.value || e.placeholder || '').trim().replace(/\s+/g, ' '); return (e.id ? '#' + e.id + ' ' : '') + e.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : ''); };
   const where = (e) => { const s = []; let n = e; while (n && n !== document.body && s.length < 4) { s.unshift(n.id ? '#' + n.id : n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : '')); if (n.id) break; n = n.parentElement; } return s.join(' > '); };
-  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [] };
+  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [] };
+  // fills the width: on a wide window with no pop-up open, the rightmost card or panel must reach 3/4 of the width (a
+  // view shrunk into one column of a grid, or capped at a fixed width, leaves the rest of a large screen empty)
+  if (innerWidth >= 1200 && !document.querySelector('dialog[open]:modal, [role=dialog][aria-modal=true]:not([hidden])')) {
+    const CLR = /rgba\(0, 0, 0, 0\)|transparent/;
+    let right = 0, who = null;
+    document.querySelectorAll('body *').forEach((e) => {
+      if (!e.offsetParent && getComputedStyle(e).position !== 'fixed') return;
+      if (e.closest('dialog, [role=dialog], [role=tooltip], .toast')) return;
+      const r = e.getBoundingClientRect(); if (r.width < 40 || r.height < 40 || r.width > innerWidth * 0.98 || r.bottom < 0 || r.top > innerHeight) return;
+      const cs = getComputedStyle(e);
+      const framed = parseFloat(cs.borderRightWidth) > 0 && !CLR.test(cs.borderRightColor) || !CLR.test(cs.backgroundColor);
+      if (framed && r.right > right) { right = r.right; who = e; }
+    });
+    if (who && right < innerWidth * 0.75) out.fill.push('content ends at ' + Math.round(right) + ' of ' + innerWidth + ' px (' + Math.round(right / innerWidth * 100) + '%), e.g. ' + where(who));
+  }
   const ctrls = [...(modal || document).querySelectorAll('button, a[href], input:not([type=hidden]), select, textarea, [role=tab], [role=button], [role=separator][tabindex], summary')].filter(vis);
   // overlap: centre and corners (inset 3 px) belong to the control
   ctrls.forEach((e) => {
@@ -177,8 +193,14 @@ async function selftest(b) {
   r.focus = await focusCheck(p, 20);
   await p.evaluate(() => document.getElementById('stay').showModal());
   r.dismiss = await dismissCheck(p, null);
-  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/ };
+  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/, fill: /content ends at/ };
   let fail = 0;
+  // and the opposite: a panel across the width is not flagged
+  const q = await b.newPage({ viewport: { width: 1600, height: 800 } });
+  await q.setContent('<!doctype html><body style="margin:0;padding:16px"><div style="height:200px;border:1px solid #888;background:#fafafa">A panel across the window</div></body>');
+  const full = (await q.evaluate(inspect)).fill; await q.close();
+  console.log((full.length ? 'FAIL ' : 'PASS ') + 'fill leaves a full-width panel alone' + (full.length ? ' — got ' + JSON.stringify(full) : ''));
+  if (full.length) fail++;
   for (const k of Object.keys(want)) {
     const hit = (r[k === 'panel' ? 'sideways' : k] || []).some((x) => want[k].test(x));
     console.log((hit ? 'PASS ' : 'FAIL ') + k + ' finds its planted problem' + (hit ? '' : ' — got ' + JSON.stringify(r[k])));
@@ -232,11 +254,22 @@ async function selftest(b) {
     await f.click('.hx-req >> nth=4'); await run('Explorer workspace', 'explorer');
     await go('studio'); await p.waitForFunction(() => { const x = document.getElementById('iframe-studio').contentWindow; return x && x.document.readyState === 'complete' && typeof x.loadFile === 'function'; }, null, { timeout: 20000 });
     await run('Studio start', 'studio');
+    // the live recording view, as Start recording shows it (its layout only: the CDP Recorder is never asked)
+    await (await frameOf('studio')).evaluate(() => {
+      window.__cards = ['.ss-choices', '#ss-how', '#ss-guide', '#ss-resume', '#ss-hero'].map((s) => document.querySelector(s)).filter(Boolean).map((c) => [c, c.hidden]);
+      window.__cards.forEach(([c]) => { c.hidden = true; }); document.getElementById('rl-live').hidden = false;
+    });
+    await run('Studio recording', 'studio');
+    await (await frameOf('studio')).evaluate(() => { document.getElementById('rl-live').hidden = true; (window.__cards || []).forEach(([c, h]) => { c.hidden = h; }); });
     f = await frameOf('studio');
     await f.setInputFiles('#dz1 input[type=file]', FX + 'studio/fixtures/oauth-pkce-sso.har');
     await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 });
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1000); }
     await run('Studio 1 requests', 'studio');
+    // a request's details: a pop-up at every width (a docked panel only when the user chose it)
+    await f.click('#ss-reqs .ss-rq:not(.out) >> nth=1').catch(() => {});
+    await run('Studio request details', 'studio');
+    await f.evaluate(() => { if (window.SSW && SSW.closeDetails) SSW.closeDetails(); });
     // every Studio pop-up once, so the dismiss check clicks outside each of them (closed again if it stayed open)
     const shut = () => f.evaluate(() => {
       document.querySelectorAll('dialog[open]').forEach((d) => d.close());
@@ -283,7 +316,7 @@ async function selftest(b) {
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 1));
   // summary: each finding once (by screen), with the sizes / themes it was seen at
   const by = new Map();
-  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss'].forEach((k) => (r[k] || []).forEach((x) => {
+  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill'].forEach((k) => (r[k] || []).forEach((x) => {
     const key = r.name + '|' + k + '|' + x; if (!by.has(key)) by.set(key, []); by.get(key).push(r.theme + ' ' + r.w);
   })));
   console.log('\npop-ups checked for a click outside: ' + ([...POPUPS].join(' · ') || 'none'));

@@ -594,7 +594,21 @@
   try {
     if (window.parent !== window) window.parent.document.addEventListener("pointerdown", function () { if (detOpen() && !document.body.classList.contains("ss-dock")) closeDet(); });
   } catch (err) { /* the portal is on another address: the backdrop still closes it */ }
-  function dock() { document.body.classList.toggle("ss-dock", window.innerWidth >= 2400); }
+  // A pop-up at every width; on screens 2400 px and wider the user may dock it as a fourth panel instead (pref dock,
+  // the button in its bar) — before, it docked by itself there, which read as a missing pop-up on a large monitor
+  var dockBtn = $("#ss-det-dock");
+  function dock() {
+    var wide = window.innerWidth >= 2400;
+    document.body.classList.toggle("ss-dock", wide && !!prefs.dock);
+    if (dockBtn) {
+      dockBtn.hidden = !wide;
+      dockBtn.setAttribute("aria-pressed", String(!!prefs.dock));
+      dockBtn.title = prefs.dock ? "Open the details as a pop-up over the workspace" : "Show the details as a panel beside the requests (wide screens)";
+      dockBtn.lastChild.textContent = prefs.dock ? "Pop-up" : "Dock";
+    }
+    scrim.hidden = det.hidden || document.body.classList.contains("ss-dock");
+  }
+  if (dockBtn) dockBtn.addEventListener("click", function () { prefs.dock = !prefs.dock; SS.save(); dock(); });
   window.addEventListener("resize", dock); dock();
 
   // ── Find a value: where a value comes from and every request that sends it back, in the details sheet. The search runs

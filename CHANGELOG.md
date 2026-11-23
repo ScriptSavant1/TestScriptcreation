@@ -353,6 +353,14 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### Large screens: the recording view fills the width; request details a pop-up
+
+- Script Studio's live recording view (Start recording) filled the window on a laptop but shrank to one column of three on a screen 2200 px wide or more (916 px of 2560); it now spans the width (BUG-154).
+- A request's details open as a pop-up at every width. On screens 2400 px and wider they used to dock by themselves as a fourth panel, which looked like the pop-up was missing; **Dock** in their bar now chooses that (remembered).
+- Paste & Detect, Add Custom Correlation and Server rename opened underneath the request details (Paste & Detect opens from their Dynamic values tab); they now open on top (BUG-155).
+- The recording view's Fold all and Newest look like buttons.
+- The screen review now checks a fourth width (3840 px), that a screen fills a wide window (the content reaching at least 3/4 of the width), the live recording view and a request's details.
+
 #### Help and the guides brought up to date
 
 - Help: correlation in step 2 is a table — tick, then Add n to the script (Apply & Regenerate is the Cards view); Paste & Detect and the second recording are under Can't find a value?; two FAQ answers no longer mention an Analyse button. The Script Studio, converter, getting-started, troubleshooting, Workload Modeller and technical guides describe the four steps, the correlation editor, values made in the browser and generated UUIDs, What the script contains, Plan the load, the seeded VuGen random values and the HAR bookmarks. Development rules: a page change passes the design audit and the screen review.

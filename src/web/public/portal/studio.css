@@ -263,7 +263,7 @@ html #ph-res .corr-list :is(.corr-type, .adv-type-badge) { color: var(--ds-text-
 #ph-res #code-body { flex: 1 1 0; min-height: 0; max-height: none; margin: 0; padding: 14px 16px; border: 0; border-radius: 0; overflow: auto; font-family: var(--ds-mono); font-size: 12.5px; line-height: 1.6; background: var(--ds-code-bg); color: var(--ds-code-text); }
 
 /* ══════════════ dialogs (ds-card on the overlay) ══════════════ */
-.adv-modal-overlay { background: var(--ds-overlay) !important; backdrop-filter: none !important; padding: 16px; }
+.adv-modal-overlay { z-index: 850 !important; background: var(--ds-overlay) !important; backdrop-filter: none !important; padding: 16px; }   /* above the request details (800) — Paste & Detect opens from their Dynamic values tab */
 .adv-modal { display: flex; flex-direction: column; max-height: calc(100vh - 32px); background: var(--ds-surface) !important; border: 1px solid var(--ds-border) !important; border-radius: var(--ds-r-card) !important; box-shadow: var(--ds-shadow-2) !important; color: var(--ds-text); animation: none; }
 .adv-modal-wide { width: 620px; }
 .pc-modal { width: 680px; max-width: calc(100vw - 32px); }
@@ -514,7 +514,7 @@ ul.ss-gol li::before { content: ""; width: 6px; height: 6px; margin: 8px 8px 0; 
   #how-cdp .ss-gcard > .ss-gcall { grid-column: 2; grid-row: 3 / span 2; margin-top: 0; }
 }
 @media (max-width: 640px) { .ss-gtabs { grid-template-columns: 1fr; } }
-@media (min-width: 2200px) { .ss-home { grid-template-columns: 1fr 1fr minmax(320px, .7fr); align-items: start; } .ss-home > .ss-hero, .ss-home > .ss-resume { grid-column: 1 / -1; } .ss-home > .ss-choices { display: contents; } #ss-how .ss-minis { grid-template-columns: 1fr; } }
+@media (min-width: 2200px) { .ss-home { grid-template-columns: 1fr 1fr minmax(320px, .7fr); align-items: start; } .ss-home > .ss-hero, .ss-home > .ss-resume, .ss-home > #rl-live { grid-column: 1 / -1; }   /* the live recording view: every column, never one of three */ .ss-home > .ss-choices { display: contents; } #ss-how .ss-minis { grid-template-columns: 1fr; } }
 #ph-upload .rl-live { margin-top: 4px; }
 
 /* ── workspace: fills the window; the page itself does not scroll on a desktop ── */

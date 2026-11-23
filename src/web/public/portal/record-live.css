@@ -110,7 +110,7 @@
 .rl-tog:has(input:checked) .box { background: var(--ds-accent); border-color: var(--ds-accent); }
 .rl-tog:has(input:checked) .box svg { opacity: 1; }
 .rl-tog:has(input:focus-visible) { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
-.rl-mini { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border: 0; border-radius: var(--ds-r-sm); background: transparent; color: var(--ds-text-2); font: inherit; font-size: var(--ds-fs-xs); font-weight: 600; white-space: nowrap; cursor: pointer; }
+.rl-mini { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-sm); background: transparent; color: var(--ds-text-2); font: inherit; font-size: var(--ds-fs-xs); font-weight: 600; white-space: nowrap; cursor: pointer; }
 .rl-mini:hover { background: var(--ds-surface-2); color: var(--ds-text); }
 .rl-mini svg { width: 15px; height: 15px; }
 .rl-feed { height: max(360px, calc(100vh - 360px)); overflow: auto; border: 1px solid var(--ds-border); border-radius: var(--ds-r-tile); background: var(--ds-inset); font-size: var(--ds-fs-sm); }
