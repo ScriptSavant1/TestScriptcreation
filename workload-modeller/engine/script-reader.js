@@ -5,9 +5,11 @@
  *   - a HAR recording (also gives recorded response times)
  *
  *   const { scripts, skipped } = await ScriptReader.readFiles(fileList);
- *   scripts[i] = { name, file, protocol, txPerIter, txNames, initTx, endTx, nestedTx, thinkPerIter, thinkPauses, thinkList,
+ *   scripts[i] = { name, file, protocol, txPerIter, txNames, txList, initTx, endTx, nestedTx, thinkPerIter, thinkPauses, thinkList,
  *                  thinkUnknown, thinkLimit, waitPerIter, waitCount, waitUnknown, requestsPerIter, pages, pageShare, thinkMode,
  *                  thinkFactor, rtAvg, notes }
+ *   txNames = each transaction once; txList = every transaction of one iteration in order ({ name }, a HAR step also
+ *   { requests, time }); initTx / endTx = in vuser_init / vuser_end (not counted); nestedTx = containers (not counted)
  *   thinkPerIter = think-time calls (LRE's Think Time settings apply); waitPerIter = plain waits (always in full);
  *   thinkList = each think time's value (seconds); thinkLimit = "Limit think time to N seconds" (null = no limit).
  *
@@ -120,7 +122,7 @@
     const a = action.join("\n"), i = init.join("\n");
     const START = /\blr_start_transaction\s*\(\s*"([^"]*)"/g, END = /\blr_end_transaction\s*\(\s*"([^"]*)"/g;
     const tx = names(START, a);
-    const s = { name, protocol: "web", txPerIter: tx.length, txNames: uniq(tx),
+    const s = { name, protocol: "web", txPerIter: tx.length, txNames: uniq(tx), txList: tx.map((n) => ({ name: n })),
       initTx: uniq(names(START, i)), endTx: uniq(names(START, end.join("\n"))),
       nestedTx: action.length ? uniq([].concat(...action.map((c) => containers(events(START, c, true).concat(events(END, c, false)))))) : [],
       requestsPerIter: count(VUGEN_REQ, a), notes: [] };
@@ -174,7 +176,7 @@
     const tx = starts(action);
     const calls = (part, verb) => { const out = []; let k; const re = new RegExp("([A-Za-z_$][\\w$]*)\\s*\\.\\s*" + verb + "\\s*\\(", "g");
       while ((k = re.exec(part))) if (vars.has(k[1])) out.push({ at: k.index, start: verb === "start", name: vars.get(k[1]) }); return out; };
-    const s = { name, protocol: "devweb", txPerIter: tx.length, txNames: uniq(tx), initTx: uniq(starts(init)), endTx: uniq(starts(end)),
+    const s = { name, protocol: "devweb", txPerIter: tx.length, txNames: uniq(tx), txList: tx.map((n) => ({ name: n })), initTx: uniq(starts(init)), endTx: uniq(starts(end)),
       nestedTx: containers(calls(action, "start").concat(calls(action, "stop"))),   // the SDK ends a transaction with stop()
       requestsPerIter: count(/new\s+load\.WebRequest\s*\(/g, action), notes: [] };
     const consts = constants(js);
@@ -250,7 +252,8 @@
     });
     let think = 0, rt = 0; const gaps = [];
     steps.forEach((s, i) => { rt += s.end - s.start; if (i) { const g = Math.max(0, s.start - steps[i - 1].end); think += g; gaps.push(g / 1000); } });
-    const s = { name, protocol: "web", txPerIter: steps.length, txNames: steps.map((x, i) => titles.get(x.page) || "Step " + (i + 1)).slice(0, 12),
+    const s = { name, protocol: "web", txPerIter: steps.length, txNames: steps.map((x, i) => titles.get(x.page) || "Step " + (i + 1)),
+      txList: steps.map((x, i) => ({ name: titles.get(x.page) || "Step " + (i + 1), requests: x.n, time: Math.round(x.end - x.start) / 1000 })),
       thinkPerIter: r1(think / 1000), thinkPauses: gaps.length, thinkList: gaps, waitPerIter: 0,
       requestsPerIter: es.length, rtAvg: Math.round(rt / steps.length) / 1000, notes: [] };
     s.pages = es.filter((e) => e.isPage).length; s.pageShare = share(s.pages, es.length);

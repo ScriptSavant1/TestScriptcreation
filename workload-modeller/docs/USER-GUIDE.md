@@ -28,7 +28,7 @@ The page works out the plan as you type. A section you have not touched keeps se
 | TPS | Transactions per second — how many business transactions a script completes each second |
 | Vuser | A virtual user: one copy of the script running in a loop |
 | Iteration | One run through the script's Action part (vuser_init and vuser_end run only once per Vuser) |
-| Transactions per iteration (T) | The transactions in one iteration that count for the TPS |
+| Transactions per iteration (T) | The transactions in one iteration that count for the TPS. A script filled in from a file shows how many it has — **see them all** opens every one, in order (a HAR recording's steps with their requests and time), the ones not counted (vuser_init, vuser_end, holding other transactions) and **Copy names** for Excel |
 | Pacing | How often a Vuser starts a new iteration (for example every 24 s) |
 | Think time | The pauses written in the script between steps with `lr_think_time` (VuGen C) or `load.thinkTime` (DevWeb). LRE's Think Time settings (ignore, multiply, random %, limit) change them |
 | Fixed waits | Plain waits in the script: `sleep(ms)` (VuGen C) or `load.sleep` (DevWeb). They are not think time: LRE always waits them in full, whatever the Think Time settings say |

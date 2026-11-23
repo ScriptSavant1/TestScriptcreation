@@ -267,6 +267,11 @@ async function selftest(b) {
     await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
     await run('Workload start', 'workload');
     f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail').catch(() => {}); await run('Workload model', 'workload');
+    // a recording filled in: every transaction of one iteration in a window
+    await f.setInputFiles('#in-fill', COL + 'petstore.octoperf.com.har');
+    await f.waitForFunction(() => document.querySelector('[data-txlist]'), null, { timeout: 30000 });
+    await f.evaluate(() => openTxList(document.querySelector('[data-txlist]').dataset.txlist)); await run('Workload transactions', 'workload');
+    await f.evaluate(() => { const d = document.getElementById('wm-tx-dlg'); if (d && d.open) d.close(); });
     await go('results'); await p.waitForFunction(() => { const d = document.getElementById('iframe-analyser').contentDocument; return d && d.getElementById('in-zip'); }, null, { timeout: 20000 });
     await run('Analyser start', 'analyser');
     if (fs.existsSync(FX + 'qa/demo-run.zip')) { f = await frameOf('analyser'); await f.setInputFiles('#in-zip', FX + 'qa/demo-run.zip'); await p.waitForTimeout(9000); await run('Analyser report', 'analyser'); }

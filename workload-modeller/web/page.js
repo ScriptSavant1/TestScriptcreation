@@ -402,7 +402,8 @@ async function fill(files) {
     const existed = !!g && !seen.has(key);
     const fields = { protocol: s.protocol, txPerIter: s.txPerIter || 1, thinkPerIter: s.thinkPerIter, requestsPerIter: s.requestsPerIter || null,
       waitPerIter: s.waitPerIter || null, thinkPauses: s.thinkPauses != null ? s.thinkPauses : null, thinkList: s.thinkList || null,
-      pages: s.pages, pageShare: s.pageShare, txNames: s.txNames, source: s.file };
+      pages: s.pages, pageShare: s.pageShare, txNames: s.txNames, txList: s.txList || null,
+      txOut: { init: s.initTx || [], end: s.endTx || [], nested: s.nestedTx || [] }, source: s.file };
     if (s.thinkMode) fields.thinkMode = s.thinkMode;
     if (s.thinkFactor) fields.thinkFactor = s.thinkFactor;
     if (s.thinkLimit !== undefined) fields.thinkLimit = s.thinkLimit;   // read from rts.yml / default.cfg (null = no limit)

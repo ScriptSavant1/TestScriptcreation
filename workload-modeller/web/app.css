@@ -25,7 +25,7 @@ html.embedded .wm-top { justify-content: flex-end; padding-top: 8px; padding-bot
 .wm-n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ds-accent-soft); color: var(--ds-accent-text); font-size: var(--ds-fs-xs); font-weight: 700; flex: none; }
 .wm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px 14px; }
 .wm-f { display: flex; flex-direction: column; gap: 5px; font-size: var(--ds-fs-sm); color: var(--ds-text-2); font-weight: 600; min-width: 0; }
-.wm-f small { font-weight: 400; color: var(--ds-text-3); font-size: var(--ds-fs-xs); line-height: 1.35; }
+.wm-f small { font-weight: 400; color: var(--ds-text-3); font-size: var(--ds-fs-xs); line-height: 1.35; overflow-wrap: anywhere; }   /* a long name (an address) wraps, never runs into the next box */
 .wm-f .ds-field { width: 100%; min-width: 0; }
 .wm-f.wide { grid-column: 1 / -1; }
 .wm-f[hidden] { display: none; }
@@ -336,3 +336,16 @@ details.wm-more[open] > summary { margin-bottom: 12px; }
 .wm-script > .wm-script-head { background: var(--ds-surface); border-bottom-color: var(--ds-border-2); border-radius: calc(var(--ds-r-tile) - 1px) calc(var(--ds-r-tile) - 1px) 0 0; }
 .wm-script.is-folded > .wm-script-head { border-radius: calc(var(--ds-r-tile) - 1px); }
 .ds-btn:hover { border-color: var(--ds-accent-line); }
+
+/* Transactions per iteration — every name in a window (app.js openTxList) */
+.wm-dlg { width: min(760px, calc(100vw - 32px)); max-height: min(80vh, 760px); margin: auto; padding: 0; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-card); background: var(--ds-surface); color: var(--ds-text); box-shadow: var(--ds-shadow-2); }
+.wm-dlg[open] { display: flex; flex-direction: column; }
+.wm-dlg::backdrop { background: rgba(10, 12, 24, .45); }
+.wm-dlg-h { padding: 14px 18px; border-bottom: 1px solid var(--ds-border); }
+.wm-dlg-h h2 { margin: 0; font-size: var(--ds-fs-md); font-weight: 700; overflow-wrap: anywhere; }
+.wm-dlg-b { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px; }
+.wm-dlg-lead { margin: 0 0 10px; font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+.wm-dlg-f { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--ds-border); }
+.wm-tx-t .wm-txn { overflow-wrap: anywhere; font-family: var(--ds-mono); font-size: var(--ds-fs-xs); }
+.wm-tx-t td.ds-num, .wm-tx-t th.ds-num { white-space: nowrap; }
+.wm-tx-out { margin: 4px 0 0; padding-left: 18px; font-size: var(--ds-fs-sm); overflow-wrap: anywhere; }

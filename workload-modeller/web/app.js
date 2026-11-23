@@ -118,6 +118,51 @@ const opt = (list, v) => list.map(([k, l]) => `<option value="${k}"${k === v ? "
 function num(label, key, val, unit, help, cls, extra) {
   return `<label class="wm-f ${cls || ""}">${label}<div class="${unit ? "wm-unit" : ""}"><input class="ds-field" type="number" data-k="${key}" value="${val ?? ""}" min="0" step="any" ${extra || ""}>${unit ? `<span>${unit}</span>` : ""}</div>${help ? `<small>${help}</small>` : ""}</label>`;
 }
+// Transactions per iteration: the script's own names in a window (long names — addresses — never fill the card)
+const txOf = (g) => (g.txList && g.txList.length ? g.txList : (g.txNames || []).map((n) => ({ name: n })));
+function txHelp(g) {
+  const n = txOf(g).length;
+  if (!n) return "that count for the TPS";
+  return `${n} in the script <button type="button" class="wm-goto" data-txlist="${esc(g.id)}" title="Every transaction of one iteration, in order">see them all</button>`;
+}
+function openTxList(id) {
+  const g = state.groups.find((x) => String(x.id) === String(id)); if (!g) return;
+  const list = txOf(g), har = list.some((x) => x.requests != null), times = {};
+  list.forEach((x) => { times[x.name] = (times[x.name] || 0) + 1; });
+  const out = g.txOut || {}, outRows = [["In vuser_init (once per Vuser)", out.init], ["In vuser_end (once per Vuser)", out.end], ["Holding other transactions (nested)", out.nested]]
+    .filter((r) => r[1] && r[1].length);
+  const same = Number(g.txPerIter) === list.length;
+  let d = document.getElementById("wm-tx-dlg");
+  if (!d) {
+    d = document.createElement("dialog"); d.id = "wm-tx-dlg"; d.className = "wm-dlg"; d.setAttribute("aria-labelledby", "wm-tx-h");
+    document.body.appendChild(d);
+    let downOut = false;
+    const outside = (e) => { const r = d.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
+    d.addEventListener("pointerdown", (e) => { downOut = e.target === d && outside(e); });
+    d.addEventListener("click", (e) => {
+      if (e.target.closest("[data-close]") || (downOut && e.target === d && outside(e))) { d.close(); return; }
+      if (e.target.closest("[data-copy]")) {
+        const names = (d._names || []).join("\n");
+        Promise.resolve(navigator.clipboard && navigator.clipboard.writeText(names)).then(() => { if (typeof toast === "function") toast("The transaction names are copied — one per line, ready to paste into Excel."); })
+          .catch(() => { if (typeof toast === "function") toast("Could not copy: select the names in the list instead."); });
+      }
+    });
+  }
+  d._names = list.map((x) => x.name);
+  d.innerHTML = `<div class="wm-dlg-h"><h2 id="wm-tx-h">Transactions — ${esc(g.name)}</h2></div>
+    <div class="wm-dlg-b"><p class="wm-dlg-lead">${list.length} per iteration, in order${same ? " — the count the TPS uses." : ` — the Transactions per iteration box says ${esc(g.txPerIter)}: the TPS uses the box.`}${har ? " A HAR recording's steps: its pages, or a pause over 1.5 s." : ""}</p>
+    <div class="wm-tw"><table class="ds-table wm-tx-t"><thead><tr><th class="ds-num">#</th><th>Transaction</th>${har ? '<th class="ds-num">Requests</th><th class="ds-num">Time in the recording</th>' : ""}</tr></thead><tbody>${
+      list.map((x, i) => `<tr><td class="ds-num">${i + 1}</td><td class="wm-txn">${esc(x.name)}${times[x.name] > 1 ? ` <span class="wm-muted">· ${times[x.name]} times per iteration</span>` : ""}</td>${
+        har ? `<td class="ds-num">${fmt(x.requests)}</td><td class="ds-num">${fmtS(x.time)}</td>` : ""}</tr>`).join("")}</tbody></table></div>
+    ${outRows.length ? `<p class="wm-sub">Not counted <span class="wm-subh">— not part of an iteration's TPS</span></p><ul class="wm-tx-out">${outRows.map((r) => `<li><b>${r[0]}:</b> ${r[1].map(esc).join(", ")}</li>`).join("")}</ul>` : ""}</div>
+    <div class="wm-dlg-f"><button type="button" class="ds-btn ds-btn-sm" data-copy>Copy names</button><button type="button" class="ds-btn ds-btn-sm ds-btn-primary" data-close>Close</button></div>`;
+  d.showModal();
+  d.querySelector("[data-close]").focus();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-txlist]");
+  if (b) { e.preventDefault(); openTxList(b.dataset.txlist); }   // (inside a label: never focus its box instead)
+});
 // the replay settings act on the think time above: greyed out while there is none
 const noThink = (g) => !(g.thinkPerIter > 0);
 // Multiply / Random: the think time LRE will really wait, so a factor is never read as seconds (27 s × 3 = 81 s)
@@ -166,7 +211,7 @@ function scriptCard(g) {
         ${num("Vusers per machine", "perLg", g.perLg, "", "your figure for this script, e.g. from a past run — replaces the rule", "adv")}
       </div></div>
       <div><p class="wm-sub">One iteration <span class="wm-subh">— one run through the script</span></p><div class="wm-grid">
-        ${num("Transactions per iteration", "txPerIter", g.txPerIter, "", g.txNames && g.txNames.length ? "in the script: " + esc(g.txNames.length > 4 ? g.txNames.slice(0, 3).join(", ") + " and " + (g.txNames.length - 3) + " more" : g.txNames.join(", ")) : "that count for the TPS")}
+        ${num("Transactions per iteration", "txPerIter", g.txPerIter, "", txHelp(g))}
         ${num("Think time — total per iteration", "thinkPerIter", g.thinkPerIter, "s", "all think times of one iteration added up, not per transaction — e.g. 9 × lr_think_time(3) = 27 s")}
         ${num("Fixed waits — total per iteration", "waitPerIter", g.waitPerIter, "s", "all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full", g.waitPerIter > 0 ? "" : "adv")}
         ${num("Response time — per transaction", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}

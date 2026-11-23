@@ -196,3 +196,29 @@ describe('pages and API calls (for the Vusers-per-machine rule)', () => {
     expect(R.readVugen('V', { 'Action.c': 'Action() { lr_think_time(5); return 0; }' }).pageShare).toBeNull();
   });
 });
+
+describe('every transaction of an iteration, in order (the "see them all" window)', () => {
+  test('VuGen: txList keeps repeats in order; txNames once each; the not-counted ones apart', () => {
+    const v = R.readVugen('Loop', {
+      'vuser_init.c': 'vuser_init(){ lr_start_transaction("T00_Login"); lr_end_transaction("T00_Login", LR_AUTO); return 0; }',
+      'Action.c': 'Action(){ lr_start_transaction("T01_Search"); lr_end_transaction("T01_Search", LR_AUTO); lr_start_transaction("T02_Open"); lr_end_transaction("T02_Open", LR_AUTO); lr_start_transaction("T01_Search"); lr_end_transaction("T01_Search", LR_AUTO); return 0; }',
+    });
+    expect(v.txList.map((x) => x.name)).toEqual(['T01_Search', 'T02_Open', 'T01_Search']);
+    expect(v.txList.length).toBe(v.txPerIter);
+    expect(v.txNames).toEqual(['T01_Search', 'T02_Open']);
+    expect(v.initTx).toEqual(['T00_Login']);
+  });
+
+  test('a HAR with 14 steps: all 14 names (no cut at 12), each with its requests and time', () => {
+    const t0 = Date.parse('2026-01-01T10:00:00Z');
+    const at = (ms) => new Date(t0 + ms).toISOString();
+    const pages = Array.from({ length: 14 }, (_, i) => ({ id: 'p' + i, title: 'https://shop.example.com/actions/Step' + i + '.action' }));
+    const entries = [];
+    pages.forEach((p, i) => [0, 100].forEach((d) => entries.push({ pageref: p.id, startedDateTime: at(i * 5000 + d), time: 400, request: { method: 'GET', url: 'https://shop.example.com/' + i + '/' + d }, response: { status: 200 } })));
+    const s = R.readHar('Shop', { log: { pages, entries } });
+    expect(s.txPerIter).toBe(14);
+    expect(s.txNames.length).toBe(14);
+    expect(s.txList.length).toBe(14);
+    expect(s.txList[13]).toEqual({ name: 'https://shop.example.com/actions/Step13.action', requests: 2, time: 0.5 });
+  });
+});

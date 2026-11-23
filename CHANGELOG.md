@@ -6,6 +6,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### Every transaction of a script in one window
+
+- Transactions per iteration shows how many the script has and **see them all**: a window with every transaction of one iteration in order (repeats counted; a HAR recording's steps with their requests and their time in the recording), the ones not counted (vuser_init, vuser_end, transactions holding others) and **Copy names** (one per line, for Excel). It closes with Esc, Close or a click outside.
+- A HAR recording kept only its first 12 step names; now all of them. Long names (addresses) no longer run out of their box into the next field.
+
 #### Clearer results and inputs
 
 - Result tiles in words first, abbreviation after: **Transactions per second (TPS)**, **Transactions per hour (TPH)**, **Iterations per hour** (all Vusers and per Vuser) — at full load — **One iteration takes** (response + think time, and whether it fits in the pacing), **Total test duration**, **Full load (steady state)**, **Total iterations (whole test)** (about how many per Vuser), **Total transactions (whole test)**, **Requests per second (hits)**; "How to read these numbers" under the tiles, worked out with the plan's own figures. The summary uses the same names.
