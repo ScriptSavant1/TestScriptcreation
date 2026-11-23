@@ -28,7 +28,7 @@ The page works out the plan as you type. A section you have not touched keeps se
 | TPS | Transactions per second — how many business transactions a script completes each second |
 | Vuser | A virtual user: one copy of the script running in a loop |
 | Iteration | One run through the script's Action part (vuser_init and vuser_end run only once per Vuser) |
-| Transactions per iteration (T) | The transactions in one iteration that count for the TPS. A script filled in from a file shows how many it has — **see them all** opens every one, in order (a HAR recording's steps with their requests and time), the ones not counted (vuser_init, vuser_end, holding other transactions) and **Copy names** for Excel |
+| Transactions per iteration (T) | The transactions in one iteration that count for the TPS. A script filled in from a file shows how many it has — **see them all** opens every one, in order (a HAR recording's transactions with their requests and response time), the ones not counted (vuser_init, vuser_end, holding other transactions) and **Copy names** for Excel |
 | Pacing | How often a Vuser starts a new iteration (for example every 24 s) |
 | Think time | The pauses written in the script between steps with `lr_think_time` (VuGen C) or `load.thinkTime` (DevWeb). LRE's Think Time settings (ignore, multiply, random %, limit) change them |
 | Fixed waits | Plain waits in the script: `sleep(ms)` (VuGen C) or `load.sleep` (DevWeb). They are not think time: LRE always waits them in full, whatever the Think Time settings say |
@@ -55,6 +55,10 @@ The page works out the plan as you type. A section you have not touched keeps se
 - **Before you fill in a script — what each box means**: the notes at the top of Scripts (open until you fold them)
   explain one iteration, transactions per iteration, think time as the total of one iteration, response time per
   transaction and pacing, with the three formulas and a worked example.
+- **A HAR recording**: its transactions are its bookmarks (`START-name` / `END-name`, as Script Studio reads them; an END
+  without its START starts where the previous one ended); without bookmarks, its pages; without pages, a new step after
+  a pause over 1.5 s. A transaction's response time is the time its requests ran: a quiet gap over 1.5 s is the user
+  (reading, typing, pressing the END bookmark) and counts as think time. The bookmark requests are not requests.
 - **Fill from scripts**: script ZIPs (Web HTTP/HTML or DevWeb; one ZIP may hold several scripts) and HAR files. The
   import note lists what was read and anything to check: transactions that run once at the start (vuser_init /
   load.initialize) or at the end (vuser_end / load.finalize) and are not counted, transactions inside other

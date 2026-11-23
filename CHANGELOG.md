@@ -6,6 +6,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### A HAR recording: transactions from its bookmarks, response time from its requests
+
+- A HAR recording's transactions are its START / END bookmarks, as Script Studio and the HAR Explorer read them (before: its pages, named by their address, and the bookmark requests counted as API calls). Response time per transaction = the time its requests ran; a quiet gap over 1.5 s — the user reading, or pressing END — is think time. A sample recording: 13 transactions instead of 14 pages, 0.18 s response instead of 25 s, 419 s of pauses instead of 81 s, 161 requests instead of 187 (BUG-153).
+
 #### Every transaction of a script in one window
 
 - Transactions per iteration shows how many the script has and **see them all**: a window with every transaction of one iteration in order (repeats counted; a HAR recording's steps with their requests and their time in the recording), the ones not counted (vuser_init, vuser_end, transactions holding others) and **Copy names** (one per line, for Excel). It closes with Esc, Close or a click outside.

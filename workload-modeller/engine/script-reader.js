@@ -235,31 +235,86 @@
   }
   const mime = (e) => (e.response && e.response.content && e.response.content.mimeType) || "";
   const header = (e, n) => ((e.request.headers || []).find((h) => String(h.name).toLowerCase() === n) || {}).value || "";
+  // A transaction bookmark of the recording — the same rule as Script Studio and the HAR Explorer (portal/recorder-core.js
+  // detectMarkers; keep the two in step): https://START-name.invalid or https://name-START.invalid, END the same.
+  // A bookmark is not a request of the script.
+  function harMarker(url) {
+    const s = /\/\/START[-_]([^/.\s?]+)\.invalid/i.exec(url) || /\/\/([^/.\s?]+)[-_]START\.invalid/i.exec(url);
+    if (s) return { type: "start", name: s[1].replace(/-/g, "_") };
+    const e = /\/\/END[-_]([^/.\s?]+)\.invalid/i.exec(url) || /\/\/([^/.\s?]+)[-_]END\.invalid/i.exec(url);
+    return e ? { type: "end", name: e[1].replace(/-/g, "_") } : null;
+  }
+  // The time requests were running: a request that starts within 1.5 s of the ones before it ending is part of the same
+  // burst; a longer quiet gap is the user (reading, typing, pressing the bookmark) — think time, not response time.
+  const QUIET_MS = 1500;
+  function bursts(reqs) {
+    const out = [];
+    reqs.slice().sort((a, b) => a.start - b.start).forEach((r) => {
+      const last = out[out.length - 1];
+      if (last && r.start <= last.end + QUIET_MS) last.end = Math.max(last.end, r.start + r.time);
+      else out.push({ start: r.start, end: r.start + r.time });
+    });
+    return out;
+  }
+  const busyMs = (reqs) => bursts(reqs).reduce((t, b) => t + (b.end - b.start), 0);
+
+  // Transactions: the recording's bookmarks (START / END) when it has them; else its pages; else a new step after a
+  // pause over 1.5 s. Response time per transaction = the time its requests ran (bursts); think time = every quiet gap
+  // of the iteration (between bursts of the transactions' requests) — so late calls or a slow click on the END
+  // bookmark no longer count as response time.
   function readHar(name, har) {
     const log = har && har.log;
     if (!log || !Array.isArray(log.entries)) throw new Error("not a HAR file");
-    const es = log.entries.filter((e) => e.request && e.request.url && /^https?:/i.test(e.request.url))
-      .map((e) => ({ start: Date.parse(e.startedDateTime), time: Math.max(0, e.time || 0), page: e.pageref || null, isPage: harIsPage(e) }))
+    const all = log.entries.filter((e) => e.request && e.request.url && /^https?:/i.test(e.request.url))
+      .map((e) => ({ start: Date.parse(e.startedDateTime), time: Math.max(0, e.time || 0), page: e.pageref || null, isPage: harIsPage(e), marker: harMarker(e.request.url) }))
       .filter((e) => Number.isFinite(e.start)).sort((a, b) => a.start - b.start);
+    const es = all.filter((e) => !e.marker), marks = all.length - es.length;
     if (!es.length) throw new Error("no requests in the HAR");
-    const steps = [];
     const titles = new Map((log.pages || []).map((p) => [p.id, p.title || p.id]));
-    es.forEach((e) => {
-      const last = steps[steps.length - 1];
-      const same = titles.size ? last && last.page === e.page : last && e.start - last.end <= 1500;
-      if (same) { last.end = Math.max(last.end, e.start + e.time); last.n++; }
-      else steps.push({ page: e.page, start: e.start, end: e.start + e.time, n: 1 });
-    });
-    let think = 0, rt = 0; const gaps = [];
-    steps.forEach((s, i) => { rt += s.end - s.start; if (i) { const g = Math.max(0, s.start - steps[i - 1].end); think += g; gaps.push(g / 1000); } });
-    const s = { name, protocol: "web", txPerIter: steps.length, txNames: steps.map((x, i) => titles.get(x.page) || "Step " + (i + 1)),
-      txList: steps.map((x, i) => ({ name: titles.get(x.page) || "Step " + (i + 1), requests: x.n, time: Math.round(x.end - x.start) / 1000 })),
-      thinkPerIter: r1(think / 1000), thinkPauses: gaps.length, thinkList: gaps, waitPerIter: 0,
-      requestsPerIter: es.length, rtAvg: Math.round(rt / steps.length) / 1000, notes: [] };
+    let steps = [];
+    if (marks) {
+      // an END without its START (the START bookmark fired before the recording began) starts where the previous
+      // transaction ended, or at the beginning — as Script Studio does (_repairOrphanEnds)
+      const open = []; let free = [];
+      all.forEach((e) => {
+        if (e.marker && e.marker.type === "start") {
+          open.forEach((t) => { t.holds = true; });
+          const t = { name: e.marker.name, reqs: [] }; open.push(t); steps.push(t); free = []; return;
+        }
+        if (e.marker) {
+          const k = open.map((t) => t.name).lastIndexOf(e.marker.name);
+          if (k >= 0) open.splice(k); else steps.push({ name: e.marker.name, reqs: free });
+          free = []; return;
+        }
+        if (open.length) open.forEach((t) => t.reqs.push(e)); else free.push(e);
+      });
+    } else {
+      es.forEach((e) => {
+        const last = steps[steps.length - 1], lastEnd = last && Math.max(...last.reqs.map((r) => r.start + r.time));
+        const same = titles.size ? last && last.page === e.page : last && e.start - lastEnd <= QUIET_MS;
+        if (same) last.reqs.push(e); else steps.push({ page: e.page, reqs: [e] });
+      });
+      steps.forEach((x, i) => { x.name = titles.get(x.page) || "Step " + (i + 1); });
+    }
+    // think time: the quiet gaps between the bursts of the transactions' requests, over the whole iteration
+    const inTx = new Set(); steps.forEach((t) => t.reqs.forEach((r) => inTx.add(r)));
+    const line = bursts([...inTx]), gaps = [];
+    for (let i = 1; i < line.length; i++) gaps.push(Math.round(line[i].start - line[i - 1].end) / 1000);
+    const think = gaps.reduce((t, g) => t + g, 0);
+    const times = steps.map((t) => busyMs(t.reqs));
+    const rt = times.reduce((t, x) => t + x, 0);
+    const s = { name, protocol: "web", txPerIter: steps.length, txNames: uniq(steps.map((t) => t.name)),
+      txList: steps.map((t, i) => ({ name: t.name, requests: t.reqs.length, time: Math.round(times[i]) / 1000 })),
+      nestedTx: uniq(steps.filter((t) => t.holds).map((t) => t.name)),
+      thinkPerIter: r1(think), thinkPauses: gaps.length, thinkList: gaps, waitPerIter: 0,
+      requestsPerIter: es.length, rtAvg: steps.length ? Math.round(rt / steps.length) / 1000 : 0, notes: [] };
     s.pages = es.filter((e) => e.isPage).length; s.pageShare = share(s.pages, es.length);
-    s.brief = `${steps.length} step${steps.length === 1 ? "" : "s"} · ${s.thinkPerIter} s pauses · ${es.length} requests${kindText(s)} · ${s.rtAvg} s response`;
+    const word = marks ? "transaction" : "step";
+    s.brief = `${steps.length} ${word}${steps.length === 1 ? "" : "s"} · ${s.thinkPerIter} s pauses · ${es.length} requests${kindText(s)} · ${s.rtAvg} s response`;
     s.warnCodes = ["har"];
-    s.warnings = [`steps ${titles.size ? "are the recording's transactions" : "split where the recording pauses over 1.5 s"}; the response time is one user's — a first estimate`];
+    s.warnings = [(marks ? `transactions are the recording's bookmarks (START / END) — ${marks} bookmark request${marks === 1 ? " is" : "s are"} not counted`
+      : `steps ${titles.size ? "are the recording's transactions" : "split where the recording pauses over 1.5 s"}`) +
+      "; the response time is the time each one's requests ran (a quiet gap over 1.5 s is the user: think time) — one user's, a first estimate"];
     s.notes = [s.brief].concat(s.warnings);
     return s;
   }

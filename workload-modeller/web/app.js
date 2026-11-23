@@ -150,10 +150,10 @@ function openTxList(id) {
   }
   d._names = list.map((x) => x.name);
   d.innerHTML = `<div class="wm-dlg-h"><h2 id="wm-tx-h">Transactions — ${esc(g.name)}</h2></div>
-    <div class="wm-dlg-b"><p class="wm-dlg-lead">${list.length} per iteration, in order${same ? " — the count the TPS uses." : ` — the Transactions per iteration box says ${esc(g.txPerIter)}: the TPS uses the box.`}${har ? " A HAR recording's steps: its pages, or a pause over 1.5 s." : ""}</p>
-    <div class="wm-tw"><table class="ds-table wm-tx-t"><thead><tr><th class="ds-num">#</th><th>Transaction</th>${har ? '<th class="ds-num">Requests</th><th class="ds-num">Time in the recording</th>' : ""}</tr></thead><tbody>${
+    <div class="wm-dlg-b"><p class="wm-dlg-lead">${list.length} per iteration, in order${same ? " — the count the TPS uses." : ` — the Transactions per iteration box says ${esc(g.txPerIter)}: the TPS uses the box.`}${har ? " From the recording: its bookmarks (START / END), else its pages, else a pause over 1.5 s. Response time = the time the requests ran; a quiet gap over 1.5 s is the user (think time)." : ""}</p>
+    <div class="wm-tw"><table class="ds-table wm-tx-t"><thead><tr><th class="ds-num">#</th><th>Transaction</th>${har ? '<th class="ds-num">Requests</th><th class="ds-num">Response time</th>' : ""}</tr></thead><tbody>${
       list.map((x, i) => `<tr><td class="ds-num">${i + 1}</td><td class="wm-txn">${esc(x.name)}${times[x.name] > 1 ? ` <span class="wm-muted">· ${times[x.name]} times per iteration</span>` : ""}</td>${
-        har ? `<td class="ds-num">${fmt(x.requests)}</td><td class="ds-num">${fmtS(x.time)}</td>` : ""}</tr>`).join("")}</tbody></table></div>
+        har ? `<td class="ds-num">${fmt(x.requests)}</td><td class="ds-num">${x.time < 10 ? fmt(x.time, 2) + " s" : fmtS(x.time)}</td>` : ""}</tr>`).join("")}</tbody></table></div>
     ${outRows.length ? `<p class="wm-sub">Not counted <span class="wm-subh">— not part of an iteration's TPS</span></p><ul class="wm-tx-out">${outRows.map((r) => `<li><b>${r[0]}:</b> ${r[1].map(esc).join(", ")}</li>`).join("")}</ul>` : ""}</div>
     <div class="wm-dlg-f"><button type="button" class="ds-btn ds-btn-sm" data-copy>Copy names</button><button type="button" class="ds-btn ds-btn-sm ds-btn-primary" data-close>Close</button></div>`;
   d.showModal();
