@@ -13,6 +13,7 @@ read on the user's PC and never sent to the server.
 - Output: the LRE settings to type in (Copy LRE settings) and a one-sheet Excel file for the LRE scenario.
 - Team settings: `config/workload-settings.json` (machine types and their Vusers per machine, load-generator limits,
   schedule defaults, protocol assumptions) — edit on the server, read by every page when it opens.
+- **Plan the load**: Script Studio and the Postman / Bruno and JMeter converters hand their script ZIP to the page (`window.WorkloadModeller.addScripts`).
 - **Fill from scripts**: script ZIPs (Web HTTP/HTML, DevWeb; several scripts per ZIP) and HAR files give each script's
   transactions, think time, fixed waits (`sleep`, `load.sleep`: not changed by the think-time settings) and requests,
   and the "Limit think time to" setting. Transactions in `vuser_init` / `vuser_end` (`load.initialize` /

@@ -237,8 +237,13 @@ All scripts at once: choose or drop any number of files; each script becomes (or
   quotes is kept (a "https://" is not a comment).
 - Transactions inside other transactions (a start while another is open; DevWeb ends one with `.stop()`): listed, all
   counted. Calls in if / else branches are each counted — the count is what is written, not what runs.
-- HAR: steps = its pages (Recorder transactions), else split at pauses over 1.5 s; response time per step and pauses
-  from the timings (one user: a first estimate, marked "From the recording").
+- HAR: transactions = its START / END bookmarks (the same rule as Script Studio; an END without its START begins where
+  the previous one ended), else its pages (Recorder transactions), else split at pauses over 1.5 s. The bookmark
+  requests are not requests. Response time per transaction = the time its requests ran (bursts: a quiet gap over 1.5 s
+  is the user, counted as think time); think time = every quiet gap of the iteration (one user: a first estimate,
+  marked "From the recording") — BUG-153.
+- Transactions per iteration: "n in the script · see them all" opens every transaction of one iteration in order
+  (repeats counted; HAR: requests and response time), the ones not counted (vuser_init, vuser_end, nested), Copy names.
 - A script zipped without its .usr also counts: a folder with Action.c (Web HTTP/HTML), or a main.js with `load.action` (DevWeb).
 - Not a ZIP / HAR, or no script inside: listed under "N files were not read", with the reason, in amber; the
   headline says "N scripts filled in from M files". The same script in two files: the last one is used, and said.

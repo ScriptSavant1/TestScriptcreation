@@ -9,12 +9,14 @@ Browser tools use Microsoft Edge through the CDP Recorder's `playwright-core`, s
 | `studio/` | Script Studio output | `node make-fixtures.js` once, then `node harness.js <page URL> <out folder>` and `node compare.js <old> <new>` |
 | `converter/` | Postman / Bruno and JMeter panels | `node make-inputs.js` once, then `node harness.js <portal URL> <out folder>` and `node compare.js <old> <new>` |
 | `help/` | Help text, word by word | `node capture.js <portal URL> baseline.json`, again to `next.json` after the change, then `node diff.js` |
-| `audit/` | Fonts, weights, contrast and shapes on every section (`audit.js`); every screen control by control — overlap, clipped text, unnamed controls, keyboard focus, sideways scroll — at five widths and both themes, with a JPEG per screen (`review.js [out] [--sizes=…] [--themes=…] [--only=…]`; `--selftest` proves each check on planted problems); HAR Explorer against Script Studio (`hx-parity.js <files>`: every request's transaction and left-out reason); screen walk-through (`hx-ui.js`) | `node audit.js [out folder]` |
+| `audit/` | Fonts, weights, contrast and shapes on every section (`audit.js`); every screen control by control — overlap, clipped text, unnamed controls, keyboard focus, sideways scroll (the page, or a control reachable only by scrolling a panel sideways), a button with words that looks like plain text, a pop-up a click outside does not close (it opens each pop-up and lists the ones it tested) — at the widths and themes asked, with a JPEG per screen (`review.js [out] [--sizes=…] [--themes=…] [--only=…]`; `--selftest` proves each check on planted problems); HAR Explorer against Script Studio (`hx-parity.js <files>`: every request's transaction and left-out reason); screen walk-through (`hx-ui.js`) | `node audit.js [out folder]` |
 | `engines/` | What generated scripts really send, on the real VuGen and DevWeb engines through a local test proxy | `node runvugen.js <script folder> <out folder> [--har=<file>]`, `node rundevweb.js ...`, `node wirediff.js ...`; `node studioextract.js <studio url> <out folder>` (Script Studio's Regex and XPath extractors, lists — every value as recorded, one at random, the next each iteration, always the Nth, a `<select>` among others, the Correlation Advisor's own select list — on both engines against a copy of the recording with new values; `--only=<name>`) |
 
 Take the baseline from the code before the change, for example from a second working copy.
 
 The server allows 60 conversions per 5 minutes per address; the converter harness sends a different `X-Forwarded-For` per run.
+
+The runners take an unpacked script folder (unzip a downloaded ZIP first). To prove a change to generated random values (UUIDs, tokens), read them from `wire.jsonl`: a version 4 UUID never starts with `0000`.
 
 `engines/` needs VuGen installed in its default folder, and a throwaway certificate for the proxy in `engines/mock.key` and `engines/mock.crt`:
 

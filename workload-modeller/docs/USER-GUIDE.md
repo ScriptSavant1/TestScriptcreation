@@ -12,7 +12,7 @@ Open it from the PerfX Studio sidebar: **Plan → Workload Modeller**.
 
 1. **The test** — choose the kind of test (Load, Soak, Stress, Capacity, Spike) and how long full load lasts.
 2. **Scripts** — drop your script ZIPs or HAR recordings on the Scripts section. Each script's transactions, think
-   time and requests are filled in.
+   time and requests are filled in. From Script Studio or a converter, **Plan the load** brings the script here by itself.
 3. Give each script its **target** (for example 5 TPS) and a **response time** (your SLA will do).
 4. **Load generators** — choose the machine type: the on-premise Windows servers or AWS c6a.4xlarge.
 5. Read the **Result** and the **Checks**, then use the two buttons at the top of the page — **Copy LRE settings** and

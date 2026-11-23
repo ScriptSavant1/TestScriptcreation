@@ -62,7 +62,8 @@ Update only what the change calls for, in the same piece of work. If no row fits
 
 - [ ] Impact analysis approved, and only what was approved changed
 - [ ] Unit tests added or updated, and `npm test` passes
-- [ ] Old-against-new comparison run for anything that changes generated scripts or a page
+- [ ] Old-against-new comparison run for anything that changes generated scripts or a page; a change to what a script sends proved on the real engines (`regression-tests/tools/engines/`)
+- [ ] A page change: the design audit (`audit.js`) and the screen review (`review.js`, its `--selftest` too after changing it) pass in both themes — buttons look like buttons, every pop-up closes with a click outside, nothing is reachable only by scrolling a panel sideways — and the changed screens looked at, not only measured
 - [ ] Failure paths fail loudly, and negated conditions read back
 - [ ] Change scanned for secrets, company names, local paths and repository details
 - [ ] Documents updated as in the table above

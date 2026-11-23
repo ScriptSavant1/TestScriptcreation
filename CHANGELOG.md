@@ -353,6 +353,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### Help and the guides brought up to date
+
+- Help: correlation in step 2 is a table — tick, then Add n to the script (Apply & Regenerate is the Cards view); Paste & Detect and the second recording are under Can't find a value?; two FAQ answers no longer mention an Analyse button. The Script Studio, converter, getting-started, troubleshooting, Workload Modeller and technical guides describe the four steps, the correlation editor, values made in the browser and generated UUIDs, What the script contains, Plan the load, the seeded VuGen random values and the HAR bookmarks. Development rules: a page change passes the design audit and the screen review.
+
 #### Buttons that look like buttons, pop-ups that close from outside
 
 - Buttons with words always show a button's outline: the design system's ghost buttons (Collapse all, Copy URL, Rename, All / None, Reset, Clear all …) had no border and read as plain text; link-style buttons (a request's #2 GET link, View all tools, Not set up yet?) are underlined. In Script Studio's Correlate table the row actions are buttons (Open, Take out, Put back, Skip, Options) and In the script is a state, not a button.
