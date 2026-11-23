@@ -107,7 +107,7 @@ describe('advisorMirrorEngine', () => {
     expect(app.indexOf('studioAfterAdvisor()')).toBeGreaterThan(app.indexOf('advisorScan('));
     expect(app).toContain('.filter((c) => !c._engineCorr).length + _corrs.length');
     const ui = read('studio-ui.js');
-    expect(ui.split('return c.status === "accepted" && !(c._engineCorr && c._applied);').length - 1).toBe(2);
+    expect(ui.split('return c.status === "accepted" && !(c._engineCorr && c._applied) && advisorCanAccept(c);').length - 1).toBe(2);
   });
 });
 

@@ -49,6 +49,7 @@
 
   // the engine's helpers draw the request links (#id METHOD /path, a click opens its details)
   function from(c) {
+    if (c._browser) return '<span class="ss-cr-browser" title="No response sends it before it is first sent: a script in the page made it, so the script cannot read it">Made in the browser</span><small class="ss-muted">not read from a response</small>';
     if (!c.source) return '<span class="ss-muted">Not in an earlier response</span>';
     return (typeof _advReqLink === "function" ? _advReqLink(c.source.entryIdx, c.source.url) : esc(c.source.url || "")) +
       (c.source.jsonPath ? '<small class="ss-cr-where">' + esc(c.source.jsonPath) + "</small>" : "");
@@ -63,7 +64,7 @@
   }
   // a token the server renews (the same name and field, a new value each time) is one row; it opens to the renewals
   var openG = {}, G = {};
-  function gkey(c) { return c.varName + "|" + (c.source && c.source.jsonPath || "") + "|" + (c._applied ? 1 : 0); }
+  function gkey(c) { return c.varName + "|" + (c.source && c.source.jsonPath || "") + "|" + (c._applied ? 1 : 0) + (c._browser ? "|b" : ""); }
   function rowsHtml(rows) {
     var by = {}, order = [];
     G = {};
@@ -81,12 +82,14 @@
     var conf = g.some(function (x) { return x.confidence === "high"; }) ? '<span class="ss-conf hi" title="Traced: earlier responses send these values">High</span>' : '<span class="ss-conf md" title="Found by shape only">Medium</span>';
     var act = '<button type="button" class="ds-btn ds-btn-sm" data-gexp="' + gid + '" aria-expanded="' + open + '">' + (open ? "Hide the " : "Show the ") + g.length + "</button>" +
       (c._applied ? '<span class="ss-cr-in"><svg class="i"><use href="#i-ok"/></svg>In the script</span>' : '<button type="button" class="ds-btn ds-btn-sm" data-gskip="' + gid + '" title="Skip every renewal">Skip all</button>');
+    // made in the browser, every one (BUG-151): a new value each time, from no response — nothing to tick
+    var made = g.every(function (x) { return !advisorCanAccept(x); });
     return '<tr class="ss-cr-row ss-cr-grp' + (ticked === g.length && !c._applied ? " is-tick" : "") + (c._applied ? " is-in" : "") + '" data-gid="' + gid + '">' +
-      '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-gtick' + (ticked === g.length ? " checked" : "") + (ticked && ticked < g.length ? " data-mixed" : "") + (c._applied ? " disabled" : "") + ' aria-label="Add every renewal of ' + esc(c.varName) + ' to the script" /></td>' +
+      '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-gtick' + (ticked === g.length ? " checked" : "") + (ticked && ticked < g.length ? " data-mixed" : "") + (c._applied || made ? " disabled" : "") + ' aria-label="Add every renewal of ' + esc(c.varName) + ' to the script"' + (made ? ' title="Made in the browser: nothing to read it from"' : "") + " /></td>" +
       '<td><input class="ss-field ss-cr-name" data-gname value="' + esc(c.varName) + '" spellcheck="false" aria-label="Name of ' + esc(c.varName) + '"' + (c._applied ? " disabled" : "") + " /></td>" +
-      "<td>" + esc(kind(c)) + '<small class="ss-cr-tag">Renewed</small></td>' +
-      '<td><code class="ss-cr-val">' + esc(String(c.preview || c.value).slice(0, 47)) + '</code><small class="ss-muted">' + g.length + " values: the server renews it</small></td>" +
-      "<td>" + from(c) + '<small class="ss-muted">and ' + plural(g.length - 1, "later response") + "</small></td>" +
+      "<td>" + esc(kind(c)) + '<small class="ss-cr-tag">' + (made ? "New each time" : "Renewed") + "</small></td>" +
+      '<td><code class="ss-cr-val">' + esc(String(c.preview || c.value).slice(0, 47)) + '</code><small class="ss-muted">' + g.length + (made ? " values: a new one each time" : " values: the server renews it") + "</small></td>" +
+      "<td>" + from(c) + (made ? "" : '<small class="ss-muted">and ' + plural(g.length - 1, "later response") + "</small>") + "</td>" +
       "<td>" + plural(uses, "place") + '<small class="ss-muted">each renewal where it is sent back</small></td><td>' + conf + '</td><td class="ss-cr-act">' + act + "</td></tr>";
   }
 
@@ -118,7 +121,7 @@
     act = '<button type="button" class="ds-btn ds-btn-sm ss-btn-accent" data-edit="' + esc(c.id) + '" title="Open it: how it is read, the response, every place it is sent back"><svg class="i"><use href="#i-' + (c._applied ? "eye" : "edit") + '"/></svg>' + (c._applied ? "Open" : "Review") + "</button>" + act;
     if (c._arrayReconstruct || c._selectAll) act += '<button type="button" class="ds-btn ds-btn-sm" data-opts="' + esc(c.id) + '" title="The list options (every value or one at random, or how it is rebuilt): in the editor">Options</button>';
     return '<tr class="' + cls + '" data-id="' + esc(c.id) + '">' +
-      '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-tick' + (c.status === "accepted" || c._applied ? " checked" : "") + (c._applied ? " disabled" : "") + ' aria-label="Add ' + esc(c.varName) + ' to the script" /></td>' +
+      '<td class="ss-cr-c0"><input type="checkbox" class="ss-cb" data-tick' + (c.status === "accepted" || c._applied ? " checked" : "") + (c._applied || !advisorCanAccept(c) ? " disabled" : "") + ' aria-label="Add ' + esc(c.varName) + ' to the script"' + (advisorCanAccept(c) ? "" : ' title="Made in the browser: nothing to read it from"') + " /></td>" +
       '<td><input class="ss-field ss-cr-name" data-name value="' + esc(c.varName) + '" spellcheck="false" aria-label="Name of ' + esc(c.varName) + '"' + (c._applied ? " disabled title=\"In the script: the name is fixed\"" : "") + " /></td>" +
       "<td>" + esc(kind(c)) + (t ? '<small class="ss-cr-tag">' + esc(t) + "</small>" : "") + "</td>" +
       '<td><code class="ss-cr-val" title="' + esc(v.length > 400 ? v.slice(0, 400) + "…" : v) + '">' + esc(pv.length > 48 ? pv.slice(0, 47) + "…" : pv) + '</code><small class="ss-muted">' + (/^\((?:list|array) — \d+ (?:values|items)/.test(v) ? v.slice(1).replace(/^(?:list|array) — /, "").replace(/\).*$/, "") : plural(v.length, "character")) + "</small></td>" +

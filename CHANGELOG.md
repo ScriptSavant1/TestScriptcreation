@@ -89,6 +89,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio: values made in the browser are said so, and left out
+
+- A value that no response sends before the page sends it (a hash or an id made by the page's own scripts) is marked "Made in the browser" in the Correlate table, on its card and in the editor, and cannot be ticked into the script: there is nothing to read it from — before, ticking it gave a boundary that read the wrong text (BUG-151). A value a left-out request's response has is not one of them. Choosing a response yourself in the editor still works.
+
 #### Script Studio: a value with no JSON path is read from its page
 
 - A Correlation Advisor value without a JSON path (Medium) is read from the response that has it, with boundaries whose first match is the value — before, ticking it gave the value's own first 8 characters and no right boundary (BUG-144).

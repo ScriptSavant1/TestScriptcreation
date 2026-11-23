@@ -763,6 +763,7 @@
         : editing && editing.id === c.id ? "<b>Changing it.</b> It is out of the script until you click <b>Save to the script</b>; <b>Cancel</b> puts it back as it was."
         : c._fixed && c._applied ? "<b>Made while the script runs.</b> The script creates this value itself (a PKCE code verifier or challenge, or a list it rebuilds) — it is not read from a response, so there is nothing to change here. Sent in " + plural(us.length, "place") + "; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
         : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + ". Click <b>Edit</b> to change how it is read, its name or its response; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
+        : c._browser && !c._gen ? "<b>Made in the browser.</b> No response sends this value before it is first sent — a script in the page made it (a hash, an id), so it is not read from a response. Sent in " + plural(us.length, "place") + ". Skip it; if you know a response that has it, choose it below and select the value."
         : c.confidence === "high" ? "<b>An earlier response sends this value</b> and " + plural(us.length, "later place") + " send it back. A new user gets a new value, so the script must read it from the response each time."
         : "<b>It looks like a " + esc(String(c.valueType || "token")) + "</b> by its shape, and " + plural(us.length, "later place") + " send it back. No earlier response was found that sends it: check the response, or use Can't find a value?";
       if (isList(c)) why += " It is a list: its options are below.";
@@ -868,6 +869,7 @@
     var s = "";
     try {
       if (adding && !draft) throw new Error("none");
+      if (!adding && kind === "auto" && c._browser && !c._gen) { $("#ss-ed-code").textContent = "// Made in the browser: not added to the script."; return; }
       var corr = draftCorr(c);
       s = S.format === "webhttp" ? webHttpCorrCode(corr, "") : devwebExtractorDecl(corr);
     } catch (x) { s = "// The code is shown once a response and a value are chosen."; }
@@ -939,6 +941,7 @@
     var x = $("#ss-ed-expr"), cfg = draft && draft.extractorConfig || {};
     if (!adding && isList(c)) { listOpts(c); return; }
     if (adding && listSt) { listAddOpts(); return; }
+    if (!adding && kind === "auto" && c._browser && !c._gen) { x.innerHTML = '<p class="ss-muted">Nothing reads it: no response has it before it is sent.</p>'; return; }
     if (!adding && kind === "auto") {
       var a; try { a = auto(c); } catch (err) { a = null; }
       var t = !a ? "" : a.extractorType === "jsonpath" ? "JSON path <code>" + esc(a.extractorConfig.path) + "</code>" + (a.extractorConfig.selectAll ? " (every match)" : "")
@@ -1001,6 +1004,7 @@
       return;
     }
     p.hidden = false;
+    if (!e && c._browser && !c._gen) { p.className = "ss-ed-test"; p.textContent = "Made in the browser: nothing to read it from, so it stays out of the script."; return; }
     if (!e) { p.className = "ss-ed-test bad"; p.textContent = "No earlier response was found that sends this value: choose one that has it (marked “has the value”), or use Can't find a value?"; return; }
     if (isList(c)) { testOk = true; p.className = "ss-ed-test"; p.textContent = "A list: every match is read when the script runs."; return; }
     try { r = E.readWith(e, x, _advFirstMatch, xp); } catch (err) { r = { unknown: true }; }

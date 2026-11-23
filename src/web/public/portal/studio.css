@@ -971,6 +971,9 @@ body.ss-step-4 .ss-cols { display: none; }
 .ss-cr-val { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-mono); font-size: 12px; }
 .ss-corr-t small { display: block; font-size: var(--ds-fs-xs); }
 .ss-cr-where { color: var(--ds-text-2); overflow-wrap: anywhere; }
+/* made in the browser (BUG-151): nothing to read it from — a state, in the warning colour */
+.ss-cr-browser, #ph-res .adv-browser { font-weight: 600; color: color-mix(in srgb, var(--ds-warn) 80%, var(--ds-text)); }
+.ss-cr-browser + small { display: block; font-size: var(--ds-fs-xs); }
 .ss-cr-tag { color: var(--ds-text-2); }
 .ss-conf { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
 .ss-conf::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ds-text-3); }

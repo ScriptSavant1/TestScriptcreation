@@ -1180,6 +1180,10 @@ function advisorScan(entries, existingCorrelations) {
     all.splice(firstMed === -1 ? all.length : firstMed, 0, ...selects);
   }
 
+  // Made in the browser (BUG-151): no source, and no response before the value is first sent has it (a page's own
+  // script made it: a hash, a UUID) — there is nothing to read it from, so it is never added to the script as a read value
+  all.forEach(c => { if (_advMadeInBrowser(c, entries)) c._browser = true; });
+
   // Re-index IDs after filtering
   all.forEach((c, i) => { c.id = 'adv-' + i; });
 
@@ -1942,6 +1946,24 @@ function _advFirstMatch(text, lb, rb) {
 }
 // Boundaries around the value at `at` that capture exactly it as the FIRST match: start from `lb0`, or the text just
 // before the value, and widen to the left (same line) until the first match is the value itself
+// A value no response has before it is first sent (BUG-151): no source, and neither the body nor a header of an earlier
+// response holds it, as written or URL-encoded. A left-out response counts (the server sent it: putting that request
+// back makes it readable), markers do not. Lists and rebuilt arrays are never browser-made (they are read from a response).
+function _advMadeInBrowser(c, entries) {
+  if (!c || c.source || c._selectAll || c._arrayReconstruct || c._manual || typeof c.value !== 'string' || !c.value) return false;
+  const first = (c.usages || []).reduce((m, u) => (u.entryIdx != null && u.entryIdx < m ? u.entryIdx : m), (entries || []).length);
+  const forms = [c.value];
+  try { const enc = encodeURIComponent(c.value); if (enc !== c.value) forms.push(enc); } catch (e) { /* as written only */ }
+  for (let i = 0; i < first && i < entries.length; i++) {
+    const e = entries[i];
+    if (!e || e.isMarker) continue;
+    const hdrs = e.respHdrsMap ? Object.keys(e.respHdrsMap).map(k => e.respHdrsMap[k]).join('\n') : '';
+    const text = (e.respBody || '') + '\n' + hdrs;
+    if (forms.some(f => text.indexOf(f) >= 0)) return false;
+  }
+  return true;
+}
+
 // A value with no known source path (BUG-144): the response that has it — the card's own source first, else the nearest
 // response before its first use (filtered and marker entries skipped) — and boundaries read from that page, widened
 // until their first match is the value. → { extractorType, extractorConfig, sourceIdx } or null (no response has it)

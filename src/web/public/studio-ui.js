@@ -851,6 +851,8 @@ function _advCardHtml(c) {
       (c.source.jsonPath
         ? " &middot; <b>" + _esc(c.source.jsonPath) + "</b>"
         : "")
+    : c._browser
+    ? '<span class="adv-browser" title="No response sends it before it is first sent: a script in the page made it, so there is nothing to read it from">Made in the browser &middot; not read from a response</span>'
     : '<span style="color:var(--text-3)">Source not found in HAR</span>';
 
   var usageCount = (c.usages || []).length;
@@ -1011,7 +1013,7 @@ function _advCardHtml(c) {
     acceptActive +
     '" onclick="advisorAccept(\'' +
     c.id +
-    '\')" title="Add this correlation to the script">&#x2713; Accept</button>' +
+    '\')" ' + (advisorCanAccept(c) ? 'title="Add this correlation to the script"' : 'disabled title="Made in the browser: the script cannot read it from a response"') + '>&#x2713; Accept</button>' +
     '<button class="adv-btn-skip' +
     skipActive +
     '" onclick="advisorSkip(\'' +
@@ -1093,9 +1095,19 @@ function advisorAcceptAllHigh() {
 // ---------------------------------------------------------------------------
 // User actions on individual cards
 // ---------------------------------------------------------------------------
+// Made in the browser (BUG-151): nothing to read it from — such a card is never added to the script as a read value,
+// unless the user chose a response and how to read it in the editor (_edit), or chose to generate it (_gen)
+function advisorCanAccept(c) {
+  return !!c && !(c._browser && !c._gen && !(c._edit && c._edit.extractorType));
+}
+
 function advisorAccept(id) {
   var c = _advFindById(id);
   if (!c) return;
+  if (!advisorCanAccept(c) && c.status !== "accepted") {
+    showToast("Made in the browser: no response has this value before it is sent, so the script cannot read it.", "warning");
+    return;
+  }
   c.status = c.status === "accepted" ? "pending" : "accepted"; // toggle
   _advRefreshCard(c);
   _advUpdateBadge();
@@ -1536,7 +1548,7 @@ function advisorApplyOne(cand) {
 
 function advisorApplyAndRegen() {
   var accepted = (S.advisorCandidates || []).filter(function (c) {
-    return c.status === "accepted" && !(c._engineCorr && c._applied);
+    return c.status === "accepted" && !(c._engineCorr && c._applied) && advisorCanAccept(c);
   });
   if (!accepted.length) {
     showToast("Accept at least one correlation first.", "warning");
@@ -1641,7 +1653,7 @@ function _advUpdateFooter() {
   var candidates = S.advisorCandidates || [];
   // (a correlation the engines found and still in the script — listed by the Script Studio page — is not waiting)
   var accepted = candidates.filter(function (c) {
-    return c.status === "accepted" && !(c._engineCorr && c._applied);
+    return c.status === "accepted" && !(c._engineCorr && c._applied) && advisorCanAccept(c);
   }).length;
   var skipped = candidates.filter(function (c) {
     return c.status === "skipped";
