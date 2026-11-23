@@ -145,3 +145,37 @@ describe('the scripts', () => {
     expect(mj).not.toContain('load.utils.uuid()');
   });
 });
+
+describe('the two-recording "generate" type uses the same seeded random helper (old code fix)', () => {
+  const E = engine();
+  const gen = (pattern, length) => ({ name: 'tok', extractorType: 'generate', sourceIdx: -1, extractorConfig: { pattern, length }, usages: [{ reqIdx: 1, location: 'header', key: 'X-Token', tokenValue: 'x' }] });
+  // the code each pattern writes (webHttpCorrCode is shared by the generator and the editor)
+  const code = (pattern, length) => {
+    const S = E.S;
+    Object.assign(S, { format: 'webhttp', entries1: recording(), txns: [], params: [], correlations: [], hostNames: {} });
+    return E.genActionC(S.entries1, [gen(pattern, length)]);
+  };
+  test('a UUID: perfx_uuid, no bare rand()', () => {
+    const ac = code('uuid');
+    expect(ac).toContain('perfx_uuid("tok");');
+    expect(ac.split('int perfx_r16()').length - 1).toBe(1);
+    expect(ac.replace(/perfx_r16\(\)\n\{[\s\S]*?\n\}/, '')).not.toMatch(/(^|[^_\w])rand\(\)/);
+  });
+  test('hex tokens: 32-bit random groups; a short rest keeps exactly its length', () => {
+    expect(code('hex32')).toContain('"%08x%08x%08x%08x",\n\t\tperfx_r32(),perfx_r32(),perfx_r32(),perfx_r32());');
+    expect(code('alphanumeric', 19)).toContain('"%08x%08x%03x",\n\t\tperfx_r32(),perfx_r32(),(perfx_r32() & 0xfff));');
+  });
+  test('the helper is written once and seeded once per Vuser', () => {
+    const ac = code('hex16');
+    expect(ac.split('unsigned int perfx_r32()').length - 1).toBe(1);
+    expect(ac).toContain('if (!seeded) {');
+    expect(ac.indexOf('int perfx_r16()')).toBeLessThan(ac.indexOf('void gen_tok()'));
+  });
+});
+
+describe('Test (StudioEdit.check): a value the script makes is not read from the recording', () => {
+  const SE = require('../../src/web/public/portal/studio-editor.js');
+  test.each(['uuid', 'generate'])('%s → runtime', (t) => {
+    expect(SE.check({ entries: recording(), corr: { name: 'x', extractorType: t, sourceIdx: -1, extractorConfig: {}, usages: [] } }).verdict).toBe('runtime');
+  });
+});

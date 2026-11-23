@@ -476,6 +476,7 @@
           '<button type="button" data-kind="regexp" aria-pressed="false">Regex</button>' +
           '<button type="button" data-kind="xpath" aria-pressed="false">XPath</button>' +
           '<button type="button" data-kind="header" aria-pressed="false">Header</button>' +
+          '<button type="button" data-kind="uuid" aria-pressed="false">Generate (UUID)</button>' +
           '<button type="button" data-kind="list" aria-pressed="false" title="Every value like this one (the options of a select, the items of a JSON list): a list">List</button></span>' +
         '<div class="ss-ed-expr" id="ss-ed-expr"></div>' +
         '<p class="ss-ed-test" id="ss-ed-test" role="status" aria-live="polite"></p>' +
@@ -666,7 +667,7 @@
     adding = false; nc = null;
     cur = id; srcIdx = c._edit && c._edit.sourceIdx != null ? c._edit.sourceIdx : c.source ? c.source.entryIdx : null;
     draft = c._edit ? JSON.parse(JSON.stringify(c._edit)) : null;
-    kind = draft ? (draft.extractorType === "boundary_header" ? "header" : draft.extractorType) : "auto";
+    kind = c._gen ? "uuid" : draft ? (draft.extractorType === "boundary_header" ? "header" : draft.extractorType) : "auto";
     // a value read from a response header opens on the Headers (also when Auto reads it from one)
     var ax = null; try { ax = draft || auto(c); } catch (e) { ax = null; }
     rview = kind === "header" || (ax && ax.extractorType === "boundary_header") ? "headers" : "body";
@@ -705,6 +706,8 @@
   function save() {
     var c = cand(cur); if (!c || locked(c)) return;
     if (adding) { c._edit = draft ? { extractorType: draft.extractorType, extractorConfig: draft.extractorConfig, sourceIdx: srcIdx } : undefined; sync(); return; }
+    if (kind === "uuid") { c._gen = { kind: "uuid" }; delete c._edit; return; }
+    delete c._gen;
     if (kind === "auto" && (srcIdx == null || (c.source && srcIdx === c.source.entryIdx))) delete c._edit;
     else if (draft) c._edit = { extractorType: draft.extractorType, extractorConfig: draft.extractorConfig, sourceIdx: srcIdx };
   }
@@ -762,7 +765,7 @@
     else {
       why = !us.length ? "<b>No later request sends this value back</b>, so there is nothing to correlate. Skip it."
         : editing && editing.id === c.id ? "<b>Changing it.</b> It is out of the script until you click <b>Save to the script</b>; <b>Cancel</b> puts it back as it was."
-        : c._gen ? "<b>A new UUID, made by the script.</b> The browser made this value (no response sends it), so the script makes a new one before the first request that sends it — renewed where the recording renewed it, kept where it kept it. Sent in " + plural(us.length, "place") + (c._applied ? "; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).' : ". Add it to the script from the list, or choose Don't generate there.")
+        : c._gen ? "<b>A new UUID, made by the script.</b> " + (c._browser ? "The browser made this value (no response sends it), so the script makes" : "Not read from a response: the script makes") + " a new one before the first request that sends it — renewed where the recording renewed it, kept where it kept it. Sent in " + plural(us.length, "place") + (c._applied ? "; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).' : (c._browser ? ". Add it to the script, or choose Don't generate in the list." : ". Accept adds it; another way to read it, or Undo my changes, puts it back."))
         : c._fixed && c._applied ? "<b>Made while the script runs.</b> The script creates this value itself (a PKCE code verifier or challenge, or a list it rebuilds) — it is not read from a response, so there is nothing to change here. Sent in " + plural(us.length, "place") + "; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
         : c._applied ? "<b>This value is in the script.</b> It is read from the response below and sent back in " + plural(us.length, "place") + ". Click <b>Edit</b> to change how it is read, its name or its response; or " + '<button type="button" class="adv-req-link" id="ss-ed-out">take it out of the script</button> (Undo puts it back).'
         : c._browser && !c._gen ? "<b>Made in the browser.</b> No response sends this value before it is first sent — a script in the page made it (a hash, an id), so it is not read from a response. Sent in " + plural(us.length, "place") + ". Skip it; if you know a response that has it, choose it below and select the value."
@@ -775,6 +778,11 @@
     $("#ss-ed-src-l").textContent = adding ? "Comes from (the request whose response has the value)" : "Read from the response of";
     $("#ss-ed-find").hidden = !adding;
     sources(c, lock, us);
+    // Generate (UUID): no response is read — step 1 says so and waits
+    if (!adding && kind === "uuid") {
+      $("#ss-ed-src-l").textContent = "Read from the response of — not needed: the script makes it";
+      ["#ss-ed-src", "#ss-ed-src-up", "#ss-ed-src-down"].forEach(function (s) { $(s).disabled = true; });
+    }
     // how to read it
     var e = srcIdx != null ? entry(srcIdx) : null, btxt = String(e && e.respBody || "");
     var isJson = (function () { try { JSON.parse(btxt); return !!btxt.trim(); } catch (x) { return false; } })(), isXml = !!xml(btxt);
@@ -785,10 +793,11 @@
       var k = b.getAttribute("data-kind");
       b.hidden = adding && k === "auto";
       var on = adding ? (listSt ? k === "list" : draft && (k === "header" ? draft.extractorType === "boundary_header" : draft.extractorType === k)) : k === kind;
-      b.hidden = (adding && k === "auto") || (!adding && k === "list");
+      b.hidden = (adding && k === "auto") || (!adding && k === "list") || (adding && k === "uuid");
       b.setAttribute("aria-pressed", String(!!on));
-      b.disabled = lock || !e || (k === "jsonpath" && !isJson) || (k === "xpath" && !isXml) || (k === "regexp" && !btxt) || (k === "header" && !heads.length) || (k === "list" && !listSt && !c.value);
+      b.disabled = k === "uuid" ? lock || !(c.usages || []).length : lock || !e || (k === "jsonpath" && !isJson) || (k === "xpath" && !isXml) || (k === "regexp" && !btxt) || (k === "header" && !heads.length) || (k === "list" && !listSt && !c.value);
       b.title = k === "jsonpath" && !isJson ? "This response is not JSON" : k === "xpath" && !isXml ? "This response is not XML" : k === "header" && !heads.length ? "No header of this response has the value"
+        : k === "uuid" ? "Not read from a response: the script makes a new UUID before the first request that sends this value (where the recording sent a new one, so does the script)"
         : k === "auto" ? "What the Correlation Advisor chose" : k === "regexp" ? "A regular expression: the first ( ) group is the value" : k === "xpath" ? "An XPath in the XML response" : "";
     });
     expr(c, e, heads);
@@ -944,7 +953,7 @@
     var x = $("#ss-ed-expr"), cfg = draft && draft.extractorConfig || {};
     if (!adding && isList(c)) { listOpts(c); return; }
     if (adding && listSt) { listAddOpts(); return; }
-    if (!adding && kind === "auto" && c._gen) { x.innerHTML = '<p class="ss-muted">Nothing reads it: the script makes a new UUID.</p>'; return; }
+    if (!adding && (kind === "uuid" || c._gen)) { x.innerHTML = '<p class="ss-muted">Nothing reads it: the script makes a new UUID.</p>'; return; }
     if (!adding && kind === "auto" && c._browser && !c._gen) { x.innerHTML = '<p class="ss-muted">Nothing reads it: no response has it before it is sent.</p>'; return; }
     if (!adding && kind === "auto") {
       var a; try { a = auto(c); } catch (err) { a = null; }
@@ -1008,7 +1017,14 @@
       return;
     }
     p.hidden = false;
-    if (!e && c._gen) { testOk = true; p.className = "ss-ed-test"; p.textContent = "Made by the script: a new UUID before the first request that sends it."; return; }
+    if (!adding && (kind === "uuid" || c._gen)) {
+      testOk = true;
+      var looks = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.value || ""));
+      p.className = "ss-ed-test" + (looks ? "" : " warn");
+      p.textContent = looks ? "Made by the script: a new UUID before the first request that sends it."
+        : "Made by the script: a new UUID before the first request that sends it. The recorded value is not a UUID — check that the server takes one here.";
+      return;
+    }
     if (!e && c._browser && !c._gen) { p.className = "ss-ed-test"; p.textContent = "Made in the browser: nothing to read it from, so it stays out of the script."; return; }
     if (!e) { p.className = "ss-ed-test bad"; p.textContent = "No earlier response was found that sends this value: choose one that has it (marked “has the value”), or use Can't find a value?"; return; }
     if (isList(c)) { testOk = true; p.className = "ss-ed-test"; p.textContent = "A list: every match is read when the script runs."; return; }
@@ -1233,7 +1249,7 @@
     else if (t.id === "ss-ed-accept") { if (adding) addNow(); else if (editing && editing.id === c.id) saveEdit(c); else if (c._applied) startEdit(c); else { save(); if (c.status !== "accepted") advisorAccept(c.id); var l2 = SSC.list(), k = l2.indexOf(cur), nx = l2[k + 1]; if (nx) open(nx); else close(); } }
     else if (t.id === "ss-ed-skip") { advisorSkip(c.id); draw(); }
     else if (t.id === "ss-ed-reset" && editing) { cancelEdit(); shownBody = null; draw(); }
-    else if (t.id === "ss-ed-reset") { delete c._edit; draft = null; kind = "auto"; srcIdx = c.source ? c.source.entryIdx : null; draw(); }
+    else if (t.id === "ss-ed-reset") { delete c._edit; delete c._gen; draft = null; kind = "auto"; srcIdx = c.source ? c.source.entryIdx : null; draw(); }
     else if (t.id === "ss-ed-src-up" || t.id === "ss-ed-src-down") { var o = $$("#ss-ed-src option").map(function (x) { return x.value; }).filter(Boolean).map(Number), p = o.indexOf(srcIdx); var to = p === -1 ? o[0] : o[p + (t.id === "ss-ed-src-down" ? 1 : -1)]; if (to != null) setSrc(to); }
     else if (t.id === "ss-ed-out") { if (SS.corrTakeOut) SS.corrTakeOut(c.id); shownBody = null; draw(); }
     else if (t.id === "ss-ed-paste") { if (typeof openPasteCorrelate === "function") openPasteCorrelate(); }
@@ -1302,6 +1318,7 @@
       setList(r); return;
     }
     if (adding && listSt) { var first = listSt.values[listSt.from - 1]; listSt = null; c.value = first; }
+    if (k === "uuid") { kind = k; draft = null; save(); draw(); return; }
     if (k === "header") {
       var hs = adding ? (draft && draft.extractorType === "boundary_header" ? [] : E.headersWith(e, c.value)) : E.headersWith(e, c.value);
       if (adding && !hs.length) { rview = "headers"; kind = "header"; draw(); return; }
@@ -1377,7 +1394,7 @@
     code(c);
     var us = c.usages || [];
     $("#ss-ed-accept").disabled = !!c._applied || !us.length || !testOk;
-    $("#ss-ed-reset").hidden = locked(c) || !c._edit;
+    $("#ss-ed-reset").hidden = locked(c) || !(c._edit || c._gen);
   }
   document.addEventListener("keydown", function (ev) {
     if (!cur || box.hidden) return;

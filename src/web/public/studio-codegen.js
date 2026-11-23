@@ -329,14 +329,17 @@ function _uuidSets(correlations, idx, fmt, ind, done) {
   }
   return s;
 }
-// VuGen C: a version 4 UUID in a parameter. rand() gives 15 bits, so each 16-bit group is two calls mixed; seeded once
-// per Vuser (its time and Vuser id), so two Vusers do not make the same values.
-const PERFX_UUID_C =
-  "/* A new UUID (version 4) for a value the browser made — random, seeded once per Vuser */\n" +
-  "int perfx_r16()\n{\n\treturn ((rand() << 8) ^ rand()) & 0xffff;\n}\n\n" +
-  "void perfx_uuid(char *name)\n{\n" +
+// VuGen C: random values the script makes ("uuid" and "generate" correlations). rand() gives 15 bits, so each 16-bit
+// group is two calls mixed; seeded once per Vuser (its time and Vuser id), so two Vusers do not make the same values.
+// perfx_uuid = a version 4 UUID in a parameter; perfx_r32 = 32 random bits (the "generate" hex tokens).
+const PERFX_RAND_C =
+  "/* Random values the script makes (new UUIDs, tokens): seeded once per Vuser */\n" +
+  "int perfx_r16()\n{\n" +
   "\tstatic int seeded = 0;\n\tint id, scid;\n\tchar *group;\n" +
   "\tif (!seeded) {\n\t\tlr_whoami(&id, &group, &scid);\n\t\tsrand((unsigned int)time(0) ^ (unsigned int)(id * 7919));\n\t\tseeded = 1;\n\t}\n" +
+  "\treturn ((rand() << 8) ^ rand()) & 0xffff;\n}\n\n" +
+  "unsigned int perfx_r32()\n{\n\treturn ((unsigned int)perfx_r16() << 16) | (unsigned int)perfx_r16();\n}\n\n" +
+  "void perfx_uuid(char *name)\n{\n" +
   "\tlr_param_sprintf(name, \"%04x%04x-%04x-4%03x-%04x-%04x%04x%04x\",\n" +
   "\t\tperfx_r16(), perfx_r16(), perfx_r16(), perfx_r16() & 0x0fff,\n" +
   "\t\t(perfx_r16() & 0x3fff) | 0x8000, perfx_r16(), perfx_r16(), perfx_r16());\n}\n\n";
@@ -963,28 +966,29 @@ function webHttpCorrCode(corr, indent) {
     }
 
     case "uuid":
-      // A value the browser made: a new UUID before the first request that sends it (perfx_uuid, PERFX_UUID_C)
+      // A value the browser made: a new UUID before the first request that sends it (perfx_uuid, PERFX_RAND_C)
       return `${t}perfx_uuid("${name}");\n`;
 
     case "generate": {
       // Client-side token generation — lr_param_sprintf, not a web_reg_save_param call
+      // (random digits from the seeded perfx_r32 of PERFX_RAND_C: rand() alone gives 15 bits, so "%08x" of it always
+      // began with 0000, and an unseeded rand() can give two Vusers the same values)
       const pat = cfg.pattern || "alphanumeric";
-      if (pat === "uuid")
-        return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x-%04x-4%03x-%04x-%04x%08x",\n${t}\trand(), rand()&0xffff, rand()&0x0fff, (rand()&0x3fff)|0x8000, rand()&0xffff, rand());\n`;
+      if (pat === "uuid") return `${t}perfx_uuid("${name}");\n`;
       if (pat === "hex64")
-        return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x%08x%08x%08x%08x%08x%08x%08x",\n${t}\trand(),rand(),rand(),rand(),rand(),rand(),rand(),rand());\n`;
+        return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x%08x%08x%08x%08x%08x%08x%08x",\n${t}\tperfx_r32(),perfx_r32(),perfx_r32(),perfx_r32(),perfx_r32(),perfx_r32(),perfx_r32(),perfx_r32());\n`;
       if (pat === "hex32")
-        return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x%08x%08x%08x",\n${t}\trand(),rand(),rand(),rand());\n`;
+        return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x%08x%08x%08x",\n${t}\tperfx_r32(),perfx_r32(),perfx_r32(),perfx_r32());\n`;
       if (pat === "hex16")
-        return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x%08x",\n${t}\trand(),rand());\n`;
+        return `${t}lr_param_sprintf("${name}",\n${t}\t"%08x%08x",\n${t}\tperfx_r32(),perfx_r32());\n`;
       {
         const len = cfg.length || 19;
         const full8 = Math.floor(len / 8);
         const rem = len % 8;
         let fmt = "";
         const args = [];
-        for (let i = 0; i < full8; i++) { fmt += "%08x"; args.push("rand()"); }
-        if (rem > 0) { fmt += `%0${rem}x`; args.push("rand()"); }
+        for (let i = 0; i < full8; i++) { fmt += "%08x"; args.push("perfx_r32()"); }
+        if (rem > 0) { fmt += `%0${rem}x`; args.push(`(perfx_r32() & 0x${"f".repeat(rem)})`); }   // exactly rem digits
         return `${t}lr_param_sprintf("${name}",\n${t}\t"${fmt}",\n${t}\t${args.join(",")});\n`;
       }
     }
@@ -2902,7 +2906,7 @@ function genActionC(entries, correlations) {
   }
 
   let o =
-    (correlations.some((c) => c.extractorType === "uuid") ? PERFX_UUID_C : "") +
+    (correlations.some((c) => _noExtractor(c)) ? PERFX_RAND_C : "") +
     helperFns +
     "Action()\n{\n\n";
   const _uuidDoneC = new Set();

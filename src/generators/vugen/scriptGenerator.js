@@ -1112,27 +1112,44 @@ class WebHttpScriptGenerator {
 #include "web_api.h"
 #include "lrw_custom_body.h"
 
-${jsr223Decls}static void gen_uuid(const char *param_name) {
+${jsr223Decls}/* Random values the script makes: rand() gives 15 bits, so each 16-bit group mixes two calls; seeded once per
+   Vuser (its time and Vuser id), so two Vusers do not make the same values. */
+static int perfx_r16(void) {
+    static int seeded = 0;
+    int id, scid;
+    char *group;
+    if (!seeded) {
+        lr_whoami(&id, &group, &scid);
+        srand((unsigned int)time(0) ^ (unsigned int)(id * 7919));
+        seeded = 1;
+    }
+    return ((rand() << 8) ^ rand()) & 0xffff;
+}
+
+static unsigned int perfx_r32(void) {
+    return ((unsigned int)perfx_r16() << 16) | (unsigned int)perfx_r16();
+}
+
+static void gen_uuid(const char *param_name) {
     lr_param_sprintf(param_name,
-        "%08x-%04x-4%03x-%04x-%04x%08x",
-        rand(),
-        rand() & 0xffff,
-        rand() & 0x0fff,
-        (rand() & 0x3fff) | 0x8000,
-        rand() & 0xffff,
-        rand());
+        "%04x%04x-%04x-4%03x-%04x-%04x%04x%04x",
+        perfx_r16(), perfx_r16(),
+        perfx_r16(),
+        perfx_r16() & 0x0fff,
+        (perfx_r16() & 0x3fff) | 0x8000,
+        perfx_r16(), perfx_r16(), perfx_r16());
 }
 
 static void gen_csrf_token(const char *param_name) {
     lr_param_sprintf(param_name,
         "%08x%08x%08x%08x",
-        rand(), rand(), rand(), rand());
+        perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32());
 }
 
 static void gen_hex64(const char *param_name) {
     lr_param_sprintf(param_name,
         "%08x%08x%08x%08x%08x%08x%08x%08x",
-        rand(), rand(), rand(), rand(), rand(), rand(), rand(), rand());
+        perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32());
 }
 
 #endif
@@ -2809,7 +2826,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
         }
         if (valExpr.includes("__VUGEN_UUID__")) {
           statements.push(
-            `${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`,
+            `${indent}gen_uuid("_uuid");`,   // globals.h: a version 4 UUID, seeded once per Vuser
           );
           statements.push(
             `${indent}lr_save_string(lr_eval_string("{_uuid}"), "${varName}");`,
@@ -2847,7 +2864,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
         }
         if (valExpr.includes("__VUGEN_UUID__")) {
           statements.push(
-            `${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`,
+            `${indent}gen_uuid("_uuid");`,   // globals.h: a version 4 UUID, seeded once per Vuser
           );
           statements.push(`${indent}${localVar} = lr_eval_string("{_uuid}");`);
           declaredLocalVars.add(localVar);
