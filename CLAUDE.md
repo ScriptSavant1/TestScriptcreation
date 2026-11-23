@@ -366,7 +366,8 @@ lre-utils.js lre-utils.dat` should always be empty.
 | studio-advisor.js | `_advHiddenFieldScan()` | Phase 2.6: form fields whose value the nearest earlier page sent in an HTML hidden input, under any name; generated-looking values only (BUG-141) |
 | studio-advisor.js | `_advHtmlValueExtractor()` | Boundary for a value in an HTML / text response, read from the page (`name="x" value="` … `"`) and widened until its first match is the value; used by Phases 2.5 and 2.6 |
 | studio-advisor.js | `_advSelectScan()` | Phase 2.7: a `<select>` (options written `<option value="`) with generated-looking options, one sent back later → one High list candidate (`_select`, `_extract` boundary + `all`, `_range`, uses with `tokenValue` / `listIdx`); single candidates for its values from that page are dropped |
-| studio-advisor.js | `_advPatternScan()` | Phase 3: JWT/UUID pattern detection |
+| studio-advisor.js | `_advPatternScan()` | Phase 3: JWT/UUID pattern detection (JSON leaves, or a plain-text body; a form body is never one value — BUG-144) |
+| studio-advisor.js | `_advBoundaryFromResponses()` | A value with no JSON path: boundaries from the response that has it (the card's source, else the nearest earlier one), first match = the value — used by `advisorToCorrelation` before the 8-character fallback (BUG-144) |
 | studio-advisor.js | `_advMergeArrayCandidates()` | F1: merge array siblings → SelectAll; each use keeps its value + place (`tokenValue`, `listIdx` via `_advListPos`; values from another response: no place, not replaced) — BUG-150 |
 | studio-advisor.js | `_advDetectArrayGroups()` | F2: detect array reconstruction |
 | studio-advisor.js | `advisorToCorrelation()` | Convert candidate → S.correlations entry (`_edit` first, then `_engineCorr`: the engine's extractor, its own uses and settings) |

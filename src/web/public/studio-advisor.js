@@ -620,6 +620,9 @@ function _advPatternScan(entries, alreadyFoundValues) {
     if (!bodyText) continue;
     const obj = _advParseJson(bodyText);
     if (!obj) {
+      // A form (name=value&…) has fields, not one value: the whole body is not a token (BUG-144 — `csrf_token=<hex>`
+      // became a card whose value no page has, read with a weak boundary)
+      if ((e.body.params && e.body.params.length) || /x-www-form-urlencoded|multipart\/form-data/i.test(e.body.mimeType || '')) continue;
       // Check plain string body directly
       const trimmed = bodyText.trim().replace(/^"|"$/g, '');
       if (trimmed.length >= ADV_MIN_LEN && !alreadyFoundValues.has(trimmed) && _advMatchesPattern(trimmed)) {
@@ -1251,7 +1254,7 @@ function advisorToCorrelation(candidate) {
   }
 
   // Determine extractor type and config
-  let extractorType, extractorConfig;
+  let extractorType, extractorConfig, _fb = null;
   const exact = candidate._explorer || candidate._paste;
   if (candidate._edit && candidate._edit.extractorType) {
     // Chosen in Script Studio's correlation editor (how to read it, and from which response): the user's choice wins
@@ -1291,8 +1294,13 @@ function advisorToCorrelation(candidate) {
     extractorConfig = candidate._selectAll
       ? { path: candidate.source.jsonPath, selectAll: true }
       : { path: candidate.source.jsonPath };
+  } else if ((_fb = _advBoundaryFromResponses(candidate, usages))) {
+    // No known source path: boundaries read from the response that has the value, widened until their first
+    // match is the value (BUG-144 — before, the value's own first 8 characters with no right boundary)
+    extractorType = _fb.extractorType;
+    extractorConfig = _fb.extractorConfig;
   } else {
-    // Medium-confidence, no known source path: boundary fallback
+    // Medium-confidence, no response has the value: boundary fallback (to be reviewed in the editor)
     extractorType = 'boundary';
     extractorConfig = { lb: candidate.value.slice(0, 8), rb: '' };
   }
@@ -1303,6 +1311,7 @@ function advisorToCorrelation(candidate) {
   const out = {
     name: candidate.varName,
     sourceIdx: candidate._edit && candidate._edit.extractorType && candidate._edit.sourceIdx != null ? candidate._edit.sourceIdx
+      : _fb ? _fb.sourceIdx
       : candidate.source ? candidate.source.entryIdx : (usages[0] ? Math.max(0, usages[0].reqIdx - 1) : 0),
     extractorType,
     extractorConfig,
@@ -1933,6 +1942,33 @@ function _advFirstMatch(text, lb, rb) {
 }
 // Boundaries around the value at `at` that capture exactly it as the FIRST match: start from `lb0`, or the text just
 // before the value, and widen to the left (same line) until the first match is the value itself
+// A value with no known source path (BUG-144): the response that has it — the card's own source first, else the nearest
+// response before its first use (filtered and marker entries skipped) — and boundaries read from that page, widened
+// until their first match is the value. → { extractorType, extractorConfig, sourceIdx } or null (no response has it)
+function _advBoundaryFromResponses(candidate, usages) {
+  const all = (typeof S !== 'undefined' && S.entries1) || [];
+  const value = candidate && candidate.value;
+  if (!value || typeof value !== 'string' || !all.length) return null;
+  const text = (e) => (e && (e.respBody || (e.response && e.response.body && e.response.body.text) || e.resBody)) || '';
+  const tryAt = (i) => {
+    const e = all[i];
+    if (!e || e.isMarker) return null;
+    const x = _advHtmlValueExtractor(text(e), value);
+    return x ? { extractorType: x.extractorType, extractorConfig: x.extractorConfig, sourceIdx: i } : null;
+  };
+  if (candidate.source && candidate.source.entryIdx != null) {
+    const own = tryAt(candidate.source.entryIdx);
+    if (own) return own;
+  }
+  const firstUse = (usages || []).reduce((m, u) => (u.reqIdx != null && u.reqIdx < m ? u.reqIdx : m), all.length);
+  for (let i = Math.min(firstUse, all.length) - 1; i >= 0; i--) {
+    if (all[i] && all[i].filtered) continue;
+    const r = tryAt(i);
+    if (r) return r;
+  }
+  return null;
+}
+
 function _advSafeBoundaries(text, at, s, lb0, rb0) {
   var after = text.slice(at + s.length, at + s.length + 12);
   var rb = rb0 || ((/^["'&;,<\s}\])]/.exec(after) || [after.charAt(0)])[0] || "");

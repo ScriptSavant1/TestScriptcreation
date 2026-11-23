@@ -89,6 +89,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio: a value with no JSON path is read from its page
+
+- A Correlation Advisor value without a JSON path (Medium) is read from the response that has it, with boundaries whose first match is the value — before, ticking it gave the value's own first 8 characters and no right boundary (BUG-144).
+- A form post (`csrf_token=…`) is no longer suggested as one value; its token is suggested on its own, as before.
+
 #### Script Studio, correlation editor: Test in a window, a calmer column
 
 - Test opens its result in a window: what it reads (every value of a list), every place the value is sent back with the value that request sent (Same / Another value), the second recording. The editor's column keeps one status line.
