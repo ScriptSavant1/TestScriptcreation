@@ -713,11 +713,12 @@ html:not(.embedded) #ph-res { height: calc(100vh - 60px); }
 }
 
 /* ── request details (portal/request-details.js; its own styles are portal/request-details.css) ──
-   A sheet over the workspace from the right; on desktops 2400 px and wider a fourth panel between Requests and the
+   A large window over the workspace, centred and movable; on desktops 2400 px and wider, when docked (Dock), a fourth panel between Requests and the
    Script / Advisor panel (no overlay). */
-.ss-det { position: fixed; z-index: 800; top: 12px; right: 12px; bottom: 12px; width: min(760px, calc(100vw - 24px)); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+.ss-det { position: fixed; z-index: 800; top: 12px; left: 50%; right: auto; bottom: 16px; transform: translateX(-50%); width: min(1440px, calc(100vw - 48px)); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
   background: var(--ds-surface); border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-card); box-shadow: var(--ds-shadow-2); }
 .ss-det[hidden] { display: none; }
+.ss-det.ss-det-moved { transform: none; }   /* a big window over the workspace, centred; moved by its bar (studio-workspace.js) */
 .ss-det-bar { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 14px; min-height: 46px; background: var(--br-head); border-bottom: 1px solid var(--ds-border-2); }
 .ss-det-bar h3 { margin: 0; font-size: var(--ds-fs); font-weight: 700; white-space: nowrap; }
 body:not(.ss-dock) .ss-det-bar { cursor: move; touch-action: none; }   /* the pop-up moves by its bar */
@@ -729,14 +730,14 @@ body.ss-dock .ss-det.ss-det-moved { left: auto !important; height: auto !importa
 .ss-det-ctx { margin: 0 0 10px; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
 .ss-det-ctx b { color: var(--ds-text); }
 .ss-det-ctx .ss-in { color: var(--ds-ok); font-weight: 600; }
-body.ss-dock .ss-det { position: relative; z-index: auto; top: auto !important; right: auto; bottom: auto; width: auto; box-shadow: none; }
+body.ss-dock .ss-det { position: relative; z-index: auto; top: auto !important; left: auto; right: auto; bottom: auto; width: auto; transform: none; box-shadow: none; }
 body.ss-dock.ss-det-open .ss-cols { grid-template-columns: var(--c1) 10px minmax(0, 1000px) 10px minmax(420px, 1fr) 10px minmax(560px, 1.15fr); }
 body.ss-dock.ss-det-open #ss-p-dom { grid-column: 1; } body.ss-dock.ss-det-open .ss-rs[data-rs="dom"] { grid-column: 2; }
 body.ss-dock.ss-det-open #ss-p-req { grid-column: 3; } body.ss-dock.ss-det-open #ss-det { grid-column: 5; }
 body.ss-dock.ss-det-open .ss-rs[data-rs="right"] { grid-column: 6; pointer-events: none; } body.ss-dock.ss-det-open #ss-p-right { grid-column: 7; }
 body.ss-dock.ss-det-open .ss-cols.no-dom { --c1: 46px; }
 body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10px minmax(0, 1000px) 10px minmax(420px, 1fr) 10px 46px; }
-@media (max-width: 600px) { .ss-det { top: 0; right: 0; bottom: 0; width: 100vw; border-radius: 0; } .ss-inl { display: none; } }
+@media (max-width: 600px) { .ss-det { top: 0; left: 0; right: 0; bottom: 0; width: 100vw; transform: none; border-radius: 0; } .ss-inl { display: none; } }
 
 /* Correlation Advisor: Source / Replaced in (studio-ui.js) — a request opens its details; "+n more" lists every place */
 .adv-req-link { display: inline; padding: 0 2px; border: 0; background: none; color: var(--ds-accent-text); font: inherit; font-family: var(--ds-mono); font-size: 12px; cursor: pointer; text-align: left; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 2px; }

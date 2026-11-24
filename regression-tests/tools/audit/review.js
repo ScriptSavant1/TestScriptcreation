@@ -7,6 +7,7 @@
 //   - plain: a button with words but no border, no background and no underline — it cannot be told from text
 //   - dismiss: an open pop-up (dialog) that a click outside it does not close
 //   - fill: on a wide window, the content ends short of 3/4 of the width (a view shrunk into one column or capped)
+//   - expect: a screen's own promise did not hold (for example the correlation editor shows the value of a long response)
 // At 1366, 1920 and 2560 px wide, dark and light; a JPEG of each screen and report.json for the gallery.
 //   node review.js [outDir] [--sizes=1366,1920,2560] [--themes=dark,light] [--only=substr]
 'use strict';
@@ -297,6 +298,28 @@ async function selftest(b) {
     await run('Studio 3 test data', 'studio');
     await f.click('#ss-steps [data-step="4"]'); await run('Studio 4 download', 'studio');
     await f.click('#ss-steps [data-step="1"]');
+    // a long JSON response with the value at its very end (a sign-in answer): the editor shows the value — never cut
+    // above it — marked and scrolled into view, formatted (one value per line) and as sent
+    {
+      const TOK = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZXZpZXcifQ.c2lnbmF0dXJlX3Jldmlldw';
+      const cols = Array.from({ length: 2600 }, (_, i) => ({ headerName: 'Column ' + i, field: 'field' + i, sortable: true, filter: 'STRING' }));
+      const body = JSON.stringify({ config: { columns: cols }, jwtResponse: { token: TOK } });
+      const at = (i) => new Date(Date.parse('2026-01-01T10:00:00Z') + i * 2000).toISOString();
+      const en = (i, url, hdrs, text) => ({ startedDateTime: at(i), time: 100, _resourceType: 'fetch', request: { method: 'POST', url, httpVersion: 'HTTP/1.1', headers: hdrs, queryString: [], cookies: [], postData: { mimeType: 'application/json', text: '{}' } }, response: { status: 200, statusText: 'OK', httpVersion: 'HTTP/1.1', headers: [{ name: 'Content-Type', value: 'application/json' }], cookies: [], content: { size: text.length, mimeType: 'application/json', text } }, cache: {}, timings: { send: 1, wait: 90, receive: 9 } });
+      const file = path.join(require('os').tmpdir(), 'review-long-response.har');
+      fs.writeFileSync(file, JSON.stringify({ log: { version: '1.2', creator: { name: 'review', version: '1' }, entries: [en(0, 'https://app.example.com/authenticate', [], body), en(1, 'https://app.example.com/home', [{ name: 'Authorization', value: TOK }], '{"ok":true}')] } }));
+      await f.setInputFiles('#dz1 input[type=file]', file);
+      await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 });
+      await f.click('#ss-steps [data-step="2"]');
+      await f.evaluate((tok) => { const c = PerfxStudio.state().advisorCandidates.find((x) => x.value === tok); if (c) SSE.open(c.id); }, TOK);
+      await p.waitForTimeout(800);
+      const seen = () => f.evaluate((tok) => { const pre = document.getElementById('ss-ed-body'), m = document.getElementById('ss-ed-first'); if (!m) return 'the value is not marked (cut above it?)'; if (m.textContent !== tok) return 'the mark is not the value'; const r = m.getBoundingClientRect(), b = pre.getBoundingClientRect(); return r.top >= b.top - 2 && r.bottom <= b.bottom + 2 ? '' : 'the value is not scrolled into view'; }, TOK);
+      const e1 = await seen(); await run('Studio editor long response', 'studio');
+      await f.click('#ss-ed-fmt').catch(() => {}); await p.waitForTimeout(500); const e2 = await seen(); await f.click('#ss-ed-fmt').catch(() => {});
+      const fails = [e1 && 'Formatted: ' + e1, e2 && 'As sent: ' + e2].filter(Boolean);
+      if (fails.length) report[report.length - 1].expect = fails;
+      await f.evaluate(() => SSE.close());
+    }
     await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
     await run('Workload start', 'workload');
     f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail').catch(() => {}); await run('Workload model', 'workload');
@@ -316,7 +339,7 @@ async function selftest(b) {
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 1));
   // summary: each finding once (by screen), with the sizes / themes it was seen at
   const by = new Map();
-  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill'].forEach((k) => (r[k] || []).forEach((x) => {
+  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill', 'expect'].forEach((k) => (r[k] || []).forEach((x) => {
     const key = r.name + '|' + k + '|' + x; if (!by.has(key)) by.set(key, []); by.get(key).push(r.theme + ' ' + r.w);
   })));
   console.log('\npop-ups checked for a click outside: ' + ([...POPUPS].join(' · ') || 'none'));

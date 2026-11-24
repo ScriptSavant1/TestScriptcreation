@@ -20,7 +20,7 @@
   'use strict';
 
   var REC = 'http://localhost:8787';
-  var LATEST = '0.3.1';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
+  var LATEST = '0.3.2';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
   var PREF = 'perfx-rec-live';     // remembered choices: recent addresses, browser, private window, name, last transaction
   var STATIC_TYPES = { Image: 1, Stylesheet: 1, Script: 1, Font: 1, Media: 1 };
   var ROWS_PER_GROUP = 400;        // rows drawn per open transaction (the newest)

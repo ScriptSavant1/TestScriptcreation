@@ -495,6 +495,7 @@
         '<button type="button" class="ss-ed-rail" data-ed-show="right" title="Show the response"><svg class="i"><use href="#i-panel"/></svg>The response</button>' +
         '<div class="ss-ed-rh"><b id="ss-ed-rt">The response</b>' +
           '<span class="ss-seg ss-ed-rtab" id="ss-ed-rtab" role="group" aria-label="Show"><button type="button" data-rv="body" aria-pressed="true">Body</button><button type="button" data-rv="headers" aria-pressed="false">Headers</button></span>' +
+          '<button type="button" class="ds-btn ds-btn-xs" id="ss-ed-fmt" aria-pressed="true" title="A JSON response laid out with one value per line (Formatted), or exactly as it was sent" hidden><svg class="i"><use href="#i-code"/></svg><span>Formatted</span></button>' +
           '<button type="button" class="ds-btn ds-btn-xs ds-btn-ghost ss-icon ss-ed-rhide" data-ed-hide="right" title="Hide this panel (how it is read gets the space)" aria-label="Hide the response"><svg class="i"><use href="#i-panel"/></svg></button>' +
           '<span class="ss-muted" id="ss-ed-hint">Select a value (or double-click it) to read it from here.</span></div>' +
         '<p class="ss-ed-legend" id="ss-ed-legend" hidden><mark class="later">value</mark> sent back by a later request — click one to use it</p>' +
@@ -1119,7 +1120,19 @@
 
   // the response: Body (the value marked; in add mode also the values a later request sends back) or Headers.
   // Long bodies are cut for the screen (the test reads the whole body).
-  var MAXB = 200000, shownBody = null;
+  // A long body is cut for the screen, but never above the value: when the value is past the cut the whole body is
+  // shown, and "Show all" shows the rest. A JSON body is shown Formatted (one value per line; pref edFmt, default on);
+  // marks and selections there map back to the body as sent (rawAt), which is what the extractor reads.
+  var MAXB = 200000, shownBody = null, fullFor = null, fmtShown = false, rawText = "", fmtText = "";
+  function isJsonText(text) { if (!/^\s*[[{]/.test(text)) return false; try { JSON.parse(text); return true; } catch (x) { return false; } }
+  function nthIndex(str, s, n) { var i = -1; for (var k = 0; k <= n; k++) { i = str.indexOf(s, i + 1); if (i === -1) return -1; } return i; }
+  function countIn(str, s) { var n = 0, i = 0; while ((i = str.indexOf(s, i)) !== -1) { n++; i += s.length; } return n; }
+  // the place in the body as sent of text at a place in the formatted body: the same occurrence of the same text
+  function rawAt(at, s) {
+    if (!fmtShown) return at;
+    var n = countIn(fmtText.slice(0, at), s), r = nthIndex(rawText, s, n);
+    return r !== -1 ? r : rawText.indexOf(s);
+  }
   function response(c, e) {
     var pre = $("#ss-ed-body"), hd = $("#ss-ed-hdrs"), text = String(e && e.respBody || ""), hmap = e && e.respHdrsMap || {};
     var nh = Object.keys(hmap).length;
@@ -1138,7 +1151,10 @@
     // a list: the values it reads are marked (every match of its JSON path, or of each field of a rebuilt list)
     var lpaths = !adding && isList(c) ? (c._arrayReconstruct ? ((c._arrayConfig || {}).columns || []).map(function (k) { return k._placeholder ? "" : k.sourceJsonPath; }).filter(Boolean) : [c.source && c.source.jsonPath].filter(Boolean)) : [];
     var lmark = adding && listSt ? listSt.values.slice(listSt.from - 1, listSt.to) : !adding && isList(c) && !c._arrayReconstruct ? lvals(c) : null;
-    var key = cur + "|" + srcIdx + "|" + rview + "|" + text.length + "|" + c.value + "|" + (draft ? JSON.stringify(draft) : "") + "|" + lpaths.join(",") + "|" + tray.length + "|" + listKey();
+    var isJ = rview === "body" && !!text && isJsonText(text), fmt = isJ && EP.edFmt !== false, fb = $("#ss-ed-fmt");
+    fb.hidden = !isJ; fb.setAttribute("aria-pressed", String(fmt)); fb.lastChild.textContent = fmt ? "Formatted" : "As sent";
+    var full = fullFor === cur + "|" + srcIdx;
+    var key = cur + "|" + srcIdx + "|" + rview + "|" + text.length + "|" + c.value + "|" + (draft ? JSON.stringify(draft) : "") + "|" + lpaths.join(",") + "|" + tray.length + "|" + listKey() + "|" + fmt + "|" + full;
     if (shownBody === key) return;
     shownBody = key;
     var v = String(c.value || "");
@@ -1150,7 +1166,10 @@
       return;
     }
     // ranges: the chosen value (every place) and, when adding, the first place of each value sent back later
-    var t = text.length > MAXB ? text.slice(0, MAXB) : text, rs = [], i, j;
+    rawText = text; fmtShown = fmt; fmtText = fmt ? JSON.stringify(JSON.parse(text), null, 2) : text;
+    var view = fmtText, fc = v.length >= 2 ? view.indexOf(v) : -1;
+    var cut = view.length > MAXB && !full && (fc === -1 || fc + v.length < MAXB);   // never cut above the value
+    var t = cut ? view.slice(0, MAXB) : view, rs = [], i, j;
     (lmark && lmark.length ? lmark.map(function (x) { return /^\s*[[{]/.test(text) ? JSON.stringify(x).slice(1, -1) : x; }) : lpaths.length ? E.listValues(text, lpaths).map(function (x) { return JSON.stringify(x).slice(1, -1); }) : [v]).forEach(function (w) {
       if (w.length < 2) return;
       i = 0; while ((j = t.indexOf(w, i)) !== -1) { rs.push([j, j + w.length, "cur"]); i = j + w.length; }
@@ -1159,17 +1178,17 @@
     lat.forEach(function (x) {
       if (x.kind === "header" || x.value === v) return;
       var q = x.kind === "json" ? JSON.stringify(x.value).slice(1, -1) : x.value, k = t.indexOf(q);
-      if (k !== -1) rs.push([k, k + q.length, kept.indexOf(x.value) !== -1 ? "kept" : "later"]);
+      if (k !== -1) rs.push([k, k + q.length, kept.indexOf(x.value) !== -1 ? "kept" : "later", fmt ? text.indexOf(q) : k]);   // [3]: its place in the body as sent
     });
     rs.sort(function (a, b) { return a[0] - b[0] || (a[2] === "cur" ? -1 : 1); });
     var h = "", pos = 0, first = true;
     rs.forEach(function (r) {
       if (r[0] < pos) return;
-      h += esc(t.slice(pos, r[0])) + "<mark" + (r[2] === "later" ? ' class="later" data-at="' + r[0] + '" title="Sent back by a later request: click to use it"' : r[2] === "kept" ? ' class="kept" title="Kept: in Values to add"' : first ? ' id="ss-ed-first"' : "") + ">" + esc(t.slice(r[0], r[1])) + "</mark>";
+      h += esc(t.slice(pos, r[0])) + "<mark" + (r[2] === "later" ? ' class="later" data-at="' + (r[3] != null ? r[3] : r[0]) + '" title="Sent back by a later request: click to use it"' : r[2] === "kept" ? ' class="kept" title="Kept: in Values to add"' : first ? ' id="ss-ed-first"' : "") + ">" + esc(t.slice(r[0], r[1])) + "</mark>";
       if (r[2] === "cur") first = false;
       pos = r[1];
     });
-    pre.innerHTML = h + esc(t.slice(pos)) + (text.length > MAXB ? '<span class="ss-muted">\n… (' + plural(text.length - MAXB, "more character") + ")</span>" : "");
+    pre.innerHTML = h + esc(t.slice(pos)) + (cut ? '<span class="ss-muted">\n… </span><button type="button" class="ds-btn ds-btn-sm ss-ed-all" data-show-all>Show all (' + (view.length / 1024).toFixed(1) + " KB)</button>" : "");
     var m = $("#ss-ed-first") || (adding ? pre.querySelector("mark.later") : null);
     if (m) setTimeout(function () { m.scrollIntoView({ block: "center" }); }, 0);
     else pre.scrollTop = 0;
@@ -1181,7 +1200,8 @@
     var r = s.getRangeAt(0); if (!pre.contains(r.startContainer)) return null;
     var pr = document.createRange(); pr.selectNodeContents(pre); pr.setEnd(r.startContainer, r.startOffset);
     var txt = s.toString(), at = pr.toString().length, lead = txt.length - txt.replace(/^\s+/, "").length;
-    return { at: at + lead, s: txt.trim() };
+    var s0 = txt.trim(), raw = rawAt(at + lead, s0);
+    return raw === -1 ? null : { at: raw, s: s0 };
   }
   // a section selected (several values, options of a select): the list of what is inside it
   function sectionList(at, s) {
@@ -1241,6 +1261,8 @@
     else if (t.id === "ss-ed-prev" || t.id === "ss-ed-next") { var l = SSC.list(), i = l.indexOf(cur); var n = l[i + (t.id === "ss-ed-next" ? 1 : -1)]; if (n) open(n); }
     else if (t.hasAttribute("data-kind")) { setKind(t.getAttribute("data-kind")); }
     else if (t.hasAttribute("data-rv")) { rview = t.getAttribute("data-rv"); rest(); }
+    else if (t.id === "ss-ed-fmt") { EP.edFmt = EP.edFmt === false; SS.save(); shownBody = null; rest(); }
+    else if (t.hasAttribute("data-show-all")) { fullFor = cur + "|" + srcIdx; shownBody = null; rest(); }
     else if (t.hasAttribute("data-h")) { setHeader(t.getAttribute("data-h")); }
     else if (t.hasAttribute("data-known")) { if (!tray.length) open(t.getAttribute("data-known")); else if (typeof showToast === "function") showToast("Add or remove the kept values first.", "info", 3000); }
     else if (t.id === "ss-ed-keep") keep();

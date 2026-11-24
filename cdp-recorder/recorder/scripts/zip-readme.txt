@@ -60,8 +60,8 @@ RECORD FROM PERFX STUDIO (recommended)
    clicked or typed in. Type a name, Enter (or Mark): the
    running transaction ends and the next starts. The arrow opens the
    details (transactions, rename, Undo last mark, planned steps); Stop and
-   save is on the bar too. Drag it by its grip anywhere (it stays where
-   you let it go; double-click the grip: back at the top), minimise it, or press Alt+Shift+H to hide it and bring it
+   save is on the bar too. Drag it anywhere, by any part that is not a
+   button (it stays there; double-click the grip: back at the top), minimise it, or press Alt+Shift+H to hide it and bring it
    back. It is never part of the recording. Turn it off on the page under
    More options, or start the recorder with --no-bar.
 

@@ -628,7 +628,7 @@
       if (e.button !== 0 || document.body.classList.contains("ss-dock") || e.target.closest("button, input, label, select, a")) return;
       var r = det.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
       det.style.height = r.height + "px"; det.style.right = "auto"; det.style.bottom = "auto";
-      det.style.left = r.left + "px"; det.style.top = r.top + "px"; det.classList.add("ss-det-moved");
+      det.classList.add("ss-det-moved"); det.style.left = r.left + "px"; det.style.top = r.top + "px";
       bar.setPointerCapture(e.pointerId); e.preventDefault();
       function move(ev) {
         det.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, ev.clientX - dx)) + "px";

@@ -14,7 +14,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, release } from "node:os";
 import { LINK_SCHEME, linkCommand, expandEnv, readAllowedPages } from "./portal-mode.js";
 import { barPrefsOf } from "./page-bar.js";
 
@@ -40,9 +40,16 @@ async function regQuery(key: string, value: string | null): Promise<string | nul
  * Registers perfx-recorder: for this .exe. Skips the registry writes when it already points here.
  * Returns what happened, for the console; never throws (recording works without it, by double-click).
  */
+/** conhost.exe when it can run a program without a window (--headless: Windows 10 1809, build 17763, and later). */
+function headlessHost(): string | undefined {
+  const build = parseInt(String(release()).split(".")[2] ?? "0", 10);
+  const p = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "conhost.exe");
+  return build >= 17763 && existsSync(p) ? p : undefined;
+}
+
 export async function registerLink(exePath = process.execPath): Promise<"registered" | "unchanged" | "failed"> {
   const root = `HKCU\\Software\\Classes\\${LINK_SCHEME}`;
-  const command = linkCommand(exePath);
+  const command = linkCommand(exePath, headlessHost());
   if ((await regQuery(`${root}\\shell\\open\\command`, null)) === command) return "unchanged";
   try {
     await execFileAsync("reg", ["add", root, "/ve", "/d", "URL:PerfX CDP Recorder", "/f"]);

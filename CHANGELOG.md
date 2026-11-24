@@ -64,6 +64,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### CDP Recorder
 
+#### 0.3.2: the floating bar really moves; the recorder closes after saving
+
+- The floating bar could not be moved at a person's pace: its state arrives every 0.7 s and redrew the bar during the drag, which dropped it. No redraw while dragging now; and it moves by any part that is not a button, not only its grip. (The 0.3.1 test dragged faster than a redraw; it now drags over two seconds — and fails on 0.3.1.)
+- Started by Start recording, the recorder closes itself — its console window too — once the saved recording's windows have closed (before: it waited an hour). The link runs it without a console window (Windows 10 1809 and later). A newer recorder started by the link replaces an older one still running, so an update is used at once.
+- Temporary browser profiles earlier recordings left behind (a folder per recording, when the browser still held a file) are removed at the next start — one test computer had 107 of them, 173 MB.
+
 #### 0.3.1: the floating bar goes anywhere
 
 - The floating bar stays exactly where you drop it (before: it snapped to the top or bottom, left, middle or right), remembered for the next recordings as a share of the window; a double-click on its grip puts it back at the top, and the dock button still moves it to the top or bottom. A click on the grip without moving no longer moves it.
@@ -356,6 +362,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The Correlation Advisor is shown whenever a recording is loaded, also when it found nothing, so Paste & Detect, Add Manual and the Request Inspector are always at hand (BUG-140).
 
 ### Portal
+
+#### Script Studio: a large request-details window; the editor shows the whole response
+
+- A request's details open as a large window over the workspace, centred (as wide as 1440 px), moved by its bar.
+- The correlation editor never hides the value: a long response was cut at 200 000 characters even when the value (a token at the end of a sign-in answer) came after; now the whole body shows when the value is past the cut, and **Show all** shows the rest otherwise. A JSON response is **Formatted** (one value per line, as in the HAR Explorer) — **As sent** shows it as recorded; selecting a value works in both.
 
 #### Script Studio: the request details move
 

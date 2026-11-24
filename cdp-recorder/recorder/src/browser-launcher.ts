@@ -16,7 +16,7 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import CDP from "chrome-remote-interface";
@@ -123,6 +123,26 @@ export async function killProcessTree(pid: number): Promise<void> {
  * Ends every Edge / Chrome process still running on this (temporary) profile folder — only processes whose
  * command line names it, so the user's own browser windows are never touched. Windows only; best effort.
  */
+/**
+ * Temporary profiles left behind by earlier recordings (the browser still held a file when the recorder deleted it, or
+ * the recorder was ended abruptly): every "cdp-recorder-*" folder in the temporary folder not changed for 10 minutes
+ * — a profile in use keeps changing, and a locked file just stays. Returns how many were removed.
+ */
+export async function cleanOldProfiles(dir = tmpdir(), olderThanMs = 10 * 60 * 1000): Promise<number> {
+  let names: string[] = [];
+  try { names = (await readdir(dir)).filter((n) => /^cdp-recorder-[A-Za-z0-9]+$/.test(n)); } catch { return 0; }
+  let removed = 0;
+  for (const n of names) {
+    const p = join(dir, n);
+    try {
+      if (Date.now() - (await stat(p)).mtimeMs < olderThanMs) continue;
+      await rm(p, { recursive: true, force: true, maxRetries: 1, retryDelay: 100 });
+      removed++;
+    } catch { /* in use or locked: next time */ }
+  }
+  return removed;
+}
+
 export async function killProfileProcesses(userDataDir: string): Promise<void> {
   if (process.platform !== "win32" || !userDataDir) return;
   const dir = userDataDir.replace(/'/g, "''");

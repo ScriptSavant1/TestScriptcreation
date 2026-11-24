@@ -40,9 +40,11 @@ export function parsePortalLink(link) {
   return { action: m[1].toLowerCase(), portal: originOf(params.portal) };
 }
 
-/** The command Windows runs for the link: the .exe, in portal mode, with the link as one argument. */
-export function linkCommand(exePath) {
-  return `"${exePath}" --portal "%1"`;
+/** The command Windows runs for the link: the .exe, in portal mode, with the link as one argument. With conhost (the
+ *  path of conhost.exe, Windows 10 1809 and later) it runs headless: no console window opens behind the recording. */
+export function linkCommand(exePath, conhost) {
+  const run = `"${exePath}" --portal "%1"`;
+  return conhost ? `"${conhost}" --headless ${run}` : run;
 }
 
 /**
@@ -222,4 +224,13 @@ export function readAllowedPages(text) {
     if (o && out.indexOf(o) < 0) out.push(o);
   }
   return out;
+}
+
+/** a.b.c older than x.y.z (a missing or odd version counts as older) */
+export function olderThan(v, than) {
+  const p = (s) => String(s).split(".").map((n) => parseInt(n, 10) || 0);
+  if (!v) return true;
+  const a = p(v), b = p(than);
+  for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0);
+  return false;
 }
