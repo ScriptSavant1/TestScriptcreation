@@ -4,7 +4,7 @@
 const { chromium } = require(require('path').resolve(__dirname, '../../../cdp-recorder/recorder/node_modules/playwright-core'));
 const path = require('path'), fs = require('fs');
 const OUT = process.argv[2] || path.join(__dirname, 'run');
-fs.mkdirSync(OUT, { recursive: true });
+if (require.main === module) fs.mkdirSync(OUT, { recursive: true });
 const BASE = 'http://localhost:3999/converter/';
 const FX = require('path').resolve(__dirname, '../').replace(/\\/g, '/') + '/';
 const COL = require('path').resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/';
@@ -56,7 +56,8 @@ function measure() {
   return { fams, weights, sizes, fails, cards, buttons, bodyBg: bodyCs.backgroundColor, bodyFont: bodyCs.fontFamily.split(',')[0], textCount: els.length };
 }
 
-(async () => {
+module.exports = { measure };   // the checks, reused on mockups (mock.js)
+if (require.main === module) (async () => {
   const b = await chromium.launch({ channel: 'msedge' });
   const report = {};
   for (const theme of ['dark', 'light']) {

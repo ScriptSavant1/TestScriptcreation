@@ -211,7 +211,8 @@ async function selftest(b) {
   return fail;
 }
 
-(async () => {
+module.exports = { chromium, inspect, focusCheck, dismissCheck, HEIGHT };   // the checks, reused on mockups (mock.js)
+if (require.main === module) (async () => {
   const b = await chromium.launch({ channel: 'msedge' });
   if (args.includes('--selftest')) { const n = await selftest(b); await b.close(); process.exitCode = n ? 1 : 0; return; }
   fs.mkdirSync(OUT, { recursive: true });

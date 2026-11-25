@@ -434,6 +434,10 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 - Home: seven tool cards (four then three on wide screens). Sidebar: new group "Plan". Help: Workload Modeller section, contents entry, tools table row and What's New line. Usage statistics and the admin reports know the tool `workload` (counted in scripts).
 
+### Regression tools
+
+- `audit/mock.js`: a mockup goes through the same checks as the real screens (the screen review and the design audit), plus: the main button on the screen without scrolling, cards and buttons that do not touch, no card cut off, and every item of an inventory on some screen.
+
 ### Script generation
 
 #### Sign-in (NTLM, Kerberos, Basic)
