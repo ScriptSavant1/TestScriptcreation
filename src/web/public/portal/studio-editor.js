@@ -701,7 +701,7 @@
     }
     var id = cur, was = adding; cur = null; adding = false; nc = null; tray = []; box.hidden = true; tab.classList.remove("ss-cr-editing");
     if (window.SSC) SSC.render();
-    var r = was ? $("#ss-cr-manual") : document.querySelector('#ss-cr-body [data-id="' + id + '"] [data-edit]'); if (r) r.focus();
+    var r = was ? $("#ss-cr-manual") : document.querySelector('.ss-sec.is-open [data-id="' + id + '"] :is([data-edit], [data-ci-edit])'); if (r) r.focus();
   }
   // keep the user's choice on the candidate (the engine reads it when the value is added to the script)
   function save() {
@@ -1423,7 +1423,7 @@
     if (ev.key === "Escape" && !document.querySelector("dialog[open]") && !ev.target.closest("input, select, textarea")) close();
   });
 
-  // Correlation details (the engine's list under the table, one item per correlation in S.correlations): every item
+  // In the script (the engine's list, one item per correlation in S.correlations): every item
   // has Edit (the editor, as for the table's values) and Remove (the table's Take out, with Undo). The correlations
   // Studio's own engines found are candidates too (advisorMirrorEngine), so every item has one.
   function forCorr(corr) {

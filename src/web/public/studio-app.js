@@ -7,6 +7,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // opts.collect (an array): the ZIPs are added to it as { name, blob } instead of being downloaded — the Script Studio
 // page hands them to the Workload Modeller (Plan the load). Without it: downloaded, as always.
+// The script's name when none is typed on the page: the recording's file name, made safe for VuGen (letters, digits, _;
+// starts with a letter; up to 60). Nothing usable in it, or both formats in one go (two files): the name per format.
+function scriptNameFromFile(file) {
+  let n = String(file || "").replace(/^.*[\\/]/, "").replace(/(\.(har|json|zip|log|txt))+$/i, "");
+  n = n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_]+/g, "_").replace(/_{2,}/g, "_").replace(/^_+/, "");
+  if (/^[0-9]/.test(n)) n = "Script_" + n;
+  return n.slice(0, 60).replace(/_+$/, "");
+}
+function studioScriptName(fmt) {
+  return (fmt !== "both" && scriptNameFromFile(S.har1Name)) || (fmt === "webhttp" ? "WebHttpScript_Correlated" : "DevWebScript_Correlated");
+}
+
 async function dlZip(fmt, opts) {
   const deliver = (blob, name) => {
     if (opts && Array.isArray(opts.collect)) { opts.collect.push({ name, blob }); return; }
@@ -27,7 +39,7 @@ async function dlZip(fmt, opts) {
   const isDev = fmt === "devweb" || fmt === "both";
 
   async function makeWebHttpZip() {
-    const nm = S.scriptName || "WebHttpScript_Correlated";   // the name typed on the page (letters, digits, _)
+    const nm = S.scriptName || (fmt === "both" ? "WebHttpScript_Correlated" : studioScriptName("webhttp"));   // the name typed on the page (letters, digits, _), else the recording's
     const zip = new JSZip();
     zip.file("Action.c", S.scripts.ac || "");
     zip.file("vuser_init.c", S.scripts.vi || "");
@@ -69,7 +81,7 @@ async function dlZip(fmt, opts) {
   }
 
   async function makeDevWebZip() {
-    const nm = S.scriptName || "DevWebScript_Correlated";
+    const nm = S.scriptName || (fmt === "both" ? "DevWebScript_Correlated" : studioScriptName("devweb"));
     const zip = new JSZip();
     zip.file("main.js", S.scripts.mj || "");
     if (S.scripts.corrjs) zip.file("correlations.js", S.scripts.corrjs);

@@ -54,7 +54,8 @@ describe('Script Studio redesign — every element the scripts use exists', () =
   // The classic set-up screen's domain list and its Start over button are gone: the workspace's Domains panel calls the
   // same engine functions (studioToggleAllDomains for All on / All off) and draws its own list and search; the start
   // screen is one click away (Open another), and nothing restarts when a choice changes.
-  const REPLACED = new Set(['studioToggleAllDomains(true)', 'studioToggleAllDomains(false)', 'studioRenderDomains(this.value)', 'goBack()']);
+  // toggleCorrPanel: the list is a section of its own now, opened by its bar (studio-corr.js section)
+  const REPLACED = new Set(['studioToggleAllDomains(true)', 'studioToggleAllDomains(false)', 'studioRenderDomains(this.value)', 'goBack()', 'toggleCorrPanel()']);
   test('every onclick / onchange / oninput handler of the classic page is still wired', () => {
     const handlers = (html) => new Set([...html.matchAll(/on(?:click|change|input|drop|dragover|dragleave)="([^"]+)"/g)].map((m) => m[1].replace(/\s+/g, ' ').trim()));
     const mine = handlers(page);
@@ -113,7 +114,7 @@ describe('Script Studio — the four steps', () => {
     ['id="ss-steps"', 'id="ss-step-next"', 'id="ss-step-back"', 'id="ss-done"', 'id="ss-done-dl"', 'id="ss-done-list"'].forEach((id) => expect(page).toContain(id));
   });
   test('the tabs are kept (the engine and the harness use them) and each one opens its step', () => {
-    ['ss-tab-script', 'ss-tab-corr', 'ss-tab-data', 'ss-t-script', 'ss-t-corr', 'ss-t-data'].forEach((id) => expect(page).toContain('id="' + id + '"'));
+    ['ss-tab-script', 'ss-t-script', 'ss-t-corr', 'ss-t-data'].forEach((id) => expect(page).toContain('id="' + id + '"'));
     expect(js).toContain('var TAB_STEP = { script: 1, corr: 2, data: 3 }');
     expect(js).toContain('function tab(name) { step(TAB_STEP[name] || 1); }');
     expect(js).toContain('if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); if (window.SSH) SSH.reset(); }');
@@ -192,7 +193,18 @@ describe('Script Studio — steps fit the window', () => {
   test('no width cap on Correlate, Test data or Download', () => {
     expect(css).not.toMatch(/#ss-t-(corr|data) \{[^}]*max-width: 1500px/);
     expect(css).not.toMatch(/\.ss-done-card \{[^}]*max-width/);
-    expect(css).toContain('body.ss-step-wide #ss-t-corr:not(.ss-cr-cards):not(.ss-cr-editing) > #ss-corr { height: 100%;');
+    expect(css).toContain('body.ss-step-wide #ss-t-corr > .ss-sec.is-open { flex: 1 1 0;');
+  });
+  test('Correlate: three named sections, one open; everything of before is in them', () => {
+    const corr = html.slice(html.indexOf('id="ss-t-corr"'), html.indexOf('id="ss-t-data"'));
+    const at = ['data-sec="values"', 'data-sec="script"', 'data-sec="second"'].map((x) => corr.indexOf(x));
+    expect(at.every((x) => x > 0) && at[0] < at[1] && at[1] < at[2]).toBe(true);
+    const inside = (from, to, ids) => ids.forEach((id) => { const i = corr.indexOf('id="' + id + '"'); expect([id, i > from && i < to]).toEqual([id, true]); });
+    inside(at[0], at[1], ['ss-sec-n1', 'ss-cr-manual', 'ss-cr-cant', 'ss-cr-view', 'ss-cr-tools', 'ss-cr-table', 'ss-cr-foot', 'ss-cr-apply', 'adv-panel', 'adv-cards', 'adv-btn-regen']);
+    inside(at[1], at[2], ['ss-sec-n2', 'ss-sec-w2', 'corr-list', 'corr-toggle-icon']);
+    inside(at[2], corr.length, ['ss-sec-n3', 'mode-badge', 'dz2', 'dz2-clear']);
+    expect((corr.match(/class="ss-sec-b"/g) || []).length).toBe(3);
+    expect((corr.match(/aria-expanded="true" aria-controls="ss-cr-wrap"/g) || []).length).toBe(1);
   });
   test('step 4: the files and their code beside the Ready list, every old id kept', () => {
     ['ss-done-list', 'ss-done-fh', 'ss-done-files', 'ss-done-dl', 'ss-done-ftabs', 'ss-done-pre', 'ss-done-copy'].forEach((id) => expect(html).toContain('id="' + id + '"'));

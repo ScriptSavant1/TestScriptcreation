@@ -125,18 +125,20 @@
                   <span class="dz-icon" aria-hidden="true"><svg class="i"><use href="#i-up"/></svg></span>
                   <div class="dz-body">
                     <div class="dz-title" id="dz1-title">Open a recording you already have</div>
-                    <div class="dz-sub" id="dz1-sub">Drop a .har file anywhere on this page, or click this box</div>
-                    <div class="dz-name" id="dz1-name" style="display:none"></div>
-                    <div class="ss-drop-more">A HAR file from the CDP Recorder or DevTools (F12), a NetLog file, or a file someone sent you. It is read in your browser; nothing is uploaded.</div>
+                    <div class="ss-drop-txt">
+                      <div class="dz-sub" id="dz1-sub">Drop a .har file anywhere on this page, or click this box</div>
+                      <div class="dz-name" id="dz1-name" style="display:none"></div>
+                      <div class="ss-drop-more">A HAR file from the CDP Recorder or DevTools (F12), a NetLog file, or a file someone sent you. It is read in your browser; nothing is uploaded.</div>
+                    </div>
                   </div>
-                  <span class="ds-btn ds-btn-primary ss-browse" aria-hidden="true"><svg class="i"><use href="#i-file"/></svg>Choose file</span>
+                  <span class="ds-btn ds-btn-primary ds-btn-lg ss-browse" aria-hidden="true"><svg class="i"><use href="#i-file"/></svg>Choose file</span>
                   <button id="dz1-clear" class="dz-clear-btn"
                     onclick="event.stopPropagation();clearSlot(1)" title="Close this recording" aria-label="Close the recording" style="display:none">&#x2715;</button>
                 </div>
             </section>
           </div>
 
-          <div class="ss-links"><button type="button" class="ss-linkb" id="ss-how-btn">How it works</button><button type="button" class="ss-linkb" id="ss-guide-btn">How to record your journey</button></div>
+          <div class="ss-links"><button type="button" class="ss-linkb" id="ss-how-btn">The four steps</button><button type="button" class="ss-linkb" id="ss-guide-btn">How to record your journey</button></div>
         </div>
       </div>
 
@@ -282,15 +284,12 @@
           <!-- Script | Correlation Advisor | Test data -->
           <section class="ss-pane" id="ss-p-right" aria-label="Script and correlation">
             <button class="ss-rail" type="button" data-show="right" title="Show the script panel"><svg class="i"><use href="#i-panel"/></svg>Script</button>
-            <div class="ss-tabs" role="tablist" aria-label="Script and correlation">
-              <button type="button" role="tab" id="ss-tab-script" aria-selected="true" aria-controls="ss-t-script" data-tab="script"><svg class="i"><use href="#i-code"/></svg>Script</button>
-              <button type="button" role="tab" id="ss-tab-corr" aria-selected="false" aria-controls="ss-t-corr" data-tab="corr"><svg class="i"><use href="#i-bulb"/></svg>Correlation Advisor <span class="ss-badge" id="ss-adv-n" hidden></span></button>
-              <button type="button" role="tab" id="ss-tab-data" aria-selected="false" aria-controls="ss-t-data" data-tab="data"><svg class="i"><use href="#i-table"/></svg>Test data <span class="ss-badge ss-badge-q" id="ss-data-n" hidden></span></button>
+            <div class="ss-pane-h ss-script-h"><h3 id="ss-tab-script">Script</h3>
               <span class="ss-grow"></span>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-hide="right" title="Hide this panel (the others get the space)" aria-label="Hide the script panel"><svg class="i"><use href="#i-panel"/></svg></button>
             </div>
 
-            <div class="ss-tab" id="ss-t-script" role="tabpanel" aria-labelledby="ss-tab-script">
+            <div class="ss-tab" id="ss-t-script" role="region" aria-labelledby="ss-tab-script">
               <div class="code-area">
                 <div class="code-area-header">
                   <div class="code-tabs" id="code-tabs"></div>
@@ -303,13 +302,13 @@
               <!-- the engine's own download buttons (the file bar's Download ZIP does the same) -->
               <div class="dl-bar" id="dl-bar" hidden></div>
             </div>
-            <div class="ss-tab" id="ss-t-corr" role="tabpanel" aria-labelledby="ss-tab-corr" hidden>
-              <!-- step 2: the Correlation Advisor's findings as one table (portal/studio-corr.js); the engine's cards
-                   below stay (Cards view) — they carry the list / array options until the editor has them -->
-              <div class="ss-corr" id="ss-corr">
-                <div class="ss-corr-h">
-                  <span class="ss-sec-ic" aria-hidden="true"><svg class="i"><use href="#i-studio"/></svg></span>
-                  <h2>Correlate</h2><button type="button" class="ss-q" data-about="ss-corr-about" aria-expanded="false" aria-controls="ss-corr-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button>
+            <div class="ss-tab" id="ss-t-corr" role="region" aria-label="Correlate" hidden>
+              <!-- three sections, one open at a time: their bars are always in sight and the open one fills the height (portal/studio-corr.js) -->
+              <!-- 1: the Correlation Advisor's findings as one table (portal/studio-corr.js); the engine's cards are the Cards view -->
+              <div class="ss-corr ss-sec is-open" id="ss-corr" data-sec="values">
+                <div class="ss-sec-h ss-corr-h">
+                  <h2 class="ss-sec-t"><button type="button" class="ss-sec-b" data-sec-b="values" aria-expanded="true" aria-controls="ss-cr-wrap"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-studio"/></svg></span><b>Values found</b><span class="ss-pill" id="ss-sec-n1"></span><small class="ss-muted">Tick the ones to put in the script</small></button></h2>
+                  <button type="button" class="ss-q" data-about="ss-corr-about" aria-expanded="false" aria-controls="ss-corr-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button>
                   <span class="ss-grow"></span>
                   <span class="ss-corr-hact">
                   <button class="ds-btn ss-btn-accent" type="button" id="ss-cr-manual" title="Choose a request and the value in its response yourself"><svg class="i"><use href="#i-plus"/></svg>Add manual correlation</button>
@@ -353,7 +352,6 @@
                   <button type="button" role="menuitem" data-cant="paste"><svg class="i"><use href="#i-paste"/></svg><span><b>Its response is empty in the recording</b><br><small class="ss-muted">Paste the response and the value: the extractor is made from it</small></span></button>
                   <button type="button" role="menuitem" data-cant="second"><svg class="i"><use href="#i-layers"/></svg><span><b>Use a second recording</b><br><small class="ss-muted">The same journey recorded again with other data: every value that changes is found</small></span></button>
                 </div>
-              </div>
               <div class="adv-panel" id="adv-panel" style="display:none">
                 <div class="adv-panel-hdr" onclick="toggleAdvisorPanel()">
                   <div class="adv-panel-hdr-left">
@@ -401,18 +399,23 @@
                   </div>
                 </div>
               </div>
-              <div class="corr-panel" id="corr-panel">
-                <div class="corr-panel-hdr" onclick="toggleCorrPanel()">
-                  <span><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-studio"/></svg></span><span class="ss-hd-t">Correlation details<small class="ss-muted">What the script reads now, and every place it sends it back</small></span></span>
-                  <span class="corr-toggle-icon" id="corr-toggle-icon">&#x25BE;</span>
+              </div>
+              <!-- 2: the correlations in the script (the engine's list, renderCorrelations) -->
+              <div class="corr-panel ss-sec" id="corr-panel" data-sec="script">
+                <div class="ss-sec-h">
+                  <h2 class="ss-sec-t"><button type="button" class="ss-sec-b" data-sec-b="script" aria-expanded="false" aria-controls="corr-list"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-code"/></svg></span><b>In the script</b><span class="ss-pill" id="ss-sec-n2"></span><span class="ss-pill warn" id="ss-sec-w2" hidden></span><small class="ss-muted">What the script reads now, and every place it sends it back</small></button></h2>
+                  <span id="corr-toggle-icon" hidden></span>
                 </div>
                 <div class="corr-list" id="corr-list"></div>
               </div>
 
-              <!-- Advanced: a second recording of the same journey (diff mode) -->
-              <section class="ss-card ss-diff folded" id="ss-diff">
-                <div class="ss-card-h" data-fold="diff"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><h3 class="ss-hd-t">Advanced: second recording<small class="ss-muted">Record the same journey again with other data: every value that changes is found</small></h3><span class="ss-pill" id="mode-badge">Mode: <b>Pattern</b> (1 HAR)</span></div>
-                <div class="ss-card-b">
+              <!-- 3: a second recording of the same journey (diff mode) -->
+              <section class="ss-card ss-diff ss-sec" id="ss-diff" data-sec="second">
+                <div class="ss-sec-h">
+                  <h2 class="ss-sec-t"><button type="button" class="ss-sec-b" data-sec-b="second" aria-expanded="false" aria-controls="ss-diff-b"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><b>Second recording</b><span class="ss-pill" id="ss-sec-n3">Optional</span><small class="ss-muted">Record the same journey again with other data: every value that changes is found</small></button></h2>
+                  <span class="ss-pill" id="mode-badge">Mode: <b>Pattern</b> (1 HAR)</span>
+                </div>
+                <div class="ss-card-b" id="ss-diff-b">
                   <p class="ss-p"><b>One recording (pattern mode)</b> — dynamic values are found by their shape and by tracing them back to an earlier response. Quick to start.</p>
                   <p class="ss-p"><b>Two recordings (diff mode)</b> — record the same journey twice with different data. Every value that changes between the two is found: the deepest and most reliable correlation.</p>
                   <div class="drop-zone ss-drop ss-drop-sm dz-optional-zone" id="dz2"
@@ -431,7 +434,7 @@
               </section>
             </div>
 
-            <div class="ss-tab" id="ss-t-data" role="tabpanel" aria-labelledby="ss-tab-data" hidden>
+            <div class="ss-tab" id="ss-t-data" role="region" aria-label="Test data" hidden>
               <!-- the Test data table (portal/studio-testdata.js) -->
               <div class="ss-td-h"><h2>Test data</h2><button type="button" class="ss-q" data-about="ss-data-about" aria-expanded="false" aria-controls="ss-data-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button><button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
                 <span class="ss-grow"></span>
@@ -513,9 +516,9 @@
     <!-- ── HOW IT WORKS / HOW TO RECORD (links of the start screen) ── -->
     <dialog class="ss-dlg ss-dlg-wide" id="ss-how" aria-labelledby="ss-how-h">
       <div class="ss-dlg-in">
-        <div class="ss-dlg-h"><h2 id="ss-how-h">How it works</h2><button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+        <div class="ss-dlg-h"><h2 id="ss-how-h">The four steps</h2><button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
         <ol class="ss-minis">
-              <li><i>1</i><div><b>Record your journey</b><span>With Start recording, or the bookmarks and DevTools (see How to record, below).</span></div></li>
+              <li><i>1</i><div><b>Record your journey</b><span>With Start recording, or the bookmarks and DevTools (see How to record your journey).</span></div></li>
               <li><i>2</i><div><b>Open the recording</b><span>A recording made here opens by itself. The script is ready at once.</span></div></li>
               <li><i>3</i><div><b>Review and download</b><span>Format, filters, domains and transactions, then the ZIP.</span></div></li>
               <li><i>4</i><div><b>Correlate when needed</b><span>Step 2, Correlate: the Correlation Advisor checks the recording by itself.</span></div></li>

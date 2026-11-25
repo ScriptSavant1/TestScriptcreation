@@ -56,12 +56,12 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
     ok('each step has its count', (await p.locator('#ss-steps em:visible').allInnerTexts()).length === 4);
 
     // name
-    await click('#ss-name-btn'); await p.keyboard.press('Escape'); ok('Escape leaves the name', await vis('#ss-name-btn') && (await txt('#ss-name-now')) === 'DevWebScript_Correlated');
+    await click('#ss-name-btn'); await p.keyboard.press('Escape'); ok('Escape leaves the name', await vis('#ss-name-btn') && (await txt('#ss-name-now')) === 'rich_shop');
     await click('#ss-name-btn'); await p.fill('#ss-sc-name', '1 bad'); await p.keyboard.press('Enter'); ok('a name that cannot be used is said', await vis('#ss-sc-err')); await p.fill('#ss-sc-name', 'My shop run'); await p.keyboard.press('Enter'); await settle();
     ok('the title is the new name', (await txt('#ss-name-now')) === 'My_shop_run');
     const [d] = await Promise.all([p.waitForEvent('download'), click('#ss-dl')]); const z = await JSZip.loadAsync(fs.readFileSync(await d.path()));
     ok('the ZIP and the .usr take it', d.suggestedFilename() === 'My_shop_run.zip' && Object.keys(z.files).some((f) => /My_shop_run\.usr$/.test(f)), [d.suggestedFilename(), Object.keys(z.files)]);
-    await click('#ss-undo'); await settle(); ok('Undo: the name', (await txt('#ss-name-now')) === 'DevWebScript_Correlated'); await click('#ss-redo'); await settle(); ok('Redo: the name', (await txt('#ss-name-now')) === 'My_shop_run'); await click('#ss-undo'); await settle();
+    await click('#ss-undo'); await settle(); ok('Undo: the name is the recording\'s again', (await txt('#ss-name-now')) === 'rich_shop'); await click('#ss-redo'); await settle(); ok('Redo: the name', (await txt('#ss-name-now')) === 'My_shop_run'); await click('#ss-undo'); await settle();
 
     // format
     let s0 = await script(); await click('#ss-fmt [data-fmt=webhttp]'); await settle(); ok('the other format at once', /web_url|web_custom_request/.test(await code())); await undo('format', s0);
@@ -123,6 +123,24 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
     await click('#ss-steps [data-step="2"]'); await p.waitForTimeout(400); ok('Correlate: one line, the text behind the question mark', !(await vis('#ss-corr-about'))); await click('[data-about=ss-corr-about]'); ok('… shown', await vis('#ss-corr-about')); await click('[data-about=ss-corr-about]');
     ok('the whole table row is in sight', await p.evaluate(() => [...document.querySelectorAll('#ss-cr-body tr')].every((x) => x.scrollWidth <= x.clientWidth + 1) && document.getElementById('ss-cr-wrap').scrollWidth <= document.getElementById('ss-cr-wrap').clientWidth + 1));
     s0 = await script(); const c0 = await p.evaluate(() => S.correlations.length); await click('#ss-cr-apply'); await settle(); ok('values added', (await p.evaluate(() => S.correlations.length)) > c0); await undo('correlations added', s0); ok('… and they are to review again', (await p.evaluate(() => S.advisorCandidates.filter((c) => !c._applied).length)) >= 3);
+    // ── the three sections: names, counts, one open, bars always in sight ──
+    { const bars = () => p.evaluate(() => [...document.querySelectorAll('#ss-t-corr > .ss-sec')].map((s) => { const h = s.querySelector('.ss-sec-h').getBoundingClientRect(); return { open: s.classList.contains('is-open'), exp: s.querySelector('.ss-sec-b').getAttribute('aria-expanded'), seen: h.top >= 0 && h.bottom <= innerHeight, h: s.getBoundingClientRect().height, n: s.querySelector('.ss-sec-b b').textContent }; }));
+      const one = async (i) => { const b = await bars(); return b.length === 3 && b.every((x, j) => x.seen && x.open === (j === i) && x.exp === String(j === i) && (j === i ? x.h > 300 : x.h < 70)); };
+      ok('three sections by name', (await bars()).map((x) => x.n).join('|') === 'Values found|In the script|Second recording', await bars());
+      ok('Values found is open, the bars of all three in sight', await one(0), await bars());
+      ok('the step itself does not scroll', await p.evaluate(() => { const t = document.getElementById('ss-t-corr'); return t.scrollHeight <= t.clientHeight + 1; }));
+      ok('the bar says what is to review', /^\d+ to review$|^Nothing to review$/.test(await txt('#ss-sec-n1')), await txt('#ss-sec-n1')); ok('… and what is in the script', (await txt('#ss-sec-n2')) === (await p.evaluate(() => { const n = S.correlations.length; return n ? n + (n > 1 ? ' correlations' : ' correlation') : 'None yet'; })));
+      await click('[data-sec-b=script]'); ok('a click opens In the script', await one(1), await bars()); ok('… with its list', (await p.locator('#corr-list .corr-item').count()) === (await p.evaluate(() => S.correlations.length + S.candidates.length)));
+      await click('[data-sec-b=second]'); ok('a click opens Second recording', await one(2) && await vis('#dz2') && await vis('#mode-badge'));
+      await click('[data-sec-b=second]'); ok('a click on the open one closes it: Values found', await one(0)); await click('[data-sec-b=values]'); ok('… and that one: In the script', await one(1));
+      await p.focus('[data-sec-b=values]'); await p.keyboard.press('Enter'); ok('Enter opens a section', await one(0)); await p.focus('[data-sec-b=second]'); await p.keyboard.press('Space'); ok('Space too', await one(2));
+      await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('#corr-panel .ss-sec-h').getBoundingClientRect(); return [r.right - 6, r.top + r.height / 2]; })); ok('anywhere on a bar opens it', await one(1));
+      await click('#ss-steps [data-step="3"]'); await p.waitForTimeout(250); if (await vis('#ss-ask')) { await click('#ss-ask-no'); await settle(); } await click('#ss-steps [data-step="2"]'); await p.waitForTimeout(250); ok('kept when the step is left', await one(1));
+      await click('[data-sec-b=values]'); await click('#ss-cr-cant'); await click('[data-cant=second]'); ok('Use a second recording opens its section', await one(2)); await click('[data-sec-b=values]');
+      await click('#ss-cr-view [data-view=cards]'); ok('Cards: in the section, the bars stay in sight', await one(0) && await vis('#adv-cards .adv-card')); await click('#ss-cr-view [data-view=table]');
+      // the scroll starts at the top after another step
+      await p.evaluate(() => { document.getElementById('ss-cr-wrap').style.maxHeight = '60px'; document.getElementById('ss-cr-wrap').scrollTop = 40; }); await click('#ss-steps [data-step="3"]'); await p.waitForTimeout(200); if (await vis('#ss-ask')) { await click('#ss-ask-no'); await settle(); } await click('#ss-steps [data-step="2"]'); await p.waitForTimeout(200);
+      ok('back on the step: at the top', await p.evaluate(() => { const w = document.getElementById('ss-cr-wrap'); const t = w.scrollTop; w.style.maxHeight = ''; return t === 0; })); }
     await click('#ss-redo'); await settle(); await click('#ss-steps [data-step="1"]'); await settle(); if (await vis('#ss-ask')) { await click('#ss-ask-no'); await settle(); }
     const s1 = await script(); await click(row(12) + ' .ss-path'); await click('#ss-det-leave'); await p.waitForTimeout(300); ok('a change that takes correlations off asks first', await vis('#ss-ask')); await click('#ss-ask-no'); await p.waitForTimeout(200); ok('no: nothing changed', (await script()) === s1);
     await click('#ss-det-leave'); await p.waitForTimeout(300); await click('#ss-ask-yes'); await settle(); await p.keyboard.press('Escape'); await p.waitForTimeout(100); await undo('a request left out, with correlations', s1);

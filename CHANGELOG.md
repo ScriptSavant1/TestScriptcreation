@@ -108,6 +108,14 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio: Correlate in three sections, the recording's name, aligned start page
+
+- Step 2, Correlate, has three named sections — **Values found**, **In the script** (was Correlation details), **Second recording** (was Advanced: second recording). Their bars are always in sight with what is in them (how many to review, how many correlations, values with no source); one is open and fills the height, so the step has no second scroll bar. Cards is inside Values found. On small laptops the table's buttons are in sight without scrolling sideways.
+- Correlate and Test data start at the top, also after another recording was opened (the place scrolled to before was kept).
+- The script's name is the recording's file name when none is typed (`My shop.har` → `My_shop`), in both formats: title, ZIP, .usr. Before: DevWebScript_Correlated / WebHttpScript_Correlated (still used when the file name has no usable letters).
+- Start page: the two cards line up (icon, title, text, button); the link "How it works" is now "The four steps" (the top bar's How it works opens Help). Step 1: the single Script tab is a plain title.
+- Regression tools: `studio/behave.js` reports a part that stopped or compared nothing as a fault (its domain step had emptied the script, so the Correlate and Test data parts compared empty lists); it now also compares In the script, Cards, the second recording, the names and the script panel (274 comparisons). `studio/walk.js` has 169 checks.
+
 #### Script Studio: more room, every choice at once, Undo and Redo
 
 - The start page has the same top band as every tool and two cards of the same size: Record in a browser, Open a recording (a click anywhere on the card opens the file window). How it works and How to record your journey are links that open windows with the same texts. The format is chosen in the workspace (remembered, as before); the old introduction with its Hide button is gone.

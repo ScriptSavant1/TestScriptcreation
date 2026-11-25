@@ -4,7 +4,8 @@
  * so the script is exactly what the cards would give. The engine's cards stay on the page (Cards view); a list's options
  * (every value or one at random, how it is rebuilt) are in the editor (Options opens it).
  * High-confidence values come ticked when the user opens the step (once per reading); nothing reaches the script
- * before "Add to the script", and leaving the step with ticked values asks first (SS.leaveCorr). */
+ * before "Add to the script", and leaving the step with ticked values asks first (SS.leaveCorr).
+ * The step has three sections (Values found, In the script, Second recording): section(name) opens one of them. */
 (function () {
   "use strict";
   var SS = window.SS;
@@ -165,6 +166,7 @@
       var want = esc(lab) + ' <span class="ss-cnt">' + cnt[k] + "</span>";
       if (x.innerHTML !== want) x.innerHTML = want;
     });
+    secs(cnt);
     var body = $("#ss-cr-body"), focus = document.activeElement, fid = focus && focus.closest && focus.closest(".ss-cr-row") && focus.closest(".ss-cr-row").getAttribute("data-id"), fname = focus && focus.hasAttribute && focus.hasAttribute("data-name");
     if (fname && body.contains(focus)) { foot(); return; }   // never redraw under the user's typing
     body.innerHTML = rowsHtml(rows);
@@ -365,12 +367,41 @@
     if (w === "find" && window.SSW) SSW.openFind();
     else if (w === "paste" && typeof openPasteCorrelate === "function") openPasteCorrelate();
     else if (w === "second") {
-      var d = $("#ss-diff");
-      if (d) { if (d.classList.contains("folded")) d.querySelector("[data-fold]").click(); d.scrollIntoView({ block: "start", behavior: "smooth" }); }
+      section("second", true);
     }
   });
   document.addEventListener("click", function (e) { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !menu.hidden) { closeMenu(); cant.focus(); } });
+
+  // ── the three sections: their bars are always in sight, the open one fills the height; a click on a closed bar opens
+  //    it, a click on the open one closes it and opens the other of the first two. Kept while the recording is open; a
+  //    new one starts at what there is to do: Values found, or In the script when nothing is left to review. ──
+  var tabEl = $("#ss-t-corr"), sec = "";
+  function section(name, focus) {
+    sec = name;
+    $$(".ss-sec", tabEl).forEach(function (s) {
+      var on = s.getAttribute("data-sec") === name;
+      s.classList.toggle("is-open", on);
+      s.querySelector(".ss-sec-b").setAttribute("aria-expanded", String(on));
+    });
+    if (focus) { var b = tabEl.querySelector('[data-sec-b="' + name + '"]'); b.focus(); b.scrollIntoView({ block: "nearest" }); }
+  }
+  tabEl.addEventListener("click", function (e) {
+    var h = e.target.closest(".ss-sec-h"); if (!h) return;
+    var b = e.target.closest("button, a, input, select");
+    if (b && !b.classList.contains("ss-sec-b")) return;   // the bar's own buttons
+    var name = h.parentNode.getAttribute("data-sec");
+    section(sec === name ? (name === "values" ? "script" : "values") : name);
+  });
+  // what each bar says: how many to review, how many in the script, what has no source (or a warning), the second recording
+  function secs(cnt) {
+    var inn = (S.correlations || []).length, un = (S.candidates || []).length;
+    if (!sec && SS.curStep && SS.curStep() === 2) section(!cnt.review && inn ? "script" : "values");
+    var a = $("#ss-sec-n1"); a.textContent = cnt.review ? cnt.review + " to review" : "Nothing to review"; a.classList.toggle("warn", !!cnt.review);
+    $("#ss-sec-n2").textContent = inn ? plural(inn, "correlation") : "None yet";
+    var w = $("#ss-sec-w2"); w.hidden = !un && !S.harWarning; w.textContent = un ? un + " unresolved" : "Warning";
+    $("#ss-sec-n3").textContent = S.har2 ? "In use" : "Optional";
+  }
 
   // Table / Cards (remembered)
   function view(v) {
@@ -397,15 +428,16 @@
   // a new recording: the filters start again (To review, no search)
   function reset() {
     F = { q: "", type: "", conf: "", show: "review" };
+    sec = "";
     $("#ss-cr-q").value = ""; $("#ss-cr-conf").value = ""; $("#ss-cr-type").value = "";
     $$("#ss-cr-show [data-show]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-show") === "review")); });
   }
   // show one filter (after Add manual correlation: In the script), the rows just added marked for a moment
   var fresh = null;
   function showOnly(k, ids) {
-    F.show = k; fresh = ids || null;
+    F.show = k; fresh = ids || null; section("values");
     $$("#ss-cr-show [data-show]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-show") === k)); });
     render();
   }
-  window.SSC = { render: render, view: view, list: list, reset: reset, show: showOnly };
+  window.SSC = { render: render, view: view, list: list, reset: reset, show: showOnly, section: section };
 })();

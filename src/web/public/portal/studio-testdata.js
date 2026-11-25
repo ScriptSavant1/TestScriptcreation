@@ -164,7 +164,6 @@
     $("#ss-td-files").innerHTML = files.length
       ? "Files in the ZIP: " + files.map(function (f) { return "<code>" + esc(f + ext) + "</code>"; }).join(", ") + (S.format === "devweb" ? " and <code>parameters.yml</code>" : " and <code>ParameterFile.prm</code>")
       : "";
-    var n = $("#ss-data-n"); if (n) { n.hidden = !ps.length; n.textContent = ps.length; }
   }
   SS.renderTestData = render;
 

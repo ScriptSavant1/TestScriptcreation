@@ -307,7 +307,7 @@ if (require.main === module) (async () => {
       ['Studio add custom correlation', () => openAdvisorModal()],
     ];
     for (const [name, open] of pops) { await f.evaluate(open); await run(name, 'studio'); await shut(); }
-    await f.click('#ss-steps [data-step="2"]'); await run('Studio 2 correlate', 'studio');
+    await f.click('#ss-steps [data-step="2"]'); await f.evaluate(() => SSC.section('values')); await run('Studio 2 correlate', 'studio');
     await f.click('#ss-cr-show [data-show="script"]'); await run('Studio 2 in the script', 'studio'); await f.click('#ss-cr-show [data-show="review"]');
     await f.evaluate(() => { const c = PerfxStudio.state().advisorCandidates.find((x) => x.varName === 'State') || PerfxStudio.state().advisorCandidates[0]; if (c) SSE.open(c.id); });
     await run('Studio editor', 'studio');
@@ -315,7 +315,9 @@ if (require.main === module) (async () => {
     await f.evaluate(() => SSE.close()); await f.evaluate(() => SSE.add()); await run('Studio add manual', 'studio'); await f.evaluate(() => SSE.close());
     await f.evaluate(() => openPasteCorrelate()); await run('Studio paste and detect', 'studio'); await f.evaluate(() => { try { closePasteCorrelate(); } catch (e) { /* closed */ } });
     await f.click('#ss-cr-test'); await run('Studio test dialog', 'studio'); await f.evaluate(() => { const d = document.getElementById('ss-test-dlg'); if (d.open) d.close(); });
-    await f.evaluate(() => document.getElementById('corr-panel').scrollIntoView()); await run('Studio correlation details', 'studio');
+    await f.click('#ss-cr-view [data-view=cards]'); await run('Studio correlate cards', 'studio'); await f.click('#ss-cr-view [data-view=table]');
+    await f.click('[data-sec-b=script]'); await run('Studio correlate: in the script', 'studio');
+    await f.click('[data-sec-b=second]'); await run('Studio correlate: second recording', 'studio'); await f.click('[data-sec-b=values]');
     await f.click('#ss-steps [data-step="3"]'); await p.waitForTimeout(200);
     if (await f.isVisible('#ss-ask')) await f.click('#ss-ask-no');
     await run('Studio 3 test data', 'studio');

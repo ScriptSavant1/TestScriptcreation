@@ -197,16 +197,17 @@
 
   // ── the script's settings (step 1): its name and the think time between transactions ──
   // the name: letters, digits and underscores, starting with a letter (VuGen's rule); the ZIP and the .usr take it
-  // (dlZip reads S.scriptName); empty = the default name. It belongs to the recording: a new file starts empty.
+  // (dlZip reads S.scriptName); empty = the recording's own name (studio-app.js studioScriptName). It belongs to the
+  // recording: a new file starts empty.
   var nameIn = $("#ss-sc-name"), nameErr = $("#ss-sc-err");
-  function defaultName() { return S.format === "webhttp" ? "WebHttpScript_Correlated" : "DevWebScript_Correlated"; }
+  function defaultName() { return studioScriptName(S.format); }
   SS.scriptName = function () { return S.scriptName || defaultName(); };
   var nameBtn = $("#ss-name-btn"), nameForm = $("#ss-name-f");
   function nameShow() { nameIn.placeholder = defaultName(); $("#ss-name-now").textContent = SS.scriptName(); if (document.activeElement !== nameIn) nameIn.value = S.scriptName || ""; nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); }
   function nameOpen(on) { nameForm.hidden = !on; nameBtn.hidden = on; $("#ss-from").hidden = on; if (on) { nameIn.value = SS.scriptName(); nameIn.focus(); nameIn.select(); } else { nameIn.blur(); nameShow(); } }
   function nameSet() {
     var v = nameIn.value.trim().replace(/[\s-]+/g, "_");
-    if (v === defaultName()) v = "";   // the default name follows the format
+    if (v === defaultName()) v = "";   // the default name follows the recording
     if (v && !/^[A-Za-z][A-Za-z0-9_]{0,59}$/.test(v)) {
       nameErr.textContent = "Letters, numbers and underscores only, starting with a letter.";
       nameErr.hidden = false; nameIn.setAttribute("aria-invalid", "true"); nameIn.focus();
@@ -292,10 +293,7 @@
     return out;
   }
   function badges() {
-    var pend = (S.advisorCandidates || []).filter(function (c) { return c.status === "pending"; }).length;
-    var n = $("#ss-adv-n"); n.hidden = !pend; n.textContent = pend; n.title = plural(pend, "suggestion") + " to review";
-    var d = $("#ss-data-n"), p = (S.params || []).length; d.hidden = !p; d.textContent = p;
-    $("#ss-data-empty").hidden = !!p;
+    $("#ss-data-empty").hidden = !!(S.params || []).length;
     var warn = readyItems().filter(function (i) { return i.warn; }).length;
     var r = $("#ss-ready-n"); r.hidden = !warn; r.textContent = warn;
     stepNotes();
@@ -347,16 +345,14 @@
     if (e.target.closest("[data-x]")) { hiddenWarn = S.harWarning; notices(); badges(); }
   });
 
-  // ── the right panel's tabs (Script · Correlation Advisor · Test data) — each one is now shown by its step ──
+  // ── the right panel's parts (Script · Correlate · Test data): each one is shown by its step ──
   function showTab(name) {
-    $$(".ss-tabs [role=tab]").forEach(function (b) { b.setAttribute("aria-selected", String(b.getAttribute("data-tab") === name)); });
     ["script", "corr", "data"].forEach(function (t) { $("#ss-t-" + t).hidden = t !== name; });
   }
   // every caller that opened a tab (the engine's links, the Ready list, request details) now opens its step
   var TAB_STEP = { script: 1, corr: 2, data: 3 }, STEP_TAB = { 1: "script", 2: "corr", 3: "data" };
   function tab(name) { step(TAB_STEP[name] || 1); }
   SS.tab = tab;
-  $(".ss-tabs").addEventListener("click", function (e) { var b = e.target.closest("[role=tab]"); if (b) tab(b.getAttribute("data-tab")); });
 
   // ── the four steps: 1 Requests · 2 Correlate · 3 Test data · 4 Download. One workspace, four views of it: step 1
   //    is the workspace as it was; steps 2 and 3 give the whole width to the Correlation Advisor / the Test data
@@ -379,7 +375,10 @@
     if (window.SSW && SSW.panes) SSW.panes();
     if (n === 4) done();
     if (n === 2 && window.SSC) SSC.render();   // High values come ticked when the step opens
-    if (was && was !== n) { var ws = $("#ph-res"); if (ws.scrollTop) ws.scrollTop = 0; }
+    if (was && was !== n) {
+      // Correlate and Test data start at the top, whatever was scrolled before (another recording, an earlier look)
+      [$("#ph-res")].concat(n === 2 || n === 3 ? [$("#ss-t-" + STEP_TAB[n])].concat($$("#ss-cr-wrap, #adv-panel, #corr-list, #ss-diff-b, .ss-td-wrap")) : []).forEach(function (x) { if (x.scrollTop) x.scrollTop = 0; });
+    }
   }
   SS.step = step;
   SS.curStep = function () { return cur; };
@@ -683,7 +682,7 @@
   });
 
   // ── keyboard for controls the Studio scripts draw as plain divs (code tabs, panel headers) ──
-  var KB = ".code-tab, .adv-panel-hdr, .adv-inspector-hdr, .corr-panel-hdr";
+  var KB = ".code-tab, .adv-panel-hdr, .adv-inspector-hdr";
   function markKeyboard(root) {
     $$(KB, root).forEach(function (el) {
       if (!el.hasAttribute("tabindex")) { el.setAttribute("tabindex", "0"); el.setAttribute("role", "button"); }

@@ -66,7 +66,7 @@ async function walk(b, url, w, h) {
   await part('domains', async () => {
     is('domains', await ev(() => [...document.querySelectorAll('.ss-dom .ss-host')].map((x) => x.textContent).join(' '))); is('groups', await ev(() => [...document.querySelectorAll('.ss-dgrp')].map((x) => x.firstElementChild.nextSibling.textContent.trim()).join(' · ')));
     await click('.ss-dom [data-rename]'); is('rename a server parameter: a window', await vis('#host-modal-overlay .adv-modal')); await p.fill('#host-modal-inp', 'My_Server'); await p.keyboard.press('Enter'); await idle(); is('renamed in the script', (await code()).includes('My_Server')); await click('.ss-dom [data-rename]'); await click('#host-modal-default'); await idle();
-    const s0 = await code(); await click('.ss-dom[data-host="api.example-outdoor.com"] input'); await wait(250); is('leaving out a needed domain asks', await vis('#ss-ask')); await click('#ss-ask-no'); await idle(); is('no: nothing changed', (await code()) === s0);
+    const s0 = await code(); for (const h of ['api.example-outdoor.com', 'www.example-outdoor.com']) { await click('.ss-dom[data-host="' + h + '"] input'); await wait(250); const asks = await vis('#ss-ask'); is('leaving out ' + h + ' asks', asks); if (asks) { await click('#ss-ask-no'); await idle(); is(h + ', no: nothing changed', (await code()) === s0); } else { await idle(); is(h + ': the script changes', (await code()) !== s0); if (!(await vis('.ss-dom[data-host="' + h + '"]'))) await click('[data-grp=domRest]'); await click('.ss-dom[data-host="' + h + '"] input'); await idle(); is(h + ' back: as before', (await code()) === s0); } }
     await click('#ss-dom-off'); is('All off asks', await vis('#ss-ask')); await click('#ss-ask-no'); await p.fill('#ss-dq', 'www'); await wait(100); is('domain search', await p.locator('.ss-dom').count()); await p.fill('#ss-dq', '');
   });
   await part('panels', async () => { for (const k of ['dom', 'req', 'right']) { await click('[data-hide=' + k + ']'); is('hide ' + k, await ev((x) => document.getElementById('ss-cols').classList.contains('no-' + x), k)); await click('[data-show=' + k + ']'); is('show ' + k, await ev((x) => !document.getElementById('ss-cols').classList.contains('no-' + x), k)); } is('resize bars', await p.locator('#ss-cols .ss-rs:visible').count()); });
@@ -93,6 +93,38 @@ async function walk(b, url, w, h) {
     await click('#ss-cr-view [data-view=cards]'); is('Cards', await vis('#adv-panel')); await click('#ss-cr-view [data-view=table]');
     await click('#ss-cr-apply'); await idle(); is('Add to the script', await ev(() => S.correlations.map((c) => c.name).join(' ')));
   });
+  // the parts below the table: the correlations in the script, the second recording (a section each, opened by its bar)
+  const sec = async (name, old) => { if (await p.locator('[data-sec-b=' + name + ']').count()) { if (!(await ev((n) => document.querySelector('[data-sec=' + n + ']').classList.contains('is-open'), name))) await p.click('[data-sec-b=' + name + ']'); } else if (old && await p.locator(old).count() && await ev((s) => document.querySelector(s).parentNode.classList.contains('folded'), old)) await p.click(old); await wait(150); };
+  await part('in the script', async () => {
+    await click('#ss-steps [data-step="2"]'); await wait(300); await sec('script');
+    const items = () => ev(() => [...document.querySelectorAll('#corr-list .corr-item')].map((x) => x.innerText.replace(/\s+/g, ' ')).join(' | '));
+    is('in the script: items', await items());
+    await p.locator('#corr-list [data-ci-edit]').first().click(); await wait(200); is('its Edit opens the editor', await ev(() => SSE.isOpen())); is('… on', await ev(() => (document.querySelector('#ss-ed h2, #ss-ed h3') || {}).textContent)); await ev(() => SSE.close()); await wait(150);
+    await sec('script'); await p.locator('#corr-list .corr-item .corr-name').nth(1).click(); await wait(200); is('a click on an item opens the editor', await ev(() => SSE.isOpen())); await ev(() => SSE.close()); await wait(150);
+    await sec('script'); const s0 = await code(); await p.locator('#corr-list [data-ci-out]').first().click(); await idle(); is('Remove: items', await items()); is('Remove: the script changes', (await code()) !== s0);
+    await click('#ss-undo'); await idle(); is('Undo: the script as before', (await code()) === s0); await sec('script'); is('Undo: items', await items());
+  });
+  await part('cards', async () => {
+    await sec('values'); await click('#ss-cr-view [data-view=cards]'); is('cards: how many', await ev(() => [...document.querySelectorAll('#adv-cards .adv-card')].filter((x) => x.offsetParent).length)); is('cards: buttons', await ev(() => [...document.querySelectorAll('#adv-panel .adv-panel-hdr-right button')].filter((x) => x.offsetParent).map((x) => x.textContent.trim()).join(' · ')));
+    for (const [n, s] of [['Paste & Detect', '.adv-btn-paste'], ['Add Manual', '.adv-panel-hdr-right .adv-btn-add:last-of-type']]) { await p.locator(s).first().click(); await wait(250); is('cards: ' + n + ' opens', await ev(() => [...document.querySelectorAll('.adv-modal-overlay')].some((x) => x.getClientRects().length) || SSE.isOpen())); await p.keyboard.press('Escape'); await wait(100); await ev(() => { document.querySelectorAll('.adv-modal-overlay').forEach((x) => { x.style.display = 'none'; }); SSE.close(); }); await wait(100); }
+    await sec('values'); await click('#ss-cr-view [data-view=table]');
+  });
+  await part('second recording', async () => {
+    await click('#ss-steps [data-step="2"]'); await wait(250); await sec('values'); await click('#ss-cr-cant'); await p.click('[data-cant=second]'); await wait(600); is('Use a second recording: its box', await vis('#dz2')); is('its mode', await p.locator('#mode-badge').innerText());
+    is('Record it now', await ev(() => [...document.querySelectorAll('#ss-diff button')].some((x) => x.offsetParent && /Record it now/.test(x.textContent))));
+    await p.setInputFiles('#dz2 input', FX + 'rich-shop.r2.har'); await idle(); if (await vis('#ss-bg-dlg')) { await p.keyboard.press('Escape'); await idle(); }
+    is('two recordings: mode', await p.locator('#mode-badge').innerText()); is('two recordings: correlations', await ev(() => S.correlations.map((c) => c.name).join(' '))); is('two recordings: values', await ev(() => S.advisorCandidates.map((c) => c.varName).join(' ')));
+    await click('#ss-steps [data-step="2"]'); await wait(250); await sec('second', '#ss-diff [data-fold]'); await p.click('#dz2-clear'); await idle(); if (await vis('#ss-bg-dlg')) { await p.keyboard.press('Escape'); await idle(); }
+    is('removed: mode', await p.locator('#mode-badge').innerText()); is('removed: correlations', await ev(() => S.correlations.map((c) => c.name).join(' ')));
+  });
+  await part('names', async () => {
+    await p.reload(); await ev(() => { document.documentElement.classList.add('embedded'); }); await wait(400); await p.setInputFiles('#dz1 input', FX + 'rich-shop.har'); await p.waitForFunction(() => document.body.classList.contains('ss-view-ws'), null, { timeout: 60000 }); await idle(); await p.keyboard.press('Escape'); await idle();
+    is('the script name', await p.locator('#ss-name-now').innerText()); const [d] = await Promise.all([p.waitForEvent('download'), click('#ss-dl')]); is('the ZIP', d.suggestedFilename());
+    await click('#ss-fmt [data-fmt=webhttp]'); await idle(); is('the script name, other format', await p.locator('#ss-name-now').innerText()); await click('#ss-fmt [data-fmt=devweb]'); await idle();
+  });
+  await part('the script panel', async () => {
+    await click('#ss-steps [data-step="1"]'); await wait(250); if (await vis('#ss-ask')) await click('#ss-ask-no'); is('Script: its title', await p.locator('#ss-tab-script').innerText()); await click('#ss-p-right [data-hide=right]'); is('its hide button', !(await vis('#code-body'))); await p.locator('#ss-p-right .ss-rail').click(); await wait(150); is('… and back', await vis('#code-body'));
+  });
   await part('test data', async () => { await click('#ss-steps [data-step="3"]'); await wait(250); if (await vis('#ss-ask')) await click('#ss-ask-no'); for (const s of ['#ss-td-add', '#ss-td-xl-down', '#ss-td-xl-up', '#ss-td-table']) is('test data: ' + s, await vis(s)); is('parameters', await ev(() => [...document.querySelectorAll('.ss-td-name')].map((x) => x.value).join(' '))); });
   await part('another', async () => { await click('#ss-open-another'); is('Open another: the start page', await vis('#dz1')); is('the open one is named', await vis('#ss-resume')); await click('#ss-resume-go'); is('back to it', await vis('#ss-cols')); });
   is('page errors', errs.join(' | '));
@@ -104,6 +136,9 @@ async function walk(b, url, w, h) {
   const b = await chromium.launch({ channel: 'msedge' }); let bad = 0, n = 0;
   for (const [w, h] of [[1118, 708], [1845, 800]]) {
     const a = await walk(b, OLD, w, h), c = await walk(b, NEW, w, h);
+    // a part that stopped compared nothing: it is a fault of this check (or of the page), never "no difference"
+    for (const [o, v] of [['before', a], ['now', c]]) Object.keys(v).filter((k) => / stopped$/.test(k)).forEach((k) => { bad++; console.log(`${w}x${h}  ${o}: ${k} — ${v[k]}`); });
+    for (const k of ['rows', 'in the script: items', 'two recordings: correlations', 'parameters']) if (!c[k]) { bad++; console.log(`${w}x${h}  empty, so nothing was compared: ${k}`); }
     for (const k of new Set([...Object.keys(a), ...Object.keys(c)])) { n++; if (JSON.stringify(a[k]) !== JSON.stringify(c[k])) { bad++; console.log(`${w}x${h}  ${k}\n    before: ${JSON.stringify(a[k])}\n    now:    ${JSON.stringify(c[k])}`); } }
   }
   console.log(`${n} behaviours compared, ${bad} differ`);
