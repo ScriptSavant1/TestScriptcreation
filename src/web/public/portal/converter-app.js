@@ -114,7 +114,7 @@
     }
     return a >= 0 && b >= a ? [a, b] : null;
   }
-  var GROUPS = [["missing", "Needs a value"], ["given", "Given here"], ["empty", "Empty"], ["set", "Read from a response"], ["environment", "From the environment"], ["collection", "From the collection"], ["data", "From a data file"], ["builtin", "Made by the script"]];
+  var GROUPS = [["missing", "Needs a value"], ["given", "Given here"], ["empty", "Empty"], ["set", "Set while the script runs"], ["environment", "From the environment"], ["collection", "From the collection"], ["data", "From a data file"], ["builtin", "Made by the script"]];
   var keyOf = function (v) { return v.orig || v.name; };   // a value's name in the file: what the choices are kept under
   function sourceOf(v, values) { return (values || {})[keyOf(v)] != null ? "given" : v.source; }
   // the Values tab: [{ key, title, list }] in the order above, none empty

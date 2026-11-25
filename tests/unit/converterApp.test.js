@@ -93,6 +93,7 @@ describe('values and domains', () => {
     expect(A.valueGroups(vars, { base_url: 'x', v: '1' }, '', 'pm').map((g) => g.key)).toEqual(['given', 'set', 'collection']);
     expect(A.valueGroups(vars, {}, 'https', 'pm').map((g) => g.list[0].name)).toEqual(['App']);
     expect(A.valueGroups(vars, {}, '', 'jmx')[3].title).toBe('From the test plan');
+    expect(A.valueGroups(vars, {}, '', 'pm')[1].title).toBe('Set while the script runs'); // a script's values are not read from a response
   });
   test('how a value is read', () => {
     expect([A.howOf({ how: 'json $.a' }), A.howOf({ how: 'regex a(.+)b' }), A.howOf({ how: 'xpath //a' }), A.howOf({})]).toEqual([{ kind: 'JSON path', text: '$.a' }, { kind: 'regular expression', text: 'a(.+)b' }, { kind: 'XPath', text: '//a' }, { kind: 'set by a script', text: '' }]);
