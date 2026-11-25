@@ -6,7 +6,8 @@
  * Config files delegated to: WebHttpMandatoryFilesGenerator
  */
 
-const { looksLikeJson, impliedContentType } = require("../../core/utils");
+const { looksLikeJson, impliedContentType, escapeCString } = require("../../core/utils");
+const { requestAuth, authOf, signInHost } = require("../../core/requestAuth");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -1144,7 +1145,7 @@ static void gen_uuid(const char *param_name) {
         perfx_r16(), perfx_r16(), perfx_r16());
 }
 
-static void gen_csrf_token(const char *param_name) {
+${this._basicHelper()}static void gen_csrf_token(const char *param_name) {
     lr_param_sprintf(param_name,
         "%08x%08x%08x%08x",
         perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32());
@@ -1157,6 +1158,33 @@ static void gen_hex64(const char *param_name) {
 }
 
 #endif
+`;
+  }
+
+  /** globals.h: "user:password" as Base64, for a Basic header — only when a request signs in so. */
+  _basicHelper() {
+    if (this.options.useAuthentication === false || !this.requests.some((r) => (requestAuth(r, this.collection) || {}).kind === "basic")) return "";
+    return `/* Basic sign-in: the credentials (their {parameters} filled in) as Base64, saved as a parameter. */
+static void perfx_basic(const char *param_name, const char *credentials) {
+    static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static char out[4100];
+    char *in = lr_eval_string((char *)credentials);
+    int n = (int)strlen(in), i, o = 0;
+    unsigned int v;
+    if (n > 3000) n = 3000;
+    for (i = 0; i < n; i += 3) {
+        v = ((unsigned int)(in[i] & 0xff)) << 16;
+        if (i + 1 < n) v |= ((unsigned int)(in[i + 1] & 0xff)) << 8;
+        if (i + 2 < n) v |= (unsigned int)(in[i + 2] & 0xff);
+        out[o++] = b64[(v >> 18) & 63];
+        out[o++] = b64[(v >> 12) & 63];
+        out[o++] = i + 1 < n ? b64[(v >> 6) & 63] : '=';
+        out[o++] = i + 2 < n ? b64[v & 63] : '=';
+    }
+    out[o] = 0;
+    lr_save_string(out, param_name);
+}
+
 `;
   }
 
@@ -1695,12 +1723,31 @@ ${sources}    LAST);
       ? `    // Windows (NTLM / Kerberos) sign-in for this server\n` +
         `    web_set_user("{username}", "{password}", "${this.applyHostVars(this.ntlmHost)}");\n\n`
       : "";
+    // Digest: the engine answers the server's question with these users — one per server
+    const digest = new Map();
+    if (this.options.useAuthentication !== false) for (const r of this.requests) {
+      const a = requestAuth(r, this.collection);
+      const host = a && a.kind === "digest" ? signInHost(r, this.variableMap) : "";
+      if (host && !digest.has(host)) digest.set(host, a);
+    }
+    // a sign-in the converter does not write is said once, not left out in silence
+    const missing = {};
+    if (this.options.useAuthentication !== false) for (const r of this.requests) {
+      const a = requestAuth(r, this.collection);
+      if (!a || a.kind !== "other" || /^(bearer|ntlm|kerberos)$/.test(a.type) || this.getAuthHeader(r)) continue;
+      if ((r.headers || []).some((h) => h && !h.disabled && /^authorization$/i.test(h.key || ""))) continue;
+      missing[a.type] = (missing[a.type] || 0) + 1;
+    }
+    const missingNote = Object.keys(missing).map((k) => `    // ${missing[k]} request${missing[k] === 1 ? " signs" : "s sign"} in with ${k.replace(/[^a-z0-9_-]/g, "")}: the converter does not write this kind for VuGen — add the header or the token request\n`).join("");
+    const digestSetup = digest.size
+      ? `    // Digest sign-in: the engine answers the server's question\n` + [...digest].map(([h, a]) => `    web_set_user("${escapeCString(this.replaceParameters(a.username))}", "${escapeCString(this.replaceParameters(a.password))}", "${this.applyHostVars(h)}");\n`).join("") + "\n"
+      : "";
 
     let code = `Action()
 {
 ${declBlock}    // Set in vuser_init: ${this._actionServerNote()}
 
-${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
+${missingNote ? missingNote + "\n" : ""}${ntlmSetup}${digestSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
 
     code += this.generateSequentialRequests();
 
@@ -2330,14 +2377,30 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
       (h) => h.key?.toLowerCase() === "authorization",
     );
     const authInGlobal = globalKeys.has("authorization");
-    if (!hasExplicitAuth && !authInGlobal) {
-      const authHeader = this.getAuthHeader(request);
-      if (authHeader) headers.push(authHeader);
+    let before = "";
+    {
+      // (switched off in the settings: Basic is not written; Bearer and API key headers are, as before)
+      const sign = requestAuth(request, this.collection);
+      if (sign && sign.kind === "apikey") {
+        // (in the address: applyQueryKeys)
+        if (sign.in === "header" && !headers.some((h) => h.key.toLowerCase() === sign.key.toLowerCase()) && !globalKeys.has(sign.key.toLowerCase())) headers.push({ key: sign.key, value: sign.value });
+      } else if (!hasExplicitAuth && !authInGlobal) {
+        if (sign && sign.kind === "basic") {
+          if (this.options.useAuthentication !== false) {
+          // made when the request is sent (globals.h): the user and the password may change every iteration
+          before = `${indent}perfx_basic("_basic_auth", "${escapeCString(this.replaceParameters(sign.username + ":" + sign.password))}");\n`;
+          headers.push({ key: "Authorization", value: "Basic {_basic_auth}" });
+          }
+        } else {
+          const authHeader = this.getAuthHeader(request);
+          if (authHeader) headers.push(authHeader);
+        }
+      }
     }
 
-    if (headers.length === 0) return "";
+    if (headers.length === 0) return before;
 
-    return headers
+    return before + headers
       .map((h) => {
         const hdrKey = h.key
           .split("-")
@@ -2366,8 +2429,8 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
   }
 
   getAuthHeader(request) {
-    const auth = request.auth || this.collection.auth;
-    if (!auth || !auth.type || auth.type === "noauth") return null;
+    const auth = authOf(request, this.collection);
+    if (!auth) return null;
 
     switch (auth.type) {
       case "bearer": {
@@ -2375,13 +2438,10 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
         if (token) return { key: "Authorization", value: `Bearer ${token}` };
         break;
       }
-      case "apikey": {
-        const keyName = this.getAuthValue(auth.apikey, "key");
-        const keyVal = this.getAuthValue(auth.apikey, "value");
-        const placement = this.getAuthValue(auth.apikey, "in");
-        if (keyName && keyVal && placement !== "query") {
-          return { key: keyName, value: keyVal };
-        }
+      case "oauth2": {
+        // a token kept in the collection is sent as it is; fetching one is a request of its own
+        const token = this.getAuthValue(auth.oauth2, "accessToken");
+        if (token) return { key: "Authorization", value: `${this.getAuthValue(auth.oauth2, "headerPrefix") || "Bearer"} ${token}` };
         break;
       }
     }

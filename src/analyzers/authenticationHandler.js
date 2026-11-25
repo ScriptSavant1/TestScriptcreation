@@ -88,8 +88,11 @@ class AuthenticationHandler {
       auth[auth.type].forEach(item => {
         authData[item.key] = item.value;
       });
-    } else if (typeof auth[auth.type] === 'object') {
+    } else if (auth[auth.type] && typeof auth[auth.type] === 'object') {
       Object.assign(authData, auth[auth.type]);
+    } else {
+      // JMeter: the fields stand beside the type
+      Object.keys(auth).forEach((k) => { if (k !== 'type' && typeof auth[k] !== 'object') authData[k] = auth[k]; });
     }
 
     return authData;
@@ -103,20 +106,11 @@ class AuthenticationHandler {
       case this.authTypes.OAUTH2:
         return this.generateOAuth2Code(authConfig);
       
-      case this.authTypes.BASIC:
-        return this.generateBasicAuthCode(authConfig);
-      
       case this.authTypes.BEARER:
         return this.generateBearerAuthCode(authConfig);
       
-      case this.authTypes.API_KEY:
-        return this.generateApiKeyCode(authConfig);
-      
       case this.authTypes.AWS_SIGNATURE:
         return this.generateAWSSignatureCode(authConfig);
-      
-      case this.authTypes.DIGEST:
-        return this.generateDigestAuthCode(authConfig);
       
       default:
         return this.generateGenericAuthCode(authConfig);
@@ -202,23 +196,6 @@ load.global.oauth2TokenType = "Bearer";
   }
 
   /**
-   * Generate Basic Authentication code
-   */
-  generateBasicAuthCode(authConfig) {
-    const { config } = authConfig;
-    
-    return `
-// Basic Authentication
-const username = ${this.parameterize(config.username)};
-const password = ${this.parameterize(config.password)};
-const basicAuthCredentials = load.utils.base64Encode(\`\${username}:\${password}\`);
-load.global.basicAuthHeader = \`Basic \${basicAuthCredentials}\`;
-
-load.log("Basic Auth configured", load.LogLevel.info);
-`;
-  }
-
-  /**
    * Generate Bearer Token authentication code
    */
   generateBearerAuthCode(authConfig) {
@@ -240,34 +217,6 @@ load.global.authorizationHeader = \`Bearer \${load.global.bearerToken}\`;
   }
 
   /**
-   * Generate API Key authentication code
-   */
-  generateApiKeyCode(authConfig) {
-    const { config } = authConfig;
-    const addTo = config.in || 'header';
-    const key = config.key || 'X-API-Key';
-    const value = config.value;
-
-    if (addTo === 'header') {
-      return `
-// API Key Authentication (Header)
-load.global.apiKey = ${this.parameterize(value)};
-load.global.apiKeyHeader = "${key}";
-
-load.log("API Key configured in header", load.LogLevel.info);
-`;
-    } else if (addTo === 'query') {
-      return `
-// API Key Authentication (Query Parameter)
-load.global.apiKey = ${this.parameterize(value)};
-load.global.apiKeyParam = "${key}";
-
-load.log("API Key configured in query parameters", load.LogLevel.info);
-`;
-    }
-  }
-
-  /**
    * Generate AWS Signature v4 authentication code
    */
   generateAWSSignatureCode(authConfig) {
@@ -286,26 +235,6 @@ load.global.awsRegion = "${config.region || 'us-east-1'}";
 load.global.awsService = "${config.service || 's3'}";
 
 load.log("AWS Signature v4 configured", load.LogLevel.info);
-`;
-  }
-
-  /**
-   * Generate Digest Authentication code
-   */
-  generateDigestAuthCode(authConfig) {
-    const { config } = authConfig;
-    
-    return `
-// Digest Authentication
-// Note: DevWeb handles digest auth automatically with setUserCredentials
-load.setUserCredentials({
-    username: ${this.parameterize(config.username)},
-    password: ${this.parameterize(config.password)},
-    ${config.realm ? `realm: "${config.realm}",` : ''}
-    host: "*"
-});
-
-load.log("Digest Auth configured", load.LogLevel.info);
 `;
   }
 
@@ -343,25 +272,10 @@ ${JSON.stringify(authConfig.config, null, 2)
         return `"Authorization": \`Bearer \${load.global.oauth2AccessToken || load.global.bearerToken}\``;
       }
 
-      case this.authTypes.BASIC:
-        return `"Authorization": load.global.basicAuthHeader`;
-      
-      case this.authTypes.API_KEY:
-        return `[load.global.apiKeyHeader]: load.global.apiKey`;
-      
+      // (Basic and API key: DevWeb scriptGenerator generateHeaders, through src/core/requestAuth.js)
       default:
         return null;
     }
-  }
-
-  /**
-   * Generate query parameter injection for authenticated requests
-   */
-  generateAuthQueryInjection(authConfig) {
-    if (authConfig.type === this.authTypes.API_KEY && authConfig.config.in === 'query') {
-      return `[load.global.apiKeyParam]: load.global.apiKey`;
-    }
-    return null;
   }
 
   /**
@@ -439,9 +353,10 @@ ${JSON.stringify(authConfig.config, null, 2)
       return '// No authentication configured\n';
     }
 
-    // Generate code for the first/primary auth config
-    const primaryAuth = authArray[0];
-    return this.generateAuthCode(primaryAuth);
+    // Generate code for the first/primary auth config that needs some: Basic, API key and Digest are written with each
+    // request (src/core/requestAuth.js), "no sign-in" needs nothing
+    const primaryAuth = authArray.find((a) => !["basic", "apikey", "digest", "noauth"].includes(a.type));
+    return primaryAuth ? this.generateAuthCode(primaryAuth) : "";
   }
 }
 

@@ -14,6 +14,7 @@ function reportOptions(options) {
 const { keepSelected, readLeaveOut } = require("../../core/requestSelection");
 const BrunoParser = require("../../parsers/brunoParser");
 const { bruEnvironment } = require("../../parsers/brunoFormat");
+const { applyQueryKeys } = require("../../core/requestAuth");
 const AdvancedScriptGenerator = require("../../generators/devweb/scriptGenerator");
 const WebHttpScriptGenerator = require("../../generators/vugen/scriptGenerator");
 const fs = require("fs").promises;
@@ -82,6 +83,8 @@ class BrunoDevWebConverter {
       const environmentVars = applyValues(parser.collection, await this.loadEnvironmentFile(), this.options.values);
       // the domains' variables under the names chosen on the page (none → as before)
       const renamed = applyVarNames({ requests: parsed, collection: parser.collection, environmentVars, taken: runtimeNames(parsed) }, this.options.varNames);
+      // an API key sent in the address (src/core/requestAuth.js)
+      applyQueryKeys(parsed, parser.collection);
       // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
       this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars, renamed, given: Object.keys(this.options.values || {}) };
 
@@ -195,6 +198,8 @@ class BrunoDevWebConverter {
       const environmentVars = applyValues(parser.collection, await this.loadEnvironmentFile(), this.options.values);
       // the domains' variables under the names chosen on the page (none → as before)
       const renamed = applyVarNames({ requests: parsed, collection: parser.collection, environmentVars, taken: runtimeNames(parsed) }, this.options.varNames);
+      // an API key sent in the address (src/core/requestAuth.js)
+      applyQueryKeys(parsed, parser.collection);
       // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
       this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars, renamed, given: Object.keys(this.options.values || {}) };
 

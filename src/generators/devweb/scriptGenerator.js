@@ -4,6 +4,7 @@
  */
 
 const { looksLikeJson, impliedContentType } = require("../../core/utils");
+const { requestAuth, signInHost } = require("../../core/requestAuth");
 const crypto = require("crypto");
 const CorrelationDetector = require("../../analyzers/correlationDetector");
 const ParameterizationEngine = require("../../analyzers/parameterizationEngine");
@@ -1578,8 +1579,11 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
 
     // Add authentication initialization
     if (this.options.useAuthentication && this.authConfigs.size > 0) {
-      code += `\n    // Authentication Setup\n`;
-      code += this.indent(this.authHandler.generateInitializationCode(), 1);
+      const setup = this.authHandler.generateInitializationCode();
+      if (setup) {
+        code += `\n    // Authentication Setup\n`;
+        code += this.indent(setup, 1);
+      }
     }
 
     // Add collection-level OAuth2 / auth config from Bruno YAML request.auth
@@ -2157,7 +2161,7 @@ ${audLine}        load.global.${jwtOutVar} = ${tokenCall};
         : "";
 
     let code = `load.action('Action', async function() {
-${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
+${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}${this._digestUsers()}
 `;
 
     if (this.options.groupByFolder && this.options.useTransactions) {
@@ -2811,22 +2815,21 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     const queryStart = url.indexOf("?");
     if (queryStart === -1) return null;
 
-    const queryString = url.substring(queryStart + 1);
+    const queryString = url.substring(queryStart + 1).split("#")[0];
     const params = {};
+    // the engine encodes keys and values itself: what is encoded in the address is decoded here (else %20 went out as
+    // %2520); a key given more than once is a list
+    const plain = (s) => s.split(/(\{\{[^{}]*\}\})/).map((p, i) => {
+      if (i % 2) return p;
+      const x = p.replace(/\+/g, " ");
+      try { return decodeURIComponent(x); } catch (e) { return x; }
+    }).join("");
     queryString.split("&").forEach((pair) => {
       const eqIndex = pair.indexOf("=");
-      if (eqIndex === -1) {
-        // Key with no value
-        if (pair) {
-          params[pair] = this.replaceParameters("");
-        }
-      } else {
-        const key = pair.substring(0, eqIndex);
-        const value = pair.substring(eqIndex + 1);
-        if (key) {
-          params[key] = this.replaceParameters(value);
-        }
-      }
+      const key = plain(eqIndex === -1 ? pair : pair.substring(0, eqIndex));
+      if (!key) return;
+      const value = this.replaceParameters(eqIndex === -1 ? "" : plain(pair.substring(eqIndex + 1)));
+      params[key] = Object.prototype.hasOwnProperty.call(params, key) ? [].concat(params[key], value) : value;
     });
     return Object.keys(params).length > 0 ? params : null;
   }
@@ -2906,11 +2909,22 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
     // Inject auth header from auth section ONLY if Authorization is NOT already explicit.
     // This prevents duplication when auth section and headers both define Authorization.
-    const hasExplicitAuthHeader = Object.keys(headers).some(
+    // (one of its own may be written with the common headers: it counts too)
+    const ownKeys = (request.headers || []).filter((h) => h && !h.disabled && h.key && h.value).map((h) => h.key.toLowerCase());
+    const hasExplicitAuthHeader = ownKeys.includes("authorization") || Object.keys(headers).some(
       (k) => k.toLowerCase() === "authorization",
     );
 
-    if (!hasExplicitAuthHeader) {
+    const sign = requestAuth(request, this.collection);
+    const has = (k) => ownKeys.includes(k.toLowerCase()) || Object.keys(headers).some((x) => x.toLowerCase() === k.toLowerCase());
+    if (this.options.useAuthentication === false) {
+      // switched off in the settings: nothing is written
+    } else if (sign && sign.kind === "apikey") {
+      if (sign.in === "header" && !has(sign.key)) headers[sign.key] = this.applyHostVars(this.replaceParameters(sign.value));
+    } else if (sign && sign.kind === "basic") {
+      // made when the request is sent: the user and the password may change every iteration
+      if (!hasExplicitAuthHeader) headers.Authorization = this._code("`Basic ${load.utils.base64Encode(" + this._expr(sign.username + ":" + sign.password) + ")}`");
+    } else if (!hasExplicitAuthHeader) {
       const authConfig = this.findAuthConfig(request);
       if (authConfig) {
         const authHeader =
@@ -2931,6 +2945,34 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     }
 
     return Object.keys(headers).length > 0 ? headers : null;
+  }
+
+  /** A piece of code as a value: formatOptionsObject puts it in without quotes. */
+  _code(code) {
+    if (!this._codes) this._codes = [];
+    this._codes.push(code);
+    return `{{CODE:${this._codes.length - 1}}}`;
+  }
+
+  /** A text with {{variables}} as one JavaScript expression: "a" + load.params.user + "b". */
+  _expr(text) {
+    const parts = String(this.replaceParameters(String(text))).split(/(\$\{[^{}]*\})/).filter((p) => p !== "");
+    return parts.map((p) => (/^\$\{[^{}]*\}$/.test(p) ? p.slice(2, -1) : JSON.stringify(p))).join(" + ") || '""';
+  }
+
+  /** Digest: the engine answers the server's question with these users — one per server, set in every iteration. */
+  _digestUsers() {
+    const seen = new Map();
+    if (this.options.useAuthentication === false) return "";
+    for (const r of this.requests) {
+      const a = requestAuth(r, this.collection);
+      if (!a || a.kind !== "digest") continue;
+      const host = signInHost(r, this.variableMap);
+      if (host && !seen.has(host)) seen.set(host, a);
+    }
+    if (!seen.size) return "";
+    const q = (h) => { const x = this.applyHostVars(h); return x.includes("${") ? "`" + x + "`" : JSON.stringify(x); };
+    return "\n    // Digest sign-in: the engine answers the server's question\n" + [...seen].map(([h, a]) => `    load.setUserCredentials({ username: ${this._expr(a.username)}, password: ${this._expr(a.password)}, domain: "", host: ${q(h)} });\n`).join("");
   }
 
   /**
@@ -3480,6 +3522,8 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     // the line breaks of a text body
     str = str.replace(/\uE00D/g, "\\r").replace(/\uE00A/g, "\\n");
 
+    str = str.replace(/"\{\{CODE:(\d+)\}\}"/g, (m, i) => (this._codes || [])[+i] || m);
+
     // a JSON body written as text
     str = str.replace(/"\{\{JSONTEXT:(\d+)\}\}"/g, (m, i) => (this._jsonTexts || [])[+i] || m);
 
@@ -3549,18 +3593,15 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
    * Find auth config for request
    */
   findAuthConfig(request) {
+    if (this.options.useAuthentication === false) return null;   // switched off in the settings
     if (request.auth && request.auth.type) {
       const authType = request.auth.type.toLowerCase();
 
       // 'noauth' explicitly overrides collection-level auth — return null, apply nothing
       if (authType === "noauth") return null;
 
-      // Any other request-level auth — look up by request name (registered by extractAuthentication)
-      const reqAuth = this.authConfigs.get(request.name);
-      if (reqAuth) return reqAuth;
-      // Edge case: extractAuthentication may have missed it — register now
-      this.authHandler.processAuth(request.name, request.auth);
-      return this.authConfigs.get(request.name) || null;
+      // the request's own (two requests may have one name and different sign-ins)
+      if (authType !== "inherit") return { name: request.name, folder: request.folder || "", type: authType, config: this.authHandler.extractAuthConfig(request.auth) };
     }
 
     // No request-level auth — inherit collection-level auth only (never spill a per-request auth)
