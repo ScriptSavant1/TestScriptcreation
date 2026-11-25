@@ -445,6 +445,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The script keeps the order of the collection or test plan. Requests in a sub-folder (Postman / Bruno) or inside an If / Loop controller (JMeter, single script) ran after everything outside it.
 - JMeter: an uploaded CSV file is found by every script that reads it, also when the test plan names it with a folder; per thread group it lies in each script folder.
 - DevWeb: a JSON body without its own Content-Type is sent as JSON (it went out as form fields); form bodies get their Content-Type too.
+- VuGen: multipart (form-data) bodies are written (they were left out); text and XML bodies, SOAP among them, keep their spaces and get their own content type.
+- DevWeb: a JSON body under another JSON content type (application/vnd.api+json …) is sent as JSON; a multi-line text or XML body is sent exactly as it is.
 - DevWeb: two requests with one name are two transactions.
 - Counts: each value once, every thread group, also for Postman multi-script. A value the script makes itself is no longer listed as having no value. The answers hold no server folders.
 

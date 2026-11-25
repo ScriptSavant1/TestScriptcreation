@@ -67,9 +67,9 @@ describe('DevWeb: the Content-Type of a body sent with none', () => {
   test('a disabled Content-Type does not count', async () => {
     expect(await body(raw('{"a":1}'), [{ key: 'Content-Type', value: 'text/xml', disabled: true }])).toContain('"Content-Type": "application/json"');
   });
-  test('plain text, XML and multipart: nothing added; GET: nothing', async () => {
-    expect(await body(raw('hello'))).not.toContain('Content-Type');
-    expect(await body(raw('<a/>'))).not.toContain('Content-Type');
+  test('plain text and XML: their own; multipart and GET: nothing', async () => {
+    expect(await body(raw('hello'))).toContain('"Content-Type": "text/plain"');
+    expect(await body(raw('<a/>'))).toContain('"Content-Type": "application/xml"');
     expect(await body({ mode: 'formdata', formdata: [{ key: 'a', value: '1' }] })).not.toContain('Content-Type');
     expect((await devweb([req('Get it', '', { body: raw('{"a":1}') })])).code).not.toContain('Content-Type');
   });

@@ -3,6 +3,7 @@
  * Integrates correlation, parameterization, authentication, and transactions
  */
 
+const { looksLikeJson, impliedContentType } = require("../../core/utils");
 const crypto = require("crypto");
 const CorrelationDetector = require("../../analyzers/correlationDetector");
 const ParameterizationEngine = require("../../analyzers/parameterizationEngine");
@@ -2730,7 +2731,7 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     if (["POST", "PUT", "PATCH"].includes(request.method) && request.body) {
       const body = this.generateBody(request.body, request.name);
       if (body) {
-        options.body = body;
+        options.body = this._bodyAsJsonText(request, body) ? this._jsonTextBody(body) : body;
       }
     }
 
@@ -2753,24 +2754,43 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     return this.formatOptionsObject(options);
   }
 
+  /** The Content-Type a request has of its own: its headers, else the common headers; null when neither has one. */
+  _ownContentType(request) {
+    const isCt = (k) => String(k).toLowerCase() === "content-type";
+    const own = (request.headers || []).find((h) => h && !h.disabled && h.key && h.value && isCt(h.key));
+    if (own) return String(own.value);
+    for (const map of [this._staticGlobalHeaders, this._authGlobalHeaders]) {
+      for (const [k, v] of map || []) if (isCt(k)) return String(v).replace(/^["'`]|["'`]$/g, "");
+    }
+    return null;
+  }
+
   /**
    * The Content-Type Postman / Bruno add by themselves, for a body sent with none of its own (request or common
    * headers): DevWeb sends none, and writes a body object as form fields — a JSON sign-in went out as "user=…&pass=…".
    */
   _impliedContentType(request) {
-    const body = request.body;
-    if (!body || !["POST", "PUT", "PATCH"].includes(request.method)) return null;
-    const isCt = (k) => String(k).toLowerCase() === "content-type";
-    if ((request.headers || []).some((h) => h && !h.disabled && h.key && h.value && isCt(h.key))) return null;
-    if ([...(this._staticGlobalHeaders || new Map()).keys(), ...(this._authGlobalHeaders || new Map()).keys()].some(isCt)) return null;
-    if (body.mode === "urlencoded") return "application/x-www-form-urlencoded";
-    if (body.mode !== "raw") return null;
-    try {
-      const json = JSON.parse(body.raw);
-      return json !== null && typeof json === "object" ? "application/json" : null;
-    } catch (e) {
-      return null;
-    }
+    if (!request.body || !["POST", "PUT", "PATCH"].includes(request.method)) return null;
+    return this._ownContentType(request) ? null : impliedContentType(request.body);
+  }
+
+  /**
+   * A JSON body object sent under another content type (application/vnd.api+json, text/json …) is written as JSON text:
+   * the DevWeb engine writes an object as JSON under application/json only — elsewhere as form fields, and an object
+   * with a list in it stops the script (checked on the engine).
+   */
+  _bodyAsJsonText(request, body) {
+    if (typeof body !== "object" || !request.body || request.body.mode !== "raw") return false;
+    const ct = this._ownContentType(request);
+    return !!ct && !/^\s*application\/json\s*(;|$)/i.test(ct) && !ct.includes("{{");
+  }
+
+  /** JSON.stringify(<the body object>) — put in by formatOptionsObject. */
+  _jsonTextBody(body) {
+    const code = this.formatOptionsObject({ b: body });
+    if (!this._jsonTexts) this._jsonTexts = [];
+    this._jsonTexts.push("JSON.stringify(" + code.slice(code.indexOf('"b": ') + 5, code.lastIndexOf("\n}")) + ")");
+    return `{{JSONTEXT:${this._jsonTexts.length - 1}}}`;
   }
 
   /**
@@ -2938,7 +2958,11 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
             const fileInfo = this.extractedDataFiles.get(hash);
             return `{{load.global.${fileInfo.varName}}}`;
           }
-          return this.replaceParameters(body.raw);
+          const text = this.replaceParameters(body.raw);
+          if (looksLikeJson(body.raw) || typeof text !== "string") return text;
+          // text, XML …: line breaks stay escapes (formatOptionsObject) — as real ones the code's indentation became
+          // part of the body
+          return text.replace(/\r/g, "\uE00D").replace(/\n/g, "\uE00A");
         }
 
       case "urlencoded":
@@ -3452,6 +3476,12 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
     // Replace "{{MULTIPART}}" with actual multipart code
     str = str.replace(/"\{\{MULTIPART:(\d+)\}\}"/g, (m, i) => (this._multipartBodies || [])[+i] || m);
+
+    // the line breaks of a text body
+    str = str.replace(/\uE00D/g, "\\r").replace(/\uE00A/g, "\\n");
+
+    // a JSON body written as text
+    str = str.replace(/"\{\{JSONTEXT:(\d+)\}\}"/g, (m, i) => (this._jsonTexts || [])[+i] || m);
 
     // Strip quotes from extractor code (new load.XXXExtractor(...))
     // JSON.stringify double-escapes inner backslashes (\" → \\\" in JSON text).

@@ -30,6 +30,28 @@ function sanitizeVarName(name) {
   return String(name).replace(/[^a-zA-Z0-9_$]/g, '_');
 }
 
+// ─── Request bodies ───────────────────────────────────────────────────────────
+/** True when a raw body is JSON by its look ({ or [ first) — also one with unquoted {{variables}} that JSON.parse refuses. */
+function looksLikeJson(raw) {
+  return /^\s*(\{(?!\{)|\[)/.test(String(raw == null ? '' : raw));
+}
+
+/**
+ * The Content-Type Postman / Bruno add by themselves to a body sent with no such header (null: none).
+ * Both generators use it when the request and the common headers have none.
+ */
+function impliedContentType(body) {
+  if (!body) return null;
+  if (body.mode === 'urlencoded') return 'application/x-www-form-urlencoded';
+  if (body.mode !== 'raw' || !String(body.raw || '').trim()) return null;
+  if (looksLikeJson(body.raw)) return 'application/json';
+  const language = String((body.options && body.options.raw && body.options.raw.language) || '').toLowerCase();
+  if (language === 'html') return 'text/html';
+  if (language === 'javascript') return 'application/javascript';
+  if (language === 'xml' || /^\s*</.test(body.raw)) return 'application/xml';
+  return 'text/plain';
+}
+
 // ─── C-string escaping ────────────────────────────────────────────────────────
 /**
  * Escape a value for use inside a VuGen C-string literal (double-quoted).
@@ -96,4 +118,6 @@ function buildBaseUrl(domain, port, protocol) {
   return `${proto}://${domain}${portStr}`;
 }
 
-module.exports = { sanitizeVarName, escapeCString, decodeHtmlEntities, buildBaseUrl };
+module.exports = {
+  looksLikeJson,
+  impliedContentType, sanitizeVarName, escapeCString, decodeHtmlEntities, buildBaseUrl };

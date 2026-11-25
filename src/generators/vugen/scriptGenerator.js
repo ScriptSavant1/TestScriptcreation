@@ -6,6 +6,7 @@
  * Config files delegated to: WebHttpMandatoryFilesGenerator
  */
 
+const { looksLikeJson, impliedContentType } = require("../../core/utils");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -2310,9 +2311,11 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     }
 
     // Request-level headers (skip global ones — they're already persistent via auto-header)
+    const multipart = this._multipartParts(request).length > 0;   // its Content-Type holds the boundary: written with the body
     if (request.headers && Array.isArray(request.headers)) {
       request.headers.forEach((h) => {
         if (
+          !(multipart && h.key && h.key.toLowerCase() === "content-type") &&
           h.key &&
           h.value &&
           !h.disabled &&
@@ -2398,6 +2401,8 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
 
     if (method === "GET" || method === "HEAD") {
       return this.generateWebUrl(request, url, snapshot, indent);
+    } else if (this._multipartParts(request).length) {
+      return this.generateWebSubmitData(request, url, method, snapshot, indent);
     } else {
       return this.generateWebCustomRequest(
         request,
@@ -2420,6 +2425,50 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     code += `${indent}    "Mode=HTTP",\n`;
     code += `${indent}    LAST);\n`;
     return code;
+  }
+
+  /** The parts of a multipart (form-data) body: [{ name, value, file, contentType }]; none for other bodies. */
+  _multipartParts(request) {
+    const body = request.body;
+    if (!body || body.mode !== "formdata") return [];
+    const parts = [];
+    for (const p of body.formdata || []) {
+      if (!p || !p.key || p.disabled) continue;
+      if (p.type !== "file") { parts.push({ name: p.key, value: p.value == null ? "" : String(p.value), contentType: p.contentType }); continue; }
+      const files = [].concat(p.src == null || p.src === "" ? p.value || p.key : p.src);
+      // the file lies next to the script (its name, no folder)
+      files.forEach((src) => parts.push({ name: p.key, value: String(src).split(/[\\/]/).pop(), file: true, contentType: p.contentType }));
+    }
+    return parts;
+  }
+
+  /**
+   * A multipart (form-data) body. POST: web_submit_data, which builds the parts and their boundary; a file part is read
+   * from the script folder. Other methods (web_submit_data sends POST only): the parts written into
+   * web_custom_request — text parts only, a file part is left to a comment.
+   */
+  generateWebSubmitData(request, url, method, snapshot, indent) {
+    const parts = this._multipartParts(request);
+    const text = (v) => this.escapeCBodyString(this.applyHostVars(this.replaceParameters(v)));
+    const files = [...new Set(parts.filter((p) => p.file).map((p) => p.value))];
+    let code = "";
+    if (method === "POST") {
+      if (files.length) code += `${indent}// Put ${files.join(", ").replace(/\*\//g, "")} into the script folder\n`;
+      code += `${indent}web_submit_data("${this.sanitizeCName(request.name)}",\n`;
+      code += `${indent}    "Action=${this.applyHostVars(url)}",\n`;
+      for (const a of ["Method=POST", "EncType=multipart/form-data", "RecContentType=application/json", "Referer=", `Snapshot=${snapshot}`, "Mode=HTTP"]) code += `${indent}    "${a}",\n`;
+      code += `${indent}    ITEMDATA,\n`;
+      for (const p of parts) code += `${indent}    "Name=${text(p.name)}", "Value=${text(p.value)}", ${p.file ? '"File=Yes", ' : ""}${p.contentType ? `"ContentType=${text(p.contentType)}", ` : ""}ENDITEM,\n`;
+      return code + `${indent}    LAST);\n`;
+    }
+    const boundary = "----PerfXFormBoundary";
+    if (files.length) code += `${indent}// ${method} with a file part (${files.join(", ").replace(/\*\//g, "")}): add the file by hand\n`;
+    code += `${indent}web_custom_request("${this.sanitizeCName(request.name)}",\n`;
+    code += `${indent}    "URL=${this.applyHostVars(url)}",\n`;
+    for (const a of [`Method=${method}`, "Resource=0", "RecContentType=application/json", "Referer=", `Snapshot=${snapshot}`, "Mode=HTTP", `EncType=multipart/form-data; boundary=${boundary}`]) code += `${indent}    "${a}",\n`;
+    const lines = parts.filter((p) => !p.file).map((p) => `--${boundary}\\r\\nContent-Disposition: form-data; name=\\"${text(p.name)}\\"${p.contentType ? `\\r\\nContent-Type: ${text(p.contentType)}` : ""}\\r\\n\\r\\n${text(p.value)}\\r\\n`);
+    code += `${indent}    "Body="\n` + lines.concat(`--${boundary}--\\r\\n`).map((l) => `${indent}        "${l}"`).join("\n") + ",\n";
+    return code + `${indent}    LAST);\n`;
   }
 
   generateWebCustomRequest(
@@ -2497,7 +2546,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
    * Returns:
    *   { body: string }     — inline "Body=..." attribute value
    *   { bodyFile: string } — "BodyFilePath=..." for large base64 or large JSON bodies
-   *   null                 — no body (formdata / empty)
+   *   null                 — no body (a multipart body is written by generateWebSubmitData)
    *
    * VuGen's BodyFilePath= reads the file at runtime and performs {param} substitution
    * within it, so {varName} LR parameter references work inside body files.
@@ -2505,7 +2554,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
   generateBodyForC(request) {
     if (!request.body) return null;
 
-    const { mode, raw, urlencoded, formdata } = request.body;
+    const { mode, raw, urlencoded } = request.body;
 
     if (mode === "raw" && raw) {
       // Case 1: Entire raw body was detected as large base64 — use BodyFilePath
@@ -2535,7 +2584,8 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
       } catch {
         // JSON.parse failed (unquoted {{variables}} or non-standard body).
         // Compact first to strip pretty-printing whitespace.
-        withParams = this.replaceParameters(this._compactJsonBody(raw));
+        // Only JSON: in a text or XML body the spaces are part of what is sent.
+        withParams = this.replaceParameters(looksLikeJson(raw) ? this._compactJsonBody(raw) : raw);
       }
       const lines = this._splitBodyFields(withParams);
       if (lines && lines.length > 1) {
@@ -2552,16 +2602,6 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
             `${encodeURIComponent(p.key)}=${this.vuGenEncodeValue(p.value || "")}`,
         );
       return { body: parts.join("&") };
-    }
-
-    if (mode === "formdata" && formdata) {
-      // Multipart/form-data cannot be represented in web_custom_request Body=.
-      // VuGen Web HTTP/HTML does not support multipart uploads via the C API body string.
-      // The request is generated without a body — adapt manually in Action.c if needed.
-      console.warn(
-        `  ⚠  "${request.name}": multipart/form-data body cannot be represented in web_custom_request Body= — request generated without body. Convert to raw JSON or urlencoded manually in Action.c.`,
-      );
-      return null;
     }
 
     return null;
@@ -3012,11 +3052,10 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     );
     if (ct) return ct.value;
 
-    // Infer from body mode
-    if (request.body?.mode === "raw") return "application/json";
-    if (request.body?.mode === "urlencoded")
-      return "application/x-www-form-urlencoded";
-    return null;
+    // a raw body left empty: as before (with no EncType the engine sends a form type)
+    if (request.body?.mode === "raw" && !String(request.body.raw || "").trim()) return "application/json";
+    // what Postman / Bruno add by themselves
+    return impliedContentType(request.body);
   }
 
   // ─── Undeclared Parameter Scanner ───────────────────────────────────────────
