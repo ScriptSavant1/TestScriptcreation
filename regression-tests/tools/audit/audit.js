@@ -99,14 +99,17 @@ if (require.main === module) (async () => {
     await run('Studio start', 'studio');
     f = await frameOf('studio');
     // How to record (moved from the Recorder): both ways
-    await f.click('#ss-guide [data-fold]'); await run('Studio how to record', 'studio');
+    await f.click('#ss-guide-btn'); await run('Studio how to record', 'studio');
     await f.click('#tab-classic'); await run('Studio how to record bookmarks', 'studio');
-    await f.click('#tab-cdp'); await f.click('#ss-guide [data-fold]');
+    await f.click('#tab-cdp'); await f.click('#ss-guide [data-close]');
+    await f.click('#ss-how-btn'); await run('Studio how it works', 'studio'); await f.click('#ss-how [data-close]');
     // the file is read as soon as it is opened (no Analyse button)
     await f.setInputFiles('#dz1 input[type=file]', FX + 'studio/fixtures/api-tokens.har');
     await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 }); await p.waitForTimeout(800);
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1200); }
     await run('Studio results', 'studio');
+    await f.click('#ss-reqs .ss-rq:not(.out) .ss-path >> nth=1'); await run('Studio request chosen', 'studio'); await f.click('#ss-tab-req'); await run('Studio request tab', 'studio'); await f.click('#ss-tab-script');
+    for (const b of ['#ss-filters-btn', '#ss-think-btn']) { await f.click(b); await run('Studio ' + b.slice(4, -4), 'studio'); await f.evaluate(() => SS.popClose()); }
     await f.click('#ss-steps [data-step="2"]'); await p.waitForTimeout(300); await run('Studio advisor', 'studio');
     // the correlation editor (one value at a time)
     await f.evaluate(() => { const l = SSC.list(); if (l[0]) SSE.open(l[0]); }); await p.waitForTimeout(300); await run('Studio editor', 'studio');

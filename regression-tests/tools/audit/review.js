@@ -38,7 +38,8 @@ function inspect() {
   };
   const vis = (e) => { if (!e.isConnected) return false; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false; const cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0.05 && !!seen(e); };
   // a modal dialog open: only what is in it can be used
-  const modal = [...document.querySelectorAll('dialog[open]')].find((d) => d.matches(':modal'));
+  // (a pop-up of a tool bar, .ss-pp, lies over what is under it: only what is in it is looked at)
+  const modal = [...document.querySelectorAll('dialog[open]')].find((d) => d.matches(':modal')) || [...document.querySelectorAll('.ss-pp:not([hidden])')].find(vis);
   const label = (e) => { const t = (e.getAttribute('aria-label') || e.getAttribute('title') || e.innerText || e.value || e.placeholder || '').trim().replace(/\s+/g, ' '); return (e.id ? '#' + e.id + ' ' : '') + e.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : ''); };
   const where = (e) => { const s = []; let n = e; while (n && n !== document.body && s.length < 4) { s.unshift(n.id ? '#' + n.id : n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : '')); if (n.id) break; n = n.parentElement; } return s.join(' > '); };
   const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [] };
@@ -274,20 +275,27 @@ if (require.main === module) (async () => {
     await run('Studio start', 'studio');
     // the live recording view, as Start recording shows it (its layout only: the CDP Recorder is never asked)
     await (await frameOf('studio')).evaluate(() => {
-      window.__cards = ['.ss-choices', '#ss-how', '#ss-guide', '#ss-resume', '#ss-hero'].map((s) => document.querySelector(s)).filter(Boolean).map((c) => [c, c.hidden]);
+      window.__cards = ['.ss-choices', '.ss-links', '#ss-resume', '#ss-band'].map((s) => document.querySelector(s)).filter(Boolean).map((c) => [c, c.hidden]);
       window.__cards.forEach(([c]) => { c.hidden = true; }); document.getElementById('rl-live').hidden = false;
     });
     await run('Studio recording', 'studio');
     await (await frameOf('studio')).evaluate(() => { document.getElementById('rl-live').hidden = true; (window.__cards || []).forEach(([c, h]) => { c.hidden = h; }); });
     f = await frameOf('studio');
+    await f.click('#ss-how-btn'); await run('Studio how it works', 'studio'); await f.evaluate(() => document.querySelectorAll('dialog[open]').forEach((d) => d.close()));
+    await f.click('#ss-guide-btn'); await run('Studio how to record', 'studio'); await f.evaluate(() => document.querySelectorAll('dialog[open]').forEach((d) => d.close()));
     await f.setInputFiles('#dz1 input[type=file]', FX + 'studio/fixtures/oauth-pkce-sso.har');
     await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 });
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1000); }
     await run('Studio 1 requests', 'studio');
-    // a request's details: a pop-up at every width (a docked panel only when the user chose it)
-    await f.click('#ss-reqs .ss-rq:not(.out) >> nth=1').catch(() => {});
-    await run('Studio request details', 'studio');
-    await f.evaluate(() => { if (window.SSW && SSW.closeDetails) SSW.closeDetails(); });
+    // a request: its code marked; its details in the Request tab, and as a window (Larger)
+    await f.click('#ss-reqs .ss-rq:not(.out) .ss-path >> nth=1'); await p.waitForTimeout(200); await run('Studio request chosen', 'studio');
+    { const bad = await f.evaluate(() => { const q = (s) => { const e = document.querySelector(s); if (!e || !e.offsetParent) return s + ' is not shown'; const r = e.getBoundingClientRect(); return r.bottom > innerHeight + 1 || r.right > innerWidth + 1 ? s + ' ends at ' + Math.round(r.right) + ' x ' + Math.round(r.bottom) : ''; }; return ['#ss-name-btn', '#ss-undo', '#ss-redo', '#ss-dl', '#ss-steps [data-step="4"]', '#ss-fmt', '#ss-think-btn', '#ss-filters-btn', '#ss-p-dom', '#ss-p-req', '#ss-p-right', '#code-body'].map(q).concat(document.getElementById('ss-cols').getBoundingClientRect().top > 130 ? ['the panels begin at ' + Math.round(document.getElementById('ss-cols').getBoundingClientRect().top)] : [], document.querySelector('#code-body.ss-hl') ? [] : ['the code of the request is not marked'], [...document.querySelectorAll('.ss-filebar, .ss-tools, .ss-pane-h, .ss-pane-tools, .code-area-header, .ss-tabs')].filter((e) => e.offsetParent && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 2)).map((e) => '.' + e.classList[0] + ' is cut off')).filter(Boolean); }); if (bad.length) report[report.length - 1].expect = bad; }
+    await f.click('#ss-tab-req'); await run('Studio request tab', 'studio');
+    await f.click('#ss-det-big'); await run('Studio request details', 'studio');
+    await f.evaluate(() => { if (window.SSW && SSW.closeDetails && !document.querySelector('.ss-det-inline')) SSW.closeDetails(); }); await f.click('#ss-tab-script');
+    for (const [name, btn] of [['Studio filters', '#ss-filters-btn'], ['Studio think time', '#ss-think-btn'], ['Studio note', '.ss-note-b']]) { await f.click(btn); await run(name, 'studio'); await f.evaluate(() => SS.popClose()); }
+    await f.click('#ss-name-btn'); await run('Studio script name', 'studio'); await f.click('#ss-name-x');
+    await f.click('#ss-new-txn'); await run('Studio choosing requests', 'studio'); await f.click('#ss-sel-clear');
     // every Studio pop-up once, so the dismiss check clicks outside each of them (closed again if it stayed open)
     const shut = () => f.evaluate(() => {
       document.querySelectorAll('dialog[open]').forEach((d) => d.close());

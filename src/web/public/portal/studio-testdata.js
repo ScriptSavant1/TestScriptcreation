@@ -95,6 +95,8 @@
     T.orig = (S.params || []).map(function (p) { return Object.assign({}, p); });
     S.params = TestData.apply(T.orig, T.ed, S.entries1);
   };
+  // Undo / Redo (portal/studio-history.js): the user's choices, and the same put back
+  SS.testData = function (ed) { if (ed) { T.ed = ed; S.params = TestData.apply(T.orig, T.ed, S.entries1); } return T.ed; };
   SS.testDataNewFile = function () { T.orig = []; T.ed = { by: {}, added: [] }; };
 
   // a change: the parameters again from the detected ones, and the script again (no new reading)

@@ -108,6 +108,19 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio: more room, every choice at once, Undo and Redo
+
+- The start page has the same top band as every tool and two cards of the same size: Record in a browser, Open a recording (a click anywhere on the card opens the file window). How it works and How to record your journey are links that open windows with the same texts. The format is chosen in the workspace (remembered, as before); the old introduction with its Hide button is gone.
+- Two rows above the panels instead of six: on a 1366 × 768 laptop the panels begin at about 165 px instead of 386.
+- The script's name is the title (click it to rename). Under it: the recording, requests in the script, transactions, sign-in. "Up to date" / "Updating…" beside it.
+- Undo and Redo (Ctrl+Z, Ctrl+Y) for every change: name, format, think time, filters, domains, left-out requests, transactions, server names, correlations, test data. After Undo the script is, character for character, the one before. Correlations taken off by a change that reads the recording again come back with Undo.
+- Steps with their counts, format, think time and Filters on one line; Next and Back are gone (each step is one click away). The recording's message is a note button.
+- A click on a request marks its code in the script; its details are in the Request tab beside it, or in a window (Larger). Find in this file. The domain parameter itself is clicked to rename it.
+- The tick of a request says it is in the script (before: chosen for a new transaction); a request left out stays listed, struck through. New transaction turns the ticks into a choice.
+- Requests the page repeats in the background and that are left out are no longer counted or shown as in the script ("repeats in the background"); those that run once are marked so.
+- Escape closes the request window wherever the focus is. Correlate and Test data: one line for the heading, the text behind a question mark; a Correlate row takes two lines, never a sideways scroll.
+- Scripts and ZIPs do not change (golden harness: 1409 files identical).
+
 #### Script Studio: Generate (UUID) in the correlation editor
 
 - The editor's "How to read it" has a choice **Generate (UUID)**: any value, not only one the browser made, can be made by the script instead of read from a response. Step 1 (the response) is not needed and says so; the code shows the line the script gets; a recorded value that is not a UUID gets a warning. Another choice, or Undo my changes, puts it back.

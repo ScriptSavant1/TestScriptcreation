@@ -24,6 +24,7 @@ Behaviour that is deliberate or deferred, recorded so it is not reported again a
 
 | ID | Severity | Description |
 |----|----------|-------------|
+| BUG-176 | Low | **Script Studio: background requests that are left out were counted and listed as in the script** (the header, the domains, the request list), and Escape did not close a request window opened from a table. Fix: what is in the script is asked from the generators (`SS.inScript`); Escape closes the window wherever the focus is. |
 | BUG-174 | Medium | **Converters: a GraphQL request of a Postman collection was sent without its body.** Fix: the query and its variables are sent as JSON, as Postman does (`graphqlText`). |
 | BUG-173 | High | **Converter: a Bruno JSON export lost header names, the body, the sign-in and the scripts** — only the Postman shape was read. Fix: `src/parsers/brunoFormat.js` (`collectionFromJson`), with sign-in, headers and scripts handed down from the collection and the folders. The scripts are the same as from the same collection in Postman. Bruno YAML: a request's own sign-in, and the collection's when it inherits it, were lost too. |
 | BUG-172 | High | **Converter: a real `.bru` request file was not read** (the address became `{`), and a zipped folder was not read at all. Fix: `.bru` blocks, folders and ZIPs are read (`bruToItem`, `collectionFromFiles`, `src/core/zipReader.js`). An environment file with a value holding braces was cut short: fixed with it. |

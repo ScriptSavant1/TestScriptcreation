@@ -51,6 +51,10 @@
       <symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></symbol>
       <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></symbol>
+      <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h1"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+      <symbol id="i-big" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></symbol>
       <symbol id="i-q" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></symbol>
       <symbol id="i-ok" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
@@ -88,14 +92,17 @@
       <!-- ═══════════════ START ═══════════════ -->
       <div id="ph-upload" class="phase active">
         <div class="ss-home">
-          <section class="ss-hero" id="ss-hero">
-            <button class="ds-btn ds-btn-sm ds-btn-ghost ss-hero-x" type="button" id="ss-hero-hide" title="Hide this introduction (remembered)">Hide</button>
-            <h1><span class="ss-hero-ic"><svg class="i"><use href="#i-studio"/></svg></span>Script Studio</h1>
-            <p>Record a journey or open a HAR file and get a LoadRunner script straight away. Then correlate, add test data and download, one step at a time.</p>
-            <ol class="ss-flow" aria-label="How it goes">
-              <li><em>1</em>Record or open</li><li><em>2</em>Review requests</li><li><em>3</em>Correlate (optional)</li><li><em>4</em>Download for VuGen / LRE</li>
-            </ol>
-          </section>
+          <!-- the top band, the same as on every tool page (portal/ds.css .ds-band-panel) -->
+          <header class="ds-band ds-band-panel ss-band" id="ss-band">
+            <div class="ds-band-text">
+              <div class="ds-band-title"><span class="ds-band-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span><div><h1>Script Studio</h1><p class="ds-band-tag">Record a journey, get a LoadRunner script</p></div></div>
+              <p class="ds-band-lead">Record in a browser or open a HAR file: the script is ready straight away. Then review the requests, correlate, add test data and download.</p>
+            </div>
+            <figure class="ds-flow" aria-label="A recording, then correlate, then a VuGen script">
+              <ol><li><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span><b>Recording</b></li><li><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span><b>Correlate</b></li><li><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m10 13-2 2 2 2"/><path d="m14 13 2 2-2 2"/></svg></span><b>VuGen script</b></li></ol>
+              <figcaption class="ds-hand"><span>Record once,<br>replay for every user</span><svg viewBox="0 0 40 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 27c12 0 22-6 30-19"/><path d="m26 9 7-2 1 7"/></svg></figcaption>
+            </figure>
+          </header>
 
           <div class="ss-resume" id="ss-resume" hidden>
             <svg class="i"><use href="#i-file"/></svg><span><b id="ss-resume-name"></b> is still open. Open another file below, or go back to it.</span><span class="ss-grow"></span>
@@ -104,149 +111,32 @@
 
           <div class="ss-choices">
             <!-- record from here: the CDP Recorder on this computer (portal/record-live.js, mounted by portal/studio-page.js) -->
-            <section class="ss-card ss-choice" id="ss-rec-card">
-              <div class="ss-card-h" data-fold="rec"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-card-ic" style="--c:var(--c-record)"><svg class="i"><use href="#i-rec"/></svg></span><h2>Record in a browser</h2><span class="ss-sum">Edge or Chrome</span></div>
-              <div class="ss-card-b">
-                <div class="ss-rec" id="ss-rec">
-                  <div class="ss-rec-text"><span id="ss-rec-sub">Edge or Chrome opens on your desktop. Pop-ups and new tabs are recorded too, no DevTools needed. When you stop, the recording opens here.</span><div class="ss-rec-chips" id="ss-rec-chips" aria-live="polite"></div></div>
-                  <button class="ds-btn ds-btn-primary ds-btn-lg" type="button" id="ss-rec-btn"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/></svg>Start recording</button>
-                </div>
-              </div>
-            </section>
-
-            <section class="ss-card ss-choice" id="ss-open-card">
-              <div class="ss-card-h" data-fold="open"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-card-ic"><svg class="i"><use href="#i-up"/></svg></span><h2>Open a recording you already have</h2><span class="ss-sum">Drop a .har anywhere</span></div>
-              <div class="ss-card-b">
-                <p class="ss-p">A HAR file from the CDP Recorder or DevTools (F12), a NetLog file, or a file someone sent you. It is read in your browser; nothing is uploaded.</p>
-                <div class="drop-zone ss-drop" id="dz1"
+            <section class="ss-big" id="ss-rec-card"><div class="ss-rec" id="ss-rec">
+              <span class="ss-big-ic" aria-hidden="true"><svg class="i"><use href="#i-rec"/></svg></span>
+              <h2>Record in a browser</h2>
+              <p id="ss-rec-sub">Edge or Chrome opens on your desktop. Pop-ups and new tabs are recorded too, no DevTools needed. When you stop, the recording opens here.</p>
+              <button class="ds-btn ds-btn-primary ds-btn-lg" type="button" id="ss-rec-btn"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/></svg>Start recording</button>
+              <div class="ss-rec-chips" id="ss-rec-chips" aria-live="polite"></div>
+            </div></section>
+            <section class="ss-big ss-big-open" id="ss-open-card">
+              <div class="drop-zone ss-drop ss-drop-big" id="dz1"
                   ondrop="onDrop(event,1)" ondragover="onDragOver(event,1)" ondragleave="onDragLeave(1)">
                   <input type="file" title="" accept=".har,.json" onchange="onFilePick(event,1)" aria-label="Open a recording — choose a .har file" />
                   <span class="dz-icon" aria-hidden="true"><svg class="i"><use href="#i-up"/></svg></span>
                   <div class="dz-body">
-                    <div class="dz-title" id="dz1-title">Drop your .har file here, or anywhere on this page</div>
-                    <div class="dz-sub" id="dz1-sub">or click to browse &nbsp;&middot;&nbsp; .har file</div>
+                    <div class="dz-title" id="dz1-title">Open a recording you already have</div>
+                    <div class="dz-sub" id="dz1-sub">Drop a .har file anywhere on this page, or click this box</div>
                     <div class="dz-name" id="dz1-name" style="display:none"></div>
+                    <div class="ss-drop-more">A HAR file from the CDP Recorder or DevTools (F12), a NetLog file, or a file someone sent you. It is read in your browser; nothing is uploaded.</div>
                   </div>
-                  <span class="ds-btn ds-btn-primary ss-browse" aria-hidden="true"><svg class="i"><use href="#i-file"/></svg>Browse file</span>
+                  <span class="ds-btn ds-btn-primary ss-browse" aria-hidden="true"><svg class="i"><use href="#i-file"/></svg>Choose file</span>
                   <button id="dz1-clear" class="dz-clear-btn"
                     onclick="event.stopPropagation();clearSlot(1)" title="Close this recording" aria-label="Close the recording" style="display:none">&#x2715;</button>
                 </div>
-                <div class="ss-row">
-                  <span class="ss-lbl">Script format</span>
-                  <div class="fmt-btns ss-seg" role="group" aria-label="Script format">
-                    <button class="fmt-btn" id="fmt-web" onclick="setFmt('webhttp')"><i>C</i>Web HTTP/HTML</button>
-                    <button class="fmt-btn active" id="fmt-dev" onclick="setFmt('devweb')"><i>JS</i>DevWeb</button>
-                    <button class="fmt-btn" id="fmt-both" onclick="setFmt('both')" style="display:none">Both</button>
-                  </div>
-                  <small class="ss-muted">Remembered. Change it at any time in the workspace.</small>
-                </div>
-              </div>
             </section>
           </div>
 
-          <section class="ss-card" id="ss-how">
-            <div class="ss-card-h" data-fold="how"><svg class="i ss-chev"><use href="#i-chev"/></svg><h3>How it works</h3><span class="ss-sum">4 steps</span></div>
-            <ol class="ss-minis">
-              <li><i>1</i><div><b>Record your journey</b><span>With Start recording, or the bookmarks and DevTools (see How to record, below).</span></div></li>
-              <li><i>2</i><div><b>Open the recording</b><span>A recording made here opens by itself. The script is ready at once.</span></div></li>
-              <li><i>3</i><div><b>Review and download</b><span>Format, filters, domains and transactions, then the ZIP.</span></div></li>
-              <li><i>4</i><div><b>Correlate when needed</b><span>Step 2, Correlate: the Correlation Advisor checks the recording by itself.</span></div></li>
-            </ol>
-          </section>
-
-          <!-- How to record: the two ways (CDP Recorder, bookmarks + DevTools); folded until opened (pref fold.guide) -->
-          <section class="ss-card folded" id="ss-guide">
-            <div class="ss-card-h" data-fold="guide"><svg class="i ss-chev"><use href="#i-chev"/></svg><h3>How to record your journey</h3><span class="ss-sum">CDP Recorder, or bookmarks + DevTools</span></div>
-            <div class="ss-guide-b">
-            <p class="ss-p">Choose one way to record. Both give you a HAR file to open above. Can't install programs? Use <b>Bookmarks + DevTools</b> — nothing to install.</p>
-            <div class="ss-gtabs" role="tablist" aria-label="Recording method">
-              <button class="ss-gtab" type="button" role="tab" aria-selected="true" aria-controls="how-cdp" id="tab-cdp"><span class="ss-card-ic" style="--c:var(--c-record)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span><span><b>CDP Recorder</b><small>Pop-ups, new tabs, or DevTools / bookmarks blocked</small></span><span class="radio" aria-hidden="true"></span></button>
-              <button class="ss-gtab" type="button" role="tab" aria-selected="false" aria-controls="how-classic" id="tab-classic"><span class="ss-card-ic" style="--c:var(--c-help)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span><span><b>Bookmarks + DevTools</b><small>No install at all</small></span><span class="radio" aria-hidden="true"></span></button>
-            </div>
-
-            <!-- CDP Recorder -->
-            <div class="ss-gpanel" id="how-cdp" role="tabpanel" aria-labelledby="tab-cdp">
-              <div class="ss-gcard">
-                <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Pop-ups, new tabs, or DevTools / bookmarks blocked? Use the CDP Recorder</h4>
-                <p>A small Windows program that records your whole journey — including every new tab and pop-up window (for example a sign-in pop-up) — and names transactions from a floating toolbar. No DevTools, no bookmarks and no browser extension needed.</p>
-                <h5 class="ss-gsub">Set up once on this computer</h5>
-                <ol class="ss-gol">
-                  <li><span>Download <a id="cdp-dl" href="downloads/cdp-recorder">cdp-recorder.zip</a> (one time only — and again when this page says a newer version is available)</span></li>
-                  <li><span>Right-click the ZIP → <b>Extract All…</b> → choose a folder that stays and where your computer lets you run programs, for example <code>C:\PerfX\cdp-recorder</code> — not inside your user profile folder (such as Downloads, Desktop or Documents)</span></li>
-                  <li><span>Open the extracted folder and double-click <code>cdp-recorder.exe</code> once. This connects it to the <b>Start recording</b> button for your Windows user — no administrator rights needed. It opens a small toolbar and a browser window; you don't need to record anything in them. If you move the folder later, double-click it again</span></li>
-                </ol>
-                <h5 class="ss-gsub">Record</h5>
-                <ol class="ss-gol">
-                  <li><span>Click <b>Start recording</b> above, type your application's address, choose Edge or Chrome and, if you like, a private window, then click <b>Start recording</b>. The first time, your browser asks <i>"Open cdp-recorder?"</i> — click <b>Open</b></span></li>
-                  <li><span>Two windows open: a small <b>toolbar</b> and an orange-bordered <b>RECORDING window</b> showing your application. Use your application <b>only in the recording window</b> (and the tabs and pop-ups it opens) — your normal browser is not recorded</span></li>
-                  <li><span>Name each transaction on this page: type a name (e.g. <code>Login</code>) and press <b>Enter</b> — the running transaction ends and this one starts, numbered for you (<code>T02_Login</code>). With planned steps (More options), press <b>Enter</b> on an empty box for the next one. <b>End</b> ends the running one. The page title is offered as grey text — <b>Tab</b> takes it. Rename a transaction with the pencil in the list; <b>Undo last mark</b> takes back the last Start or End. On the toolbar: type a name, click <b>Start Transaction</b>, do the steps, then click <b>End Transaction</b></span></li>
-                  <li><span>Click <b>Stop and save</b> — the <code>.har</code> file is saved in your <b>Downloads</b> folder and opens here, with the script ready. The toolbar says it is saved; the recorder's windows close after 10 seconds (<b>Keep open</b> on the toolbar keeps them)</span></li>
-                </ol>
-                <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg><span>Transactions named on the toolbar are picked up automatically — no START/END bookmarks needed. Don't run <code>cdp-recorder.exe</code> from inside the ZIP: Windows would run it from a temporary folder and the button could not find it next time.</span></div>
-                <h5 class="ss-gsub">Or start it yourself</h5>
-                <ol class="ss-gol">
-                  <li><span>Double-click <code>cdp-recorder.exe</code>. Two windows open: a small <b>toolbar</b> and an orange-bordered <b>RECORDING window</b>. Use your application <b>only in the recording window</b> — your normal browser is not recorded</span></li>
-                  <li><span>On the toolbar click <b>Start Recording</b>, type a transaction name (e.g. <code>T01_Login</code>) and click <b>Start Transaction</b></span></li>
-                  <li><span>Do the steps for that transaction, then click <b>End Transaction</b>. Repeat for each transaction</span></li>
-                  <li><span>Click <b>Stop Recording</b> — the <code>.har</code> file is saved in the same folder as <code>cdp-recorder.exe</code>. Drop it in the area above</span></li>
-                </ol>
-              </div>
-            </div>
-
-            <!-- Bookmarks + DevTools -->
-            <div class="ss-gpanel" id="how-classic" role="tabpanel" aria-labelledby="tab-classic" hidden>
-              <div class="ss-ggrid">
-                <div class="ss-gcard">
-                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Install the transaction bookmarks <small>(one-time setup)</small></h4>
-                  <p>Show the Bookmarks Bar (<b>Ctrl+Shift+B</b>), then <b>drag both buttons below</b> onto it. During recording, click <b class="c-start"><svg class="ss-gico" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>START Transaction</b> before each transaction and <b class="c-end"><svg class="ss-gico" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>END Transaction</b> after. A prompt lets you type the transaction name each time.</p>
-                  <div class="ss-bm">
-                    <a class="start" title="Drag this button to your Bookmarks Bar — do not click it here."
-                       href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('Start transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n){localStorage.setItem('_vugen_txn',n);new Image().src='https://START-'+n+'.invalid/';}}}catch(e){}})();">&#x25B6; START Transaction</a>
-                    <a class="end" title="Drag this button to your Bookmarks Bar — do not click it here."
-                       href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('End transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n)new Image().src='https://END-'+n+'.invalid/';}}catch(e){}})();">&#x25A0; END Transaction</a>
-                  </div>
-                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>How it works:</b> the last used transaction name is remembered automatically — the END prompt pre-fills with the same name you used for START. Both bookmarks fire a request to a <code>.invalid</code> domain which appears in the HAR and is detected as a transaction marker by this tool.</span></div>
-                  <div class="ss-gcall ds-note warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>Bookmarklets only work on real websites.</b> They will not respond on the browser's New Tab page or any <code>chrome://</code> page — Chrome blocks them silently. Always navigate to your application URL first, then click the bookmark.</span></div>
-                </div>
-                <div class="ss-gcard">
-                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Record your application</h4>
-                  <ol class="ss-gol">
-                    <li><span><b>Navigate to your application</b> in the browser (e.g. <code>https://myapp.example.com</code>)</span></li>
-                    <li><span>Press <b>F12</b> → click the <b>Network</b> tab → enable <b>Preserve Log</b> and <b>Disable Cache</b> checkboxes → click <svg class="ss-gico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" role="img" aria-label="the clear button"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg> to clear existing entries</span></li>
-                    <li><span>Click the <b class="c-start"><svg class="ss-gico" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>START Transaction</b> bookmark — type a name (e.g. <code>T01_Login</code>) and click OK</span></li>
-                    <li><span>Perform all steps for that transaction (login, fill form, navigate, etc.)</span></li>
-                    <li><span>Click the <b class="c-end"><svg class="ss-gico" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>END Transaction</b> bookmark — the name is pre-filled from START, just click OK</span></li>
-                    <li><span>Repeat START / END for each transaction (T02_Home, T03_Search…). Navigate freely between bookmarklet clicks — markers always fire in the current page's context</span></li>
-                    <li><span>After all transactions are done: in the Network tab, click the download icon → select <b>"Export HAR (with sensitive data)"</b> — or right-click any row → <b>"Save all as HAR with content"</b></span></li>
-                    <li><span>Drop the saved <code>.har</code> file in the area above — the script is generated at once, in the format you chose</span></li>
-                  </ol>
-                </div>
-              </div>
-              <div class="ss-ggrid">
-                <div class="ss-gcard warn">
-                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> Required: enable "Allow to generate HAR with Sensitive Data" before recording</h4>
-                  <ol class="ss-gol">
-                    <li><span>Press <b>F12</b> to open DevTools → click the <b>Settings gear icon</b> (top-right corner) — or press <b>F1</b> / <b>Shift+?</b></span></li>
-                    <li><span>Scroll to the <b>Network</b> section</span></li>
-                    <li><span>Tick <b>"Allow to generate HAR with Sensitive Data"</b></span></li>
-                    <li><span>Close Settings → when downloading, choose <b>"Export HAR (with sensitive data)"</b></span></li>
-                  </ol>
-                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>This ensures Authorization headers, cookies and Bearer tokens are included. NFT environments use test data only — safe to enable.</span></div>
-                </div>
-                <div class="ss-gcard">
-                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg> DevTools settings (required before recording)</h4>
-                  <ul class="ss-gol">
-                    <li><span><b>Preserve Log</b> — keeps all network requests visible across page navigations and redirects. Without this, requests from login redirects are lost.</span></li>
-                    <li><span><b>Disable Cache</b> — forces the browser to fetch fresh responses instead of using the local cache. Without this, response bodies may be empty in the HAR, making correlation extraction impossible in Script Studio.</span></li>
-                  </ul>
-                  <p class="ss-gnote">Both checkboxes are in the Network tab toolbar at the top of the DevTools panel.</p>
-                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>Forgot markers?</b> After opening the HAR, tick the requests in the Requests list and use <b>New transaction</b> to group them into transactions.</span></div>
-                  <div class="ss-gcall ds-note warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.</span></div>
-                </div>
-              </div>
-            </div>
-            </div>
-          </section>
+          <div class="ss-links"><button type="button" class="ss-linkb" id="ss-how-btn">How it works</button><button type="button" class="ss-linkb" id="ss-guide-btn">How to record your journey</button></div>
         </div>
       </div>
 
@@ -266,18 +156,19 @@
 
       <!-- ═══════════════ WORKSPACE ═══════════════ -->
       <div id="ph-res" class="phase">
+        <!-- the script (its name is the title), what it was made from, what is done with it -->
         <div class="ss-filebar" id="ss-filebar">
-          <div class="ss-file"><span class="ss-file-ic"><svg class="i"><use href="#i-file"/></svg></span><div class="ss-file-t"><b id="ss-file-name"></b><small id="ss-file-src"></small></div></div>
-          <div class="ss-kpi">
-            <span class="ss-k" title="Requests in the script / requests in the recording"><b id="ss-k-in">0</b>/<b id="ss-k-all">0</b> requests<span class="ss-wide"> in the script</span></span>
-            <span class="ss-k"><b id="ss-k-tx">0</b> transactions</span>
-            <span class="ss-pill ss-pill-acc" id="ss-auth" hidden title="Authentication found in the recording"><svg class="i"><use href="#i-lock"/></svg><span></span></span>
-          </div>
-          <div class="ss-seg" id="ss-fmt" role="group" aria-label="Script format">
-            <button type="button" data-fmt="webhttp" aria-pressed="false"><i>C</i><span class="ss-wide">Web </span>HTTP/HTML</button>
-            <button type="button" data-fmt="devweb" aria-pressed="true"><i>JS</i>DevWeb</button>
+          <div class="ss-title">
+            <button type="button" class="ss-name" id="ss-name-btn" title="Rename the script: the ZIP and the .usr file take this name"><b id="ss-name-now"></b><svg class="i"><use href="#i-edit"/></svg></button>
+            <form class="ss-name-f" id="ss-name-f" hidden><input class="ss-field ss-sc-name" id="ss-sc-name" type="text" maxlength="60" spellcheck="false" autocomplete="off" aria-describedby="ss-sc-err" title="Letters, numbers and underscores, starting with a letter. The ZIP and the .usr file take this name; empty: the default name." aria-label="Script name" /><button type="submit" class="ds-btn ds-btn-sm ds-btn-primary">Save</button><button type="button" class="ds-btn ds-btn-sm" id="ss-name-x">Cancel</button><span class="ss-err" id="ss-sc-err" role="alert" hidden></span></form>
+            <small class="ss-from" id="ss-from">from <span id="ss-file-name"></span> · <span title="Requests in the script / requests in the recording"><b id="ss-k-in">0</b> of <b id="ss-k-all">0</b> requests</span> · <span><b id="ss-k-tx">0</b> <span id="ss-k-txw">transactions</span></span><span id="ss-auth" hidden title="Authentication found in the recording"> · <span></span></span><span class="ss-src" id="ss-file-src"></span></small>
           </div>
           <button class="ds-btn" type="button" id="ss-open-another" title="Open another recording; this one stays until the new file is read"><svg class="i"><use href="#i-up"/></svg><span class="ss-wide">Open another</span></button>
+          <span class="ss-state" id="ss-state" role="status" title="The script shown and the ZIP are the same"><i></i><span>Up to date</span></span>
+          <span class="ss-grow"></span>
+          <span class="ss-pb" id="ss-note" hidden><button type="button" class="ds-btn ss-note-b" data-pop="ss-note-pop" aria-expanded="false" aria-controls="ss-note-pop"><svg class="i"><use href="#i-warn"/></svg><span><span id="ss-note-n">1</span><span class="ss-wide"> note</span></span></button><div class="ss-pp" id="ss-note-pop" hidden><h3>About this recording</h3><div class="ss-notices" id="ss-notices"></div></div></span>
+          <button type="button" class="ss-ic" id="ss-undo" aria-label="Undo" title="Undo the last change (Ctrl+Z)" disabled><svg class="i"><use href="#i-undo"/></svg></button>
+          <button type="button" class="ss-ic" id="ss-redo" aria-label="Redo" title="Redo (Ctrl+Y)" disabled><svg class="i"><use href="#i-redo"/></svg></button>
           <button class="ds-btn" type="button" id="ss-wm" hidden title="Open this script in the Workload Modeller: work out the Vusers, pacing and load generators"><svg class="i"><use href="#i-chart"/></svg><span class="ss-wide">Plan the load</span></button>
           <span class="ss-split">
             <button class="ds-btn ds-btn-primary" type="button" id="ss-dl" title="Project ZIP: the script files plus the project files (.usr, .prm …)"><svg class="i"><use href="#i-down"/></svg>Download ZIP</button>
@@ -285,46 +176,36 @@
           </span>
         </div>
 
-        <!-- the four steps (portal/studio-page.js): each one is a view of the same workspace; none blocks another -->
-        <nav class="ss-steps" id="ss-steps" aria-label="Steps">
-          <ol>
-            <li><button type="button" data-step="1" aria-label="Step 1: Requests" aria-describedby="ss-st-1" aria-current="step"><i>1</i><span><b>Requests</b><small id="ss-st-1">Domains, requests, the script</small></span></button></li>
-            <li><button type="button" data-step="2" aria-label="Step 2: Correlate" aria-describedby="ss-st-2" aria-current="false"><i>2</i><span><b>Correlate</b><small id="ss-st-2">Values the server changes</small></span></button></li>
-            <li><button type="button" data-step="3" aria-label="Step 3: Test data" aria-describedby="ss-st-3" aria-current="false"><i>3</i><span><b>Test data</b><small id="ss-st-3">Values per user</small></span></button></li>
-            <li><button type="button" data-step="4" aria-label="Step 4: Download" aria-describedby="ss-st-4" aria-current="false"><i>4</i><span><b>Download</b><small id="ss-st-4">Check and download</small></span></button></li>
+        <!-- the four steps (portal/studio-page.js): each one is a view of the same workspace, none blocks another; the choices about the script -->
+        <div class="ss-tools" id="ss-tools">
+          <nav class="ss-steps" id="ss-steps" aria-label="Steps">
+            <ol>
+            <li><button type="button" data-step="1" aria-label="Step 1: Requests" aria-describedby="ss-st-1" aria-current="step"><i>1</i><span><b>Requests</b><small class="ss-vh" id="ss-st-1">Domains, requests, the script</small></span><em hidden></em></button></li>
+            <li><button type="button" data-step="2" aria-label="Step 2: Correlate" aria-describedby="ss-st-2" aria-current="false"><i>2</i><span><b>Correlate</b><small class="ss-vh" id="ss-st-2">Values the server changes</small></span><em hidden></em></button></li>
+            <li><button type="button" data-step="3" aria-label="Step 3: Test data" aria-describedby="ss-st-3" aria-current="false"><i>3</i><span><b>Test data</b><small class="ss-vh" id="ss-st-3">Values per user</small></span><em hidden></em></button></li>
+            <li><button type="button" data-step="4" aria-label="Step 4: Download" aria-describedby="ss-st-4" aria-current="false"><i>4</i><span><b>Download</b><small class="ss-vh" id="ss-st-4">Check and download</small></span><em hidden></em></button></li>
           </ol>
+          </nav>
           <span class="ss-grow"></span>
-          <button class="ds-btn" type="button" id="ss-step-back" hidden><svg class="i"><use href="#i-left"/></svg><span>Back</span></button>
-          <button class="ds-btn ds-btn-primary" type="button" id="ss-step-next"><span>Next: Correlate</span><svg class="i ss-next-ic"><use href="#i-left"/></svg></button>
-        </nav>
-
-        <div class="ss-notices" id="ss-notices"></div>
-
-        <!-- step 1: the script's own settings — its name (the ZIP and the .usr take it) and the think time (portal/studio-page.js) -->
-        <div class="ss-setbar" id="ss-setbar">
-          <span class="ss-set">
-            <label class="ss-lbl" for="ss-sc-name">Script name</label>
-            <input class="ss-field ss-sc-name" id="ss-sc-name" type="text" maxlength="60" spellcheck="false" autocomplete="off" aria-describedby="ss-sc-err" title="Letters, numbers and underscores, starting with a letter. The ZIP and the .usr file take this name; empty: the default name." />
-            <span class="ss-err" id="ss-sc-err" role="alert" hidden></span>
-          </span>
-          <span class="ss-sep"></span>
-          <span class="ss-set">
-            <span class="ss-lbl" id="ss-think-l">Think time between transactions</span>
-            <span class="ss-seg" role="group" aria-labelledby="ss-think-l" id="ss-think">
+          <div class="ss-seg" id="ss-fmt" role="group" aria-label="Script format">
+            <button type="button" data-fmt="webhttp" aria-pressed="false"><i>C</i><span class="ss-wide">Web </span>HTTP/HTML</button>
+            <button type="button" data-fmt="devweb" aria-pressed="true"><i>JS</i>DevWeb</button>
+          </div>
+          <span class="ss-pb"><button type="button" class="ds-btn" id="ss-think-btn" data-pop="ss-think-pop" aria-expanded="false" aria-controls="ss-think-pop" title="Think time between transactions"><svg class="i"><use href="#i-clock"/></svg><span id="ss-think-now">3 s</span><svg class="i ss-chev"><use href="#i-chev"/></svg></button>
+            <div class="ss-pp" id="ss-think-pop" hidden>
+              <h3 id="ss-think-l">Think time between transactions</h3>
+              <div class="ss-row"><span class="ss-seg" role="group" aria-labelledby="ss-think-l" id="ss-think">
               <button type="button" data-think="fixed" aria-pressed="true">Fixed</button>
               <button type="button" data-think="recorded" aria-pressed="false">As recorded</button>
               <button type="button" data-think="none" aria-pressed="false">None</button>
-            </span>
-            <span class="ss-think-sec" id="ss-think-secw"><input class="ss-field" id="ss-think-sec" type="number" min="1" max="3600" step="1" value="3" aria-label="Think time in seconds" /><span class="ss-muted">s</span></span>
-          </span>
-          <small class="ss-muted ss-think-note" id="ss-think-note"></small>
-        </div>
-
-        <section class="ss-card ss-fbar" id="ss-fbar">
-          <div class="ss-fbar-row">
-            <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-fbar-fold" aria-expanded="true" title="Fold the filters to one line"><svg class="i ss-chev"><use href="#i-chev"/></svg><svg class="i"><use href="#i-filter"/></svg>Filters</button>
-            <span class="ss-sum" id="ss-f-sum"></span>
-            <span class="ss-fbar-chips">
+            </span><span class="ss-think-sec" id="ss-think-secw"><input class="ss-field" id="ss-think-sec" type="number" min="1" max="3600" step="1" value="3" aria-label="Think time in seconds" /><span class="ss-muted">seconds</span></span></div>
+              <p class="ss-muted ss-think-note" id="ss-think-note"></p>
+            </div></span>
+          <span class="ss-pb" id="ss-filters"><button type="button" class="ds-btn" id="ss-filters-btn" data-pop="ss-fbar" aria-expanded="false" aria-controls="ss-fbar" title="What goes into the script"><svg class="i"><use href="#i-filter"/></svg><span>Filters</span><em id="ss-f-n" hidden></em><svg class="i ss-chev"><use href="#i-chev"/></svg></button>
+            <div class="ss-pp ss-pp-wide ss-fbar" id="ss-fbar" hidden>
+              <h3>What goes into the script</h3>
+              <p class="ss-muted"><span id="ss-f-all"></span> <span class="ss-vh" id="ss-f-sum"></span>Every change updates the script at once.</p>
+              <span class="ss-fbar-chips">
               <span class="ss-lbl" title="Each type is either in the script or left out. The number is how many requests of that type there are.">In the script</span>
               <span id="ss-types" class="ss-contents"></span>
               <span class="ss-types-all">
@@ -339,8 +220,7 @@
               <button class="ss-chip" type="button" data-leave="options" aria-pressed="true" title="Ticked: OPTIONS (pre-flight) requests are left out of the script"><svg class="i"><use href="#i-ok"/></svg>OPTIONS <span class="ss-n" id="ss-n-opt">0</span></button>
               <button class="ss-chip" type="button" id="ss-bg-btn" hidden title="Requests the page repeats in the background: choose per endpoint"><svg class="i"><use href="#i-reset"/></svg>Background <span class="ss-n" id="ss-n-bg">0</span><svg class="i ss-chev"><use href="#i-chev"/></svg></button>
             </span>
-          </div>
-          <div class="ss-pop" id="ss-res-pop" hidden>
+              <div class="ss-pop" id="ss-res-pop" hidden>
             <details class="rt-res-help" open>
               <summary><svg class="i"><use href="#i-info"/></svg>Should I include Img / CSS / JS / Font?</summary>
               <ul>
@@ -350,7 +230,8 @@
               Included files are added to the page step that loaded them (<code>EXTRARES</code> / <code>resources[]</code>), never as separate requests and never twice. Known analytics/ads domains are always left out here unless you untick <b>Analytics / ads</b>. VuGen also needs the run-time setting <strong>Download non-HTML resources</strong> on (default).
             </details>
           </div>
-        </section>
+            </div></span>
+        </div>
 
         <div class="ss-cols" id="ss-cols">
           <!-- Domains -->
@@ -372,13 +253,10 @@
             <div class="ss-pane-h" data-hide-head="req" title="Click to hide this panel"><h3>Requests</h3><span class="ss-muted" id="ss-req-n"></span><span class="ss-grow"></span>
               <span class="ss-req-act">
                 <button class="ds-btn ds-btn-sm" type="button" id="ss-new-txn" title="Tick requests, then make them a new transaction"><svg class="i"><use href="#i-plus"/></svg><span>New transaction</span></button>
-                <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-find" title="Look up any value: where it comes from and every request that sends it back"><svg class="i"><use href="#i-search"/></svg><span class="ss-opt">Find a value</span></button>
-                <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-showout" aria-pressed="false" title="Show the requests that are left out, faded, with the reason"><svg class="i"><use href="#i-eye"/></svg><span class="ss-opt">Show left-out</span></button>
-                <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-fold-all" title="Fold or unfold every transaction"><svg class="i"><use href="#i-fold"/></svg><span class="ss-opt">Collapse all</span></button>
               </span>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-hide="req" title="Hide this panel (the others get the space)" aria-label="Hide the request panel"><svg class="i"><use href="#i-panel"/></svg></button>
             </div>
-            <div class="ss-pane-tools"><label class="ss-search"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-q" type="search" placeholder="Filter by address, e.g. /api, login" aria-label="Filter requests by address" /></label></div>
+            <div class="ss-pane-tools"><label class="ss-search"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-q" type="search" placeholder="Filter by address, e.g. /api, login" aria-label="Filter requests by address" /></label><button class="ds-btn ds-btn-sm ds-btn-ghost ss-icon" type="button" id="ss-find" aria-label="Find a value" title="Look up any value: where it comes from and every request that sends it back"><svg class="i"><use href="#i-search"/></svg></button><button class="ds-btn ds-btn-sm ds-btn-ghost ss-icon" type="button" id="ss-showout" aria-label="Show left-out" aria-pressed="false" title="Show the requests that are left out, faded, with the reason"><svg class="i"><use href="#i-eye"/></svg></button><button class="ds-btn ds-btn-sm ds-btn-ghost ss-icon" type="button" id="ss-fold-all" aria-label="Collapse all" title="Fold or unfold every transaction"><svg class="i"><use href="#i-fold"/></svg></button></div>
             <div class="ss-rq-head" aria-hidden="true"><span></span><span>#</span><span>Method</span><span>Address</span><span>Status</span><span class="ss-num">Time</span><span class="ss-tlh">Timeline</span></div>
             <div class="ss-pane-b ss-reqs" id="ss-reqs" tabindex="0" role="list" aria-label="Requests in the recording"><div class="ss-reqs-in" id="ss-reqs-in"></div></div>
             <div class="ss-selbar" id="ss-selbar" hidden><b id="ss-sel-n">0 selected</b><span class="ss-muted">Esc to stop</span><button class="ds-btn ds-btn-sm" type="button" id="ss-sel-clear">Cancel</button><button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-sel-group"><svg class="i"><use href="#i-plus"/></svg>Create transaction</button></div>
@@ -391,6 +269,7 @@
               <h3 id="ss-det-h">Request details</h3><span class="ss-muted" id="ss-det-pos"></span><span class="ss-grow"></span>
               <label class="ss-inl" title="Hide passwords, tokens, cookies and session values on screen and in Copy as cURL"><input type="checkbox" class="ss-cb" id="ss-det-mask" />Hide secrets</label>
               <button class="ds-btn ds-btn-xs" type="button" id="ss-det-dock" aria-pressed="false" hidden><svg class="i"><use href="#i-layers"/></svg><span>Dock</span></button>
+              <button class="ds-btn ds-btn-xs" type="button" id="ss-det-big" title="Open the details as a large window" hidden><svg class="i"><use href="#i-big"/></svg>Larger</button>
               <button class="ds-btn ds-btn-xs" type="button" id="ss-det-leave" title="Leave this request out of the script (Put back brings it back)">Leave out</button>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-prev" title="Previous request (Up arrow)" aria-label="Previous request"><svg class="i" style="transform:rotate(180deg)"><use href="#i-chev"/></svg></button>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-next" title="Next request (Down arrow)" aria-label="Next request"><svg class="i"><use href="#i-chev"/></svg></button>
@@ -404,6 +283,7 @@
             <button class="ss-rail" type="button" data-show="right" title="Show the script panel"><svg class="i"><use href="#i-panel"/></svg>Script</button>
             <div class="ss-tabs" role="tablist" aria-label="Script and correlation">
               <button type="button" role="tab" id="ss-tab-script" aria-selected="true" aria-controls="ss-t-script" data-tab="script"><svg class="i"><use href="#i-code"/></svg>Script</button>
+              <button type="button" role="tab" id="ss-tab-req" aria-selected="false" aria-controls="ss-t-req" data-rt="req"><svg class="i"><use href="#i-info"/></svg>Request <span class="ss-badge ss-badge-q" id="ss-req-badge" hidden></span></button>
               <button type="button" role="tab" id="ss-tab-corr" aria-selected="false" aria-controls="ss-t-corr" data-tab="corr"><svg class="i"><use href="#i-bulb"/></svg>Correlation Advisor <span class="ss-badge" id="ss-adv-n" hidden></span></button>
               <button type="button" role="tab" id="ss-tab-data" aria-selected="false" aria-controls="ss-t-data" data-tab="data"><svg class="i"><use href="#i-table"/></svg>Test data <span class="ss-badge ss-badge-q" id="ss-data-n" hidden></span></button>
               <span class="ss-grow"></span>
@@ -414,6 +294,8 @@
               <div class="code-area">
                 <div class="code-area-header">
                   <div class="code-tabs" id="code-tabs"></div>
+                  <select class="ss-field ss-code-sel" id="ss-code-sel" aria-label="File"></select>
+                  <label class="ss-search ss-code-q"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-code-q" type="search" placeholder="Find in this file" aria-label="Find in this file" /></label><span class="ss-muted ss-code-n" id="ss-code-n" role="status"></span>
                   <button class="btn-copy" id="btn-copy" onclick="copyCode()" aria-label="Copy this file to the clipboard" title="Copy this file to the clipboard">&#x1F4CB; Copy</button>
                 </div>
                 <pre id="code-body">// Loading...</pre>
@@ -422,13 +304,18 @@
               <div class="dl-bar" id="dl-bar" hidden></div>
             </div>
 
+            <!-- the request chosen in the list: its details (portal/request-details.js), or as a window (Larger) -->
+            <div class="ss-tab" id="ss-t-req" role="tabpanel" aria-labelledby="ss-tab-req" hidden>
+              <p class="ss-empty" id="ss-req-empty">Click a request to see its headers, payload, response, timing and dynamic values.</p>
+            </div>
+
             <div class="ss-tab" id="ss-t-corr" role="tabpanel" aria-labelledby="ss-tab-corr" hidden>
               <!-- step 2: the Correlation Advisor's findings as one table (portal/studio-corr.js); the engine's cards
                    below stay (Cards view) — they carry the list / array options until the editor has them -->
               <div class="ss-corr" id="ss-corr">
                 <div class="ss-corr-h">
                   <span class="ss-sec-ic" aria-hidden="true"><svg class="i"><use href="#i-studio"/></svg></span>
-                  <div><h2>Correlate</h2><p class="ss-muted">Values the server makes for each user (session ids, tokens, order numbers) and the script must read from a response, not replay. Tick the ones to put in the script, then <b>Add to the script</b>.</p></div>
+                  <h2>Correlate</h2><button type="button" class="ss-q" data-about="ss-corr-about" aria-expanded="false" aria-controls="ss-corr-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button>
                   <span class="ss-grow"></span>
                   <span class="ss-corr-hact">
                   <button class="ds-btn ss-btn-accent" type="button" id="ss-cr-manual" title="Choose a request and the value in its response yourself"><svg class="i"><use href="#i-plus"/></svg>Add manual correlation</button>
@@ -436,6 +323,7 @@
                   <span class="ss-seg" id="ss-cr-view" role="group" aria-label="View"><button type="button" data-view="table" aria-pressed="true"><svg class="i"><use href="#i-table"/></svg>Table</button><button type="button" data-view="cards" aria-pressed="false"><svg class="i"><use href="#i-layers"/></svg>Cards</button></span>
                   </span>
                 </div>
+                <p class="ss-muted ss-about" id="ss-corr-about" hidden>Values the server makes for each user (session ids, tokens, order numbers) and the script must read from a response, not replay. Tick the ones to put in the script, then <b>Add to the script</b>.</p>
                 <div class="ss-corr-tools" id="ss-cr-tools">
                   <label class="ss-search ss-cr-q"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-cr-q" type="search" placeholder="Name, value or address" aria-label="Search the values" /></label>
                   <select class="ss-field ss-cr-sel" id="ss-cr-type" aria-label="Type"><option value="">Every type</option></select>
@@ -443,8 +331,6 @@
                   <span class="ss-seg" id="ss-cr-show" role="group" aria-label="Show"><button type="button" data-show="review" aria-pressed="true">To review</button><button type="button" data-show="script" aria-pressed="false">In the script</button><button type="button" data-show="skipped" aria-pressed="false">Skipped</button><button type="button" data-show="all" aria-pressed="false">All</button></span>
                   <span class="ss-grow"></span>
                   <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-high" title="Tick every High-confidence value in the list"><svg class="i"><use href="#i-ok"/></svg>Select all high</button>
-                  <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-clear" title="Untick every value that is not in the script yet">Clear selection</button>
-                  <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-names" aria-haspopup="true" aria-expanded="false" title="How new names are written"><svg class="i"><use href="#i-edit"/></svg>Names</button>
                 </div>
                 <div class="ss-corr-wrap" id="ss-cr-wrap">
                   <table class="ss-corr-t" id="ss-cr-table">
@@ -457,6 +343,8 @@
                   <span id="ss-cr-n" class="ss-muted"></span>
                   <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-more" title="Values under 10 characters, numbers, and those past the first 20: suggested as Medium, not ticked"><svg class="i"><use href="#i-search"/></svg>Also suggest other repeated values</button>
                   <button class="ds-btn ds-btn-sm" type="button" id="ss-cr-test" title="Check the ticked values (none ticked: the ones in the script) against the recording"><svg class="i"><use href="#i-play"/></svg>Test</button>
+                  <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-clear" title="Untick every value that is not in the script yet">Clear selection</button>
+                  <button class="ds-btn ds-btn-sm ds-btn-ghost" type="button" id="ss-cr-names" aria-haspopup="true" aria-expanded="false" title="How new names are written"><svg class="i"><use href="#i-edit"/></svg>Names</button>
                   <span class="ss-grow"></span>
                   <button class="ds-btn ds-btn-primary" type="button" id="ss-cr-apply"><svg class="i"><use href="#i-ok"/></svg><span>Add to the script</span></button>
                 </div>
@@ -551,15 +439,12 @@
 
             <div class="ss-tab" id="ss-t-data" role="tabpanel" aria-labelledby="ss-tab-data" hidden>
               <!-- the Test data table (portal/studio-testdata.js) -->
-              <div class="ss-sec-head ss-step-h"><span class="ss-sec-ic" aria-hidden="true"><svg class="i"><use href="#i-table"/></svg></span><div><h2>Test data</h2><p class="ss-muted">What the user typed (names, passwords, search words), given to each virtual user from a data file.</p></div></div>
-              <div class="ss-td-bar">
-                <button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
+              <div class="ss-td-h"><h2>Test data</h2><button type="button" class="ss-q" data-about="ss-data-about" aria-expanded="false" aria-controls="ss-data-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button><button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
                 <span class="ss-grow"></span>
                 <button class="ds-btn ds-btn-sm" type="button" id="ss-td-xl-down" title="One column per parameter, one row per user: fill many rows in Excel"><svg class="i"><use href="#i-down"/></svg>Download as Excel</button>
                 <button class="ds-btn ds-btn-sm" type="button" id="ss-td-xl-up" title="Read the rows back: the data files in the ZIP get them"><svg class="i"><use href="#i-up"/></svg>Upload Excel</button>
-                <input type="file" id="ss-td-xl-file" accept=".xlsx" hidden />
-              </div>
-              <p class="ss-insp-moved"><svg class="i"><use href="#i-info"/></svg><span>Values the user typed become parameters: <b>{Name}</b> (Web HTTP/HTML) and <b>load.params.Name</b> (DevWeb). By default they share <b>one file</b>, so values that belong together stay on the same row (a user and its password). Give a parameter its <b>own file</b> when it should vary on its own. The ZIP has the data files VuGen and DevWeb read (.dat / .csv).</span></p>
+                <input type="file" id="ss-td-xl-file" accept=".xlsx" hidden /></div>
+                            <div class="ss-about ss-about-box" id="ss-data-about" hidden><p class="ss-muted">What the user typed (names, passwords, search words), given to each virtual user from a data file.</p><p class="ss-insp-moved"><svg class="i"><use href="#i-info"/></svg><span>Values the user typed become parameters: <b>{Name}</b> (Web HTTP/HTML) and <b>load.params.Name</b> (DevWeb). By default they share <b>one file</b>, so values that belong together stay on the same row (a user and its password). Give a parameter its <b>own file</b> when it should vary on its own. The ZIP has the data files VuGen and DevWeb read (.dat / .csv).</span></p></div>
               <div class="ss-td-wrap"><table class="ss-td" id="ss-td-table" hidden>
                 <thead><tr><th>Parameter</th><th>Recorded value · replaced in</th><th title="Which row each virtual user takes: the next one, a random one, or a unique one (no two users share it)">Take value</th><th title="A new value for each run of Action (each iteration), or once per virtual user">Update</th><th title="The shared data file (values that belong together stay on one row) or a file of its own">File</th><th class="ss-num">Rows</th><th><span class="ss-vh">Remove</span></th></tr></thead>
                 <tbody id="ss-td-body"></tbody>
@@ -610,6 +495,11 @@
     <!-- Elements the Studio scripts still write into, with no place on this page (the summary tiles and the
          set-up screen's filter lists of the classic page). Kept so the scripts run unchanged; never shown. -->
     <div id="ss-engine" hidden>
+      <div class="fmt-btns ss-seg" role="group" aria-label="Script format">
+                    <button class="fmt-btn" id="fmt-web" onclick="setFmt('webhttp')"><i>C</i>Web HTTP/HTML</button>
+                    <button class="fmt-btn active" id="fmt-dev" onclick="setFmt('devweb')"><i>JS</i>DevWeb</button>
+                    <button class="fmt-btn" id="fmt-both" onclick="setFmt('both')" style="display:none">Both</button>
+                  </div>
       <button class="btn-analyze" id="btn-analyze" onclick="analyze()" disabled>Load a HAR file to begin</button>
       <div class="filter-empty-state" id="filter-empty-state"></div>
       <div id="filter-section" style="display:none">
@@ -625,6 +515,113 @@
         <span class="stat" id="st-auth-wrap" style="display: none"><span id="st-auth">-</span></span>
       </div>
     </div>
+
+    <!-- ── HOW IT WORKS / HOW TO RECORD (links of the start screen) ── -->
+    <dialog class="ss-dlg ss-dlg-wide" id="ss-how" aria-labelledby="ss-how-h">
+      <div class="ss-dlg-in">
+        <div class="ss-dlg-h"><h2 id="ss-how-h">How it works</h2><button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+        <ol class="ss-minis">
+              <li><i>1</i><div><b>Record your journey</b><span>With Start recording, or the bookmarks and DevTools (see How to record, below).</span></div></li>
+              <li><i>2</i><div><b>Open the recording</b><span>A recording made here opens by itself. The script is ready at once.</span></div></li>
+              <li><i>3</i><div><b>Review and download</b><span>Format, filters, domains and transactions, then the ZIP.</span></div></li>
+              <li><i>4</i><div><b>Correlate when needed</b><span>Step 2, Correlate: the Correlation Advisor checks the recording by itself.</span></div></li>
+            </ol>
+      </div>
+    </dialog>
+    <dialog class="ss-dlg ss-dlg-wide ss-guide-dlg" id="ss-guide" aria-labelledby="ss-guide-h">
+      <div class="ss-dlg-in">
+        <div class="ss-dlg-h"><h2 id="ss-guide-h">How to record your journey</h2><button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+        <div class="ss-guide-b">
+            <p class="ss-p">Choose one way to record. Both give you a HAR file to open above. Can't install programs? Use <b>Bookmarks + DevTools</b> — nothing to install.</p>
+            <div class="ss-gtabs" role="tablist" aria-label="Recording method">
+              <button class="ss-gtab" type="button" role="tab" aria-selected="true" aria-controls="how-cdp" id="tab-cdp"><span class="ss-card-ic" style="--c:var(--c-record)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span><span><b>CDP Recorder</b><small>Pop-ups, new tabs, or DevTools / bookmarks blocked</small></span><span class="radio" aria-hidden="true"></span></button>
+              <button class="ss-gtab" type="button" role="tab" aria-selected="false" aria-controls="how-classic" id="tab-classic"><span class="ss-card-ic" style="--c:var(--c-help)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span><span><b>Bookmarks + DevTools</b><small>No install at all</small></span><span class="radio" aria-hidden="true"></span></button>
+            </div>
+
+            <!-- CDP Recorder -->
+            <div class="ss-gpanel" id="how-cdp" role="tabpanel" aria-labelledby="tab-cdp">
+              <div class="ss-gcard">
+                <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Pop-ups, new tabs, or DevTools / bookmarks blocked? Use the CDP Recorder</h4>
+                <p>A small Windows program that records your whole journey — including every new tab and pop-up window (for example a sign-in pop-up) — and names transactions from a floating toolbar. No DevTools, no bookmarks and no browser extension needed.</p>
+                <h5 class="ss-gsub">Set up once on this computer</h5>
+                <ol class="ss-gol">
+                  <li><span>Download <a id="cdp-dl" href="downloads/cdp-recorder">cdp-recorder.zip</a> (one time only — and again when this page says a newer version is available)</span></li>
+                  <li><span>Right-click the ZIP → <b>Extract All…</b> → choose a folder that stays and where your computer lets you run programs, for example <code>C:\PerfX\cdp-recorder</code> — not inside your user profile folder (such as Downloads, Desktop or Documents)</span></li>
+                  <li><span>Open the extracted folder and double-click <code>cdp-recorder.exe</code> once. This connects it to the <b>Start recording</b> button for your Windows user — no administrator rights needed. It opens a small toolbar and a browser window; you don't need to record anything in them. If you move the folder later, double-click it again</span></li>
+                </ol>
+                <h5 class="ss-gsub">Record</h5>
+                <ol class="ss-gol">
+                  <li><span>Click <b>Start recording</b> above, type your application's address, choose Edge or Chrome and, if you like, a private window, then click <b>Start recording</b>. The first time, your browser asks <i>"Open cdp-recorder?"</i> — click <b>Open</b></span></li>
+                  <li><span>Two windows open: a small <b>toolbar</b> and an orange-bordered <b>RECORDING window</b> showing your application. Use your application <b>only in the recording window</b> (and the tabs and pop-ups it opens) — your normal browser is not recorded</span></li>
+                  <li><span>Name each transaction on this page: type a name (e.g. <code>Login</code>) and press <b>Enter</b> — the running transaction ends and this one starts, numbered for you (<code>T02_Login</code>). With planned steps (More options), press <b>Enter</b> on an empty box for the next one. <b>End</b> ends the running one. The page title is offered as grey text — <b>Tab</b> takes it. Rename a transaction with the pencil in the list; <b>Undo last mark</b> takes back the last Start or End. On the toolbar: type a name, click <b>Start Transaction</b>, do the steps, then click <b>End Transaction</b></span></li>
+                  <li><span>Click <b>Stop and save</b> — the <code>.har</code> file is saved in your <b>Downloads</b> folder and opens here, with the script ready. The toolbar says it is saved; the recorder's windows close after 10 seconds (<b>Keep open</b> on the toolbar keeps them)</span></li>
+                </ol>
+                <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg><span>Transactions named on the toolbar are picked up automatically — no START/END bookmarks needed. Don't run <code>cdp-recorder.exe</code> from inside the ZIP: Windows would run it from a temporary folder and the button could not find it next time.</span></div>
+                <h5 class="ss-gsub">Or start it yourself</h5>
+                <ol class="ss-gol">
+                  <li><span>Double-click <code>cdp-recorder.exe</code>. Two windows open: a small <b>toolbar</b> and an orange-bordered <b>RECORDING window</b>. Use your application <b>only in the recording window</b> — your normal browser is not recorded</span></li>
+                  <li><span>On the toolbar click <b>Start Recording</b>, type a transaction name (e.g. <code>T01_Login</code>) and click <b>Start Transaction</b></span></li>
+                  <li><span>Do the steps for that transaction, then click <b>End Transaction</b>. Repeat for each transaction</span></li>
+                  <li><span>Click <b>Stop Recording</b> — the <code>.har</code> file is saved in the same folder as <code>cdp-recorder.exe</code>. Drop it in the area above</span></li>
+                </ol>
+              </div>
+            </div>
+
+            <!-- Bookmarks + DevTools -->
+            <div class="ss-gpanel" id="how-classic" role="tabpanel" aria-labelledby="tab-classic" hidden>
+              <div class="ss-ggrid">
+                <div class="ss-gcard">
+                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Install the transaction bookmarks <small>(one-time setup)</small></h4>
+                  <p>Show the Bookmarks Bar (<b>Ctrl+Shift+B</b>), then <b>drag both buttons below</b> onto it. During recording, click <b class="c-start"><svg class="ss-gico" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>START Transaction</b> before each transaction and <b class="c-end"><svg class="ss-gico" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>END Transaction</b> after. A prompt lets you type the transaction name each time.</p>
+                  <div class="ss-bm">
+                    <a class="start" title="Drag this button to your Bookmarks Bar — do not click it here."
+                       href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('Start transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n){localStorage.setItem('_vugen_txn',n);new Image().src='https://START-'+n+'.invalid/';}}}catch(e){}})();">&#x25B6; START Transaction</a>
+                    <a class="end" title="Drag this button to your Bookmarks Bar — do not click it here."
+                       href="javascript:(function(){try{var last=localStorage.getItem('_vugen_txn')||'T01_Login';var n=prompt('End transaction name:',last);if(n){n=n.trim().replace(/[\s-]+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');if(n)new Image().src='https://END-'+n+'.invalid/';}}catch(e){}})();">&#x25A0; END Transaction</a>
+                  </div>
+                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>How it works:</b> the last used transaction name is remembered automatically — the END prompt pre-fills with the same name you used for START. Both bookmarks fire a request to a <code>.invalid</code> domain which appears in the HAR and is detected as a transaction marker by this tool.</span></div>
+                  <div class="ss-gcall ds-note warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>Bookmarklets only work on real websites.</b> They will not respond on the browser's New Tab page or any <code>chrome://</code> page — Chrome blocks them silently. Always navigate to your application URL first, then click the bookmark.</span></div>
+                </div>
+                <div class="ss-gcard">
+                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg> Record your application</h4>
+                  <ol class="ss-gol">
+                    <li><span><b>Navigate to your application</b> in the browser (e.g. <code>https://myapp.example.com</code>)</span></li>
+                    <li><span>Press <b>F12</b> → click the <b>Network</b> tab → enable <b>Preserve Log</b> and <b>Disable Cache</b> checkboxes → click <svg class="ss-gico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" role="img" aria-label="the clear button"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg> to clear existing entries</span></li>
+                    <li><span>Click the <b class="c-start"><svg class="ss-gico" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>START Transaction</b> bookmark — type a name (e.g. <code>T01_Login</code>) and click OK</span></li>
+                    <li><span>Perform all steps for that transaction (login, fill form, navigate, etc.)</span></li>
+                    <li><span>Click the <b class="c-end"><svg class="ss-gico" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>END Transaction</b> bookmark — the name is pre-filled from START, just click OK</span></li>
+                    <li><span>Repeat START / END for each transaction (T02_Home, T03_Search…). Navigate freely between bookmarklet clicks — markers always fire in the current page's context</span></li>
+                    <li><span>After all transactions are done: in the Network tab, click the download icon → select <b>"Export HAR (with sensitive data)"</b> — or right-click any row → <b>"Save all as HAR with content"</b></span></li>
+                    <li><span>Drop the saved <code>.har</code> file in the area above — the script is generated at once, in the format you chose</span></li>
+                  </ol>
+                </div>
+              </div>
+              <div class="ss-ggrid">
+                <div class="ss-gcard warn">
+                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> Required: enable "Allow to generate HAR with Sensitive Data" before recording</h4>
+                  <ol class="ss-gol">
+                    <li><span>Press <b>F12</b> to open DevTools → click the <b>Settings gear icon</b> (top-right corner) — or press <b>F1</b> / <b>Shift+?</b></span></li>
+                    <li><span>Scroll to the <b>Network</b> section</span></li>
+                    <li><span>Tick <b>"Allow to generate HAR with Sensitive Data"</b></span></li>
+                    <li><span>Close Settings → when downloading, choose <b>"Export HAR (with sensitive data)"</b></span></li>
+                  </ol>
+                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>This ensures Authorization headers, cookies and Bearer tokens are included. NFT environments use test data only — safe to enable.</span></div>
+                </div>
+                <div class="ss-gcard">
+                  <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg> DevTools settings (required before recording)</h4>
+                  <ul class="ss-gol">
+                    <li><span><b>Preserve Log</b> — keeps all network requests visible across page navigations and redirects. Without this, requests from login redirects are lost.</span></li>
+                    <li><span><b>Disable Cache</b> — forces the browser to fetch fresh responses instead of using the local cache. Without this, response bodies may be empty in the HAR, making correlation extraction impossible in Script Studio.</span></li>
+                  </ul>
+                  <p class="ss-gnote">Both checkboxes are in the Network tab toolbar at the top of the DevTools panel.</p>
+                  <div class="ss-gcall ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span><b>Forgot markers?</b> After opening the HAR, tick the requests in the Requests list and use <b>New transaction</b> to group them into transactions.</span></div>
+                  <div class="ss-gcall ds-note warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Keep the Developer Tools (F12) open for the entire recording session. Closing it loses all recorded data.</span></div>
+                </div>
+              </div>
+            </div>
+            </div>
+      </div>
+    </dialog>
 
     <!-- ── NEW / RENAME TRANSACTION ── -->
     <dialog class="ss-dlg" id="ss-txn-dlg" aria-labelledby="ss-txn-h">
@@ -821,5 +818,6 @@
     <script src="portal/studio-testdata.js"></script>
     <script src="portal/studio-corr.js"></script>
     <script src="portal/studio-editor.js"></script>
+    <script src="portal/studio-history.js"></script>
   </body>
 </html>

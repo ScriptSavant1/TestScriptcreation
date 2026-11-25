@@ -20,7 +20,7 @@ describe('Script Studio redesign — same scripts as the classic page', () => {
   test('Studio.html loads the classic scripts unchanged, in the same order, then its layout script', () => {
     const engine = scripts(classic);
     expect(scripts(page).slice(0, engine.length)).toEqual(engine);
-    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/plan-load.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js', 'portal/studio-corr.js', 'portal/studio-editor.js']);
+    expect(scripts(page).slice(engine.length)).toEqual(['portal/track.js', 'portal/drop-anywhere.js', 'portal/record-live.js', 'portal/studio-txn.js', 'portal/request-details.js', 'portal/find-value.js', 'portal/plan-load.js', 'portal/studio-page.js', 'portal/studio-workspace.js', 'portal/studio-testdata.js', 'portal/studio-corr.js', 'portal/studio-editor.js', 'portal/studio-history.js']);
   });
 
   test('the classic stylesheet is still loaded (it styles what the scripts draw), then the new one', () => {
@@ -108,17 +108,30 @@ describe('Script Studio redesign — every element the scripts use exists', () =
 // open their step, so every caller that opened a tab (the engine, Ready to download, request details) still works.
 describe('Script Studio — the four steps', () => {
   const js = read('portal/studio-page.js');
-  test('the step line has Requests, Correlate, Test data and Download, with Next / Back', () => {
+  test('the steps Requests, Correlate, Test data and Download, each one click away', () => {
     [1, 2, 3, 4].forEach((n) => expect(page).toContain('data-step="' + n + '"'));
-    ['id="ss-steps"', 'id="ss-step-next"', 'id="ss-step-back"', 'id="ss-done"', 'id="ss-done-dl"', 'id="ss-done-list"'].forEach((id) => expect(page).toContain(id));
+    ['id="ss-steps"', 'id="ss-done"', 'id="ss-done-dl"', 'id="ss-done-list"'].forEach((id) => expect(page).toContain(id));
   });
   test('the tabs are kept (the engine and the harness use them) and each one opens its step', () => {
     ['ss-tab-script', 'ss-tab-corr', 'ss-tab-data', 'ss-t-script', 'ss-t-corr', 'ss-t-data'].forEach((id) => expect(page).toContain('id="' + id + '"'));
     expect(js).toContain('var TAB_STEP = { script: 1, corr: 2, data: 3 }');
     expect(js).toContain('function tab(name) { step(TAB_STEP[name] || 1); }');
-    expect(js).toContain('if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); }');
+    expect(js).toContain('if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); if (window.SSH) SSH.reset(); }');
     // step 1 settings: the script name and the think time
-    ['id="ss-setbar"', 'id="ss-sc-name"', 'id="ss-think"', 'id="ss-think-sec"'].forEach((id) => expect(page).toContain(id));
+    ['id="ss-name-btn"', 'id="ss-sc-name"', 'id="ss-think"', 'id="ss-think-sec"'].forEach((id) => expect(page).toContain(id));
+  });
+  test('two rows above the panels: title, counts, Undo, Redo, Download; steps, format, think time, filters', () => {
+    const top = page.slice(page.indexOf('id="ss-filebar"'), page.indexOf('id="ss-cols"'));
+    ['id="ss-name-btn"', 'id="ss-from"', 'id="ss-k-in"', 'id="ss-k-all"', 'id="ss-k-tx"', 'id="ss-auth"', 'id="ss-open-another"', 'id="ss-state"', 'id="ss-notices"', 'id="ss-undo"', 'id="ss-redo"', 'id="ss-wm"', 'id="ss-dl"', 'id="ss-dl-more"', 'id="ss-steps"', 'id="ss-fmt"', 'id="ss-think-pop"', 'id="ss-fbar"', 'id="ss-types"', 'data-leave="ads"', 'data-leave="options"', 'id="ss-bg-btn"', 'id="ss-res-pop"'].forEach((x) => expect(top).toContain(x));
+  });
+  test('the right panel: Script and Request; the start page: the band every tool has, two ways, two links', () => {
+    ['id="ss-tab-req"', 'id="ss-t-req"', 'id="ss-det-big"', 'id="ss-code-q"', 'class="ds-band ds-band-panel ss-band"', 'id="ss-rec-btn"', 'id="dz1"', 'id="ss-how-btn"', 'id="ss-guide-btn"'].forEach((x) => expect(page).toContain(x));
+    expect(page).not.toMatch(/id="ss-hero"|data-fold="(rec|open|how|guide)"/);
+  });
+  test('the tick of a request is the script\'s; in the script means what the generators write', () => {
+    const ws = read('portal/studio-workspace.js');
+    expect(js).toContain('SS.inScript = function (e) { return !e.filtered && (typeof shouldIncludeEntry !== "function" || shouldIncludeEntry(e, S.bgDecisions) || SS.setup(e)); };');
+    ['toggleIn(id, cb.checked, e.shiftKey)', 'S.leaveOutIds.delete(x); else S.leaveOutIds.add(x);', 'class="ss-cb ss-cb-pick"'].forEach((x) => expect(ws).toContain(x));
   });
 });
 
@@ -211,7 +224,7 @@ describe('Script Studio — review fixes', () => {
   const html = read('Studio.html'), css = read('portal/studio.css'), ws = read('portal/studio-workspace.js');
   test('step buttons named; notices cannot widen the page; step 1 bars are keyboard separators', () => {
     ['Requests', 'Correlate', 'Test data', 'Download'].forEach((n, i) => expect(html).toContain('data-step="' + (i + 1) + '" aria-label="Step ' + (i + 1) + ': ' + n + '" aria-describedby="ss-st-' + (i + 1) + '"'));
-    expect(css).toContain('.ss-notices { flex: none; display: grid; grid-template-columns: minmax(0, 1fr);');
+    expect(css).toContain('.ss-notices { display: grid; grid-template-columns: minmax(0, 1fr);');
     expect(html.match(/class="ss-rs"[^>]*role="separator"[^>]*tabindex="0"/g).length).toBe(2);
     expect(ws).toContain('rs.addEventListener("keydown"');
   });

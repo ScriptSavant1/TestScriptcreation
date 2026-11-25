@@ -9,7 +9,7 @@
   "use strict";
   var SS = window.SS, $ = SS.$, $$ = SS.$$, esc = SS.esc, plural = SS.plural, prefs = SS.prefs;
 
-  var W = { log: [], sel: new Set(), last: null, folded: {}, openOut: {}, q: "", rows: [], cur: null };
+  var W = { log: [], sel: new Set(), last: null, folded: {}, openOut: {}, q: "", rows: [], cur: null, pend: {} };
 
   // ── the user's transactions, applied again on every reading (called by analyze() after detectMarkers) ──
   window.studioAfterMarkers = function (entries) {
@@ -20,8 +20,8 @@
 
   function newFile() {
     if (SS.testDataNewFile) SS.testDataNewFile();
-    if (typeof closeDet === "function" && D && detOpen()) closeDet();
-    W.log = []; W.sel = new Set(); W.last = null; W.folded = {}; W.openOut = {}; W.q = ""; W.cur = null;
+    if (typeof closeDet === "function" && D && detOpen()) closeDet(true);
+    W.log = []; W.sel = new Set(); W.picking = false; W.pend = {}; W.last = null; W.folded = {}; W.openOut = {}; W.q = ""; W.cur = null;
     S.leaveOut = { ads: true, options: true }; S.leaveOutIds = new Set();
     var q = $("#ss-q"); if (q) q.value = "";
     var d = $("#ss-dq"); if (d) d.value = "";
@@ -40,6 +40,7 @@
   }
   var tAgain = null;
   function again() { clearTimeout(tAgain); tAgain = setTimeout(function () { tAgain = null; if (S.har1) window.analyze(); }, 120); }
+  SS.queuedRead = function () { return tAgain != null; };
   SS.cancelAgain = function () { clearTimeout(tAgain); tAgain = null; };
 
   // ── filter bar: types ──
@@ -70,6 +71,9 @@
     var outs = [];
     if (!(S.leaveOut && S.leaveOut.ads === false)) outs.push("analytics / ads");
     if (!(S.leaveOut && S.leaveOut.options === false)) outs.push("OPTIONS");
+    var out = reqs().filter(isOut).length, fn = $("#ss-f-n");
+    fn.hidden = !out; fn.textContent = out; $("#ss-filters-btn").title = "What goes into the script" + (out ? ": " + plural(out, "request") + " left out" : "");
+    $("#ss-f-all").textContent = (reqs().length - out) + " of " + reqs().length + " requests are in the script.";
     $("#ss-f-sum").textContent = "In the script: " + (on.length === STUDIO_RT_TYPES.length ? "every type" : on.join(", ")) + (outs.length ? " · leaving out " + outs.join(" and ") : "");
   }
   $("#ss-types").addEventListener("click", function (e) {
@@ -94,12 +98,6 @@
     });
   });
   $("#ss-bg-btn").addEventListener("click", function () { SS.openBg(false); });
-  // filters fold to one line (remembered)
-  var fbar = $("#ss-fbar"), ffold = $("#ss-fbar-fold");
-  function fbarFold(f) { fbar.classList.toggle("folded", f); ffold.setAttribute("aria-expanded", String(!f)); }
-  ffold.addEventListener("click", function () { prefs.fbarFolded = !fbar.classList.contains("folded"); SS.save(); fbarFold(prefs.fbarFolded); });
-  fbar.querySelector(".ss-fbar-row").addEventListener("click", function (e) { if (e.target === e.currentTarget) ffold.click(); });
-  fbarFold(!!prefs.fbarFolded);
   // "Should I put JS, CSS … in the script?"
   var help = $("#ss-res-help"), pop = $("#ss-res-pop");
   help.addEventListener("click", function (e) { e.stopPropagation(); pop.hidden = !pop.hidden; help.setAttribute("aria-expanded", String(!pop.hidden)); });
@@ -136,8 +134,8 @@
   }
   function renderDomains() {
     var stats = S.domainStats || {}, hosts = Object.keys(stats);
-    var inS = {}, all = {};
-    reqs().forEach(function (e) { var h = hostOf(e.url); if (!h) return; all[h] = (all[h] || 0) + 1; if (!e.filtered) inS[h] = (inS[h] || 0) + 1; });
+    var inS = {}, all = {}, nIn = {};
+    reqs().forEach(function (e) { var h = hostOf(e.url); if (!h) return; all[h] = (all[h] || 0) + 1; if (!e.filtered) inS[h] = (inS[h] || 0) + 1; if (!isOut(e)) nIn[h] = (nIn[h] || 0) + 1; });
     var q = ($("#ss-dq").value || "").trim().toLowerCase();
     var adsOn = !(S.leaveOut && S.leaveOut.ads === false);
     var isAds = function (h) { return NOISY.test(h); };
@@ -154,10 +152,9 @@
       return '<div class="ss-dom' + (off || ads ? " off" : "") + '" data-host="' + esc(h) + '">' +
         '<input type="checkbox" class="ss-cb" ' + (off || ads ? "" : "checked ") + (ads ? "disabled " : "") + 'aria-label="' + esc(h) + (ads ? " — analytics / ads, left out (Leave out: Analytics / ads)" : off ? " — left out; tick to put it in the script" : " — in the script; untick to leave it out") + '">' +
         '<span class="ss-host" title="' + esc(h) + '">' + esc(h) + "</span>" +
-        '<span class="ss-meta">' + (inS[h] || 0) + " of " + (all[h] || stats[h].count) + " in the script" + (ads ? ' · <span class="ss-tag">analytics / ads</span>' : "") + "</span>" +
+        '<span class="ss-meta">' + (nIn[h] || 0) + " of " + (all[h] || stats[h].count) + " in the script" + (ads ? ' · <span class="ss-tag">analytics / ads</span>' : "") + "</span>" +
         (srv.length ? '<span class="ss-srv">' + srv.map(function (s) {
-          return '<code title="The server parameter of ' + esc(s.key) + ' in the script">' + esc(s.name) + "</code>" + (s.main ? '<span class="ss-tag">main</span>' : "") +
-            '<button class="ds-btn ds-btn-xs ds-btn-ghost" type="button" data-rename="' + esc(s.key) + '" aria-label="Rename the server parameter of ' + esc(s.key) + '"><svg class="i"><use href="#i-edit"/></svg>Rename</button>';
+          return '<button class="ss-par" type="button" data-rename="' + esc(s.key) + '" title="The server parameter of ' + esc(s.key) + ' in the script: click to change its name" aria-label="' + esc(s.name) + ", the server parameter of " + esc(s.key) + ': change its name"><code>' + esc(s.name) + '</code><svg class="i"><use href="#i-edit"/></svg></button>' + (s.main ? '<span class="ss-tag">main</span>' : "");
         }).join("") + "</span>" : "") +
         "</div>";
     }
@@ -205,6 +202,8 @@
   // ── Requests: one list, grouped by transaction; left-out requests behind one line per group ──
   var H = { h: 40, r: 44, o: 32 };
   var REASON = { report: "browser report", websocket: "WebSocket", nonhttp: "not HTTP", prefetch: "prefetched page opened later", domain: "domain switched off", options: "OPTIONS pre-flight", ads: "analytics / ads", type: "type left out", user: "left out by you" };
+  function isOut(e) { return !SS.inScript(e); }
+  function why(e) { return e.filtered ? REASON[e.leftOut] || "left out" : "repeats in the background"; }
   function groups() {
     var out = [], cur = null;
     (S.entries1 || []).forEach(function (e) {
@@ -228,19 +227,19 @@
     gs.forEach(function (g, gi) {
       var items = q ? g.items.filter(function (e) { return e.url.toLowerCase().indexOf(q) !== -1; }) : g.items;
       if (q && !items.length) return;
-      var ins = items.filter(function (e) { return !e.filtered; }), outs = items.filter(function (e) { return e.filtered; });
+      var ins = items.filter(function (e) { return !isOut(e); }), outs = items.filter(function (e) { return isOut(e) && e.leftOut !== "user"; });   // (one left out with its tick stays in sight)
       var key = g.txn || "";
       var folded = !!W.folded[key];
-      if (anyTxn || g.txn) { rows.push({ k: "h", g: g, gi: gi, key: key, n: ins.length, nOut: outs.length, folded: folded, y: y }); y += H.h; }
+      if (anyTxn || g.txn) { rows.push({ k: "h", g: g, gi: gi, key: key, n: ins.length, nOut: items.length - ins.length, folded: folded, y: y }); y += H.h; }
       if (folded) return;
       var openOut = showOut || W.openOut[gi] || !!q;
       items.forEach(function (e) {
-        if (!e.filtered || openOut) { rows.push({ k: "r", e: e, y: y }); y += H.r; }
+        if (!isOut(e) || openOut || e.leftOut === "user") { rows.push({ k: "r", e: e, y: y }); y += H.r; }
       });
       if (outs.length && !openOut) {
-        var why = {};
-        outs.forEach(function (e) { var w = REASON[e.leftOut] || "left out"; why[w] = (why[w] || 0) + 1; });
-        rows.push({ k: "o", gi: gi, n: outs.length, why: Object.keys(why).map(function (w) { return why[w] + " " + w; }).join(", "), y: y }); y += H.o;
+        var by = {};
+        outs.forEach(function (e) { var w = why(e); by[w] = (by[w] || 0) + 1; });
+        rows.push({ k: "o", gi: gi, n: outs.length, why: Object.keys(by).map(function (w) { return by[w] + " " + w; }).join(", "), y: y }); y += H.o;
       }
     });
     W.rows = rows; W.height = y;
@@ -263,18 +262,20 @@
     if (r.k === "o") {
       return '<button type="button" class="ss-outrow" style="top:' + r.y + 'px" data-gi="' + r.gi + '"><svg class="i"><use href="#i-eye"/></svg>' + plural(r.n, "request") + " left out — " + esc(r.why) + '<span class="ss-link">Show</span></button>';
     }
-    var e = r.e, u = split(e.url), sel = W.sel.has(e.id);
+    var e = r.e, u = split(e.url), sel = W.sel.has(e.id), pick = picking(), o = isOut(e), mine = e.leftOut === "user" && e.filtered, on = W.pend[e.id] !== undefined ? W.pend[e.id] : !o, once = SS.setup(e);
     var tl = "";
     if (e.startMs && W.span) {
       var l = (e.startMs - W.span.t0) / W.span.len * 100, w = Math.max(0.6, (e.dur || 0) / W.span.len * 100);
       tl = '<i style="left:' + l.toFixed(2) + "%;width:" + Math.min(w, 100 - l).toFixed(2) + '%"></i>';
     }
-    return '<div class="ss-rq' + (e.filtered ? " out" : "") + (sel ? " sel" : "") + (W.cur === e.id ? " cur" : "") + '" style="top:' + r.y + 'px" data-id="' + e.id + '" role="listitem">' +
-      '<input type="checkbox" class="ss-cb" tabindex="-1"' + (sel ? " checked" : "") + (e.filtered ? " disabled" : "") + ' aria-label="Tick request ' + e.id + ' for a new transaction">' +
+    return '<div class="ss-rq' + (o ? " out" : "") + (sel ? " sel" : "") + (W.cur === e.id ? " cur" : "") + '" style="top:' + r.y + 'px" data-id="' + e.id + '" role="listitem">' +
+      // the tick: in the script (as in the converters); while a new transaction is made, its requests
+      (pick ? '<input type="checkbox" class="ss-cb ss-cb-pick" tabindex="-1"' + (sel ? " checked" : "") + (o ? " disabled" : "") + ' aria-label="Choose request ' + e.id + ' for the new transaction">'
+        : '<input type="checkbox" class="ss-cb" tabindex="-1"' + (on ? " checked" : "") + (o && !mine ? " disabled" : "") + ' aria-label="Request ' + e.id + ' in the script" title="' + (o && !mine ? "Left out: " + esc(why(e)) + " (Filters, Domains)" : on ? "In the script: untick to leave it out" : "Left out: tick to put it back") + '">') +
       '<span class="ss-rn">' + e.id + "</span>" +
       '<span class="ss-m ' + esc(e.method) + '">' + esc(e.method) + "</span>" +
       '<span class="ss-path"><b title="' + esc(e.url) + '">' + esc(u.path) + "</b><small>" + esc(u.host) +
-        (e.filtered ? ' <span class="ss-why">' + esc(REASON[e.leftOut] || "left out") + "</span>" : "") + "</small></span>" +
+        (o ? ' <span class="ss-why">' + esc(why(e)) + "</span>" : once ? ' <span class="ss-why">runs once at the start</span>' : "") + "</small></span>" +
       '<span class="ss-st ' + statusCls(e.status) + '">' + (e.status || "—") + "</span>" +
       '<span class="ss-num">' + (e.dur ? e.dur + " ms" : "") + "</span>" +
       '<span class="ss-tl">' + tl + "</span></div>";
@@ -297,12 +298,12 @@
   box.addEventListener("scroll", function () { if (!raf) raf = requestAnimationFrame(function () { raf = 0; draw(); }); });
   function renderReqs() {
     build(); draw();
-    var all = reqs(), ins = all.filter(function (e) { return !e.filtered; }).length;
+    var all = reqs(), ins = all.filter(function (e) { return !isOut(e); }).length;
     $("#ss-req-n").textContent = ins + " in the script · " + (all.length - ins) + " left out";
     var so = $("#ss-showout"); so.setAttribute("aria-pressed", String(!!prefs.showOut));
-    so.querySelector("span").textContent = prefs.showOut ? "Hide left-out" : "Show left-out";
+    so.title = prefs.showOut ? "Hide left-out" : "Show left-out"; so.setAttribute("aria-label", so.title);
     var anyFold = Object.keys(W.folded).some(function (k) { return W.folded[k]; });
-    $("#ss-fold-all span").textContent = anyFold ? "Expand all" : "Collapse all";
+    var fa = $("#ss-fold-all"); fa.title = anyFold ? "Expand all" : "Collapse all"; fa.setAttribute("aria-label", fa.title);
     selbar();
   }
   $("#ss-q").addEventListener("input", function () { W.q = this.value.trim(); box.scrollTop = 0; renderReqs(); });
@@ -314,15 +315,30 @@
     renderReqs();
   });
 
-  // selection → New transaction
+  // selection → New transaction: while it is made, the ticks choose its requests
+  function picking() { return !!W.picking || W.sel.size > 0; }
   function selbar() {
     var n = W.sel.size;
-    $("#ss-selbar").hidden = !n;
-    $("#ss-sel-n").textContent = n + " selected";
-    $("#ss-p-req").classList.toggle("picking", !!W.picking || n > 0);
+    $("#ss-selbar").hidden = !picking();
+    $("#ss-sel-n").textContent = n ? n + " selected" : "Tick its requests";
+    $("#ss-sel-group").disabled = !n;
+    $("#ss-new-txn").setAttribute("aria-pressed", String(picking()));
+    $("#ss-p-req").classList.toggle("picking", picking());
+  }
+  // the tick of a request: in the script, or left out (Shift-click: a range)
+  function toggleIn(id, on, range) {
+    var list = W.rows.filter(function (r) { return r.k === "r" && (!isOut(r.e) || r.e.leftOut === "user"); }).map(function (r) { return r.e.id; }), ids = [id];
+    if (range && W.last != null && list.indexOf(W.last) !== -1 && list.indexOf(id) !== -1) { var a = list.indexOf(W.last), b = list.indexOf(id); ids = list.slice(Math.min(a, b), Math.max(a, b) + 1); }
+    W.last = id;
+    ids.forEach(function (x) { W.pend[x] = on; });
+    draw();
+    change(function () {
+      S.leaveOutIds = S.leaveOutIds || new Set();
+      ids.forEach(function (x) { if (on) S.leaveOutIds.delete(x); else S.leaveOutIds.add(x); });
+    });
   }
   function tick(id, on, range) {
-    var list = W.rows.filter(function (r) { return r.k === "r" && !r.e.filtered; }).map(function (r) { return r.e.id; });
+    var list = W.rows.filter(function (r) { return r.k === "r" && !isOut(r.e); }).map(function (r) { return r.e.id; });
     var ids = [id];
     if (range && W.last != null && list.indexOf(W.last) !== -1) {
       var a = list.indexOf(W.last), b = list.indexOf(id);
@@ -348,8 +364,10 @@
     var id = +r.getAttribute("data-id");
     W.cur = id;
     var cb = r.querySelector("input");
-    if (!cb.disabled && (e.target === cb || W.sel.size || W.picking)) tick(id, e.target === cb ? cb.checked : !W.sel.has(id), e.shiftKey);
-    else openDet(id);
+    if (picking()) { if (!cb.disabled) tick(id, e.target === cb ? cb.checked : !W.sel.has(id), e.shiftKey); return; }
+    if (e.target === cb) { if (!cb.disabled) toggleIn(id, cb.checked, e.shiftKey); return; }
+    openDet(id);
+    if (e.detail === 2) SS.rtab("req");   // a double click (the rows are drawn again by the first one)
   });
   function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
   // keyboard: arrows move, Space ticks, Enter folds a transaction
@@ -364,17 +382,23 @@
       var y = list[i].y;
       if (y < box.scrollTop) box.scrollTop = y; else if (y + H.r > box.scrollTop + box.clientHeight) box.scrollTop = y + H.r - box.clientHeight;
       if (D.id != null) openDet(W.cur); else draw();
-    } else if (e.key === " " && i >= 0 && !list[i].e.filtered) { e.preventDefault(); tick(W.cur, !W.sel.has(W.cur), e.shiftKey); }
-    else if (e.key === "Enter" && i >= 0) { e.preventDefault(); openDet(W.cur); }
+    } else if (e.key === " " && i >= 0) {
+      e.preventDefault();
+      var en = list[i].e;
+      if (picking()) { if (!isOut(en)) tick(W.cur, !W.sel.has(W.cur), e.shiftKey); }
+      else if (!isOut(en) || en.leftOut === "user") toggleIn(W.cur, !!en.filtered, e.shiftKey);
+    }
+    else if (e.key === "Enter" && i >= 0) { e.preventDefault(); openDet(W.cur); SS.rtab("req"); }
     else if (e.key === "Escape" && (W.sel.size || W.picking)) { clearSel(); }
-    else if (e.key === "Escape" && detOpen()) { closeDet(); }
+    else if (e.key === "Escape" && detOpen() && !D.inline) { closeDet(); }
   });
   function clearSel() { W.sel = new Set(); W.picking = false; W.last = null; draw(); selbar(); }
   $("#ss-sel-clear").addEventListener("click", clearSel);
   $("#ss-sel-group").addEventListener("click", function () { openTxn("create"); });
   $("#ss-new-txn").addEventListener("click", function () {
     if (W.sel.size) { openTxn("create"); return; }
-    W.picking = true; selbar();
+    if (W.picking) { clearSel(); return; }
+    W.picking = true; W.last = null; draw(); selbar();
     showToast("Tick the requests for the new transaction (Shift-click ticks a range), then Create transaction.", "info", 5000);
     box.focus();
   });
@@ -405,7 +429,7 @@
       edit({ op: "rename", from: mode.name, to: name }, "Renamed " + mode.name + " to " + name + ".");
     } else {
       var ids = Array.from(W.sel).sort(function (a, b) { return a - b; });
-      W.sel = new Set(); W.picking = false;
+      W.sel = new Set(); W.picking = false; W.last = null;
       edit({ op: "create", name: name, ids: ids }, "Transaction " + name + " created.");
     }
   });
@@ -461,19 +485,40 @@
     // Leave out / Put back this one request (a request left out by its type, domain or a rule is changed there)
     var lv = $("#ss-det-leave"), mine = e.leftOut === "user";
     lv.textContent = mine ? "Put back" : "Leave out";
-    lv.disabled = e.filtered && !mine;
-    lv.title = mine ? "Put this request back into the script" : e.filtered ? "Already left out (" + (REASON[e.leftOut] || "left out") + ") — change that in the filters or Domains" : "Leave this request out of the script";
+    lv.disabled = isOut(e) && !mine;
+    lv.title = mine ? "Put this request back into the script" : isOut(e) ? "Already left out (" + why(e) + ") — change that in the filters or Domains" : "Leave this request out of the script";
     var top = (D.fromFind != null ? '<p class="hx-back"><mark class="hx-hl">' + esc(RequestDetails.short(D.fromFind, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back-find>Back to Find a value</button></p>' : "") +
       '<p class="ss-det-ctx">' + (e.txn ? "Transaction <b>" + esc(e.txn) + "</b>" : "Not in a transaction") + " · " +
-      (e.filtered ? "left out of the script" : '<span class="ss-in">in the script</span>') + "</p>";
+      (isOut(e) ? "left out of the script (" + esc(why(e)) + ")" : '<span class="ss-in">in the script</span>' + (SS.setup(e) ? ", once at the start" : "")) + "</p>";
     detB.innerHTML = RequestDetails.html({
       n: e.id, e: { method: e.method, url: e.url, status: e.status, size: c.size >= 0 ? c.size : rs.bodySize >= 0 ? rs.bodySize : null }, raw: raw,
       type: esc(typeLabel(e)), dur: e.dur || 0, start: e.startMs && W.span ? e.startMs - W.span.t0 : 0,
-      out: !!e.filtered, why: REASON[e.leftOut] || "left out", tab: D.tab, mask: D.mask, full: D.full, top: top,
+      out: isOut(e), why: why(e), tab: D.tab, mask: D.mask, full: D.full, top: top,
       hl: markFound, extra: [dynTab(e)],
     });
   }
   // keepFind: opened from a Find a value answer (the value stays marked, with a way back)
+  // where the details are shown: the Request tab of step 1; as a window (Larger, Find a value, steps 2 to 4, the panel
+  // hidden); or docked as a fourth panel (2400 px and wider, when chosen)
+  var tabBox = $("#ss-t-req"), emptyNote = $("#ss-req-empty");
+  function canInline() { return SS.curStep() === 1 && !(prefs.hide || {}).right && !D.large && !document.body.classList.contains("ss-dock"); }
+  function place(inl) {
+    D.inline = inl;
+    var host = inl ? tabBox : cols;
+    if (det.parentNode !== host) { if (inl) host.appendChild(det); else host.insertBefore(det, $("#ss-p-right")); }
+    det.classList.toggle("ss-det-inline", inl);
+    det.setAttribute("role", inl ? "group" : "dialog");
+    if (inl) { det.classList.remove("ss-det-moved"); det.removeAttribute("style"); }
+    $("#ss-det-big").hidden = !inl; $("#ss-det-x").hidden = inl;
+    document.body.classList.toggle("ss-det-open", !inl && !det.hidden);
+    scrimUp();
+  }
+  function scrimUp() { scrim.hidden = det.hidden || !!D.inline || document.body.classList.contains("ss-dock"); }
+  function badge() {
+    var b = $("#ss-req-badge"), id = D.view === "req" ? D.id : null;
+    b.hidden = id == null; b.textContent = id == null ? "" : id;
+    emptyNote.hidden = !!(D.inline && D.id != null && D.view === "req");
+  }
   function homeTop(fb) { return window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : ""; }
   function openDet(id, keepFind) {
     if (!keepFind) D.fromFind = null;
@@ -483,24 +528,84 @@
     if (D.id !== id) D.full = {};
     D.id = id; W.cur = id;
     // over the workspace, below the file bar (Download ZIP and the format stay in reach)
-    var fb = $("#ss-filebar").getBoundingClientRect();
-    if (!det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
     det.hidden = false;
-    document.body.classList.add("ss-det-open");
-    renderDet(); draw();
+    place(canInline());
+    var fb = $("#ss-filebar").getBoundingClientRect();
+    if (!D.inline && !det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
+    renderDet(); draw(); badge(); mark(true);
     if (first && !document.body.classList.contains("ss-dock")) detB.scrollTop = 0;
   }
   function detOpen() { return D.id != null || D.view === "find"; }
-  function closeDet() {
+  // the window closes: the request goes back into the Request tab (gone: the recording is)
+  function closeDet(gone) {
     if (!detOpen()) return;
-    D.id = null; D.view = "req"; D.fromFind = null; det.hidden = true;
+    var keep = gone ? null : D.id != null ? D.id : D.back;
+    D.id = null; D.view = "req"; D.fromFind = null; D.large = false; D.back = null; det.hidden = true; det.classList.remove("is-find");
     $("#ss-det-h").textContent = "Request details";
-    document.body.classList.remove("ss-det-open");
-    draw(); box.focus();
+    place(false); badge();
+    if (keep != null && canInline() && byId(keep)) { openDet(keep); box.focus(); return; }
+    mark(); draw(); if (!gone) box.focus();
   }
+  // step 1 again: the request chosen before is still there
+  function back1() {
+    if (D.inline && D.id != null && !document.body.classList.contains("ss-dock") && !canInline()) { D.kept = D.id; D.id = null; det.hidden = true; place(false); badge(); mark(); return; }   // another step, or the panel hidden
+    if (SS.curStep() !== 1) return;
+    var k = D.kept; D.kept = null;
+    if (k != null && D.id == null && D.view === "req" && byId(k) && canInline()) openDet(k);
+    else if (D.id != null && D.view === "req" && D.inline !== canInline()) openDet(D.id);
+  }
+  // ── the code of the request, marked in the script (a background behind its lines: the code itself is not touched) ──
+  var blocks = { text: null, map: null };
+  function decodeURIComponentSafe(s) { try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch (e) { return s; } }
+  function codeMap(text) {
+    if (blocks.text === text) return blocks.map;
+    var L = text.split("\n"), list = [], map = {}, dev = S.tab === "mj";
+    var head = dev ? /new load\.WebRequest\(\{\s*$/ : /^\s*web_(url|custom_request|submit_data|submit_form|link|rest)\(/;
+    for (var i = 0; i < L.length; i++) {
+      if (!head.test(L[i])) continue;
+      var b = i; while (b < L.length - 1 && !(dev ? /^\s*\}\)\.send(Sync)?\(\)|^\s*\}\)[,;]?\s*$/ : /LAST\);/).test(L[b])) b++;
+      var url = "", j; for (j = i; j <= b && !url; j++) { var m = dev ? /^\s*"?url"?:\s*(.*)$/.exec(L[j]) : /"(?:URL|Action)=([^"]*)/.exec(L[j]); if (m) url = m[1]; }
+      var a = i; while (a > 0 && L[a - 1].trim() && !/lr_(start|end)_transaction|\.(start|stop)\(|lr_think_time|load\.thinkTime|LAST\);\s*$|\}\)\.send/.test(L[a - 1])) a--;
+      list.push({ a: a, b: b, url: url.replace(/^[`'"]/, "") });
+      i = b;
+    }
+    // the requests in the script and their blocks, both in order: the pairs with the same path (a part of it may be a
+    // parameter by now) that together match the most; a query that is in the block says which of two equal paths it is
+    var qs = reqs().filter(function (e) { return !isOut(e) && !SS.setup(e); });
+    var pat = qs.map(function (e) {
+      var p = split(e.url).path.split("?")[0].split("#")[0];
+      return new RegExp("(^|[^/])/" + p.replace(/^\//, "").split("/").map(function (s) { return s ? "(?:" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|[^/?`'\"]*\\{[^}]+\\}[^/?`'\"]*)" : ""; }).join("/") + "/?([?`'\"#]|$)");
+    });
+    var urls = list.map(function (b) { return b.url.replace(/^https?:\/\//, ""); }), texts = list.map(function (b) { return L.slice(b.a, b.b + 1).join("\n"); });
+    var vals = qs.map(function (e) { return (split(e.url).path.split("?")[1] || "").split("#")[0].split("&").map(function (x) { return decodeURIComponentSafe(x.split("=").slice(1).join("=")); }).filter(function (v) { return v.length > 1; }); });
+    var n = qs.length, m = list.length, score = function (a, b) { return !pat[a].test(urls[b]) ? 0 : 10 + (vals[a].length && vals[a].every(function (v) { return texts[b].indexOf(v) >= 0; }) ? 2 : 0); };
+    if (n * m <= 1000000) {
+      var T = [], x, y; for (x = 0; x <= n; x++) T.push(new Int32Array(m + 1));
+      for (x = n - 1; x >= 0; x--) for (y = m - 1; y >= 0; y--) { var s = score(x, y); T[x][y] = Math.max(T[x + 1][y], T[x][y + 1], s ? s + T[x + 1][y + 1] : 0); }
+      for (x = 0, y = 0; x < n && y < m;) { var s2 = score(x, y); if (s2 && T[x][y] === s2 + T[x + 1][y + 1]) { map[qs[x].id] = list[y]; x++; y++; } else if (T[x][y] === T[x + 1][y]) x++; else y++; }
+    } else { var at = 0; qs.forEach(function (e, a) { for (var k = at; k < m && k < at + 40; k++) if (score(a, k)) { map[e.id] = list[k]; at = k + 1; return; } }); }
+    // no block of its own: a redirect that is followed, a file listed on its page — the request before it
+    var prev = null; qs.forEach(function (e) { if (map[e.id]) prev = map[e.id]; else if (prev) map[e.id] = prev; });
+    // what runs once at the start (DevWeb initialize): its own line
+    reqs().forEach(function (e) { if (!SS.setup(e)) return; for (var i = 0; i < L.length; i++) if (L[i].indexOf(e.url) >= 0) { map[e.id] = { a: i, b: i }; return; } });
+    blocks = { text: text, map: map };
+    return map;
+  }
+  function mark(go) {
+    var pre = $("#code-body"), main = S.tab === "mj" || S.tab === "ac";
+    // a request was chosen while another file was open: the script again
+    if (go && !main && SS.rtab() === "script" && D.id != null) { var t0 = $("#code-tabs .code-tab"); if (t0) { t0.click(); main = S.tab === "mj" || S.tab === "ac"; } }
+    var r = main && D.id != null && D.view === "req" && SS.curStep() === 1 ? codeMap(pre.textContent)[D.id] : null;
+    pre.classList.toggle("ss-hl", !!r);
+    if (!r) return;
+    var cs = getComputedStyle(pre), lh = parseFloat(cs.lineHeight) || 20, top = parseFloat(cs.paddingTop) || 0;
+    pre.style.setProperty("--hl-y", (top + r.a * lh) + "px"); pre.style.setProperty("--hl-h", ((r.b - r.a + 1) * lh) + "px");
+    if (go) { var y = top + r.a * lh; if (y < pre.scrollTop + 4 || top + (r.b + 1) * lh > pre.scrollTop + pre.clientHeight) pre.scrollTop = Math.max(0, y - 24); pre.scrollLeft = 0; }
+  }
+  $("#ss-det-big").addEventListener("click", function () { if (D.id == null) return; D.large = true; openDet(D.id); var x = $("#ss-det-x"); if (x) x.focus(); });
   function step(d) { var ids = shownIds(), at = ids.indexOf(D.id); if (at < 0 || !ids[at + d]) return; openDet(ids[at + d]); scrollTo(ids[at + d]); }
   function scrollTo(id) { var r = W.rows.filter(function (x) { return x.k === "r" && x.e.id === id; })[0]; if (!r) return; if (r.y < box.scrollTop || r.y + H.r > box.scrollTop + box.clientHeight) box.scrollTop = Math.max(0, r.y - box.clientHeight / 2); draw(); }
-  $("#ss-det-x").addEventListener("click", closeDet);
+  $("#ss-det-x").addEventListener("click", function () { closeDet(); });
   $("#ss-det-prev").addEventListener("click", function () { step(-1); });
   $("#ss-det-leave").addEventListener("click", function () {
     var id = D.id, e = byId(id); if (!e) return;
@@ -553,7 +658,7 @@
     return { key: "dynamic", label: "Dynamic values", count: list.length || "", html: html };
   }
   detB.addEventListener("click", function (e) {
-    if (e.target.closest("[data-go-adv]")) { if (!document.body.classList.contains("ss-dock")) closeDet(); SS.tab("corr"); return; }
+    if (e.target.closest("[data-go-adv]")) { if (!document.body.classList.contains("ss-dock") && !D.inline) closeDet(); SS.tab("corr"); return; }
     var fv = e.target.closest("[data-find]"); if (fv && D.view !== "find") { openFind(fv.getAttribute("data-find")); return; }
     var op = e.target.closest("[data-open]"); if (op) { openDet(+op.getAttribute("data-open")); scrollTo(+op.getAttribute("data-open")); return; }
     var ad = e.target.closest("[data-dyn-add], [data-dyn-paste]");
@@ -576,7 +681,7 @@
     else showToast("Copying is not allowed here.", "warning");
   });
   det.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { e.preventDefault(); closeDet(); return; }
+    if (e.key === "Escape") { if (D.inline) return; e.preventDefault(); closeDet(); return; }
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       var tb = e.target.closest(".hx-tab"); if (!tb) return;
@@ -590,10 +695,12 @@
   var scrim = document.createElement("div");
   scrim.className = "ss-det-scrim"; scrim.id = "ss-det-scrim"; scrim.hidden = true;
   det.parentNode.insertBefore(scrim, det);
+  // Escape closes the window wherever the focus is (opened from the table, say)
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !e.defaultPrevented && detOpen() && !D.inline && !document.body.classList.contains("ss-dock") && !document.querySelector("dialog[open]")) { e.preventDefault(); closeDet(); } });
   scrim.addEventListener("pointerdown", function (e) { e.preventDefault(); closeDet(); });
-  new MutationObserver(function () { scrim.hidden = det.hidden || document.body.classList.contains("ss-dock"); }).observe(det, { attributes: true, attributeFilter: ["hidden"] });
+  new MutationObserver(scrimUp).observe(det, { attributes: true, attributeFilter: ["hidden"] });
   try {
-    if (window.parent !== window) window.parent.document.addEventListener("pointerdown", function () { if (detOpen() && !document.body.classList.contains("ss-dock")) closeDet(); });
+    if (window.parent !== window) window.parent.document.addEventListener("pointerdown", function () { if (detOpen() && !D.inline && !document.body.classList.contains("ss-dock")) closeDet(); });
   } catch (err) { /* the portal is on another address: the backdrop still closes it */ }
   // A pop-up at every width; on screens 2400 px and wider the user may dock it as a fourth panel instead (pref dock,
   // the button in its bar) — before, it docked by itself there, which read as a missing pop-up on a large monitor
@@ -607,7 +714,8 @@
       dockBtn.title = prefs.dock ? "Open the details as a pop-up over the workspace" : "Show the details as a panel beside the requests (wide screens)";
       dockBtn.lastChild.textContent = prefs.dock ? "Pop-up" : "Dock";
     }
-    scrim.hidden = det.hidden || document.body.classList.contains("ss-dock");
+    scrimUp();
+    if (SS.curStep() === 1 && D.id != null && D.view === "req" && D.inline !== canInline()) openDet(D.id);
   }
   if (dockBtn) dockBtn.addEventListener("click", function () { prefs.dock = !prefs.dock; SS.save(); unmove(); dock(); });
 
@@ -625,7 +733,7 @@
   if (bar) {
     bar.title = "Drag to move; double-click puts it back";
     bar.addEventListener("pointerdown", function (e) {
-      if (e.button !== 0 || document.body.classList.contains("ss-dock") || e.target.closest("button, input, label, select, a")) return;
+      if (e.button !== 0 || D.inline || document.body.classList.contains("ss-dock") || e.target.closest("button, input, label, select, a")) return;
       var r = det.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
       det.style.height = r.height + "px"; det.style.right = "auto"; det.style.bottom = "auto";
       det.classList.add("ss-det-moved"); det.style.left = r.left + "px"; det.style.top = r.top + "px";
@@ -637,7 +745,7 @@
       function up() { bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); bar.removeEventListener("pointercancel", up); }
       bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up); bar.addEventListener("pointercancel", up);
     });
-    bar.addEventListener("dblclick", function (e) { if (!e.target.closest("button, input, label, select, a")) unmove(); });
+    bar.addEventListener("dblclick", function (e) { if (!D.inline && !e.target.closest("button, input, label, select, a")) unmove(); });
   }
   window.addEventListener("resize", clampDet);
   window.addEventListener("resize", dock); dock();
@@ -688,8 +796,10 @@
   function openFind(value) {
     if (!S.har1) return;
     if (S.isNetLog1) { showToast("Find a value needs a HAR file (a NetLog file has no response bodies).", "warning"); return; }
+    if (D.view === "req" && D.id != null) D.back = D.id;
     D.view = "find"; D.id = null;
     det.classList.add("is-find");
+    det.hidden = false; place(false); badge(); mark();
     var fb = $("#ss-filebar").getBoundingClientRect();
     if (!det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
     det.hidden = false; document.body.classList.add("ss-det-open");
@@ -839,6 +949,7 @@
     ["dom", "req", "right"].forEach(function (p) { cols.classList.toggle("no-" + p, !!prefs.hide[p] && !(wide && p === "right")); });
     if (prefs.wDom) cols.style.setProperty("--ss-dw", prefs.wDom + "px");
     if (prefs.wRight) cols.style.setProperty("--ss-rw", prefs.wRight + "px");
+    back1();
   }
   function showPane(p, on) {
     if (!!prefs.hide[p] === !on) return;
@@ -908,11 +1019,14 @@
     // (Dynamic values are worked out again after every change: an applied correlation changes them)
     // (Find a value reads the new reading too: what is left out and the Advisor's findings may have changed)
     render: function () {
-      renderTypes(); renderDomains(); renderReqs(); D.dynFor = null;
+      W.pend = {}; renderTypes(); renderDomains(); renderReqs(); D.dynFor = null;
       var nc = (S.advisorCandidates || []).length, again = FW.forE !== S.entries1 || FW.forC !== nc;
       if (again) { FW.dirty = true; FW.forE = S.entries1; FW.forC = nc; }
-      if (D.view === "find") { if (again) find(D.find); else renderFind(); } else if (D.id != null) renderDet();
+      if (D.view === "find") { if (again) find(D.find); else renderFind(); } else if (D.id != null) { renderDet(); mark(); }
     },
+    mark: mark,
+    // a question was answered with no: the ticks show what is in the script
+    asked: function () { W.pend = {}; draw(); },
     openFind: function (v) { openFind(v); },
     openDetails: function (id) { openDet(id); },
     // "Show an example" in step 2, Correlate (as in the mockup): a request that sends back a value the
@@ -925,6 +1039,7 @@
     },
     undoToast: function (msg, undo) { undoToast(msg, undo); },
     closeDetails: function () { closeDet(); },
+    reread: again,
     showPane: showPane,
     panes: panes,
     state: W,

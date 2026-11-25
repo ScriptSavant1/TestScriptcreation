@@ -3,9 +3,9 @@
  * decides when they run and shows the result:
  *  - a recording is read as soon as it is opened (no Analyse button); analyze() runs one at a time
  *  - the start screen ⇄ the workspace (#ph-upload / #ph-res; #ph-proc is an overlay while the file is read)
- *  - the file bar (counts, sign-in found, format switch, Open another, Download ZIP + "Ready to download?")
- *  - the four steps (Requests · Correlate · Test data · Download) over the right panel's tabs, the notices,
- *    the background-requests dialog
+ *  - the title row (script name, counts, sign-in found, Open another, notes, Download ZIP + "Ready to download?") and
+ *    the tool row (the four steps Requests · Correlate · Test data · Download, format, think time, filters; pop-ups)
+ *  - the right panel's Script and Request tabs, the background-requests dialog
  *  - Escape / focus for the engine's dialogs, keyboard for the controls the engine draws as divs, script colouring
  *  - the format remembered (localStorage "perfx-studio-fmt"), page layout remembered ("perfx-studio-ui")
  *  - "Start recording" (portal/record-live.js), drop anywhere, window.PerfxStudio for the HAR Explorer hand-off
@@ -31,8 +31,10 @@
   //    caller gets a promise that settles when the page is idle again, with the latest inputs read. ──
   var engineAnalyze = window.analyze;
   var running = false, again = false, waiters = [];
+  // "Up to date" / "Updating…" beside the title
+  function state() { var s = $("#ss-state"); if (!s) return; s.classList.toggle("up", running); s.lastElementChild.textContent = running ? "Updating…" : "Up to date"; }
   function start() {
-    running = true;
+    running = true; state();
     if (SS.cancelAgain) SS.cancelAgain();   // a reading the page had queued is this one
     Promise.resolve().then(function () { return engineAnalyze(); }).then(finish, finish);
   }
@@ -40,7 +42,7 @@
   // burst — a second recording opened during the first reading is counted as the diff reading it leads to
   var owed = false;
   function finish() {
-    running = false;
+    running = false; state();
     if (again) { again = false; if (owed) { owed = false; S._usageSent = false; } start(); return; }
     owed = false;
     afterAnalysis();
@@ -54,7 +56,8 @@
     } else start();
     return new Promise(function (r) { waiters.push(r); });
   };
-  SS.busy = function () { return running; };
+  SS.busy = function () { return running || applying > 0; };
+  var applying = 0;   // a background-requests answer being applied
 
   // ── start screen ⇄ workspace: follow the engine's phases; the reading overlay keeps the view under it ──
   var upload = $("#ph-upload"), proc = $("#ph-proc"), res = $("#ph-res");
@@ -80,7 +83,7 @@
   window.markLoaded = function (slot) {
     var r = engineMarkLoaded.apply(this, arguments);
     if (slot === 1 && window.SSW) SSW.newFile();
-    if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); }   // a new recording starts at step 1, with the default name
+    if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); if (window.SSH) SSH.reset(); }   // a new recording starts at step 1, with the default name
     setTimeout(function () { if (S.har1) window.analyze(); }, 0);
     return r;
   };
@@ -122,6 +125,7 @@
     if (window.SSW) SSW.render();
     if (window.SSC) SSC.render();
     if (window.SSE && SSE.isOpen()) SSE.redraw();
+    if (window.SSH) SSH.look();
   }
   // the engine draws several parts one after another — the page follows once
   var queued = false;
@@ -132,6 +136,11 @@
     if (typeof orig !== "function") return;
     window[fn] = function () { var r = orig.apply(this, arguments); later(); return r; };
   });
+
+  // in the script: not left out by a rule, a type, a domain or the user, and not a background endpoint that is left out
+  // (the generators' own answer: shouldIncludeEntry for the journey, getSetupEntries for what runs once at the start)
+  SS.setup = function (e) { return !e.filtered && typeof getSetupEntries === "function" && getSetupEntries([e], S.bgDecisions).length > 0; };
+  SS.inScript = function (e) { return !e.filtered && (typeof shouldIncludeEntry !== "function" || shouldIncludeEntry(e, S.bgDecisions) || SS.setup(e)); };
 
   // ── file bar ──
   var AUTH = { kerberos: "Kerberos", ntlm: "NTLM", negotiate: "Negotiate", basic: "Basic", digest: "Digest", bearer: "Bearer", saml: "SAML" };
@@ -150,10 +159,10 @@
     $("#ss-file-name").title = S.har1Name || "";
     var src = S.isNetLog1 ? "NetLog file" : sourceLabel(es, S.har1, S.harPages);
     if (S.har2) src += " · second recording: " + (S.har2Name || "") + " (diff mode)";
-    $("#ss-file-src").textContent = src;
-    $("#ss-k-in").textContent = reqs.filter(function (e) { return !e.filtered; }).length;
+    $("#ss-file-src").textContent = " · " + src; $("#ss-from").title = (S.har1Name || "") + " · " + src;
+    $("#ss-k-in").textContent = reqs.filter(SS.inScript).length;
     $("#ss-k-all").textContent = reqs.length;
-    $("#ss-k-tx").textContent = (S.txns || []).length;
+    var tx = (S.txns || []).length; $("#ss-k-tx").textContent = tx; $("#ss-k-txw").textContent = tx === 1 ? "transaction" : "transactions";
     var a = $("#ss-auth");
     a.hidden = !S.auth;
     if (S.auth) { a.lastElementChild.textContent = AUTH[S.auth.type] || S.auth.type; a.title = "Sign-in found in the recording: " + (AUTH[S.auth.type] || S.auth.type) + ". The script signs in the same way (web_set_user / user credentials)."; }
@@ -192,18 +201,23 @@
   var nameIn = $("#ss-sc-name"), nameErr = $("#ss-sc-err");
   function defaultName() { return S.format === "webhttp" ? "WebHttpScript_Correlated" : "DevWebScript_Correlated"; }
   SS.scriptName = function () { return S.scriptName || defaultName(); };
-  function nameShow() { nameIn.placeholder = defaultName(); if (document.activeElement !== nameIn) nameIn.value = S.scriptName || ""; nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); }
+  var nameBtn = $("#ss-name-btn"), nameForm = $("#ss-name-f");
+  function nameShow() { nameIn.placeholder = defaultName(); $("#ss-name-now").textContent = SS.scriptName(); if (document.activeElement !== nameIn) nameIn.value = S.scriptName || ""; nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); }
+  function nameOpen(on) { nameForm.hidden = !on; nameBtn.hidden = on; $("#ss-from").hidden = on; if (on) { nameIn.value = SS.scriptName(); nameIn.focus(); nameIn.select(); } else { nameIn.blur(); nameShow(); } }
   function nameSet() {
     var v = nameIn.value.trim().replace(/[\s-]+/g, "_");
+    if (v === defaultName()) v = "";   // the default name follows the format
     if (v && !/^[A-Za-z][A-Za-z0-9_]{0,59}$/.test(v)) {
       nameErr.textContent = "Letters, numbers and underscores only, starting with a letter.";
-      nameErr.hidden = false; nameIn.setAttribute("aria-invalid", "true");
+      nameErr.hidden = false; nameIn.setAttribute("aria-invalid", "true"); nameIn.focus();
       return;
     }
-    S.scriptName = v || ""; nameShow(); nameIn.value = S.scriptName; badges();
+    S.scriptName = v || ""; nameOpen(false); badges(); nameBtn.focus(); if (window.SSH) SSH.look();
   }
-  nameIn.addEventListener("change", nameSet);
-  nameIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); nameSet(); } if (e.key === "Escape") nameShow(); });
+  nameBtn.addEventListener("click", function () { nameOpen(true); });
+  nameForm.addEventListener("submit", function (e) { e.preventDefault(); nameSet(); });
+  $("#ss-name-x").addEventListener("click", function () { nameOpen(false); nameBtn.focus(); });
+  nameIn.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.stopPropagation(); nameOpen(false); nameBtn.focus(); } });
   nameIn.addEventListener("input", function () { if (!nameErr.hidden) { nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); } });
   // think time: Fixed N s (default 3 — what Studio has always written) / As recorded / None; remembered per browser
   var thinkSec = $("#ss-think-sec");
@@ -227,11 +241,14 @@
         (n.length < gaps.length ? (n.length ? "; " : "") + plural(gaps.length - n.length, "pause") + " under a second, left out" : "") + ".";
     }
     $("#ss-think-note").textContent = note;
+    $("#ss-think-now").textContent = t.mode === "fixed" ? t.sec + " s" : t.mode === "none" ? "No think time" : "As recorded";
   }
   function thinkSet(t) {
     prefs.think = t; save(); thinkShow();
     if (S.entries1 && S.entries1.length && !running) regenerateFromAdvisor({ quiet: true });
   }
+  SS.thinkNow = thinkNow;
+  SS.thinkSet = function (t) { prefs.think = t; save(); thinkShow(); };
   $("#ss-think").addEventListener("click", function (e) {
     var b = e.target.closest("[data-think]"); if (!b) return;
     var t = thinkNow(); if (t.mode === b.getAttribute("data-think")) return;
@@ -310,7 +327,7 @@
     if (to === "dl") $("#ss-dl").click();
     else if (to === "corr" || to === "data") tab(to);
     else if (to === "bg") openBg(false);
-    else if (to === "notice") { var n = $("#ss-notices .ss-notice"); if (n) { n.classList.add("open"); n.scrollIntoView({ block: "nearest" }); } }
+    else if (to === "notice") { hiddenWarn = null; notices(); popOpen("ss-note-pop"); }
     else if (to === "dom") { tab("script"); if (window.SSW) SSW.showPane("dom", true); }
   }
   document.addEventListener("click", function (e) { if (!menu.hidden && !menu.contains(e.target)) closeReady(); });
@@ -321,32 +338,42 @@
   function notices() {
     var box = $("#ss-notices");
     var w = S.harWarning || "";
-    if (!w || w === hiddenWarn) { box.innerHTML = ""; return; }
+    $("#ss-note").hidden = !w || w === hiddenWarn;
+    if (!w || w === hiddenWarn) { box.innerHTML = ""; if (!$("#ss-note-pop").hidden) popClose(); return; }
     box.innerHTML = '<div class="ss-notice"><svg class="i"><use href="#i-warn"/></svg><span class="ss-nt">' + esc(w) + '</span>' +
-      '<button class="ds-btn ds-btn-xs ds-btn-ghost" type="button" data-more aria-expanded="false">Details</button>' +
-      '<button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-x aria-label="Hide this message"><svg class="i"><use href="#i-x"/></svg></button></div>';
+      '</div><div class="ss-row ss-note-f"><button class="ds-btn ds-btn-sm" type="button" data-x>Got it, hide the note</button></div>';
   }
   $("#ss-notices").addEventListener("click", function (e) {
-    var n = e.target.closest(".ss-notice"); if (!n) return;
-    if (e.target.closest("[data-x]")) { hiddenWarn = S.harWarning; n.remove(); badges(); return; }
-    if (e.target.closest("[data-more]")) { var o = n.classList.toggle("open"); e.target.closest("[data-more]").setAttribute("aria-expanded", String(o)); e.target.closest("[data-more]").textContent = o ? "Less" : "Details"; }
+    if (e.target.closest("[data-x]")) { hiddenWarn = S.harWarning; notices(); badges(); }
   });
 
   // ── the right panel's tabs (Script · Correlation Advisor · Test data) — each one is now shown by its step ──
   function showTab(name) {
     $$(".ss-tabs [role=tab]").forEach(function (b) { b.setAttribute("aria-selected", String(b.getAttribute("data-tab") === name)); });
     ["script", "corr", "data"].forEach(function (t) { $("#ss-t-" + t).hidden = t !== name; });
+    // step 1: the script, or the request chosen in the list
+    var req = name === "script" && rt === "req";
+    $("#ss-t-req").hidden = !req;
+    if (req) $("#ss-t-script").hidden = true;
+    $("#ss-tab-req").setAttribute("aria-selected", String(req));
+    if (req) $("#ss-tab-script").setAttribute("aria-selected", "false");
   }
+  var rt = "script";
+  SS.rtab = function (name) { if (name) { rt = name === "req" ? "req" : "script"; if (cur === 1) showTab("script"); if (window.SSW && SSW.mark) SSW.mark(); } return rt; };
   // every caller that opened a tab (the engine's links, the Ready list, request details) now opens its step
   var TAB_STEP = { script: 1, corr: 2, data: 3 }, STEP_TAB = { 1: "script", 2: "corr", 3: "data" };
   function tab(name) { step(TAB_STEP[name] || 1); }
   SS.tab = tab;
-  $(".ss-tabs").addEventListener("click", function (e) { var b = e.target.closest("[role=tab]"); if (b) tab(b.getAttribute("data-tab")); });
+  $(".ss-tabs").addEventListener("click", function (e) { var b = e.target.closest("[role=tab]"); if (!b) return; if (b.hasAttribute("data-rt")) SS.rtab("req"); else { if (b.getAttribute("data-tab") === "script") rt = "script"; tab(b.getAttribute("data-tab")); if (window.SSW && SSW.mark) SSW.mark(); } });
+  $(".ss-tabs").addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    var o = e.target.id === "ss-tab-req" ? $("#ss-tab-script") : e.target.id === "ss-tab-script" ? $("#ss-tab-req") : null;
+    if (o && o.offsetParent) { e.preventDefault(); o.focus(); o.click(); }
+  });
 
   // ── the four steps: 1 Requests · 2 Correlate · 3 Test data · 4 Download. One workspace, four views of it: step 1
   //    is the workspace as it was; steps 2 and 3 give the whole width to the Correlation Advisor / the Test data
   //    table; step 4 lists what is worth a look and downloads. Nothing is applied or lost by moving between steps. ──
-  var NEXT = { 1: "Next: Correlate", 2: "Next: Test data", 3: "Next: Download" };
   var cur = 0;
   function step(n, sure) {
     n = n >= 1 && n <= 4 ? n : 1;
@@ -358,8 +385,7 @@
     marks();
     if (STEP_TAB[n]) showTab(STEP_TAB[n]);
     $("#ss-done").hidden = n !== 4;
-    $("#ss-step-back").hidden = n === 1;
-    var nx = $("#ss-step-next"); nx.hidden = n === 4; if (NEXT[n]) nx.firstElementChild.textContent = NEXT[n];
+    popClose();
     if (window.SSW && SSW.panes) SSW.panes();
     if (n === 4) done();
     if (n === 2 && window.SSC) SSC.render();   // High values come ticked when the step opens
@@ -368,16 +394,13 @@
   SS.step = step;
   SS.curStep = function () { return cur; };
   $("#ss-steps").addEventListener("click", function (e) { var b = e.target.closest("[data-step]"); if (b) step(+b.getAttribute("data-step")); });
-  $("#ss-step-next").addEventListener("click", function () { step(cur + 1); });
-  $("#ss-step-back").addEventListener("click", function () { step(cur - 1); });
   $("#ss-steps").addEventListener("keydown", function (e) {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     var t = $$("#ss-steps [data-step]"), i = t.indexOf(document.activeElement); if (i < 0) return;
     var n = t[(i + (e.key === "ArrowRight" ? 1 : t.length - 1)) % t.length]; n.focus(); n.click();
   });
-  // the short line under each step's name
-  // the step line's look: steps before the current one show a tick (or ! when something there is worth a look), the
-  // line fills up to the current step; each note is a pill — amber worth a look, green done (stepNotes sets ST)
+  // the steps: the ones before the current one show a tick (or ! when something there is worth a look); each has its
+  // count, and its state in words for the screen reader and the tooltip (stepNotes sets ST)
   var ST = {};
   function marks() {
     $$("#ss-steps [data-step]").forEach(function (b) {
@@ -386,12 +409,13 @@
       if (i.getAttribute("data-ic") !== icon) { i.setAttribute("data-ic", icon); i.innerHTML = icon ? '<svg class="i"><use href="#i-' + icon + '"/></svg>' : String(n); }
       b.classList.toggle("is-past", n < cur);
       b.parentNode.classList.toggle("is-reached", n <= cur);
-      var s = b.querySelector("small"); if (s) s.className = st ? "st-" + st : "";
+      b.querySelector("em").className = st ? "st-" + st : "";
+      b.title = b.querySelector("small").textContent;
     });
   }
   function stepNotes() {
     var es = S.entries1 || [], reqs = es.filter(function (e) { return !e.isMarker; });
-    var inn = reqs.filter(function (e) { return !e.filtered; }).length;
+    var inn = reqs.filter(SS.inScript).length;
     $("#ss-st-1").textContent = reqs.length ? inn + " of " + reqs.length + " requests in the script" : "Domains, requests, the script";
     var cs = S.advisorCandidates || [];
     var pend = cs.filter(function (c) { return c.status === "pending"; }).length;
@@ -403,6 +427,7 @@
     $("#ss-st-3").textContent = p ? plural(p, "parameter") : "No typed values found";
     var warn = readyItems().filter(function (i) { return i.warn; }).length;
     $("#ss-st-4").textContent = warn ? plural(warn, "thing") + " worth a look" : "Ready";
+    [inn, tk || pend, p, warn].forEach(function (v, i) { var em = $("#ss-steps [data-step='" + (i + 1) + "'] em"); em.hidden = !v; em.textContent = v || ""; });
     ST = { 1: reqs.length ? "ok" : "", 2: tk || pend ? "warn" : inScript ? "ok" : "", 3: p ? "info" : "", 4: warn ? "warn" : "ok" };
     marks();
   }
@@ -532,7 +557,8 @@
   window.applyBgDecisions = function () {
     bgDlg.dataset.gate = "";
     if (bgDlg.open) bgDlg.close();
-    return Promise.resolve(engineApplyBg.apply(this, arguments)).then(function (r) {
+    applying++;
+    return Promise.resolve(engineApplyBg.apply(this, arguments)).then(function (r) { applying--; return r; }, function (e) { applying--; throw e; }).then(function (r) {
       // the answer for this file, kept for the next readings (afterAnalysis)
       if (S.bgDecisions && S.har1) { SS.bgChoice = new Map(S.bgDecisions); SS.bgFor = S.har1; }
       refresh(); return r;
@@ -552,14 +578,50 @@
     $("#ss-ask-h").textContent = title; $("#ss-ask-t").textContent = text; $("#ss-ask-yes").textContent = okLabel || "Continue";
     $("#ss-ask-no").textContent = opt.no || "Cancel";
     d.returnValue = "";
-    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); else if (d.returnValue === "no" && opt.otherwise) opt.otherwise(); };
+    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); else { if (d.returnValue === "no" && opt.otherwise) opt.otherwise(); if (window.SSW && SSW.asked) SSW.asked(); } };
     try { d.showModal(); } catch (e) { if (window.confirm(title + "\n\n" + text)) then(); }
   };
 
-  // ── start screen: hide the introduction, fold the cards ──
-  function heroPref() { $("#ss-hero").hidden = !!prefs.noHero; }
-  $("#ss-hero-hide").addEventListener("click", function () { prefs.noHero = true; save(); heroPref(); });
-  heroPref();
+  // ── pop-ups of the two top rows (think time, filters, notes): one open at a time; a click outside or Escape closes ──
+  function popBtn(id) { return $('[data-pop="' + id + '"]'); }
+  function popOpen(id) {
+    popClose();
+    var p = document.getElementById(id), b = popBtn(id); if (!p || !b) return;
+    p.hidden = false; b.setAttribute("aria-expanded", "true"); p.style.transform = "";
+    var r = p.getBoundingClientRect(), w = document.documentElement.clientWidth;
+    if (r.left < 8) p.style.transform = "translateX(" + Math.round(8 - r.left) + "px)";
+    else if (r.right > w - 8) p.style.transform = "translateX(" + Math.round(w - 8 - r.right) + "px)";
+    p.style.maxHeight = Math.max(160, window.innerHeight - r.top - 12) + "px";
+    var f = p.querySelector("button:not([disabled]), input"); if (f) f.focus({ preventScroll: true });
+  }
+  function popClose(back) {
+    $$(".ss-pp").forEach(function (p) { if (p.hidden) return; p.hidden = true; var b = popBtn(p.id); if (b) { b.setAttribute("aria-expanded", "false"); if (back) b.focus(); } });
+  }
+  SS.popOpen = popOpen; SS.popClose = popClose;
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-pop]"); if (!b) return;
+    var id = b.getAttribute("data-pop"), was = document.getElementById(id).hidden; popClose(); if (was) popOpen(id);
+  });
+  // (the press, not the click: what is pressed may be drawn again before the click is through)
+  document.addEventListener("pointerdown", function (e) { if (!(e.target.closest && e.target.closest(".ss-pp, [data-pop], dialog, .ss-menu, .toast"))) popClose(); }, true);
+  try { if (window.parent !== window) window.parent.document.addEventListener("pointerdown", function () { popClose(); }); } catch (err) { /* the portal is on another address */ }
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !document.querySelector("dialog[open]") && $$(".ss-pp").some(function (p) { return !p.hidden; })) popClose(true); });
+
+  // "What is this?" in Correlate and Test data: the text behind the question mark (remembered)
+  prefs.about = prefs.about || {};
+  $$("[data-about]").forEach(function (b) {
+    var id = b.getAttribute("data-about"), box = document.getElementById(id);
+    function show(on) { box.hidden = !on; b.setAttribute("aria-expanded", String(on)); }
+    show(!!prefs.about[id]);
+    b.addEventListener("click", function () { prefs.about[id] = box.hidden; save(); show(box.hidden); });
+  });
+
+  // ── start screen: the two windows behind its links ──
+  function openDlg(id) { var d = document.getElementById(id); try { d.showModal(); } catch (e) { d.setAttribute("open", ""); } }
+  SS.openGuide = function () { openDlg("ss-guide"); };
+  $("#ss-how-btn").addEventListener("click", function () { openDlg("ss-how"); });
+  $("#ss-guide-btn").addEventListener("click", SS.openGuide);
+  ["ss-how", "ss-guide"].forEach(function (id) { document.getElementById(id).addEventListener("click", function (e) { if (e.target.closest("[data-close]")) this.close(); }); });
   prefs.fold = prefs.fold || {};
   $$("[data-fold]").forEach(function (h) {
     var k = h.getAttribute("data-fold"), card = h.parentNode;
@@ -645,6 +707,42 @@
     el.click();
   });
 
+  // ── the Script tab: the file list (narrow panel) and Find in this file — nothing is written into the code
+  //    (the browser's highlights mark the hits, so textContent stays the exact script) ──
+  var sel = $("#ss-code-sel"), cq = $("#ss-code-q"), hits = [], hit = 0;
+  function codeFiles() {
+    var tabs = $$("#code-tabs .code-tab");
+    sel.innerHTML = tabs.map(function (t, i) { return '<option value="' + i + '"' + (t.classList.contains("act") ? " selected" : "") + ">" + esc(t.textContent.trim()) + "</option>"; }).join("");
+  }
+  sel.addEventListener("change", function () { var t = $$("#code-tabs .code-tab")[+sel.value]; if (t) t.click(); });
+  new MutationObserver(function () { codeFiles(); findCode(false); if (window.SSW && SSW.mark) SSW.mark(); }).observe($("#code-tabs"), { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  function findCode(go) {
+    var q = cq.value, pre = $("#code-body"), n = $("#ss-code-n"); hits = [];
+    var hl = window.CSS && CSS.highlights && window.Highlight;
+    if (hl) { CSS.highlights.delete("ss-find"); CSS.highlights.delete("ss-find-on"); }
+    if (!q) { n.textContent = ""; hit = 0; return; }
+    var w = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT), nodes = [], text = "", x;
+    while ((x = w.nextNode())) { nodes.push([text.length, x]); text += x.data; }
+    var low = text.toLowerCase(), k = q.toLowerCase(), at = low.indexOf(k);
+    function point(pos) { var a = 0, b = nodes.length - 1; while (a < b) { var m = (a + b + 1) >> 1; if (nodes[m][0] <= pos) a = m; else b = m - 1; } return [nodes[a][1], pos - nodes[a][0]]; }
+    while (at >= 0 && hits.length < 2000) { var r = document.createRange(), s = point(at), e = point(at + k.length - 1); r.setStart(s[0], s[1]); r.setEnd(e[0], e[1] + 1); hits.push(r); at = low.indexOf(k, at + k.length); }
+    if (go) hit = 0;
+    hit = hits.length ? Math.min(hit, hits.length - 1) : 0;
+    n.textContent = hits.length ? (hit + 1) + " of " + hits.length : "None";
+    if (hl && hits.length) { CSS.highlights.set("ss-find", new Highlight(...hits)); CSS.highlights.set("ss-find-on", new Highlight(hits[hit])); }
+    if (go && hits.length) showHit();
+  }
+  function showHit() {
+    var r = hits[hit].getBoundingClientRect(), b = $("#code-body"), q = b.getBoundingClientRect();
+    if (r.top < q.top + 8 || r.bottom > q.bottom - 24) b.scrollTop += r.top - q.top - b.clientHeight / 3;
+    if (r.left < q.left || r.right > q.right - 16) b.scrollLeft += r.left - q.left - 60;
+  }
+  cq.addEventListener("input", function () { findCode(true); });
+  cq.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && hits.length) { e.preventDefault(); hit = (hit + (e.shiftKey ? hits.length - 1 : 1)) % hits.length; findCode(false); showHit(); }
+    if (e.key === "Escape" && cq.value) { e.stopPropagation(); cq.value = ""; findCode(false); }
+  });
+
   // ── light syntax colouring of the script preview: the Studio scripts write plain text into #code-body; this only
   //    wraps tokens in spans, so textContent stays the exact script (built from text nodes: \r\n kept, Copy exact) ──
   var HL = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\[\s\S])*`)|(#\w+)|\b(return|const|let|var|async|await|new|function|if|else|for|while|try|catch|throw|typeof|null|true|false|int|char|void|LAST|ENDITEM|ITEMDATA|EXTRARES)\b|\b([A-Za-z_$][\w$]*)(?=\s*\()/g;
@@ -671,6 +769,7 @@
     painted = t;
     var frag = colour(t);
     if (frag) { code.textContent = ""; code.appendChild(frag); }
+    findCode(false); if (window.SSW && SSW.mark) SSW.mark();
   }
   new MutationObserver(paint).observe(code, { childList: true, characterData: true, subtree: true });
   paint();
@@ -707,13 +806,11 @@
   var btn = document.getElementById("ss-rec-btn");
   if (!btn || !window.PerfxRecordLive) return;
   var up = document.getElementById("ph-upload"), home = up && up.querySelector(".ss-home");
-  var cards = [document.querySelector(".ss-choices"), document.getElementById("ss-how"), document.getElementById("ss-guide"), document.getElementById("ss-resume"), document.getElementById("ss-hero")];
+  var cards = [document.querySelector(".ss-choices"), document.querySelector(".ss-links"), document.getElementById("ss-resume"), document.getElementById("ss-band")];
   var target = 1, was = [];
   function openGuide() {
-    var g = document.getElementById("ss-guide"); if (!g) return;
-    if (g.classList.contains("folded")) g.querySelector("[data-fold]").click();
     var t = document.getElementById("tab-cdp"); if (t) t.click();
-    g.scrollIntoView({ block: "start", behavior: "smooth" });
+    window.SS.openGuide();
   }
   window.PerfxRecordLive.mount({
     host: home,

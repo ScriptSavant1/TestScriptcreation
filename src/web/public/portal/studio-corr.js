@@ -31,6 +31,8 @@
   };
   function all() { return S.advisorCandidates || []; }
   function ticked() { return all().filter(function (c) { return c.status === "accepted" && !c._applied; }); }
+  // Undo / Redo put a kept list back: its High values are not ticked again for the user
+  SS.corrSeen = function (ask) { if (ask) return tickedFor === all(); tickedFor = all(); };
   SS.corrTicked = function () { return ticked().length; };
 
   function shown(c) {
