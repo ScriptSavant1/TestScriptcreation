@@ -13,6 +13,7 @@ function reportOptions(options) {
 }
 const { keepSelected, readLeaveOut } = require("../../core/requestSelection");
 const BrunoParser = require("../../parsers/brunoParser");
+const { bruEnvironment } = require("../../parsers/brunoFormat");
 const AdvancedScriptGenerator = require("../../generators/devweb/scriptGenerator");
 const WebHttpScriptGenerator = require("../../generators/vugen/scriptGenerator");
 const fs = require("fs").promises;
@@ -364,27 +365,9 @@ class BrunoDevWebConverter {
     const environmentVars = {};
 
     // Detect format: Bruno .bru or JSON (Postman/Bruno JSON export)
-    if (envContent.trim().startsWith("vars {")) {
+    if (/^\s*(vars|vars:secret)\s*[{[]/m.test(envContent) && !/^\s*\{/.test(envContent)) {
       // Bruno .bru format
-      const varsMatch = envContent.match(/vars\s*\{([^}]*)\}/s);
-      if (varsMatch) {
-        const varsBlock = varsMatch[1];
-        const lines = varsBlock.split("\n");
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith("//")) continue;
-          const colonIdx = trimmed.indexOf(":");
-          if (colonIdx > 0) {
-            const key = trimmed.substring(0, colonIdx).trim();
-            let value = trimmed.substring(colonIdx + 1).trim();
-            // Remove trailing comma if present
-            if (value.endsWith(",")) {
-              value = value.slice(0, -1).trim();
-            }
-            environmentVars[key] = value;
-          }
-        }
-      }
+      Object.assign(environmentVars, bruEnvironment(envContent));
     } else {
       // JSON format (Postman or Bruno JSON export)
       const envData = JSON.parse(envContent);

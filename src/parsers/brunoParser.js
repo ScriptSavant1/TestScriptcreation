@@ -7,10 +7,13 @@ const fs = require('fs').promises;
 const path = require('path');
 const yaml = require('js-yaml');
 const { fillPathVariables } = require('../core/utils');
+const { readZip } = require('../core/zipReader');
+const bruno = require('./brunoFormat');
 
 class BrunoParser {
   constructor(collectionPath) {
     this.collectionPath = collectionPath;
+    this.files = fs; // the YAML reader's files (a ZIP brings its own)
     this.collection = null;
     this.metadata = {
       version: null,
@@ -21,17 +24,15 @@ class BrunoParser {
 
   /**
    * Parse Bruno collection
-   * Supports: .json (Postman/Bruno JSON), .bru (Bruno text), directory or .yml (Bruno YAML folder)
+   * Supports: .json (Postman / Bruno JSON), .bru (Bruno text), .yml (Bruno YAML), a folder or a .zip of .bru or .yml files
    */
   async parse() {
-    // Check if path is a directory → Bruno YAML folder format
-    try {
-      const stat = await fs.stat(this.collectionPath);
-      if (stat.isDirectory()) {
-        return await this.parseBrunoYamlCollection();
-      }
-    } catch (e) {
-      // Not a stat-able path, fall through to file parsing
+    // a folder: of .bru files, or a Bruno YAML folder
+    let folder = false;
+    try { folder = (await fs.stat(this.collectionPath)).isDirectory(); } catch (e) { /* not on disk: a file kept in memory */ }
+    if (folder) {
+      const bru = await this.readBruFolder(this.collectionPath);
+      return bru ? this.parseBrunoData(bruno.collectionFromFiles(bru), 'bruno-folder') : await this.parseBrunoYamlCollection();
     }
 
     const ext = path.extname(this.collectionPath).toLowerCase();
@@ -40,6 +41,8 @@ class BrunoParser {
       return await this.parseJSON();
     } else if (ext === '.bru') {
       return await this.parseBru();
+    } else if (ext === '.zip') {
+      return await this.parseZip();
     } else if (ext === '.yml' || ext === '.yaml') {
       return await this.parseBrunoYamlCollection();
     } else {
@@ -57,8 +60,8 @@ class BrunoParser {
   /**
    * Parse JSON format (Postman-compatible or Bruno JSON export)
    */
-  async parseJSON() {
-    const content = await fs.readFile(this.collectionPath, 'utf8');
+  async parseJSON(given) {
+    const content = given !== undefined ? given : await fs.readFile(this.collectionPath, 'utf8');
     this.collection = JSON.parse(content);
     
     // Detect if it's Postman or Bruno format
@@ -66,12 +69,69 @@ class BrunoParser {
       this.metadata.type = 'postman';
       this.metadata.version = this.collection.info.schema;
       this.metadata.name = this.collection.info.name;
+    } else if (bruno.isBrunoJson(this.collection)) {
+      return this.parseBrunoData(this.collection, 'bruno');
     } else {
       this.metadata.type = 'bruno';
       this.metadata.name = this.collection.name || 'Bruno Collection';
     }
 
     return this.extractRequests();
+  }
+
+  /** Bruno's own JSON shape (the JSON export, or made from .bru files) — src/parsers/brunoFormat.js */
+  parseBrunoData(data, type) {
+    const c = bruno.collectionFromJson(data, () => this.generateId());
+    this.metadata.type = type;
+    this.metadata.name = c.name;
+    this.metadata.environments = c.environments;
+    this.collection = c.collection;
+    return c.requests;
+  }
+
+  /** The .bru files of a folder ({ path: text }); null when it is not a .bru folder (a Bruno YAML folder then). */
+  async readBruFolder(dir) {
+    const out = {}, walk = async (d, rel, depth) => {
+      for (const e of await fs.readdir(d, { withFileTypes: true })) {
+        if (e.isDirectory()) { if (depth < 20 && !['node_modules', '.git'].includes(e.name)) await walk(path.join(d, e.name), rel + e.name + '/', depth + 1); }
+        else if (/\.bru$/i.test(e.name) || e.name === 'bruno.json') out[rel + e.name] = await fs.readFile(path.join(d, e.name), 'utf8');
+      }
+    };
+    try { await walk(dir, '', 0); } catch (e) { return null; }
+    return Object.keys(out).some((f) => /\.bru$/i.test(f)) ? out : null;
+  }
+
+  /** A zipped collection: a folder of .bru files, a Bruno YAML folder, or one exported .json / .yml file. */
+  async parseZip() {
+    const files = readZip(await fs.readFile(this.collectionPath)), names = Object.keys(files).filter((f) => !/(^|\/)(__MACOSX|node_modules|\.git)\//.test(f));
+    const text = (f) => files[f].toString('utf8').replace(/^\uFEFF/, '');
+    if (names.some((f) => /\.bru$/i.test(f))) return this.parseBrunoData(bruno.collectionFromFiles(Object.fromEntries(names.filter((f) => /\.(bru|json)$/i.test(f)).map((f) => [f, text(f)]))), 'bruno-folder');
+    const yml = names.filter((f) => /(^|\/)opencollection\.ya?ml$/i.test(f)).sort((a, b) => a.split('/').length - b.split('/').length)[0];
+    if (yml) {
+      const base = yml.slice(0, yml.lastIndexOf('/') + 1), tree = {};
+      names.filter((f) => f.startsWith(base)).forEach((f) => { tree[f.slice(base.length)] = text(f); });
+      this.files = this.zipFiles(tree);
+      return await this.parseBrunoYamlCollection(path.posix.basename(base || 'Bruno Collection'));
+    }
+    const one = names.filter((f) => /\.json$/i.test(f) && !/environment/i.test(f));
+    if (one.length !== 1) throw new Error(one.length ? 'The ZIP holds several .json files. Convert the collection file itself.' : 'The ZIP holds no Bruno or Postman collection.');
+    return this.parseJSON(text(one[0]));
+  }
+
+  /** The files of a ZIP as the few fs calls the YAML reader makes (paths under /zip). */
+  zipFiles(tree) {
+    const rel = (p) => String(p).replace(/\\/g, '/').replace(/^\/zip(\/|$)/, '').replace(/\/$/, ''), has = (p) => Object.prototype.hasOwnProperty.call(tree, rel(p));
+    const missing = () => Object.assign(new Error('not in the ZIP'), { code: 'ENOENT' });
+    return {
+      access: async (p) => { if (!has(p)) throw missing(); },
+      readFile: async (p) => { if (!has(p)) throw missing(); return tree[rel(p)]; },
+      stat: async (p) => ({ isDirectory: () => !has(p) }),
+      readdir: async (p) => {
+        const base = rel(p) ? rel(p) + '/' : '', seen = new Map();
+        Object.keys(tree).forEach((f) => { if (f.startsWith(base)) { const r = f.slice(base.length), i = r.indexOf('/'); seen.set(i < 0 ? r : r.slice(0, i), i >= 0); } });
+        return [...seen].map(([name, dir]) => ({ name, isFile: () => !dir, isDirectory: () => dir }));
+      },
+    };
   }
 
   /**
@@ -88,8 +148,16 @@ class BrunoParser {
       return [];
     }
 
-    // Parse .bru file as request
+    // Bruno's own text (blocks in braces)
+    if (bruno.isBru(content)) {
+      const item = bruno.bruToItem(content, path.basename(this.collectionPath).replace(/\.bru$/i, ''));
+      return this.parseBrunoData({ name: item ? item.name : 'Bruno Collection', items: item ? [item] : [] }, 'bruno-bru');
+    }
+
+    // The older text without braces
     const request = this.parseBruContent(content);
+    this.metadata.name = request.name || 'Bruno Collection';
+    this.collection = { info: { name: this.metadata.name }, variable: [], event: [], item: [{ name: request.name, request: { method: request.method, url: request.url, auth: request.auth || undefined } }] };
     return [request];
   }
 
@@ -283,15 +351,16 @@ class BrunoParser {
    *   - The path to opencollection.yml itself
    *   - Any .yml file inside the collection (will walk up to find root)
    */
-  async parseBrunoYamlCollection() {
+  async parseBrunoYamlCollection(zipName) {
     let collectionDir;
     let collectionFile = null;
+    const files = this.files;
 
-    const stat = await fs.stat(this.collectionPath);
-    if (stat.isDirectory()) {
-      collectionDir = this.collectionPath;
+    const stat = zipName ? null : await files.stat(this.collectionPath);
+    if (zipName || stat.isDirectory()) {
+      collectionDir = zipName ? '/zip' : this.collectionPath;
       const candidate = path.join(collectionDir, 'opencollection.yml');
-      try { await fs.access(candidate); collectionFile = candidate; } catch (e) { /* no root file */ }
+      try { await files.access(candidate); collectionFile = candidate; } catch (e) { /* no root file */ }
     } else {
       collectionFile = this.collectionPath;
       collectionDir = path.dirname(this.collectionPath);
@@ -299,19 +368,19 @@ class BrunoParser {
       // If not the root file, look for opencollection.yml in the same directory
       if (path.basename(this.collectionPath) !== 'opencollection.yml') {
         const sibling = path.join(collectionDir, 'opencollection.yml');
-        try { await fs.access(sibling); collectionFile = sibling; } catch (e) { /* use given file */ }
+        try { await files.access(sibling); collectionFile = sibling; } catch (e) { /* use given file */ }
       }
     }
 
     // Parse root collection metadata
     let rootData = {};
     if (collectionFile) {
-      const rootContent = await fs.readFile(collectionFile, 'utf8');
+      const rootContent = await files.readFile(collectionFile, 'utf8');
       rootData = yaml.load(rootContent) || {};
     }
 
     this.metadata.type = 'bruno-yaml';
-    this.metadata.name = rootData.info?.name || path.basename(collectionDir);
+    this.metadata.name = rootData.info?.name || zipName || path.basename(collectionDir);
     this.metadata.version = rootData.opencollection || '1.0.0';
 
     // Build Postman-compatible variable array (key/value) from Bruno variables array (name/value)
@@ -349,6 +418,7 @@ class BrunoParser {
 
     // Extract collection-level auth (OAuth2 / API Key / Bearer / etc.)
     const collectionAuth = rootData.request?.auth || null;
+    this.yamlAuth = collectionAuth;
 
     //Extract proxy configuration
     const proxyConfig = rootData.config?.proxy || null;
@@ -381,7 +451,7 @@ class BrunoParser {
     this.collection.item = requests.map(req => ({
       name: req.name,
       event: req.tests,
-      request: { method: req.method, url: req.url }
+      request: { method: req.method, url: req.url, auth: req.auth || undefined }
     }));
 
     return requests;
@@ -433,7 +503,7 @@ class BrunoParser {
   async walkBrunoYamlDir(dirPath, requests, parentFolder) {
     let entries;
     try {
-      entries = await fs.readdir(dirPath, { withFileTypes: true });
+      entries = await this.files.readdir(dirPath, { withFileTypes: true });
     } catch (e) {
       return; // Unreadable directory — skip
     }
@@ -456,7 +526,7 @@ class BrunoParser {
     for (const file of requestFiles) {
       const filePath = path.join(dirPath, file.name);
       try {
-        const content = await fs.readFile(filePath, 'utf8');
+        const content = await this.files.readFile(filePath, 'utf8');
         const data = yaml.load(content);
         if (data && data.info && data.info.type === 'http') {
           reqEntries.push({ data });
@@ -477,7 +547,7 @@ class BrunoParser {
       const folderYmlPath = path.join(dirPath, subdir.name, 'folder.yml');
       let meta = { name: subdir.name, seq: 999 };
       try {
-        const folderContent = await fs.readFile(folderYmlPath, 'utf8');
+        const folderContent = await this.files.readFile(folderYmlPath, 'utf8');
         const folderData = yaml.load(folderContent) || {};
         meta = {
           name: folderData.info?.name || subdir.name,
@@ -529,13 +599,20 @@ class BrunoParser {
       url: fillPathVariables(String(http.url || '').trim(), (http.params || []).filter(p => p && p.type === 'path')),
       headers,
       body: this.normalizeBrunoYamlBody(http.body),
-      auth: null, // Bruno YAML auth is at collection/folder level — handled via variables
+      auth: this.brunoYamlAuth(http.auth),
       description: data.docs || '',
       tests: this.normalizeBrunoYamlScripts(data.runtime?.scripts),
       variables: {},
       id: this.generateId(),
       seq
     };
+  }
+
+  /** The request's own sign-in, or the collection's when it says "inherit" (a collection's oauth2 stays the block written into the script's start). */
+  brunoYamlAuth(a) {
+    const inherited = a === 'inherit' || (a && a.type === 'inherit');
+    const auth = bruno.brunoAuth(inherited ? this.yamlAuth : a);
+    return !auth || auth.type === 'noauth' || (inherited && auth.type === 'oauth2') ? null : auth;
   }
 
   /**
@@ -783,6 +860,8 @@ class BrunoParser {
    */
   normalizeBody(body) {
     if (!body) return null;
+    // GraphQL is sent as JSON: the query and its variables
+    if (body.mode === 'graphql' && body.graphql) body = { mode: 'raw', raw: bruno.graphqlText(body.graphql), options: { raw: { language: 'json' } } };
     
     return {
       mode: body.mode || 'raw',

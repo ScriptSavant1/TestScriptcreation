@@ -6,8 +6,7 @@ Every bug found in PerfX Studio, newest first. Open bugs are at the top; fixed b
 
 | Bug | Severity | Description |
 |-----|----------|-------------|
-| BUG-173 | High | **Converter: a Bruno JSON export loses header names, the body, the sign-in and the scripts** — `normalizeRequest` reads the Postman shape (`header[].key`, `body.raw`, `item.event`); Bruno writes `headers[].name` / `enabled`, `body.json` / `formUrlEncoded` / `multipartForm`, `auth.mode`, `request.script`. Found 2026-11-25; not fixed. |
-| BUG-172 | High | **Converter: a real `.bru` request file is not read** — the address becomes `{` and headers, body, sign-in and scripts are empty: `parseBruContent` expects sections without braces, Bruno writes `get { url: … }`. Help also names a zipped folder of `.bru` files, which the page does not accept. Found 2026-11-25; not fixed. |
+| BUG-175 | High | **Converters: some sign-in kinds are not written** — DevWeb sends the text `load.global.basicAuthHeader` instead of the Basic header, and no API key; VuGen sends no Basic sign-in; an API key in the address and Digest are missing in both. For Postman and Bruno alike (Bearer, NTLM, Kerberos, API key header in VuGen are right). Found 2026-11-25; not fixed. |
 | BUG-133 | Low | **Home page is 2 px wider than the window at about 760 px wide** (a sideways scroll of 2 px). Found while checking the Home grid for the Workload Modeller at six widths; the same with the Home as it was before that change, so it is older. Tool cards fit at every width; the element that overflows is not identified yet. The Postman / Bruno and JMeter panels are 2 px wider at 900 px too (their header band `.cv-band`), before any conversion — the same pattern, also older. |
 
 ## Known limitations
@@ -25,6 +24,9 @@ Behaviour that is deliberate or deferred, recorded so it is not reported again a
 
 | ID | Severity | Description |
 |----|----------|-------------|
+| BUG-174 | Medium | **Converters: a GraphQL request of a Postman collection was sent without its body.** Fix: the query and its variables are sent as JSON, as Postman does (`graphqlText`). |
+| BUG-173 | High | **Converter: a Bruno JSON export lost header names, the body, the sign-in and the scripts** — only the Postman shape was read. Fix: `src/parsers/brunoFormat.js` (`collectionFromJson`), with sign-in, headers and scripts handed down from the collection and the folders. The scripts are the same as from the same collection in Postman. Bruno YAML: a request's own sign-in, and the collection's when it inherits it, were lost too. |
+| BUG-172 | High | **Converter: a real `.bru` request file was not read** (the address became `{`), and a zipped folder was not read at all. Fix: `.bru` blocks, folders and ZIPs are read (`bruToItem`, `collectionFromFiles`, `src/core/zipReader.js`). An environment file with a value holding braces was cut short: fixed with it. |
 | BUG-171 | High | **Converters: path variables were sent as written** — `https://api.example.com/orders/:id` with the path variable `id` = 42 was sent with the literal `:id`, in both formats (Postman, Bruno YAML, Bruno JSON). Cause: the parser took only the address. Fix: `fillPathVariables` (src/core/utils.js) puts the value, or the variable it holds, into the path; one without a value is listed under Values as needing one. Proved on both engines. |
 | BUG-170 | Low | **Converter: README.md and ANALYSIS.md in DevWeb ZIPs held folders of the server (with its user name) and the environment's values** — the converter's options were printed whole. Fix: `reportOptions`. |
 | BUG-161 | Medium | **Converters: the two panels shared one result and one Clear** — opening JMeter and coming back removed the Postman result; Clear on one emptied the other. Fix: the new page keeps each tool's own files, choices and script. |

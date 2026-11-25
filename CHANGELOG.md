@@ -396,6 +396,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - A review of every screen of every tool in a real browser — at 1100, 1280, 1366, 1920 and 2560 px, dark and light (210 screen checks): no control covered by another, no clipped text, every control named, keyboard focus visible on every control, no sideways scroll; the tool proves each check on planted problems first (`regression-tests/tools/audit/review.js --selftest`).
 - Fixed on the way: Script Studio scrolled sideways by 28 px in narrow windows when a long notice was shown; past steps in Script Studio's narrow step bar had no name for screen readers; Script Studio's step 1 resize bars now take the keyboard (arrow keys, Enter puts the width back), as the editor, the converters and the HAR Explorer do.
 
+#### The converters: Bruno collections in every form (BUG-172 to BUG-174)
+
+- Bruno `.bru` files, the Bruno JSON export and a zipped Bruno folder (`.bru` or YAML files) are read completely: headers, bodies of every kind, sign-in, scripts, values read after a response, variables, path variables. The scripts are the same as from the same collection in Postman.
+- Sign-in, headers and scripts of the collection and of its folders are handed down to the requests.
+- One environment in the folder or export is used; with several, choose the environment file.
+- GraphQL requests (Postman and Bruno) are sent with their query and variables.
+
 #### The converters: a top band on the start page; a click anywhere on a file box
 
 - The start pages of Postman / Bruno and JMeter have the same top band as the other tools (name, one line, what goes in and what comes out).

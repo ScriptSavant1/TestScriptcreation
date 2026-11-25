@@ -174,7 +174,7 @@
     var ext = function (f) { var m = /\.[^.]+$/.exec(String(f.name).toLowerCase()); return m ? m[0] : ""; };
     var CERT = [".p12", ".pfx", ".pem", ".crt", ".cer", ".key"], by = function (l) { return files.filter(function (f) { return l.indexOf(ext(f)) >= 0; }); };
     if (kind === "jmx") return [{ slot: "main", files: by([".jmx"]).slice(0, 1) }, { slot: "csv", files: by([".csv"]) }, { slot: "cert", files: by(CERT) }].filter(function (x) { return x.files.length; });
-    var out = [{ slot: "cert", files: by(CERT) }], rest = by([".json", ".yml", ".yaml", ".bru"]);
+    var out = [{ slot: "cert", files: by(CERT) }], rest = by([".json", ".yml", ".yaml", ".bru", ".zip"]);
     // a name that says environment goes to its box also when both come together
     var envs = rest.filter(function (f) { return /environment/i.test(f.name) && /\.(json|bru)$/i.test(f.name); }), cols = rest.filter(function (f) { return envs.indexOf(f) < 0; });
     if (!hasMain && !cols.length && envs.length) { cols = [envs.shift()]; }
@@ -234,7 +234,7 @@
   var P = function (k) { return T[k].data && T[k].data.preview; };
   var slots = function (kind) {
     return kind === "pm"
-      ? [["main", "fi-col", "api", "Collection", true, "Postman v2.1 JSON · Bruno JSON / YAML · .bru"], ["env", "fi-env", "key", "Environment", false, "Postman environment JSON · Bruno .bru vars. Provides variable values."], ["cert", "fi-bru-cert", "shield", "Client certificates", false, ".p12 / .pfx · .pem / .crt / .cer · .key. Several files, for mutual TLS."]]
+      ? [["main", "fi-col", "api", "Collection", true, "Postman v2.1 JSON · Bruno JSON / YAML · .bru · a zipped Bruno folder"], ["env", "fi-env", "key", "Environment", false, "Postman environment JSON · Bruno .bru vars. Provides variable values."], ["cert", "fi-bru-cert", "shield", "Client certificates", false, ".p12 / .pfx · .pem / .crt / .cer · .key. Several files, for mutual TLS."]]
       : [["main", "fi-jmx", "mig", "JMeter test plan", true, ".jmx file"], ["csv", "fi-csv", "table", "CSV data files", false, "The .csv files the test plan reads. Several files."], ["cert", "fi-cert", "shield", "Certificates", false, ".p12 .pfx .pem .crt .cer .key. Convert a Java keystore (.jks) to .p12 first (keytool -importkeystore)."]];
   };
 
@@ -739,7 +739,7 @@
     // files dropped anywhere on the page go to their box
     if (window.PerfxDrop) window.PerfxDrop.attach({
       when: function () { return root.offsetParent !== null || getComputedStyle(root).display !== "none"; },
-      label: function () { return cur() === "jmx" ? ["Drop to load", ".jmx test plan · .csv data files · certificates"] : ["Drop to load", "Collection (.json .yml .yaml .bru) · environment · certificates"]; },
+      label: function () { return cur() === "jmx" ? ["Drop to load", ".jmx test plan · .csv data files · certificates"] : ["Drop to load", "Collection (.json .yml .yaml .bru .zip) · environment · certificates"]; },
       route: function (files) { var k = cur(); return sortFiles(files, k, !!T[k].files.main).map(function (x) { var s = slots(k).filter(function (y) { return y[0] === x.slot; })[0]; return { input: $(s[1]), files: x.files }; }); },
     });
     draw("pm"); draw("jmx");

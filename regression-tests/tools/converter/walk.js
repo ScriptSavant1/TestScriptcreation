@@ -44,7 +44,7 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
   await go('postman');
   ok('Convert waits for the collection', await $('.cx-go').isDisabled()); ok('three boxes, nothing else', (await count('.cx-tile')) === 3 && !(await count('.cx-seg')));
   // anywhere on a box opens its file window, once; a button inside does its own job only
-  const opens = async (act) => { const l = []; const on = (fc) => l.push(fc.element()); p.on('filechooser', on); await act(); await p.waitForTimeout(250); p.off('filechooser', on); return Promise.all(l.map(async (e) => (await e).getAttribute('id'))); };
+  const opens = async (act) => { const l = []; const on = (fc) => l.push(fc.element()); p.on('filechooser', on); await act(); await p.waitForTimeout(350); p.off('filechooser', on); return Promise.all(l.map(async (e) => (await e).getAttribute('id'))); };
   const spots = []; for (const [n, id] of [[0, 'fi-col'], [1, 'fi-env'], [2, 'fi-bru-cert']]) { const r = await p.locator(panel() + '.cx-tile').nth(n).boundingBox(); for (const [x, y] of [[r.width / 2, 8], [r.width - 8, r.height / 2], [40, 40], [r.width - 10, r.height - 10], [60, r.height - 34]]) spots.push((await opens(() => p.mouse.click(r.x + x, r.y + y))).join() === id); }
   ok('anywhere on a file box opens its file window, once', spots.length === 15 && spots.every(Boolean), spots); ok('outside the boxes: nothing opens', !(await opens(async () => { await p.locator(panel() + '.cx-in h2').click(); await p.locator(panel() + '.cx-band h1').click(); })).length);
   ok('the top band of every tool page', (await vis('.cx-band h1')) && /Postman/.test(await txt('.cx-band h1')) && (await count('.cx-band .ds-flow li')) === 3);

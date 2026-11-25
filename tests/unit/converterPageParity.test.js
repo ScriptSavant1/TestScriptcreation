@@ -27,7 +27,7 @@ describe('wiring', () => {
     expect(partial).toContain('id="' + id + '"'); expect(app + index).toContain(id);
   });
   test('file kinds as the server accepts them', () => {
-    expect(partial).toContain('id="fi-col" accept=".json,.yml,.yaml,.bru"'); expect(partial).toContain('id="fi-env" accept=".json,.bru"');
+    expect(partial).toContain('id="fi-col" accept=".json,.yml,.yaml,.bru,.zip"'); expect(partial).toContain('id="fi-env" accept=".json,.bru"');
     expect(partial.match(/accept="\.p12,\.pfx,\.pem,\.crt,\.cer,\.key" multiple/g)).toHaveLength(2); expect(partial).toContain('id="fi-csv" accept=".csv" multiple');
   });
   test('switching tools keeps both; Clear is for the open one only', () => {
