@@ -5,6 +5,12 @@
 
 const { applyScriptName, noteGenerated, applyValues, applyVarNames } = require("../../core/scriptSettings");
 const { runtimeNames } = require("../../web/convertPreview");
+
+// the options for the reports in the ZIP (README.md, ANALYSIS.md): no folders of the server, no values of the environment
+const PRIVATE_OPTIONS = ["inputFile", "outputDir", "environmentFile", "examplesPath", "csvFilePaths", "environmentVars", "values"];
+function reportOptions(options) {
+  return Object.fromEntries(Object.entries(options || {}).filter(([k]) => !PRIVATE_OPTIONS.includes(k)));
+}
 const { keepSelected, readLeaveOut } = require("../../core/requestSelection");
 const BrunoParser = require("../../parsers/brunoParser");
 const AdvancedScriptGenerator = require("../../generators/devweb/scriptGenerator");
@@ -682,7 +688,7 @@ See \`ANALYSIS.md\` for detailed analysis including:
 
 **Bruno to DevWeb Converter v2.0**
 - Conversion date: ${new Date().toISOString()}
-- Options used: ${JSON.stringify(this.options, null, 2)}
+- Options used: ${JSON.stringify(reportOptions(this.options), null, 2)}
 
 ## 📄 License
 
@@ -829,7 +835,7 @@ ${analysis.customScripts.warnings.length > 10 ? `\n... and ${analysis.customScri
 ## Conversion Options
 
 \`\`\`json
-${JSON.stringify(analysis.options, null, 2)}
+${JSON.stringify(reportOptions(analysis.options), null, 2)}
 \`\`\`
 
 ## Next Steps

@@ -6,12 +6,11 @@
  *    (addresses resolved with the collection and environment variables, never with new URL()), each server's state —
  *    resolved, set while the script runs (a script or an extractor), or missing — and the files as the ZIP names them
  *    (keys, certificates, binary and too-large files listed but not shown)
- *  - page (src/web/public/portal/convert-preview.js): filter, groups, the first file, files by folder
+ *  - the page itself: tests/unit/converterApp.test.js
  */
 
 const path = require('path');
 const C = require('../../src/web/convertPreview.js');
-const P = require('../../src/web/public/portal/convert-preview.js');
 
 const OUT = path.join('/tmp', 'lr-out-1').replace(/\\/g, '/');
 const files = (o) => new Map(Object.entries(o).map(([k, v]) => [OUT + '/' + k, v]));
@@ -134,70 +133,5 @@ describe('convertPreview (server)', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     expect(C.safePreview({ kind: 'pm', requests: [{ get url() { throw new Error('boom'); } }] })).toBeNull();
     warn.mockRestore();
-  });
-});
-
-describe('convert-preview (page helpers)', () => {
-  const reqs = [
-    { n: 1, name: 'Login', folder: 'Auth', group: 'Auth', method: 'POST', address: 'https://a.example.com/login', host: 'a.example.com' },
-    { n: 2, name: 'Orders', folder: 'Shop', group: 'Shop', method: 'GET', address: 'https://b.example.com/orders', host: 'b.example.com' },
-    { n: 3, name: 'Logout', folder: 'Auth', group: 'Auth', method: 'GET', address: 'https://a.example.com/logout', host: 'a.example.com' },
-  ];
-  test('filterRequests: one server, words in the name or address', () => {
-    expect(P.filterRequests(reqs, 'a.example.com', '').map((r) => r.n)).toEqual([1, 3]);
-    expect(P.filterRequests(reqs, '', 'ORDERS').map((r) => r.n)).toEqual([2]);
-    expect(P.filterRequests(reqs, 'b.example.com', 'login')).toEqual([]);
-  });
-  test('groupRequests: in order, one group per folder / thread group', () => {
-    expect(P.groupRequests(reqs).map((g) => [g.name, g.requests.map((r) => r.n)])).toEqual([['Auth', [1, 3]], ['Shop', [2]]]);
-  });
-  test('defaultFile: main.js for DevWeb, else Action.c, else the first shown', () => {
-    expect(P.defaultFile([{ path: 'Action.c', text: 'x' }, { path: 'main.js', text: 'y' }])).toBe('main.js');
-    expect(P.defaultFile([{ path: 'a.usr', text: 'x' }, { path: 'Action.c', text: 'y' }])).toBe('Action.c');
-    expect(P.defaultFile([{ path: 'k.pem', text: null }, { path: 'r.md', text: 'z' }])).toBe('r.md');
-    expect(P.defaultFile([])).toBeNull();
-  });
-  test('stateOf: a tick for several requests — all in, none in, some', () => {
-    expect(P.stateOf([1, 2], new Set())).toBe('all');
-    expect(P.stateOf([1, 2], new Set([1, 2, 5]))).toBe('none');
-    expect(P.stateOf([1, 2], new Set([2]))).toBe('some');
-  });
-  test('sameSet: the choice equals the ZIP (no Update needed)', () => {
-    expect(P.sameSet(new Set([1, 2]), new Set([2, 1]))).toBe(true);
-    expect(P.sameSet(new Set([1]), new Set([2]))).toBe(false);
-    expect(P.sameSet(new Set(), new Set([2]))).toBe(false);
-  });
-  test('needed: a value set only by left-out requests and sent by a kept one', () => {
-    const list = [
-      { n: 1, sets: ['token'] }, { n: 2, uses: ['token'] }, { n: 3, sets: ['id'] }, { n: 4, sets: ['id'], uses: ['id'] }, { n: 5, uses: ['token', 'id'] },
-    ];
-    expect(P.needed(list, new Set())).toEqual([]);
-    expect(P.needed(list, new Set([1]))).toEqual([{ name: 'token', by: [1], usedBy: [2, 5] }]);
-    expect(P.needed(list, new Set([3]))).toEqual([]);                       // request 4 still sets id
-    expect(P.needed(list, new Set([1, 2, 5]))).toEqual([]);                 // nobody kept sends token
-    expect(P.needed(list, new Set([3, 4])).map((x) => [x.name, x.usedBy])).toEqual([['id', [5]]]);
-  });
-  test('changesOf: what differs from the ZIP, in words', () => {
-    const base = { out: new Set([1]), gen: new Set([1]), name: 'A', genName: 'A', tt: 3, genTT: 3, renamed: 0 };
-    expect(P.changesOf(base)).toEqual([]);
-    expect(P.changesOf({ ...base, out: new Set(), name: 'B', tt: 5, renamed: 2 })).toEqual(['the requests', 'the script name', 'the think time', '2 server names']);
-    expect(P.changesOf({ ...base, tt: '3' })).toEqual([]);
-  });
-  test('changesOf: the environment, given values, the workload workbook', () => {
-    const base = { out: new Set(), gen: new Set(), name: 'A', genName: 'A', tt: 1, genTT: 1, renamed: 0 };
-    expect(P.changesOf({ ...base, env: true, values: 1, wlm: true })).toEqual(['the environment', 'a value', 'the workload workbook']);
-    expect(P.changesOf({ ...base, values: 3 })).toEqual(['3 values']);
-  });
-  test('tgText: a JMeter thread group in words', () => {
-    expect(P.tgText({ type: 'Standard', virtualUsers: 10, rampUpSec: 10, holdSec: 300, iterations: 'Infinite', enabled: true })).toBe('10 users · ramp-up 10 s · hold 5 min · loops until stopped');
-    expect(P.tgText({ type: 'SetUp', virtualUsers: 1, rampUpSec: 0, holdSec: 0, iterations: 1 })).toBe('setUp · 1 user · 1 loop');
-    expect(P.tgText({ virtualUsers: 5, iterations: 3, holdSec: 90, enabled: false })).toBe('5 users · hold 90 s · 3 loops · off in the test plan');
-  });
-  test('sortValues: no value first, then empty, then in order of use', () => {
-    const v = [{ name: 'a', source: 'set' }, { name: 'b', source: 'empty' }, { name: 'c', source: 'missing' }, { name: 'd', source: 'environment' }];
-    expect(P.sortValues(v).map((x) => x.name)).toEqual(['c', 'b', 'a', 'd']);
-  });
-  test('fileGroups: the root first, then one group per script folder', () => {
-    expect(P.fileGroups([{ path: 'B/main.js' }, { path: 'a.md' }, { path: 'A/main.js' }]).map((g) => g.dir)).toEqual(['', 'A', 'B']);
   });
 });

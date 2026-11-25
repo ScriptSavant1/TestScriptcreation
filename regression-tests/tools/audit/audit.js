@@ -79,16 +79,15 @@ if (require.main === module) (async () => {
     const go = (pg) => p.evaluate((x) => PerfxShell.go(x, { instant: true }), pg);
     let f;
     await go('home'); await run('Home');
-    await go('postman'); await run('Postman');
-    await p.setInputFiles('#fi-col', COL + 'postman_collection.json'); await p.click('#btn-cvt');
-    await p.waitForSelector('#res-ok', { state: 'visible', timeout: 60000 }); await run('Postman result');
-    // a request left out, not applied yet: the summary bar with Undo changes / Update the script
-    await p.click('#cv-pv-rlist [data-tick-req="1"]'); await run('Postman leave out'); await p.click('#cv-pv-undo');
-    // the Values tab and a script name typed (the settings strip)
-    await p.click('#cv-pv-tab-values'); await p.fill('#cv-pv-name', 'Audit name'); await run('Postman values'); await p.click('#cv-pv-undo'); await p.click('#cv-pv-tab-files');
-    // a value given in the Values tab (the editor open)
-    await p.click('#cv-pv-tab-values'); await p.click('#cv-pv-vlist [data-give] >> nth=0'); await run('Postman give a value'); await p.click('[data-give-cancel]'); await p.click('#cv-pv-tab-files');
-    await go('jmeter'); await run('JMeter');
+    {
+      const PM = '#panel-bruno ', JX = '#panel-jmx ', ok = (k) => p.waitForFunction((x) => ConverterApp.state(x).status === 'ok', k, { timeout: 60000 });
+      await go('postman'); await run('Postman start');
+      await p.setInputFiles('#fi-col', COL + 'postman_collection.json'); await run('Postman file added'); await p.click('#cx-go-pm'); await ok('pm'); await run('Postman script');
+      await p.click(PM + '[data-req="2"]'); await run('Postman request code'); await p.click(PM + '[data-rtab=req]'); await run('Postman request details');
+      await p.click(PM + '[data-tab=val]'); await run('Postman values'); await p.click(PM + '[data-tab=req]'); await p.click(PM + '.cx-row .cx-cb'); await p.waitForTimeout(700); await ok('pm'); await run('Postman left out'); await p.click(PM + '[data-act=undo]'); await p.waitForTimeout(300); await ok('pm');
+      for (const k of ['files', 'sett', 'check']) { await p.click(PM + '[data-dlg=' + k + ']'); await run('Postman ' + k); await p.evaluate(() => document.getElementById('cx-dlg').close()); }
+      await go('jmeter'); await run('JMeter start'); await p.setInputFiles('#fi-jmx', FX + 'converter/inputs/rich.jmx'); await p.click('#cx-go-jmx'); await ok('jmx'); await run('JMeter script'); await p.click(JX + '[data-tab=val]'); await run('JMeter values');
+    }
     await go('explore'); await p.waitForFunction(() => { const d = document.getElementById('iframe-explorer').contentDocument; return d && d.getElementById('hx-file'); }, null, { timeout: 20000 });
     await run('Explorer start', 'explorer');
     f = await frameOf('explorer'); await f.setInputFiles('#hx-file', require('path').resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/' + 'WebTours.har'); await f.waitForSelector('#hx-ws:not([hidden])');

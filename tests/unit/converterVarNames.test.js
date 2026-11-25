@@ -70,6 +70,20 @@ describe('applyVarNames', () => {
   });
 });
 
+describe('the reports in the ZIP', () => {
+  test('no folder of the server, no value of the environment', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lr-test-')), f = path.join(dir, 'c.json'), e = path.join(dir, 'e.json'), out = path.join(dir, 'out');
+    fs.writeFileSync(f, JSON.stringify({ info: { name: 'M', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' }, item: [{ name: 'a', request: { method: 'GET', url: { raw: 'https://api.example.com/{{id}}' }, header: [] } }] }));
+    fs.writeFileSync(e, JSON.stringify({ values: [{ key: 'id', value: 'a-value-of-the-environment', enabled: true }] }));
+    await new CollectionConverter({ inputFile: f, environmentFile: e, outputDir: out, protocol: 'devweb', mode: 'single', csvFilePaths: { 'x.pem': path.join(dir, 'x.pem') } }).convert();
+    for (const n of ['README.md', 'ANALYSIS.md']) {
+      const t = fs.readFileSync(path.join(out, n), 'utf8');
+      expect(t).not.toContain(path.basename(dir)); expect(t).not.toContain('a-value-of-the-environment'); expect(t).not.toContain('examplesPath'); expect(t).toContain('"protocol": "devweb"');
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe('preview: domain variables and request details', () => {
   test('hostVars', () => {
     expect([C.hostVars('{{base_url}}/x/{{id}}'), C.hostVars('https://{{HOST}}:{{PORT}}/{{id}}'), C.hostVars('https://${HOST}/a'), C.hostVars('https://api.example.com/{{id}}'), C.hostVars('/a'), C.hostVars(null)]).toEqual([['base_url'], ['HOST', 'PORT'], ['HOST'], [], [], []]);

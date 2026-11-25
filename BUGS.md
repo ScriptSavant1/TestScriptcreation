@@ -6,8 +6,7 @@ Every bug found in PerfX Studio, newest first. Open bugs are at the top; fixed b
 
 | Bug | Severity | Description |
 |-----|----------|-------------|
-| BUG-160 | High | **Converters: a choice on the form can be missing from the ZIP, or lost** — after a conversion, a new format, script mode, log level or advanced setting is not shown as a change and Download stays on; Convert then drops the left-out requests, names and given values; a failed Update closes the workspace; another file leaves the old result and its Download. Found 2026-11-25; planned with the redesign (Docs/redesign/converter-mockup.html). |
-| BUG-161 | Medium | **Converters: the two panels share one result and one Clear** — opening JMeter and coming back removes the Postman result; Clear on one empties the files of the other. Found 2026-11-25; planned with the redesign. |
+| BUG-171 | High | **Converters: Postman path variables are not filled in** — `https://api.example.com/orders/:id` with the path variable `id` = 42 is sent with the literal `:id`, in both formats. Found 2026-11-25; not fixed. |
 | BUG-133 | Low | **Home page is 2 px wider than the window at about 760 px wide** (a sideways scroll of 2 px). Found while checking the Home grid for the Workload Modeller at six widths; the same with the Home as it was before that change, so it is older. Tool cards fit at every width; the element that overflows is not identified yet. The Postman / Bruno and JMeter panels are 2 px wider at 900 px too (their header band `.cv-band`), before any conversion — the same pattern, also older. |
 
 ## Known limitations
@@ -25,6 +24,9 @@ Behaviour that is deliberate or deferred, recorded so it is not reported again a
 
 | ID | Severity | Description |
 |----|----------|-------------|
+| BUG-170 | Low | **Converter: README.md and ANALYSIS.md in DevWeb ZIPs held folders of the server (with its user name) and the environment's values** — the converter's options were printed whole. Fix: `reportOptions`. |
+| BUG-161 | Medium | **Converters: the two panels shared one result and one Clear** — opening JMeter and coming back removed the Postman result; Clear on one emptied the other. Fix: the new page keeps each tool's own files, choices and script. |
+| BUG-160 | High | **Converters: a choice on the form could be missing from the ZIP, or lost** — a new format or setting after a conversion was not applied; Convert dropped the left-out requests, names and values; a failed update closed the result; another file left the old script. Fix: the new page converts again after every choice and keeps them all. |
 | BUG-169 | Medium | **Converter, DevWeb: a multi-line text or XML body was sent with the code's indentation in it** — four spaces at the start of every following line. Fix: its line breaks stay escapes in the code. Proved on the engine. |
 | BUG-168 | High | **Converter, DevWeb: a JSON body under another content type** (application/vnd.api+json, scim+json, text/json …) was sent as form fields, and stopped the script when it held a list: the engine writes a body object as JSON under application/json only (checked with eight types). Fix: `JSON.stringify({…})` there (`_bodyAsJsonText`). |
 | BUG-167 | High | **Converter, VuGen: spaces were dropped from text and XML bodies** — every SOAP request went out as `<?xmlversion="1.0"…`, unreadable for the server, and as application/json. Fix: only JSON is compacted (`looksLikeJson`); the content type is the one Postman adds (`impliedContentType`, shared by both generators). |

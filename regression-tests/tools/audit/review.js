@@ -8,21 +8,21 @@
 //   - dismiss: an open pop-up (dialog) that a click outside it does not close
 //   - fill: on a wide window, the content ends short of 3/4 of the width (a view shrunk into one column or capped)
 //   - expect: a screen's own promise did not hold (for example the correlation editor shows the value of a long response)
-// At 1366, 1920 and 2560 px wide, dark and light; a JPEG of each screen and report.json for the gallery.
-//   node review.js [outDir] [--sizes=1366,1920,2560] [--themes=dark,light] [--only=substr]
+// At 1366, 1536 (a 1920 screen at 125 %, the browser's bars taken off), 1920, 2560 and 3840 px wide, dark and light; a JPEG of each screen and report.json for the gallery.
+//   node review.js [outDir] [--sizes=1366,1536,1920,2560,3840] [--themes=dark,light] [--only=substr]
 'use strict';
 const { chromium } = require(require('path').resolve(__dirname, '../../../cdp-recorder/recorder/node_modules/playwright-core'));
 const path = require('path'), fs = require('fs');
 const args = process.argv.slice(2);
 const OUT = args.find((a) => !a.startsWith('--')) || path.join(__dirname, 'review');
 const opt = (k, d) => ((args.find((a) => a.startsWith('--' + k + '=')) || '').split('=')[1] || d);
-const SIZES = opt('sizes', '1366,1920,2560,3840').split(',').map(Number);
+const SIZES = opt('sizes', '1366,1536,1920,2560,3840').split(',').map(Number);
 const THEMES = opt('themes', 'dark,light').split(',');
 const ONLY = opt('only', '');
 const BASE = 'http://localhost:3999/converter/';
 const FX = path.resolve(__dirname, '../').replace(/\\/g, '/') + '/';
 const COL = path.resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/';
-const HEIGHT = { 1100: 800, 1280: 720, 1366: 768, 1920: 1000, 2560: 1300, 3840: 1900 };   // 3840: a large monitor at 100 % (the tool beside the sidebar is over 2400 px)
+const HEIGHT = { 1100: 800, 1280: 720, 1366: 768, 1536: 700, 1920: 1000, 2560: 1300, 3840: 1900 };   // 3840: a large monitor at 100 % (the tool beside the sidebar is over 2400 px)
 
 // runs in a document: the checks
 function inspect() {
@@ -241,15 +241,31 @@ if (require.main === module) (async () => {
     };
     let f;
     await go('home'); await run('Home');
-    await go('postman'); await run('Postman');
-    await p.setInputFiles('#fi-col', COL + 'advanced_enterprise_postman_collection.json'); await p.setInputFiles('#fi-env', COL + 'advanced_enterprise_environment.json');
-    await p.click('#btn-cvt'); await p.waitForSelector('#cv-pv:not([hidden]) #cv-pv-cols', { timeout: 60000 });
-    await p.$eval('#cv-pv', (x) => x.scrollIntoView()); await run('Postman result');
-    await p.click('#cv-pv-tab-values'); await run('Postman values'); await p.click('#cv-pv-tab-files');
-    await go('jmeter'); await run('JMeter');
-    await p.setInputFiles('#fi-jmx', FX + 'converter/inputs/rich.jmx'); await p.click('#btn-jmx');
-    await p.waitForSelector('#cv-pv:not([hidden]) #cv-pv-cols', { timeout: 60000 });
-    await p.$eval('#cv-pv', (x) => x.scrollIntoView()); await run('JMeter result');
+    // the converters: start, each tab, each window, a change that failed, panels hidden
+    {
+      const PM = '#panel-bruno ', JX = '#panel-jmx ', ws = (s) => p.waitForFunction((k) => ConverterApp.state(k).status === 'ok', s, { timeout: 60000 });
+      const expect = (list) => { const l = list.filter(Boolean); if (l.length) report[report.length - 1].expect = l; };
+      // what must be in view without scrolling, and nothing cut off or lying over something else
+      const seenAll = (...sel) => p.evaluate((l) => l.map((s) => { const e = document.querySelector(s); if (!e || !e.offsetParent) return s + ' is not shown'; const r = e.getBoundingClientRect(); return r.bottom > innerHeight + 1 || r.right > innerWidth + 1 || r.top < 0 ? s + ' ends at ' + Math.round(r.right) + ' x ' + Math.round(r.bottom) : ''; }).concat(document.documentElement.scrollHeight > innerHeight + 1 ? ['the page scrolls'] : [], [...document.querySelectorAll('.cx-ph, .cx-pt, .cx-bar, .cx-tools, .cx-note, .cx-tile')].filter((e) => e.offsetParent && e.scrollHeight > e.clientHeight + 2).map((e) => '.' + e.classList[0] + ' is cut off by ' + (e.scrollHeight - e.clientHeight) + ' px')), sel);
+      const win = async (name, sel, kind) => { await p.click(sel + '[data-dlg=' + kind + ']'); await run(name); await p.evaluate(() => { const d = document.getElementById('cx-dlg'); if (d.open) d.close(); }); };
+      await go('postman'); await run('Postman start'); expect(await seenAll(PM + '.cx-go'));
+      await win('Postman how it works', PM, 'how');
+      await p.setInputFiles('#fi-col', COL + 'advanced_enterprise_postman_collection.json'); await p.setInputFiles('#fi-env', COL + 'advanced_enterprise_environment.json'); await p.setInputFiles('#fi-bru-cert', FX + 'converter/inputs/client.pem');
+      await run('Postman files added'); expect(await seenAll(PM + '.cx-go'));
+      await p.click('#cx-go-pm'); await ws('pm'); await run('Postman script'); expect(await seenAll(PM + '[data-act=dl]', PM + '[data-dlg=sett]', PM + '.cx-dom', PM + '.cx-left', PM + '.cx-right'));
+      await p.click(PM + '[data-req="9"]'); await run('Postman request chosen'); expect([(await p.$$(PM + '.hl')).length ? '' : 'its code is not marked']);
+      await p.click(PM + '[data-rtab=req]'); await run('Postman request details'); await p.click(PM + '.cx-ph [data-rtab=code]');
+      await p.click(PM + '[data-tab=val]'); await run('Postman values'); await p.click(PM + '[data-tab=req]');
+      await p.click(PM + '[data-ren]'); await run('Postman domain renamed'); await p.click(PM + '[data-act=noren]'); await p.click(PM + '[data-act=name]'); await run('Postman script name'); await p.click(PM + '[data-act=noname]');
+      await p.click(PM + '.cx-row .cx-cb'); await p.waitForTimeout(700); await ws('pm'); await run('Postman left out'); await p.click(PM + '[data-act=putback]'); await p.waitForTimeout(400); await ws('pm');
+      for (const k of ['files', 'sett', 'check']) await win('Postman ' + k, PM, k);
+      await p.route('**/convert', (r) => r.abort()); await p.click(PM + '[data-set=tt][data-v="3"]'); await p.waitForFunction(() => ConverterApp.state('pm').status === 'bad'); await run('Postman not updated'); await p.unroute('**/convert'); await p.click(PM + '[data-act=retry]'); await ws('pm');
+      for (const k of ['d', 'l', 'r']) { await p.click(PM + '[data-hide=' + k + ']'); await run('Postman hidden ' + k); await p.click(PM + '[data-show=' + k + ']'); }
+      await go('jmeter'); await run('JMeter start'); expect(await seenAll(JX + '.cx-go')); await win('JMeter how it works', JX, 'how');
+      await p.setInputFiles('#fi-jmx', FX + 'converter/inputs/rich.jmx'); await p.click('#cx-go-jmx'); await ws('jmx'); await run('JMeter script'); expect(await seenAll(JX + '[data-act=dl]', JX + '.cx-left', JX + '.cx-right'));
+      await p.click(JX + '[data-tab=val]'); await run('JMeter values'); await p.click(JX + '[data-tab=req]'); await win('JMeter settings', JX, 'sett'); await win('JMeter ready', JX, 'check');
+      await p.click(JX + '[data-set=mode][data-v=multi]'); await p.waitForTimeout(300); await ws('jmx'); await run('JMeter several scripts');
+    }
     await go('explore'); await p.waitForFunction(() => { const d = document.getElementById('iframe-explorer').contentDocument; return d && d.getElementById('hx-file'); }, null, { timeout: 20000 });
     await run('Explorer start', 'explorer');
     f = await frameOf('explorer'); await f.setInputFiles('#hx-file', COL + 'WebTours.har'); await f.waitForSelector('#hx-ws:not([hidden])');

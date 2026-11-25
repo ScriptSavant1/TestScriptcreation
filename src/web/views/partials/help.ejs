@@ -236,22 +236,22 @@
           <li><strong>Single .bru file</strong> — a single Bruno request</li>
         </ul>
         <p class="help-p">Optionally upload an <strong>Environment file</strong> alongside your collection. It fills in variable values — base URLs, API keys, usernames — directly in the generated script so you do not need to edit them by hand.</p>
-        <p class="help-p">After the conversion, <strong>What the script contains</strong> shows it before you download: the <strong>Servers</strong> the requests call (a click shows only that server's requests; an address that is still a variable with no value is flagged — add the environment file that defines it; one a script sets while it runs is marked so), the <strong>Requests</strong> grouped by folder (filter by name or address) and the generated <strong>Files</strong> with their code (Copy). The download link works once and for 5 minutes; after that the button reads <strong>Convert again</strong> and makes it again from the same files.</p>
-        <p class="help-p"><strong>Choose what goes in:</strong> untick a server, a folder or a request to leave it out, then <strong>Update the script</strong> — the same files are converted again without them (Download waits until you do; <strong>Undo changes</strong> or <strong>Put all back</strong> to return). Left-out requests stay listed, struck through. If a request you keep sends a value that only a left-out request sets — a token, an id — a note names it: keep that request, or give the value in the environment.</p>
-        <p class="help-p"><strong>Script settings:</strong> change the <strong>Script name</strong> (it names the .usr file and the ZIP) or the <strong>Think time</strong>, or <strong>Rename</strong> a server's parameter (the pencil beside a server, when the script has one), then <strong>Update the script</strong>. The <strong>Values</strong> tab beside Files lists every value the requests send, where it comes from — the environment, the collection, a script or an extractor while the script runs — and which requests send it; values that nothing gives a value are named at the top. <strong>Give a value</strong> there fills a missing or empty one (or changes one from the environment or collection) without editing your files; the strip's <strong>Environment</strong> lets you choose another environment file or remove it. <strong>Plan the load in Workload Modeller</strong> opens the generated ZIP there, to work out Vusers, pacing and load generators. Hide a panel to a rail with the button in its header (click the rail to bring it back), and drag the bar between two panels to resize them (or use its arrow keys; double-click puts it back) — remembered in this browser.</p>
+        <p class="help-p">After <strong>Convert</strong>, one screen shows the script. <strong>Every choice changes it at once</strong> &#x2014; there is nothing to apply, and <strong>Download ZIP</strong> always gives what you see. At the top: the script&#x2019;s name (click it to rename; it names the .usr file and the ZIP), <strong>Files</strong> (change, add or remove files, or convert another), <strong>Undo</strong> / <strong>Redo</strong> (Ctrl+Z, Ctrl+Y), <strong>Plan the load</strong> (opens the script in the Workload Modeller) and Download; the number beside it opens <strong>Ready to download?</strong>, a list of things worth a look. Below: <strong>Format</strong> (Web HTTP/HTML or DevWeb), <strong>Scripts</strong> (one, or one per folder), <strong>Think time</strong> and <strong>Settings</strong> (log level; correlation, parameterization, authentication and comments on or off). Your settings are remembered.</p>
+        <p class="help-p"><strong>Domains</strong> lists every server the requests call, with its parameter in the script. Click the parameter to change its name &#x2014; a variable of your environment or collection (<code>base_url</code>) is renamed everywhere it is used &#x2014; or its address. Click a domain to see only its requests; untick it to leave them out. <em>Needs a value</em> marks one that is still a variable with no value.</p>
+        <p class="help-p"><strong>Requests</strong> are grouped by folder, in the order of the collection, which is the order in the script. Untick a request, a folder or a domain to leave it out; left-out ones stay listed, struck through, and <strong>Put back</strong> returns them. If a request you keep sends a value that only a left-out request sets &#x2014; a token, an id &#x2014; a note says so. Click a request to see its code in <strong>Script</strong>; the <strong>Request</strong> tab shows its headers, body, scripts and values (secrets written out are hidden).</p>
+        <p class="help-p"><strong>Values</strong> lists every value the requests send, in groups you can fold: the ones that <strong>need a value</strong> first (type it there &#x2014; your files are not changed), then those read from a response, from the environment, from the collection, from a data file, and made by the script. The pencil changes a value; <em>n uses</em> shows the requests that send it. If an update does not work (server busy, no connection), the last script and all your choices stay, with <strong>Try again</strong>. Hide a panel with the button in its header, drag the bar before Script to resize it (or use its arrow keys; double-click puts it back) &#x2014; remembered in this browser.</p>
         <h3 class="help-h3">Step-by-step</h3>
         <ol class="help-steps-list">
           <li>Click <strong>Postman / Bruno</strong> in the sidebar.</li>
-          <li>Choose your output format: <strong>DevWeb</strong> (JavaScript) or <strong>Web HTTP/HTML</strong> (C).</li>
-          <li>Drag and drop your collection file into the upload area, or click to browse.</li>
-          <li>Optionally upload an environment file in the second upload area.</li>
-          <li>Adjust options as needed: think time, transactions, correlation toggles.</li>
-          <li>Click <strong>Convert</strong> and wait a few seconds.</li>
-          <li>Click <strong>Download ZIP</strong> when it appears.</li>
+          <li>Drop your collection on the page, or click <strong>Choose file</strong>. Drop the environment file and any client certificates too (optional) &#x2014; each goes to its box.</li>
+          <li>Click <strong>Convert</strong>.</li>
+          <li>Choose the <strong>Format</strong>: <strong>DevWeb</strong> (JavaScript) or <strong>Web HTTP/HTML</strong> (C). The script changes at once.</li>
+          <li>If <strong>Values</strong> says some need a value, type them there. Leave out what you do not need, rename what you like.</li>
+          <li>Click <strong>Download ZIP</strong>.</li>
           <li>Extract the ZIP and open the <code>.usr</code> file in VuGen, or upload it to LoadRunner Enterprise.</li>
         </ol>
         <div class="help-callout help-callout-blue">
-          <strong>Multi-script mode:</strong> Enable this when your collection has multiple folders. Instead of one large script, you get one separate script per folder — ideal for modular test design.
+          <strong>Multi-script:</strong> Choose this under Scripts when your collection has multiple folders. Instead of one large script, you get one separate script per folder — ideal for modular test design.
         </div>
       </div>
     </div>
@@ -273,7 +273,7 @@
       <div class="help-acc-inner">
         <div class="help-tool-badge help-badge-orange"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>JMeter Converter</div>
         <p class="help-p">Migrating from Apache JMeter to LoadRunner? Upload your <code>.jmx</code> test plan and receive an equivalent VuGen script, plus a <strong>Workload Model Excel</strong> file that translates your JMeter thread groups into a LoadRunner workload definition.</p>
-        <p class="help-p">After the conversion, <strong>What the script contains</strong> shows the servers, the requests grouped by thread group and the generated files with their code, before you download — as for Postman / Bruno. Untick a thread group or a request to leave it out, change the script name or think time, then <strong>Update the script</strong>; a thread group with every request left out gets no script. The <strong>Values</strong> tab shows where each value comes from — the test plan, a CSV data set, an extractor — and lets you give one a value. Each thread group's users, ramp-up, hold time and loops are shown under its name; the strip also chooses whether the workload workbook is included. <strong>Plan the load in Workload Modeller</strong> opens the scripts there.</p>
+        <p class="help-p">After <strong>Convert</strong>, the same screen as for Postman / Bruno shows the script, and every choice changes it at once. The requests are grouped by thread group, with its users, ramp-up, hold time and loops; a thread group with every request left out gets no script. <strong>Values</strong> shows where each value comes from &#x2014; the test plan, a CSV data set, an extractor &#x2014; and lets you give one a value. A CSV file the plan reads and that was not added is named at the top, with a button to add it; an added one lies next to every script that reads it. <strong>Settings</strong> includes or leaves out the workload workbook. <strong>Plan the load</strong> opens the scripts in the Workload Modeller.</p>
         <h3 class="help-h3">What to upload</h3>
         <ul class="help-list">
           <li><strong>.jmx file</strong> — your JMeter test plan (exported from JMeter: <em>File → Save Test Plan As</em>)</li>
@@ -283,11 +283,10 @@
         <h3 class="help-h3">Step-by-step</h3>
         <ol class="help-steps-list">
           <li>Click <strong>JMeter</strong> in the sidebar.</li>
-          <li>Choose your output format: <strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>.</li>
-          <li>Upload your <code>.jmx</code> file. Optionally add CSV and certificate files.</li>
-          <li>Select script mode: <strong>Single script</strong> or <strong>Per thread group</strong>.</li>
+          <li>Drop your <code>.jmx</code> file on the page, with the CSV and certificate files it uses, or click <strong>Choose file</strong>.</li>
           <li>Click <strong>Convert</strong>.</li>
-          <li>Download the ZIP — it includes VuGen scripts and a Workload Model Excel file.</li>
+          <li>Choose the <strong>Format</strong> (<strong>DevWeb</strong> or <strong>Web HTTP/HTML</strong>) and <strong>Scripts</strong>: <strong>Single</strong> or <strong>Per thread group</strong>.</li>
+          <li>Click <strong>Download ZIP</strong> — it includes VuGen scripts and a Workload Model Excel file.</li>
         </ol>
         <div class="help-callout help-callout-amber">
           <strong>Per-thread-group mode:</strong> Each JMeter Thread Group becomes its own VuGen script. Recommended when thread groups represent different user roles or business flows.

@@ -436,7 +436,20 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Regression tools
 
+- `converter/walk.js`: the converter page clicked through as a user would (both tools, every control). `converter/harness.js` now records the form fields the page sends; before, the list was always empty, so "the same request" was not checked.
 - `audit/mock.js`: a mockup goes through the same checks as the real screens (the screen review and the design audit), plus: the main button on the screen without scrolling, cards and buttons that do not touch, no card cut off or covered by a floating bar (also at 1536 × 700, a 1920 screen at 125 %), and every item of an inventory on some screen.
+
+### Converters
+
+#### A new page for Postman / Bruno and JMeter
+
+- The start page has three boxes for the files and one Convert button. Then one screen shows the script: domains, requests, values and code.
+- Every choice — format, one script or several, think time, a request left out, a name, a value — changes the script at once (a conversion takes 20 to 200 ms). Undo and Redo; a failed update keeps the last script and every choice; Download always gives what is shown.
+- Domains have their own panel. The parameter of every domain can be renamed, also a variable of the environment or collection, and its address changed.
+- Values are in groups that fold; those that need one are typed in the list. A click on a request shows its code; the Request tab shows its headers, body, scripts and values.
+- The script's name is the page's title: click it to rename. Each converter keeps its own files and script; Clear clears the open one, with Undo.
+- The conversion limit is 600 per 5 minutes per address (60 before), as each choice is a conversion; updates are not counted as uses.
+- README.md and ANALYSIS.md in the ZIP no longer hold folders of the server or values of the environment.
 
 ### Script generation
 

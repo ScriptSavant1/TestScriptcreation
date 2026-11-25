@@ -178,7 +178,7 @@ function variablesList({ requests, collection, environmentVars, correlations, se
   });
 }
 
-function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations, given, made, renamed }) {
+function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations, given, made, renamed, tx }) {
   const out = leftOut instanceof Set ? leftOut : new Set(leftOut || []);
   const declared = new Set();
   const vars = variablesOf(collection, environmentVars, declared);
@@ -196,6 +196,7 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
     const row = { n: i + 1, name: String(r.name || ''), folder, group, method: String(r.method || 'GET').toUpperCase(), url, address, host, resolved: !isVariable(host), state: stateOf(host), out: out.has(i + 1) };
     const hv = hostVars(url);
     if (hv.length) row.hostVars = hv;
+    if (tx && tx.get(r)) row.tx = tx.get(r);   // its transaction in the script (none: setUp / tearDown requests, left out)
     const det = detailsOf(r, collection), size = det ? JSON.stringify(det).length : 0;
     if (det && detailsSize + size <= MAX_DETAILS) { row.details = det; detailsSize += size; }
     const sets = setsOf(r), uses = usesOf(r, setByScript);

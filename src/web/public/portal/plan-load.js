@@ -1,4 +1,4 @@
-/* Plan the load in Workload Modeller — shared by the converters (portal/convert-preview.js) and Script Studio
+/* Plan the load in Workload Modeller — shared by the converters (portal/converter-app.js) and Script Studio
  * (portal/studio-page.js): the script ZIPs are handed to the Workload Modeller page in the portal, through its own
  * window.WorkloadModeller.addScripts (workload-modeller/web/page.js) — the same as choosing the files there.
  *   PerfxPlanLoad.available(win)    true when the portal is there (this window, or the one around this tool's frame)

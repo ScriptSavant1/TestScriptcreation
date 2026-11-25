@@ -7,11 +7,11 @@
  *  - the generators take a chosen server name only when it can be used (not reserved, not a value's name, not
  *    another server's — two servers may swap), else keep their default
  *  - the script name is the collection's / test plan's name every generator reads
- *  - the page's own copy of the name rule (portal/convert-preview.js cleanName) matches the server's
+ *  - the page's own copy of the name rule (portal/converter-app.js cleanName) matches the server's
  */
 
 const S = require('../../src/core/scriptSettings');
-const Page = require('../../src/web/public/portal/convert-preview.js');
+const Page = require('../../src/web/public/portal/converter-app.js');
 const WebHttpScriptGenerator = require('../../src/generators/vugen/scriptGenerator.js');
 const DevWebScriptGenerator = require('../../src/generators/devweb/scriptGenerator.js');
 
@@ -63,10 +63,10 @@ describe('applyServerNames / applyScriptName', () => {
     expect(b).toEqual({});
   });
   test('noteGenerated: server names and correlations over several scripts', () => {
-    const src = {};
-    S.noteGenerated(src, { hostVarMap: new Map([['API.example.com', 'Api_Server']]), perRequestVars: new Map([['xRequestId', {}]]) }, { correlations: { correlations: [{ name: 'a' }] } });
-    S.noteGenerated(src, { hostVarMap: new Map([['api.example.com', 'Other']]), perRequestVars: new Map([['xRequestId', {}], ['nonce', {}]]) }, { correlations: { correlations: [{ name: 'b' }] } });
-    expect(src).toEqual({ servers: { 'api.example.com': 'Api_Server' }, correlations: [{ name: 'a' }, { name: 'b' }], made: ['xRequestId', 'nonce'] });
+    const src = {}, r1 = {}, r2 = {}, r3 = {};
+    S.noteGenerated(src, { requests: [r1], requestTxMap: new Map([[r1, { txName: 'T1' }]]), hostVarMap: new Map([['API.example.com', 'Api_Server']]), perRequestVars: new Map([['xRequestId', {}]]) }, { correlations: { correlations: [{ name: 'a' }] } });
+    S.noteGenerated(src, { requests: [r2, r3], transactionNames: ['T2'], hostVarMap: new Map([['api.example.com', 'Other']]), perRequestVars: new Map([['xRequestId', {}], ['nonce', {}]]) }, { correlations: { correlations: [{ name: 'b' }] } });
+    expect(src).toEqual({ servers: { 'api.example.com': 'Api_Server' }, correlations: [{ name: 'a' }, { name: 'b' }], made: ['xRequestId', 'nonce'], tx: new Map([[r1, 'T1'], [r2, 'T2']]) });
   });
 });
 
