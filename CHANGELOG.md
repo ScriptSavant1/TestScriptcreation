@@ -396,6 +396,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - A review of every screen of every tool in a real browser — at 1100, 1280, 1366, 1920 and 2560 px, dark and light (210 screen checks): no control covered by another, no clipped text, every control named, keyboard focus visible on every control, no sideways scroll; the tool proves each check on planted problems first (`regression-tests/tools/audit/review.js --selftest`).
 - Fixed on the way: Script Studio scrolled sideways by 28 px in narrow windows when a long notice was shown; past steps in Script Studio's narrow step bar had no name for screen readers; Script Studio's step 1 resize bars now take the keyboard (arrow keys, Enter puts the width back), as the editor, the converters and the HAR Explorer do.
 
+#### The converters: path variables (BUG-171)
+
+- `/orders/:id` is sent with the value of the path variable (Postman, Bruno YAML, Bruno JSON): a fixed value, or the variable it holds — so a value read from an earlier response reaches the address. Before, `:id` itself was sent, in both formats.
+- A path variable without a value is listed under **Values** as needing one; type it there.
+- Characters that would end the path (a space, `?`, `#`) are encoded, as Postman does. A collection without path variables gives the same script as before.
+
 #### The converters: panels that hide and resize, a calmer top
 
 - Postman / Bruno and JMeter, What the script contains: Servers, Requests and Files · Values can be hidden to a rail and resized (drag the bar between two, or its arrow keys; double-click puts it back) — remembered in the browser, the last panel shown always stays; the panels fill the window's height. Narrow windows stack them as before.

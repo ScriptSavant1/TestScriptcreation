@@ -6,7 +6,8 @@ Every bug found in PerfX Studio, newest first. Open bugs are at the top; fixed b
 
 | Bug | Severity | Description |
 |-----|----------|-------------|
-| BUG-171 | High | **Converters: Postman path variables are not filled in** — `https://api.example.com/orders/:id` with the path variable `id` = 42 is sent with the literal `:id`, in both formats. Found 2026-11-25; not fixed. |
+| BUG-173 | High | **Converter: a Bruno JSON export loses header names, the body, the sign-in and the scripts** — `normalizeRequest` reads the Postman shape (`header[].key`, `body.raw`, `item.event`); Bruno writes `headers[].name` / `enabled`, `body.json` / `formUrlEncoded` / `multipartForm`, `auth.mode`, `request.script`. Found 2026-11-25; not fixed. |
+| BUG-172 | High | **Converter: a real `.bru` request file is not read** — the address becomes `{` and headers, body, sign-in and scripts are empty: `parseBruContent` expects sections without braces, Bruno writes `get { url: … }`. Help also names a zipped folder of `.bru` files, which the page does not accept. Found 2026-11-25; not fixed. |
 | BUG-133 | Low | **Home page is 2 px wider than the window at about 760 px wide** (a sideways scroll of 2 px). Found while checking the Home grid for the Workload Modeller at six widths; the same with the Home as it was before that change, so it is older. Tool cards fit at every width; the element that overflows is not identified yet. The Postman / Bruno and JMeter panels are 2 px wider at 900 px too (their header band `.cv-band`), before any conversion — the same pattern, also older. |
 
 ## Known limitations
@@ -24,6 +25,7 @@ Behaviour that is deliberate or deferred, recorded so it is not reported again a
 
 | ID | Severity | Description |
 |----|----------|-------------|
+| BUG-171 | High | **Converters: path variables were sent as written** — `https://api.example.com/orders/:id` with the path variable `id` = 42 was sent with the literal `:id`, in both formats (Postman, Bruno YAML, Bruno JSON). Cause: the parser took only the address. Fix: `fillPathVariables` (src/core/utils.js) puts the value, or the variable it holds, into the path; one without a value is listed under Values as needing one. Proved on both engines. |
 | BUG-170 | Low | **Converter: README.md and ANALYSIS.md in DevWeb ZIPs held folders of the server (with its user name) and the environment's values** — the converter's options were printed whole. Fix: `reportOptions`. |
 | BUG-161 | Medium | **Converters: the two panels shared one result and one Clear** — opening JMeter and coming back removed the Postman result; Clear on one emptied the other. Fix: the new page keeps each tool's own files, choices and script. |
 | BUG-160 | High | **Converters: a choice on the form could be missing from the ZIP, or lost** — a new format or setting after a conversion was not applied; Convert dropped the left-out requests, names and values; a failed update closed the result; another file left the old script. Fix: the new page converts again after every choice and keeps them all. |

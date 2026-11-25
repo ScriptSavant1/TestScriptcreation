@@ -6,6 +6,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const yaml = require('js-yaml');
+const { fillPathVariables } = require('../core/utils');
 
 class BrunoParser {
   constructor(collectionPath) {
@@ -524,7 +525,8 @@ class BrunoParser {
       folder: folderName,
       depth: folderName ? folderName.split('/').length : 0,
       method: (http.method || 'GET').toUpperCase(),
-      url: String(http.url || '').trim(), // no line break (YAML block value) — see normalizeUrl()
+      // no line break (YAML block value) — see normalizeUrl(); /orders/:id with its value
+      url: fillPathVariables(String(http.url || '').trim(), (http.params || []).filter(p => p && p.type === 'path')),
       headers,
       body: this.normalizeBrunoYamlBody(http.body),
       auth: null, // Bruno YAML auth is at collection/folder level — handled via variables
@@ -680,7 +682,8 @@ class BrunoParser {
       folder: folderName,
       depth: depth,
       method: this.normalizeMethod(request.method),
-      url: this.normalizeUrl(request.url),
+      // /orders/:id with its value: Postman url.variable, Bruno request.params of type path
+      url: fillPathVariables(this.normalizeUrl(request.url), (request.url && request.url.variable) || (Array.isArray(request.params) ? request.params.filter(p => p && p.type === 'path') : [])),
       headers: this.normalizeHeaders(request.header || request.headers),
       body: this.normalizeBody(request.body),
       auth: request.auth || item.auth || null,
