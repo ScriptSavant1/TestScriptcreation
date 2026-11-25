@@ -43,13 +43,18 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
   // ── start
   await go('postman');
   ok('Convert waits for the collection', await $('.cx-go').isDisabled()); ok('three boxes, nothing else', (await count('.cx-tile')) === 3 && !(await count('.cx-seg')));
+  // anywhere on a box opens its file window, once; a button inside does its own job only
+  const opens = async (act) => { const l = []; const on = (fc) => l.push(fc.element()); p.on('filechooser', on); await act(); await p.waitForTimeout(250); p.off('filechooser', on); return Promise.all(l.map(async (e) => (await e).getAttribute('id'))); };
+  const spots = []; for (const [n, id] of [[0, 'fi-col'], [1, 'fi-env'], [2, 'fi-bru-cert']]) { const r = await p.locator(panel() + '.cx-tile').nth(n).boundingBox(); for (const [x, y] of [[r.width / 2, 8], [r.width - 8, r.height / 2], [40, 40], [r.width - 10, r.height - 10], [60, r.height - 34]]) spots.push((await opens(() => p.mouse.click(r.x + x, r.y + y))).join() === id); }
+  ok('anywhere on a file box opens its file window, once', spots.length === 15 && spots.every(Boolean), spots); ok('outside the boxes: nothing opens', !(await opens(async () => { await p.locator(panel() + '.cx-in h2').click(); await p.locator(panel() + '.cx-band h1').click(); })).length);
+  ok('the top band of every tool page', (await vis('.cx-band h1')) && /Postman/.test(await txt('.cx-band h1')) && (await count('.cx-band .ds-flow li')) === 3);
   await click('[data-dlg=how]'); ok('How it works opens', await p.locator('#cx-dlg .cx-steps').first().isVisible()); await p.mouse.click(6, 350); ok('… and closes with a click outside', !(await p.locator('#cx-dlg').isVisible()));
   await p.setInputFiles('#fi-col', bad); ok('one file is enough', await $('.cx-go').isEnabled());
   await click('.cx-go'); await p.waitForSelector('#cx-err-pm'); ok('a broken file: said in words, the file stays', /could not be read as a Postman/.test(await txt('#cx-err-pm')) && (await count('.cx-tile.has')) === 1, await txt('#cx-err-pm'));
   await p.setInputFiles('#fi-col', F('empty.json', { info: { name: 'E', schema: COL.info.schema }, item: [] })); await click('.cx-go'); await p.waitForSelector('#cx-err-pm'); ok('an empty collection: said in words', /no requests/.test(await txt('#cx-err-pm')));
   await p.setInputFiles('#fi-col', col); ok('another file: the message goes', !(await count('#cx-err-pm')));
   await p.setInputFiles('#fi-env', env); await p.setInputFiles('#fi-bru-cert', [pem, key]); await p.setInputFiles('#fi-bru-cert', pem);
-  ok('certificates add up, none twice', (await count('.cx-tile .cx-chip')) === 2); await click('.cx-chip [aria-label="Remove client.key"]'); ok('one removed', (await count('.cx-tile .cx-chip')) === 1);
+  ok('certificates add up, none twice', (await count('.cx-tile .cx-chip')) === 2); ok('Remove opens no file window', !(await opens(() => click('.cx-chip [aria-label="Remove client.key"]'))).length); ok('one removed', (await count('.cx-tile .cx-chip')) === 1);
   await click('.cx-tile [data-rm=env]'); ok('environment removed', (await count('.cx-tile.has')) === 2); await p.setInputFiles('#fi-env', env);
 
   // ── the workspace
@@ -121,7 +126,7 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
   // another file, clear
   await p.setInputFiles('#fi-col', col2); await settle(); ok('another collection: its own name, no old choices', (await txt('.cx-name')) === 'Other API' && (await st('JSON.stringify(s.c.varNames) + s.c.name')) === '{}');
   await p.evaluate(() => globalClear()); ok('Clear: the start', await vis('.cx-tile') && !(await count('.cx-tile.has'))); await p.locator('.cx-toast button').click(); ok('… and Undo', await vis('.cx-ws')); kind = 'jmx'; ok('the other tool untouched', (await st('!!s.data')) === true); kind = 'pm';
-  await click('[data-dlg=files]'); await p.locator('#cx-dlg [data-act=another]').click(); ok('Convert another', await vis('.cx-tile')); await p.locator('.cx-toast button').click(); ok('… and back', await vis('.cx-ws'));
+  await click('[data-dlg=files]'); ok('Files: a row opens its file window', (await opens(() => p.locator('#cx-dlg .cx-frow b').first().click())).join() === 'fi-jmx' || (await opens(() => p.locator('#cx-dlg .cx-frow b').first().click())).join() === 'fi-col'); await p.locator('#cx-dlg [data-act=another]').click(); ok('Convert another', await vis('.cx-tile')); await p.locator('.cx-toast button').click(); ok('… and back', await vis('.cx-ws'));
   await click('[data-dlg=files]'); await p.locator('#cx-dlg [data-rm=env]').click(); await settle(); await p.locator('#cx-dlg .cx-df [data-close]').click(); ok('no environment: more values to give', /[3-9] to give/.test(await txt('[data-tab=val]')), await txt('[data-tab=val]'));
   // dropped anywhere; remembered
   await p.evaluate(() => globalClear()); await p.evaluate(([a, e]) => { const t = new DataTransfer(); t.items.add(new File([a], 'Shop.json')); t.items.add(new File([e], 'Test.postman_environment.json')); for (const k of ['dragenter', 'dragover', 'drop']) document.body.dispatchEvent(new DragEvent(k, { dataTransfer: t, bubbles: true, cancelable: true })); }, [JSON.stringify(COL), JSON.stringify(ENV)]); await p.waitForTimeout(200); ok('two files dropped go to their boxes', (await count('.cx-tile.has')) === 2 && (await st('s.files.main.name + s.files.env.name')) === 'Shop.jsonTest.postman_environment.json');

@@ -363,13 +363,25 @@
 
   // ── drawing: the start page ──
   function chips(kind, slot) { return T[kind].files[slot].map(function (f, n) { return '<span class="cx-chip"><span title="' + esc(f.name) + '">' + esc(f.name) + '</span><button type="button" class="cx-icon" data-rm="' + slot + '" data-n="' + n + '" aria-label="Remove ' + esc(f.name) + '">' + i("x") + "</button></span>"; }).join(""); }
+  // the top band of the start page: the same one as on every other tool page (portal/ds.css .ds-band-panel)
+  var DOC = '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>';
+  IC.doc = DOC + '<path d="M9 13h6M9 17h4"/>'; IC.script = DOC + '<path d="m10 13-2 2 2 2"/><path d="m14 13 2 2-2 2"/>';
+  var BAND = {
+    pm: ["api", "Postman / Bruno", "Turn an API collection into a load test script", "Add a Postman or Bruno collection — and, if you have one, its environment file. You get a ready-to-run script, Web HTTP/HTML or DevWeb, with correlation, parameters and authentication handled.", "API collection", "From API collection<br>to a script that replays", "A Postman or Bruno collection, then convert and correlate, then a VuGen script"],
+    jmx: ["mig", "JMeter", "Move a JMeter test plan to LoadRunner", "Add a JMeter test plan (.jmx) with the CSV data files and certificates it uses. You get a script, Web HTTP/HTML or DevWeb, one per thread group if you choose, and a Workload Model Excel.", "JMeter test plan", "Keep your test logic,<br>change the tool", "A JMeter test plan, then convert and correlate, then a VuGen script"],
+  };
+  function bandHtml(kind) {
+    var b = BAND[kind], step = function (ic, x) { return "<li><span>" + i(ic) + "</span><b>" + x + "</b></li>"; };
+    return '<header class="ds-band ds-band-panel cx-band"><div class="ds-band-text"><div class="ds-band-title"><span class="ds-band-ico">' + i(b[0]) + "</span><div><h1>" + b[1] + '</h1><p class="ds-band-tag">' + b[2] + '</p></div></div><p class="ds-band-lead">' + b[3] + "</p></div>" +
+      '<figure class="ds-flow" aria-label="' + b[6] + '"><ol>' + step("doc", b[4]) + step("sliders", "Convert &amp; Correlate") + step("script", "VuGen script") + '</ol><figcaption class="ds-hand"><span>' + b[5] + '</span><svg viewBox="0 0 40 30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 27c12 0 22-6 30-19"/><path d="m26 9 7-2 1 7"/></svg></figcaption></figure></header>';
+  }
   function startHtml(kind) {
     var t = T[kind], ready = !!t.files.main, many = function (s) { return s === "csv" || s === "cert"; };
-    return '<div class="cx-start"><section class="cx-stage"><div class="cx-in"><h1>' + (kind === "pm" ? "Turn an API collection into a load test script" : "Move a JMeter test plan to LoadRunner") + "</h1><p>Drop your files anywhere on this page, or choose them here.</p>" +
+    return bandHtml(kind) + '<div class="cx-start"><section class="cx-stage"><div class="cx-in"><h2>Add your files</h2><p>Drop them anywhere on this page, or click a box.</p>' +
       (t.err ? '<div class="cx-note bad" role="alert" id="cx-err-' + kind + '">' + i("warn") + "<span><b>Conversion failed.</b> " + esc(t.err) + '</span><button type="button" class="ds-btn ds-btn-sm" data-act="convert">Try again</button><button type="button" class="cx-icon" data-act="noerr" aria-label="Close this message">' + i("x") + "</button></div>" : "") +
       '<div class="cx-tiles">' + slots(kind).map(function (x) {
         var s = x[0], f = t.files[s], has = many(s) ? f.length : !!f;
-        return '<div class="cx-tile' + (has ? " has" : x[4] ? " need" : "") + '"><div class="cx-th"><i>' + i(has ? "ok" : x[2]) + "</i><div><b>" + x[3] + "</b><small>" + (x[4] ? "Needed" : "Optional") + "</small></div></div>" +
+        return '<div class="cx-tile' + (has ? " has" : x[4] ? " need" : "") + '" data-box="' + x[1] + '"><div class="cx-th"><i>' + i(has ? "ok" : x[2]) + "</i><div><b>" + x[3] + "</b><small>" + (x[4] ? "Needed" : "Optional") + "</small></div></div>" +
           (has ? (many(s) ? '<div class="cx-chips">' + chips(kind, s) + "</div>" : '<span class="cx-fn">' + esc(f.name) + "</span>") : "<small>" + x[5] + "</small>") +
           '<div class="cx-ta"><button type="button" class="ds-btn ds-btn-sm' + (x[4] && !has ? " ds-btn-primary" : "") + '" data-pick="' + x[1] + '"' + (has && !many(s) ? "" : ' aria-label="' + (has ? "Add more" : "Choose") + ": " + x[3] + '"') + ">" + (has ? (many(s) ? "Add more" : "Change") : "Choose file") + "</button>" +
           (has && !many(s) ? '<button type="button" class="ds-btn ds-btn-sm" data-rm="' + s + '" aria-label="Remove ' + esc(f.name) + '">Remove</button>' : "") + "</div></div>";
@@ -584,7 +596,7 @@
     var d = $("cx-dlg"), t = T[kind], head = function (x) { return '<div class="cx-dh"><h2>' + x + '</h2><button type="button" class="cx-icon" data-close aria-label="Close">' + i("x") + "</button></div>"; }, h = ""; dlgKind = k; dlgFor = kind;
     if (k === "files") h = head("Files") + '<div class="cx-db">' + slots(kind).map(function (x) {
       var s = x[0], f = t.files[s], many = s === "csv" || s === "cert", has = many ? f.length : !!f;
-      return '<div class="cx-frow' + (has ? " has" : "") + '"><i>' + i(has ? "ok" : x[2]) + '</i><div class="cx-grow"><b>' + x[3] + "</b>" + (many && has ? '<div class="cx-chips">' + chips(kind, s) + "</div>" : "<small>" + (has ? esc(f.name) : "None") + "</small>") + '</div><button type="button" class="ds-btn ds-btn-sm" data-pick="' + x[1] + '" aria-label="' + (many ? "Add" : has ? "Change" : "Choose") + ": " + x[3] + '">' + (many ? "Add" : has ? "Change" : "Choose") + "</button>" + (has && !many && !x[4] ? '<button type="button" class="cx-icon" data-rm="' + s + '" aria-label="Remove ' + esc(f.name) + '">' + i("x") + "</button>" : "") + "</div>";
+      return '<div class="cx-frow' + (has ? " has" : "") + '" data-box="' + x[1] + '"><i>' + i(has ? "ok" : x[2]) + '</i><div class="cx-grow"><b>' + x[3] + "</b>" + (many && has ? '<div class="cx-chips">' + chips(kind, s) + "</div>" : "<small>" + (has ? esc(f.name) : "None") + "</small>") + '</div><button type="button" class="ds-btn ds-btn-sm" data-pick="' + x[1] + '" aria-label="' + (many ? "Add" : has ? "Change" : "Choose") + ": " + x[3] + '">' + (many ? "Add" : has ? "Change" : "Choose") + "</button>" + (has && !many && !x[4] ? '<button type="button" class="cx-icon" data-rm="' + s + '" aria-label="Remove ' + esc(f.name) + '">' + i("x") + "</button>" : "") + "</div>";
     }).join("") + '</div><div class="cx-df"><span class="cx-muted cx-grow">A changed file is converted at once</span><button type="button" class="ds-btn" data-act="another">' + i("up") + 'Convert another</button><button type="button" class="ds-btn ds-btn-primary" data-close>Done</button></div>';
     if (k === "sett") h = head("Settings") + '<div class="cx-db">' + (kind === "jmx" ? '<div class="cx-opt"><div class="cx-grow"><b>Workload workbook</b><small>Workload Model Excel (.xlsx) in the ZIP</small></div>' + seg("wlm", [[true, "Include"], [false, "Leave out"]], t.c.wlm, "Workload workbook") + "</div>"
       : '<div class="cx-opt"><div class="cx-grow"><b>Log level</b><small>How much the script writes to its log</small></div>' + seg("ll", [["info", "Info"], ["debug", "Debug"]], t.c.ll, "Log level") + "</div>" + ADVT.map(function (a) { return '<label class="cx-opt"><div class="cx-grow"><b>' + a[1] + "</b><small>" + a[2] + '</small></div><span class="cx-sw"><input type="checkbox" data-adv="' + a[0] + '"' + (t.c.adv[a[0]] ? " checked" : "") + ' aria-label="' + a[1] + '"><span></span></span></label>'; }).join("")) + '</div><div class="cx-df"><span class="cx-muted cx-grow">Remembered for the next conversion</span><button type="button" class="ds-btn ds-btn-primary" data-close>Done</button></div>';
@@ -626,7 +638,10 @@
   function onClick(e) {
     var d = $("cx-dlg");
     if (e.target === d) { var r0 = d.getBoundingClientRect(); if (e.clientX < r0.left || e.clientX > r0.right || e.clientY < r0.top || e.clientY > r0.bottom) d.close(); return; }
-    var b = e.target.closest("button"); if (!b || b.disabled) return;
+    var b = e.target.closest("button");
+    // anywhere on a file box opens the file window (the keyboard has the box's own button)
+    if (!b) { var bx = e.target.closest("[data-box]"); if (bx) $(bx.getAttribute("data-box")).click(); return; }
+    if (b.disabled) return;
     var inDlg = d.contains(b), kind = inDlg ? dlgFor : b.closest("#panel-jmx") ? "jmx" : "pm", t = T[kind], g = function (k) { return b.getAttribute(k); }, has = function (k) { return b.hasAttribute(k); };
     if (has("data-close")) return d.close();
     if (has("data-dlg")) return dialog(g("data-dlg"), kind);
