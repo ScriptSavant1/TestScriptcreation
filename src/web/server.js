@@ -257,11 +257,11 @@ class WebServer {
 
   setupRoutes() {
     // ── Rate limiter (conversion endpoints only) ──────────────────────────────
-    // 60 requests per 5-minute window per IP — generous for an internal team.
-    // Adjust max/windowMs if needed for your team size.
+    // 600 requests per 5-minute window per IP: the converter page converts again after every choice (a conversion takes
+    // 20 to 200 ms), and people behind one company address share it. Adjust max/windowMs if needed for your team size.
     const convertLimiter = rateLimit({
       windowMs: 5 * 60 * 1000,
-      max: 60,
+      max: 600,
       standardHeaders: true,
       legacyHeaders: false,
       message: { error: "rate_limit_exceeded" },
@@ -401,7 +401,8 @@ class WebServer {
         this.activeConversions++;
 
         // Analytics — capture request data before async work begins
-        const _evt = analytics ? analytics.startEvent(req, "converter") : null;
+        // an update of the same script (a choice made on the page) is not another use
+        const _evt = analytics && req.body.update !== "1" ? analytics.startEvent(req, "converter") : null;
         if (_evt && analytics) analytics.enrichWithFile(_evt, collectionFile, req.body.protocol, req.body.mode);
         let _evtResult = "failed", _evtErrCode = null, _evtReqCount = null;
 
@@ -465,6 +466,7 @@ class WebServer {
 
           // Issue a cryptographically strong single-use download token (F-05)
           const token = crypto.randomBytes(32).toString("hex");
+          if (/^[0-9a-f]{64}$/.test(req.body.replaces || "")) this.pendingDownloads.delete(req.body.replaces);   // the ZIP this one replaces
           this.pendingDownloads.set(token, { files, outputDir, zipName: safeZipName(options.scriptName), expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
@@ -573,7 +575,8 @@ class WebServer {
         this.activeConversions++;
 
         // Analytics
-        const _evtJ = analytics ? analytics.startEvent(req, "jmx") : null;
+        // an update of the same script (a choice made on the page) is not another use
+        const _evtJ = analytics && req.body.update !== "1" ? analytics.startEvent(req, "jmx") : null;
         if (_evtJ && analytics) analytics.enrichWithFile(_evtJ, jmxFile, req.body.protocol, req.body.mode);
         let _evtJResult = "failed", _evtJErrCode = null, _evtJReqCount = null;
 
@@ -636,6 +639,7 @@ class WebServer {
           }
 
           const token = crypto.randomBytes(32).toString("hex");
+          if (/^[0-9a-f]{64}$/.test(req.body.replaces || "")) this.pendingDownloads.delete(req.body.replaces);   // the ZIP this one replaces
           this.pendingDownloads.set(token, { files, outputDir, zipName: safeZipName(options.scriptName), expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 

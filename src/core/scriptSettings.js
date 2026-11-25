@@ -21,6 +21,10 @@
  *   noteGenerated(src, generator, analysis)  for the preview: each server's parameter name, the correlations found, the
  *                                    values the script makes itself (a UUID, a nonce: the generators' perRequestVars)
  *   safeZipName(name)                the download's file name for a chosen script name
+ *   applyVarNames(o, names)          a variable used as a server's address (base_url) under the name chosen on the page:
+ *                                     everywhere it is sent, in the scripts that read it, in the environment / collection /
+ *                                     test plan that gives it its value → { old: new } that were applied. Never one a script
+ *                                     sets, a data file column, or a name already in use
  */
 
 const HostParams = require('../web/public/shared/host-params');
@@ -93,7 +97,69 @@ function settingsOptions(body) {
   if (servers) out.serverNames = servers;
   const values = readValues(b.values);
   if (values) out.values = values;
+  const vars = readVarNames(b.varNames);
+  if (vars) out.varNames = vars;
   return out;
+}
+
+function readVarNames(text) {
+  if (text == null || text === '') return null;
+  let o;
+  try { o = typeof text === 'object' ? text : JSON.parse(String(text)); } catch (e) { return null; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const out = {};
+  let n = 0;
+  for (const k of Object.keys(o)) {
+    if (n >= MAX_SERVERS) break;
+    const name = String(o[k] == null ? '' : o[k]).trim();
+    if (!/^[A-Za-z_][\w.-]{0,99}$/.test(k) || !/^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(name) || name === k) continue;
+    out[k] = name; n++;
+  }
+  return n ? out : null;
+}
+
+const SCRIPT_KEYS = /^(script|exec|tests?|events?|preScripts|postScripts|code|runtime|scripts|req|res)$/;
+// o = { requests, collection, environmentVars, threadGroupVars (Map), taken (names that cannot be renamed or used) }
+function applyVarNames(o, names) {
+  const applied = {};
+  if (!names) return applied;
+  const env = o.environmentVars || {}, cv = o.collection && (o.collection.variable || o.collection.variables);
+  const colNames = Array.isArray(cv) ? cv.map((v) => v && (v.key || v.name)).filter(Boolean) : cv && typeof cv === 'object' ? Object.keys(cv) : [];
+  const known = new Set([...Object.keys(env), ...colNames]), taken = new Set(o.taken || []);
+  for (const old of Object.keys(names)) {
+    const want = names[old], lc = want.toLowerCase();
+    if (!known.has(old) || taken.has(old)) continue;
+    if ([...known, ...taken, ...Object.values(applied)].some((k) => k !== old && String(k).toLowerCase() === lc)) continue;
+    if (HostParams.validName(want, old, {}, [])) continue;
+    applied[old] = want;
+  }
+  const olds = Object.keys(applied);
+  if (!olds.length) return applied;
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const any = olds.map(esc).join('|');
+  const ref = new RegExp('(\\{\\{\\s*|\\$\\{)(' + any + ')(?=\\s*\\})', 'g');
+  const call = new RegExp('(\\w*(?:get|set|has|put|Var|Variable)\\w*\\s*\\(\\s*)(["\'])(' + any + ')\\2', 'g');
+  const text = (s, inScript) => {
+    let t = s.replace(ref, (m, a, k) => a + applied[k]);
+    if (inScript) t = t.replace(call, (m, a, q, k) => a + q + applied[k] + q);
+    return t;
+  };
+  const seen = new WeakSet();
+  const walk = (x, inScript) => {
+    if (!x || typeof x !== 'object' || seen.has(x) || Buffer.isBuffer(x)) return;
+    seen.add(x);
+    for (const k of Object.keys(x)) {
+      const s = inScript || (!Array.isArray(x) && SCRIPT_KEYS.test(k));
+      if (typeof x[k] === 'string') { const t = text(x[k], s); if (t !== x[k]) x[k] = t; } else walk(x[k], s);
+    }
+  };
+  walk(o.requests, false); walk(o.collection, false); walk(env, false);
+  const keys = (obj) => { for (const k of Object.keys(obj || {})) if (applied[k]) { obj[applied[k]] = obj[k]; delete obj[k]; } };
+  keys(env);
+  if (Array.isArray(cv)) cv.forEach((v) => { if (v && applied[v.key]) v.key = applied[v.key]; if (v && applied[v.name]) v.name = applied[v.name]; });
+  else keys(cv);
+  for (const [, vars] of o.threadGroupVars || []) { walk(vars, false); keys(vars); }
+  return applied;
 }
 
 function applyScriptName(collection, name) {
@@ -136,4 +202,4 @@ function safeZipName(name) {
   return s ? s + '.zip' : 'loadrunner_script.zip';
 }
 
-module.exports = { settingsOptions, applyScriptName, applyServerNames, noteGenerated, serverKey, safeZipName, cleanScriptName, readServerNames, readValues, applyValues };
+module.exports = { readVarNames, applyVarNames, settingsOptions, applyScriptName, applyServerNames, noteGenerated, serverKey, safeZipName, cleanScriptName, readServerNames, readValues, applyValues };

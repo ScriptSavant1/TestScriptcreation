@@ -98,6 +98,43 @@ function hostOf(address) {
   return first || '(no server)';
 }
 
+// the variables a server's address is made of, as the request writes it: "{{base_url}}/x" → ["base_url"],
+// "https://{{HOST}}:{{PORT}}/x" → ["HOST", "PORT"], "https://api.example.com/{{id}}" → []
+function hostVars(url) {
+  const a = String(url || '').trim();
+  const m = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i.exec(a);
+  if (m) return varNames(m[1]);
+  const v = /^(\{\{[^{}]+\}\}|\$\{[^{}]+\})/.exec(a);
+  return v ? varNames(v[1]) : [];
+}
+
+// one request for the page's Request tab: headers, body, scripts as the collection / test plan has them. Values that are
+// written out under a secret-looking name are not shown ({{variables}} are)
+const MAX_PART = 20000, MAX_DETAILS = 3 * 1024 * 1024;
+const cut = (s, n) => (s.length > n ? s.slice(0, n) + '\n… (' + (s.length - n).toLocaleString('en-GB') + ' more characters)' : s);
+const masked = (name, value) => (SECRET_NAME.test(name) && value && !/\{\{|\$\{/.test(value) ? '(hidden)' : value);
+function detailsOf(r, collection) {
+  const d = {};
+  const heads = (r.headers || []).filter((h) => h && h.key && !h.disabled).map((h) => [String(h.key), cut(masked(h.key, String(h.value == null ? '' : h.value)), 2000)]);
+  if (heads.length) d.headers = heads;
+  const b = r.body;
+  if (b && b.mode === 'raw' && b.raw) d.body = cut(String(b.raw).replace(/"([^"\n]{1,80})"(\s*:\s*)"((?:[^"\\]|\\.)*)"/g, (m, k, s, v) => '"' + k + '"' + s + '"' + masked(k, v) + '"'), MAX_PART);
+  else if (b && (b.mode === 'urlencoded' || b.mode === 'formdata')) {
+    const parts = (b[b.mode] || []).filter((p) => p && p.key && !p.disabled).map((p) => [String(p.key), p.type === 'file' ? 'file: ' + String([].concat(p.src || p.value || p.key)[0]).split(/[\\/]/).pop() : cut(masked(p.key, String(p.value == null ? '' : p.value)), 2000)]);
+    if (parts.length) d.form = parts;
+  }
+  const auth = (r.auth && r.auth.type) || (collection && collection.auth && collection.auth.type);
+  if (auth && auth !== 'noauth' && auth !== 'inherit') d.auth = String(auth);
+  const scripts = [];
+  for (const e of r.tests || r.event || []) {
+    const src = e && e.script && (Array.isArray(e.script.exec) ? e.script.exec.join('\n') : e.script.exec || e.script);
+    if (typeof src === 'string' && src.trim()) scripts.push([e.listen === 'prerequest' ? 'Before the request' : 'After the response', cut(src, MAX_PART)]);
+  }
+  for (const [list, when] of [[r.preScripts, 'Before the request'], [r.postScripts, 'After the response']]) for (const s of list || []) { const src = typeof s === 'string' ? s : s && s.code; if (src && String(src).trim()) scripts.push([when, cut(String(src), MAX_PART)]); }
+  if (scripts.length) d.scripts = scripts;
+  return Object.keys(d).length ? d : null;
+}
+
 const isVariable = (h) => /\{\{|\$\{/.test(h);
 
 // every variable the requests send or set, and where its value comes from:
@@ -141,7 +178,7 @@ function variablesList({ requests, collection, environmentVars, correlations, se
   });
 }
 
-function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations, given, made }) {
+function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations, given, made, renamed }) {
   const out = leftOut instanceof Set ? leftOut : new Set(leftOut || []);
   const declared = new Set();
   const vars = variablesOf(collection, environmentVars, declared);
@@ -149,6 +186,7 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
   const setByScript = runtimeNames(requests);
   const stateOf = (h) => !isVariable(h) ? 'resolved' : varNames(h).every((k) => runtime.has(k)) ? 'runtime' : 'missing';
   const setsList = [];
+  let detailsSize = 0;
   const list = (requests || []).map((r, i) => {
     const url = typeof r.url === 'string' ? r.url : (r.url && (r.url.raw || r.url.url)) || '';
     const address = resolve(url, vars);
@@ -156,6 +194,10 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
     const folder = String(r.folder || '');
     const group = kind === 'jmx' ? (r.threadGroupName || 'Test plan') : (folder.split('/')[0] || '(no folder)');
     const row = { n: i + 1, name: String(r.name || ''), folder, group, method: String(r.method || 'GET').toUpperCase(), url, address, host, resolved: !isVariable(host), state: stateOf(host), out: out.has(i + 1) };
+    const hv = hostVars(url);
+    if (hv.length) row.hostVars = hv;
+    const det = detailsOf(r, collection), size = det ? JSON.stringify(det).length : 0;
+    if (det && detailsSize + size <= MAX_DETAILS) { row.details = det; detailsSize += size; }
     const sets = setsOf(r), uses = usesOf(r, setByScript);
     setsList[i] = sets;
     if (sets.length) row.sets = sets;
@@ -172,6 +214,7 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
     const param = p0 && writes(p0) ? p0 : null;   // only a server parameter the script really writes
     const h = hostMap.get(r.host) || Object.assign({ host: r.host, count: 0, resolved: r.resolved, state: r.state }, param ? { param } : {});
     h.count++; hostMap.set(r.host, h);
+    for (const v of r.hostVars || []) { h.vars = h.vars || []; if (!h.vars.includes(v)) h.vars.push(v); }
     groupMap.set(r.group, (groupMap.get(r.group) || 0) + 1);
   }
 
@@ -199,7 +242,12 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
     files: fileList,
     truncated,
     scriptName: String((collection && ((collection.info && collection.info.name) || collection.name)) || ''),
-    variables: variablesList({ requests, collection, environmentVars, correlations, sets: setsList, made }).map((v) => ((given || []).includes(v.name) ? Object.assign(v, { given: true }) : v)),
+    variables: variablesList({ requests, collection, environmentVars, correlations, sets: setsList, made }).map((v) => {
+      const orig = Object.keys(renamed || {}).find((k) => renamed[k] === v.name);   // the name in the file, for a renamed one
+      if (orig) v.orig = orig;
+      if ((given || []).includes(orig || v.name)) v.given = true;
+      return v;
+    }),
   };
 }
 
@@ -220,4 +268,4 @@ function publicScripts(scripts) {
   return scripts.map(({ outputDir, analysis, ...rest }) => (analysis ? { ...rest, analysis: publicAnalysis(analysis) } : rest));
 }
 
-module.exports = { publicAnalysis, publicScripts, buildPreview, safePreview, resolve, hostOf, variablesOf, runtimeNames, setsOf, usesOf };
+module.exports = { publicAnalysis, publicScripts, hostVars, detailsOf, buildPreview, safePreview, resolve, hostOf, variablesOf, runtimeNames, setsOf, usesOf };
