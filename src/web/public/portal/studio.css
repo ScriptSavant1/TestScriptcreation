@@ -634,14 +634,13 @@ html:not(.embedded) #ph-res { height: calc(100vh - 60px); }
 .ss-reqs:focus-visible { outline-offset: -2px; }
 .ss-reqs-in { position: relative; }
 .ss-rq, .ss-txn, .ss-outrow { position: absolute; left: 0; right: 0; }
-.ss-rq { height: 44px; border-bottom: 1px solid var(--ds-border); cursor: pointer; }
+.ss-rq { height: 44px; border-bottom: 1px solid var(--ds-border); cursor: default; }
 .ss-rq:hover { background: color-mix(in srgb, var(--ds-accent-soft) 55%, var(--ds-surface)); }   /* light enough that green / red text keeps 4.5:1 */
 .ss-rq.sel, .ss-rq.cur { background: var(--br-sel); }
 .ss-rq.cur { box-shadow: inset 3px 0 0 var(--ds-accent); }
-.ss-rq.out > :not(.ss-cb) { opacity: .62; } .ss-rq.out .ss-path b { text-decoration: line-through; }
+.ss-rq.out > :not(.ss-cb) { opacity: .62; }
 .ss-rq.cur :is(.ss-rn, .ss-path small, .ss-num) { color: var(--ds-text); } [data-theme="light"] .ss-rq:is(.cur, .sel) .ss-st.s2, [data-theme="light"] .ss-rq:is(.cur, .sel) .ss-m.GET { color: #14532d; }
-.ss-cb-pick { border-radius: 50%; }
-#ss-p-req .ss-pane-tools { gap: 7px; } #ss-new-txn[aria-pressed="true"] { background: var(--ds-accent-soft); border-color: var(--ds-accent); color: var(--ds-accent-text); }
+#ss-p-req .ss-pane-tools { gap: 7px; }
 /* tick boxes always in sight, as in the mockup (a left-out request cannot be ticked) */
 .ss-rq .ss-cb:disabled { visibility: hidden; }
 .ss-rn { color: var(--ds-text-3); font-size: var(--ds-fs-xs); font-variant-numeric: tabular-nums; }
@@ -679,7 +678,6 @@ html:not(.embedded) #ph-res { height: calc(100vh - 60px); }
 .ss-tabs [aria-selected="true"] { background: var(--ds-surface); color: var(--ds-accent-text); box-shadow: inset 0 0 0 1px var(--ds-border-2); }
 .ss-tabs [aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; border-radius: 3px; background: var(--ds-accent); }
 .ss-tabs > .ds-btn { align-self: center; margin-bottom: 4px; }
-#ss-t-req { padding: 0; gap: 0; overflow: hidden; } #ss-t-req > .ss-empty { padding: 28px 24px; text-align: center; } body.ss-dock #ss-tab-req { display: none; }
 .ss-tab { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px; }
 .ss-tab[hidden] { display: none; }
 #ss-t-script { padding: 0; }
@@ -743,9 +741,6 @@ html:not(.embedded) #ph-res { height: calc(100vh - 60px); }
 .ss-det { position: fixed; z-index: 800; top: 12px; left: 50%; right: auto; bottom: 16px; transform: translateX(-50%); width: min(1440px, calc(100vw - 48px)); display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
   background: var(--ds-surface); border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-card); box-shadow: var(--ds-shadow-2); }
 .ss-det[hidden] { display: none; }
-/* in the Request tab */
-.ss-det.ss-det-inline { position: static; z-index: auto; width: auto; flex: 1; transform: none; border: 0; border-radius: 0; box-shadow: none; background: none; container-type: inline-size; }
-.ss-det-inline .ss-det-bar { flex-wrap: wrap; background: none; cursor: default !important; touch-action: auto; } .ss-det-inline .ss-det-bar h3 { display: none; } .ss-det-inline #ss-det-dock { display: none; }
 .ss-code-sel { width: auto; flex: 0 1 200px; min-width: 110px; display: none; }
 .ss-code-q { flex: 0 1 230px; min-width: 120px; } .ss-code-n { flex: none; font-size: var(--ds-fs-xs); white-space: nowrap; } .ss-code-n:empty { display: none; }
 #ss-t-script { container-type: inline-size; } @container (max-width: 760px) { #ph-res .code-tabs { display: none; } .ss-code-sel { display: block; } .ss-code-q { flex: 1 1 120px; } }
@@ -771,7 +766,7 @@ body.ss-dock.ss-det-open #ss-p-req { grid-column: 3; } body.ss-dock.ss-det-open 
 body.ss-dock.ss-det-open .ss-rs[data-rs="right"] { grid-column: 6; pointer-events: none; } body.ss-dock.ss-det-open #ss-p-right { grid-column: 7; }
 body.ss-dock.ss-det-open .ss-cols.no-dom { --c1: 46px; }
 body.ss-dock.ss-det-open .ss-cols.no-right { grid-template-columns: var(--c1) 10px minmax(0, 1000px) 10px minmax(420px, 1fr) 10px 46px; }
-@media (max-width: 600px) { .ss-det:not(.ss-det-inline) { top: 0; left: 0; right: 0; bottom: 0; width: 100vw; transform: none; border-radius: 0; } .ss-inl { display: none; } }
+@media (max-width: 600px) { .ss-det { top: 0; left: 0; right: 0; bottom: 0; width: 100vw; transform: none; border-radius: 0; } .ss-inl { display: none; } }
 
 /* Correlation Advisor: Source / Replaced in (studio-ui.js) — a request opens its details; "+n more" lists every place */
 .adv-req-link { display: inline; padding: 0 2px; border: 0; background: none; color: var(--ds-accent-text); font: inherit; font-family: var(--ds-mono); font-size: 12px; cursor: pointer; text-align: left; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 2px; }
@@ -906,7 +901,9 @@ html .adv-type-badge { background: var(--ds-accent-soft); color: var(--ds-accent
 .ss-steps [data-step] em { font-style: normal; min-width: 20px; box-sizing: border-box; padding: 0 5px; border-radius: 99px; font-size: 11px; line-height: 18px; font-weight: 600; text-align: center; background: var(--ds-accent-soft); color: var(--ds-text); } .ss-steps [data-step] em[hidden] { display: none; } .ss-steps [data-step] em.st-warn { background: var(--ds-warn-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ds-warn) 45%, transparent); }
 .ss-steps [data-step].is-past i { border-color: var(--ds-ok); color: var(--ds-ok); } .ss-steps [data-step].is-past i[data-ic="warn"] { border-color: var(--ds-warn); color: var(--ds-warn); }
 .ss-steps [aria-current="step"], .ss-steps [aria-current="step"]:hover { background: var(--ds-accent); color: #fff; } .ss-steps [aria-current="step"] i { border-color: #fff; background: #fff; color: #4c1d95; } .ss-steps [aria-current="step"] em, .ss-steps [aria-current="step"] em.st-warn { background: #fff; color: #4c1d95; box-shadow: none; }
-@container (max-width: 1180px) { .ss-steps [data-step] { gap: 6px; padding-right: 9px; } .ss-tools > .ss-seg > button { padding: 0 9px; } }
+.ss-tools > .ds-btn { flex: none; height: 38px; } .ss-next-ic { transform: rotate(180deg); }
+/* narrow: Next stays on the line — the counts that only inform and the word Filters go first */
+@container (max-width: 1330px) { .ss-tools .ss-wide { display: none; } .ss-steps [data-step] { gap: 6px; padding-right: 9px; } } @container (max-width: 1180px) { .ss-steps [data-step] em:not(.st-warn) { display: none; } .ss-tools > .ss-seg > button { padding: 0 9px; } #ss-filters-btn > span { display: none; } #ss-step-back span { display: none; } }
 @container (max-width: 700px) { .ss-steps [data-step]:not([aria-current="step"]) b { display: none; } }
 /* step 1: the right panel keeps the script; the Correlation Advisor and Test data are steps 2 and 3 */
 body.ss-step-1 :is(#ss-tab-corr, #ss-tab-data) { display: none; }

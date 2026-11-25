@@ -108,9 +108,9 @@ describe('Script Studio redesign — every element the scripts use exists', () =
 // open their step, so every caller that opened a tab (the engine, Ready to download, request details) still works.
 describe('Script Studio — the four steps', () => {
   const js = read('portal/studio-page.js');
-  test('the steps Requests, Correlate, Test data and Download, each one click away', () => {
+  test('the step line has Requests, Correlate, Test data and Download, with Next / Back', () => {
     [1, 2, 3, 4].forEach((n) => expect(page).toContain('data-step="' + n + '"'));
-    ['id="ss-steps"', 'id="ss-done"', 'id="ss-done-dl"', 'id="ss-done-list"'].forEach((id) => expect(page).toContain(id));
+    ['id="ss-steps"', 'id="ss-step-next"', 'id="ss-step-back"', 'id="ss-done"', 'id="ss-done-dl"', 'id="ss-done-list"'].forEach((id) => expect(page).toContain(id));
   });
   test('the tabs are kept (the engine and the harness use them) and each one opens its step', () => {
     ['ss-tab-script', 'ss-tab-corr', 'ss-tab-data', 'ss-t-script', 'ss-t-corr', 'ss-t-data'].forEach((id) => expect(page).toContain('id="' + id + '"'));
@@ -124,14 +124,15 @@ describe('Script Studio — the four steps', () => {
     const top = page.slice(page.indexOf('id="ss-filebar"'), page.indexOf('id="ss-cols"'));
     ['id="ss-name-btn"', 'id="ss-from"', 'id="ss-k-in"', 'id="ss-k-all"', 'id="ss-k-tx"', 'id="ss-auth"', 'id="ss-open-another"', 'id="ss-state"', 'id="ss-notices"', 'id="ss-undo"', 'id="ss-redo"', 'id="ss-wm"', 'id="ss-dl"', 'id="ss-dl-more"', 'id="ss-steps"', 'id="ss-fmt"', 'id="ss-think-pop"', 'id="ss-fbar"', 'id="ss-types"', 'data-leave="ads"', 'data-leave="options"', 'id="ss-bg-btn"', 'id="ss-res-pop"'].forEach((x) => expect(top).toContain(x));
   });
-  test('the right panel: Script and Request; the start page: the band every tool has, two ways, two links', () => {
-    ['id="ss-tab-req"', 'id="ss-t-req"', 'id="ss-det-big"', 'id="ss-code-q"', 'class="ds-band ds-band-panel ss-band"', 'id="ss-rec-btn"', 'id="dz1"', 'id="ss-how-btn"', 'id="ss-guide-btn"'].forEach((x) => expect(page).toContain(x));
+  test('the start page: the band every tool has, two ways, two links; Find in this file', () => {
+    ['id="ss-code-q"', 'class="ds-band ds-band-panel ss-band"', 'id="ss-rec-btn"', 'id="dz1"', 'id="ss-how-btn"', 'id="ss-guide-btn"'].forEach((x) => expect(page).toContain(x));
     expect(page).not.toMatch(/id="ss-hero"|data-fold="(rec|open|how|guide)"/);
   });
-  test('the tick of a request is the script\'s; in the script means what the generators write', () => {
+  test('a click on a request opens its window; its tick is for a new transaction (owner, 2026-11-25: keep both)', () => {
     const ws = read('portal/studio-workspace.js');
     expect(js).toContain('SS.inScript = function (e) { return !e.filtered && (typeof shouldIncludeEntry !== "function" || shouldIncludeEntry(e, S.bgDecisions) || SS.setup(e)); };');
-    ['toggleIn(id, cb.checked, e.shiftKey)', 'S.leaveOutIds.delete(x); else S.leaveOutIds.add(x);', 'class="ss-cb ss-cb-pick"'].forEach((x) => expect(ws).toContain(x));
+    expect(ws).toContain('if (!cb.disabled && (e.target === cb || W.sel.size || W.picking)) tick(id, e.target === cb ? cb.checked : !W.sel.has(id), e.shiftKey);\n    else openDet(id);');
+    expect(page).not.toMatch(/id="ss-tab-req"|id="ss-t-req"/);
   });
 });
 

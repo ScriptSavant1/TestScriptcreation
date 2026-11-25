@@ -114,12 +114,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - Two rows above the panels instead of six: on a 1366 × 768 laptop the panels begin at about 165 px instead of 386.
 - The script's name is the title (click it to rename). Under it: the recording, requests in the script, transactions, sign-in. "Up to date" / "Updating…" beside it.
 - Undo and Redo (Ctrl+Z, Ctrl+Y) for every change: name, format, think time, filters, domains, left-out requests, transactions, server names, correlations, test data. After Undo the script is, character for character, the one before. Correlations taken off by a change that reads the recording again come back with Undo.
-- Steps with their counts, format, think time and Filters on one line; Next and Back are gone (each step is one click away). The recording's message is a note button.
-- A click on a request marks its code in the script; its details are in the Request tab beside it, or in a window (Larger). Find in this file. The domain parameter itself is clicked to rename it.
-- The tick of a request says it is in the script (before: chosen for a new transaction); a request left out stays listed, struck through. New transaction turns the ticks into a choice.
-- Requests the page repeats in the background and that are left out are no longer counted or shown as in the script ("repeats in the background"); those that run once are marked so.
+- Steps with their counts, Next / Back, format, think time and Filters on one line. The recording's message is a note button.
+- A click on a request opens its window, as before; the code of the request opened last is marked in the script. Find in this file. The domain parameter itself is clicked to rename it.
+- Requests the page repeats in the background and that are left out are no longer counted as in the script; they say so in the list ("repeats in the background"), and those that run once too.
 - Escape closes the request window wherever the focus is. Correlate and Test data: one line for the heading, the text behind a question mark; a Correlate row takes two lines, never a sideways scroll.
-- Scripts and ZIPs do not change (golden harness: 1409 files identical).
+- Scripts and ZIPs do not change (golden harness). Every other behaviour is the one before: `regression-tests/tools/studio/behave.js` does the same user actions on the old and the new page and lists each difference.
 
 #### Script Studio: Generate (UUID) in the correlation editor
 

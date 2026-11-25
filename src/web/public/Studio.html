@@ -186,6 +186,8 @@
             <li><button type="button" data-step="4" aria-label="Step 4: Download" aria-describedby="ss-st-4" aria-current="false"><i>4</i><span><b>Download</b><small class="ss-vh" id="ss-st-4">Check and download</small></span><em hidden></em></button></li>
           </ol>
           </nav>
+          <button class="ds-btn" type="button" id="ss-step-back" aria-label="Back" title="Back" hidden><svg class="i"><use href="#i-left"/></svg><span>Back</span></button>
+          <button class="ds-btn ds-btn-primary" type="button" id="ss-step-next"><span>Next: Correlate</span><svg class="i ss-next-ic"><use href="#i-left"/></svg></button>
           <span class="ss-grow"></span>
           <div class="ss-seg" id="ss-fmt" role="group" aria-label="Script format">
             <button type="button" data-fmt="webhttp" aria-pressed="false"><i>C</i><span class="ss-wide">Web </span>HTTP/HTML</button>
@@ -269,7 +271,6 @@
               <h3 id="ss-det-h">Request details</h3><span class="ss-muted" id="ss-det-pos"></span><span class="ss-grow"></span>
               <label class="ss-inl" title="Hide passwords, tokens, cookies and session values on screen and in Copy as cURL"><input type="checkbox" class="ss-cb" id="ss-det-mask" />Hide secrets</label>
               <button class="ds-btn ds-btn-xs" type="button" id="ss-det-dock" aria-pressed="false" hidden><svg class="i"><use href="#i-layers"/></svg><span>Dock</span></button>
-              <button class="ds-btn ds-btn-xs" type="button" id="ss-det-big" title="Open the details as a large window" hidden><svg class="i"><use href="#i-big"/></svg>Larger</button>
               <button class="ds-btn ds-btn-xs" type="button" id="ss-det-leave" title="Leave this request out of the script (Put back brings it back)">Leave out</button>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-prev" title="Previous request (Up arrow)" aria-label="Previous request"><svg class="i" style="transform:rotate(180deg)"><use href="#i-chev"/></svg></button>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-next" title="Next request (Down arrow)" aria-label="Next request"><svg class="i"><use href="#i-chev"/></svg></button>
@@ -283,7 +284,6 @@
             <button class="ss-rail" type="button" data-show="right" title="Show the script panel"><svg class="i"><use href="#i-panel"/></svg>Script</button>
             <div class="ss-tabs" role="tablist" aria-label="Script and correlation">
               <button type="button" role="tab" id="ss-tab-script" aria-selected="true" aria-controls="ss-t-script" data-tab="script"><svg class="i"><use href="#i-code"/></svg>Script</button>
-              <button type="button" role="tab" id="ss-tab-req" aria-selected="false" aria-controls="ss-t-req" data-rt="req"><svg class="i"><use href="#i-info"/></svg>Request <span class="ss-badge ss-badge-q" id="ss-req-badge" hidden></span></button>
               <button type="button" role="tab" id="ss-tab-corr" aria-selected="false" aria-controls="ss-t-corr" data-tab="corr"><svg class="i"><use href="#i-bulb"/></svg>Correlation Advisor <span class="ss-badge" id="ss-adv-n" hidden></span></button>
               <button type="button" role="tab" id="ss-tab-data" aria-selected="false" aria-controls="ss-t-data" data-tab="data"><svg class="i"><use href="#i-table"/></svg>Test data <span class="ss-badge ss-badge-q" id="ss-data-n" hidden></span></button>
               <span class="ss-grow"></span>
@@ -303,12 +303,6 @@
               <!-- the engine's own download buttons (the file bar's Download ZIP does the same) -->
               <div class="dl-bar" id="dl-bar" hidden></div>
             </div>
-
-            <!-- the request chosen in the list: its details (portal/request-details.js), or as a window (Larger) -->
-            <div class="ss-tab" id="ss-t-req" role="tabpanel" aria-labelledby="ss-tab-req" hidden>
-              <p class="ss-empty" id="ss-req-empty">Click a request to see its headers, payload, response, timing and dynamic values.</p>
-            </div>
-
             <div class="ss-tab" id="ss-t-corr" role="tabpanel" aria-labelledby="ss-tab-corr" hidden>
               <!-- step 2: the Correlation Advisor's findings as one table (portal/studio-corr.js); the engine's cards
                    below stay (Cards view) — they carry the list / array options until the editor has them -->

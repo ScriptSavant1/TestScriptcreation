@@ -351,29 +351,17 @@
   function showTab(name) {
     $$(".ss-tabs [role=tab]").forEach(function (b) { b.setAttribute("aria-selected", String(b.getAttribute("data-tab") === name)); });
     ["script", "corr", "data"].forEach(function (t) { $("#ss-t-" + t).hidden = t !== name; });
-    // step 1: the script, or the request chosen in the list
-    var req = name === "script" && rt === "req";
-    $("#ss-t-req").hidden = !req;
-    if (req) $("#ss-t-script").hidden = true;
-    $("#ss-tab-req").setAttribute("aria-selected", String(req));
-    if (req) $("#ss-tab-script").setAttribute("aria-selected", "false");
   }
-  var rt = "script";
-  SS.rtab = function (name) { if (name) { rt = name === "req" ? "req" : "script"; if (cur === 1) showTab("script"); if (window.SSW && SSW.mark) SSW.mark(); } return rt; };
   // every caller that opened a tab (the engine's links, the Ready list, request details) now opens its step
   var TAB_STEP = { script: 1, corr: 2, data: 3 }, STEP_TAB = { 1: "script", 2: "corr", 3: "data" };
   function tab(name) { step(TAB_STEP[name] || 1); }
   SS.tab = tab;
-  $(".ss-tabs").addEventListener("click", function (e) { var b = e.target.closest("[role=tab]"); if (!b) return; if (b.hasAttribute("data-rt")) SS.rtab("req"); else { if (b.getAttribute("data-tab") === "script") rt = "script"; tab(b.getAttribute("data-tab")); if (window.SSW && SSW.mark) SSW.mark(); } });
-  $(".ss-tabs").addEventListener("keydown", function (e) {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    var o = e.target.id === "ss-tab-req" ? $("#ss-tab-script") : e.target.id === "ss-tab-script" ? $("#ss-tab-req") : null;
-    if (o && o.offsetParent) { e.preventDefault(); o.focus(); o.click(); }
-  });
+  $(".ss-tabs").addEventListener("click", function (e) { var b = e.target.closest("[role=tab]"); if (b) tab(b.getAttribute("data-tab")); });
 
   // ── the four steps: 1 Requests · 2 Correlate · 3 Test data · 4 Download. One workspace, four views of it: step 1
   //    is the workspace as it was; steps 2 and 3 give the whole width to the Correlation Advisor / the Test data
   //    table; step 4 lists what is worth a look and downloads. Nothing is applied or lost by moving between steps. ──
+  var NEXT = { 1: "Next: Correlate", 2: "Next: Test data", 3: "Next: Download" };
   var cur = 0;
   function step(n, sure) {
     n = n >= 1 && n <= 4 ? n : 1;
@@ -385,6 +373,8 @@
     marks();
     if (STEP_TAB[n]) showTab(STEP_TAB[n]);
     $("#ss-done").hidden = n !== 4;
+    $("#ss-step-back").hidden = n === 1;
+    var nx = $("#ss-step-next"); nx.hidden = n === 4; if (NEXT[n]) nx.firstElementChild.textContent = NEXT[n];
     popClose();
     if (window.SSW && SSW.panes) SSW.panes();
     if (n === 4) done();
@@ -394,6 +384,8 @@
   SS.step = step;
   SS.curStep = function () { return cur; };
   $("#ss-steps").addEventListener("click", function (e) { var b = e.target.closest("[data-step]"); if (b) step(+b.getAttribute("data-step")); });
+  $("#ss-step-next").addEventListener("click", function () { step(cur + 1); });
+  $("#ss-step-back").addEventListener("click", function () { step(cur - 1); });
   $("#ss-steps").addEventListener("keydown", function (e) {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     var t = $$("#ss-steps [data-step]"), i = t.indexOf(document.activeElement); if (i < 0) return;
@@ -578,7 +570,7 @@
     $("#ss-ask-h").textContent = title; $("#ss-ask-t").textContent = text; $("#ss-ask-yes").textContent = okLabel || "Continue";
     $("#ss-ask-no").textContent = opt.no || "Cancel";
     d.returnValue = "";
-    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); else { if (d.returnValue === "no" && opt.otherwise) opt.otherwise(); if (window.SSW && SSW.asked) SSW.asked(); } };
+    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); else if (d.returnValue === "no" && opt.otherwise) opt.otherwise(); };
     try { d.showModal(); } catch (e) { if (window.confirm(title + "\n\n" + text)) then(); }
   };
 

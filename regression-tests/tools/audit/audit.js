@@ -108,7 +108,7 @@ if (require.main === module) (async () => {
     await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 }); await p.waitForTimeout(800);
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1200); }
     await run('Studio results', 'studio');
-    await f.click('#ss-reqs .ss-rq:not(.out) .ss-path >> nth=1'); await run('Studio request chosen', 'studio'); await f.click('#ss-tab-req'); await run('Studio request tab', 'studio'); await f.click('#ss-tab-script');
+    await f.click('#ss-reqs .ss-rq:not(.out) .ss-path >> nth=1'); await run('Studio request details', 'studio'); await f.evaluate(() => SSW.closeDetails());
     for (const b of ['#ss-filters-btn', '#ss-think-btn']) { await f.click(b); await run('Studio ' + b.slice(4, -4), 'studio'); await f.evaluate(() => SS.popClose()); }
     await f.click('#ss-steps [data-step="2"]'); await p.waitForTimeout(300); await run('Studio advisor', 'studio');
     // the correlation editor (one value at a time)

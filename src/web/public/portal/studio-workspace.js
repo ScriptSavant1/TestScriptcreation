@@ -9,7 +9,7 @@
   "use strict";
   var SS = window.SS, $ = SS.$, $$ = SS.$$, esc = SS.esc, plural = SS.plural, prefs = SS.prefs;
 
-  var W = { log: [], sel: new Set(), last: null, folded: {}, openOut: {}, q: "", rows: [], cur: null, pend: {} };
+  var W = { log: [], sel: new Set(), last: null, folded: {}, openOut: {}, q: "", rows: [], cur: null };
 
   // ── the user's transactions, applied again on every reading (called by analyze() after detectMarkers) ──
   window.studioAfterMarkers = function (entries) {
@@ -20,8 +20,8 @@
 
   function newFile() {
     if (SS.testDataNewFile) SS.testDataNewFile();
-    if (typeof closeDet === "function" && D && detOpen()) closeDet(true);
-    W.log = []; W.sel = new Set(); W.picking = false; W.pend = {}; W.last = null; W.folded = {}; W.openOut = {}; W.q = ""; W.cur = null;
+    if (typeof closeDet === "function" && D && detOpen()) closeDet();
+    W.log = []; W.sel = new Set(); W.last = null; W.folded = {}; W.openOut = {}; W.q = ""; W.cur = null;
     S.leaveOut = { ads: true, options: true }; S.leaveOutIds = new Set();
     var q = $("#ss-q"); if (q) q.value = "";
     var d = $("#ss-dq"); if (d) d.value = "";
@@ -227,14 +227,14 @@
     gs.forEach(function (g, gi) {
       var items = q ? g.items.filter(function (e) { return e.url.toLowerCase().indexOf(q) !== -1; }) : g.items;
       if (q && !items.length) return;
-      var ins = items.filter(function (e) { return !isOut(e); }), outs = items.filter(function (e) { return isOut(e) && e.leftOut !== "user"; });   // (one left out with its tick stays in sight)
+      var ins = items.filter(function (e) { return !isOut(e); }), outs = items.filter(function (e) { return e.filtered; });
       var key = g.txn || "";
       var folded = !!W.folded[key];
       if (anyTxn || g.txn) { rows.push({ k: "h", g: g, gi: gi, key: key, n: ins.length, nOut: items.length - ins.length, folded: folded, y: y }); y += H.h; }
       if (folded) return;
       var openOut = showOut || W.openOut[gi] || !!q;
       items.forEach(function (e) {
-        if (!isOut(e) || openOut || e.leftOut === "user") { rows.push({ k: "r", e: e, y: y }); y += H.r; }
+        if (!e.filtered || openOut) { rows.push({ k: "r", e: e, y: y }); y += H.r; }
       });
       if (outs.length && !openOut) {
         var by = {};
@@ -262,16 +262,14 @@
     if (r.k === "o") {
       return '<button type="button" class="ss-outrow" style="top:' + r.y + 'px" data-gi="' + r.gi + '"><svg class="i"><use href="#i-eye"/></svg>' + plural(r.n, "request") + " left out — " + esc(r.why) + '<span class="ss-link">Show</span></button>';
     }
-    var e = r.e, u = split(e.url), sel = W.sel.has(e.id), pick = picking(), o = isOut(e), mine = e.leftOut === "user" && e.filtered, on = W.pend[e.id] !== undefined ? W.pend[e.id] : !o, once = SS.setup(e);
+    var e = r.e, u = split(e.url), sel = W.sel.has(e.id), o = isOut(e), once = SS.setup(e);
     var tl = "";
     if (e.startMs && W.span) {
       var l = (e.startMs - W.span.t0) / W.span.len * 100, w = Math.max(0.6, (e.dur || 0) / W.span.len * 100);
       tl = '<i style="left:' + l.toFixed(2) + "%;width:" + Math.min(w, 100 - l).toFixed(2) + '%"></i>';
     }
-    return '<div class="ss-rq' + (o ? " out" : "") + (sel ? " sel" : "") + (W.cur === e.id ? " cur" : "") + '" style="top:' + r.y + 'px" data-id="' + e.id + '" role="listitem">' +
-      // the tick: in the script (as in the converters); while a new transaction is made, its requests
-      (pick ? '<input type="checkbox" class="ss-cb ss-cb-pick" tabindex="-1"' + (sel ? " checked" : "") + (o ? " disabled" : "") + ' aria-label="Choose request ' + e.id + ' for the new transaction">'
-        : '<input type="checkbox" class="ss-cb" tabindex="-1"' + (on ? " checked" : "") + (o && !mine ? " disabled" : "") + ' aria-label="Request ' + e.id + ' in the script" title="' + (o && !mine ? "Left out: " + esc(why(e)) + " (Filters, Domains)" : on ? "In the script: untick to leave it out" : "Left out: tick to put it back") + '">') +
+    return '<div class="ss-rq' + (e.filtered ? " out" : "") + (sel ? " sel" : "") + (W.cur === e.id ? " cur" : "") + '" style="top:' + r.y + 'px" data-id="' + e.id + '" role="listitem">' +
+      '<input type="checkbox" class="ss-cb" tabindex="-1"' + (sel ? " checked" : "") + (e.filtered ? " disabled" : "") + ' aria-label="Tick request ' + e.id + ' for a new transaction">' +
       '<span class="ss-rn">' + e.id + "</span>" +
       '<span class="ss-m ' + esc(e.method) + '">' + esc(e.method) + "</span>" +
       '<span class="ss-path"><b title="' + esc(e.url) + '">' + esc(u.path) + "</b><small>" + esc(u.host) +
@@ -315,30 +313,15 @@
     renderReqs();
   });
 
-  // selection → New transaction: while it is made, the ticks choose its requests
-  function picking() { return !!W.picking || W.sel.size > 0; }
+  // selection → New transaction
   function selbar() {
     var n = W.sel.size;
-    $("#ss-selbar").hidden = !picking();
-    $("#ss-sel-n").textContent = n ? n + " selected" : "Tick its requests";
-    $("#ss-sel-group").disabled = !n;
-    $("#ss-new-txn").setAttribute("aria-pressed", String(picking()));
-    $("#ss-p-req").classList.toggle("picking", picking());
-  }
-  // the tick of a request: in the script, or left out (Shift-click: a range)
-  function toggleIn(id, on, range) {
-    var list = W.rows.filter(function (r) { return r.k === "r" && (!isOut(r.e) || r.e.leftOut === "user"); }).map(function (r) { return r.e.id; }), ids = [id];
-    if (range && W.last != null && list.indexOf(W.last) !== -1 && list.indexOf(id) !== -1) { var a = list.indexOf(W.last), b = list.indexOf(id); ids = list.slice(Math.min(a, b), Math.max(a, b) + 1); }
-    W.last = id;
-    ids.forEach(function (x) { W.pend[x] = on; });
-    draw();
-    change(function () {
-      S.leaveOutIds = S.leaveOutIds || new Set();
-      ids.forEach(function (x) { if (on) S.leaveOutIds.delete(x); else S.leaveOutIds.add(x); });
-    });
+    $("#ss-selbar").hidden = !n;
+    $("#ss-sel-n").textContent = n + " selected";
+    $("#ss-p-req").classList.toggle("picking", !!W.picking || n > 0);
   }
   function tick(id, on, range) {
-    var list = W.rows.filter(function (r) { return r.k === "r" && !isOut(r.e); }).map(function (r) { return r.e.id; });
+    var list = W.rows.filter(function (r) { return r.k === "r" && !r.e.filtered; }).map(function (r) { return r.e.id; });
     var ids = [id];
     if (range && W.last != null && list.indexOf(W.last) !== -1) {
       var a = list.indexOf(W.last), b = list.indexOf(id);
@@ -364,10 +347,8 @@
     var id = +r.getAttribute("data-id");
     W.cur = id;
     var cb = r.querySelector("input");
-    if (picking()) { if (!cb.disabled) tick(id, e.target === cb ? cb.checked : !W.sel.has(id), e.shiftKey); return; }
-    if (e.target === cb) { if (!cb.disabled) toggleIn(id, cb.checked, e.shiftKey); return; }
-    openDet(id);
-    if (e.detail === 2) SS.rtab("req");   // a double click (the rows are drawn again by the first one)
+    if (!cb.disabled && (e.target === cb || W.sel.size || W.picking)) tick(id, e.target === cb ? cb.checked : !W.sel.has(id), e.shiftKey);
+    else openDet(id);
   });
   function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
   // keyboard: arrows move, Space ticks, Enter folds a transaction
@@ -382,23 +363,17 @@
       var y = list[i].y;
       if (y < box.scrollTop) box.scrollTop = y; else if (y + H.r > box.scrollTop + box.clientHeight) box.scrollTop = y + H.r - box.clientHeight;
       if (D.id != null) openDet(W.cur); else draw();
-    } else if (e.key === " " && i >= 0) {
-      e.preventDefault();
-      var en = list[i].e;
-      if (picking()) { if (!isOut(en)) tick(W.cur, !W.sel.has(W.cur), e.shiftKey); }
-      else if (!isOut(en) || en.leftOut === "user") toggleIn(W.cur, !!en.filtered, e.shiftKey);
-    }
-    else if (e.key === "Enter" && i >= 0) { e.preventDefault(); openDet(W.cur); SS.rtab("req"); }
+    } else if (e.key === " " && i >= 0 && !list[i].e.filtered) { e.preventDefault(); tick(W.cur, !W.sel.has(W.cur), e.shiftKey); }
+    else if (e.key === "Enter" && i >= 0) { e.preventDefault(); openDet(W.cur); }
     else if (e.key === "Escape" && (W.sel.size || W.picking)) { clearSel(); }
-    else if (e.key === "Escape" && detOpen() && !D.inline) { closeDet(); }
+    else if (e.key === "Escape" && detOpen()) { closeDet(); }
   });
   function clearSel() { W.sel = new Set(); W.picking = false; W.last = null; draw(); selbar(); }
   $("#ss-sel-clear").addEventListener("click", clearSel);
   $("#ss-sel-group").addEventListener("click", function () { openTxn("create"); });
   $("#ss-new-txn").addEventListener("click", function () {
     if (W.sel.size) { openTxn("create"); return; }
-    if (W.picking) { clearSel(); return; }
-    W.picking = true; W.last = null; draw(); selbar();
+    W.picking = true; selbar();
     showToast("Tick the requests for the new transaction (Shift-click ticks a range), then Create transaction.", "info", 5000);
     box.focus();
   });
@@ -429,7 +404,7 @@
       edit({ op: "rename", from: mode.name, to: name }, "Renamed " + mode.name + " to " + name + ".");
     } else {
       var ids = Array.from(W.sel).sort(function (a, b) { return a - b; });
-      W.sel = new Set(); W.picking = false; W.last = null;
+      W.sel = new Set(); W.picking = false;
       edit({ op: "create", name: name, ids: ids }, "Transaction " + name + " created.");
     }
   });
@@ -485,8 +460,8 @@
     // Leave out / Put back this one request (a request left out by its type, domain or a rule is changed there)
     var lv = $("#ss-det-leave"), mine = e.leftOut === "user";
     lv.textContent = mine ? "Put back" : "Leave out";
-    lv.disabled = isOut(e) && !mine;
-    lv.title = mine ? "Put this request back into the script" : isOut(e) ? "Already left out (" + why(e) + ") — change that in the filters or Domains" : "Leave this request out of the script";
+    lv.disabled = e.filtered && !mine;
+    lv.title = mine ? "Put this request back into the script" : e.filtered ? "Already left out (" + why(e) + ") — change that in the filters or Domains" : "Leave this request out of the script";
     var top = (D.fromFind != null ? '<p class="hx-back"><mark class="hx-hl">' + esc(RequestDetails.short(D.fromFind, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back-find>Back to Find a value</button></p>' : "") +
       '<p class="ss-det-ctx">' + (e.txn ? "Transaction <b>" + esc(e.txn) + "</b>" : "Not in a transaction") + " · " +
       (isOut(e) ? "left out of the script (" + esc(why(e)) + ")" : '<span class="ss-in">in the script</span>' + (SS.setup(e) ? ", once at the start" : "")) + "</p>";
@@ -496,63 +471,6 @@
       out: isOut(e), why: why(e), tab: D.tab, mask: D.mask, full: D.full, top: top,
       hl: markFound, extra: [dynTab(e)],
     });
-  }
-  // keepFind: opened from a Find a value answer (the value stays marked, with a way back)
-  // where the details are shown: the Request tab of step 1; as a window (Larger, Find a value, steps 2 to 4, the panel
-  // hidden); or docked as a fourth panel (2400 px and wider, when chosen)
-  var tabBox = $("#ss-t-req"), emptyNote = $("#ss-req-empty");
-  function canInline() { return SS.curStep() === 1 && !(prefs.hide || {}).right && !D.large && !document.body.classList.contains("ss-dock"); }
-  function place(inl) {
-    D.inline = inl;
-    var host = inl ? tabBox : cols;
-    if (det.parentNode !== host) { if (inl) host.appendChild(det); else host.insertBefore(det, $("#ss-p-right")); }
-    det.classList.toggle("ss-det-inline", inl);
-    det.setAttribute("role", inl ? "group" : "dialog");
-    if (inl) { det.classList.remove("ss-det-moved"); det.removeAttribute("style"); }
-    $("#ss-det-big").hidden = !inl; $("#ss-det-x").hidden = inl;
-    document.body.classList.toggle("ss-det-open", !inl && !det.hidden);
-    scrimUp();
-  }
-  function scrimUp() { scrim.hidden = det.hidden || !!D.inline || document.body.classList.contains("ss-dock"); }
-  function badge() {
-    var b = $("#ss-req-badge"), id = D.view === "req" ? D.id : null;
-    b.hidden = id == null; b.textContent = id == null ? "" : id;
-    emptyNote.hidden = !!(D.inline && D.id != null && D.view === "req");
-  }
-  function homeTop(fb) { return window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : ""; }
-  function openDet(id, keepFind) {
-    if (!keepFind) D.fromFind = null;
-    if (D.view !== "req") { D.view = "req"; $("#ss-det-h").textContent = "Request details"; }
-    det.classList.remove("is-find");
-    var first = D.id == null;
-    if (D.id !== id) D.full = {};
-    D.id = id; W.cur = id;
-    // over the workspace, below the file bar (Download ZIP and the format stay in reach)
-    det.hidden = false;
-    place(canInline());
-    var fb = $("#ss-filebar").getBoundingClientRect();
-    if (!D.inline && !det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
-    renderDet(); draw(); badge(); mark(true);
-    if (first && !document.body.classList.contains("ss-dock")) detB.scrollTop = 0;
-  }
-  function detOpen() { return D.id != null || D.view === "find"; }
-  // the window closes: the request goes back into the Request tab (gone: the recording is)
-  function closeDet(gone) {
-    if (!detOpen()) return;
-    var keep = gone ? null : D.id != null ? D.id : D.back;
-    D.id = null; D.view = "req"; D.fromFind = null; D.large = false; D.back = null; det.hidden = true; det.classList.remove("is-find");
-    $("#ss-det-h").textContent = "Request details";
-    place(false); badge();
-    if (keep != null && canInline() && byId(keep)) { openDet(keep); box.focus(); return; }
-    mark(); draw(); if (!gone) box.focus();
-  }
-  // step 1 again: the request chosen before is still there
-  function back1() {
-    if (D.inline && D.id != null && !document.body.classList.contains("ss-dock") && !canInline()) { D.kept = D.id; D.id = null; det.hidden = true; place(false); badge(); mark(); return; }   // another step, or the panel hidden
-    if (SS.curStep() !== 1) return;
-    var k = D.kept; D.kept = null;
-    if (k != null && D.id == null && D.view === "req" && byId(k) && canInline()) openDet(k);
-    else if (D.id != null && D.view === "req" && D.inline !== canInline()) openDet(D.id);
   }
   // ── the code of the request, marked in the script (a background behind its lines: the code itself is not touched) ──
   var blocks = { text: null, map: null };
@@ -593,19 +511,41 @@
   }
   function mark(go) {
     var pre = $("#code-body"), main = S.tab === "mj" || S.tab === "ac";
-    // a request was chosen while another file was open: the script again
-    if (go && !main && SS.rtab() === "script" && D.id != null) { var t0 = $("#code-tabs .code-tab"); if (t0) { t0.click(); main = S.tab === "mj" || S.tab === "ac"; } }
-    var r = main && D.id != null && D.view === "req" && SS.curStep() === 1 ? codeMap(pre.textContent)[D.id] : null;
+    var r = main && W.cur != null && SS.curStep() === 1 && byId(W.cur) ? codeMap(pre.textContent)[W.cur] : null;
     pre.classList.toggle("ss-hl", !!r);
     if (!r) return;
     var cs = getComputedStyle(pre), lh = parseFloat(cs.lineHeight) || 20, top = parseFloat(cs.paddingTop) || 0;
     pre.style.setProperty("--hl-y", (top + r.a * lh) + "px"); pre.style.setProperty("--hl-h", ((r.b - r.a + 1) * lh) + "px");
     if (go) { var y = top + r.a * lh; if (y < pre.scrollTop + 4 || top + (r.b + 1) * lh > pre.scrollTop + pre.clientHeight) pre.scrollTop = Math.max(0, y - 24); pre.scrollLeft = 0; }
   }
-  $("#ss-det-big").addEventListener("click", function () { if (D.id == null) return; D.large = true; openDet(D.id); var x = $("#ss-det-x"); if (x) x.focus(); });
+  // keepFind: opened from a Find a value answer (the value stays marked, with a way back)
+  function homeTop(fb) { return window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : ""; }
+  function openDet(id, keepFind) {
+    if (!keepFind) D.fromFind = null;
+    if (D.view !== "req") { D.view = "req"; $("#ss-det-h").textContent = "Request details"; }
+    det.classList.remove("is-find");
+    var first = D.id == null;
+    if (D.id !== id) D.full = {};
+    D.id = id; W.cur = id;
+    // over the workspace, below the file bar (Download ZIP and the format stay in reach)
+    var fb = $("#ss-filebar").getBoundingClientRect();
+    if (!det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
+    det.hidden = false;
+    document.body.classList.add("ss-det-open");
+    renderDet(); draw(); mark(true);
+    if (first && !document.body.classList.contains("ss-dock")) detB.scrollTop = 0;
+  }
+  function detOpen() { return D.id != null || D.view === "find"; }
+  function closeDet() {
+    if (!detOpen()) return;
+    D.id = null; D.view = "req"; D.fromFind = null; det.hidden = true;
+    $("#ss-det-h").textContent = "Request details";
+    document.body.classList.remove("ss-det-open");
+    draw(); box.focus();
+  }
   function step(d) { var ids = shownIds(), at = ids.indexOf(D.id); if (at < 0 || !ids[at + d]) return; openDet(ids[at + d]); scrollTo(ids[at + d]); }
   function scrollTo(id) { var r = W.rows.filter(function (x) { return x.k === "r" && x.e.id === id; })[0]; if (!r) return; if (r.y < box.scrollTop || r.y + H.r > box.scrollTop + box.clientHeight) box.scrollTop = Math.max(0, r.y - box.clientHeight / 2); draw(); }
-  $("#ss-det-x").addEventListener("click", function () { closeDet(); });
+  $("#ss-det-x").addEventListener("click", closeDet);
   $("#ss-det-prev").addEventListener("click", function () { step(-1); });
   $("#ss-det-leave").addEventListener("click", function () {
     var id = D.id, e = byId(id); if (!e) return;
@@ -658,7 +598,7 @@
     return { key: "dynamic", label: "Dynamic values", count: list.length || "", html: html };
   }
   detB.addEventListener("click", function (e) {
-    if (e.target.closest("[data-go-adv]")) { if (!document.body.classList.contains("ss-dock") && !D.inline) closeDet(); SS.tab("corr"); return; }
+    if (e.target.closest("[data-go-adv]")) { if (!document.body.classList.contains("ss-dock")) closeDet(); SS.tab("corr"); return; }
     var fv = e.target.closest("[data-find]"); if (fv && D.view !== "find") { openFind(fv.getAttribute("data-find")); return; }
     var op = e.target.closest("[data-open]"); if (op) { openDet(+op.getAttribute("data-open")); scrollTo(+op.getAttribute("data-open")); return; }
     var ad = e.target.closest("[data-dyn-add], [data-dyn-paste]");
@@ -681,7 +621,7 @@
     else showToast("Copying is not allowed here.", "warning");
   });
   det.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { if (D.inline) return; e.preventDefault(); closeDet(); return; }
+    if (e.key === "Escape") { e.preventDefault(); closeDet(); return; }
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       var tb = e.target.closest(".hx-tab"); if (!tb) return;
@@ -696,11 +636,11 @@
   scrim.className = "ss-det-scrim"; scrim.id = "ss-det-scrim"; scrim.hidden = true;
   det.parentNode.insertBefore(scrim, det);
   // Escape closes the window wherever the focus is (opened from the table, say)
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !e.defaultPrevented && detOpen() && !D.inline && !document.body.classList.contains("ss-dock") && !document.querySelector("dialog[open]")) { e.preventDefault(); closeDet(); } });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !e.defaultPrevented && detOpen() && !document.body.classList.contains("ss-dock") && !document.querySelector("dialog[open]")) { e.preventDefault(); closeDet(); } });
   scrim.addEventListener("pointerdown", function (e) { e.preventDefault(); closeDet(); });
-  new MutationObserver(scrimUp).observe(det, { attributes: true, attributeFilter: ["hidden"] });
+  new MutationObserver(function () { scrim.hidden = det.hidden || document.body.classList.contains("ss-dock"); }).observe(det, { attributes: true, attributeFilter: ["hidden"] });
   try {
-    if (window.parent !== window) window.parent.document.addEventListener("pointerdown", function () { if (detOpen() && !D.inline && !document.body.classList.contains("ss-dock")) closeDet(); });
+    if (window.parent !== window) window.parent.document.addEventListener("pointerdown", function () { if (detOpen() && !document.body.classList.contains("ss-dock")) closeDet(); });
   } catch (err) { /* the portal is on another address: the backdrop still closes it */ }
   // A pop-up at every width; on screens 2400 px and wider the user may dock it as a fourth panel instead (pref dock,
   // the button in its bar) — before, it docked by itself there, which read as a missing pop-up on a large monitor
@@ -714,8 +654,7 @@
       dockBtn.title = prefs.dock ? "Open the details as a pop-up over the workspace" : "Show the details as a panel beside the requests (wide screens)";
       dockBtn.lastChild.textContent = prefs.dock ? "Pop-up" : "Dock";
     }
-    scrimUp();
-    if (SS.curStep() === 1 && D.id != null && D.view === "req" && D.inline !== canInline()) openDet(D.id);
+    scrim.hidden = det.hidden || document.body.classList.contains("ss-dock");
   }
   if (dockBtn) dockBtn.addEventListener("click", function () { prefs.dock = !prefs.dock; SS.save(); unmove(); dock(); });
 
@@ -733,7 +672,7 @@
   if (bar) {
     bar.title = "Drag to move; double-click puts it back";
     bar.addEventListener("pointerdown", function (e) {
-      if (e.button !== 0 || D.inline || document.body.classList.contains("ss-dock") || e.target.closest("button, input, label, select, a")) return;
+      if (e.button !== 0 || document.body.classList.contains("ss-dock") || e.target.closest("button, input, label, select, a")) return;
       var r = det.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
       det.style.height = r.height + "px"; det.style.right = "auto"; det.style.bottom = "auto";
       det.classList.add("ss-det-moved"); det.style.left = r.left + "px"; det.style.top = r.top + "px";
@@ -745,7 +684,7 @@
       function up() { bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); bar.removeEventListener("pointercancel", up); }
       bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up); bar.addEventListener("pointercancel", up);
     });
-    bar.addEventListener("dblclick", function (e) { if (!D.inline && !e.target.closest("button, input, label, select, a")) unmove(); });
+    bar.addEventListener("dblclick", function (e) { if (!e.target.closest("button, input, label, select, a")) unmove(); });
   }
   window.addEventListener("resize", clampDet);
   window.addEventListener("resize", dock); dock();
@@ -796,10 +735,8 @@
   function openFind(value) {
     if (!S.har1) return;
     if (S.isNetLog1) { showToast("Find a value needs a HAR file (a NetLog file has no response bodies).", "warning"); return; }
-    if (D.view === "req" && D.id != null) D.back = D.id;
     D.view = "find"; D.id = null;
     det.classList.add("is-find");
-    det.hidden = false; place(false); badge(); mark();
     var fb = $("#ss-filebar").getBoundingClientRect();
     if (!det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
     det.hidden = false; document.body.classList.add("ss-det-open");
@@ -949,7 +886,6 @@
     ["dom", "req", "right"].forEach(function (p) { cols.classList.toggle("no-" + p, !!prefs.hide[p] && !(wide && p === "right")); });
     if (prefs.wDom) cols.style.setProperty("--ss-dw", prefs.wDom + "px");
     if (prefs.wRight) cols.style.setProperty("--ss-rw", prefs.wRight + "px");
-    back1();
   }
   function showPane(p, on) {
     if (!!prefs.hide[p] === !on) return;
@@ -1019,14 +955,11 @@
     // (Dynamic values are worked out again after every change: an applied correlation changes them)
     // (Find a value reads the new reading too: what is left out and the Advisor's findings may have changed)
     render: function () {
-      W.pend = {}; renderTypes(); renderDomains(); renderReqs(); D.dynFor = null;
+      renderTypes(); renderDomains(); renderReqs(); D.dynFor = null;
       var nc = (S.advisorCandidates || []).length, again = FW.forE !== S.entries1 || FW.forC !== nc;
       if (again) { FW.dirty = true; FW.forE = S.entries1; FW.forC = nc; }
-      if (D.view === "find") { if (again) find(D.find); else renderFind(); } else if (D.id != null) { renderDet(); mark(); }
+      if (D.view === "find") { if (again) find(D.find); else renderFind(); } else if (D.id != null) renderDet();
     },
-    mark: mark,
-    // a question was answered with no: the ticks show what is in the script
-    asked: function () { W.pend = {}; draw(); },
     openFind: function (v) { openFind(v); },
     openDetails: function (id) { openDet(id); },
     // "Show an example" in step 2, Correlate (as in the mockup): a request that sends back a value the
@@ -1038,8 +971,8 @@
       D.tab = "dynamic"; D.full = {}; openDet(e.id); scrollTo(e.id);
     },
     undoToast: function (msg, undo) { undoToast(msg, undo); },
+    mark: mark,
     closeDetails: function () { closeDet(); },
-    reread: again,
     showPane: showPane,
     panes: panes,
     state: W,
