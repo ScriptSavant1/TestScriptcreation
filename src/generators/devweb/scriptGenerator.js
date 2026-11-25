@@ -2058,17 +2058,12 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
         const seqNum = String(counter).padStart(2, "0");
         const txName = this.formatTransactionName(req.name, counter);
         const txVar = `TS${seqNum}`;
-        this.requestTxMap.set(req.name, { txVar, txName });
+        this.requestTxMap.set(req, { txVar, txName });   // by request: two with one name are two transactions
         counter++;
       });
     };
 
-    if (this.options.groupByFolder && this.options.useTransactions) {
-      const grouped = this.groupRequestsByFolder();
-      Object.values(grouped).forEach((requests) => assign(requests));
-    } else {
-      assign(this.requests);
-    }
+    assign(this.requests);
   }
 
   /**
@@ -2176,14 +2171,12 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
   }
 
   /**
-   * Generate grouped actions by folder (as transactions)
-   */
-  /**
-   * Generate per-request transactions.
+   * Generate per-request transactions, in the order of the collection / test plan (a request in a sub-folder or
+   * controller stays where it is: one folder after the other ran it after everything outside its folder).
    *
    * Each API request = one transaction: T{nn}_{RequestName}
    * Counter is global across ALL folders (T01, T02 ... Tn).
-   * Folders remain as code comments for readability but have no outer transaction.
+   * Folders have no outer transaction.
    *
    * Examples across folders:
    *   Folder Auth:      T01_Get_Access_Token, T02_Refresh_Token
@@ -2191,31 +2184,24 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
    *   Sub-folder A/B:   T05_Get_Items
    */
   generateGroupedActions() {
-    const grouped = this.groupRequestsByFolder();
     let code = "";
 
     // Transactions are already declared at module level (in generateHeader via requestTxMap).
     // Here we only emit .start() and .stop() — no inline "let T01 = new load.Transaction()" declarations.
-    const groupEntries = Object.entries(grouped);
-    const total = groupEntries.reduce((n, [, reqs]) => n + reqs.length, 0);
-    let done = 0;
-    groupEntries.forEach(([folder, requests], groupIndex) => {
-      requests.forEach((request, reqIndex) => {
-        done++;
-        const tx = this.requestTxMap.get(request.name);
-        const txVar = tx ? tx.txVar : null;
+    this.requests.forEach((request, index) => {
+      const tx = this.requestTxMap.get(request);
+      const txVar = tx ? tx.txVar : null;
 
-        if (txVar) code += `\n    ${txVar}.start();\n`;
-        code += this.generateRequestCode(request, 1);
-        if (txVar)
-          code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
+      if (txVar) code += `\n    ${txVar}.start();\n`;
+      code += this.generateRequestCode(request, 1);
+      if (txVar)
+        code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
 
-        // Think time between steps — none after the last one; load.thinkTime follows the Runtime Settings
-        if (this.options.thinkTime > 0 && done < total) {
-          code += `\n    load.thinkTime(${this.options.thinkTime});`;
-        }
-        code += "\n\n";
-      });
+      // Think time between steps — none after the last one; load.thinkTime follows the Runtime Settings
+      if (this.options.thinkTime > 0 && index < this.requests.length - 1) {
+        code += `\n    load.thinkTime(${this.options.thinkTime});`;
+      }
+      code += "\n\n";
     });
 
     return code;
@@ -2363,7 +2349,7 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
     // Transactions already declared at module level via requestTxMap — only start/stop here
     this.requests.forEach((request, index) => {
-      const tx = this.requestTxMap.get(request.name);
+      const tx = this.requestTxMap.get(request);
       const txVar = tx ? tx.txVar : null;
 
       if (txVar) code += `\n    ${txVar}.start();\n`;
@@ -2729,8 +2715,9 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
     // Add headers only if there are any
     const headers = this.generateHeaders(request);
-    if (headers && Object.keys(headers).length > 0) {
-      options.headers = headers;
+    const contentType = this._impliedContentType(request);
+    if ((headers && Object.keys(headers).length > 0) || contentType) {
+      options.headers = contentType ? { ...headers, "Content-Type": contentType } : headers;
     }
 
     // Add queryString if URL has query parameters
@@ -2764,6 +2751,26 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
     // Format as code string
     return this.formatOptionsObject(options);
+  }
+
+  /**
+   * The Content-Type Postman / Bruno add by themselves, for a body sent with none of its own (request or common
+   * headers): DevWeb sends none, and writes a body object as form fields — a JSON sign-in went out as "user=…&pass=…".
+   */
+  _impliedContentType(request) {
+    const body = request.body;
+    if (!body || !["POST", "PUT", "PATCH"].includes(request.method)) return null;
+    const isCt = (k) => String(k).toLowerCase() === "content-type";
+    if ((request.headers || []).some((h) => h && !h.disabled && h.key && h.value && isCt(h.key))) return null;
+    if ([...(this._staticGlobalHeaders || new Map()).keys(), ...(this._authGlobalHeaders || new Map()).keys()].some(isCt)) return null;
+    if (body.mode === "urlencoded") return "application/x-www-form-urlencoded";
+    if (body.mode !== "raw") return null;
+    try {
+      const json = JSON.parse(body.raw);
+      return json !== null && typeof json === "object" ? "application/json" : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   /**

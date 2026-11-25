@@ -2106,7 +2106,7 @@ function showResult(data, err) {
   }
   const a = data.analysis || {};
   const reqs   = a.requests?.total              ?? '—';
-  const corrs  = a.correlations?.totalCorrelations ?? '—';
+  const corrs  = a.correlations?.totalValues ?? a.correlations?.totalCorrelations ?? '—';
   const params = a.parameters?.totalParameters   ?? '—';
   document.getElementById('stats-row').innerHTML =
     stat(reqs,   'Requests')  +
@@ -2133,7 +2133,7 @@ function showJmxResult(data, err) {
   const tgArr  = data.threadGroups || [];
   const tgCount= tgArr.length;
   const reqs   = a.requests?.total              ?? data.metadata?.totalRequests ?? '—';
-  const corrs  = a.correlations?.totalCorrelations ?? '—';
+  const corrs  = a.correlations?.totalValues ?? a.correlations?.totalCorrelations ?? '—';
   const params = a.parameters?.totalParameters   ?? '—';
 
   document.getElementById('stats-row').innerHTML =

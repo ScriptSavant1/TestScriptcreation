@@ -64,9 +64,9 @@ describe('applyServerNames / applyScriptName', () => {
   });
   test('noteGenerated: server names and correlations over several scripts', () => {
     const src = {};
-    S.noteGenerated(src, { hostVarMap: new Map([['API.example.com', 'Api_Server']]) }, { correlations: { correlations: [{ name: 'a' }] } });
-    S.noteGenerated(src, { hostVarMap: new Map([['api.example.com', 'Other']]) }, { correlations: { correlations: [{ name: 'b' }] } });
-    expect(src).toEqual({ servers: { 'api.example.com': 'Api_Server' }, correlations: [{ name: 'a' }, { name: 'b' }] });
+    S.noteGenerated(src, { hostVarMap: new Map([['API.example.com', 'Api_Server']]), perRequestVars: new Map([['xRequestId', {}]]) }, { correlations: { correlations: [{ name: 'a' }] } });
+    S.noteGenerated(src, { hostVarMap: new Map([['api.example.com', 'Other']]), perRequestVars: new Map([['xRequestId', {}], ['nonce', {}]]) }, { correlations: { correlations: [{ name: 'b' }] } });
+    expect(src).toEqual({ servers: { 'api.example.com': 'Api_Server' }, correlations: [{ name: 'a' }, { name: 'b' }], made: ['xRequestId', 'nonce'] });
   });
 });
 

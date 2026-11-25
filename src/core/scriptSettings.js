@@ -18,7 +18,8 @@
  *                                    name that is valid (shared/host-params.js validName — not reserved, not one of
  *                                    `extra`, not another server's) replaces the default; others are ignored
  *   serverKey(host)                  how a server is compared: lower case, :443 / :80 dropped
- *   noteGenerated(src, generator, analysis)  for the preview: each server's parameter name, the correlations found
+ *   noteGenerated(src, generator, analysis)  for the preview: each server's parameter name, the correlations found, the
+ *                                    values the script makes itself (a UUID, a nonce: the generators' perRequestVars)
  *   safeZipName(name)                the download's file name for a chosen script name
  */
 
@@ -124,6 +125,8 @@ function noteGenerated(previewSource, generator, analysis) {
   if (!previewSource || !generator) return;
   const servers = previewSource.servers || (previewSource.servers = {});
   for (const [host, name] of generator.hostVarMap || []) { const k = serverKey(host); if (!servers[k]) servers[k] = name; }
+  const made = previewSource.made || (previewSource.made = []);
+  for (const name of (generator.perRequestVars && generator.perRequestVars.keys()) || []) if (!made.includes(name)) made.push(name);
   const list = analysis && analysis.correlations && analysis.correlations.correlations;
   if (Array.isArray(list)) (previewSource.correlations || (previewSource.correlations = [])).push(...list);
 }

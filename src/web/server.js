@@ -55,7 +55,7 @@ const { resolveCdpRecorderDownload } = require("./cdpRecorderDownload");
 const BrunoDevWebConverter      = require("../tools/collection-converter");
 const JmxConverter              = require("../tools/jmx-converter");
 const JmxDependencyResolver     = require("../lib/jmxDependencyResolver");
-const { safePreview }           = require("./convertPreview");
+const { safePreview, publicAnalysis, publicScripts }           = require("./convertPreview");
 const { leaveOutOption }        = require("../core/requestSelection");
 const { settingsOptions, safeZipName } = require("../core/scriptSettings");
 
@@ -476,7 +476,7 @@ class WebServer {
           res.json({
             success:     true,
             downloadUrl: `/converter/download/${token}`,
-            analysis:    results.analysis,
+            analysis:    publicAnalysis(results.analysis),
             protocol:    options.protocol,
             mode:        options.mode,
             // what the ZIP holds — requests, servers, files — shown before the download (read-only)
@@ -647,9 +647,9 @@ class WebServer {
           res.json({
             success:     true,
             downloadUrl: `/converter/download/${token}`,
-            analysis:    results.analysis,
+            analysis:    publicAnalysis(results.analysis),
             threadGroups: results.threadGroups,
-            scripts:     results.scripts || null,
+            scripts:     publicScripts(results.scripts),
             multiScript: results.multiScript || false,
             metadata:    results.metadata,
             dependency,

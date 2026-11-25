@@ -84,6 +84,9 @@ class JmxConverter {
     //     when variableNames is blank).
     await this.enrichCsvVariableNames(csvDataSets);
 
+    // 2c. The scripts name an uploaded data file as the ZIP holds it (test plans write "data/users.csv", "C:/…/users.csv").
+    this.nameUploadedCsvFiles(csvDataSets);
+
     // 3. Remove JMX-internal variables from the collection so they never reach
     //    the generator's classifyVariables().  Without this, vars like
     //    nrThreads=50, csvFile1=users.csv, lines1=100 become spurious Tier 2
@@ -187,6 +190,7 @@ class JmxConverter {
     const kept          = new Set(requests);   // the requests left in (all, unless some were left out on the page)
     const scripts       = [];
     let   firstAnalysis = null;
+    const total = { requests: 0, uses: 0, values: new Set(), params: new Set() };   // every thread group
 
     for (const [tgName, tgAll] of tgRequestsMap) {
       const tgReqs = tgAll.filter(r => kept.has(r));
@@ -277,6 +281,10 @@ class JmxConverter {
       const { script, analysis } = await generator.generate(tgOutputDir);
       noteGenerated(this.previewSource, generator, analysis);
       if (!firstAnalysis) firstAnalysis = analysis;
+      total.requests += tgReqs.length;
+      total.uses     += (analysis.correlations && analysis.correlations.totalCorrelations) || 0;
+      for (const c of generator.correlations || []) total.values.add(c.name);
+      for (const name of (generator.parameters && generator.parameters.keys()) || []) total.params.add(name);
 
       if (!isWebHttp) {
         await fs.writeFile(path.join(tgOutputDir, 'main.js'), script, 'utf8');
@@ -286,6 +294,9 @@ class JmxConverter {
       if (tgCsvDataSets.length && this.options.useParameterization && !isWebHttp) {
         await this.generateCsvParameterFiles(tgCsvDataSets, false, tgOutputDir);
       }
+
+      // the data files this thread group reads, next to its script (uploaded ones; the copy at the top of the ZIP stays)
+      await this.copyUploadedCsvFiles(tgCsvDataSets, tgOutputDir);
 
       // Per-thread-group WLM Excel (only when we have metadata for this group)
       if (this.options.generateWlmExcel && tgMeta) {
@@ -319,7 +330,12 @@ class JmxConverter {
       outputDir:   this.options.outputDir,
       multiScript: true,
       scripts,
-      analysis:    firstAnalysis,
+      analysis:    firstAnalysis && {
+        ...firstAnalysis,
+        requests:     { ...firstAnalysis.requests, total: total.requests },
+        correlations: { ...firstAnalysis.correlations, totalCorrelations: total.uses, totalValues: total.values.size },
+        parameters:   { ...firstAnalysis.parameters, totalParameters: total.params.size },
+      },
       metadata,
       threadGroups,
       csvDataSets,
@@ -560,6 +576,34 @@ class JmxConverter {
         });
       }
       await fs.writeFile(ymlPath, ymlContent, 'utf8');
+    }
+  }
+
+  /**
+   * An uploaded data file (found by its name, upper / lower case alike) is named in the scripts as the ZIP holds it:
+   * the name alone, no folder. ds.uploadedName keeps the uploaded name for the dependency report. A file that was not
+   * uploaded keeps the test plan's own path.
+   */
+  nameUploadedCsvFiles(csvDataSets) {
+    const paths = this.options.csvFilePaths || {};
+    const byName = new Map(Object.keys(paths).map((k) => [path.basename(k).toLowerCase(), k]));
+    for (const ds of csvDataSets) {
+      const name = String(ds.filename || '').replace(/\\/g, '/').split('/').pop().trim().toLowerCase();
+      const uploaded = name && byName.get(name);
+      if (!uploaded) continue;
+      ds.uploadedName = uploaded;
+      ds.filename     = path.basename(paths[uploaded]);
+    }
+  }
+
+  /** The uploaded data files of these data sets, written into a script's folder. */
+  async copyUploadedCsvFiles(csvDataSets, outputDir) {
+    const paths = this.options.csvFilePaths || {};
+    const done = new Set();
+    for (const ds of csvDataSets) {
+      if (!ds.uploadedName || done.has(ds.filename)) continue;
+      done.add(ds.filename);
+      await fs.writeFile(path.join(outputDir, ds.filename), await fs.readFile(paths[ds.uploadedName]));
     }
   }
 }

@@ -213,6 +213,7 @@ class BrunoDevWebConverter {
       await fs.mkdir(this.options.outputDir, { recursive: true });
       const scriptSummaries = [];
 
+      const total = { uses: 0, values: new Set(), params: new Set() };   // every script
       for (const folderName of folderNames) {
         const folderRequests = folderGroups[folderName];
         const safeFolderName = folderName.replace(/[<>:"/\\|?*]/g, "_");
@@ -266,6 +267,9 @@ class BrunoDevWebConverter {
           }
         }
 
+        for (const c of generator.correlations || []) total.values.add(c.name);
+        for (const name of (generator.parameters && generator.parameters.keys()) || []) total.params.add(name);
+        total.uses += (analysis.correlations && analysis.correlations.totalCorrelations) || 0;
         scriptSummaries.push({
           folder: folderName,
           outputDir: scriptOutputDir,
@@ -315,6 +319,11 @@ class BrunoDevWebConverter {
         outputDir: this.options.outputDir,
         scripts: scriptSummaries,
         totalRequests: requests.length,
+        analysis: {
+          requests: { total: requests.length },
+          correlations: { totalCorrelations: total.uses, totalValues: total.values.size },
+          parameters: { totalParameters: total.params.size },
+        },
         crossFolderWarnings: uniqueWarningStrings,
         metadata,
       };

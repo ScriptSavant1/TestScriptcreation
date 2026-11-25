@@ -68,7 +68,7 @@ class WebHttpScriptGenerator {
     this.largeValueIndex = new Map(); // "requestName::__raw__|__json__" → hash
     this.BASE64_THRESHOLD = 500;
 
-    // Transaction names collected during generateGroupedRequests() — passed to .usr file
+    // Transaction names collected during generateSequentialRequests() — passed to .usr file
     this.transactionNames = [];
 
     // Snapshot counter — increments for every web_url/web_custom_request in Action.c.
@@ -687,7 +687,10 @@ class WebHttpScriptGenerator {
       script: actionC,
       analysis: {
         requests: { total: this.requests.length },
-        correlations: { totalCorrelations: this.correlations.length },
+        correlations: {
+          totalCorrelations: this.correlations.length,   // every use
+          totalValues: new Set(this.correlations.map((c) => c.name)).size,   // each value once (the page's count)
+        },
         parameters: { totalParameters: this.parameters.size },
         authentication: { totalConfigs: 0 },
       },
@@ -1698,11 +1701,7 @@ ${declBlock}    // Set in vuser_init: ${this._actionServerNote()}
 
 ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
 
-    if (this.options.useTransactions && this.options.groupByFolder) {
-      code += this.generateGroupedRequests();
-    } else {
-      code += this.generateSequentialRequests();
-    }
+    code += this.generateSequentialRequests();
 
     code += `
     return 0;
@@ -1742,62 +1741,15 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     return String(block || "").replace(/^( +)(?=\S)/gm, (m) => m + m);
   }
 
-  // ─── Request Grouping ────────────────────────────────────────────────────────
-
-  groupRequestsByFolder() {
-    const groups = new Map();
-    this.requests.forEach((req) => {
-      const folder = req.folder || "Default";
-      if (!groups.has(folder)) groups.set(folder, []);
-      groups.get(folder).push(req);
-    });
-    return groups;
-  }
+  // ─── Requests ────────────────────────────────────────────────────────────────
 
   /**
-   * Generate per-request transactions.
+   * Generate per-request transactions, in the order of the collection / test plan (a request in a sub-folder or
+   * controller stays where it is: one folder after the other ran it after everything outside its folder).
    *
-   * Each API request = one LR transaction: T{nn}_{RequestName}
-   * Counter is global across ALL folder groups (T01, T02 ... Tn).
-   * Folders remain as C comments for code readability — no outer transactions.
-   *
-   * Examples:
-   *   Folder Auth:      T01_Get_Access_Token,  T02_Refresh_Token
-   *   Folder Products:  T03_Get_Products,       T04_Create_Product
-   *   Sub-folder A/B:   T05_Get_Items  (uses sanitized request name)
-   *
-   *  * All transaction names collected in this.transactionNames for .usr file.
+   * Each API request = one LR transaction: T{nn}_{RequestName}; folders have no outer transaction.
+   * All transaction names are collected in this.transactionNames for the .usr file.
    */
-  generateGroupedRequests() {
-    const groups = this.groupRequestsByFolder();
-    let code = "";
-    let txCounter = 1;
-    this.transactionNames = []; // Reset — will hold ALL per-request tx names
-
-    const groupEntries = Array.from(groups.entries());
-    const total = groupEntries.reduce((n, [, reqs]) => n + reqs.length, 0);
-    groupEntries.forEach(([folder, requests], groupIndex) => {
-      requests.forEach((request, idx) => {
-        const txName = this.formatTransactionName(request.name, txCounter);
-        this.transactionNames.push(txName);
-        txCounter++;
-
-        // Per-request transaction wrapper
-        code += `    lr_start_transaction("${txName}");\n\n`;
-        code += this.generateRequestBlock(request, 1);
-        code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
-
-        // Think time between steps — none after the last one (the iteration pacing follows)
-        if (this.options.thinkTime > 0 && txCounter <= total) {
-          code += `\n    lr_think_time(${this.options.thinkTime});\n`;
-        }
-        code += "\n";
-      });
-    });
-
-    return code;
-  }
-
   generateSequentialRequests() {
     let code = "";
     let txCounter = 1;

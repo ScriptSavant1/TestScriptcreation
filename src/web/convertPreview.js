@@ -106,7 +106,7 @@ const isVariable = (h) => /\{\{|\$\{/.test(h);
 //   (nothing gives it a value)
 // value: shown for environment / collection values, hidden for names that look secret, cut to 80 characters
 const SECRET_NAME = /key|secret|pass|pwd|token|private|pem|cert|cookie|session|auth/i;
-function variablesList({ requests, collection, environmentVars, correlations, sets }) {
+function variablesList({ requests, collection, environmentVars, correlations, sets, made }) {
   const env = {}, col = {}, data = {}, empty = new Set();
   Object.keys(environmentVars || {}).forEach((k) => { const v = environmentVars[k]; if (v != null && v !== '') env[k] = String(v); else empty.add(k); });
   const cv = collection && (collection.variable || collection.variables);
@@ -129,7 +129,7 @@ function variablesList({ requests, collection, environmentVars, correlations, se
   });
   return [...by.values()].map((v) => {
     const k = v.name;
-    const source = /^(\$|__)/.test(k) ? 'builtin' : v.setBy.length ? 'set' : env[k] != null ? 'environment' : col[k] != null ? 'collection' : data[k] != null ? 'data' : empty.has(k) ? 'empty' : 'missing';
+    const source = /^(\$|__)/.test(k) ? 'builtin' : v.setBy.length ? 'set' : env[k] != null ? 'environment' : col[k] != null ? 'collection' : data[k] != null ? 'data' : (made || []).includes(k) ? 'builtin' : empty.has(k) ? 'empty' : 'missing';
     const raw = env[k] != null ? env[k] : col[k];
     if (source === 'set' && how[k]) v.how = how[k];
     if (source === 'data') v.file = data[k];
@@ -141,7 +141,7 @@ function variablesList({ requests, collection, environmentVars, correlations, se
   });
 }
 
-function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations, given }) {
+function buildPreview({ kind, requests, leftOut, collection, environmentVars, files, outputDir, servers, correlations, given, made }) {
   const out = leftOut instanceof Set ? leftOut : new Set(leftOut || []);
   const declared = new Set();
   const vars = variablesOf(collection, environmentVars, declared);
@@ -199,7 +199,7 @@ function buildPreview({ kind, requests, leftOut, collection, environmentVars, fi
     files: fileList,
     truncated,
     scriptName: String((collection && ((collection.info && collection.info.name) || collection.name)) || ''),
-    variables: variablesList({ requests, collection, environmentVars, correlations, sets: setsList }).map((v) => ((given || []).includes(v.name) ? Object.assign(v, { given: true }) : v)),
+    variables: variablesList({ requests, collection, environmentVars, correlations, sets: setsList, made }).map((v) => ((given || []).includes(v.name) ? Object.assign(v, { given: true }) : v)),
   };
 }
 
@@ -208,4 +208,16 @@ function safePreview(input) {
   try { return buildPreview(input); } catch (e) { console.warn('[convert-preview]', e.message); return null; }
 }
 
-module.exports = { buildPreview, safePreview, resolve, hostOf, variablesOf, runtimeNames, setsOf, usesOf };
+// the analysis without the converter's own options (they hold the server's temporary folders)
+function publicAnalysis(analysis) {
+  if (!analysis || typeof analysis !== 'object') return analysis;
+  const { options, ...rest } = analysis;
+  return rest;
+}
+// the scripts of a multi-script answer, without the server's temporary folders
+function publicScripts(scripts) {
+  if (!Array.isArray(scripts)) return null;
+  return scripts.map(({ outputDir, analysis, ...rest }) => (analysis ? { ...rest, analysis: publicAnalysis(analysis) } : rest));
+}
+
+module.exports = { publicAnalysis, publicScripts, buildPreview, safePreview, resolve, hostOf, variablesOf, runtimeNames, setsOf, usesOf };
