@@ -440,6 +440,14 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Script generation
 
+#### Converters: order, data files, content type
+
+- The script keeps the order of the collection or test plan. Requests in a sub-folder (Postman / Bruno) or inside an If / Loop controller (JMeter, single script) ran after everything outside it.
+- JMeter: an uploaded CSV file is found by every script that reads it, also when the test plan names it with a folder; per thread group it lies in each script folder.
+- DevWeb: a JSON body without its own Content-Type is sent as JSON (it went out as form fields); form bodies get their Content-Type too.
+- DevWeb: two requests with one name are two transactions.
+- Counts: each value once, every thread group, also for Postman multi-script. A value the script makes itself is no longer listed as having no value. The answers hold no server folders.
+
 #### Sign-in (NTLM, Kerberos, Basic)
 
 ##### Fixed

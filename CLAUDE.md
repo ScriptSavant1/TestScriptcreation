@@ -247,6 +247,7 @@ DevWeb 26.3 (DevWeb.exe run directly) refuses an rts.yml without `network.ipVers
 - XPath: converter correlations from `xml2Json(...)` are XPath; DevWeb gets plain names (`/a/b` — no `local-name()`
   support), VuGen gets `local-name()` (namespace-aware) via `_vugenXpath`. A script's explicit extractor kind wins over
   the name-guessed type in VuGen.
+- Converters: requests in the order of the collection / test plan (`this.requests`; never folder by folder — BUG-158), one transaction per request (DevWeb `requestTxMap` keyed by the request object — BUG-164); DevWeb adds the Content-Type Postman adds by itself (`_impliedContentType`, BUG-165); JMeter data files: `nameUploadedCsvFiles` / `copyUploadedCsvFiles` (jmx-converter, BUG-159). `tests/unit/converterOrderAndData.test.js`.
 - Converter VuGen: auto headers live in `this._autoHeaderBlock` (written into vuser_init) — `generate()` scans it for
   undeclared `{params}` too; `tidyC` collapses blank-line runs.
 - Proof: `regression-tests/tools/engines/` — `mockproxy.js` (TLS test proxy, HAR replay, DPoP verifier), `runvugen.js` /
