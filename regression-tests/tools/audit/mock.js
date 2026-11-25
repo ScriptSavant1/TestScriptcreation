@@ -4,7 +4,8 @@
 //   - gap: no two cards / panels / buttons side by side or one above the other touch
 //   - cut: a card or panel head squeezed so that its own content is cut off (it has no scroll bar of its own)
 //   - inventory: every ID of the inventory (rows not "Remove" or "not drawn") is on some screen (data-inv)
-//   node mock.js <mockup.html> [--inventory=<file.md>] [--out=<folder>] [--sizes=1366,1920,2560,3840] [--themes=light,dark]
+//   - covered: a bar that stays in place (position: sticky, at the bottom) lying over the text it belongs to
+//   node mock.js <mockup.html> [--inventory=<file.md>] [--out=<folder>] [--sizes=1366,1536x700,1920,2560,3840] [--themes=light,dark]
 // The mockup gives window.MK = { tool(id), jump(screen) } and the lists #mk-tool [data-v], #mk-state option.
 'use strict';
 const path = require('path'), fs = require('fs');
@@ -12,13 +13,14 @@ const { chromium, inspect, focusCheck, dismissCheck, HEIGHT } = require('./revie
 const { measure } = require('./audit.js');
 const args = process.argv.slice(2), file = args.find((a) => !a.startsWith('--'));
 const opt = (k, d) => { const a = args.find((x) => x.startsWith('--' + k + '=')); return a ? a.slice(k.length + 3) : d; };
-const SIZES = opt('sizes', '1366,1920,2560,3840').split(',').map(Number), THEMES = opt('themes', 'light,dark').split(',');
+const SIZES = opt('sizes', '1366,1536x700,1920,2560,3840').split(',')   // 1536x700: a 1920 screen at 125 %, the browser's own bars taken off
+, THEMES = opt('themes', 'light,dark').split(',');
 const OUT = opt('out', ''), INV = opt('inventory', '');
 
 function reach() {
   const out = [], modal = document.querySelector('dialog[open]');
   (modal || document).querySelectorAll('[data-reach], .ds-btn-primary').forEach((e) => {
-    if (!e.offsetParent || e.closest('table, .mk')) return;
+    if (!e.offsetParent || e.closest('table, .mk, .pb')) return;
     const r = e.getBoundingClientRect();
     if (r.bottom > innerHeight + 1 || r.right > innerWidth + 1 || r.top < -1) out.push('"' + e.innerText.trim().slice(0, 30) + '" ends at ' + Math.round(r.right) + ' x ' + Math.round(r.bottom) + ' in ' + innerWidth + ' x ' + innerHeight);
   });
@@ -37,6 +39,12 @@ function gaps() {
   return out;
 }
 
+function covered() {
+  return [...document.querySelectorAll('body *')].filter((e) => { const c = getComputedStyle(e); return e.offsetParent && c.position === 'sticky' && c.bottom !== 'auto'; }).filter((e) => {
+    const r = e.getBoundingClientRect();
+    return [...e.parentElement.children].some((o) => { if (o === e) return false; const q = o.getBoundingClientRect(); return q.bottom > r.top + 2 && q.top < r.bottom - 2 && q.right > r.left && q.left < r.right; });
+  }).map((e) => '.' + e.className + ' lies over what it belongs to');
+}
 function cut() {
   return [...document.querySelectorAll('.card, .hero, .note, .frows, .adv, .setbar, .ph, .pt, .steps, .fbar, .chg')].filter((e) => e.offsetParent && e.scrollHeight > e.clientHeight + 2 && getComputedStyle(e).overflowY !== 'auto')
     .map((e) => '.' + e.classList[0] + ' "' + (e.innerText || '').trim().slice(0, 24) + '" ' + (e.scrollHeight - e.clientHeight) + ' px cut off');
@@ -48,7 +56,7 @@ function cut() {
   let screens = 0, errs = [], ext = new Set();
   const add = (k, at) => { if (!by.has(k)) by.set(k, new Set()); by.get(k).add(at); };
   for (const theme of THEMES) for (const w of SIZES) {
-    const p = await b.newPage({ viewport: { width: w, height: HEIGHT[w] || 1000 } });
+    const [vw, vh] = w.split('x').map(Number), p = await b.newPage({ viewport: { width: vw, height: vh || HEIGHT[vw] || 1000 } });
     p.on('pageerror', (e) => errs.push(e.message));
     p.on('request', (r) => { if (!/^(file|data|blob):/.test(r.url())) ext.add(r.url()); });
     await p.goto('file:///' + path.resolve(file).replace(/\\/g, '/'));
@@ -60,7 +68,7 @@ function cut() {
       screens++;
       const at = theme + ' ' + w, name = t + '-' + s, r = await p.evaluate(inspect), m = await p.evaluate(measure);
       if (s === 'busy') r.overlap = [];   // the reading box covers the page on purpose
-      r.reach = await p.evaluate(reach); r.gap = await p.evaluate(gaps); r.cut = await p.evaluate(cut);
+      r.reach = await p.evaluate(reach); r.gap = await p.evaluate(gaps); r.cut = await p.evaluate(cut); r.covered = await p.evaluate(covered);
       Object.keys(m.fams).forEach((x) => fams.add(x)); Object.keys(m.weights).forEach((x) => weights.add(x));
       r.contrast = m.fails.map((x) => '"' + x.text.slice(0, 40) + '" ' + x.ratio);
       (await p.$$eval('[data-inv]', (l) => l.filter((e) => e.offsetParent || getComputedStyle(e).position === 'fixed').map((e) => e.dataset.inv))).forEach((x) => x.split(' ').forEach((y) => seen.add(y)));

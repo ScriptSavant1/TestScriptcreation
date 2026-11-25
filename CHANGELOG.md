@@ -436,7 +436,7 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Regression tools
 
-- `audit/mock.js`: a mockup goes through the same checks as the real screens (the screen review and the design audit), plus: the main button on the screen without scrolling, cards and buttons that do not touch, no card cut off, and every item of an inventory on some screen.
+- `audit/mock.js`: a mockup goes through the same checks as the real screens (the screen review and the design audit), plus: the main button on the screen without scrolling, cards and buttons that do not touch, no card cut off or covered by a floating bar (also at 1536 × 700, a 1920 screen at 125 %), and every item of an inventory on some screen.
 
 ### Script generation
 
