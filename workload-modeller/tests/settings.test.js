@@ -67,3 +67,24 @@ describe('the engine uses the settings', () => {
     }
   });
 });
+
+// The test types' starting figures (testTypes): load / soak full-load minutes, the stress level and its hold, or steps
+describe('test types', () => {
+  test('built in: load 60 min, soak 480 min, stress 150% held 120 min', () => {
+    expect(S.DEFAULTS.testTypes).toEqual({ load: { fullLoadMin: 60 }, soak: { fullLoadMin: 480 }, stress: { shape: 'hold', levelPct: 150, holdMin: 120 } });
+  });
+  test('the team changes them', () => {
+    const { settings, problems } = S.read({ testTypes: { load: { fullLoadMin: 90 }, stress: { shape: 'steps', levelPct: 125, holdMin: 60 } } });
+    expect(problems).toEqual([]);
+    expect(settings.testTypes).toEqual({ load: { fullLoadMin: 90 }, soak: { fullLoadMin: 480 }, stress: { shape: 'steps', levelPct: 125, holdMin: 60 } });
+  });
+  test('a wrong value keeps the built-in one and is named', () => {
+    const { settings, problems } = S.read({ testTypes: { stress: { shape: 'wave', levelPct: 99, holdMin: 0 }, load: { fullLoadMin: 'an hour' }, spike: {} } });
+    expect(settings.testTypes).toEqual(S.DEFAULTS.testTypes);
+    expect(problems.length).toBe(5);
+    expect(problems.join('\n')).toMatch(/testTypes\.stress\.levelPct: 99 is not a number from 101/);
+    expect(problems.join('\n')).toMatch(/testTypes\.stress\.shape: "wave" is not "hold" or "steps"/);
+    expect(problems.join('\n')).toMatch(/testTypes\.spike: not a test type with team figures/);
+    expect(S.read({ testTypes: [] }).problems).toEqual(['testTypes: not a group of settings — the built-in values are used']);
+  });
+});

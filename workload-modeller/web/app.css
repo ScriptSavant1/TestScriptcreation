@@ -349,3 +349,58 @@ details.wm-more[open] > summary { margin-bottom: 12px; }
 .wm-tx-t .wm-txn { overflow-wrap: anywhere; font-family: var(--ds-mono); font-size: var(--ds-fs-xs); }
 .wm-tx-t td.ds-num, .wm-tx-t th.ds-num { white-space: nowrap; }
 .wm-tx-out { margin: 4px 0 0; padding-left: 18px; font-size: var(--ds-fs-sm); overflow-wrap: anywhere; }
+
+/* The test types: five equal cards, each with a drawing of its load over time; under them "About this test" (app.js
+   renderAbout: why, load, how long, what to look at, when — hidden to one line when the user hides it) */
+.wm-tt { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; container-type: inline-size; }
+.wm-tt .wm-choice { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px 12px 11px; }
+.wm-tt .wm-choice b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-tt-shape { display: block; width: 100%; height: 28px; color: var(--ds-text-3); }
+.wm-choice[aria-pressed="true"] .wm-tt-shape { color: var(--ds-accent-text); }
+.wm-choice:hover .wm-tt-shape { color: var(--ds-text-2); }
+@container (max-width: 640px) { .wm-tt .wm-choice > span { display: none; } }
+@media (max-width: 520px) { .wm-tt { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.wm-about { margin: -2px 0 16px; border: 1px solid var(--ds-accent-line); border-radius: var(--ds-r-tile); background: linear-gradient(100deg, var(--ds-accent-soft), var(--ds-surface) 75%); overflow: hidden; }
+.wm-about-h { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--ds-border); flex-wrap: wrap; }
+.wm-about-h b { font-size: var(--ds-fs); font-weight: 700; }
+.wm-about-h span { flex: 1 1 160px; color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
+.wm-about-i, .wm-about-show svg { width: 17px; height: 17px; flex: none; color: var(--ds-accent-text); }
+.wm-about-b { display: grid; grid-template-columns: minmax(180px, 0.8fr) minmax(0, 2fr); gap: 14px 18px; padding: 12px 14px 14px; align-items: start; }
+.wm-about-fig { margin: 0; }
+.wm-about-fig svg { display: block; width: 100%; height: 96px; color: var(--ds-accent-text); }
+.wm-about-100 { stroke: var(--ds-text-3); stroke-dasharray: 3 4; }
+.wm-about-fill { fill: currentColor; opacity: .12; }
+.wm-about-line { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.wm-about-fig figcaption { display: flex; justify-content: space-between; gap: 6px; margin-top: 2px; font-size: 11px; color: var(--ds-text-2); }
+.wm-about-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; margin: 0; }
+.wm-about-facts > div:last-child { grid-column: 1 / -1; }
+.wm-about-facts dt { font-size: var(--ds-fs-xs); font-weight: 700; color: var(--ds-text-2); }
+.wm-about-facts dd { margin: 2px 0 0; font-size: var(--ds-fs-sm); line-height: 1.5; color: var(--ds-text); }
+.wm-about-facts dd b { font-weight: 700; color: var(--ds-accent-text); }
+.wm-about-show { display: inline-flex; align-items: center; gap: 6px; margin: -4px 0 14px; padding: 4px 2px; border: 0; background: none; color: var(--ds-accent-text); font: inherit; font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.wm-about-show:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; border-radius: 4px; }
+@container (max-width: 1px) { .wm-about { display: none; } }
+@media (max-width: 600px) { .wm-about-facts { grid-template-columns: minmax(0, 1fr); } }
+#sc-shape { display: flex; flex-wrap: wrap; width: max-content; max-width: 100%; }
+#sc-shape button { white-space: normal; }
+.wm-tt-100 { stroke: currentColor; stroke-dasharray: 2 3; opacity: .45; }
+.wm-about-key { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 11px; color: var(--ds-text-2); }
+.wm-about-key i { width: 18px; border-top: 1.5px dashed var(--ds-text-3); }
+
+/* working on a plan: the band gives its room to the work (page.js workingNow) */
+body.wm-working .wm-band { display: none; }
+body.wm-working .wm-wrap { padding-top: 16px; }
+/* wide screens: the results stay in view while the inputs scroll — the column scrolls on its own */
+@media (min-width: 1101px) {
+  .wm-sticky { top: 64px; max-height: calc(100vh - 76px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; }
+  html.embedded .wm-sticky { top: 60px; max-height: calc(100vh - 72px); }
+}
+.wm-sticky > * { flex-shrink: 0; }   /* the column scrolls; nothing in it is squashed */
+/* narrower columns: the drawing beside the notes, small */
+@media (max-width: 1500px) {
+  .wm-about-b { grid-template-columns: 150px minmax(0, 1fr); gap: 12px 16px; }
+  .wm-about-fig svg { height: 64px; }
+  .wm-about-fig figcaption span:nth-child(2) { display: none; }
+}
+@media (max-width: 1500px) and (min-width: 1101px) { .wm-about-facts { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
+@media (max-width: 700px) { .wm-about-b { grid-template-columns: minmax(0, 1fr); } }

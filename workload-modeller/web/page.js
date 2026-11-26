@@ -23,10 +23,11 @@ window.lreSetTheme = setTheme;
 $("#btn-theme").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 $("#btn-example").addEventListener("click", () => {
   seq = 0;
+  // the first script open, the others folded to their summary line (a click opens one)
   state.groups = [
     newScript({ name: "Login", method: "tps", targetTps: 2, txPerIter: 1, thinkPerIter: 5, rtAvg: 1, requestsPerIter: 6 }),
-    newScript({ name: "Search", method: "volume", volumePerHour: 21600, txPerIter: 2, thinkPerIter: 10, rtAvg: 0.5, requestsPerIter: 8, pacing: { mode: "random", min: 12, max: 16 } }),
-    newScript({ name: "Payment", method: "vusers", vusers: 12, txPerIter: 4, thinkPerIter: 15, pacing: { mode: "fixed", fixed: 24 }, protocol: "devweb", requestsPerIter: 14 }),
+    newScript({ name: "Search", method: "volume", volumePerHour: 21600, txPerIter: 2, thinkPerIter: 10, rtAvg: 0.5, requestsPerIter: 8, pacing: { mode: "random", min: 12, max: 16 }, folded: true }),
+    newScript({ name: "Payment", method: "vusers", vusers: 12, txPerIter: 4, thinkPerIter: 15, pacing: { mode: "fixed", fixed: 24 }, protocol: "devweb", requestsPerIter: 14, folded: true }),
   ];
   renderScripts(); renderTest(); renderPools(); calc();
 });
@@ -495,11 +496,22 @@ $("#btn-reset-all").addEventListener("click", () => clearWith("Everything cleare
 }));
 
 try { view(localStorage.getItem("wm-view") !== "detail"); } catch (e) { view(true); }
+/* ---------- working on a plan: the top band (what the tool does) gives its room to the work, as on the other tools;
+   the notes at the top of Scripts fold unless the user opened them. Starts with two scripts or one read from a file
+   (never while typing in the starting example), and stays until the scripts are cleared. ---------- */
+let working = false;
+function workingNow() {
+  const on = state.groups.length > 0 && (working || state.groups.length >= 2 || state.groups.some((g) => g.txList || g.txNames));
+  if (on === working && document.body.classList.contains("wm-working") === on) return;
+  working = on; document.body.classList.toggle("wm-working", on);
+  const d = $("#script-notes"); let pref = null; try { pref = localStorage.getItem("wm-notes"); } catch (e) { /* private window */ }
+  if (d && pref !== "open" && pref !== "closed") { d._auto = true; d.open = !on; }
+}
 // the notes at the top of Scripts: open until the user folds them; remembered
 (() => {
   const d = $("#script-notes"); if (!d) return;
   try { if (localStorage.getItem("wm-notes") === "closed") d.open = false; } catch (e) { /* private window */ }
-  d.addEventListener("toggle", () => { try { localStorage.setItem("wm-notes", d.open ? "open" : "closed"); } catch (e) { /* private window */ } });
+  d.addEventListener("toggle", () => { if (d._auto) { d._auto = false; return; } try { localStorage.setItem("wm-notes", d.open ? "open" : "closed"); } catch (e) { /* private window */ } });
 })();
 renderTest(); renderScripts(); renderPools(); renderProtoTable(); cal(); calc();
 
@@ -509,6 +521,10 @@ renderTest(); renderScripts(); renderPools(); renderProtoTable(); cal(); calc();
    assumptions; the plan on the page (if the user already started) keeps what it has. */
 function applyTeam(s) {
   TEAM.extra = s.loadGenerators.extraMachines; TEAM.limitPct = s.loadGenerators.busyLimitPct; TEAM.updated = s.updated;
+  // the test types' starting figures: a load test starts with the team's full-load time (unless the user changed it)
+  TEAM.types = JSON.parse(JSON.stringify(s.testTypes));
+  if (state.scenario.testType === "load" && state.scenario.steadyMin === DEFAULT_SCENARIO.steadyMin) state.scenario.steadyMin = s.testTypes.load.fullLoadMin;
+  DEFAULT_SCENARIO.steadyMin = s.testTypes.load.fullLoadMin;
   LG_TYPES.splice(0, LG_TYPES.length - 1, ...s.machineTypes.map(toLgType));
   const sc = { headroomPct: s.schedule.headroomPct, maxStartRate: s.schedule.maxStartRatePerSecond, minGroup: s.loadGenerators.smallestGroup, fastLoopRps: s.loadGenerators.fastLoopRequestsPerSecond };
   const untouched = (k) => state.scenario[k] === DEFAULT_SCENARIO[k] || state.scenario[k] == null;

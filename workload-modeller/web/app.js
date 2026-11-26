@@ -9,11 +9,68 @@ const fmt = (x, d) => (Number.isFinite(x) ? x.toLocaleString("en-GB", { minimumF
 const fmtS = (x) => (Number.isFinite(x) ? (Math.abs(x - Math.round(x)) < 0.05 ? fmt(x) : fmt(x, 1)) + " s" : "—");
 const PROTOS = JSON.parse(JSON.stringify(E.PROTOCOLS));
 
+// The test types: a line on each card, a drawing of its load over time, and "About this test" — what it is, why teams
+// run it, how much load and how long (common practice; the team's own figures come from the team settings, testTypes)
 const TEST_HELP = {
-  load: "Normal busy-hour load, held steady.", soak: "Normal load for many hours — finds leaks and slow drift.",
-  stress: "Steps above the target until something gives.", capacity: "Bigger steps to find the most the system can take.",
-  spike: "Normal load, then a sudden burst, then back.",
+  load: "The expected peak load, held steady.", soak: "Normal load for hours — finds leaks and slow drift.",
+  stress: "Above the expected peak — how it copes.", capacity: "Steps up until the SLA breaks.",
+  spike: "A sudden burst, then back to normal.",
 };
+function testInfo(k) {
+  const st = TEAM.types.stress, lvl = st.levelPct, hrs = (m) => (m % 60 ? fmt(m) + " min" : fmt(m / 60) + (m === 60 ? " hour" : " hours"));
+  const team = (s) => `<b>Your team:</b> ${s}`;
+  return ({
+    load: { name: "Load test", why: "Proves the system meets its response-time targets at the busiest hour you expect: the baseline every other test is compared with.",
+      load: "100% of the expected peak. For next year's peak, raise it with the Growth factor (1.2 = 20% more).", len: `1 – 2 hours at full load is common. ${team(hrs(TEAM.types.load.fullLoadMin) + " at full load")}`,
+      look: "Response times within the SLA · errors under 1% · CPU and memory steady, not climbing", when: "Before every release, and after a change to the system or its data" },
+    soak: { name: "Soak test (endurance)", why: "Finds what only time shows: memory leaks, connection pools that run dry, logs and disks that fill, response times that drift.",
+      load: "70 – 100% of the expected peak, held steady", len: `8 hours is common; 4 – 24 hours (overnight or over a weekend). ${team(hrs(TEAM.types.soak.fullLoadMin) + " at full load")}`,
+      look: "Response times and memory as flat in the last hour as in the first · no errors creeping in · no restarts", when: "Before a major release, after a memory or platform change" },
+    stress: { name: "Stress test", why: "Shows how the system behaves above the expected peak: whether it still meets the SLA, where it slows down, how it fails, and whether it recovers.",
+      load: `Above the expected peak: 125 – 200%. Today's peak plus growth and a margin, held — or in steps to see where it gives. Growth factor raises the target itself; the stress level goes above that target.`,
+      len: `1 – 2 hours (steps: 10 – 15 min each). ${team(st.shape === "hold" ? `${fmt(lvl)}% of the peak for ${hrs(st.holdMin)}` : "in steps up to 150%")}`,
+      look: "The SLA at the stress level · errors are clear, not hangs or time-outs · the system recovers when the load drops", when: "Before a busy season or a launch; after an architecture change" },
+    capacity: { name: "Capacity test (breakpoint)", why: "Finds the most the system can take within its SLA: how much headroom you have, and which part gives first.",
+      load: "Steps of 20% from 100% until the SLA breaks — often 200% or more", len: "10 – 15 min per step, until the limit is found",
+      look: "The last step that still meets the SLA = the capacity · the first resource at its limit (CPU, memory, pools, database)", when: "Sizing hardware or cloud machines; planning for growth" },
+    spike: { name: "Spike test", why: "Checks a sudden burst — a sale, a mail-out, a market opening: does the system cope, scale out in time, and come back to normal?",
+      load: "Normal load (50%), a jump to 200% within a minute, then back", len: "The burst 5 – 15 min; 30 – 60 min in all",
+      look: "Errors during the jump · how long it takes to recover · auto-scaling reacts in time", when: "Before campaigns and events; when auto-scaling is set up or changed" },
+  })[k];
+}
+// the load over time as points (x 0 – 100, y = % of the target); stress follows the team's shape
+function testShape(k) {
+  const st = TEAM.types.stress;
+  return ({
+    load: [[0, 0], [12, 100], [88, 100], [100, 0]], soak: [[0, 0], [5, 90], [95, 90], [100, 0]],
+    stress: st.shape === "hold" ? [[0, 0], [14, Math.min(200, st.levelPct)], [90, Math.min(200, st.levelPct)], [100, 0]]
+      : [[0, 0], [8, 50], [22, 50], [26, 75], [40, 75], [44, 100], [58, 100], [62, 125], [76, 125], [80, 150], [94, 150], [100, 0]],
+    capacity: [[0, 0], [6, 100], [18, 100], [22, 120], [34, 120], [38, 140], [50, 140], [54, 160], [66, 160], [70, 180], [82, 180], [86, 200], [96, 200], [100, 0]],
+    spike: [[0, 0], [10, 50], [38, 50], [40, 200], [58, 200], [60, 50], [88, 50], [100, 0]],
+  })[k];
+}
+const shapePath = (pts, W, H) => pts.map(([x, y], i) => (i ? "L" : "M") + (x * W / 100).toFixed(1) + " " + (H - 2 - y * (H - 4) / 200).toFixed(1)).join(" ");
+function shapeSvg(k, cls) {
+  return `<svg class="${cls}" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><line class="wm-tt-100" x1="0" x2="100" y1="${(30 - 100 * 28 / 200).toFixed(1)}" y2="${(30 - 100 * 28 / 200).toFixed(1)}" vector-effect="non-scaling-stroke"/><path d="${shapePath(testShape(k), 100, 32)}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+let aboutOpen = true; try { aboutOpen = localStorage.getItem("wm-about") !== "hidden"; } catch (e) { /* private window */ }
+function renderAbout() {
+  const k = state.scenario.testType, n = testInfo(k), el = $("#tt-about"); if (!el || !n) return;
+  if (!aboutOpen) { el.innerHTML = `<button type="button" class="wm-about-show" data-about="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>What is a ${esc(n.name.replace(/ \(.*/, "").toLowerCase())}, and why run it?</button>`; return; }
+  const W = 300, H = 96, y100 = (H - 14 - 100 * (H - 18) / 200).toFixed(1), pts = shapePath(testShape(k), W, H - 12);
+  el.innerHTML = `<div class="wm-about" role="region" aria-labelledby="tt-about-h">
+    <div class="wm-about-h"><svg class="wm-about-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><b id="tt-about-h">${esc(n.name)}</b><span>what it is, and why teams run it</span><button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" data-about="0" title="Hide these notes (remembered)">Hide</button></div>
+    <div class="wm-about-b">
+      <figure class="wm-about-fig"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="The load over time"><line x1="0" x2="${W}" y1="${y100}" y2="${y100}" class="wm-about-100"/><path d="${pts} L${W} ${H - 12} L0 ${H - 12} Z" class="wm-about-fill"/><path d="${pts}" class="wm-about-line"/></svg>
+        <figcaption><span>start</span><span>time →</span><span>end</span></figcaption><p class="wm-about-key"><i></i>100% = the expected peak</p></figure>
+      <dl class="wm-about-facts"><div><dt>Why</dt><dd>${n.why}</dd></div><div><dt>Load</dt><dd>${n.load}</dd></div><div><dt>How long</dt><dd>${n.len}</dd></div><div><dt>What to look at</dt><dd>${n.look}</dd></div><div><dt>When</dt><dd>${n.when}</dd></div></dl>
+    </div></div>`;
+}
+$("#tt-about").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-about]"); if (!b) return;
+  aboutOpen = b.dataset.about === "1"; try { localStorage.setItem("wm-about", aboutOpen ? "open" : "hidden"); } catch (e2) { /* private window */ }
+  renderAbout(); const f = $("#tt-about [data-about]"); if (f) f.focus();
+});
 const WL_HELP = {
   "basic-scenario": "One schedule for all scripts.", "basic-group": "Each script its own ramp; all reach full load together.",
   "real-world": "A list of steps — start, hold, start more, stop.", goal: "LRE adds Vusers until it reaches the TPS.",
@@ -32,7 +89,7 @@ const RTSRC = [["sla", "SLA from the requirement"], ["baseline", "Measured in a 
 // (AWS c6a.4xlarge: twice the on-premise figures — twice the CPUs, the same memory, which the tool keeps checking).
 // The list comes from the team settings (config/workload-settings.json, read by engine/settings.js when the page opens);
 // until then, and for anything the file gets wrong, the built-in values. "Another machine" is always last.
-const TEAM = { extra: 1, limitPct: 70, updated: null, problems: [], read: false };
+const TEAM = { extra: 1, limitPct: 70, updated: null, problems: [], read: false, types: JSON.parse(JSON.stringify(WorkloadSettings.DEFAULTS.testTypes)) };
 const toLgType = (t) => ({ id: t.id, label: t.label, where: t.location, cores: t.cores, ramGb: t.memoryGb, webPerLg: t.webVusersPerLg, apiPerLg: t.apiVusersPerLg, note: WorkloadSettings.note(t) });
 const LG_TYPES = WorkloadSettings.DEFAULTS.machineTypes.map(toLgType).concat([{ id: "custom", label: "Another machine (enter its size)", where: "Own machines" }]);
 const lgType = (p) => LG_TYPES.find((t) => t.id === p.kind) || LG_TYPES[LG_TYPES.length - 1];
@@ -68,7 +125,8 @@ function kindHelp(g) {
 function renderTest() {
   const sc = state.scenario;
   $("#test-types").innerHTML = Object.entries(E.TEST_TYPES).map(([k, t]) =>
-    `<button class="wm-choice" data-tt="${k}" aria-pressed="${sc.testType === k}"><b>${esc(t.label.replace(/ \(.*/, ""))}</b><span>${TEST_HELP[k]}</span></button>`).join("");
+    `<button class="wm-choice" data-tt="${k}" aria-pressed="${sc.testType === k}"><b>${esc(t.label.replace(/ \(.*/, ""))}</b>${shapeSvg(k, "wm-tt-shape")}<span>${TEST_HELP[k]}</span></button>`).join("");
+  renderAbout();
   const rec = E.TEST_TYPES[sc.testType].workload;
   $("#sc-workload").innerHTML = Object.entries(E.WORKLOADS).map(([k, l]) => `<option value="${k}"${k === sc.workload ? " selected" : ""}>${l}${k === rec ? " (recommended)" : ""}</option>`).join("");
   $("#wl-help").textContent = WL_HELP[sc.workload];
@@ -76,11 +134,21 @@ function renderTest() {
   $("#sc-licence").value = sc.licenceVusers ?? ""; $("#sc-headroom").value = sc.headroomPct; $("#sc-style").value = sc.pacingStyle;
   $("#sc-random").value = sc.randomPct; $("#sc-rate").value = sc.maxStartRate;
   const tt = E.TEST_TYPES[sc.testType];
+  // the fields of the chosen test: full load (load, soak — or any test on a basic schedule); stress: one level held, or
+  // steps; capacity: steps; spike: how long normal load is held
+  const stepped = !!(tt.levels || tt.base), held = sc.testType === "stress" && sc.levels && sc.levels.length === 1;
   $("#sc-levels").value = (sc.levels || tt.levels || []).join(", ");
-  $("#f-levels").style.display = tt.levels ? "" : "none";
-  $("#f-hold").style.display = tt.levels || tt.base ? "" : "none";
+  $("#f-steady").style.display = !stepped || sc.workload !== "real-world" ? "" : "none";
+  $("#f-shape").style.display = sc.testType === "stress" ? "" : "none";
+  document.querySelectorAll("#sc-shape [data-shape]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.shape === "hold") === !!held)));
+  $("#f-level").style.display = held ? "" : "none";
+  if (held && document.activeElement !== $("#sc-level")) $("#sc-level").value = sc.levels[0];
+  $("#f-levels").style.display = tt.levels && !held ? "" : "none";
+  $("#f-hold").style.display = stepped ? "" : "none";
+  $("#hold-label").textContent = held ? `Hold at ${fmt(sc.levels[0])}%` : tt.base ? "Hold normal load" : "Hold at each step";
+  $("#hold-help").textContent = held ? "how long the level is held, after the ramp-up" : "empty: the tool chooses (10 min, or 5 pacings when longer)";
   $("#sc-hold").value = sc.stepHoldMin ?? "";
-  $("#steady-help").textContent = tt.levels || tt.base ? "used by a basic schedule; steps use “Hold at each step”" : "how long full load is held, after the ramp-up";
+  $("#steady-help").textContent = stepped ? "a basic schedule only ramps to 100% and holds it — choose “Real-world schedule” for this test" : "how long full load is held, after the ramp-up";
   $("#f-total").style.display = state.groups.some((g) => g.method === "share") ? "" : "none";
   const own = sc.rampMode === "own";
   $("#sc-ramp").value = own ? "own" : "auto";
@@ -93,7 +161,10 @@ function renderTest() {
 $("#test-types").addEventListener("click", (e) => {
   const b = e.target.closest("[data-tt]"); if (!b) return;
   const sc = state.scenario; sc.testType = b.dataset.tt;
-  const tt = E.TEST_TYPES[sc.testType]; sc.workload = tt.workload; sc.steadyMin = tt.steadyMin; sc.levels = null;
+  const tt = E.TEST_TYPES[sc.testType]; sc.workload = tt.workload; sc.levels = null; sc.stepHoldMin = null;
+  // the team's starting figures (team settings, testTypes): full load for load / soak; the stress level and its hold
+  sc.steadyMin = (TEAM.types[sc.testType] && TEAM.types[sc.testType].fullLoadMin) || tt.steadyMin;
+  if (sc.testType === "stress") stressShape(TEAM.types.stress.shape);
   renderTest(); calc();
 });
 const bindNum = (id, key, nullable) => $(id).addEventListener("input", (e) => { const v = parseFloat(e.target.value); state.scenario[key] = Number.isFinite(v) ? v : (nullable ? null : 0); calc(); });
@@ -111,6 +182,13 @@ $("#sc-ramp").addEventListener("change", (e) => {
 bindNum("#sc-headroom", "headroomPct"); bindNum("#sc-random", "randomPct"); bindNum("#sc-rate", "maxStartRate"); bindNum("#sc-hold", "stepHoldMin", true);
 $("#sc-workload").addEventListener("change", (e) => { state.scenario.workload = e.target.value; $("#wl-help").textContent = WL_HELP[e.target.value]; renderTest(); calc(); });
 $("#sc-style").addEventListener("change", (e) => { state.scenario.pacingStyle = e.target.value; calc(); });
+// stress: one level held (the team's level and hold) or the tool's steps (50 … 150%, each held 10 min or 5 pacings)
+function stressShape(shape) {
+  const sc = state.scenario, st = TEAM.types.stress;
+  if (shape === "hold") { sc.levels = [st.levelPct]; sc.stepHoldMin = st.holdMin; } else { sc.levels = null; sc.stepHoldMin = null; }
+}
+$("#sc-shape").addEventListener("click", (e) => { const b = e.target.closest("[data-shape]"); if (!b) return; stressShape(b.dataset.shape); renderTest(); calc(); });
+$("#sc-level").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (v > 0) { state.scenario.levels = [v]; $("#hold-label").textContent = `Hold at ${fmt(v)}%`; calc(); } });
 $("#sc-levels").addEventListener("input", (e) => { const l = e.target.value.split(/[,; ]+/).map(Number).filter((x) => x > 0); state.scenario.levels = l.length ? l : null; calc(); });
 
 /* ---------- inputs: scripts ---------- */
@@ -517,6 +595,7 @@ function calc() {
   const res = resolved();
   const r = E.model({ scenario: state.scenario, groups: res.groups, pools: state.pools, protocols: PROTOS });
   lastResolved = res.groups;
+  if (typeof workingNow === "function") workingNow();
   if (res.check) r.checks.unshift(res.check);
   commonUi(res);
   last = r;
@@ -615,10 +694,12 @@ function calc() {
   const tps = over ? t.reachTps : t.tps, ips = over ? t.reachIps : t.ips;
   const perVu = (x) => (t.vusers ? x / t.vusers : 0);
   const n1 = (x) => String(+x.toFixed(x < 10 ? 2 : 1));    // 0.2, 72, 74.5 — no padding zeros
+  // one level held above the target (a stress test): what it reaches there too
+  const heldAbove = r.peakVusers > t.vusers && (r.actions || []).filter((a) => a.type === "hold").length === 1;
   const overNote = over ? ` — not ${fmt(t.tps, 2)}: an iteration takes longer than the pacing (see Checks)` : "";
   const tiles = [
     ["Virtual users (Vusers)", fmt(r.peakVusers), r.peakVusers > t.vusers ? `${fmt(t.vusers)} at 100%` : `${r.groups.length} script${r.groups.length > 1 ? "s" : ""}`],
-    ["Transactions per second (TPS)", fmt(tps, 2), (range && !over ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)} (random pacing) · ` : "") + "at full load" + overNote, over],
+    ["Transactions per second (TPS)", fmt(tps, 2), (range && !over ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)} (random pacing) · ` : "") + "at full load" + overNote + (heldAbove ? ` · about ${fmt(tps * r.peakVusers / t.vusers, 2)} at the held ${fmt(100 * r.peakVusers / t.vusers)}%` : ""), over],
     ["Transactions per hour (TPH)", fmt(tps * 3600), "at full load · TPS × 3,600", over],
     ["Iterations per hour", ips ? fmt(ips * 3600) : "—", ips ? `at full load, all Vusers · ${n1(perVu(ips * 3600))} per Vuser` : "depends on the response time", over],
   ];
@@ -793,7 +874,8 @@ function formulas(sc) {
       "“Start X Vusers every N s”: the fewest Vusers per step whose interval is 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 45, 60, 90, 120, 180 or 300 s and gives a ramp within 10% of the wanted one, never faster than the start rate; one Vuser starts at once",
       `Ramp-down: half the ramp-up worked out as above with twice the start rate, but never shorter than Vusers ÷ ${fmt(rate * 2)} (the stop rate), so no step stops many Vusers at once; each Vuser finishes its current iteration`,
       `Basic schedule by group: each script its own ramp; a shorter ramp starts later by (longest ramp − its ramp), so all reach full load together. The scripts ramp at the same time, so they share the start rate: each gets ${fmt(rate)} × its share of the Vusers (at least 1 Vuser every 300 s) — together never more than ${fmt(rate)} new Vusers per second; the stop rate likewise`,
-      "Stress / capacity: steps at a % of the Vusers (default 50, 75, 100, 125, 150% / 100 to 200%), each held 10 min or 5 × the longest pacing, whichever is longer (or the hold you set)",
+      "Stress held at one level (the team standard): Vusers × the level (150% → 1.5 ×), started at the start rate, held for the hold (120 min), then stopped",
+      "Stress in steps / capacity: steps at a % of the Vusers (default 50, 75, 100, 125, 150% / 100 to 200%), each held 10 min or 5 × the longest pacing, whichever is longer (or the hold you set)",
       "Spike: normal load (50%) held, the burst to 200% started within one pacing (10 to 60 s) and held up to 10 min, the burst stopped at once, recovery held, then the stop",
       "Goal-oriented: goal = the total TPS; Vusers from ⌈50%⌉ to ⌈150%⌉ of the plan; run for the full-load time after the goal is reached",
     ])}

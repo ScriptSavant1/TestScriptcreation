@@ -39,9 +39,25 @@ The page works out the plan as you type. A section you have not touched keeps se
 ## 3. The sections
 
 ### The test
-- **What kind of test**: Load (normal busy hour, held), Soak (many hours), Stress and Capacity (steps above the
-  target), Spike (normal load, a burst, back).
-- **Full-load duration**: how long all users run together after the ramp-up.
+- **What kind of test**: five cards, each with a drawing of its load over time. Under them, **About this test** says
+  what the chosen test is, why teams run it, how much load, how long, what to look at and when (**Hide** folds it to
+  one line, remembered):
+
+  | Test | Why | Load | How long (common practice) |
+  |---|---|---|---|
+  | Load | meets the SLA at the busiest hour expected; the baseline | 100% of the expected peak (Growth factor for next year's) | 1 – 2 h at full load (team: 1 h) |
+  | Soak (endurance) | leaks, pools running dry, disks filling, drift | 70 – 100% of the peak | 8 h; 4 – 24 h |
+  | Stress | above the expected peak: still within the SLA? how it fails and recovers | 125 – 200% (team: 150%) | 1 – 2 h (team: 2 h); steps 10 – 15 min each |
+  | Capacity (breakpoint) | the most it takes within the SLA; what gives first | steps of 20% from 100% until the SLA breaks | 10 – 15 min per step |
+  | Spike | a sudden burst: does it cope and recover? | 50% → 200% within a minute → back | burst 5 – 15 min, 30 – 60 min in all |
+
+  The Growth factor raises the target itself (next year's peak); a stress level goes above that target.
+- **Stress**: **How the load rises** — *Straight to one level, held* (the team standard: 150% of the target for
+  120 minutes; change the **Load level** and **Hold at 150%**) or *In steps: 50% → 150%* (the tool's steps, each held
+  10 minutes or 5 × the longest pacing). The tiles and the summary give the TPS at 100% and at the held level.
+- **Capacity**: its **Steps** and **Hold at each step**; **Spike**: **Hold normal load** — shown in Simple view.
+- **Full-load duration**: how long all users run together after the ramp-up (load and soak; for the stepped tests only
+  with a basic schedule, which ramps to 100% — choose the Real-world schedule for them).
 - **Ramp-up and ramp-down**: the tool chooses (recommended for a new test), or **My own, as in LRE** — Start
   [n] Vusers every [s] s and Stop [n] Vusers every [s] s, as typed in LRE's Start Vusers / Stop Vusers (Stop empty:
   the same as Start; 0 s: all at once). Use it to compare the plan with an LRE test that already exists. Choosing it
@@ -49,7 +65,10 @@ The page works out the plan as you type. A section you have not touched keeps se
 - **LRE workload type**: Basic schedule by group (recommended for load and soak), by test, Real-world (needed for
   stepped tests) or Goal-oriented.
 - **Growth factor**: 1 = today's peak; 1.5 = 50% more TPS. Scripts sized by Vusers or iterations keep their numbers.
-- Detailed view: the licence limit, and the steps and hold time of stepped tests.
+- Detailed view: the licence limit.
+- While you work on a plan (two scripts, or a script read from a file) the band at the top makes room, and the notes at
+  the top of Scripts fold unless you opened them; **Start over** brings both back. On a wide screen the results stay in
+  view while the inputs scroll. **Load an example** opens its first script; the others show their summary line.
 
 ### Scripts
 - **Before you fill in a script — what each box means**: the notes at the top of Scripts (open until you fold them)
@@ -188,6 +207,8 @@ The figures a team agrees on are in one file on the server, `workload-modeller/c
 | `schedule.headroomPct` | pacing chosen this much above the iteration time | 25 |
 | `schedule.maxStartRatePerSecond` | the fastest start rate | 2 |
 | `protocols` | memory per Vuser (MB) and Vusers per CPU core, per protocol (web, devweb, truclient, other) | 5 / 50, 3 / 80, 350 / 2, 10 / 30 |
+| `testTypes.load.fullLoadMin`, `testTypes.soak.fullLoadMin` | how long a load / soak test holds full load when it is chosen | 60, 480 |
+| `testTypes.stress` | `shape`: `hold` (one level: `levelPct` % of the target for `holdMin` minutes) or `steps` (50 … 150%) | hold, 150, 120 |
 
 - To change a figure (for example 150 Vusers per on-premise machine for web pages), edit the file on the server, save
   it and set `updated` to today's date. Every user gets the new figures the next time they open the page — nothing to
@@ -283,7 +304,9 @@ Also: iterations per second = Vusers ÷ pacing; hits per second = requests per i
   its share of the Vusers (at least 1 Vuser every 300 s), and together they never start more than the start rate — 2 new
   Vusers per second by default; the stop rate likewise. Example: 20 scripts of 25 Vusers start 1 Vuser every 10 s each
   (2 per second in all), not 2 per second each.
-- **Stress / Capacity**: steps at a percentage of the Vusers (50, 75, 100, 125, 150% / 100 to 200%), each held
+- **Stress held at one level** (the team standard): the Vusers × the level (150% → 1.5 ×), started at the start
+  rate, held for the hold time (120 min), then stopped — one start, one hold, one stop in LRE.
+- **Stress in steps / Capacity**: steps at a percentage of the Vusers (50, 75, 100, 125, 150% / 100 to 200%), each held
   10 minutes or 5 × the longest pacing, whichever is longer (or the hold you set).
 - **Spike**: normal load (50%) held; the burst to 200% starts within one pacing (10 to 60 s) and holds up to 10
   minutes; the burst stops at once; recovery is held; then everything stops.

@@ -65,9 +65,12 @@
         <button class="ds-btn ds-btn-sm" id="btn-example" title="Fill in a three-script example">Load an example</button></div>
       <div class="ds-card-body">
         <p class="wm-help">What kind of test is it?</p>
-        <div class="wm-seg" id="test-types" role="group" aria-label="Test type"></div>
+        <div class="wm-seg wm-tt" id="test-types" role="group" aria-label="Test type"></div>
+        <div id="tt-about"></div>
         <div class="wm-grid">
-          <label class="wm-f">Full-load duration<div class="wm-unit"><input class="ds-field" type="number" id="sc-steady" min="1" step="5"><span>min</span></div><small id="steady-help">how long all users run together, after the ramp-up</small></label>
+          <div class="wm-f wide" id="f-shape"><span id="shape-l">How the load rises</span><div class="ds-seg" id="sc-shape" role="group" aria-labelledby="shape-l"><button type="button" data-shape="hold" aria-pressed="true">Straight to one level, held</button><button type="button" data-shape="steps" aria-pressed="false">In steps: 50% → 150%</button></div></div>
+          <label class="wm-f" id="f-level">Load level<div class="wm-unit"><input class="ds-field" type="number" id="sc-level" min="101" step="5"><span>% of target</span></div><small>above the expected peak — e.g. 150 = peak + 50%</small></label>
+          <label class="wm-f" id="f-steady">Full-load duration<div class="wm-unit"><input class="ds-field" type="number" id="sc-steady" min="1" step="5"><span>min</span></div><small id="steady-help">how long all users run together, after the ramp-up</small></label>
           <label class="wm-f">LRE workload type<select class="ds-field" id="sc-workload"></select><small id="wl-help"></small></label>
           <label class="wm-f" id="f-total">Scenario total TPS<div class="wm-unit"><input class="ds-field" type="number" id="sc-total" min="0" step="0.1"><span>TPS</span></div><small>split between the scripts sized by “share”</small></label>
           <label class="wm-f">Growth factor<input class="ds-field" type="number" id="sc-growth" min="0.1" step="0.1"><small>1 = today's peak · 1.5 = 50% more TPS (Vusers and iteration targets stay as entered)</small></label>
@@ -78,8 +81,8 @@
             <small>as in LRE's Start Vusers / Stop Vusers — 0 s: all at once; Stop empty: the same as Start</small>
           </div>
           <label class="wm-f adv">Licence limit<div class="wm-unit"><input class="ds-field" type="number" id="sc-licence" min="0" placeholder="no limit"><span>Vusers</span></div><small>the most your licence allows — empty: no limit</small></label>
-          <label class="wm-f adv" id="f-levels">Steps (stress / capacity)<input class="ds-field" type="text" id="sc-levels"><small>% of the target at each step</small></label>
-          <label class="wm-f adv" id="f-hold">Hold at each step<div class="wm-unit"><input class="ds-field" type="number" id="sc-hold" min="1" placeholder="auto"><span>min</span></div><small>empty: the tool chooses</small></label>
+          <label class="wm-f" id="f-levels">Steps<input class="ds-field" type="text" id="sc-levels"><small>% of the target at each step</small></label>
+          <label class="wm-f" id="f-hold"><span id="hold-label">Hold at each step</span><div class="wm-unit"><input class="ds-field" type="number" id="sc-hold" min="1" placeholder="auto"><span>min</span></div><small id="hold-help">empty: the tool chooses</small></label>
         </div>
       </div>
     </section>

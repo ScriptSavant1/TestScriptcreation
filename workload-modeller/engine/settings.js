@@ -1,7 +1,8 @@
 /**
  * settings.js — the team settings (UMD, browser + Node).
  * The figures a team agrees on — machine types with their Vusers per machine, the load-generator limits, the schedule
- * defaults, the protocol assumptions — live in workload-modeller/config/workload-settings.json on the server. An admin
+ * defaults, the protocol assumptions, the test types' starting figures (testTypes: how long a load / soak test holds
+ * full load; the stress test's level and hold, or steps) — live in workload-modeller/config/workload-settings.json on the server. An admin
  * edits that file; every user gets the new figures on the next page load (nothing to build or restart). Users can still
  * change any figure on the page for one plan: the file only sets the starting values.
  *
@@ -29,11 +30,19 @@
       web: { memoryMbPerVuser: 5, vusersPerCore: 50 }, devweb: { memoryMbPerVuser: 3, vusersPerCore: 80 },
       truclient: { memoryMbPerVuser: 350, vusersPerCore: 2 }, other: { memoryMbPerVuser: 10, vusersPerCore: 30 },
     },
+    // what each test type starts with when chosen: load / soak hold full load so many minutes; stress either holds one
+    // level above the target (shape "hold": levelPct for holdMin) or climbs in the tool's steps (shape "steps")
+    testTypes: {
+      load: { fullLoadMin: 60 },
+      soak: { fullLoadMin: 480 },
+      stress: { shape: "hold", levelPct: 150, holdMin: 120 },
+    },
   };
   // [key, lowest, highest, whole number]
   const LG = [["busyLimitPct", 10, 100, false], ["extraMachines", 0, 50, true], ["smallestGroup", 1, 1000, true], ["fastLoopRequestsPerSecond", 0.1, 1000, false]];
   const SCHED = [["headroomPct", 0, 500, false], ["maxStartRatePerSecond", 0.01, 1000, false]];
   const PROTO = [["memoryMbPerVuser", 0.1, 100000, false], ["vusersPerCore", 0.1, 100000, false]];
+  const TT_NUM = { load: [["fullLoadMin", 1, 10080, false]], soak: [["fullLoadMin", 1, 10080, false]], stress: [["levelPct", 101, 1000, false], ["holdMin", 1, 10080, false]] };
   const TYPE_NUM = [["cores", 1, 1024, false], ["memoryGb", 1, 16384, false], ["diskGb", 1, 1000000, false], ["webVusersPerLg", 1, 100000, false], ["apiVusersPerLg", 1, 100000, false]];
 
   const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -64,6 +73,18 @@
       else Object.keys(json.protocols).forEach((k) => {
         if (!s.protocols[k]) { problems.push(`protocols.${k}: not a protocol the tool knows (web, devweb, truclient, other) — ignored`); return; }
         section(json.protocols[k], PROTO, s.protocols[k], "protocols." + k, problems);
+      });
+    }
+    if (json.testTypes !== undefined) {
+      if (!isObj(json.testTypes)) problems.push("testTypes: not a group of settings — the built-in values are used");
+      else Object.keys(json.testTypes).forEach((k) => {
+        if (!TT_NUM[k]) { problems.push(`testTypes.${k}: not a test type with team figures (load, soak, stress) — ignored`); return; }
+        section(json.testTypes[k], TT_NUM[k], s.testTypes[k], "testTypes." + k, problems);
+        const sh = isObj(json.testTypes[k]) ? json.testTypes[k].shape : undefined;
+        if (k === "stress" && sh !== undefined) {
+          if (sh === "hold" || sh === "steps") s.testTypes.stress.shape = sh;
+          else problems.push(`testTypes.stress.shape: ${JSON.stringify(sh)} is not "hold" or "steps" — the built-in value is used`);
+        }
       });
     }
     if (json.machineTypes !== undefined) {

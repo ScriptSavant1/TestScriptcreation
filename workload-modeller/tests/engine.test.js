@@ -130,6 +130,17 @@ describe('Workload engine — schedule', () => {
     expect(run(g, { testType: 'stress', workload: 'basic-scenario' }).checks.some((c) => c.code === 'needs-real-world')).toBe(true);
   });
 
+  test('stress held at one level (a team standard: 150% for 2 hours): one start, one hold, the summary names the level', () => {
+    const g = [{ name: 'S', method: 'tps', targetTps: 10, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 }];
+    const r = run(g, { testType: 'stress', workload: 'real-world', levels: [150], stepHoldMin: 120 });
+    expect(r.peakVusers).toBe(90);
+    expect(r.actions.map((a) => a.type)).toEqual(['start', 'hold', 'stop']);
+    expect(r.actions[1].dur).toBe(7200);
+    expect(r.summary).toMatch(/Run 60 virtual users \(90 at the held level, 150% of the target\)/);
+    expect(r.summary).toMatch(/about 15 at the held level/);
+    expect(run(g, { testType: 'stress', workload: 'real-world' }).summary).toMatch(/up to 90 at the highest step/);
+  });
+
   test('spike peaks at 200% (120 Vusers)', () => {
     expect(run([{ name: 'S', method: 'tps', targetTps: 10, txPerIter: 4, rtAvg: 1, thinkPerIter: 15 }], { testType: 'spike', workload: 'real-world' }).peakVusers).toBe(120);
   });

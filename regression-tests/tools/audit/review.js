@@ -348,6 +348,8 @@ if (require.main === module) (async () => {
     await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
     await run('Workload start', 'workload');
     f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail').catch(() => {}); await run('Workload model', 'workload');
+    await f.click('[data-tt=stress]'); await run('Workload stress', 'workload'); await f.click('[data-shape=steps]'); await run('Workload stress in steps', 'workload'); await f.click('[data-tt=spike]'); await run('Workload spike', 'workload');
+    await f.click('#tt-about [data-about="0"]'); await run('Workload notes hidden', 'workload'); await f.click('#tt-about [data-about="1"]'); await f.click('[data-tt=load]');
     // a recording filled in: every transaction of one iteration in a window
     await f.setInputFiles('#in-fill', COL + 'petstore.octoperf.com.har');
     await f.waitForFunction(() => document.querySelector('[data-txlist]'), null, { timeout: 30000 });
