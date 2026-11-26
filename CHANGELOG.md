@@ -121,6 +121,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### HAR Explorer: easier to read details, folded panels you can see, three ways to begin Find a value
+
+- Request details (HAR Explorer and Script Studio's request window): the address breaks only after / ? & = (it no longer splits a word in the middle; copying it gives the same address); the tabs sit closer, so on a wide panel all seven fit on one row (a narrow panel still wraps them, never hiding one); the page preview shows a focus ring when the keyboard is inside it.
+- HAR Explorer: **Hide secrets** sits with Copy URL and Copy as cURL (the address has the whole first line); a folded panel (Domains, Requests, details) is a filled bar that changes on hover, so it reads as a button; long domain names wrap instead of being cut; a narrow request list drops the timeline, then the size column, so the address stays readable (both are in the request's Timing and summary line); Find a value, before a value is chosen, lists three ways to begin.
+- Nothing else changed: every request's details on every tab, Find a value's answers, Copy as cURL, the filters and the panels compared old against new on two recordings (only the intended differences), Script Studio's request window unchanged in behaviour.
+- Regression tools: `regression-tests/tools/explorer/` — `behave.js` (old page against new: every request × every tab, the controls, Find a value for each suggestion, folding, the look) and `walk.js` (198 checks of the new parts, four widths, both themes).
+
 #### Script Studio: Correlate in three sections, the recording's name, aligned start page
 
 - Step 2, Correlate, has three named sections — **Values found**, **In the script** (was Correlation details), **Second recording** (was Advanced: second recording). Their bars are always in sight with what is in them (how many to review, how many correlations, values with no source); one is open and fills the height, so the step has no second scroll bar. Cards is inside Values found. On small laptops the table's buttons are in sight without scrolling sideways.

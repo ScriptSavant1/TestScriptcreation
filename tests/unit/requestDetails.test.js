@@ -103,3 +103,18 @@ describe('RequestDetails.copy', () => {
     expect(c).toContain('password=••••••');
   });
 });
+
+// The address in the summary line breaks after / ? & = only — a <wbr> hint, never inside a word; the text is unchanged
+describe('RequestDetails.html — where the address may break', () => {
+  const urlHtml = (url, hl) => { const h = RD.html(base({ e: { method: 'GET', url, status: 200, size: 0 }, hl })); return h.slice(h.indexOf('<code>') + 6, h.indexOf('</code>')); };
+  test('after / ? = (not between the two slashes of https://); the text stays the address', () => {
+    const c = urlHtml('https://api.example.com/v2/products?category=tents&page=1');
+    expect(c).toBe('https://<wbr>api.example.com/<wbr>v2/<wbr>products?<wbr>category=<wbr>tents&amp;page=<wbr>1');
+    expect(c.replace(/<wbr>/g, '').replace(/&amp;/g, '&')).toBe('https://api.example.com/v2/products?category=tents&page=1');
+  });
+  test('the marks of a looked-up value and HTML entities are left whole', () => {
+    const c = urlHtml('https://a.example.com/x?t=abc/def', (h) => h.replace('abc/def', '<mark class="hx-hl">abc/def</mark>'));
+    expect(c).toContain('<mark class="hx-hl">abc/<wbr>def</mark>');
+    expect(urlHtml('https://a.example.com/p?q="x"')).toContain('&quot;x&quot;');
+  });
+});

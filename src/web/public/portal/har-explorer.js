@@ -390,7 +390,9 @@
     var d = $("#hx-det");
     syncFindSheet();
     if (M && M.view !== "find" && M.sel && !d.querySelector("#hx-maskbtn")) {
-      d.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ds-btn-sm hx-maskbtn" id="hx-maskbtn" aria-pressed="' + !!M.mask + '" title="Mask passwords, tokens and cookies (for screenshots)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Hide secrets</button>');
+      // beside Copy URL and Copy as cURL (the address keeps the whole first line)
+      var row = d.querySelector(".hx-dsum .r") || d;
+      row.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ds-btn-sm hx-maskbtn" id="hx-maskbtn" aria-pressed="' + !!M.mask + '" title="Mask passwords, tokens and cookies (for screenshots)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Hide secrets</button>');
     }
     if (d.querySelector("#hx-det-hide")) return;
     var b = document.createElement("button");
@@ -635,7 +637,11 @@
       : '<p class="hx-sugg-wait">No value in this recording comes back from the server and is sent again.</p>';
     if (M.sugg !== null && !M.studioDone) sugg += '<p class="hx-sugg-wait">Script Studio\'s own analysis is still running — its findings will be added here.</p>';
     var body = "";
-    if (!v) body = '<p class="ds-note hx-hint">Type or paste a value above, pick one the server sends (Studio marks the ones Script Studio finds by itself), or select any value in a request\'s Headers, Payload or Response.</p>';
+    if (!v) body = '<div class="hx-fstart"><p class="hx-fstart-h">Three ways to begin</p><ol>' +
+      '<li><b>Type or paste a value</b> above — a session id, a token, an order number.</li>' +
+      '<li><b>Pick one the server sends</b> from the list above — <span class="by">Studio</span> marks the ones Script Studio finds by itself.</li>' +
+      '<li><b>Select any value</b> in a request\'s Headers, Payload or Response.</li></ol>' +
+      '<p class="hx-fstart-f">You get where it first came from, every request that sends it back, and the extractor for VuGen or DevWeb — then <b>Add to Script Studio</b>.</p></div>';
     else if (busy || !inv || inv.value !== v) body = '<p class="hx-none">Looking for ' + esc(short(v, 60)) + " …</p>";
     else {
       body = FV.html(inv, {

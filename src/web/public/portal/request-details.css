@@ -9,14 +9,14 @@
 
 .hx-dh { flex: none; padding: 14px 16px 0; border-bottom: 1px solid var(--ds-border); }
 .hx-durl { display: flex; align-items: flex-start; gap: 10px; }
-.hx-durl code { font-family: var(--ds-mono); font-size: 12.5px; line-height: 1.55; word-break: break-all; }
+.hx-durl code { font-family: var(--ds-mono); font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; }   /* breaks after / ? & = (request-details.js breaks) */
 .hx-dsum { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 8px 0 10px; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
 .hx-dsum b { font-weight: 600; color: var(--ds-text); }
 .hx-dsum .r { margin-left: auto; display: flex; gap: 4px; }
 .hx-left { margin: 0 0 10px; padding: 8px 12px; border-radius: var(--ds-r-sm); background: var(--ds-warn-soft); font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
 .hx-left b { color: var(--ds-text); }
 .hx-tabs { display: flex; flex-wrap: wrap; gap: 2px; }   /* a narrow panel: a second row, never a tab out of sight */
-.hx-tab { position: relative; height: 40px; padding: 0 12px; border: 0; background: none; color: var(--ds-text-2); font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer; white-space: nowrap; }
+.hx-tab { position: relative; height: 40px; padding: 0 9px; border: 0; background: none; color: var(--ds-text-2); font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer; white-space: nowrap; }
 .hx-tab:hover, .hx-tab[aria-selected="true"] { color: var(--ds-text); }
 .hx-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; border-radius: 2px; background: var(--ds-accent-text); }
 .hx-tab i { margin-left: 5px; font-style: normal; font-weight: 400; color: var(--ds-text-3); }
@@ -38,6 +38,7 @@
 .hx-code .k { color: var(--ds-syn-key); } .hx-code .s { color: var(--ds-syn-str); } .hx-code .n { color: var(--ds-syn-num); } .hx-code .t { color: var(--ds-syn-fn); }
 .hx-more { margin: 8px 12px 12px; }
 .hx-frame { display: block; width: 100%; height: 420px; border: 0; background: #fff; }
+.hx-frame:focus, .hx-frame.is-focus { outline: 2px solid var(--ds-focus); outline-offset: -2px; }   /* is-focus: the keyboard is inside the sandboxed preview (request-details.js watchFrameFocus) */
 .hx-img { padding: 16px; text-align: center; background: repeating-conic-gradient(var(--ds-surface-2) 0 25%, var(--ds-surface) 0 50%) 0 0 / 16px 16px; }
 .hx-img img { max-width: 100%; max-height: 360px; }
 .hx-tl { padding: 10px 12px; }
