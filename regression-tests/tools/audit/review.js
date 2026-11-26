@@ -151,7 +151,8 @@ async function focusCheck(p, max) {
     await p.keyboard.press('Tab');
     const r = await p.evaluate(() => {
       let d = document, a = d.activeElement;
-      while (a && a.tagName === 'IFRAME') { try { d = a.contentDocument; a = d.activeElement; } catch (e) { break; } }
+      // a sandboxed frame (a response preview) cannot be read: it stays the control
+      while (a && a.tagName === 'IFRAME') { try { const cd = a.contentDocument; if (!cd) break; d = cd; a = d.activeElement; } catch (e) { break; } }
       if (!a || a === d.body || a === d.documentElement) return null;
       if (a.dataset.rvFocus) return { again: true };
       a.dataset.rvFocus = '1';
@@ -275,6 +276,10 @@ if (require.main === module) (async () => {
     await run('Explorer start', 'explorer');
     f = await frameOf('explorer'); await f.setInputFiles('#hx-file', COL + 'WebTours.har'); await f.waitForSelector('#hx-ws:not([hidden])');
     await f.click('.hx-req >> nth=4'); await run('Explorer workspace', 'explorer');
+    for (const tab of ['Payload', 'Response', 'Preview', 'Cookies', 'Timing', 'Dynamic values']) { const b = f.locator('#hx-det .hx-tab', { hasText: tab }).first(); if (await b.count()) { await b.click(); await p.waitForTimeout(300); await run('Explorer ' + tab.toLowerCase(), 'explorer'); } }
+    await f.click('#hx-findbtn'); await p.waitForTimeout(2500); const sg = f.locator('[data-sugg]').first(); if (await sg.count()) { await sg.click(); await p.waitForTimeout(1500); } await run('Explorer find a value', 'explorer'); await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+    await f.evaluate(() => { for (const id of ['hx-hide', 'hx-det-hide', 'hx-dom-hide']) { const b = document.getElementById(id); if (b && b.offsetParent) b.click(); } }); await p.waitForTimeout(300); await run('Explorer panels folded', 'explorer');
+    await f.evaluate(() => { for (const id of ['hx-rail', 'hx-det-rail', 'hx-dom-rail']) { const b = document.getElementById(id); if (b && b.offsetParent) b.click(); } }); await p.waitForTimeout(300);
     await go('studio'); await p.waitForFunction(() => { const x = document.getElementById('iframe-studio').contentWindow; return x && x.document.readyState === 'complete' && typeof x.loadFile === 'function'; }, null, { timeout: 20000 });
     await run('Studio start', 'studio');
     // the live recording view, as Start recording shows it (its layout only: the CDP Recorder is never asked)
