@@ -146,7 +146,7 @@ html.sb-collapsed .sb-note { justify-content: center; padding: 7px 0; }
 /* ── small screens: the sidebar becomes a drawer ── */
 .sb-scrim { display: none; }
 @media (max-width: 900px) {
-  :root, html.sb-collapsed { --sb-w: 0px; --ds-page-x: 18px; }
+  :root, html.sb-collapsed { --sb-w: 0px; --ds-page-x: 16px; }   /* = the page padding below: bands run edge to edge exactly (BUG-133) */
   .sb { width: var(--sb-w-open); transform: translateX(-100%); box-shadow: var(--ds-shadow-2); }
   html.sb-open .sb { transform: none; }
   html.sb-open .sb-scrim { display: block; position: fixed !important; inset: 0; z-index: 390; background: var(--ds-overlay); }

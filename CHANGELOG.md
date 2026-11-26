@@ -410,6 +410,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### No sideways scroll on narrow screens; old styles removed; route tests
+
+- At 900 px and below the Home welcome band and the converters' top band were 2 px wider than the window, and the Results Analyser's band 12 px when its frame was 700 px wide or less (BUG-133). No portal page or tool frame scrolls sideways now, from 360 to 1300 px.
+- The portal page's own style block lost 204 rules (676 lines) that could no longer match anything — the old navigation bar, the old converter form and the old Home. Every element's computed style on every page state was compared before and after: identical.
+- `tests/unit/serverRoutes.test.js`: every server route at both addresses (the bare root and /converter), each with its own answer; the admin data never answers signed out.
+
 #### Admin pages: purple sign-in, every period in sight on a phone
 
 - The admin sign-in page uses the purple of every other page (it was still blue).

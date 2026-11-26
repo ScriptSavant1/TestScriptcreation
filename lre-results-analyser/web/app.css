@@ -32,7 +32,7 @@ body.embedded .ra-header { display: none; }
 @media (max-width: 700px) { .privacy, .badge { display: none; } }
 
 main { max-width: var(--ds-page-max, 100%); margin: 0; padding: 24px var(--ds-page-x) 48px; }
-@media (max-width: 700px) { main { padding: 16px 16px 40px; } }
+@media (max-width: 700px) { main { --ds-page-x: 16px; padding: 16px var(--ds-page-x) 40px; } }   /* the band runs edge to edge with the same 16 px (BUG-133) */
 .view { display: none; } .view.active { display: block; }
 
 /* buttons drawn by script use .btn (+ sm / ghost / primary): same look as ds-btn */

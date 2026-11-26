@@ -386,6 +386,8 @@ lre-utils.js lre-utils.dat` should always be empty.
 | studio-ui.js | `advisorApplyAndRegen()` | Accept candidates + regenerate |
 | studio-ui.js | `submitPasteCorrelate()` | Paste & Detect → an Advisor card via `advisorAddManual` + `_paste` (exact extractor), applied at once; source `_pcFindSource`, safe boundary `_pcSafeOccurrences`; names via `_advSafeVarName` |
 
+Route registration: `tests/unit/serverRoutes.test.js` starts the real app (free port, throwaway database and admin token) and checks every route at the bare root and under `/converter`, each with its own answer (never the catch-all 404); signed out, every admin data address gives the sign-in page. Add a row there for every new route.
+
 ## Session-End Checklist (run after EVERY code change session)
 - [ ] Impact analysis was done for any non-trivial change (see `DEVELOPMENT-RULES.md`)
 - [ ] `node --check` on all modified .js files
@@ -435,4 +437,3 @@ Theme: `data-theme="dark|light"` on `<html>`; dark is the default.
 ## Known Governance Gaps (track, don't ignore)
 - **`processField()` untested** — inner closure of `genParamSuggestions()` in `studio-codegen.js`; not directly accessible. Requires refactoring to export or testing via `genParamSuggestions()`. Lowest-priority remaining gap.
 - **`/regression-tests/` has no pipeline cases yet** — `run-all.sh` is a skeleton with no expected outputs captured. Old-against-new comparison is done with `regression-tests/tools/` (see its README).
-- **No route-registration tests for `server.js`** — BUG-EXT-013 (POST /convert, /convert-jmx, GET /recorder, /studio missing their bare-root registration) shipped and reached a user before being caught, because nothing exercises Express route matching. Needs a `supertest`-based harness that boots the app and asserts each route responds at both `/` and `/converter`. Not yet implemented.

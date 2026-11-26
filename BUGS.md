@@ -6,7 +6,7 @@ Every bug found in PerfX Studio, newest first. Open bugs are at the top; fixed b
 
 | Bug | Severity | Description |
 |-----|----------|-------------|
-| BUG-133 | Low | **Home page is 2 px wider than the window at about 760 px wide** (a sideways scroll of 2 px). Found while checking the Home grid for the Workload Modeller at six widths; the same with the Home as it was before that change, so it is older. Tool cards fit at every width; the element that overflows is not identified yet. The Postman / Bruno and JMeter panels are 2 px wider at 900 px too (their header band `.cv-band`), before any conversion — the same pattern, also older. |
+| — | — | No open bugs. |
 
 ## Known limitations
 
@@ -24,6 +24,7 @@ Behaviour that is deliberate or deferred, recorded so it is not reported again a
 
 | ID | Severity | Description |
 |----|----------|-------------|
+| BUG-133 | Low | **Pages 2 px (Results Analyser: 12 px) wider than the window at narrow widths** — the Home welcome band at 900 px and below, the converters' top band, and the Results Analyser's band when its frame is 700 px wide or less. Cause: bands that run edge to edge pull out by `--ds-page-x`, which was 18 px (Analyser 28 px) where the page's own side padding is 16 px. Fix: `--ds-page-x` is 16 px there too (portal/shell.css, lre-results-analyser/web/app.css). Checked: no sideways scroll on any portal page or tool frame from 360 to 1300 px. |
 | BUG-180 | Medium | **CDP Recorder: the warning for a transaction that captured nothing was never shown** once the End button had gone. Cause: starting the next transaction ended the running one (which set the warning) and then cleared the warning. Fix: server.ts `startTx` clears the old warning before it ends the running one (0.3.3). repro-multi-tx.mjs checks it (fails on 0.3.2). |
 | BUG-179 | Medium | **CDP Recorder: the floating bar had no look in a pop-up window** (a grey square, plain buttons) — e.g. a sign-in pop-up. Cause: a pop-up starts as an empty page and keeps its window when the real page comes; the bar made for the empty page is moved into the real one, and the browser drops a constructed style sheet made for another page. Fix: page-bar.js `styleRoot()` makes the sheet again when it is gone (0.3.3). floating-bar.mjs checks the pop-up's bar is styled (fails on 0.3.2). |
 | BUG-178 | Low | **Script Studio: Correlate and Test data kept the place they were scrolled to** when another recording was opened or the step was opened again. Cause: only the page itself was set back to the top, not the part that scrolls. Fix: `step()` in studio-page.js sets the step's own scrollers to the top (walk.js checks it). |
