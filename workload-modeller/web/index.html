@@ -82,6 +82,7 @@
           </div>
           <label class="wm-f adv">Licence limit<div class="wm-unit"><input class="ds-field" type="number" id="sc-licence" min="0" placeholder="no limit"><span>Vusers</span></div><small>the most your licence allows — empty: no limit</small></label>
           <label class="wm-f" id="f-levels">Steps<input class="ds-field" type="text" id="sc-levels"><small>% of the target at each step</small></label>
+          <div class="wm-f wide" id="f-spike"><div class="wm-spike-row"><label class="wm-f">Normal load<div class="wm-unit"><input class="ds-field" type="number" id="sc-spike-base" min="1" max="100" step="5"><span>% of target</span></div></label><span class="wm-spike-to" aria-hidden="true">→</span><label class="wm-f">Burst to<div class="wm-unit"><input class="ds-field" type="number" id="sc-spike-peak" min="101" max="1000" step="10"><span>% of target</span></div></label></div><small>held before and after the burst · the burst starts within a minute and lasts up to 10 min</small><small class="wm-err" id="spike-err" role="alert" hidden></small></div>
           <label class="wm-f" id="f-hold"><span id="hold-label">Hold at each step</span><div class="wm-unit"><input class="ds-field" type="number" id="sc-hold" min="1" placeholder="auto"><span>min</span></div><small id="hold-help">empty: the tool chooses</small></label>
         </div>
       </div>

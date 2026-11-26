@@ -14,10 +14,11 @@
     "truclient": { "memoryMbPerVuser": 350, "vusersPerCore": 2 },
     "other": { "memoryMbPerVuser": 10, "vusersPerCore": 30 }
   },
-  "_testTypes": "What a test type starts with when it is chosen on the page: load and soak hold full load for fullLoadMin minutes; stress either holds one level above the target (shape hold: levelPct % of the target for holdMin minutes) or climbs in the tool's steps (shape steps: 50, 75, 100, 125, 150%).",
+  "_testTypes": "What a test type starts with when it is chosen on the page: load and soak hold full load for fullLoadMin minutes; stress either holds one level above the target (shape hold: levelPct % of the target for holdMin minutes) or climbs in the tool's steps (shape steps: 50, 75, 100, 125, 150%); a spike holds normal load at basePct % of the target and bursts to peakPct %.",
   "testTypes": {
     "load": { "fullLoadMin": 60 },
     "soak": { "fullLoadMin": 480 },
-    "stress": { "shape": "hold", "levelPct": 150, "holdMin": 120 }
+    "stress": { "shape": "hold", "levelPct": 150, "holdMin": 120 },
+    "spike": { "basePct": 50, "peakPct": 200 }
   }
 }

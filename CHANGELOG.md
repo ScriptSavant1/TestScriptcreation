@@ -6,13 +6,18 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### Spike levels of your own; script cards say what a field means once
+
+- Spike: **Normal load** and **Burst to** (% of the target; team settings `testTypes.spike`, 50% → 200% as before). A burst that is not above normal load is said and not used. The notes and the drawing follow the levels.
+- Script cards: what a field means (Think time — total per iteration, Target TPS …) is said in the first open card only, and in another card while its field has the focus; what is about the script itself (its transactions, its kind, a value it needs) shows in every card.
+
 #### The test types explained; a stress test held at 150% for 2 hours; a calmer page
 
 - Each test type is a card with a drawing of its load over time. **About this test** under the cards says what the chosen test is, why teams run it, how much load, how long, what to look at and when (common practice, with the team's own figures); **Hide** folds it to one line, remembered.
 - Stress starts at the team standard: **150% of the target held for 2 hours** (one start, one hold, one stop). **How the load rises** switches to the steps 50% → 150% as before. The level and the hold can be typed; the tiles and the summary give the TPS at 100% and at the held level. The team settings file has the figures (`testTypes`: load and soak full-load minutes, the stress level, hold or steps), checked like the others.
 - The fields of the chosen test show in Simple view: the stress level and hold, the capacity steps, the spike's normal-load hold. Full-load duration shows only where it is used. A hold typed for one test type is no longer carried over to the next.
 - While you work on a plan the band at the top makes room and the notes at the top of Scripts fold (unless you opened them); Start over brings them back. On a wide screen the results stay in view while the inputs scroll. Load an example opens its first script only.
-- Regression tools: `regression-tests/tools/workload/` — `serve.js` (the page from any version), `behave.js` (old page against new, 394 behaviours: plan, summary, tiles, checks, phases, LRE settings, every Excel sheet, filled scripts, table, undo), `walk.js` (42 checks of the test types and the layout).
+- Regression tools: `regression-tests/tools/workload/` — `serve.js` (the page from any version), `behave.js` (old page against new, 394 behaviours: plan, summary, tiles, checks, phases, LRE settings, every Excel sheet, filled scripts, table, undo), `walk.js` (53 checks of the test types, the spike levels, the card help and the layout).
 
 #### A HAR recording: transactions from its bookmarks, response time from its requests
 

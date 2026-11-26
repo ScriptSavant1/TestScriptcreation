@@ -19,6 +19,7 @@ const TEST_HELP = {
 function testInfo(k) {
   const st = TEAM.types.stress, lvl = st.levelPct, hrs = (m) => (m % 60 ? fmt(m) + " min" : fmt(m / 60) + (m === 60 ? " hour" : " hours"));
   const team = (s) => `<b>Your team:</b> ${s}`;
+  const spk = spikeLevels();
   return ({
     load: { name: "Load test", why: "Proves the system meets its response-time targets at the busiest hour you expect: the baseline every other test is compared with.",
       load: "100% of the expected peak. For next year's peak, raise it with the Growth factor (1.2 = 20% more).", len: `1 – 2 hours at full load is common. ${team(hrs(TEAM.types.load.fullLoadMin) + " at full load")}`,
@@ -34,9 +35,14 @@ function testInfo(k) {
       load: "Steps of 20% from 100% until the SLA breaks — often 200% or more", len: "10 – 15 min per step, until the limit is found",
       look: "The last step that still meets the SLA = the capacity · the first resource at its limit (CPU, memory, pools, database)", when: "Sizing hardware or cloud machines; planning for growth" },
     spike: { name: "Spike test", why: "Checks a sudden burst — a sale, a mail-out, a market opening: does the system cope, scale out in time, and come back to normal?",
-      load: "Normal load (50%), a jump to 200% within a minute, then back", len: "The burst 5 – 15 min; 30 – 60 min in all",
+      load: `Normal load (${fmt(spk.base)}%), a jump to ${fmt(spk.peak)}% within a minute, then back. Common practice: 50% → 200 – 300%.`, len: "The burst 5 – 15 min; 30 – 60 min in all",
       look: "Errors during the jump · how long it takes to recover · auto-scaling reacts in time", when: "Before campaigns and events; when auto-scaling is set up or changed" },
   })[k];
+}
+// the spike's levels: the ones on the page when the spike is chosen, else the team's
+function spikeLevels() {
+  const sc = state.scenario, t = TEAM.types.spike;
+  return sc.testType === "spike" ? { base: sc.spikeBase || t.basePct, peak: sc.spikePeak || t.peakPct } : { base: t.basePct, peak: t.peakPct };
 }
 // the load over time as points (x 0 – 100, y = % of the target); stress follows the team's shape
 function testShape(k) {
@@ -46,7 +52,7 @@ function testShape(k) {
     stress: st.shape === "hold" ? [[0, 0], [14, Math.min(200, st.levelPct)], [90, Math.min(200, st.levelPct)], [100, 0]]
       : [[0, 0], [8, 50], [22, 50], [26, 75], [40, 75], [44, 100], [58, 100], [62, 125], [76, 125], [80, 150], [94, 150], [100, 0]],
     capacity: [[0, 0], [6, 100], [18, 100], [22, 120], [34, 120], [38, 140], [50, 140], [54, 160], [66, 160], [70, 180], [82, 180], [86, 200], [96, 200], [100, 0]],
-    spike: [[0, 0], [10, 50], [38, 50], [40, 200], [58, 200], [60, 50], [88, 50], [100, 0]],
+    spike: ((b, p) => [[0, 0], [10, b], [38, b], [40, p], [58, p], [60, b], [88, b], [100, 0]])(Math.min(200, spikeLevels().base), Math.min(200, spikeLevels().peak)),
   })[k];
 }
 const shapePath = (pts, W, H) => pts.map(([x, y], i) => (i ? "L" : "M") + (x * W / 100).toFixed(1) + " " + (H - 2 - y * (H - 4) / 200).toFixed(1)).join(" ");
@@ -122,10 +128,14 @@ function kindHelp(g) {
 }
 
 /* ---------- inputs: the test ---------- */
-function renderTest() {
+function renderTestCards() {
   const sc = state.scenario;
   $("#test-types").innerHTML = Object.entries(E.TEST_TYPES).map(([k, t]) =>
     `<button class="wm-choice" data-tt="${k}" aria-pressed="${sc.testType === k}"><b>${esc(t.label.replace(/ \(.*/, ""))}</b>${shapeSvg(k, "wm-tt-shape")}<span>${TEST_HELP[k]}</span></button>`).join("");
+}
+function renderTest() {
+  const sc = state.scenario;
+  renderTestCards();
   renderAbout();
   const rec = E.TEST_TYPES[sc.testType].workload;
   $("#sc-workload").innerHTML = Object.entries(E.WORKLOADS).map(([k, l]) => `<option value="${k}"${k === sc.workload ? " selected" : ""}>${l}${k === rec ? " (recommended)" : ""}</option>`).join("");
@@ -145,6 +155,12 @@ function renderTest() {
   if (held && document.activeElement !== $("#sc-level")) $("#sc-level").value = sc.levels[0];
   $("#f-levels").style.display = tt.levels && !held ? "" : "none";
   $("#f-hold").style.display = stepped ? "" : "none";
+  $("#f-spike").style.display = tt.base ? "" : "none";
+  if (tt.base) {
+    const s = spikeLevels();
+    if (document.activeElement !== $("#sc-spike-base")) $("#sc-spike-base").value = s.base;
+    if (document.activeElement !== $("#sc-spike-peak")) $("#sc-spike-peak").value = s.peak;
+  }
   $("#hold-label").textContent = held ? `Hold at ${fmt(sc.levels[0])}%` : tt.base ? "Hold normal load" : "Hold at each step";
   $("#hold-help").textContent = held ? "how long the level is held, after the ramp-up" : "empty: the tool chooses (10 min, or 5 pacings when longer)";
   $("#sc-hold").value = sc.stepHoldMin ?? "";
@@ -165,6 +181,8 @@ $("#test-types").addEventListener("click", (e) => {
   // the team's starting figures (team settings, testTypes): full load for load / soak; the stress level and its hold
   sc.steadyMin = (TEAM.types[sc.testType] && TEAM.types[sc.testType].fullLoadMin) || tt.steadyMin;
   if (sc.testType === "stress") stressShape(TEAM.types.stress.shape);
+  sc.spikeBase = sc.testType === "spike" ? TEAM.types.spike.basePct : null; sc.spikePeak = sc.testType === "spike" ? TEAM.types.spike.peakPct : null;
+  $("#spike-err").hidden = true;
   renderTest(); calc();
 });
 const bindNum = (id, key, nullable) => $(id).addEventListener("input", (e) => { const v = parseFloat(e.target.value); state.scenario[key] = Number.isFinite(v) ? v : (nullable ? null : 0); calc(); });
@@ -187,20 +205,33 @@ function stressShape(shape) {
   const sc = state.scenario, st = TEAM.types.stress;
   if (shape === "hold") { sc.levels = [st.levelPct]; sc.stepHoldMin = st.holdMin; } else { sc.levels = null; sc.stepHoldMin = null; }
 }
+// spike: normal load 1 – 100% of the target, the burst above it (up to 1000%); a pair that cannot be used is said and not used
+function spikeInput() {
+  const b = parseFloat($("#sc-spike-base").value), p = parseFloat($("#sc-spike-peak").value), err = $("#spike-err");
+  const bad = !(b >= 1 && b <= 100) ? "Normal load: 1 to 100% of the target." : !(p > b && p <= 1000) ? "The burst must be above normal load (up to 1000%)." : "";
+  err.hidden = !bad; err.textContent = bad;
+  [$("#sc-spike-base"), $("#sc-spike-peak")].forEach((x) => x.toggleAttribute("aria-invalid", !!bad));
+  if (bad) return;
+  state.scenario.spikeBase = b; state.scenario.spikePeak = p; renderAbout(); renderTestCards(); calc();
+}
+$("#sc-spike-base").addEventListener("input", spikeInput); $("#sc-spike-peak").addEventListener("input", spikeInput);
 $("#sc-shape").addEventListener("click", (e) => { const b = e.target.closest("[data-shape]"); if (!b) return; stressShape(b.dataset.shape); renderTest(); calc(); });
 $("#sc-level").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (v > 0) { state.scenario.levels = [v]; $("#hold-label").textContent = `Hold at ${fmt(v)}%`; calc(); } });
 $("#sc-levels").addEventListener("input", (e) => { const l = e.target.value.split(/[,; ]+/).map(Number).filter((x) => x > 0); state.scenario.levels = l.length ? l : null; calc(); });
 
 /* ---------- inputs: scripts ---------- */
 const opt = (list, v) => list.map(([k, l]) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(l)}</option>`).join("");
+// help: text about this script (shown in every card), or gh("…") — what the field means, the same in every card: shown
+// in the first open card only, and in any other card while its field has the focus (page.js markHelps)
+const gh = (t) => ({ gh: t });
 function num(label, key, val, unit, help, cls, extra) {
-  return `<label class="wm-f ${cls || ""}">${label}<div class="${unit ? "wm-unit" : ""}"><input class="ds-field" type="number" data-k="${key}" value="${val ?? ""}" min="0" step="any" ${extra || ""}>${unit ? `<span>${unit}</span>` : ""}</div>${help ? `<small>${help}</small>` : ""}</label>`;
+  return `<label class="wm-f ${cls || ""}">${label}<div class="${unit ? "wm-unit" : ""}"><input class="ds-field" type="number" data-k="${key}" value="${val ?? ""}" min="0" step="any" ${extra || ""}>${unit ? `<span>${unit}</span>` : ""}</div>${help ? (help.gh ? `<small class="wm-gh">${help.gh}</small>` : `<small>${help}</small>`) : ""}</label>`;
 }
 // Transactions per iteration: the script's own names in a window (long names — addresses — never fill the card)
 const txOf = (g) => (g.txList && g.txList.length ? g.txList : (g.txNames || []).map((n) => ({ name: n })));
 function txHelp(g) {
   const n = txOf(g).length;
-  if (!n) return "that count for the TPS";
+  if (!n) return gh("that count for the TPS");
   return `${n} in the script <button type="button" class="wm-goto" data-txlist="${esc(g.id)}" title="Every transaction of one iteration, in order">see them all</button>`;
 }
 function openTxList(id) {
@@ -255,12 +286,12 @@ const thinkHelp = (g) => (noThink(g) ? "no think time above — nothing to repla
 function scriptCard(g) {
   const m = g.method, p = g.pacing || {};
   const target = {
-    tps: num("Target TPS", "targetTps", g.targetTps, "TPS", "transactions per second this script must reach", "", `placeholder="${commonTps(g) != null ? fmt(commonTps(g), 2) + " — common" : ""}"`),
-    volume: num("Volume per hour", "volumePerHour", g.volumePerHour, "/ hour", "business transactions in the peak hour"),
-    share: num("Share of the scenario TPS", "sharePct", g.sharePct, "%", "of the total in step 1"),
-    vusers: num("Vusers", "vusers", g.vusers, "", "the number of users you will run"),
-    vusers_tps: num("Vusers", "vusers", g.vusers, "", "given to you") + num("Target TPS", "targetTps", g.targetTps, "TPS", "given to you"),
-    iterations: num("Iterations in full load", "iterations", g.iterations, "", "e.g. one per data row"),
+    tps: num("Target TPS", "targetTps", g.targetTps, "TPS", gh("transactions per second this script must reach"), "", `placeholder="${commonTps(g) != null ? fmt(commonTps(g), 2) + " — common" : ""}"`),
+    volume: num("Volume per hour", "volumePerHour", g.volumePerHour, "/ hour", gh("business transactions in the peak hour")),
+    share: num("Share of the scenario TPS", "sharePct", g.sharePct, "%", gh("of the total in step 1")),
+    vusers: num("Vusers", "vusers", g.vusers, "", gh("the number of users you will run")),
+    vusers_tps: num("Vusers", "vusers", g.vusers, "", gh("given to you")) + num("Target TPS", "targetTps", g.targetTps, "TPS", gh("given to you")),
+    iterations: num("Iterations in full load", "iterations", g.iterations, "", gh("e.g. one per data row")),
   }[m];
   const pacing = m === "vusers_tps" ? `<p class="wm-muted wm-f wide" style="margin:0">Pacing follows from the Vusers and the TPS — the checks say whether it is possible.</p>` :
     `<label class="wm-f">Pacing<select class="ds-field" data-k="pacing.mode">${opt(PACING, p.mode || "auto")}</select></label>` +
@@ -286,24 +317,24 @@ function scriptCard(g) {
         <label class="wm-f">Protocol<select class="ds-field" data-k="protocol">${opt(Object.entries(PROTOS).map(([k, v]) => [k, v.label]), g.protocol)}</select></label>
         ${pools.length > 1 ? `<label class="wm-f">Runs on<select class="ds-field" data-k="pool">${opt(pools, g.pool)}</select></label>` : ""}
         ${g.protocol === "truclient" ? "" : `<label class="wm-f">Kind of script<select class="ds-field" data-k="kind">${opt(KINDS, g.kind || "auto")}</select><small>${esc(kindHelp(g))} — for the load generators</small></label>`}
-        ${num("Vusers per machine", "perLg", g.perLg, "", "your figure for this script, e.g. from a past run — replaces the rule", "adv")}
+        ${num("Vusers per machine", "perLg", g.perLg, "", gh("your figure for this script, e.g. from a past run — replaces the rule"), "adv")}
       </div></div>
       <div><p class="wm-sub">One iteration <span class="wm-subh">— one run through the script</span></p><div class="wm-grid">
         ${num("Transactions per iteration", "txPerIter", g.txPerIter, "", txHelp(g))}
-        ${num("Think time — total per iteration", "thinkPerIter", g.thinkPerIter, "s", "all think times of one iteration added up, not per transaction — e.g. 9 × lr_think_time(3) = 27 s")}
-        ${num("Fixed waits — total per iteration", "waitPerIter", g.waitPerIter, "s", "all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full", g.waitPerIter > 0 ? "" : "adv")}
+        ${num("Think time — total per iteration", "thinkPerIter", g.thinkPerIter, "s", gh("all think times of one iteration added up, not per transaction — e.g. 9 × lr_think_time(3) = 27 s"))}
+        ${num("Fixed waits — total per iteration", "waitPerIter", g.waitPerIter, "s", gh("all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full"), g.waitPerIter > 0 ? "" : "adv")}
         ${num("Response time — per transaction", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}
         <label class="wm-f adv">Response time from<select class="ds-field" data-k="rtSource">${opt(RTSRC, g.rtSource)}</select></label>
-        ${num("90th percentile", "rt90", g.rt90, "s", "optional — for the worst case", "adv")}
-        ${num("Requests", "requestsPerIter", g.requestsPerIter, "", "per iteration — for hits per second", "adv")}
-        ${num("Data rows available", "dataRows", g.dataRows, "", "warns when the test needs more", "adv")}
+        ${num("90th percentile", "rt90", g.rt90, "s", gh("optional — for the worst case"), "adv")}
+        ${num("Requests", "requestsPerIter", g.requestsPerIter, "", gh("per iteration — for hits per second"), "adv")}
+        ${num("Data rows available", "dataRows", g.dataRows, "", gh("warns when the test needs more"), "adv")}
       </div></div>
       <div><p class="wm-sub">Replay in LRE <span class="wm-subh">— runtime settings</span></p><div class="wm-grid">${pacing}
-        <label class="wm-f">Think time in LRE<select class="ds-field" data-k="thinkMode" data-thinkdep${noThink(g) ? " disabled" : ""}>${opt(THINK, g.thinkMode)}</select><small data-thinkhelp>${thinkHelp(g)}</small></label>
+        <label class="wm-f">Think time in LRE<select class="ds-field" data-k="thinkMode" data-thinkdep${noThink(g) ? " disabled" : ""}>${opt(THINK, g.thinkMode)}</select><small data-thinkhelp${noThink(g) ? "" : ' class="wm-gh"'}>${thinkHelp(g)}</small></label>
         ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
-        ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%", "of the recorded think time") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
-        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "only if you tick LRE's “Limit think time to” — else leave empty", g.thinkLimit > 0 ? "" : "adv", `data-thinkdep${noThink(g) ? " disabled" : ""}`)}
-        ${g.thinkMode === "ignore" ? "" : num("How many think times", "thinkPauses", g.thinkPauses, "", "in one iteration, so the limit can cut each one — read from the script").replace('<label class="wm-f ', `<label data-pauses${g.thinkLimit > 0 ? "" : " hidden"} class="wm-f `)}
+        ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%", gh("of the recorded think time")) + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
+        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", gh("only if you tick LRE's “Limit think time to” — else leave empty"), g.thinkLimit > 0 ? "" : "adv", `data-thinkdep${noThink(g) ? " disabled" : ""}`)}
+        ${g.thinkMode === "ignore" ? "" : num("How many think times", "thinkPauses", g.thinkPauses, "", gh("in one iteration, so the limit can cut each one — read from the script")).replace('<label class="wm-f ', `<label data-pauses${g.thinkLimit > 0 ? "" : " hidden"} class="wm-f `)}
       </div></div>
     </div></div>`;
 }
@@ -328,7 +359,7 @@ $("#scripts-list").addEventListener("input", (e) => {
   setKey(g, k, v); g.sample = false;
   if (k === "name") { const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }
   // the number of think times matters only with a limit: shown while one is set (no redraw, the focus stays)
-  if (k === "thinkPerIter") { const c = el.closest("[data-id]"); c.querySelectorAll("[data-thinkdep]").forEach((x) => { x.disabled = noThink(g); }); const h = c.querySelector("[data-thinkhelp]"); if (h) h.textContent = thinkHelp(g); }
+  if (k === "thinkPerIter") { const c = el.closest("[data-id]"); c.querySelectorAll("[data-thinkdep]").forEach((x) => { x.disabled = noThink(g); }); const h = c.querySelector("[data-thinkhelp]"); if (h) { h.textContent = thinkHelp(g); h.classList.toggle("wm-gh", !noThink(g)); } }
   if (["thinkPerIter", "thinkFactor", "thinkMinPct", "thinkMaxPct", "thinkLimit"].includes(k)) { const r = el.closest("[data-id]").querySelector("[data-thinkres]"); if (r) r.textContent = thinkResult(g); }
   if (k === "thinkLimit") { const f = el.closest("[data-id]").querySelector("[data-pauses]"); if (f) f.hidden = !(v > 0); }
   if (STRUCT.has(k)) { if (tableView()) tvRedraw(g, k); else renderScripts(); renderTest(); renderPools(); calc(); } else calcSoon();

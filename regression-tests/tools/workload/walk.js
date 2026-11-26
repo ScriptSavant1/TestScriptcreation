@@ -60,6 +60,32 @@ const plan = (p) => p.evaluate(() => ({ peak: last.peakVusers, vusers: last.tota
   await p.click('[data-tt=stress]'); await p.selectOption('#sc-workload', 'basic-group');
   ok('Stress on a basic schedule: the full-load box is back, with why', await vis(p, '#f-steady') && /Real-world schedule/.test(await p.locator('#steady-help').innerText()));
   await p.selectOption('#sc-workload', 'real-world');
+  // ── spike: normal load → burst ──
+  await p.click('[data-tt=spike]'); r = await plan(p);
+  ok('Spike: Normal load 50% → Burst to 200% (team), peak = 2 × the Vusers', await vis(p, '#f-spike') && (await p.inputValue('#sc-spike-base')) === '50' && (await p.inputValue('#sc-spike-peak')) === '200' && r.peak === r.vusers * 2, r);
+  await p.fill('#sc-spike-base', '70'); await p.fill('#sc-spike-peak', '300'); r = await plan(p);
+  ok('… 70% → 300%: the plan follows', r.sc.spikeBase === 70 && r.sc.spikePeak === 300 && r.peak === Math.ceil(r.vusers * 3) && /spike \(\d+ Vusers\)/.test(await p.locator('#lre').textContent()), r.sc);
+  ok('… the notes and the drawing follow', /Normal load \(70%\), a jump to 300%/.test(await p.locator('#tt-about').innerText()));
+  await p.fill('#sc-spike-peak', '60'); r = await plan(p);
+  ok('… a burst below normal load is said and not used', await vis(p, '#spike-err') && /above normal load/.test(await p.locator('#spike-err').innerText()) && r.sc.spikePeak === 300 && (await p.getAttribute('#sc-spike-peak', 'aria-invalid')) !== null);
+  await p.fill('#sc-spike-peak', '250'); ok('… fixed: the message goes', !(await vis(p, '#spike-err')) && (await plan(p)).sc.spikePeak === 250);
+  await p.click('[data-tt=load]'); r = await plan(p);
+  ok('another test: the spike levels are not kept', r.sc.spikeBase === null && r.sc.spikePeak === null && !(await vis(p, '#f-spike')));
+  await p.click('[data-tt=spike]'); ok('back to spike: the team levels again', (await p.inputValue('#sc-spike-peak')) === '200');
+  await p.click('[data-tt=load]');
+  // ── script cards: what a field means is said once ──
+  await p.click('#btn-example'); await p.click('#btn-unfold-all').catch(() => {}); await p.evaluate(() => state.groups.forEach((g) => foldCard(g, false))); await p.waitForTimeout(150);
+  const helps = () => p.evaluate(() => [...document.querySelectorAll('#scripts .wm-script')].map((c) => ({ help: c.classList.contains('wm-help-card'), shown: [...c.querySelectorAll('small.wm-gh')].filter((x) => x.offsetParent).length, all: c.querySelectorAll('small.wm-gh').length, own: [...c.querySelectorAll('.wm-f > small:not(.wm-gh)')].filter((x) => x.offsetParent).length })));
+  let hs = await helps();
+  ok('three cards open: the first explains its fields, the others do not repeat it', hs.length === 3 && hs[0].help && hs[0].shown > 3 && hs.slice(1).every((x) => !x.help && x.shown === 0 && x.all > 3), hs);
+  ok('… what is about each script still shows in every card', hs.every((x) => x.own >= 2), hs);
+  await p.locator('#scripts .wm-script').nth(2).locator('[data-k=thinkPerIter]').focus();
+  ok('… a field of another card shows its help while it has the focus', await p.evaluate(() => { const s = document.activeElement.closest('.wm-f').querySelector('small.wm-gh'); return !!(s && s.offsetParent); }));
+  await p.evaluate(() => { document.activeElement.blur(); foldCard(state.groups[0], true); }); await p.waitForTimeout(100); hs = await helps();
+  ok('the first card folded: the next open card explains', hs[1].help && hs[1].shown > 3 && hs[2].shown === 0, hs);
+  await p.click('#sview [data-v=table]'); await p.waitForTimeout(150);
+  await p.evaluate(() => { const b = document.querySelector('#tv [data-open], #tv .wm-tv-open, #tv button'); if (b) b.click(); }); await p.waitForTimeout(150);
+  await p.click('#sview [data-v=cards]'); await p.click('#btn-reset-all'); await p.waitForTimeout(150); await p.click('[data-tt=stress]');
   // ── hide / show the notes, remembered ──
   await p.click('#tt-about [data-about="0"]');
   ok('Hide: one line instead of the notes', !(await vis(p, '.wm-about')) && /What is a stress test/.test(await p.locator('#tt-about').innerText()));

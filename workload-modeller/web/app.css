@@ -404,3 +404,15 @@ body.wm-working .wm-wrap { padding-top: 16px; }
 }
 @media (max-width: 1500px) and (min-width: 1101px) { .wm-about-facts { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
 @media (max-width: 700px) { .wm-about-b { grid-template-columns: minmax(0, 1fr); } }
+
+/* script cards: what a field means is said once — in the first open card, and in another card while its field has the
+   focus (page.js markHelps); what is about the script itself (its transactions, its kind, a needed value) always shows */
+.wm-script:not(.wm-help-card) .wm-f:not(:focus-within) > small.wm-gh { display: none; }
+/* spike: normal load → burst, on one line */
+.wm-spike-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.wm-spike-row > .wm-f { flex: 0 1 190px; }
+.wm-spike-to { padding-bottom: 9px; color: var(--ds-text-3); font-size: var(--ds-fs-md); }
+.wm-err { color: var(--ds-bad) !important; font-weight: 600 !important; }
+.wm-err[hidden] { display: none; }
+.ds-field[aria-invalid] { border-color: var(--ds-bad); }
+@media (max-width: 600px) { .wm-spike-to { display: none; } .wm-spike-row > .wm-f { flex: 1 1 100%; } }

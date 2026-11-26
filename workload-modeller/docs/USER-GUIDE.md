@@ -55,7 +55,9 @@ The page works out the plan as you type. A section you have not touched keeps se
 - **Stress**: **How the load rises** — *Straight to one level, held* (the team standard: 150% of the target for
   120 minutes; change the **Load level** and **Hold at 150%**) or *In steps: 50% → 150%* (the tool's steps, each held
   10 minutes or 5 × the longest pacing). The tiles and the summary give the TPS at 100% and at the held level.
-- **Capacity**: its **Steps** and **Hold at each step**; **Spike**: **Hold normal load** — shown in Simple view.
+- **Capacity**: its **Steps** and **Hold at each step** — shown in Simple view.
+- **Spike**: **Normal load** (1 – 100% of the target, team: 50%) **→ Burst to** (above normal load, up to 1000%; team:
+  200%) and **Hold normal load**. A burst that is not above normal load is said under the fields and not used.
 - **Full-load duration**: how long all users run together after the ramp-up (load and soak; for the stepped tests only
   with a basic schedule, which ramps to 100% — choose the Real-world schedule for them).
 - **Ramp-up and ramp-down**: the tool chooses (recommended for a new test), or **My own, as in LRE** — Start
@@ -69,6 +71,9 @@ The page works out the plan as you type. A section you have not touched keeps se
 - While you work on a plan (two scripts, or a script read from a file) the band at the top makes room, and the notes at
   the top of Scripts fold unless you opened them; **Start over** brings both back. On a wide screen the results stay in
   view while the inputs scroll. **Load an example** opens its first script; the others show their summary line.
+- Script cards say what a field means once: in the first open card. In the other cards that help shows while one of
+  their fields has the focus; what is about the script itself (its transactions, its kind, a value it needs) shows in
+  every card.
 
 ### Scripts
 - **Before you fill in a script — what each box means**: the notes at the top of Scripts (open until you fold them)
@@ -209,6 +214,7 @@ The figures a team agrees on are in one file on the server, `workload-modeller/c
 | `protocols` | memory per Vuser (MB) and Vusers per CPU core, per protocol (web, devweb, truclient, other) | 5 / 50, 3 / 80, 350 / 2, 10 / 30 |
 | `testTypes.load.fullLoadMin`, `testTypes.soak.fullLoadMin` | how long a load / soak test holds full load when it is chosen | 60, 480 |
 | `testTypes.stress` | `shape`: `hold` (one level: `levelPct` % of the target for `holdMin` minutes) or `steps` (50 … 150%) | hold, 150, 120 |
+| `testTypes.spike` | `basePct` normal load (1 – 100), `peakPct` the burst (101 – 1000), % of the target | 50, 200 |
 
 - To change a figure (for example 150 Vusers per on-premise machine for web pages), edit the file on the server, save
   it and set `updated` to today's date. Every user gets the new figures the next time they open the page — nothing to
@@ -308,7 +314,7 @@ Also: iterations per second = Vusers ÷ pacing; hits per second = requests per i
   rate, held for the hold time (120 min), then stopped — one start, one hold, one stop in LRE.
 - **Stress in steps / Capacity**: steps at a percentage of the Vusers (50, 75, 100, 125, 150% / 100 to 200%), each held
   10 minutes or 5 × the longest pacing, whichever is longer (or the hold you set).
-- **Spike**: normal load (50%) held; the burst to 200% starts within one pacing (10 to 60 s) and holds up to 10
+- **Spike**: normal load (50%, or the level set) held; the burst to 200% (or the level set) starts within one pacing (10 to 60 s) and holds up to 10
   minutes; the burst stops at once; recovery is held; then everything stops.
 - **Goal-oriented**: the goal is the total TPS; Vusers from 50% to 150% of the plan; run for the full-load time
   after the goal is reached.

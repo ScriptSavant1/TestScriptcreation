@@ -468,7 +468,7 @@ function toast(msg, canUndo) {
 function clearWith(msg, fn) { undoSnap = snapshot(); fn(); renderAll(); toast(msg, true); }
 $("#toast-undo").addEventListener("click", () => { if (undoSnap) { restore(undoSnap); undoSnap = null; renderAll(); } $("#toast").hidden = true; });
 $("#toast-x").addEventListener("click", () => { $("#toast").hidden = true; });
-const TEST_KEYS = ["testType", "steadyMin", "workload", "totalTps", "growth", "levels", "stepHoldMin", "licenceVusers"];
+const TEST_KEYS = ["testType", "steadyMin", "workload", "totalTps", "growth", "levels", "stepHoldMin", "licenceVusers", "spikeBase", "spikePeak"];
 const TUNE_KEYS = ["headroomPct", "pacingStyle", "randomPct", "maxStartRate"];
 const CLEAR = {
   test: () => TEST_KEYS.forEach((k) => { state.scenario[k] = DEFAULT_SCENARIO[k]; }),
@@ -496,6 +496,14 @@ $("#btn-reset-all").addEventListener("click", () => clearWith("Everything cleare
 }));
 
 try { view(localStorage.getItem("wm-view") !== "detail"); } catch (e) { view(true); }
+/* ---------- the script cards' general help (app.js gh): in the first open card only — the others show it while one of
+   their fields has the focus ---------- */
+function markHelps() {
+  const cards = [...document.querySelectorAll("#scripts .wm-script")], first = cards.find((c) => !c.classList.contains("is-folded") && !c.hidden && c.offsetParent);
+  cards.forEach((c) => { if (c.classList.contains("wm-help-card") !== (c === first)) c.classList.toggle("wm-help-card", c === first); });
+}
+new MutationObserver(markHelps).observe($("#scripts"), { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
+markHelps();
 /* ---------- working on a plan: the top band (what the tool does) gives its room to the work, as on the other tools;
    the notes at the top of Scripts fold unless the user opened them. Starts with two scripts or one read from a file
    (never while typing in the starting example), and stays until the scripts are cleared. ---------- */
