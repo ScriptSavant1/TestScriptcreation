@@ -165,7 +165,7 @@ export class Recorder {
     // attached session to have CONFIRMED Network.enable, not just "zero
     // requests in flight" — until it actually fires, instead of trusting a
     // flat timer. Bounded at 20s: if it never confirms, fire the signal
-    // anyway with a visible warning rather than leave "Start Transaction"
+    // anyway with a visible warning rather than leave "Start transaction"
     // disabled forever — same bounded-wait-and-warn posture as the
     // Network.enable retry logic itself.
     void this.pollUntilSettled();
@@ -180,14 +180,14 @@ export class Recorder {
       if (forceSettledCheck()) return;
     }
     console.warn(
-      "[cdp-recorder] Network capture never confirmed within 20s — firing Settled anyway so Start Transaction isn't stuck disabled forever; capture on the current target(s) may still be incomplete.",
+      "[cdp-recorder] Network capture never confirmed within 20s — firing Settled anyway so Start transaction isn't stuck disabled forever; capture on the current target(s) may still be incomplete.",
     );
     forceFireSettledRegardless();
   }
 
   /**
    * Recording started from the PerfX Studio page: once capture is confirmed on the recording window
-   * (the same Settled signal that enables Start Transaction), open the application address in it —
+   * (the same Settled signal that enables Start transaction), open the application address in it —
    * so its first request is recorded. Waits at most ~20 s, like pollUntilSettled.
    */
   async openUrl(url: string): Promise<void> {

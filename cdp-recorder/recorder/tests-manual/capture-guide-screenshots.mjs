@@ -93,14 +93,14 @@ await recPage.waitForLoadState("networkidle");
 await tb.waitForTimeout(1200);
 await shot(tb, "04-toolbar-in-transaction.png");
 await shot(recPage, "05-recording-app.png");
-await recPage.click("#signin");
+await recPage.evaluate(() => document.getElementById("signin").click());   // the floating bar (0.3.0) sits over the top of this small test page
 await recPage.waitForURL("**/home");
 await recPage.waitForLoadState("networkidle");
 
 await tb.fill("#txNameInput", "Search");
 await tb.click("#btnStartTx");
 await tb.waitForFunction(() => /Recording — /.test(document.getElementById("statusText").textContent));
-await recPage.click("#search");
+await recPage.evaluate(() => document.getElementById("search").click());
 await recPage.waitForTimeout(800);
 await tb.waitForTimeout(1200);
 await shot(tb, "06-toolbar-trail.png");

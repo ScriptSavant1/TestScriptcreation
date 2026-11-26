@@ -180,8 +180,15 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
 @container (max-width: 480px) { .pill { gap: 6px; padding-left: 10px; } .pill .time { display: none; } .box { min-width: 96px; } .narrow .tiny-only { display: inline; } }
 .hide { visibility: hidden !important; }
 `;
-  try { const sheet = new CSSStyleSheet(); sheet.replaceSync(CSS); root.adoptedStyleSheets = [sheet]; }
-  catch (e) { const st = document.createElement("style"); st.textContent = CSS; root.append(st); }
+  // the bar's look. A pop-up starts as an empty page and keeps its window when the real page comes, so the bar made
+  // for the empty page is moved into the real one (raise) — and a constructed sheet only works in the page it was made
+  // for: the browser drops it. The bar then makes it again for the page it is in (0.3.3).
+  function styleRoot() {
+    if (root.adoptedStyleSheets.length || root.querySelector("style")) return;
+    try { const sheet = new CSSStyleSheet(); sheet.replaceSync(CSS); root.adoptedStyleSheets = [sheet]; }
+    catch (e) { const st = document.createElement("style"); st.textContent = CSS; root.prepend(st); }
+  }
+  styleRoot();
   const wrap = h("div", { class: "wrap" });
   root.append(wrap);
   // keys typed in the bar never reach the application's own shortcuts; its clicks never close the application's menus
@@ -203,6 +210,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
     try { const m = document.querySelectorAll("dialog:modal"); modal = m.length ? m[m.length - 1] : null; } catch (e) { /* :modal not supported */ }
     const parent = modal || document.documentElement;
     if (parent && host.parentNode !== parent) { parent.append(host); topSig = ""; }
+    styleRoot();   // moved into another page (a pop-up's real page): its look again
     if (!canPop || !host.isConnected) return;
     try {
       const others = document.querySelectorAll(":modal, :popover-open, :fullscreen").length - (host.matches(":popover-open") ? 1 : 0);

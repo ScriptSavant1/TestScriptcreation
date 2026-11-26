@@ -84,7 +84,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: join(SHO
 let pw;
 try {
   for (let i = 0; i < 40; i++) { await wait(250); try { await fetch(API + "/api/status"); break; } catch { /* starting */ } }
-  check((await status()).version === "0.3.2", "version 0.3.2");
+  check((await status()).version === "0.3.3", "version 0.3.3");
   const s = await call("POST", "/api/session", { url: site + "/select", browser: browserName, private: true, name: "Booking", firstTx: "T01_Launch", plan: "Launch\nAdd to basket\nCheckout" });
   check(s.status === 200, "Start recording — " + s.status + " " + JSON.stringify(s.json));
 
@@ -162,6 +162,11 @@ try {
   check(/T03_Checkout/.test(await pb(".narrow").textContent().catch(() => "")) || /T03_Checkout/.test(await pb(".txn b").textContent().catch(() => "")), "with the same recording (T03_Checkout)");
   const fits = await pop.evaluate((tag) => { const r = document.querySelector(tag).shadowRoot; const pill = r.querySelector(".pill").getBoundingClientRect(); return [...r.querySelectorAll(".pill button")].filter((b) => b.offsetParent).every((b) => b.getBoundingClientRect().right <= Math.min(pill.right, innerWidth) + 1); }, BAR);
   check(fits, "every button of the bar fits a 500 px pop-up");
+  // the bar keeps its look in a pop-up (0.3.3): a pop-up starts as an empty page and the bar made for it is moved
+  // into the real page — the browser drops a style sheet made for another page
+  const styled = async (pg) => pg.evaluate((tag) => { const r = document.querySelector(tag).shadowRoot, pill = r.querySelector(".pill"); return (r.adoptedStyleSheets.length > 0 || !!r.querySelector("style")) && getComputedStyle(pill).backgroundColor !== "rgba(0, 0, 0, 0)" && getComputedStyle(pill).display === "flex"; }, BAR);
+  check(await styled(pop), "the bar in the pop-up has its look (style sheet, dark pill)");
+  check(await styled(p), "the bar in the main window has its look");
   await shot(pop, "05-popup-500");
   await pop.close();
   await p.bringToFront(); await wait(1500);
@@ -179,6 +184,7 @@ try {
   // the grip puts it back at the top, in the middle
   {
     await wait(600);
+    await bar(".grip").waitFor({ state: "visible", timeout: 10000 }).catch(() => {});   // after the dock change the bar is drawn again
     const g = await bar(".grip").boundingBox(), f0 = await bar(".fb").boundingBox(), off = g.y + g.height / 2 - f0.y, vw = await p.evaluate(() => innerWidth), vh = await p.evaluate(() => innerHeight);
     const tx = Math.round(vw * 0.3), ty = Math.round(vh * 0.55);
     await slowDrag(p, g.x + g.width / 2, g.y + g.height / 2, tx, ty); await wait(900);

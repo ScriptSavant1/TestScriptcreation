@@ -65,7 +65,7 @@ RECORD FROM PERFX STUDIO (recommended)
    back. It is never part of the recording. Turn it off on the page under
    More options, or start the recorder with --no-bar.
 
-6. Click Stop and save on the page (or Stop Recording on the toolbar).
+6. Click Stop and save on the page (or Stop recording on the toolbar).
    The recording (.har file) is saved in your Downloads folder and opens
    in Script Studio by itself. The toolbar says it is saved; the recorder's
    windows close after 10 seconds - click Keep open on the toolbar to look
@@ -93,12 +93,12 @@ Double-click cdp-recorder.exe. A floating toolbar and a separate Edge (or
 Chrome) recording window with an orange border open. Use your application
 only in the recording window - your normal browser is not recorded.
 
-On the toolbar click Start Recording, type a transaction name (for example
+On the toolbar click Start recording, type a transaction name (for example
 Login) and press Enter: it is numbered for you (T01_Login). Do the steps,
 then type the next name and press Enter - the running transaction ends and
-the next one starts. Stop Recording ends the last one.
+the next one starts. Stop recording ends the last one.
 
-Click Stop Recording. The recording (.har file) is saved in the same folder
+Click Stop recording. The recording (.har file) is saved in the same folder
 as cdp-recorder.exe. Open it in PerfX Studio's Script Studio.
 Click Quit on the toolbar when you have finished - a recording still
 running is saved first.

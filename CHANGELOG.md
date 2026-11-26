@@ -77,6 +77,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### CDP Recorder
 
+#### 0.3.3: the floating bar keeps its look in pop-ups; the empty-transaction warning is shown again; a clearer toolbar
+
+- A pop-up window (a sign-in window, for example) showed the floating bar without its look: a grey square and plain buttons (BUG-179). The bar now makes its style sheet again for the page it is in.
+- "No network requests were captured during …" appeared no more: starting the next transaction, now the usual way to end one, cleared it at once (BUG-180). It stays in sight again, in the toolbar, the floating bar and the page's live view.
+- Toolbar: the buttons use the toolbar's own font and say Start recording, Stop recording and Start transaction; the purple chip and the transaction number are easier to read; in the dark theme Start next and Stop recording have white text on a deep colour (contrast 4.5 or more).
+- Manual tests brought up to date: portal-session (the recorder closes itself after a saved recording, 0.3.2), portal-extras (reads the version from the sources), repro-multi-tx (no End button), capture-guide-screenshots (the floating bar covers the top of its test page); floating-bar checks that the bar in a pop-up has its look and waits for the grip before dragging.
+
 #### 0.3.2: the floating bar really moves; the recorder closes after saving
 
 - The floating bar could not be moved at a person's pace: its state arrives every 0.7 s and redrew the bar during the drag, which dropped it. No redraw while dragging now; and it moves by any part that is not a button, not only its grip. (The 0.3.1 test dragged faster than a redraw; it now drags over two seconds — and fails on 0.3.1.)
@@ -402,6 +409,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - The Correlation Advisor is shown whenever a recording is loaded, also when it found nothing, so Paste & Detect, Add Manual and the Request Inspector are always at hand (BUG-140).
 
 ### Portal
+
+#### Admin pages: purple sign-in, every period in sight on a phone
+
+- The admin sign-in page uses the purple of every other page (it was still blue).
+- On a phone the period buttons (7 days … All time) wrap instead of running off the side, so All time can be reached.
 
 #### Home and Help: every tool in the picture, Plan the load, "In this section", FAQ topics
 

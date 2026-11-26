@@ -204,7 +204,7 @@ const RECORDING_WINDOW_LANDING_HTML = `<!doctype html><html><head><meta charset=
 h1{color:#c2410c;margin:0 0 12px;font-size:24px}li{margin:6px 0}</style></head><body><div class="box">
 <h1>&#9679; This is the RECORDING window</h1>
 <p>Only activity in <b>this</b> browser window (and tabs/popups it opens) is recorded.</p>
-<ol><li>Click <b>Start Recording</b> on the floating toolbar.</li>
+<ol><li>Click <b>Start recording</b> on the floating toolbar.</li>
 <li>Type your application URL in <b>this window's address bar</b> and log in here.</li>
 <li>Do NOT use your usual browser window &mdash; it is not being recorded.</li></ol>
 <p style="color:#6b7280;font-size:13px">This window uses its own temporary profile, separate from your usual browser. You may need to log in again here.</p>
