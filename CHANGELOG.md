@@ -396,6 +396,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### Home and Help: every tool in the picture, Plan the load, "In this section", FAQ topics
+
+- Home: the six tools in two rows of three, every card the same size (before: four, then two wide ones with a gap); the picture lists the LRE scenario (Vusers, pacing) among what comes out; "Your workflow" has **Plan the load** (Workload Modeller) before "Run the load test"; **Documentation** opens the tool guides (Overview) — it opened Quick Start, as the card beside it does.
+- Help: Quick Start has **Path F — Plan the load** (six paths, three to a row); a long section lists its own headings beside the text (**In this section**, on wide screens: it stays in view while you read and marks where you are; a click goes there); the FAQ has topics (General, Script Studio, Converters, Recording, Sign-in and security, Results) that show only their questions — every question stays, search finds them all.
+- No Help text was removed (word-by-word check against the Help before); every Home link and Help section works as before.
+- Regression tools: `regression-tests/tools/portal/` — `behave.js` (old portal against new: every Home link's destination, every Help section's words, the sidebar list, Previous / Next, search, the FAQ, the look) and `walk.js` (69 checks of the new parts, four widths).
+
 #### Script Studio: a large request-details window; the editor shows the whole response
 
 - A request's details open as a large window over the workspace, centred (as wide as 1440 px), moved by its bar.

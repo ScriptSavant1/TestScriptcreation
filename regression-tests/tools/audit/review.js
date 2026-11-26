@@ -367,6 +367,8 @@ if (require.main === module) (async () => {
       await f.evaluate(() => { const r = document.querySelector('#tab-transactions tbody tr'); r && r.click(); }); await p.waitForTimeout(1200); await run('Analyser transaction drawer', 'analyser'); await f.evaluate(() => { const c = document.getElementById('drawer-close'); c && c.click(); }); await p.waitForTimeout(300);
       await f.click('#btn-settings').catch(() => {}); await p.waitForTimeout(300); await run('Analyser settings', 'analyser'); await f.click('#btn-settings').catch(() => {}); }
     await go('help'); await run('Help');
+    await p.evaluate(() => { haccJump('hacc-studio'); }); await p.waitForTimeout(400); await p.evaluate(() => window.scrollTo(0, 1500)); await p.waitForTimeout(300); await run('Help in this section');
+    await p.evaluate(() => { window.scrollTo(0, 0); haccJump('hacc-faq'); }); await p.waitForTimeout(300); await p.click('.help-faq-topics [data-topic=recording]').catch(() => {}); await run('Help FAQ topics');
     report.push({ theme, w, name: '_errors', errs });
     await p.close();
   }

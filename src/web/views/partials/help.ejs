@@ -98,14 +98,14 @@
         <div class="help-acc-icon" style="--c-tool:var(--c-help)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg></div>
         <div>
           <div class="help-acc-title">Quick Start — pick your path</div>
-          <div class="help-acc-sub">Five paths · a few minutes each</div>
+          <div class="help-acc-sub">Six paths · a few minutes each</div>
         </div>
       </div>
       <svg class="help-acc-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg>
     </button>
     <div class="help-acc-body">
       <div class="help-acc-inner">
-        <p class="help-p">Paths A to D produce a ready-to-run VuGen script ZIP in a few minutes; path E turns the results of a test run into a report. Choose the one that matches your starting point.</p>
+        <p class="help-p">Paths A to D produce a ready-to-run VuGen script ZIP in a few minutes; path E turns the results of a test run into a report; path F plans the load of a test (Vusers, pacing, the LRE scenario). Choose the one that matches your starting point.</p>
         <div class="help-paths">
           <div class="help-path" style="--c-tool:var(--c-convert)">
             <div class="help-path-title"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg>Path A — Postman / Bruno</div>
@@ -152,6 +152,15 @@
               <li>Choose the run's <strong>raw results</strong> ZIP from LRE (or the unzipped folder)</li>
               <li>Review Overview, Transactions, Charts, Errors and Workload</li>
               <li>Export <strong>Excel</strong>, <strong>Word</strong>, <strong>HTML</strong> or <strong>PDF</strong></li>
+            </ol>
+          </div>
+          <div class="help-path" style="--c-tool:var(--c-work)">
+            <div class="help-path-title"><svg class="help-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="m7 15 4-4 3 3 5-6"/></svg>Path F — Plan the load</div>
+            <ol class="help-path-steps">
+              <li>Click <strong>Workload Modeller</strong> in the sidebar</li>
+              <li>Choose the <strong>test type</strong> — load, soak, stress, capacity or spike (<strong>About this test</strong> says what each one is)</li>
+              <li>Drop your <strong>script ZIPs</strong> or HAR files and give each script its <strong>target</strong> (TPS, transactions per hour or Vusers)</li>
+              <li>Read the <strong>Result</strong> and <strong>Checks</strong> → <strong>Copy LRE settings</strong> or <strong>Download Excel</strong></li>
             </ol>
           </div>
         </div>
@@ -872,79 +881,79 @@
     <div class="help-acc-body">
       <div class="help-acc-inner">
         <div class="help-faq">
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="general">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Which tool should I use?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">It depends on what you already have. If you have a <strong>Postman or Bruno collection</strong>, use the Postman / Bruno Converter. If you have a <strong>JMeter .jmx file</strong>, use the JMeter Converter. If you need to record a new journey and VuGen cannot record on your machine, or you have a HAR file and want a script &#x2014; correlated when needed (tokens, session IDs) &#x2014; use <strong>Script Studio</strong>. If a replay fails on a value, or the Correlation Advisor missed one, look it up in the <strong>HAR Explorer</strong>. After a test run in LoadRunner Enterprise, use the <strong>Results Analyser</strong> for the report.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="general">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Which output format should I choose — DevWeb or Web HTTP/HTML?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Ask your LRE administrator or project lead. If your project runs on LRE 2021 or later and there is no existing script convention, choose <strong>DevWeb (JavaScript)</strong> — it is the current default for new projects. If your team has existing VuGen C scripts or uses an older LRE version, choose <strong>Web HTTP/HTML (C)</strong>. You can always convert again with the other format — it takes seconds.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="general">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Are my files stored on the server?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">No. Script Studio, the HAR Explorer and the Results Analyser do not upload your file at all — it is read in your browser. The converters hold it in memory and in the server&#x2019;s temporary folder only while the conversion runs, and delete it when the conversion ends. Generated scripts are never written to disk, nothing persists between requests, and no other user can see your data. Download links expire after 5 minutes and are single-use. See the <em>Privacy &amp; Security</em> section for a full breakdown.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="security">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My HAR file contains real session tokens and credentials — is that a security risk?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">The tool itself does not retain your data. However, the HAR file you export from your browser is a sensitive document. Best practices: <strong>(1)</strong> record against a test environment, not production; <strong>(2)</strong> use test credentials, not personal or admin accounts; <strong>(3)</strong> delete the HAR file from your machine once the conversion is complete; <strong>(4)</strong> never email or share HAR files from production sessions.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="studio">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My script runs but fails with "invalid token" or "session expired" errors.</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">The script has a hard-coded value from your recording session that the server no longer accepts — this is a missing correlation. The fix: open <strong>Script Studio</strong>, record the same journey <strong>twice</strong> using different credentials or test data, open the first one, and add the second in step 2, <strong>Correlate</strong>: <strong>Can&#x2019;t find a value?</strong> &#x2192; <strong>Use a second recording</strong>. The diff between the two recordings pinpoints every value that changed between runs. Tick the suggestions, click <strong>Add n to the script</strong>, then download the updated script.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="studio">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">How do I get the best correlation result from Script Studio?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Use two HAR files, not one. Record the <em>exact same journey</em> twice with <em>different</em> test data (two different usernames, for example). Script Studio compares the two and identifies every value that changed — these are guaranteed dynamic values that need correlation. Then, in step 2, <strong>Correlate</strong>: <strong>Review</strong> a value to see where it comes from and every place it is sent back, tick the ones to correlate and click <strong>Add n to the script</strong>.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="recording">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Where is the Recorder?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">It is part of <strong>Script Studio</strong> now. Script Studio records your journey (Start recording) or reads a HAR file and makes a VuGen script with your transactions, servers and page resources straight away &#x2014; download it as it is, or correlate it first in step 2, Correlate, of the same workspace. Old Recorder links and bookmarks open Script Studio.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="converters">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My download failed or the ZIP is empty. What happened?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">The download link is single-use and expires after 5 minutes. If you waited too long or clicked the link more than once, it will no longer work. Simply run the conversion again — it takes only a few seconds. If the ZIP downloads but appears empty, check that you uploaded the correct file and that the conversion did not show an error message.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="converters">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">The conversion completed but the script doesn't look right. What should I check?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">First confirm the file format: Postman must be <strong>v2.1</strong> (not v2.0). For Bruno YAML, make sure you exported the full collection. For JMeter, verify the .jmx was saved from JMeter 3.x or later and that all referenced CSV files were uploaded. If the script is missing auth headers, check that your collection includes an environment file with the relevant variable values.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="general">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Can I upload files from a shared drive or network path?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Yes — the upload areas accept any file accessible from your machine. Browse to the file on your shared drive or network location just as you would on your local drive.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="recording">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Why can't I record in VuGen on my virtual desktop or Azure machine?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Corporate security policies and incomplete VuGen installations on some virtual desktops and Azure virtual machines prevent VuGen's built-in proxy recording from working. <strong>Script Studio</strong> is the solution — click <strong>Start recording</strong> and the CDP Recorder records your journey through the browser itself, so no proxy or certificate is needed (or use the browser's Developer Tools, F12 → Network tab, and export the HAR). The recording opens in Script Studio; download the VuGen script.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="security">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My application uses JWT tokens in pre-request scripts — will those be converted?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Yes. PerfX Studio scans pre-request and test scripts for JWT signing code — including jsrsasign, jsonwebtoken, jose (JavaScript) and JJWT, nimbus-jose-jwt, BouncyCastle, JCA (Java/Groovy). It extracts the claim mappings and generates equivalent signing code: <code>lre-utils.dat</code> + <code>createJWTFromMap()</code> for VuGen, or <code>jwt-helper.js</code> + <code>getJwtTokenFromMap()</code> for DevWeb. Each request with a distinct claim set gets its own JWT call.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="security">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My application uses DPoP — will the generated script handle it?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Yes. If your application sends <code>dpop</code> or <code>dpop-pf</code> headers, the toolkit detects them automatically and generates the full cryptographic proof code (RFC 9449). For VuGen, it initialises the EC P-256 key once in <code>vuser_init.c</code>, loads <code>lre-utils.js</code> again at the top of Action (VuGen empties its JavaScript engine on every new-user iteration), and generates a unique signed proof right before every request that needs it. No manual configuration is needed.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="security">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My application uses PKCE in its OAuth2 flow — is that handled?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Yes. The toolkit detects <code>code_challenge</code> in authorization URLs and <code>code_verifier</code> in token exchange bodies. Because these values are freshly generated by the client on each login, the script generates a new PKCE pair at the start of each iteration using <code>crypto.subtle</code> (DevWeb) or <code>generatePkce()</code> in <code>lre-utils.dat</code> (VuGen). They are never correlated from a server response.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="security">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">My application uses Kerberos / NTLM / Windows SSO — is that supported?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Yes. The toolkit detects Negotiate, Kerberos, and NTLM challenges from response headers and generates the appropriate authentication code: <code>web_set_user()</code> in VuGen C, or <code>setUserCredentials()</code> in DevWeb. It also sets the runtime configuration (<code>IntegratedAuthentication=1</code>) automatically so no manual VuGen setup is needed.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="recording">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Start recording says "The CDP Recorder did not start". What do I do?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">It means nothing answered on your computer. <strong>(1)</strong> If your browser asked <em>"Open cdp-recorder?"</em>, click <strong>Open</strong> and then <strong>Try again</strong>. <strong>(2)</strong> Not set up yet: download <code>cdp-recorder.zip</code>, extract it to a folder that stays and where your computer lets you run programs (for example <code>C:\PerfX\cdp-recorder</code>, not inside your user profile folder), double-click <code>cdp-recorder.exe</code> once, then <strong>Try again</strong>. <strong>(3)</strong> If your computer does not let the browser start programs, start <code>cdp-recorder.exe</code> yourself first, click <strong>Try again</strong>, then <strong>Allow</strong> on its small toolbar — it asks once and remembers this page. If Windows does not let <code>cdp-recorder.exe</code> run at all, use <strong>Bookmarks + DevTools</strong> in Script Studio (<em>How to record your journey</em>), or ask your IT team to approve it.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="recording">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Do I need administrator rights to use the CDP Recorder?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">No. It is not installed: you extract the ZIP and double-click <code>cdp-recorder.exe</code>, which connects it to the <strong>Start recording</strong> button for your Windows user only. It uses the Edge or Chrome already on your computer, in a separate browser profile, so your usual browser windows, bookmarks and sign-ins are not touched.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="recording">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Where does the CDP Recorder keep its setup, and why does it still work after I clear my browser?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Nothing is stored in the browser. Each time you double-click <code>cdp-recorder.exe</code> it registers a <strong>link type</strong>, <code>perfx-recorder:</code>, with <strong>Windows</strong> &#x2014; the same way Windows knows that <code>mailto:</code> links open your e-mail program. It is written in the Windows registry under your own user (<code>HKEY_CURRENT_USER\Software\Classes\perfx-recorder</code>), which is why no administrator rights are needed, and it says: &#x201C;when a <code>perfx-recorder:</code> link is opened, start this program&#x201D; &#x2014; with the full path of the <code>.exe</code> in the folder you extracted. <strong>Start recording</strong> opens such a link: Windows looks it up and starts the program, which then talks to this page on your own computer only (<code>127.0.0.1:8787</code>). When it is running already, the page asks it at that address and no link is needed. Clearing history and cookies does not touch the Windows registry, so it keeps working. That is also why, after <strong>moving the folder</strong>, you double-click the <code>.exe</code> once more (the registry still points to the old place), and why running it from <strong>inside the ZIP</strong> does not work (Windows runs it from a temporary folder, and that address would be registered).<br><br><strong>Also kept:</strong> the pages you clicked <strong>Allow</strong> for (when you started the program yourself) in <code>%LOCALAPPDATA%\PerfX\cdp-recorder\allowed-pages.json</code> &#x2014; not cleared with the browser; the browser&#x2019;s own &#x201C;Open cdp-recorder?&#x201D; answer, if you ticked &#x201C;Always allow&#x201D; &#x2014; in the browser&#x2019;s site settings (if they are cleared, the browser simply asks once more); and your choices in the Start recording window (recent addresses, browser, private window, script ID, planned steps) in the browser&#x2019;s storage for this page &#x2014; clearing the browser forgets only those choices. The recording itself always runs in a <strong>fresh, temporary browser profile</strong> that is deleted when the recorder closes: it starts signed out, and your usual browser (history, cookies, passwords) is never used or changed. <br><br><strong>To remove it completely:</strong> delete the extracted folder, the registry key above (<code>reg delete HKCU\Software\Classes\perfx-recorder /f</code>) and the folder <code>%LOCALAPPDATA%\PerfX\cdp-recorder</code>.</p></div></div>
           </div>
-          <div class="help-faq-item">
+          <div class="help-faq-item" data-topic="results">
             <button class="help-faq-btn" onclick="hfaqToggle(this)"><span class="help-faq-q">Why do the Results Analyser's percentiles differ slightly from LRE Analysis?</span><svg class="help-faq-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"/></svg></button>
             <div class="help-faq-body"><div><p class="help-faq-a">Transaction counts should match LRE Analysis exactly. Percentiles may differ a little because LRE Analysis interpolates between samples, while the Results Analyser takes the exact sample (nearest rank) from every transaction in <code>RawData.eve</code>. Averages can also differ when LRE Analysis groups samples by its granularity — choose <strong>Granularity</strong> in the Results Analyser to compare like with like.</p></div></div>
           </div>

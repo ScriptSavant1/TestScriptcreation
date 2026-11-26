@@ -78,12 +78,11 @@ body.has-shell #portal-home.hm { width: 100%; max-width: var(--ds-page-max); mar
 
 /* ── Quick actions ── */
 .hm-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-gap); }
-/* seven tools: one column; two columns with the last one full width; four then three, each row full width (12 columns) */
+/* six tools: one column; two columns; three per row (two rows of three, every card the same size) */
 @container hm (min-width: 560px) { .hm-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hm-tool:last-child:nth-child(odd) { grid-column: 1 / -1; } }
 @container hm (min-width: 1000px) {
-  .hm-tools { grid-template-columns: repeat(12, minmax(0, 1fr)); }
-  .hm-tool { grid-column: span 3; }
-  .hm-tool:nth-child(n+5), .hm-tool:last-child:nth-child(odd) { grid-column: span 4; }
+  .hm-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hm-tool, .hm-tool:last-child:nth-child(odd) { grid-column: auto; }
 }
 .hm-tool {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 22px 20px 20px; text-align: left; cursor: pointer;

@@ -137,7 +137,7 @@ body.has-shell #portal-help .help-callout a { color: var(--ds-accent-text); font
 body.has-shell #portal-help .help-callout a:hover { text-decoration-color: currentColor; }
 
 /* Quick Start paths: neutral cards, tool-coloured icon */
-body.has-shell #portal-help .help-paths { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 16px 0 0; }
+body.has-shell #portal-help .help-paths { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0 0; }
 @container (max-width: 1250px) { body.has-shell #portal-help .help-paths { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @container (max-width: 760px) { body.has-shell #portal-help .help-paths { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (max-width: 540px) { body.has-shell #portal-help .help-paths { grid-template-columns: minmax(0, 1fr); } }
@@ -260,3 +260,27 @@ body.has-shell #portal-help .help-pager b { font-size: var(--ds-fs); font-weight
 
 /* reading mode: the section's own small name label repeats the title right above it — kept for screen readers only */
 body.has-shell #portal-help.help-reader:not(.help-searching) .help-acc-inner > .help-tool-badge:first-child { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* "In this section" (help.js inSection): the section's headings beside its text, from 1400 px of section width; it
+   stays in view while the section scrolls */
+body.has-shell #portal-help .help-insec { display: none; }
+@container (min-width: 1400px) {
+  body.has-shell #portal-help .help-reader:not(.help-searching) .help-insec, body.has-shell #portal-help.help-reader:not(.help-searching) .help-insec { display: flex; }
+}
+body.has-shell #portal-help .help-insec { position: fixed; z-index: 5; flex-direction: column; gap: 2px; width: 260px; max-height: calc(100vh - var(--tb-h, 60px) - var(--help-sticky-h, 60px) - 40px); overflow: auto; padding: 12px 10px 12px 14px; border-left: 2px solid var(--ds-border); background: var(--ds-surface); }
+body.has-shell #portal-help .help-insec-h { margin: 0 0 6px 6px; font-size: var(--ds-fs-xs); font-weight: 700; color: var(--ds-text-2); }
+body.has-shell #portal-help .help-insec button { display: block; width: 100%; padding: 5px 8px; border: 0; border-radius: var(--ds-r-sm); background: none; color: var(--ds-text-2); font: inherit; font-size: var(--ds-fs-sm); line-height: 1.4; text-align: left; cursor: pointer; }
+body.has-shell #portal-help .help-insec button:hover { background: var(--ds-surface-2); color: var(--ds-text); }
+body.has-shell #portal-help .help-insec button[aria-current] { background: var(--ds-accent-soft); color: var(--ds-accent-text); font-weight: 600; }
+body.has-shell #portal-help .help-insec button:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 1px; }
+body.has-shell #portal-help .help-h3 { scroll-margin-top: calc(var(--tb-h, 60px) + var(--help-sticky-h, 60px) + 16px); }
+/* the FAQ topics: only those questions; while searching every match is shown and the topics step aside */
+body.has-shell #portal-help .help-faq-topics { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+body.has-shell #portal-help .help-faq-topics button { height: 32px; padding: 0 12px; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-pill); background: var(--ds-surface); color: var(--ds-text-2); font: inherit; font-size: var(--ds-fs-sm); font-weight: 600; cursor: pointer; }
+body.has-shell #portal-help .help-faq-topics button span { margin-left: 4px; color: var(--ds-text-3); font-weight: 400; }
+body.has-shell #portal-help .help-faq-topics button:hover { border-color: var(--ds-accent-line); color: var(--ds-text); }
+body.has-shell #portal-help .help-faq-topics button[aria-pressed="true"] { border-color: var(--ds-accent-line); background: var(--ds-accent-soft); color: var(--ds-accent-text); }
+body.has-shell #portal-help .help-faq-topics button[aria-pressed="true"] span { color: inherit; }
+body.has-shell #portal-help .help-faq-topics button:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+body.has-shell #portal-help:not(.help-searching) .help-faq-item[data-off] { display: none; }
+body.has-shell #portal-help.help-searching .help-faq-topics { display: none; }
