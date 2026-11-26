@@ -357,7 +357,11 @@ if (require.main === module) (async () => {
     await f.evaluate(() => { const d = document.getElementById('wm-tx-dlg'); if (d && d.open) d.close(); });
     await go('results'); await p.waitForFunction(() => { const d = document.getElementById('iframe-analyser').contentDocument; return d && d.getElementById('in-zip'); }, null, { timeout: 20000 });
     await run('Analyser start', 'analyser');
-    if (fs.existsSync(FX + 'qa/demo-run.zip')) { f = await frameOf('analyser'); await f.setInputFiles('#in-zip', FX + 'qa/demo-run.zip'); await p.waitForTimeout(9000); await run('Analyser report', 'analyser'); }
+    if (fs.existsSync(FX + 'qa/demo-run.zip')) { f = await frameOf('analyser'); await f.setInputFiles('#in-zip', FX + 'qa/demo-run.zip'); await p.waitForTimeout(9000); await run('Analyser report', 'analyser');
+      for (const tab of ['transactions', 'charts', 'errors', 'workload', 'insights']) { await f.evaluate((t) => { const b = [...document.querySelectorAll('#tabs [role=tab], #tabs button')].find((x) => x.textContent.toLowerCase().includes(t)); if (b) b.click(); }, tab); await p.waitForTimeout(700); await run('Analyser ' + tab, 'analyser'); }
+      await f.evaluate(() => { const b = [...document.querySelectorAll('#tabs [role=tab], #tabs button')].find((x) => /transactions/i.test(x.textContent)); b && b.click(); }); await p.waitForTimeout(300);
+      await f.evaluate(() => { const r = document.querySelector('#tab-transactions tbody tr'); r && r.click(); }); await p.waitForTimeout(1200); await run('Analyser transaction drawer', 'analyser'); await f.evaluate(() => { const c = document.getElementById('drawer-close'); c && c.click(); }); await p.waitForTimeout(300);
+      await f.click('#btn-settings').catch(() => {}); await p.waitForTimeout(300); await run('Analyser settings', 'analyser'); await f.click('#btn-settings').catch(() => {}); }
     await go('help'); await run('Help');
     report.push({ theme, w, name: '_errors', errs });
     await p.close();
