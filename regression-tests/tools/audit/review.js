@@ -158,7 +158,11 @@ async function focusCheck(p, max) {
       // the control or the box around it (a search field shows its focus on its frame, :focus-within)
       const one = (x) => { const c = getComputedStyle(x); return [c.outlineStyle !== 'none' && parseFloat(c.outlineWidth) > 0 ? c.outlineWidth + ' ' + c.outlineColor : '', c.boxShadow, c.borderColor, c.backgroundColor, c.textDecorationLine].join('|'); };
       const sig = () => [a, a.parentElement, a.parentElement && a.parentElement.parentElement].filter(Boolean).map(one).join('#');
-      const on = sig(); a.blur(); const off = sig(); a.focus({ preventScroll: true });
+      // without the focus: blur(); a date field keeps its own calendar button focused after it — then the focus goes to
+      // a spare element beside it for the measure
+      const on = sig(); a.blur(); let tmp = null;
+      if (a.matches(':focus-within')) { tmp = d.createElement('button'); tmp.style.cssText = 'position:fixed;left:-200px;top:0'; a.parentElement.appendChild(tmp); tmp.focus({ preventScroll: true }); }
+      const off = sig(); if (tmp) tmp.remove(); a.focus({ preventScroll: true });
       const t = (a.getAttribute('aria-label') || a.getAttribute('title') || a.innerText || a.value || a.placeholder || '').trim().replace(/\s+/g, ' ');
       return on === off ? { bad: (a.id ? '#' + a.id + ' ' : '') + a.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : '') } : {};
     });

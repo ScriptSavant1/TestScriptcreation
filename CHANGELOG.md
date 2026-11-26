@@ -496,6 +496,18 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - `converter/walk.js`: the converter page clicked through as a user would (both tools, every control). `converter/harness.js` now records the form fields the page sends; before, the list was always empty, so "the same request" was not checked.
 - `audit/mock.js`: a mockup goes through the same checks as the real screens (the screen review and the design audit), plus: the main button on the screen without scrolling, cards and buttons that do not touch, no card cut off or covered by a floating bar (also at 1536 × 700, a 1920 screen at 125 %), and every item of an inventory on some screen.
 
+### Results Analyser
+
+#### One Export button, a lighter page, every control checked
+
+- One **Export** button with every format (Excel, Word, PDF, HTML, the result data and the redacted result data): the header is one row again on a 1366 laptop (230 → 177 px high).
+- Transactions: the SLA columns show once an SLA is set; **Set SLAs** opens a box beside each name (before: twelve empty boxes at the end of the table, off-screen on a laptop). Result and Apdex are added once an SLA is set. The boxes have names for screen readers.
+- Insights: the tab says "5 high" (before "5", while the Overview said "All findings (18)"); the severity counts filter the list (click again for all).
+- Charts: a row of the chart names jumps to each one; from 1600 px wide two charts stand side by side (the first and the tall ones full width).
+- The explanations keep their text and "How to read it" beside a thin line instead of a coloured box. Buttons with words have an outline (Collapse all, None, Detected, Transactions …); "Show chart" is a link; the switches (Steady state / Full run, the metric) are announced as pressed buttons. A date field shows its focus on its calendar button too.
+- The figures, tables, charts, findings and every export file are unchanged.
+- Regression tools: `regression-tests/tools/analyser/` — `serve.js` (the page from any version) and `behave.js` (old page against new: every tab, the drawer, settings, SLA, window, charts, every export file, and the look of every kind of element); the design review now covers every Analyser tab, the drawer and the settings, and its focus check moves the focus to a spare element (blur() left a date field's calendar button focused).
+
 ### Converters
 
 #### A new page for Postman / Bruno and JMeter

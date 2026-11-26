@@ -197,7 +197,7 @@ Proof for any page change: `regression-tests/tools/workload/behave.js` (old page
 | `lre-results-analyser/docs/IMPLEMENTATION-PLAN.md` | Phases 0–6, outputs, architecture (browser-side, nothing uploaded) |
 | `lre-results-analyser/engine/*.js` | UMD engine (`LreRA.*`): parsers, eve decoder (transactions = sub-types 12586944/12586945/12619721, RT = end−start s; 762 = data points), txnames (internal id → name via sum_data graph), collector/hist, dat, insights, analyse (`analyse()`, `applySettings()`, `redact()`) |
 | `lre-results-analyser/report/*.js` | Shared by page + CLI: format, charts (ECharts options), xlsx, docx, html |
-| `lre-results-analyser/web/` | Page (`index.html`, `app.js`, `app.css`), `worker.js`, `zip.js` (ZIP64 streaming), `vendor/` |
+| `lre-results-analyser/web/` | Page (`index.html`, `app.js`, `app.css`), `worker.js`, `zip.js` (ZIP64 streaming), `vendor/`. Header: one **Export** menu (`#btn-more` / `#menu-more`, every `[data-export]`; "Preparing…" on `#btn-more-l`). Transactions: SLA box beside the name only while `state.slaEdit` (**Set SLAs**, `#tx-sla-edit`) or once an SLA is set; Result / Apdex once one is set. Insights: tab count "n high", `[data-sev]` filters (`state.insFilter`). Charts: `#chart-jump` row; two columns from 1600 px. Proof for any page change: `regression-tests/tools/analyser/behave.js` (old vs new) + `audit/review.js --only=analyser` |
 | `lre-results-analyser/cli/analyse.js` | CLI: `<folder|zip> [--xlsx] [--docx] [--html] [--out] [--sla] [--window] [--redact]` |
 | `lre-results-analyser/tools/make-demo-run.js` | Synthetic demo run generator (no client data) |
 | `lre-results-analyser/tests/` | Jest, synthetic data only — never add real results (internal host names) |

@@ -90,7 +90,7 @@
 
   const state = {
     model: null, worker: null, dark: true, tab: "overview", txView: "steady", sort: null, filter: "",
-    selected: new Set(), metric: "p90", detailTx: null, charts: new Map(), started: 0, lastSettings: {},
+    selected: new Set(), metric: "p90", detailTx: null, charts: new Map(), started: 0, lastSettings: {}, slaEdit: false, insFilter: null,
   };
 
   // ── theme (also driven by the portal when embedded) ─────────────────────────
@@ -396,7 +396,8 @@
     const v = $("#verdict");
     v.innerHTML = (VERDICT_ICON[m.insights.verdict.status] || "") + esc(m.insights.verdict.text); v.className = "verdict " + m.insights.verdict.status;
     const n = m.insights.findings.filter((f) => f.severity === "high").length;
-    $("#ins-count").textContent = n ? String(n) : "";
+    $("#ins-count").textContent = n ? n + " high" : "";
+    state.insFilter = null;
     $("#ins-count").title = n ? n + " high-severity finding" + (n === 1 ? "" : "s") : "";
     // neutral counts on the other tabs
     $("#tx-count").textContent = fmt.int(m.transactions.length);
@@ -687,28 +688,34 @@
         return (va < vb ? -1 : va > vb ? 1 : 0) * (state.sort.asc ? 1 : -1);
       }).map((t) => ({ t }));
     } else for (const g of groups) { if (groups.length > 1) rows.push({ group: g.script }); for (const t of g.rows) if (match(t)) rows.push({ t }); }
-    const slaCols = which === "steady";
+    // SLA: the box beside the name while SLAs are being set or once one is set; Pass / Fail and Apdex once one is set
+    const slaSet = Object.keys(slaPerTx).length > 0 || (m.settings.sla && m.settings.sla.defaultSec != null);
+    const slaCols = which === "steady" && (slaSet || state.slaEdit), slaRes = which === "steady" && slaSet;
     const tl = m.timeline;
     p.innerHTML = `
       <div class="tx-controls">
-        <div class="seg"><button data-v="steady" class="${which === "steady" ? "on" : ""}">${m.window && !m.window.detected ? "Analysis window" : "Steady state"}</button><button data-v="full" class="${which === "full" ? "on" : ""}">Full run</button></div>
+        <div class="seg" role="group" aria-label="Figures for"><button data-v="steady" aria-pressed="${which === "steady"}" class="${which === "steady" ? "on" : ""}">${m.window && !m.window.detected ? "Analysis window" : "Steady state"}</button><button data-v="full" aria-pressed="${which === "full"}" class="${which === "full" ? "on" : ""}">Full run</button></div>
         <input id="tx-filter" placeholder="Filter transactions" aria-label="Filter transactions" value="${esc(state.filter)}">
+        ${which === "steady" && !slaSet ? `<button class="btn sm" id="tx-sla-edit" aria-pressed="${state.slaEdit}" title="Type the response-time target (seconds) of each transaction">${state.slaEdit ? IC.check + "Done" : "Set SLAs"}</button>` : ""}
         <span class="hint">${which === "steady" && m.window ? `${esc(fmt.relRange(m, m.window.start, m.window.end))} · ` : ""}seconds · click a row for detail${slaCols ? " · type an SLA (s) per transaction" : ""}</span>
       </div>
       ${m.method.percentileMethod === "exact" ? "" : `<div class="method-note warn"><b>How these figures are calculated:</b> ${esc(m.method.summaryBasis)}. ${FEATURES.granularity && m.aggregation && m.aggregation.active ? "Choose “Exact” in Granularity to see every transaction on its own." : "Every figure is calculated from the individual transactions — nothing is averaged into time slots first."} P90 trend: per ${m.timeline.bucketSec} s slot (chart granularity).</div>`}
       <div class="card" data-ckey="txTable"><h3>Transaction summary — ${which === "steady" ? (m.window && !m.window.detected ? "analysis window" : "steady state") : "full run"}</h3><div class="table-wrap"><table class="t" id="tx-table"><thead><tr>
-        ${TX_COLS.map((c) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" title="${esc(NT.COLUMNS[c.k] || "")}">${c.h}</th>`).join("")}
-        ${slaCols ? `<th class="num" title="${esc(NT.COLUMNS.sla)}">SLA (s)</th><th title="${esc(NT.COLUMNS.result)}">Result</th><th class="num" title="${esc(NT.COLUMNS.apdex)}">Apdex</th>` : ""}<th title="${esc(NT.COLUMNS.trend)}">P90 trend</th>
+        ${TX_COLS.map((c, ci) => `<th class="sortable ${c.num ? "num" : ""} ${state.sort && state.sort.k === c.k ? "sorted" + (state.sort.asc ? " asc" : "") : ""}" data-k="${c.k}" title="${esc(NT.COLUMNS[c.k] || "")}">${c.h}</th>${ci === 0 && slaCols ? `<th class="num" title="${esc(NT.COLUMNS.sla)}">SLA (s)</th>` : ""}`).join("")}
+        ${slaRes ? `<th title="${esc(NT.COLUMNS.result)}">Result</th><th class="num" title="${esc(NT.COLUMNS.apdex)}">Apdex</th>` : ""}<th title="${esc(NT.COLUMNS.trend)}">P90 trend</th>
       </tr></thead><tbody>
         ${rows.map((r) => {
-          if (r.group) return `<tr class="group"><td colspan="${TX_COLS.length + (slaCols ? 4 : 1)}">${esc(r.group)}</td></tr>`;
+          if (r.group) return `<tr class="group"><td colspan="${TX_COLS.length + (slaCols ? 1 : 0) + (slaRes ? 2 : 0) + 1}">${esc(r.group)}</td></tr>`;
           const t = r.t, s = t[which];
-          const sla = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td><td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "Pass" : "Fail"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
-          return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(state.sort ? t.label || t.name : t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' +
-            t.id + ' could not be matched to a name">unnamed</span>') : esc(c.f(t, s))}</td>`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
+          const slaIn = slaCols ? `<td class="num"><input class="in-sla" data-tx="${esc(t.name)}" aria-label="SLA of ${esc(t.name)}, in seconds" value="${slaPerTx[t.name] != null ? esc(slaPerTx[t.name]) : ""}" placeholder="${m.settings.sla.defaultSec != null && (t.inMap || !m.transactions.some((x) => x.inMap)) ? esc(m.settings.sla.defaultSec) : ""}"></td>` : "";
+          const sla = slaRes ? `<td>${t.sla ? `<span class="pill ${t.sla.pass ? "pass" : "fail"}">${t.sla.pass ? "Pass" : "Fail"}</span>` : ""}</td><td class="num">${t.sla && t.sla.apdex != null ? t.sla.apdex.toFixed(2) : ""}</td>` : "";
+          return `<tr class="click ${state.detailTx === t.id ? "selected" : ""}" data-id="${t.id}">${TX_COLS.map((c, ci) => `<td class="${c.num ? "num" : ""}">${c.k === "name" ? esc(state.sort ? t.label || t.name : t.name) + (t.inMap ? "" : ' <span class="pill warn" title="Internal id ' +
+            t.id + ' could not be matched to a name">unnamed</span>') : esc(c.f(t, s))}</td>${ci === 0 ? slaIn : ""}`).join("")}${sla}<td>${spark(downsample(tl.tx[t.id].p90, 60))}</td></tr>`;
         }).join("")}
       </tbody></table></div></div>`;
     $$(".seg button", p).forEach((b) => { b.onclick = () => { state.txView = b.dataset.v; rerender(p); }; });
+    const se = $("#tx-sla-edit", p);
+    if (se) se.onclick = () => { state.slaEdit = !state.slaEdit; rerender(p); const f = state.slaEdit ? $("#tx-table input.in-sla", $("#tab-transactions")) : $("#tx-sla-edit"); if (f) f.focus(); };
     const fi = $("#tx-filter", p);
     fi.oninput = () => { state.filter = fi.value; clearTimeout(fi._h); fi._h = setTimeout(() => { rerender(p); const n = $("#tx-filter", p); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
     $$("th.sortable", p).forEach((th) => { th.onclick = () => { const k = th.dataset.k; state.sort = state.sort && state.sort.k === k ? (state.sort.asc ? null : { k, asc: true }) : { k, asc: false }; rerender(p); }; });
@@ -866,8 +873,9 @@
       </aside>
       <div>
         <div class="chart-controls"><span class="setting-label">Response-time metric</span>
-          <div class="seg" id="metric">${["avg", "p50", "p90", "p95", "p99", "max"].map((k) => `<button data-m="${k}" class="${state.metric === k ? "on" : ""}">${k === "avg" ? "Avg" : k === "max" ? "Max" : k.toUpperCase()}</button>`).join("")}</div>
+          <div class="seg" id="metric" role="group" aria-label="Response-time metric">${["avg", "p50", "p90", "p95", "p99", "max"].map((k) => `<button data-m="${k}" aria-pressed="${state.metric === k}" class="${state.metric === k ? "on" : ""}">${k === "avg" ? "Avg" : k === "max" ? "Max" : k.toUpperCase()}</button>`).join("")}</div>
           <span class="hint">Each point = ${esc(m.granularity ? `${m.granularity.sec}` : String(m.timeline.bucketSec))} s of the test · drag the slider or scroll inside a chart to zoom · the shaded band is the analysis window</span></div>
+        <nav class="chart-jump" id="chart-jump" aria-label="Go to a chart"></nav>
         <div id="chart-grid"></div>
       </div></div>`;
     $$(".tx-picker input", p).forEach((cb) => { cb.onchange = () => { if (cb.checked) state.selected.add(+cb.value); else state.selected.delete(+cb.value); rerender(p); }; });
@@ -897,6 +905,8 @@
     chartCard(g, "Load-generator CPU and memory", (o) => C.lgHealth(state.model, o), "lgHealth");
     chartCard(g, "P90 per load generator", (o) => C.rtPerLg(state.model, o), "rtPerLg", "", "A load generator that is slower on most transactions points to the LG, not the application.");
     chartCard(g, "Response time per VUser", (o) => C.vuserHeat(state.model, o), "vuserHeat", "tall");
+    $("#chart-jump", p).innerHTML = $$("[data-chart]", g).map((c) => `<button type="button" class="btn sm" data-jump="${esc(c.dataset.chart)}">${esc($("h3", c).textContent.replace(/ — .*/, ""))}</button>`).join("");
+    $$("#chart-jump [data-jump]", p).forEach((b) => { b.onclick = () => { const c = $(`#chart-grid [data-chart="${b.dataset.jump}"]`, p); if (!c) return; if (c.classList.contains("collapsed")) setCard(c, false, true); c.scrollIntoView({ behavior: "smooth", block: "start" }); const h = $(".card-head", c); if (h) h.focus({ preventScroll: true }); }; });
     if (state.scrollTo) { const el = $(`[data-chart="${state.scrollTo}"]`, p); state.scrollTo = null; if (el) setTimeout(() => { if (el.classList.contains("collapsed")) setCard(el, false, true); el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); }
   }
 
@@ -982,10 +992,12 @@
     const groups = ["high", "medium", "low", "info", "good"];
     const counts = groups.map((s) => [s, ins.findings.filter((f) => f.severity === s).length]).filter(([, n]) => n);
     p.innerHTML = `<div class="verdict-banner ${ins.verdict.status}"><span class="vb-title"><span class="hero-ico">${VERDICT_ICON[ins.verdict.status] || IC.alert}</span>${esc(ins.verdict.text)}</span>
-        <span class="vb-counts">${counts.map(([s, n]) => `<span class="pill ${s}">${n} ${fmt.SEVERITY[s].label.toLowerCase()}</span>`).join("")}</span></div>
+        <span class="vb-counts" role="group" aria-label="Show only">${counts.map(([s, n]) => `<button type="button" class="pill ${s}" data-sev="${s}" aria-pressed="${state.insFilter === s}" title="Show only these — click again for every finding">${n} ${fmt.SEVERITY[s].label.toLowerCase()}</button>`).join("")}</span></div>
       ${explainHtml("insights")}
-      ${groups.map((s) => ins.findings.filter((f) => f.severity === s).map(findingHtml).join("")).join("") || '<div class="na">No findings.</div>'}`;
+      ${state.insFilter ? `<p class="ins-only">Showing the ${esc(fmt.SEVERITY[state.insFilter].label.toLowerCase())} findings only · <button type="button" class="link-btn" data-sev="">Show all ${ins.findings.length}</button></p>` : ""}
+      ${groups.filter((s) => !state.insFilter || s === state.insFilter).map((s) => ins.findings.filter((f) => f.severity === s).map(findingHtml).join("")).join("") || '<div class="na">No findings.</div>'}`;
     bindFindingLinks(p);
+    $$("[data-sev]", p).forEach((b) => { b.onclick = () => { const s = b.dataset.sev; state.insFilter = s && state.insFilter !== s ? s : null; rerender(p); const n = $(`[data-sev="${state.insFilter || ""}"]`, p) || $("[data-sev]", p); if (n) n.focus(); }; });
   }
 
   // ── exports ─────────────────────────────────────────────────────────────────
@@ -1064,11 +1076,10 @@
   $$("[data-export]").forEach((b) => {
     b.onclick = async () => {
       if (!menu.hidden) setMenu(false);
-      const k = b.dataset.export;
-      const label = b.innerHTML;
-      b.disabled = true; b.textContent = "Preparing…";
+      const k = b.dataset.export, lab = $("#btn-more-l");
+      moreBtn.disabled = true; lab.textContent = "Preparing…";
       try { await EXPORTS[k](); } catch (e) { toast("Export failed: " + (e.message || e), true); }
-      finally { b.disabled = false; b.innerHTML = label; }
+      finally { moreBtn.disabled = false; lab.textContent = "Export"; moreBtn.focus(); }
     };
   });
   // "More" menu: opens below the button (flips to the left edge when it would leave the screen),
