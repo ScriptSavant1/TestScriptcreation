@@ -204,7 +204,80 @@ function big(seed) {
   return h.har();
 }
 
-const FLOWS = { 'api-tokens': apiTokens, 'form-csrf': formCsrf, 'rich-shop': richShop, 'oauth-pkce-sso': oauthPkce, 'dpop-jwt': dpopJwt, 'big-3000': big };
+// ---- 7. Travel booking: a whole journey with many dynamic values (28 found, 18 High) in 7 bookmark transactions —
+// sign-in form CSRF, a ticket in a redirect, access / refresh / id tokens, ids, a list of accounts, search id and offers
+// with fare keys, a price token, a basket and its ETag, a page state and a <select> of generated seats, a payment with
+// its redirect reference and code, an order number and booking reference, and a request id the browser makes.
+// Static files, analytics and OPTIONS are left out. Used by journey.js (Script Studio as a user, both formats).
+function travelBooking(seed) {
+  const h = makeHar(seed);
+  const b64 = (label, n) => Buffer.from(H(seed, label, 256), 'hex').toString('base64').slice(0, n);
+  const W = 'https://www.travel.example.com', API = 'https://api.travel.example.com', ID = 'https://id.travel.example.com', PAY = 'https://pay.example-psp.com', CDN = 'https://cdn.travel.example.com';
+  const statics = () => {
+    h.add({ url: CDN + '/css/site.css', mime: 'text/css', rt: 'stylesheet', body: 'body{}' }); h.add({ url: CDN + '/js/app.js', mime: 'application/javascript', rt: 'script', body: 'void 0' }); h.add({ url: CDN + '/img/logo.png', mime: 'image/png', rt: 'image' });
+    h.add({ url: 'https://www.google-analytics.com/g/collect?v=2&tid=G-TEST&cid=' + num(seed, 'ga' + h.now(), 99999), method: 'POST', rt: 'ping', mime: 'text/plain', status: 204 });
+  };
+  const csrf = H(seed, 'csrf', 48), ticket = 'ST-' + num(seed, 'st', 999999) + '-' + H(seed, 'ticket', 20), jsid = H(seed, 'jsid', 32).toUpperCase();
+  const at1 = jwt(seed, 'at1', { sub: 'cust', iat: Math.floor(h.baseMs / 1000), scope: 'booking payment' }), rt = H(seed, 'rt', 64), idt = jwt(seed, 'idt', { sub: 'cust', nonce: H(seed, 'nonce', 16) });
+  const customerId = uuid(seed, 'customer'), accounts = [0, 1, 2].map((i) => ({ accountId: uuid(seed, 'acc' + i), iban: 'GB' + (10 + num(seed, 'ib' + i, 89)) + 'TEST' + (10000000 + num(seed, 'iban' + i, 89999999)) }));
+  const searchId = uuid(seed, 'search'), offers = [0, 1, 2, 3].map((i) => ({ offerId: 'OF-' + H(seed, 'offer' + i, 12).toUpperCase(), fareKey: b64('fare' + i, 40), price: 120 + i * 15 }));
+  const priceToken = b64('price', 120), basketId = uuid(seed, 'basket'), itemId = uuid(seed, 'item'), etag = '"' + H(seed, 'etag', 16) + '"';
+  const viewState = b64('vs', 320), formBuild = 'form-' + H(seed, 'fb', 24), seats = [0, 1, 2, 3, 4].map((i) => 'S-' + H(seed, 'seat' + i, 10).toUpperCase());
+  const paymentId = uuid(seed, 'pay'), txRef = 'TX' + H(seed, 'txref', 18).toUpperCase(), authCode = H(seed, 'auth', 12).toUpperCase();
+  const at2 = jwt(seed, 'at2', { sub: 'cust', iat: Math.floor(h.baseMs / 1000) + 900 }), orderNo = 'BK-' + (100000 + num(seed, 'order', 899999)), bookingRef = H(seed, 'bref', 6).toUpperCase();
+  const reqId = () => uuid(seed + 1000, 'rid' + h.now());   // the browser makes one per call: no response has it
+  const bearer = (tok) => [{ name: 'Authorization', value: 'Bearer ' + tok }, { name: 'X-Customer-Id', value: customerId }, { name: 'X-Request-Id', value: reqId() }];
+  const JS = [{ name: 'Content-Type', value: 'application/json' }];
+
+  h.marker('START', 'T01_Home');
+  h.add({ url: W + '/', mime: 'text/html', rt: 'document', body: '<!doctype html><html><head><title>Travel</title></head><body><a href="/login">Sign in</a></body></html>' }); statics();
+  h.marker('END', 'T01_Home');
+  h.marker('START', 'T02_SignIn');
+  h.add({ url: ID + '/login?client_id=travel-web', mime: 'text/html', rt: 'document', respHeaders: [{ name: 'Set-Cookie', value: 'JSESSIONID=' + jsid + '; Path=/; HttpOnly' }], respCookies: [{ name: 'JSESSIONID', value: jsid }],
+    body: `<html><body><form method="post" action="/login"><input type="hidden" name="_csrf" value="${csrf}"><input name="username"><input name="password" type="password"></form></body></html>` });
+  const cb = W + '/auth/callback?ticket=' + encodeURIComponent(ticket) + '&state=web';
+  h.add({ method: 'POST', url: ID + '/login', rt: 'document', mime: 'text/html', status: 302, reqHeaders: [{ name: 'Cookie', value: 'JSESSIONID=' + jsid }], post: form({ _csrf: csrf, username: 'test.user07', password: 'Passw0rd!' }),
+    respHeaders: [{ name: 'Location', value: cb }], redirect: cb });
+  h.add({ url: cb, mime: 'text/html', rt: 'document', body: '<html><body>Signing in…</body></html>' });
+  h.add({ method: 'OPTIONS', url: API + '/v2/auth/token', rt: 'preflight', status: 204, mime: 'text/plain' });
+  h.add({ method: 'POST', url: API + '/v2/auth/token', rt: 'fetch', reqHeaders: JS, post: json({ grant_type: 'ticket', ticket }), body: JSON.stringify({ access_token: at1, refresh_token: rt, id_token: idt, token_type: 'Bearer', expires_in: 900 }) });
+  h.add({ url: API + '/v2/me', rt: 'fetch', reqHeaders: [{ name: 'Authorization', value: 'Bearer ' + at1 }, { name: 'X-Request-Id', value: reqId() }], body: JSON.stringify({ customerId, name: 'Test Traveller', tier: 'SILVER' }) });
+  h.add({ url: API + '/v2/customers/' + customerId + '/accounts', rt: 'fetch', reqHeaders: bearer(at1), body: JSON.stringify({ accounts }) }); statics();
+  h.marker('END', 'T02_SignIn');
+  h.marker('START', 'T03_Search');
+  h.add({ method: 'POST', url: API + '/v2/search', rt: 'fetch', reqHeaders: bearer(at1).concat(JS), post: json({ from: 'LHR', to: 'EDI', date: '2026-12-14', adults: 1 }), body: JSON.stringify({ searchId, offers, currency: 'GBP' }) });
+  h.add({ url: API + '/v2/offers/' + offers[2].offerId + '?searchId=' + searchId + '&fareKey=' + encodeURIComponent(offers[2].fareKey), rt: 'fetch', reqHeaders: bearer(at1),
+    body: JSON.stringify({ offerId: offers[2].offerId, priceToken, price: offers[2].price, validFor: 600 }) });
+  h.marker('END', 'T03_Search');
+  h.marker('START', 'T04_Basket');
+  h.add({ method: 'POST', url: API + '/v2/baskets', rt: 'fetch', reqHeaders: bearer(at1).concat(JS), post: json({ customerId }), status: 201, respHeaders: [{ name: 'ETag', value: etag }], body: JSON.stringify({ basketId, version: 1 }) });
+  h.add({ method: 'POST', url: API + '/v2/baskets/' + basketId + '/items', rt: 'fetch', reqHeaders: bearer(at1).concat(JS, [{ name: 'If-Match', value: etag }]),
+    post: json({ offerId: offers[2].offerId, priceToken, searchId, passengers: [{ type: 'ADT', firstName: 'Test', lastName: 'Traveller' }] }), body: JSON.stringify({ itemId, basketId, total: offers[2].price }) });
+  h.add({ url: API + '/v2/baskets/' + basketId, rt: 'fetch', reqHeaders: bearer(at1), body: JSON.stringify({ basketId, items: [{ itemId, offerId: offers[2].offerId }], total: offers[2].price }) });
+  h.marker('END', 'T04_Basket');
+  h.marker('START', 'T05_Seats');
+  h.add({ url: W + '/checkout/seats?basket=' + basketId, mime: 'text/html', rt: 'document',
+    body: `<html><body><form method="post" action="/checkout/seats"><input type="hidden" name="__VIEWSTATE" value="${viewState}"><input type="hidden" name="form_build_id" value="${formBuild}"><select name="seat">${seats.map((s, i) => `<option value="${s}">${12 + i}A</option>`).join('')}</select></form></body></html>` });
+  statics();
+  h.add({ method: 'POST', url: W + '/checkout/seats', rt: 'document', mime: 'text/html', post: form({ __VIEWSTATE: viewState, form_build_id: formBuild, seat: seats[3], basket: basketId }), body: '<html><body>Seat saved</body></html>' });
+  h.marker('END', 'T05_Seats');
+  h.marker('START', 'T06_Pay');
+  h.add({ method: 'POST', url: API + '/v2/payments', rt: 'fetch', reqHeaders: bearer(at1).concat(JS), post: json({ basketId, accountId: accounts[1].accountId, amount: offers[2].price }),
+    body: JSON.stringify({ paymentId, redirectUrl: PAY + '/3ds?txRef=' + txRef, status: 'PENDING' }) });
+  h.add({ url: PAY + '/3ds?txRef=' + txRef, mime: 'text/html', rt: 'document', body: `<html><body><form action="${W}/pay/return" method="post"><input type="hidden" name="authCode" value="${authCode}"><input type="hidden" name="txRef" value="${txRef}"></form></body></html>` });
+  h.add({ method: 'POST', url: W + '/pay/return', rt: 'document', mime: 'text/html', post: form({ authCode, txRef }), body: '<html><body>Returning…</body></html>' });
+  h.add({ method: 'POST', url: API + '/v2/auth/refresh', rt: 'fetch', reqHeaders: JS, post: json({ refresh_token: rt }), body: JSON.stringify({ access_token: at2, expires_in: 900 }) });
+  h.add({ method: 'POST', url: API + '/v2/payments/' + paymentId + '/confirm', rt: 'fetch', reqHeaders: bearer(at2).concat(JS), post: json({ authCode, txRef }), body: JSON.stringify({ paymentId, status: 'AUTHORISED', orderNumber: orderNo, bookingRef }) });
+  h.marker('END', 'T06_Pay');
+  h.marker('START', 'T07_Booking');
+  h.add({ url: API + '/v2/bookings/' + bookingRef + '?order=' + orderNo, rt: 'fetch', reqHeaders: bearer(at2), body: JSON.stringify({ bookingRef, orderNumber: orderNo, status: 'CONFIRMED' }) });
+  h.add({ url: W + '/confirmation/' + orderNo, mime: 'text/html', rt: 'document', body: '<html><body>Booking ' + bookingRef + ' confirmed</body></html>' }); statics();
+  h.add({ method: 'POST', url: ID + '/logout', rt: 'fetch', reqHeaders: [{ name: 'Authorization', value: 'Bearer ' + at2 }], post: json({ id_token_hint: idt }), status: 204, mime: 'text/plain' });
+  h.marker('END', 'T07_Booking');
+  return h.har();
+}
+
+const FLOWS = { 'api-tokens': apiTokens, 'form-csrf': formCsrf, 'rich-shop': richShop, 'oauth-pkce-sso': oauthPkce, 'dpop-jwt': dpopJwt, 'big-3000': big, 'travel-booking': travelBooking };
 for (const [name, fn] of Object.entries(FLOWS)) {
   fs.writeFileSync(path.join(OUT, name + '.har'), JSON.stringify(fn(1), null, 1));
   fs.writeFileSync(path.join(OUT, name + '.r2.har'), JSON.stringify(fn(2), null, 1));

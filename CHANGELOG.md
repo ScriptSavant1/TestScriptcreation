@@ -137,6 +137,19 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### A calmer Script Studio: one main button, controls where they act, no rows of greyed buttons
+
+- Requests: a transaction's header has no coloured band; **Rename** and **Ungroup** show when the pointer or the keyboard is on it; its "n left out" is the link that shows the left-out requests and hides them again (no separate line per transaction — kept only in a recording without transactions). The name gives way first on a narrow panel, with the full name on hover. On a recording with one request per transaction, 7 transactions are in view at 1920 px instead of 5.
+- **Filters** are in the Requests panel, beside New transaction (they filter that list); on a laptop the tool row no longer wraps onto a second line for them. Domains: **All on** / **All off** under the search, so the title keeps its room.
+- One main button per screen: **Download ZIP** at the top is outlined (step 4 has its own); **Next** is soft while the step's own action is ready (values ticked, the editor open, requests being ticked, the name being edited); Back to the recording, Add parameter and a recording's Start (transaction) are outlined.
+- Correlate with nothing found: one message with the three ways on (Add manual correlation, Can't find a value?, Also suggest other repeated values) instead of empty filters, zero counts and a footer of greyed buttons. "Warning" on In the script says "1 note" (its text on hover); the mode reads "One recording" / "Two recordings compared".
+- The correlation editor: headings in the text font; no row of six greyed choices before a request is chosen (a value in the script shows only its own way of reading); the empty right side says "Choose a request on the left".
+- Start page: the two cards look alike — the open card's dashed frame shows only while a file is dragged over it (the keyboard focus it gets after Open another is a focus ring).
+- Fixed on the way: Enter on a button inside the request list (fold, Rename, Ungroup) opened the request's details instead of pressing it; the selection bar's Create transaction was cut off on a laptop.
+- The editor shows only the ways of reading that work for the chosen response (no greyed JSON path / XPath / Header for an HTML page); the chosen way always shows.
+- A recording with many dynamic values for the tests: `make-fixtures.js` makes `travel-booking.har` (7 transactions, 28 values found, 18 High — tokens, CSRF, a redirect ticket, ids, lists, a page state, a payment) and its second recording; `regression-tests/tools/studio/journey.js` takes it through every step as a user in both formats (18 correlations added, the ZIP read back), old and new giving the same script and ZIP files.
+- Checks: the design review (`audit/review.js`) also finds a control cut by its panel (`cutoff`), besides the weight checks; Script Studio: 128 screens at 1366 / 1920 px, light and dark, no finding. Old page against new: 274 actions, 7 differences, all the wording above.
+
 #### Open in HAR Explorer from Script Studio; back to the same work
 
 - Script Studio's file bar has **Open in HAR Explorer** (in the portal, with a recording open): the same recording opens in the HAR Explorer.

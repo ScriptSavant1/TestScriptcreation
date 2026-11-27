@@ -606,16 +606,24 @@
     popClose();
     var p = document.getElementById(id), b = popBtn(id); if (!p || !b) return;
     p.hidden = false; b.setAttribute("aria-expanded", "true"); p.style.transform = "";
+    // a pop-up whose button sits in a panel (which clips): placed at page level, under its button, its right edge on the button's
+    placeFixed(p, b);
     var r = p.getBoundingClientRect(), w = document.documentElement.clientWidth;
     if (r.left < 8) p.style.transform = "translateX(" + Math.round(8 - r.left) + "px)";
     else if (r.right > w - 8) p.style.transform = "translateX(" + Math.round(w - 8 - r.right) + "px)";
     p.style.maxHeight = Math.max(160, window.innerHeight - r.top - 12) + "px";
     var f = p.querySelector("button:not([disabled]), input"); if (f) f.focus({ preventScroll: true });
   }
+  function placeFixed(p, b) {
+    if (!p.classList.contains("ss-pp-fixed")) return;
+    var br = b.getBoundingClientRect(); p.style.top = Math.round(br.bottom + 8) + "px"; p.style.left = Math.round(br.right - p.offsetWidth) + "px";
+  }
   function popClose(back) {
     $$(".ss-pp").forEach(function (p) { if (p.hidden) return; p.hidden = true; var b = popBtn(p.id); if (b) { b.setAttribute("aria-expanded", "false"); if (back) b.focus(); } });
   }
   SS.popOpen = popOpen; SS.popClose = popClose;
+  // a page-level pop-up would stay where its button was: the window resized, it is placed again under the button
+  window.addEventListener("resize", function () { $$(".ss-pp-fixed").forEach(function (p) { var b = popBtn(p.id); if (p.hidden || !b) return; p.style.transform = ""; placeFixed(p, b); var r = p.getBoundingClientRect(); if (r.left < 8) p.style.transform = "translateX(" + Math.round(8 - r.left) + "px)"; }); });
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("[data-pop]"); if (!b) return;
     var id = b.getAttribute("data-pop"), was = document.getElementById(id).hidden; popClose(); if (was) popOpen(id);

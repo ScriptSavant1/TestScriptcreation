@@ -183,7 +183,25 @@
         ? "<b>Nothing left to review.</b> Every value is in the script or skipped — see <b>In the script</b> or <b>All</b>."
         : "No value matches these filters.";
     }
+    none(!cs.length);
     foot();
+  }
+  // nothing found at all (Table view): one message with the three ways on, instead of empty filters, zero counts and a
+  // footer of greyed buttons. The real buttons move into it (their handlers and menus go with them) and back again.
+  function none(on) {
+    on = !!on && prefs.corrView !== "cards";
+    var corr = $("#ss-corr"), box = $("#ss-cr-none");
+    if (!box) {
+      box = document.createElement("div"); box.className = "ss-cr-none"; box.id = "ss-cr-none"; box.hidden = true;
+      box.innerHTML = '<b class="ss-cr-none-t">No value was found by itself</b><p>Most recordings of plain pages need none. If a value changes on every run (a session, a token, an order number), find it one of these ways:</p><div class="ss-cr-none-b"></div>';
+      $("#ss-cr-empty").after(box);
+    }
+    if (on) $("#ss-cr-empty").hidden = true;
+    if (corr.classList.contains("ss-cr-is-none") === on) return;
+    corr.classList.toggle("ss-cr-is-none", on); box.hidden = !on;
+    var row = box.querySelector(".ss-cr-none-b"), hact = $("#ss-corr .ss-corr-hact"), seg = $("#ss-cr-view");
+    if (on) ["ss-cr-manual", "ss-cr-cant", "ss-cr-more"].forEach(function (id) { row.appendChild(document.getElementById(id)); });
+    else { hact.insertBefore($("#ss-cr-manual"), seg); hact.insertBefore($("#ss-cr-cant"), seg); $("#ss-cr-n").after($("#ss-cr-more")); }
   }
   function foot() {
     var n = ticked().length, inn = all().filter(function (c) { return c._applied; }).length;
@@ -399,7 +417,8 @@
     if (!sec && SS.curStep && SS.curStep() === 2) section(!cnt.review && inn ? "script" : "values");
     var a = $("#ss-sec-n1"); a.textContent = cnt.review ? cnt.review + " to review" : "Nothing to review"; a.classList.toggle("warn", !!cnt.review);
     $("#ss-sec-n2").textContent = inn ? plural(inn, "correlation") : "None yet";
-    var w = $("#ss-sec-w2"); w.hidden = !un && !S.harWarning; w.textContent = un ? un + " unresolved" : "Warning";
+    var w = $("#ss-sec-w2"); w.hidden = !un && !S.harWarning; w.textContent = un ? un + " unresolved" : "1 note";
+    if (!un && S.harWarning) { var tx = document.createElement("div"); tx.innerHTML = String(S.harWarning); w.title = tx.textContent.trim(); } else w.removeAttribute("title");
     $("#ss-sec-n3").textContent = S.har2 ? "In use" : "Optional";
   }
 
@@ -409,6 +428,7 @@
     prefs.corrView = v; SS.save();
     $("#ss-t-corr").classList.toggle("ss-cr-cards", v === "cards");
     $$("#ss-cr-view [data-view]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-view") === v)); });
+    none(!all().length);
   }
   $("#ss-cr-view").addEventListener("click", function (e) { var b = e.target.closest("[data-view]"); if (b) view(b.getAttribute("data-view")); });
   view(prefs.corrView);

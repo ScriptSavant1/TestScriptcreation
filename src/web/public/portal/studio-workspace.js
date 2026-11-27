@@ -230,17 +230,18 @@
       var ins = items.filter(function (e) { return !isOut(e); }), outs = items.filter(function (e) { return e.filtered; });
       var key = g.txn || "";
       var folded = !!W.folded[key];
-      if (anyTxn || g.txn) { rows.push({ k: "h", g: g, gi: gi, key: key, n: ins.length, nOut: items.length - ins.length, folded: folded, y: y }); y += H.h; }
-      if (folded) return;
       var openOut = showOut || W.openOut[gi] || !!q;
+      var by = {};
+      outs.forEach(function (e) { var w = why(e); by[w] = (by[w] || 0) + 1; });
+      var whyAll = Object.keys(by).map(function (w) { return by[w] + " " + w; }).join(", ");
+      var head = anyTxn || g.txn;
+      // a group with a header: its "n left out" is the header's own button (shows / hides them) — no extra line (2026-11-27)
+      if (head) { rows.push({ k: "h", g: g, gi: gi, key: key, n: ins.length, nOut: items.length - ins.length, outs: outs.length, open: !!W.openOut[gi], fixed: showOut || !!q, why: whyAll, folded: folded, y: y }); y += H.h; }
+      if (folded) return;
       items.forEach(function (e) {
         if (!e.filtered || openOut) { rows.push({ k: "r", e: e, y: y }); y += H.r; }
       });
-      if (outs.length && !openOut) {
-        var by = {};
-        outs.forEach(function (e) { var w = why(e); by[w] = (by[w] || 0) + 1; });
-        rows.push({ k: "o", gi: gi, n: outs.length, why: Object.keys(by).map(function (w) { return by[w] + " " + w; }).join(", "), y: y }); y += H.o;
-      }
+      if (outs.length && !openOut && !head) { rows.push({ k: "o", gi: gi, n: outs.length, why: whyAll, y: y }); y += H.o; }
     });
     W.rows = rows; W.height = y;
   }
@@ -252,9 +253,12 @@
   function rowHtml(r) {
     if (r.k === "h") {
       var none = !r.g.txn;
-      return '<div class="ss-txn' + (none ? " none" : "") + (r.folded ? " folded" : "") + '" style="top:' + r.y + 'px" data-key="' + esc(r.key) + '" role="listitem">' +
+      return '<div class="ss-txn' + (none ? " none" : "") + (r.folded ? " folded" : "") + '" style="top:' + r.y + 'px" data-key="' + esc(r.key) + '" data-gi="' + r.gi + '" role="listitem">' +
         '<button class="ss-fold" type="button" aria-expanded="' + !r.folded + '" aria-label="' + (r.folded ? "Unfold " : "Fold ") + esc(r.g.txn || "requests outside transactions") + '"><svg class="i ss-chev"><use href="#i-chev"/></svg></button>' +
-        '<span class="ss-bar2"></span><b>' + esc(r.g.txn || "Not in a transaction") + "</b><small>" + plural(r.n, "request") + (r.nOut ? " · " + r.nOut + " left out" : "") + "</small><span class=\"ss-grow\"></span>" +
+        '<span class="ss-bar2"></span><b title="' + esc(r.g.txn || "Not in a transaction") + '">' + esc(r.g.txn || "Not in a transaction") + "</b><small>" + plural(r.n, "request") +
+        (!r.nOut ? "" : r.outs && !r.fixed && !r.folded
+          ? ' · <button type="button" class="ss-outlink" data-act="out" aria-expanded="' + r.open + '" title="' + esc(r.why) + (r.open ? " — hide them" : " — show them") + '">' + r.nOut + " left out</button>"
+          : " · " + r.nOut + " left out") + "</small><span class=\"ss-grow\"></span>" +
         (none ? "" : '<button class="ds-btn ds-btn-xs ds-btn-ghost" type="button" data-act="rename" title="Rename this transaction"><svg class="i"><use href="#i-edit"/></svg><span class="ss-opt">Rename</span></button>' +
           '<button class="ds-btn ds-btn-xs ds-btn-ghost" type="button" data-act="ungroup" title="Remove this transaction; its requests stay in the script"><svg class="i"><use href="#i-ungroup"/></svg><span class="ss-opt">Ungroup</span></button>') +
         "</div>";
@@ -337,6 +341,11 @@
     var h = e.target.closest(".ss-txn");
     if (h) {
       var key = h.getAttribute("data-key"), act = e.target.closest("[data-act]");
+      if (act && act.getAttribute("data-act") === "out") {
+        var gi = +h.getAttribute("data-gi"); W.openOut[gi] = !W.openOut[gi]; renderReqs();
+        var ob = inner.querySelector('.ss-txn[data-gi="' + gi + '"] [data-act=out]'); if (ob) ob.focus();
+        return;
+      }
       if (act && act.getAttribute("data-act") === "rename") { openTxn("rename", key); return; }
       if (act && act.getAttribute("data-act") === "ungroup") { ungroup(key); return; }
       W.folded[key] = !W.folded[key]; renderReqs();
@@ -353,6 +362,8 @@
   function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
   // keyboard: arrows move, Space ticks, Enter folds a transaction
   box.addEventListener("keydown", function (e) {
+    // a button in the list (fold, n left out, Rename, Ungroup) takes its own Enter / Space
+    if ((e.key === "Enter" || e.key === " ") && e.target.closest && e.target.closest("button") && box.contains(e.target)) return;
     var list = W.rows.filter(function (r) { return r.k === "r"; });
     if (!list.length) return;
     var i = list.findIndex(function (r) { return r.e.id === W.cur; });

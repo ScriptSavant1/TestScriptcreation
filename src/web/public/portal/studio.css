@@ -903,7 +903,7 @@ html .adv-type-badge { background: var(--ds-accent-soft); color: var(--ds-accent
 .ss-steps [aria-current="step"], .ss-steps [aria-current="step"]:hover { background: var(--ds-accent); color: #fff; } .ss-steps [aria-current="step"] i { border-color: #fff; background: #fff; color: #4c1d95; } .ss-steps [aria-current="step"] em, .ss-steps [aria-current="step"] em.st-warn { background: #fff; color: #4c1d95; box-shadow: none; }
 .ss-tools > .ds-btn { flex: none; height: 38px; } .ss-next-ic { transform: rotate(180deg); }
 /* narrow: Next stays on the line — the counts that only inform and the word Filters go first */
-@container (max-width: 1330px) { .ss-tools .ss-wide { display: none; } .ss-steps [data-step] { gap: 6px; padding-right: 9px; } } @container (max-width: 1180px) { .ss-steps [data-step] em:not(.st-warn) { display: none; } .ss-tools > .ss-seg > button { padding: 0 9px; } #ss-filters-btn > span { display: none; } #ss-step-back span { display: none; } }
+@container (max-width: 1330px) { .ss-tools .ss-wide { display: none; } .ss-steps [data-step] { gap: 6px; padding-right: 9px; } } @container (max-width: 1180px) { .ss-steps [data-step] em:not(.st-warn) { display: none; } .ss-tools > .ss-seg > button { padding: 0 9px; } #ss-step-back span { display: none; } }
 @container (max-width: 700px) { .ss-steps [data-step]:not([aria-current="step"]) b { display: none; } }
 /* step 1: the right panel keeps the script; the Correlation Advisor and Test data are steps 2 and 3 */
 /* steps 2 and 3: the right panel alone, the whole width */
@@ -1319,3 +1319,61 @@ dialog.ss-dlg { margin: auto; }
 /* Cards fill their section to the edges */
 #ph-res #ss-corr > .adv-panel { margin: 0 !important; }
 #ph-res #ss-corr .adv-footer { margin: 12px -16px 0 !important; padding: 10px 16px; }
+
+/* ── Calmer look (owner's choice, 2026-11-27: "it feels heavy"; checked by audit/review.js weight checks) ── */
+/* 1 transaction headers: no band, a line above; Rename / Ungroup on hover or keyboard focus; "n left out" is the header's link */
+.ss-txn { background: var(--ds-surface); border-bottom: 0; border-top: 1px solid var(--ds-border); }
+.ss-txn:hover, .ss-txn:focus-within { background: var(--ds-surface-2); }
+.ss-txn [data-act=rename], .ss-txn [data-act=ungroup] { opacity: 0; transition: opacity .12s; }
+.ss-txn:hover [data-act=rename], .ss-txn:hover [data-act=ungroup], .ss-txn:focus-within [data-act=rename], .ss-txn:focus-within [data-act=ungroup] { opacity: 1; }
+@media (hover: none) { .ss-txn [data-act=rename], .ss-txn [data-act=ungroup] { opacity: 1; } }
+.ss-outlink { border: 0; background: none; padding: 0; font: inherit; color: var(--ds-accent-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.ss-outlink:hover { color: var(--ds-text); }
+.ss-outlink:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; border-radius: 3px; }
+/* 2 Filters in the Requests header (they filter this list); the pop-up at page level, under its button */
+.ss-req-act { align-items: center; gap: 6px; }
+#ss-p-req .ss-pb > .ds-btn { height: 32px; padding: 0 10px; font-size: var(--ds-fs-sm); gap: 6px; }
+.ss-pp.ss-pp-fixed { position: fixed; top: 0; left: 0; right: auto; z-index: 70; }
+@container (max-width: 600px) { #ss-filters-btn > span { display: none; } }
+/* 3 one main button: Download in the title row is outlined (step 4 has its own Download ZIP); Next is soft while the
+   step's own action is ready (values ticked, the editor open, requests being ticked for a transaction, the name being edited) */
+#ss-dl, #ss-dl-more { background: var(--ds-accent-soft); border-color: var(--ds-accent); color: var(--ds-accent-text); }
+#ss-dl:hover, #ss-dl-more:hover { background: color-mix(in srgb, var(--ds-accent) 18%, var(--ds-surface)); color: var(--ds-accent-text); }
+.ss-split > #ss-dl-more { border-left: 1px solid var(--ds-accent); }
+#ss-dl-more .ss-badge-inv { background: var(--ds-accent); color: #fff; }
+body.ss-step-2:has(#ss-cr-apply:not(:disabled)) #ss-step-next, body.ss-step-2:has(#ss-ed:not([hidden])) #ss-step-next,
+body:has(#ss-selbar:not([hidden])) #ss-step-next, body:has(#ss-name-f:not([hidden])) #ss-step-next { background: var(--ds-accent-soft); border-color: var(--ds-accent); color: var(--ds-accent-text); }
+/* 4 Correlate, nothing found: one message and the three ways on (studio-corr.js none) */
+.ss-cr-is-none :is(#ss-cr-tools, #ss-cr-foot) { display: none !important; }
+.ss-cr-none { margin: 48px auto; max-width: 640px; padding: 0 16px; text-align: center; display: grid; gap: 12px; justify-items: center; color: var(--ds-text-2); }
+.ss-cr-none[hidden] { display: none; }
+.ss-cr-none p { margin: 0; line-height: 1.55; }
+.ss-cr-none-t { font-size: var(--ds-fs-lg); color: var(--ds-text); }
+.ss-cr-none-b { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.ss-cr-none-b .ds-btn { height: 38px; font-size: var(--ds-fs-sm); }
+.ss-cr-none-b .ds-btn-ghost { border-color: var(--ds-border-2); background: var(--ds-surface); color: var(--ds-text); }
+/* 5 the editor: headings in the text font; nothing chosen yet → the right side says what to do */
+.ss-ed-head h2, .ss-ed-rh #ss-ed-rt { font-family: inherit; }
+.ss-ed-pick { margin: 72px auto 0; max-width: 380px; padding: 0 16px; text-align: center; display: grid; gap: 8px; justify-items: center; color: var(--ds-text-2); }
+.ss-ed-pick[hidden] { display: none; }
+.ss-ed-pick b { color: var(--ds-text); }
+.ss-ed-pick svg.i { width: 34px; height: 34px; color: var(--ds-accent-text); }
+.ss-ed-none :is(#ss-ed-rtab, #ss-ed-hint, .ss-ed-sb, #ss-ed-uses) { display: none !important; }
+/* 6 start: the two cards alike — the open card's dashed frame only while a file is dragged over it */
+.ss-big > .ss-drop.ss-drop-big:is(:not(.loaded), .loaded.ss-fresh), .ss-big > .ss-drop.ss-drop-big.kb-focus:is(:not(.loaded), .loaded.ss-fresh) { border-color: transparent; background: transparent; }
+.ss-big > .ss-drop.ss-drop-big:is(:not(.loaded), .loaded.ss-fresh):hover { border-style: solid; border-color: var(--ds-accent-line); background: color-mix(in srgb, var(--ds-accent) 5%, transparent); }
+.ss-big > .ss-drop.ss-drop-big.over { border-style: dashed; border-color: var(--ds-accent-text); background: var(--ds-accent-soft); }
+/* 7 Domains: the title keeps its room; All on / All off under the search */
+.ss-dom-all { display: flex; gap: 16px; padding: 6px 14px; border-bottom: 1px solid var(--ds-border); font-size: var(--ds-fs-xs); }
+.ss-linkbtn { border: 0; background: none; padding: 2px 0; font: inherit; color: var(--ds-accent-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.ss-linkbtn:hover { color: var(--ds-text); }
+.ss-linkbtn:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; border-radius: 3px; }
+#ss-p-dom .ss-pane-tools { border-bottom: 0; padding-bottom: 2px; }
+.ss-big.ss-big-open { border: 1px solid var(--ds-border-2); background: radial-gradient(70% 90% at 50% 0%, color-mix(in srgb, var(--ds-accent) 10%, transparent), transparent 70%), var(--ds-surface); }
+.ss-big-open > .ss-drop.ss-drop-big { border-radius: 21px; }
+@container (max-width: 420px) { #ss-new-txn > span { display: none; } #ss-new-txn { padding: 0 9px; } }
+/* a narrow Requests panel (a laptop): the selection bar keeps every button inside the panel */
+.ss-selbar { max-width: calc(100% - 16px); box-sizing: border-box; }
+@container (max-width: 480px) { .ss-selbar > .ss-muted { display: none; } }
+/* the transaction's name gives way first: its counts and "n left out" stay whole */
+.ss-txn small { flex: none; }

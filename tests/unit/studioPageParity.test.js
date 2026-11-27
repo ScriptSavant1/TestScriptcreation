@@ -242,3 +242,54 @@ describe('Script Studio — review fixes', () => {
     expect(ws).toContain('rs.addEventListener("keydown"');
   });
 });
+
+// The calmer look (owner's choice, 2026-11-27): the same controls, placed where they act, quieter. The engine state is
+// never written by these parts; the real buttons are moved, never copied (their handlers and menus go with them).
+describe('Script Studio — calmer look', () => {
+  const html = read('Studio.html'), css = read('portal/studio.css'), ws = read('portal/studio-workspace.js'), corr = read('portal/studio-corr.js'), ed = read('portal/studio-editor.js'), pg = read('portal/studio-page.js');
+  const between = (s, a, b) => s.slice(s.indexOf(a), s.indexOf(b, s.indexOf(a)));
+  test('Filters sit in the Requests header; their pop-up is outside every panel (a panel clips) and placed under the button', () => {
+    expect(between(html, 'id="ss-p-req"', 'id="ss-reqs"')).toContain('id="ss-filters-btn"');
+    const pop = html.indexOf('id="ss-fbar"');
+    expect(pop).toBeGreaterThan(-1);
+    expect(pop).toBeLessThan(html.indexOf('id="ss-cols"'));
+    expect(html).toMatch(/class="ss-pp ss-pp-wide ss-fbar ss-pp-fixed" id="ss-fbar"/);
+    expect(pg).toContain('function placeFixed(p, b)');
+    expect(css).toContain('.ss-pp.ss-pp-fixed { position: fixed;');
+    expect(html.match(/id="ss-filters-btn"/g)).toHaveLength(1);
+  });
+  test('Domains: All on / All off under the search, same ids; New transaction keeps its name when only its icon shows', () => {
+    expect(between(html, 'class="ss-dom-all"', '</div>')).toMatch(/id="ss-dom-on"[\s\S]*id="ss-dom-off"/);
+    expect(html).toContain('id="ss-new-txn" aria-label="New transaction"');
+  });
+  test('a transaction header: its "n left out" is its own button; the separate line stays only where there is no header', () => {
+    expect(ws).toContain('data-act="out" aria-expanded="');
+    expect(ws).toContain('if (outs.length && !openOut && !head) { rows.push({ k: "o"');
+    expect(ws).toContain('W.openOut[gi] = !W.openOut[gi]; renderReqs();');
+    expect(ws).toContain('e.target.closest("button") && box.contains(e.target)) return;');
+  });
+  test('one main button: Download outlined (step 4 has its own), the start page\'s Back, Add parameter and a transaction\'s Start too', () => {
+    expect(css).toMatch(/#ss-dl, #ss-dl-more \{ background: var\(--ds-accent-soft\)/);
+    expect(html).toContain('class="ds-btn ds-btn-sm ss-btn-accent" type="button" id="ss-resume-go"');
+    expect(html).toContain('class="ds-btn ds-btn-sm ss-btn-accent" type="button" id="ss-td-add"');
+    expect(read('portal/record-live.js')).toContain('class="ds-btn ss-btn-accent" type="button" id="lv-tx-start"');
+    expect(css).toContain('body.ss-step-2:has(#ss-cr-apply:not(:disabled)) #ss-step-next');
+  });
+  test('Correlate with nothing found: the three real buttons move into one message and back — never copied', () => {
+    expect(corr).toContain('function none(on)');
+    expect(corr).toContain('["ss-cr-manual", "ss-cr-cant", "ss-cr-more"].forEach(function (id) { row.appendChild(document.getElementById(id)); });');
+    expect(corr).toContain('hact.insertBefore($("#ss-cr-manual"), seg); hact.insertBefore($("#ss-cr-cant"), seg); $("#ss-cr-n").after($("#ss-cr-more"));');
+    expect(between(corr, 'function none(on)', '\n  }\n')).not.toMatch(/advisor\w+\(|S\.\w+\s*=/);
+  });
+  test('the editor: no row of greyed choices; the right side says what to do; headings in the text font', () => {
+    expect(ed).toContain('if (b.disabled && b.getAttribute("aria-pressed") !== "true") b.hidden = true;');
+    expect(ed).toContain('id="ss-ed-pick"');
+    expect(css).toContain('.ss-ed-head h2, .ss-ed-rh #ss-ed-rt { font-family: inherit; }');
+  });
+  test('the mode in plain words, the same on both pages', () => {
+    expect(html).toContain('<span class="ss-pill" id="mode-badge">One recording</span>');
+    const ui = read('studio-ui.js');
+    expect(ui).toContain("'Two recordings compared'");
+    expect(ui).not.toContain('HAR — heuristic');
+  });
+});

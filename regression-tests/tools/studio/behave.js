@@ -55,7 +55,7 @@ async function walk(b, url, w, h) {
     const a = await n(); await click('#ss-showout'); is('Show left-out shows more', (await n()) > a); await click('#ss-showout');
     await click('#ss-fold-all'); is('Collapse all: rows', await n()); await click('#ss-fold-all');
     await click('#ss-find'); is('Find a value: a window', await vis('#ss-fq')); await p.keyboard.press('Escape'); is('… closes', !(await vis('#ss-fq')));
-    await click('.ss-outrow'); is('"n left out" line opens', await n() > a);
+    await click('.ss-outrow, .ss-txn [data-act=out]'); is('"n left out" opens', await n() > a);
   });
   await part('filters', async () => {
     for (const s of ['#ss-types [data-type]', '#ss-types-default', '[data-leave=ads]', '[data-leave=options]', '#ss-bg-btn', '#ss-res-help']) is('filters: ' + s, await reach(s));

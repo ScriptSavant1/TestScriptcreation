@@ -502,7 +502,8 @@
         '<pre class="ss-ed-body" id="ss-ed-body" tabindex="0"></pre>' +
         '<div class="ss-ed-hdrs" id="ss-ed-hdrs" hidden></div>' +
         '<div class="ss-ed-empty" id="ss-ed-empty" hidden><p id="ss-ed-empty-t">This response is empty in the recording (the browser did not keep it).</p><button type="button" class="ds-btn ds-btn-sm" id="ss-ed-paste"><svg class="i"><use href="#i-paste"/></svg>Paste the response</button></div>' +
-        '<div class="ss-ed-rh"><b>Sent back in</b><span class="ss-muted" id="ss-ed-n"></span></div>' +
+        '<div class="ss-ed-pick" id="ss-ed-pick" hidden><svg class="i"><use href="#i-left"/></svg><b>Choose a request on the left</b><span>Its response opens here, with the values sent back later marked. Click one to correlate it.</span></div>' +
+        '<div class="ss-ed-rh ss-ed-sb"><b>Sent back in</b><span class="ss-muted" id="ss-ed-n"></span></div>' +
         '<ul class="ss-ed-uses" id="ss-ed-uses"></ul>' +
       "</div>" +
     "</div>";
@@ -801,6 +802,11 @@
         : k === "uuid" ? "Not read from a response: the script makes a new UUID before the first request that sends this value (where the recording sent a new one, so does the script)"
         : k === "auto" ? "What the Correlation Advisor chose" : k === "regexp" ? "A regular expression: the first ( ) group is the value" : k === "xpath" ? "An XPath in the XML response" : "";
     });
+    // no row of greyed buttons: a way that cannot read this response (not JSON, not XML, no header has it — or nothing can
+    // be chosen: no request yet, read only) is not shown; the chosen way always is. None left: the row goes.
+    var kb = $$("#ss-ed-kind [data-kind]").filter(function (b) { return !b.hidden; });
+    kb.forEach(function (b) { if (b.disabled && b.getAttribute("aria-pressed") !== "true") b.hidden = true; });
+    if (kb.length && !kb.some(function (b) { return !b.hidden; })) $("#ss-ed-kind").hidden = true;
     expr(c, e, heads);
     rest();
   }
@@ -1141,6 +1147,9 @@
     $("#ss-ed-rt").textContent = e ? "Response of #" + e.id + " " + e.method + " " + (String(e.url || "").replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split("?")[0] || "/") : "The response";
     var lat = adding && e ? later(srcIdx) : [];
     $("#ss-ed-legend").hidden = !adding || !lat.length;
+    // adding, no request chosen yet: the right side says what to do (not an empty response with greyed tabs)
+    $("#ss-ed-pick").hidden = !!e || !adding;
+    $("#ss-ed-right").classList.toggle("ss-ed-none", !e && adding);
     var empty = !e || (rview === "body" ? !text : !nh);
     $("#ss-ed-empty").hidden = !e || !empty;
     $("#ss-ed-empty-t").textContent = rview === "body" ? "This response is empty in the recording (the browser did not keep it)." : "The recording has no headers for this response.";

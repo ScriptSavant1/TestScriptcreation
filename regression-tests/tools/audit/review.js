@@ -9,6 +9,7 @@
 //   - fill: on a wide window, the content ends short of 3/4 of the width (a view shrunk into one column or capped)
 //   - table: a table not laid out as a table, or its rows on top of each other (a style sheet meant for something else —
 //     two parts sharing a class name turned the Workload Modeller's script table into a grid: its row lay under the headings)
+//   - cutoff: a control cut by a panel that hides its overflow and does not scroll
 //   - primary: more than one main (filled) button in one view; codefont: a heading of words in the code font;
 //     idle: a bar of greyed-out buttons (an empty state should say what to do); heavy: Studio's group rows outweigh the
 //     requests (weight checks, added 2026-11-27 after the owner found pages heavy that passed every other check)
@@ -50,7 +51,7 @@ function inspect() {
   const modal = [...document.querySelectorAll('dialog[open]')].find((d) => d.matches(':modal')) || [...document.querySelectorAll('.ss-pp:not([hidden])')].find(vis);
   const label = (e) => { const t = (e.getAttribute('aria-label') || e.getAttribute('title') || e.innerText || e.value || e.placeholder || '').trim().replace(/\s+/g, ' '); return (e.id ? '#' + e.id + ' ' : '') + e.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : ''); };
   const where = (e) => { const s = []; let n = e; while (n && n !== document.body && s.length < 4) { s.unshift(n.id ? '#' + n.id : n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : '')); if (n.id) break; n = n.parentElement; } return s.join(' > '); };
-  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [], table: [], primary: [], codefont: [], idle: [] };
+  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [], table: [], primary: [], codefont: [], idle: [], cutoff: [] };
   // fills the width: on a wide window with no pop-up open, the rightmost card or panel must reach 3/4 of the width (a
   // view shrunk into one column of a grid, or capped at a fixed width, leaves the rest of a large screen empty)
   if (innerWidth >= 1200 && !document.querySelector('dialog[open]:modal, [role=dialog][aria-modal=true]:not([hidden])')) {
@@ -74,6 +75,21 @@ function inspect() {
     const stuck = (h) => { for (let n = h; n && n !== document.body; n = n.parentElement) { const pz = getComputedStyle(n).position; if (pz === 'sticky' || pz === 'fixed') return !n.contains(e); } return false; };
     const bad = pts.filter(([x, y]) => { if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false; const h = document.elementFromPoint(x, y); return h && h !== e && !e.contains(h) && !h.contains(e) && !(e.labels && [...e.labels].some((l) => l.contains(h))) && !stuck(h); });
     if (bad.length >= 2) { const h = document.elementFromPoint(bad[0][0], bad[0][1]); out.overlap.push(label(e) + ' — under ' + (h ? where(h) : '?')); }
+  });
+  // cutoff: a control cut by a panel that hides its overflow and does not scroll (only part of it can be seen or
+  // clicked — Script Studio's Requests header on a laptop pushed its hide button past the panel's edge, 2026-11-27)
+  ctrls.forEach((e) => {
+    const r = e.getBoundingClientRect();
+    if (r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight) return;   // the window: scrolling shows it
+    for (let n = e.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (/auto|scroll/.test(cs.overflowX + cs.overflowY)) break;   // a scrolling list or panel: scrolling shows it
+      if (!/hidden|clip/.test(cs.overflowX + cs.overflowY)) continue;
+      const a = n.getBoundingClientRect();
+      const w = /hidden|clip/.test(cs.overflowX) ? Math.max(0, Math.min(r.right, a.right) - Math.max(r.left, a.left)) : r.width;
+      const h = /hidden|clip/.test(cs.overflowY) ? Math.max(0, Math.min(r.bottom, a.bottom) - Math.max(r.top, a.top)) : r.height;
+      if (w < r.width - 2 || h < r.height - 2) { out.cutoff.push(label(e) + ' — cut by ' + where(n) + ' (' + Math.round(w) + ' x ' + Math.round(h) + ' of ' + Math.round(r.width) + ' x ' + Math.round(r.height) + ' shown)'); break; }
+    }
   });
   // clipped text: overflows its box, the overflow hidden, no ellipsis, no title (inputs and code panes scroll on purpose)
   document.querySelectorAll('body *').forEach((e) => {
@@ -242,6 +258,7 @@ const PLANTED = `<!doctype html><html><head><style>
   <table id="grid" style="display:grid;grid-template-columns:repeat(3,1fr)"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>
   <p><button id="main1" style="background:#6d28d9;color:#fff;border:0">Next step</button> <button id="main2" style="background:#6d28d9;color:#fff;border:0;margin-left:40px">Download</button></p>
   <h2 id="monohead" style="font-family:Consolas,monospace">New correlation</h2>
+  <div style="width:120px;overflow:hidden;white-space:nowrap"><button style="width:90px">Fits</button><button id="cut" style="width:90px">Cut off</button></div>
   <div id="greyed"><button disabled>Test</button><button disabled>Clear selection</button><button disabled>Add to the script</button></div>
 </body></html>`;
 async function selftest(b) {
@@ -251,7 +268,7 @@ async function selftest(b) {
   r.focus = await focusCheck(p, 20);
   await p.evaluate(() => document.getElementById('stay').showModal());
   r.dismiss = await dismissCheck(p, null);
-  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/, fill: /content ends at/, table: /#grid/, primary: /2 main buttons/, codefont: /#monohead/, idle: /#greyed: 3 of 3/ };
+  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/, fill: /content ends at/, table: /#grid/, primary: /2 main buttons/, codefont: /#monohead/, idle: /#greyed: 3 of 3/, cutoff: /#cut/ };
   let fail = 0;
   // and the opposite: a panel across the width is not flagged
   const q = await b.newPage({ viewport: { width: 1600, height: 800 } });
@@ -418,7 +435,9 @@ if (require.main === module) (async () => {
         const sum = (s) => [...document.querySelectorAll(s)].filter((e) => e.offsetParent).reduce((a, e) => a + e.getBoundingClientRect().height, 0);
         const chrome = sum('#ss-reqs .ss-txn') + sum('#ss-reqs .ss-outrow'), reqs = sum('#ss-reqs .ss-rq');
         const t = document.querySelector('#ss-reqs .ss-txn'), list = document.getElementById('ss-reqs');
-        const band = t && getComputedStyle(t).backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(t).backgroundColor !== getComputedStyle(list).backgroundColor;
+        // a band = a header coloured unlike what is behind the list (the first background up from the list)
+        let under = 'rgb(255, 255, 255)'; for (let n = list; n; n = n.parentElement) { const c = getComputedStyle(n).backgroundColor; if (c !== 'rgba(0, 0, 0, 0)') { under = c; break; } }
+        const band = t && getComputedStyle(t).backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(t).backgroundColor !== under;
         return { share: chrome / Math.max(1, chrome + reqs), band };
       });
       const l = [h.share > 0.5 ? 'group rows take ' + Math.round(h.share * 100) + '% of the request list (at most 50%)' : '', h.band ? 'transaction headers are filled bands' : ''].filter(Boolean);
@@ -477,7 +496,7 @@ if (require.main === module) (async () => {
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 1));
   // summary: each finding once (by screen), with the sizes / themes it was seen at
   const by = new Map();
-  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill', 'table', 'primary', 'codefont', 'idle', 'heavy', 'expect'].forEach((k) => (r[k] || []).forEach((x) => {
+  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill', 'table', 'primary', 'codefont', 'idle', 'heavy', 'cutoff', 'expect'].forEach((k) => (r[k] || []).forEach((x) => {
     const key = r.name + '|' + k + '|' + x; if (!by.has(key)) by.set(key, []); by.get(key).push(r.theme + ' ' + r.w);
   })));
   console.log('\npop-ups checked for a click outside: ' + ([...POPUPS].join(' · ') || 'none'));

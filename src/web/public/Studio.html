@@ -106,7 +106,7 @@
 
           <div class="ss-resume" id="ss-resume" hidden>
             <svg class="i"><use href="#i-file"/></svg><span><b id="ss-resume-name"></b> is still open. Open another file below, or go back to it.</span><span class="ss-grow"></span>
-            <button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-resume-go"><svg class="i"><use href="#i-left"/></svg>Back to the recording</button>
+            <button class="ds-btn ds-btn-sm ss-btn-accent" type="button" id="ss-resume-go"><svg class="i"><use href="#i-left"/></svg>Back to the recording</button>
           </div>
 
           <div class="ss-choices">
@@ -206,8 +206,9 @@
             </span><span class="ss-think-sec" id="ss-think-secw"><input class="ss-field" id="ss-think-sec" type="number" min="1" max="3600" step="1" value="3" aria-label="Think time in seconds" /><span class="ss-muted">seconds</span></span></div>
               <p class="ss-muted ss-think-note" id="ss-think-note"></p>
             </div></span>
-          <span class="ss-pb" id="ss-filters"><button type="button" class="ds-btn" id="ss-filters-btn" data-pop="ss-fbar" aria-expanded="false" aria-controls="ss-fbar" title="What goes into the script"><svg class="i"><use href="#i-filter"/></svg><span>Filters</span><em id="ss-f-n" hidden></em><svg class="i ss-chev"><use href="#i-chev"/></svg></button>
-            <div class="ss-pp ss-pp-wide ss-fbar" id="ss-fbar" hidden>
+        </div>
+        <!-- the Filters pop-up: at page level, placed under its button in the Requests header (studio-page.js popOpen) -->
+        <div class="ss-pp ss-pp-wide ss-fbar ss-pp-fixed" id="ss-fbar" hidden>
               <h3>What goes into the script</h3>
               <p class="ss-muted"><span id="ss-f-all"></span> <span class="ss-vh" id="ss-f-sum"></span>Every change updates the script at once.</p>
               <span class="ss-fbar-chips">
@@ -235,19 +236,17 @@
               Included files are added to the page step that loaded them (<code>EXTRARES</code> / <code>resources[]</code>), never as separate requests and never twice. Known analytics/ads domains are always left out here unless you untick <b>Analytics / ads</b>. VuGen also needs the run-time setting <strong>Download non-HTML resources</strong> on (default).
             </details>
           </div>
-            </div></span>
-        </div>
+            </div>
 
         <div class="ss-cols" id="ss-cols">
           <!-- Domains -->
           <section class="ss-pane" id="ss-p-dom" aria-label="Domains">
             <button class="ss-rail" type="button" data-show="dom" title="Show the domain list"><svg class="i"><use href="#i-panel"/></svg>Domains</button>
             <div class="ss-pane-h" data-hide-head="dom" title="Click to hide this panel"><h3>Domains</h3><span class="ss-muted" id="ss-dom-n"></span><span class="ss-grow"></span>
-              <button class="ds-btn ds-btn-xs" type="button" id="ss-dom-on" title="Switch every domain on: put them all in the script">All on</button>
-              <button class="ds-btn ds-btn-xs" type="button" id="ss-dom-off" title="Switch every domain off: leave them all out">All off</button>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-hide="dom" title="Hide this panel (the others get the space)" aria-label="Hide the domain panel"><svg class="i"><use href="#i-panel"/></svg></button>
             </div>
             <div class="ss-pane-tools"><label class="ss-search"><svg class="i"><use href="#i-search"/></svg><input class="ss-field" id="ss-dq" type="search" placeholder="Search domains…" aria-label="Search domains" /></label></div>
+            <div class="ss-dom-all"><button class="ss-linkbtn" type="button" id="ss-dom-on" title="Switch every domain on: put them all in the script">All on</button><button class="ss-linkbtn" type="button" id="ss-dom-off" title="Switch every domain off: leave them all out">All off</button></div>
             <div class="ss-pane-b" id="ss-domains"></div>
           </section>
           <div class="ss-rs" data-rs="dom" title="Drag to resize (double-click puts it back)" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Width of Domains: drag, or the arrow keys; Enter puts it back"></div>
@@ -257,7 +256,8 @@
             <button class="ss-rail" type="button" data-show="req" title="Show the request list"><svg class="i"><use href="#i-panel"/></svg>Requests</button>
             <div class="ss-pane-h" data-hide-head="req" title="Click to hide this panel"><h3>Requests</h3><span class="ss-muted" id="ss-req-n"></span><span class="ss-grow"></span>
               <span class="ss-req-act">
-                <button class="ds-btn ds-btn-sm" type="button" id="ss-new-txn" title="Tick requests, then make them a new transaction"><svg class="i"><use href="#i-plus"/></svg><span>New transaction</span></button>
+                <span class="ss-pb" id="ss-filters"><button type="button" class="ds-btn" id="ss-filters-btn" data-pop="ss-fbar" aria-expanded="false" aria-controls="ss-fbar" title="What goes into the script"><svg class="i"><use href="#i-filter"/></svg><span>Filters</span><em id="ss-f-n" hidden></em><svg class="i ss-chev"><use href="#i-chev"/></svg></button></span>
+                <button class="ds-btn ds-btn-sm" type="button" id="ss-new-txn" aria-label="New transaction" title="Tick requests, then make them a new transaction"><svg class="i"><use href="#i-plus"/></svg><span>New transaction</span></button>
               </span>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-hide="req" title="Hide this panel (the others get the space)" aria-label="Hide the request panel"><svg class="i"><use href="#i-panel"/></svg></button>
             </div>
@@ -414,7 +414,7 @@
               <section class="ss-card ss-diff ss-sec" id="ss-diff" data-sec="second">
                 <div class="ss-sec-h">
                   <h2 class="ss-sec-t"><button type="button" class="ss-sec-b" data-sec-b="second" aria-expanded="false" aria-controls="ss-diff-b"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><b>Second recording</b><span class="ss-pill" id="ss-sec-n3">Optional</span><small class="ss-muted">Record the same journey again with other data: every value that changes is found</small></button></h2>
-                  <span class="ss-pill" id="mode-badge">Mode: <b>Pattern</b> (1 HAR)</span>
+                  <span class="ss-pill" id="mode-badge">One recording</span>
                 </div>
                 <div class="ss-card-b" id="ss-diff-b">
                   <p class="ss-p"><b>One recording (pattern mode)</b> — dynamic values are found by their shape and by tracing them back to an earlier response. Quick to start.</p>
@@ -437,7 +437,7 @@
 
             <div class="ss-tab" id="ss-t-data" role="region" aria-label="Test data" hidden>
               <!-- the Test data table (portal/studio-testdata.js) -->
-              <div class="ss-td-h"><h2>Test data</h2><button type="button" class="ss-q" data-about="ss-data-about" aria-expanded="false" aria-controls="ss-data-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button><button class="ds-btn ds-btn-sm ds-btn-primary" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
+              <div class="ss-td-h"><h2>Test data</h2><button type="button" class="ss-q" data-about="ss-data-about" aria-expanded="false" aria-controls="ss-data-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button><button class="ds-btn ds-btn-sm ss-btn-accent" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
                 <span class="ss-grow"></span>
                 <button class="ds-btn ds-btn-sm" type="button" id="ss-td-xl-down" title="One column per parameter, one row per user: fill many rows in Excel"><svg class="i"><use href="#i-down"/></svg>Download as Excel</button>
                 <button class="ds-btn ds-btn-sm" type="button" id="ss-td-xl-up" title="Read the rows back: the data files in the ZIP get them"><svg class="i"><use href="#i-up"/></svg>Upload Excel</button>

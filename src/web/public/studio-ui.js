@@ -205,7 +205,7 @@ function clearAll() {
   btn.disabled = true;
   btn.textContent = "Load a HAR file to begin";
   document.getElementById("mode-badge").innerHTML =
-    'Mode: <b style="color:var(--warning)">Pattern</b> (1 HAR)';
+    'One recording';
   document.getElementById("btn-clear-hdr").style.display = "none";
   showPhase("ph-upload");
 }
@@ -218,12 +218,12 @@ function updateUploadState() {
     if (S.har2) {
       btn.textContent = "Analyse & generate (diff mode — 2 HARs)";
       badge.innerHTML =
-        'Mode: <b style="color:var(--success)">Diff</b> (2 HARs — deterministic)';
+        'Two recordings compared';
       S.mode = "two";
     } else {
       btn.textContent = "Analyse & generate (pattern mode — 1 HAR)";
       badge.innerHTML =
-        'Mode: <b style="color:var(--warn)">Pattern</b> (1 HAR — heuristic)';
+        'One recording';
       S.mode = "single";
     }
   } else {

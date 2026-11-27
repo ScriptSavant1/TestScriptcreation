@@ -85,7 +85,7 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
     await leave(10); await click('#ss-showout'); await leave(10); await click('#ss-showout'); ok('put back: the same script', (await script()) === s0);
     await leave(12); await leave(13); await click('#ss-undo'); await settle(); await click('#ss-undo'); await settle(); ok('two changes taken back', (await script()) === s0);
     await leave(10); await p.focus('#ss-reqs'); await p.keyboard.press('Control+z'); await settle(); ok('Ctrl+Z', (await script()) === s0); await p.keyboard.press('Control+y'); await settle(); ok('Ctrl+Y', (await p.evaluate(() => S.leaveOutIds.has(10)))); await p.keyboard.press('Control+z'); await settle();
-    await click('.ss-outrow').catch(() => {}); await p.evaluate(() => { SSW.state.openOut = {}; SSW.render(); });
+    await click('.ss-outrow, .ss-txn [data-act=out]').catch(() => {}); await p.evaluate(() => { SSW.state.openOut = {}; SSW.render(); });
 
     // each request's code is marked, in both formats
     for (const fmt of ['devweb', 'webhttp']) {
