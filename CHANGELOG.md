@@ -439,6 +439,11 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### Clear is now Start over
+
+- The top-bar button that resets the tool you are on (Script Studio, Postman / Bruno, JMeter) is called **Start over**, as in the Workload Modeller: it said Clear, beside Studio's own Open another. What it does is unchanged.
+- Postman / Bruno and JMeter: while the script or a domain is being renamed, its **Save** is the one main button; Download ZIP waits, outlined (the design review's one-main-button check).
+
 #### No sideways scroll on narrow screens; old styles removed; route tests
 
 - At 900 px and below the Home welcome band and the converters' top band were 2 px wider than the window, and the Results Analyser's band 12 px when its frame was 700 px wide or less (BUG-133). No portal page or tool frame scrolls sideways now, from 360 to 1300 px.
