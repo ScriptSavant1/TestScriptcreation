@@ -429,7 +429,7 @@ function renderCorrelations() {
   // HAR quality warning
   if (S.harWarning) {
     html += `<div style="background:var(--warn-bg);border:1px solid var(--warn);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--warn)">
-<b>&#x26A0; Recording warning:</b> ${esc(S.harWarning)}
+${_corrNoteLine(esc)}
     </div>`;
   }
 
@@ -484,8 +484,8 @@ function renderCorrelations() {
   <span class="corr-badge ${typeClass}">${typeLabel}</span>
   <div class="corr-detail">
     <div class="corr-name">${esc(c.name)}${advisorBadge}${randBtn}</div>
-    <div class="corr-src">${c.extractorType === "pkce" ? "Made while the script runs (PKCE)" : "Extracted from: …" + esc(srcUrl.slice(-50))}</div>
-    <div class="corr-usage">Used in ${usageCount} request${usageCount !== 1 ? "s" : ""}</div>
+    <div class="corr-src">${c.extractorType === "pkce" ? "Made while the script runs (PKCE)" : srcEntry && !srcEntry.isMarker ? "Read from the response of " + _advReqLink(c.sourceIdx, srcUrl) : "Extracted from: …" + esc(srcUrl.slice(-50))}</div>
+    <div class="corr-usage">Sent back in ${usageCount} request${usageCount !== 1 ? "s" : ""}</div>
   </div>
 </div>`;
       })
@@ -1045,6 +1045,16 @@ function _advWhere(u) {
   var w = _ADV_WHERE[u.location] || String(u.location || "").replace(/_/g, " ");
   var f = u.jsonPath || u.key || "";
   return w + (f ? " " + f : "");
+}
+// In the script: the recording's note. On the Studio page it is one line that opens the note (said in full there);
+// the classic page has no note button and keeps the whole text.
+function _corrNoteLine(esc) {
+  // (the page hides the first letter of this box, the warning glyph, and draws its own icon: the glyph stays first)
+  if (document.getElementById("ss-note")) return '&#x26A0; <b>A note about this recording</b> —<button type="button" class="adv-req-link" onclick="advisorOpenNote()">read it</button>';
+  return "<b>&#x26A0; Recording warning:</b> " + esc(S.harWarning);
+}
+function advisorOpenNote() {
+  if (window.SS && typeof SS.showNote === "function") SS.showNote();
 }
 function _advReqLabel(idx, fallbackUrl) {
   var e = (S.entries1 || [])[idx];
@@ -1876,7 +1886,7 @@ function riTraceField(fieldIdx) {
       pathText +
       '<button class="ri-field-btn" style="margin-left:auto" onclick="riAddCorrFromTrace(' +
       fieldIdx +
-      ')">+ Add Correlation</button>' +
+      ')">+ Add correlation</button>' +
       "</div>";
     traceEl.style.display = "";
   } else {

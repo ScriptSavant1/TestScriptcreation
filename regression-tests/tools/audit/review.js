@@ -386,14 +386,15 @@ if (require.main === module) (async () => {
     ];
     for (const [name, open] of pops) { await f.evaluate(open); await run(name, 'studio'); await shut(); }
     await f.click('#ss-steps [data-step="2"]'); await f.evaluate(() => SSC.section('values')); await run('Studio 2 correlate', 'studio');
-    await f.click('#ss-cr-show [data-show="script"]'); await run('Studio 2 in the script', 'studio'); await f.click('#ss-cr-show [data-show="review"]');
+    // every value reviewed: the filters give way to one message (round 2) — its own buttons are the way on; else the filter
+    if (await f.isVisible('#ss-cr-show')) { await f.click('#ss-cr-show [data-show="script"]'); await run('Studio 2 in the script', 'studio'); await f.click('#ss-cr-show [data-show="review"]'); }
+    else { await run('Studio 2 all reviewed', 'studio'); await f.click('[data-none=script]'); await run('Studio 2 in the script', 'studio'); await f.click('[data-sec-b=values]'); }
     await f.evaluate(() => { const c = PerfxStudio.state().advisorCandidates.find((x) => x.varName === 'State') || PerfxStudio.state().advisorCandidates[0]; if (c) SSE.open(c.id); });
     await run('Studio editor', 'studio');
     await f.click('#ss-ed-run').catch(() => {}); await run('Studio editor test', 'studio'); await f.evaluate(() => { const d = document.getElementById('ss-test-dlg'); if (d.open) d.close(); });
     await f.evaluate(() => SSE.close()); await f.evaluate(() => SSE.add()); await run('Studio add manual', 'studio'); await f.evaluate(() => SSE.close());
     await f.evaluate(() => openPasteCorrelate()); await run('Studio paste and detect', 'studio'); await f.evaluate(() => { try { closePasteCorrelate(); } catch (e) { /* closed */ } });
     await f.click('#ss-cr-test'); await run('Studio test dialog', 'studio'); await f.evaluate(() => { const d = document.getElementById('ss-test-dlg'); if (d.open) d.close(); });
-    await f.click('#ss-cr-view [data-view=cards]'); await run('Studio correlate cards', 'studio'); await f.click('#ss-cr-view [data-view=table]');
     await f.click('[data-sec-b=script]'); await run('Studio correlate: in the script', 'studio');
     await f.click('[data-sec-b=second]'); await run('Studio correlate: second recording', 'studio'); await f.click('[data-sec-b=values]');
     await f.click('#ss-steps [data-step="3"]'); await p.waitForTimeout(200);

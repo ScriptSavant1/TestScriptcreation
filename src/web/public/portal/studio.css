@@ -1377,3 +1377,9 @@ body:has(#ss-selbar:not([hidden])) #ss-step-next, body:has(#ss-name-f:not([hidde
 @container (max-width: 480px) { .ss-selbar > .ss-muted { display: none; } }
 /* the transaction's name gives way first: its counts and "n left out" stay whole */
 .ss-txn small { flex: none; }
+/* the editor, a value in the script: how it is read, in words */
+.ss-ed-how { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--ds-accent-soft); color: var(--ds-text); font-size: var(--ds-fs-sm); line-height: 1.5; }
+/* the recording's note: a long one as points */
+.ss-nt-pts { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.ss-notice + .ss-notice { margin-top: 8px; }
+@media (max-width: 1499px) { .ss-cols { --c1: var(--ss-dw, 210px); } }   /* a laptop: Domains narrower, the request list gets the room */

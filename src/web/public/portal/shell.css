@@ -102,8 +102,10 @@ html.sb-collapsed .sb-collapse svg { transform: rotate(180deg); }
 
 /* collapsed rail: icons only, centred; labels appear as tooltips */
 html.sb-collapsed .sb-brand { padding: 0; justify-content: center; }
-html.sb-collapsed .sb-brand-text, html.sb-collapsed .sb-txt, html.sb-collapsed .sb-group, html.sb-collapsed .sb-badge,
+html.sb-collapsed .sb-brand-text, html.sb-collapsed .sb-group, html.sb-collapsed .sb-badge,
 html.sb-collapsed .sb-note span { display: none; }
+/* folded to icons: the item's words stay for screen readers (its name), only out of sight */
+html.sb-collapsed .sb-txt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 html.sb-collapsed .sb-group-line { display: block; }
 html.sb-collapsed .sb-nav { padding: 12px 10px; }
 html.sb-collapsed .sb-item { justify-content: center; padding: 5px 0; }
@@ -152,6 +154,7 @@ html.sb-collapsed .sb-note { justify-content: center; padding: 7px 0; }
   html.sb-open .sb-scrim { display: block; position: fixed !important; inset: 0; z-index: 390; background: var(--ds-overlay); }
   html.sb-collapsed .sb-brand-text, html.sb-collapsed .sb-txt, html.sb-collapsed .sb-group, html.sb-collapsed .sb-note span { display: initial; }
   html.sb-collapsed .sb-txt, html.sb-collapsed .sb-brand-text { display: flex; }
+  html.sb-collapsed .sb-txt { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; }
   html.sb-collapsed .sb-brand { padding: 0 18px; justify-content: flex-start; }
   html.sb-collapsed .sb-item { justify-content: flex-start; padding: 5px 10px; }
   html.sb-collapsed .sb-group-line { display: none; }

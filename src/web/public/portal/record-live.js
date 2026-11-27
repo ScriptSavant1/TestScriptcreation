@@ -131,7 +131,7 @@
       '<div class="rl-warn ds-note warn" id="lv-warn" hidden role="alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span id="lv-warn-t"></span></div>' +
       '<div class="rl-grid">' +
         '<section class="ds-card rl-req" aria-labelledby="lv-req-h">' +
-          '<h2 id="lv-req-h">Requests as they happen</h2><p class="rl-sub">In <code id="lv-url"></code> — keep using your application in the recording window.</p>' +
+          '<h2 id="lv-req-h">Requests as they happen</h2><p class="rl-sub"><span id="lv-in" hidden>In <code id="lv-url"></code> — keep</span><span id="lv-noin">Keep</span> using your application in the recording window.</p>' +
           '<div class="rl-tools">' +
             '<span class="rl-find"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="ds-field" id="lv-filter" type="search" placeholder="Find in addresses…" aria-label="Find in the recorded addresses"></span>' +
             tog('lv-static', 'Static files', 'Show images, style sheets, scripts and fonts one by one instead of one line per transaction') +
@@ -359,6 +359,7 @@
     if (P.before) P.before();
     $('rl-live').hidden = false;
     $('lv-url').textContent = sess.url || '';
+    $('lv-in').hidden = !sess.url; $('lv-noin').hidden = !!sess.url;   // no address yet: no empty box in the sentence
     $('lv-br').textContent = sess.browser === 'chrome' ? 'Chrome' : 'Edge';
     $('lv-mode').textContent = sess.private ? (sess.browser === 'chrome' ? 'Incognito window' : 'InPrivate window') : 'normal window';
     $('lv-feed').innerHTML = '<div class="rl-empty">Waiting for the first request…</div>';

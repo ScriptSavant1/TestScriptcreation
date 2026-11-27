@@ -90,7 +90,8 @@ async function walk(b, url, w, h) {
     await click('#ss-corr .adv-req-link'); is('a request in the table: a window', await vis('#ss-det') && await vis('#ss-det-scrim')); await p.keyboard.press('Escape'); await wait(100); if (await vis('#ss-det')) await click('#ss-det-x');
     await click('#ss-cr-body [data-edit]'); is('Review: the editor', await ev(() => SSE.isOpen())); await ev(() => SSE.close());
     await click('#ss-cr-cant'); is('Can\'t find a value?', await ev(() => [...document.querySelectorAll('#ss-cr-cant-m [data-cant]')].length)); await p.keyboard.press('Escape');
-    await click('#ss-cr-view [data-view=cards]'); is('Cards', await vis('#adv-panel')); await click('#ss-cr-view [data-view=table]');
+    // Cards view retired (owner, 2026-11-27): the old page offers it, the new one does not — a listed difference
+    if (await vis('#ss-cr-view')) { await click('#ss-cr-view [data-view=cards]'); is('Cards', await vis('#adv-panel')); await click('#ss-cr-view [data-view=table]'); } else is('Cards', 'retired');
     await click('#ss-cr-apply'); await idle(); is('Add to the script', await ev(() => S.correlations.map((c) => c.name).join(' ')));
   });
   // the parts below the table: the correlations in the script, the second recording (a section each, opened by its bar)
@@ -105,7 +106,8 @@ async function walk(b, url, w, h) {
     await click('#ss-undo'); await idle(); is('Undo: the script as before', (await code()) === s0); await sec('script'); is('Undo: items', await items());
   });
   await part('cards', async () => {
-    await sec('values'); await click('#ss-cr-view [data-view=cards]'); is('cards: how many', await ev(() => [...document.querySelectorAll('#adv-cards .adv-card')].filter((x) => x.offsetParent).length)); is('cards: buttons', await ev(() => [...document.querySelectorAll('#adv-panel .adv-panel-hdr-right button')].filter((x) => x.offsetParent).map((x) => x.textContent.trim()).join(' · ')));
+    await sec('values'); if (!(await vis('#ss-cr-view'))) { is('cards view', 'retired'); return; }
+    await click('#ss-cr-view [data-view=cards]'); is('cards: how many', await ev(() => [...document.querySelectorAll('#adv-cards .adv-card')].filter((x) => x.offsetParent).length)); is('cards: buttons', await ev(() => [...document.querySelectorAll('#adv-panel .adv-panel-hdr-right button')].filter((x) => x.offsetParent).map((x) => x.textContent.trim()).join(' · ')));
     for (const [n, s] of [['Paste & Detect', '.adv-btn-paste'], ['Add Manual', '.adv-panel-hdr-right .adv-btn-add:last-of-type']]) { await p.locator(s).first().click(); await wait(250); is('cards: ' + n + ' opens', await ev(() => [...document.querySelectorAll('.adv-modal-overlay')].some((x) => x.getClientRects().length) || SSE.isOpen())); await p.keyboard.press('Escape'); await wait(100); await ev(() => { document.querySelectorAll('.adv-modal-overlay').forEach((x) => { x.style.display = 'none'; }); SSE.close(); }); await wait(100); }
     await sec('values'); await click('#ss-cr-view [data-view=table]');
   });

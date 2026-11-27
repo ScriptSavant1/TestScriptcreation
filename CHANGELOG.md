@@ -137,6 +137,17 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio, round 2: every screen looked at; Cards view retired
+
+- On a laptop (under 1600 px) the portal menu folds to its icons while a recording is open in Script Studio, so the title row keeps its words (Open another, Open in HAR Explorer, Plan the load) and the requests their room; never when you opened or folded the menu yourself, and it opens again when you leave Studio. Domains is narrower on a laptop.
+- Correlate: **Cards view retired** — everything it did is in the table and the editor (the engine's panel stays for the engine). With every value reviewed, one message offers what comes next (see the ones in the script, show the skipped, Test, Also suggest) instead of a footer of greyed buttons.
+- In the script: the recording's note is one line with "read it" (not repeated in full); each correlation names its request as the table does ("Read from the response of #4 POST /as/token.oauth2", "Sent back in 1 request").
+- The note: a long one shows as points; the sign-in note in plain words (no "SSO/OAuth redirect chain", "UPN format"); "read it" works after "Got it, hide the note" too.
+- The editor, a value in the script: how it is read, in words ("A response header (state=) — chosen by the Correlation Advisor") instead of one greyed "Auto" button and "reads it by A response header"; no greyed Skip.
+- Fixed: the footer's Test window was titled with the last value opened in the editor ("Test: State") while it tested all of them — now "Test: the 7 values in the script".
+- Recording: no empty box in "In … — keep using your application" before the first page; the empty list says "Waiting for the first request".
+- Plain words: "Add a correlation" and "Paste and detect" (sentence case, no "auto-locate all usage substitutions"); the second recording without "pattern mode" / "diff mode"; a long script name shows in full on hover.
+
 #### A calmer Script Studio: one main button, controls where they act, no rows of greyed buttons
 
 - Requests: a transaction's header has no coloured band; **Rename** and **Ungroup** show when the pointer or the keyboard is on it; its "n left out" is the link that shows the left-out requests and hides them again (no separate line per transaction — kept only in a recording without transactions). The name gives way first on a narrow panel, with the full name on hover. On a recording with one request per transaction, 7 transactions are in view at 1920 px instead of 5.

@@ -565,19 +565,16 @@ async function analyze() {
 
       // Build auth note for warning
       const authNote = ssoWindowsAuth
-        ? `Windows authentication (${((S.auth && S.auth.type) || "negotiate").toUpperCase()}) detected on SSO servers — ` +
-          `web_set_user() and Runtime Settings (Enable Integrated Authentication) are generated automatically. ` +
-          `Set username and password in collection_data.csv to the load generator service account credentials ` +
-          `(domain\\username format for NTLM, UPN format for Kerberos).`
-        : `No Windows authentication (NTLM/Kerberos) headers found on SSO servers — treating as form-based OAuth/OIDC login. ` +
-          `If VuGen replays fail with 401 on the SSO page, your IdP uses Windows auth: ` +
-          `add web_set_user("{username}","{password}","sso-server") at the top of Action.c.`;
+        ? `The sign-in server uses Windows sign-in (${((S.auth && S.auth.type) || "negotiate").toUpperCase()}): the script signs in with web_set_user() and the run-time setting Enable Integrated Authentication. ` +
+          `Put the load generator's service account in collection_data.csv — DOMAIN\\user for NTLM, user@domain for Kerberos.`
+        : `No Windows sign-in (NTLM / Kerberos) was seen on the sign-in server, so it is treated as a sign-in form (OAuth / OIDC). ` +
+          `If a replay fails with 401 on the sign-in page, it uses Windows sign-in: add web_set_user("{username}","{password}","sso-server") at the top of Action.c.`;
 
       const ssoMsg =
-        `SSO/OAuth redirect chain detected (${ssoRedirects.length} redirect step${ssoRedirects.length > 1 ? "s" : ""} — ${ssoHosts}). ` +
-        `Redirect tokens and state parameters are correlated automatically. ` +
+        `The sign-in goes through another server (${ssoRedirects.length} redirect step${ssoRedirects.length > 1 ? "s" : ""} — ${ssoHosts}). ` +
+        `Its tokens and state values are correlated for you. ` +
         `${authNote} ` +
-        `Verify manually: (1) login form POST is in the script, (2) OAuth callback POST (id_token/code) is in the script.`;
+        `Check that the login form POST and the sign-in callback (id_token / code) are in the script.`;
       S.harWarning = S.harWarning ? S.harWarning + " | " + ssoMsg : ssoMsg;
     }
 

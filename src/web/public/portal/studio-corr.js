@@ -183,25 +183,48 @@
         ? "<b>Nothing left to review.</b> Every value is in the script or skipped — see <b>In the script</b> or <b>All</b>."
         : "No value matches these filters.";
     }
-    none(!cs.length);
+    var left = cs.some(function (c) { return !c._applied && c.status !== "skipped"; });
+    none(!cs.length ? "none" : !rows.length && F.show === "review" && !left ? "done" : "");
     foot();
   }
-  // nothing found at all (Table view): one message with the three ways on, instead of empty filters, zero counts and a
-  // footer of greyed buttons. The real buttons move into it (their handlers and menus go with them) and back again.
-  function none(on) {
-    on = !!on && prefs.corrView !== "cards";
+  // Two states with nothing to tick, each one message with the ways on — instead of empty filters, zero counts and a
+  // footer of greyed buttons: "none" (nothing found at all: Add manual correlation, Can't find a value?, Also suggest)
+  // and "done" (every value reviewed: see the ones in the script, the skipped ones, Test, Also suggest). The real buttons
+  // move into the message (their handlers and menus go with them) and back again; nothing is copied.
+  function none(mode) {
     var corr = $("#ss-corr"), box = $("#ss-cr-none");
     if (!box) {
       box = document.createElement("div"); box.className = "ss-cr-none"; box.id = "ss-cr-none"; box.hidden = true;
-      box.innerHTML = '<b class="ss-cr-none-t">No value was found by itself</b><p>Most recordings of plain pages need none. If a value changes on every run (a session, a token, an order number), find it one of these ways:</p><div class="ss-cr-none-b"></div>';
+      box.innerHTML = '<b class="ss-cr-none-t"></b><p></p><div class="ss-cr-none-b"></div>';
       $("#ss-cr-empty").after(box);
+      box.addEventListener("click", function (e) {
+        var a = e.target.closest("[data-none]"); if (!a) return;
+        if (a.getAttribute("data-none") === "script") section("script", true);
+        else { var s = $('#ss-cr-show [data-show="skipped"]'); if (s) s.click(); }
+      });
     }
-    if (on) $("#ss-cr-empty").hidden = true;
-    if (corr.classList.contains("ss-cr-is-none") === on) return;
-    corr.classList.toggle("ss-cr-is-none", on); box.hidden = !on;
+    if (mode) $("#ss-cr-empty").hidden = true;
+    var inn = all().filter(function (c) { return c._applied; }).length, sk = all().filter(function (c) { return c.status === "skipped" && !c._applied; }).length;
+    var key = mode + "|" + inn + "|" + sk;
+    if (box.getAttribute("data-key") === key) return;
+    box.setAttribute("data-key", key);
+    // every moved button back home first
     var row = box.querySelector(".ss-cr-none-b"), hact = $("#ss-corr .ss-corr-hact"), seg = $("#ss-cr-view");
-    if (on) ["ss-cr-manual", "ss-cr-cant", "ss-cr-more"].forEach(function (id) { row.appendChild(document.getElementById(id)); });
-    else { hact.insertBefore($("#ss-cr-manual"), seg); hact.insertBefore($("#ss-cr-cant"), seg); $("#ss-cr-n").after($("#ss-cr-more")); }
+    hact.insertBefore($("#ss-cr-manual"), seg); hact.insertBefore($("#ss-cr-cant"), seg); $("#ss-cr-n").after($("#ss-cr-more")); $("#ss-cr-more").after($("#ss-cr-test"));
+    row.innerHTML = "";
+    corr.classList.toggle("ss-cr-is-none", !!mode); box.hidden = !mode;
+    if (!mode) return;
+    if (mode === "none") {
+      box.querySelector("b").textContent = "No value was found by itself";
+      box.querySelector("p").textContent = "Most recordings of plain pages need none. If a value changes on every run (a session, a token, an order number), find it one of these ways:";
+      ["ss-cr-manual", "ss-cr-cant", "ss-cr-more"].forEach(function (id) { row.appendChild(document.getElementById(id)); });
+    } else {
+      box.querySelector("b").textContent = sk ? "Nothing left to review" : "Every value is in the script";
+      box.querySelector("p").textContent = plural(inn, "value") + " in the script" + (sk ? ", " + sk + " skipped" : "") + ". Check them with Test, or look for values the Advisor did not suggest.";
+      if (inn) row.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ss-btn-accent" data-none="script">See the ' + inn + " in the script</button>");
+      if (sk) row.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn" data-none="skipped">Show the ' + sk + " skipped</button>");
+      row.appendChild($("#ss-cr-test")); row.appendChild($("#ss-cr-more"));
+    }
   }
   function foot() {
     var n = ticked().length, inn = all().filter(function (c) { return c._applied; }).length;
@@ -304,6 +327,8 @@
     if (!list.length) { list = all().filter(function (c) { return c._applied; }); what = "in the script"; }
     var E = window.StudioEdit, dlg = $("#ss-test-dlg"), b = $("#ss-test-b"), sub = $("#ss-test-sub");
     var two = !!(S.entries2 && S.entries2.length);
+    // its own title (the dialog is shared with the editor's Test, which names one value)
+    $("#ss-test-h").textContent = list.length ? "Test: the " + plural(list.length, "value") + " " + what : "Test";
     if (!list.length || !E) {
       sub.textContent = "";
       b.innerHTML = '<p class="ss-empty">Tick values in the list first, or add some to the script.</p>';
@@ -423,12 +448,14 @@
   }
 
   // Table / Cards (remembered)
-  function view(v) {
-    v = v === "cards" ? "cards" : "table";
-    prefs.corrView = v; SS.save();
-    $("#ss-t-corr").classList.toggle("ss-cr-cards", v === "cards");
+  // Cards view retired (owner, 2026-11-27): everything in it is in the Table and the editor. The engine still draws its
+  // panel (#adv-panel, kept for the engine and the harness); the page always shows the Table. A saved "cards" pref is read
+  // as Table.
+  function view() {
+    var v = "table";
+    if (prefs.corrView !== v) { prefs.corrView = v; SS.save(); }
+    $("#ss-t-corr").classList.remove("ss-cr-cards");
     $$("#ss-cr-view [data-view]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-view") === v)); });
-    none(!all().length);
   }
   $("#ss-cr-view").addEventListener("click", function (e) { var b = e.target.closest("[data-view]"); if (b) view(b.getAttribute("data-view")); });
   view(prefs.corrView);

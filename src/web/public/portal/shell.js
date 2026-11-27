@@ -106,6 +106,7 @@
         if (page === "help" && opts.section && typeof window.haccJump === "function") setTimeout(() => window.haccJump(opts.section), 60);
       } finally { applying = false; }
       reflect(page);
+      autoFold(page === "studio" && studioOpen());
     };
     if (document.startViewTransition && !opts.instant && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
       // a second click during the animation skips the first one — that is expected, not an error
@@ -147,14 +148,28 @@
     go(a.dataset.page);
   }));
   $(".sb-brand").addEventListener("click", (e) => { e.preventDefault(); go("home"); });
-  $(".sb-collapse").addEventListener("click", () => {
-    const on = !html.classList.contains("sb-collapsed");
+  const setFold = (on) => {
     html.classList.toggle("sb-collapsed", on);
-    store.set("perfx-sidebar", on ? "collapsed" : "open");
     $(".sb-collapse").setAttribute("aria-expanded", String(!on));
     $(".sb-collapse .sb-label").textContent = on ? "Expand menu" : "Collapse menu";
+  };
+  $(".sb-collapse").addEventListener("click", () => {
+    const on = !html.classList.contains("sb-collapsed");
+    setFold(on); autoFolded = false;
+    store.set("perfx-sidebar", on ? "collapsed" : "open");
     hideTip();
   });
+  // A laptop (under 1600 px), Script Studio with a recording open: the menu folds to its icons by itself, so the work has
+  // the room — never when the user has chosen open or folded themself (their click is remembered), and it opens again
+  // when they leave Studio or close the recording. Not remembered. (Owner's choice, 2026-11-27.)
+  let autoFolded = false;
+  function autoFold(want) {
+    const fit = want && current === "studio" && innerWidth < 1600;
+    if (fit && !autoFolded && !store.get("perfx-sidebar") && !html.classList.contains("sb-collapsed")) { setFold(true); autoFolded = true; }
+    else if (!fit && autoFolded) { setFold(false); autoFolded = false; }
+  }
+  addEventListener("resize", () => autoFold(studioOpen()), { passive: true });
+  const studioOpen = () => { try { const d = $("#iframe-studio").contentDocument; return !!(d && d.body && d.body.classList.contains("ss-view-ws")); } catch (e) { return false; } };
   $(".sb-collapse").setAttribute("aria-expanded", String(!html.classList.contains("sb-collapsed")));
   $(".sb-collapse .sb-label").textContent = html.classList.contains("sb-collapsed") ? "Expand menu" : "Collapse menu";
   $("#tb-menu").addEventListener("click", () => html.classList.toggle("sb-open"));
@@ -226,7 +241,7 @@
   });
 
   // other scripts (the Home page) navigate through the shell
-  window.PerfxShell = { go, pages: PAGES };
+  window.PerfxShell = { go, pages: PAGES, autoFold: (on) => autoFold(!!on) };
 
   // ── CDP Recorder: is one running on this machine? (best effort, silent when not) ──
   const REC = "http://localhost:8787";

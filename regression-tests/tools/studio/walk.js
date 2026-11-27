@@ -137,7 +137,7 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
       await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('#corr-panel .ss-sec-h').getBoundingClientRect(); return [r.right - 6, r.top + r.height / 2]; })); ok('anywhere on a bar opens it', await one(1));
       await click('#ss-steps [data-step="3"]'); await p.waitForTimeout(250); if (await vis('#ss-ask')) { await click('#ss-ask-no'); await settle(); } await click('#ss-steps [data-step="2"]'); await p.waitForTimeout(250); ok('kept when the step is left', await one(1));
       await click('[data-sec-b=values]'); await click('#ss-cr-cant'); await click('[data-cant=second]'); ok('Use a second recording opens its section', await one(2)); await click('[data-sec-b=values]');
-      await click('#ss-cr-view [data-view=cards]'); ok('Cards: in the section, the bars stay in sight', await one(0) && await vis('#adv-cards .adv-card')); await click('#ss-cr-view [data-view=table]');
+      ok('Cards view retired: no Table / Cards switch, the Table shown', !(await vis('#ss-cr-view')) && await one(0));
       // the scroll starts at the top after another step
       await p.evaluate(() => { document.getElementById('ss-cr-wrap').style.maxHeight = '60px'; document.getElementById('ss-cr-wrap').scrollTop = 40; }); await click('#ss-steps [data-step="3"]'); await p.waitForTimeout(200); if (await vis('#ss-ask')) { await click('#ss-ask-no'); await settle(); } await click('#ss-steps [data-step="2"]'); await p.waitForTimeout(200);
       ok('back on the step: at the top', await p.evaluate(() => { const w = document.getElementById('ss-cr-wrap'); const t = w.scrollTop; w.style.maxHeight = ''; return t === 0; })); }
@@ -161,7 +161,7 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
     // ── another recording, notes ──
     await click('#ss-open-another'); ok('the open one is named', await vis('#ss-resume') && /rich-shop/.test(await txt('#ss-resume-name'))); await click('#ss-resume-go'); ok('back to it', await vis('#ss-cols'));
     await load('oauth-pkce-sso.har'); ok('a new recording starts without Undo', !(await p.locator('#ss-undo').isEnabled()));
-    ok('its note: a button', await vis('.ss-note-b')); await click('.ss-note-b'); ok('… the whole text', /SSO/.test(await txt('#ss-notices'))); await click('#ss-notices [data-x]'); ok('… hidden when read', !(await vis('.ss-note-b')));
+    ok('its note: a button', await vis('.ss-note-b')); await click('.ss-note-b'); ok('… the whole text, as points', /sign-in goes through another server/.test(await txt('#ss-notices')) && await vis('#ss-notices .ss-nt-pts li')); await click('#ss-notices [data-x]'); ok('… hidden when read', !(await vis('.ss-note-b')));
     await click('#ss-dl-more'); if (await cnt('#ss-ready [data-go=notice]')) { await click('#ss-ready [data-go=notice]'); ok('… Ready to download? brings it back', await vis('#ss-note-pop')); }
     await p.evaluate(() => clearAll()); await settle(); ok('Clear: the start page, nothing left', await vis('#dz1') && (await p.evaluate(() => !S.har1 && !S.entries1.length)) && !(await vis('#ss-resume')) && !(await p.locator('#ss-undo').isEnabled()));
     ok('no page errors', !errs.length, errs);

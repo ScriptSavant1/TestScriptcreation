@@ -803,10 +803,12 @@
         : k === "auto" ? "What the Correlation Advisor chose" : k === "regexp" ? "A regular expression: the first ( ) group is the value" : k === "xpath" ? "An XPath in the XML response" : "";
     });
     // no row of greyed buttons: a way that cannot read this response (not JSON, not XML, no header has it — or nothing can
-    // be chosen: no request yet, read only) is not shown; the chosen way always is. None left: the row goes.
+    // be chosen: no request yet, read only) is not shown; the chosen way always is. None can be chosen at all (a value in
+    // the script, read only): the row goes — the line under it says how the value is read, in words.
     var kb = $$("#ss-ed-kind [data-kind]").filter(function (b) { return !b.hidden; });
+    var none = kb.length && kb.every(function (b) { return b.disabled; });
     kb.forEach(function (b) { if (b.disabled && b.getAttribute("aria-pressed") !== "true") b.hidden = true; });
-    if (kb.length && !kb.some(function (b) { return !b.hidden; })) $("#ss-ed-kind").hidden = true;
+    if (none || (kb.length && !kb.some(function (b) { return !b.hidden; }))) $("#ss-ed-kind").hidden = true;
     expr(c, e, heads);
     rest();
   }
@@ -866,7 +868,7 @@
     if (!adding) $("#ss-ed-tray").hidden = true;
     $("#ss-ed-skip").textContent = c.status === "skipped" ? "Put back" : "Skip";
     $("#ss-ed-skip").disabled = !!c._applied;
-    $("#ss-ed-skip").hidden = adding || !!(editing && editing.id === c.id);
+    $("#ss-ed-skip").hidden = adding || !!(editing && editing.id === c.id) || !!c._applied;   // a value in the script: Take out, not Skip
     $("#ss-ed-reset").hidden = adding || (!(editing && editing.id === c.id) && (lock || !c._edit && kind === "auto"));
     $("#ss-ed-reset").textContent = editing && editing.id === c.id ? "Cancel" : "Undo my changes";
     response(c, e);
@@ -971,7 +973,7 @@
         : a.extractorType === "regexp" ? "Regular expression <code>" + esc(a.extractorConfig.pattern) + "</code>"
         : a.extractorType === "xpath" ? "XPath <code>" + esc(a.extractorConfig.path) + "</code>"
         : a.extractorType === "array_reconstruct" ? "The list, rebuilt (list options)" : esc(a.extractorType);
-      x.innerHTML = '<p class="ss-muted">The Correlation Advisor reads it by ' + t + ".</p>";
+      x.innerHTML = '<p class="ss-ed-how">' + t + ' <span class="ss-muted">— chosen by the Correlation Advisor</span></p>';
       return;
     }
     if (!adding && !draft) { x.innerHTML = ""; return; }

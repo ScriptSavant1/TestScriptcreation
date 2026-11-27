@@ -74,7 +74,7 @@ describe('Script Studio redesign — every element the scripts use exists', () =
       'Known analytics/ads domains are always left out here unless you untick',
       'Shows up to 20 candidates',
       'Paste the server response body',
-      'For diff-based correlation',
+      'Open the second recording',   // was 'For diff-based correlation' (plain words, 2026-11-27)
     ].forEach((t) => expect(mine).toContain(t));
   });
 
@@ -275,11 +275,22 @@ describe('Script Studio — calmer look', () => {
     expect(read('portal/record-live.js')).toContain('class="ds-btn ss-btn-accent" type="button" id="lv-tx-start"');
     expect(css).toContain('body.ss-step-2:has(#ss-cr-apply:not(:disabled)) #ss-step-next');
   });
-  test('Correlate with nothing found: the three real buttons move into one message and back — never copied', () => {
-    expect(corr).toContain('function none(on)');
+  test('Correlate with nothing found / everything reviewed: the real buttons move into one message and back — never copied', () => {
+    expect(corr).toContain('function none(mode)');
     expect(corr).toContain('["ss-cr-manual", "ss-cr-cant", "ss-cr-more"].forEach(function (id) { row.appendChild(document.getElementById(id)); });');
-    expect(corr).toContain('hact.insertBefore($("#ss-cr-manual"), seg); hact.insertBefore($("#ss-cr-cant"), seg); $("#ss-cr-n").after($("#ss-cr-more"));');
-    expect(between(corr, 'function none(on)', '\n  }\n')).not.toMatch(/advisor\w+\(|S\.\w+\s*=/);
+    expect(corr).toContain('row.appendChild($("#ss-cr-test")); row.appendChild($("#ss-cr-more"));');
+    expect(corr).toContain('hact.insertBefore($("#ss-cr-manual"), seg); hact.insertBefore($("#ss-cr-cant"), seg); $("#ss-cr-n").after($("#ss-cr-more")); $("#ss-cr-more").after($("#ss-cr-test"));');
+    expect(between(corr, 'function none(mode)', '\n  }\n')).not.toMatch(/advisor\w+\(|S\.\w+\s*=/);
+  });
+  test('round 2: Cards view retired, the menu folds on a laptop, the note in points, plain words', () => {
+    expect(html).toContain('id="ss-cr-view" role="group" aria-label="View" hidden>');
+    expect(corr).toContain('var v = "table";');
+    expect(read('portal/shell.js')).toContain('autoFold: (on) => autoFold(!!on)');
+    expect(pg).toContain('window.parent.PerfxShell.autoFold(v === "ws")');
+    expect(pg).toContain('SS.showNote = function ()');
+    expect(read('studio-ui.js')).toContain('function _corrNoteLine(esc)');
+    expect(read('portal/record-live.js')).toContain("$('lv-in').hidden = !sess.url;");
+    expect(html).not.toMatch(/Add Custom Correlation|Detect &amp; Generate|pattern mode\)/);
   });
   test('the editor: no row of greyed choices; the right side says what to do; headings in the text font', () => {
     expect(ed).toContain('if (b.disabled && b.getAttribute("aria-pressed") !== "true") b.hidden = true;');

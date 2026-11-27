@@ -314,7 +314,7 @@
                   <span class="ss-corr-hact">
                   <button class="ds-btn ss-btn-accent" type="button" id="ss-cr-manual" title="Choose a request and the value in its response yourself"><svg class="i"><use href="#i-plus"/></svg>Add manual correlation</button>
                   <button class="ds-btn" type="button" id="ss-cr-cant" aria-haspopup="true" aria-expanded="false"><svg class="i"><use href="#i-q"/></svg>Can't find a value?</button>
-                  <span class="ss-seg" id="ss-cr-view" role="group" aria-label="View"><button type="button" data-view="table" aria-pressed="true"><svg class="i"><use href="#i-table"/></svg>Table</button><button type="button" data-view="cards" aria-pressed="false"><svg class="i"><use href="#i-layers"/></svg>Cards</button></span>
+                  <span class="ss-seg" id="ss-cr-view" role="group" aria-label="View" hidden><button type="button" data-view="table" aria-pressed="true"><svg class="i"><use href="#i-table"/></svg>Table</button><button type="button" data-view="cards" aria-pressed="false"><svg class="i"><use href="#i-layers"/></svg>Cards</button></span>
                   </span>
                 </div>
                 <p class="ss-muted ss-about" id="ss-corr-about" hidden>Values the server makes for each user (session ids, tokens, order numbers) and the script must read from a response, not replay. Tick the ones to put in the script, then <b>Add to the script</b>.</p>
@@ -417,15 +417,15 @@
                   <span class="ss-pill" id="mode-badge">One recording</span>
                 </div>
                 <div class="ss-card-b" id="ss-diff-b">
-                  <p class="ss-p"><b>One recording (pattern mode)</b> — dynamic values are found by their shape and by tracing them back to an earlier response. Quick to start.</p>
-                  <p class="ss-p"><b>Two recordings (diff mode)</b> — record the same journey twice with different data. Every value that changes between the two is found: the deepest and most reliable correlation.</p>
+                  <p class="ss-p"><b>With one recording</b> (what you have now), values are found by their shape and traced back to the response that sent them.</p>
+                  <p class="ss-p"><b>Add a second recording</b> of the same journey with other data (another user, another order) and every value that changes between the two is found — the most reliable way.</p>
                   <div class="drop-zone ss-drop ss-drop-sm dz-optional-zone" id="dz2"
                     ondrop="onDrop(event,2)" ondragover="onDragOver(event,2)" ondragleave="onDragLeave(2)">
                     <input type="file" title="" accept=".har,.json" onchange="onFilePick(event,2)" aria-label="Second recording (optional) — choose a .har file" />
                     <span class="dz-icon" aria-hidden="true"><svg class="i"><use href="#i-up"/></svg></span>
                     <div class="dz-body">
-                      <div class="dz-title" id="dz2-title">Second recording <span class="dz-opt-badge">Optional</span></div>
-                      <div class="dz-sub" id="dz2-sub">For diff-based correlation &nbsp;&middot;&nbsp; Leave empty for pattern mode</div>
+                      <div class="dz-title" id="dz2-title">Open the second recording</div>
+                      <div class="dz-sub" id="dz2-sub">A .har file of the same journey — drop it here or click</div>
                       <div class="dz-name" id="dz2-name" style="display:none"></div>
                     </div>
                     <button id="dz2-clear" class="dz-clear-btn"
@@ -699,9 +699,9 @@
 
     <!-- ── CORRELATION ADVISOR — Manual Add Modal ── -->
     <div class="adv-modal-overlay" id="adv-modal-overlay" onclick="closeAdvisorModal()" style="display:none">
-      <div class="adv-modal adv-modal-wide" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Add Custom Correlation">
+      <div class="adv-modal adv-modal-wide" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Add a correlation">
         <div class="adv-modal-hdr">
-          <span>Add Custom Correlation</span>
+          <span>Add a correlation</span>
           <button class="adv-modal-close" onclick="closeAdvisorModal()" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
         </div>
         <div class="adv-modal-body">
@@ -728,7 +728,7 @@
         </div>
         <div class="adv-modal-footer">
           <button class="adv-modal-cancel" onclick="closeAdvisorModal()">Cancel</button>
-          <button class="adv-modal-submit" id="adv-modal-submit-btn" onclick="submitAdvisorManual()" disabled>Add Correlation</button>
+          <button class="adv-modal-submit" id="adv-modal-submit-btn" onclick="submitAdvisorManual()" disabled>Add correlation</button>
         </div>
       </div>
     </div>
@@ -758,15 +758,15 @@
 
     <!-- ── PASTE & CORRELATE MODAL ── -->
     <div class="adv-modal-overlay" id="pc-modal-overlay" onclick="closePasteCorrelate()" style="display:none">
-      <div class="adv-modal adv-modal-wide pc-modal" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Paste & Detect Correlation">
+      <div class="adv-modal adv-modal-wide pc-modal" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Paste and detect">
         <div class="adv-modal-hdr">
-          <span>Paste &amp; Detect Correlation</span>
+          <span>Paste and detect</span>
           <button class="adv-modal-close" onclick="closePasteCorrelate()" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
         </div>
         <div class="adv-modal-body">
           <div class="pc-step-label">
             <i class="pc-n">1</i>Paste the server response body
-            <span class="adv-modal-hint">(optional — if you skip this, a pattern is auto-generated from the value shape)</span>
+            <span class="adv-modal-hint">(optional — without it, Studio reads the value by its shape)</span>
           </div>
           <textarea class="pc-textarea" id="pc-response-body"
             placeholder='{"access_token":"eyJa...","expires_in":3600}&#10;&#10;Leave empty to auto-generate from the value shape below.'
@@ -774,10 +774,10 @@
           <div class="pc-step-label" style="margin-top:10px"><i class="pc-n">2</i>Value to extract <span class="adv-modal-hint">(paste the exact value from the request)</span></div>
           <input class="adv-modal-input" id="pc-target-value" type="text"
             placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off" />
-          <button class="pc-detect-btn" onclick="runPasteDetect()"><svg class="i"><use href="#i-search"/></svg>Detect &amp; Generate</button>
+          <button class="pc-detect-btn" onclick="runPasteDetect()"><svg class="i"><use href="#i-search"/></svg>Detect</button>
           <div id="pc-result-section" style="display:none"></div>
           <div id="pc-src-row" style="margin-top:10px">
-            <div class="pc-step-label"><i class="pc-n">3</i>Which request <em>uses</em> this value? <span class="adv-modal-hint">(optional — used to auto-locate all usage substitutions)</span></div>
+            <div class="pc-step-label"><i class="pc-n">3</i>Which request <em>uses</em> this value? <span class="adv-modal-hint">(optional — Studio then finds every place it is sent)</span></div>
             <select class="adv-modal-select" id="pc-src-select">
               <option value="">— select a request (optional) —</option>
             </select>
@@ -785,7 +785,7 @@
         </div>
         <div class="adv-modal-footer">
           <button class="adv-modal-cancel" onclick="closePasteCorrelate()">Cancel</button>
-          <button class="adv-modal-submit" id="pc-submit-btn" onclick="submitPasteCorrelate()" disabled>Add Correlation</button>
+          <button class="adv-modal-submit" id="pc-submit-btn" onclick="submitPasteCorrelate()" disabled>Add correlation</button>
         </div>
       </div>
     </div>

@@ -65,6 +65,8 @@
     document.body.classList.toggle("ss-view-ws", v === "ws");
     document.body.classList.toggle("ss-view-home", v !== "ws");
     if (v !== "ws") resume();
+    // inside the portal on a laptop: the menu folds to its icons while a recording is open (portal/shell.js autoFold)
+    try { if (window.parent !== window && window.parent.PerfxShell && window.parent.PerfxShell.autoFold) window.parent.PerfxShell.autoFold(v === "ws"); } catch (e) { /* the portal is on another address */ }
   }
   SS.view = view;
   // the engine's showPhase() moves the "active" class between the three phases — only those changes count
@@ -212,7 +214,7 @@
   function defaultName() { return studioScriptName(S.format); }
   SS.scriptName = function () { return S.scriptName || defaultName(); };
   var nameBtn = $("#ss-name-btn"), nameForm = $("#ss-name-f");
-  function nameShow() { nameIn.placeholder = defaultName(); $("#ss-name-now").textContent = SS.scriptName(); if (document.activeElement !== nameIn) nameIn.value = S.scriptName || ""; nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); }
+  function nameShow() { nameIn.placeholder = defaultName(); $("#ss-name-now").textContent = SS.scriptName(); nameBtn.title = SS.scriptName() + " — click to rename (the ZIP and the .usr file take this name)"; if (document.activeElement !== nameIn) nameIn.value = S.scriptName || ""; nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); }
   function nameOpen(on) { nameForm.hidden = !on; nameBtn.hidden = on; $("#ss-from").hidden = on; if (on) { nameIn.value = SS.scriptName(); nameIn.focus(); nameIn.select(); } else { nameIn.blur(); nameShow(); } }
   function nameSet() {
     var v = nameIn.value.trim().replace(/[\s-]+/g, "_");
@@ -292,7 +294,7 @@
     if (pend) out.push({ warn: true, text: plural(pend, "correlation suggestion") + " not reviewed yet", go: "corr" });
     var tk = SS.corrTicked ? SS.corrTicked() : 0;
     if (tk) out.push({ warn: true, text: plural(tk, "value") + " ticked in Correlate but not added to the script yet", go: "corr" });
-    if (S.harWarning) out.push({ warn: true, text: "The recording has a warning — read it before you run the script", go: "notice" });
+    if (S.harWarning) out.push({ warn: true, text: "The recording has a note — read it before you run the script", go: "notice" });
     var bg = (SS.bgSummary || []).length;
     if (bg) out.push({ text: plural(bg, "background endpoint") + " (repeated by the page) — left out unless you choose otherwise", go: "bg" });
     var p = (S.params || []).length;
@@ -347,9 +349,16 @@
     var w = S.harWarning || "";
     $("#ss-note").hidden = !w || w === hiddenWarn;
     if (!w || w === hiddenWarn) { box.innerHTML = ""; if (!$("#ss-note-pop").hidden) popClose(); return; }
-    box.innerHTML = '<div class="ss-notice"><svg class="i"><use href="#i-warn"/></svg><span class="ss-nt">' + esc(w) + '</span>' +
-      '</div><div class="ss-row ss-note-f"><button class="ds-btn ds-btn-sm" type="button" data-x>Got it, hide the note</button></div>';
+    // each of the engine's notes (joined by " | ") on its own; a long one as points, one sentence each
+    var pts = function (t) {
+      var s = t.split(/(?<=[.!?])\s+(?=[A-Z(])/).filter(Boolean);
+      return s.length > 2 ? '<ul class="ss-nt-pts">' + s.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" : esc(t);
+    };
+    box.innerHTML = w.split(" | ").map(function (t) { return '<div class="ss-notice"><svg class="i"><use href="#i-warn"/></svg><span class="ss-nt">' + pts(t.trim()) + "</span></div>"; }).join("") +
+      '<div class="ss-row ss-note-f"><button class="ds-btn ds-btn-sm" type="button" data-x>Got it, hide the note</button></div>';
   }
+  // the note again (In the script's "read it"), also after "Got it, hide the note"
+  SS.showNote = function () { hiddenWarn = null; notices(); badges(); popOpen("ss-note-pop"); };
   $("#ss-notices").addEventListener("click", function (e) {
     if (e.target.closest("[data-x]")) { hiddenWarn = S.harWarning; notices(); badges(); }
   });
