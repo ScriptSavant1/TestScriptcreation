@@ -7,6 +7,8 @@
 //   - plain: a button with words but no border, no background and no underline — it cannot be told from text
 //   - dismiss: an open pop-up (dialog) that a click outside it does not close
 //   - fill: on a wide window, the content ends short of 3/4 of the width (a view shrunk into one column or capped)
+//   - table: a table not laid out as a table, or its rows on top of each other (a style sheet meant for something else —
+//     two parts sharing a class name turned the Workload Modeller's script table into a grid: its row lay under the headings)
 //   - expect: a screen's own promise did not hold (for example the correlation editor shows the value of a long response)
 // At 1366, 1536 (a 1920 screen at 125 %, the browser's bars taken off), 1920, 2560 and 3840 px wide, dark and light; a JPEG of each screen and report.json for the gallery.
 //   node review.js [outDir] [--sizes=1366,1536,1920,2560,3840] [--themes=dark,light] [--only=substr]
@@ -36,13 +38,15 @@ function inspect() {
     x1 = Math.max(x1, 0); y1 = Math.max(y1, 0); x2 = Math.min(x2, innerWidth); y2 = Math.min(y2, innerHeight);
     return x2 - x1 >= 2 && y2 - y1 >= 2 ? { left: x1, top: y1, right: x2, bottom: y2, width: x2 - x1, height: y2 - y1 } : null;
   };
-  const vis = (e) => { if (!e.isConnected) return false; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false; const cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0.05 && !!seen(e); };
+  // inside a closed <details> (not its summary) nothing can be seen — Edge keeps those boxes their size (content-visibility)
+  const shut = (e) => { const d = e.closest('details:not([open])'); return !!d && !e.closest('summary'); };
+  const vis = (e) => { if (!e.isConnected || shut(e)) return false; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false; const cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0.05 && !!seen(e); };
   // a modal dialog open: only what is in it can be used
   // (a pop-up of a tool bar, .ss-pp, lies over what is under it: only what is in it is looked at)
   const modal = [...document.querySelectorAll('dialog[open]')].find((d) => d.matches(':modal')) || [...document.querySelectorAll('.ss-pp:not([hidden])')].find(vis);
   const label = (e) => { const t = (e.getAttribute('aria-label') || e.getAttribute('title') || e.innerText || e.value || e.placeholder || '').trim().replace(/\s+/g, ' '); return (e.id ? '#' + e.id + ' ' : '') + e.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : ''); };
   const where = (e) => { const s = []; let n = e; while (n && n !== document.body && s.length < 4) { s.unshift(n.id ? '#' + n.id : n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : '')); if (n.id) break; n = n.parentElement; } return s.join(' > '); };
-  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [] };
+  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [], table: [] };
   // fills the width: on a wide window with no pop-up open, the rightmost card or panel must reach 3/4 of the width (a
   // view shrunk into one column of a grid, or capped at a fixed width, leaves the rest of a large screen empty)
   if (innerWidth >= 1200 && !document.querySelector('dialog[open]:modal, [role=dialog][aria-modal=true]:not([hidden])')) {
@@ -112,6 +116,16 @@ function inspect() {
       return q.right > r.left + n.clientWidth + 1 || q.left < r.left - 1;
     });
     if (cut.length) out.sideways.push(where(n) + ' hides ' + cut.length + ' control(s) sideways, e.g. ' + where(cut[0]));
+  });
+  // table: laid out as a table, its rows one under the other
+  document.querySelectorAll('table').forEach((tb) => {
+    if (!vis(tb)) return;
+    const d = getComputedStyle(tb).display;
+    if (!/table/.test(d)) { out.table.push(where(tb) + ' is laid out as "' + d + '", not as a table'); return; }
+    const odd = [...tb.querySelectorAll('thead, tbody, tfoot, tr, th, td')].find((x) => x.closest('table') === tb && vis(x) && !/table/.test(getComputedStyle(x).display));
+    if (odd) { out.table.push(where(odd) + ' in a table is laid out as "' + getComputedStyle(odd).display + '"'); return; }
+    const rows = [...tb.rows].filter(vis);
+    for (let i = 1; i < rows.length; i++) { const a = rows[i - 1].getBoundingClientRect(), b = rows[i].getBoundingClientRect(); if (b.top < a.bottom - 2) { out.table.push(where(tb) + ' rows ' + i + ' and ' + (i + 1) + ' lie on top of each other'); break; } }
   });
   return out;
 }
@@ -192,6 +206,7 @@ const PLANTED = `<!doctype html><html><head><style>
   <div id="strip" style="width:120px;overflow-x:auto;white-space:nowrap"><span style="display:inline-block;width:300px">Wide</span><button>Past the edge</button></div>
   <button id="flat" style="border:0;background:none;font:inherit">Take out</button>
   <dialog id="stay"><p>A pop-up</p><button>Close</button></dialog>
+  <table id="grid" style="display:grid;grid-template-columns:repeat(3,1fr)"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>
 </body></html>`;
 async function selftest(b) {
   const p = await b.newPage({ viewport: { width: 1200, height: 800 } });
@@ -200,7 +215,7 @@ async function selftest(b) {
   r.focus = await focusCheck(p, 20);
   await p.evaluate(() => document.getElementById('stay').showModal());
   r.dismiss = await dismissCheck(p, null);
-  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/, fill: /content ends at/ };
+  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/, fill: /content ends at/, table: /#grid/ };
   let fail = 0;
   // and the opposite: a panel across the width is not flagged
   const q = await b.newPage({ viewport: { width: 1600, height: 800 } });
@@ -364,6 +379,27 @@ if (require.main === module) (async () => {
     await f.waitForFunction(() => document.querySelector('[data-txlist]'), null, { timeout: 30000 });
     await f.evaluate(() => openTxList(document.querySelector('[data-txlist]').dataset.txlist)); await run('Workload transactions', 'workload');
     await f.evaluate(() => { const d = document.getElementById('wm-tx-dlg'); if (d && d.open) d.close(); });
+    // the scripts as a table (chosen, or by itself from 8 scripts), then back to cards
+    await f.click('#sview [data-v=table]'); await p.waitForTimeout(300); await run('Workload table', 'workload');
+    await f.click('#sview [data-v=cards]'); await p.waitForTimeout(300);
+    // a script sent from Script Studio (Plan the load), shown as cards and as a table — the way most people arrive
+    await go('studio'); await p.waitForFunction(() => { const x = document.getElementById('iframe-studio').contentWindow; return x && x.document.readyState === 'complete' && typeof x.loadFile === 'function'; }, null, { timeout: 20000 });
+    { const sf = await frameOf('studio'); await sf.setInputFiles('#dz1 input[type=file]', COL + 'WebTours.har');
+      await sf.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 }); await p.waitForTimeout(1500);
+      const bg = sf.locator('#ss-bg-dlg .bg-review-apply'); if (await bg.isVisible().catch(() => false)) await bg.click();
+      await sf.click('#ss-wm'); await p.waitForTimeout(3500); }
+    f = await frameOf('workload');
+    await run('Workload from Studio, cards', 'workload');
+    await f.click('#sview [data-v=table]'); await p.waitForTimeout(300); await run('Workload from Studio, table', 'workload');
+    await f.click('#sview [data-v=cards]'); await p.waitForTimeout(300);
+    // and from the Postman / Bruno converter (its Plan the load), when the converter screens ran
+    await go('postman'); await p.waitForTimeout(400);
+    if (await p.isVisible('#panel-bruno [data-act=plan]').catch(() => false)) {
+      await p.click('#panel-bruno [data-act=plan]'); await p.waitForTimeout(3500);
+      f = await frameOf('workload'); await run('Workload from Postman, cards', 'workload');
+      await f.click('#sview [data-v=table]'); await p.waitForTimeout(300); await run('Workload from Postman, table', 'workload');
+      await f.click('#sview [data-v=cards]'); await p.waitForTimeout(300);
+    }
     await go('results'); await p.waitForFunction(() => { const d = document.getElementById('iframe-analyser').contentDocument; return d && d.getElementById('in-zip'); }, null, { timeout: 20000 });
     await run('Analyser start', 'analyser');
     if (fs.existsSync(FX + 'qa/demo-run.zip')) { f = await frameOf('analyser'); await f.setInputFiles('#in-zip', FX + 'qa/demo-run.zip'); await p.waitForTimeout(9000); await run('Analyser report', 'analyser');
@@ -381,7 +417,7 @@ if (require.main === module) (async () => {
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 1));
   // summary: each finding once (by screen), with the sizes / themes it was seen at
   const by = new Map();
-  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill', 'expect'].forEach((k) => (r[k] || []).forEach((x) => {
+  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill', 'table', 'expect'].forEach((k) => (r[k] || []).forEach((x) => {
     const key = r.name + '|' + k + '|' + x; if (!by.has(key)) by.set(key, []); by.get(key).push(r.theme + ' ' + r.w);
   })));
   console.log('\npop-ups checked for a click outside: ' + ([...POPUPS].join(' · ') || 'none'));

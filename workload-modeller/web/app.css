@@ -160,6 +160,9 @@ details.wm-more[open] > summary { margin-bottom: 12px; }
 .wm-tile-warn { border-color: var(--ds-warn); }
 .wm-tile-warn .ds-tile-value { color: var(--ds-warn); }
 #res-notes { margin: 12px 0 0; }
+/* no plan yet ("Almost there"): the notes, the phase bar and the phase table are empty — not shown (an empty <details>
+   showed the browser's own "Details" label and the bar an empty line) */
+#res-notes:empty, .wm-phbar:empty, #phases:empty { display: none; }
 .wm-notes-f { display: block; margin: 2px 0 0 12px; font-family: var(--ds-mono); font-size: var(--ds-fs-xs); color: var(--ds-text); }
 .wm-import[hidden] { display: none; }
 .wm-import ul { margin: 4px 0 0; padding-left: 18px; }
@@ -187,6 +190,7 @@ details.wm-more[open] > summary { margin-bottom: 12px; }
 .wm-empty-res ol { margin: 8px 0 0; padding-left: 20px; }
 .wm-empty-res li { margin: 3px 0; }
 .ds-field.wm-need { border-color: var(--ds-warn); box-shadow: 0 0 0 1px var(--ds-warn); }
+.ds-field.wm-need:focus { border-color: var(--ds-focus); box-shadow: 0 0 0 3px var(--ds-accent-soft); }   /* the focus shows on a field that still needs a value */
 .wm-goto { border: 0; background: none; padding: 0; margin-left: 6px; color: var(--ds-accent-text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 .wm-goto:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; border-radius: 4px; }
 .wm-skip { margin-top: 8px; color: var(--ds-warn); }
@@ -352,14 +356,15 @@ details.wm-more[open] > summary { margin-bottom: 12px; }
 
 /* The test types: five equal cards, each with a drawing of its load over time; under them "About this test" (app.js
    renderAbout: why, load, how long, what to look at, when — hidden to one line when the user hides it) */
-.wm-tt { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; container-type: inline-size; }
-.wm-tt .wm-choice { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px 12px 11px; }
-.wm-tt .wm-choice b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the test-type cards: their own class — .wm-tt is the scripts table (sharing it turned the table into a grid) */
+.wm-ttypes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; container-type: inline-size; min-width: 100%; font-size: var(--ds-fs-sm); font-variant-numeric: tabular-nums; }
+.wm-ttypes .wm-choice { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px 12px 11px; }
+.wm-ttypes .wm-choice b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wm-tt-shape { display: block; width: 100%; height: 28px; color: var(--ds-text-3); }
 .wm-choice[aria-pressed="true"] .wm-tt-shape { color: var(--ds-accent-text); }
 .wm-choice:hover .wm-tt-shape { color: var(--ds-text-2); }
-@container (max-width: 640px) { .wm-tt .wm-choice > span { display: none; } }
-@media (max-width: 520px) { .wm-tt { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (max-width: 640px) { .wm-ttypes .wm-choice > span { display: none; } }
+@media (max-width: 520px) { .wm-ttypes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .wm-about { margin: -2px 0 16px; border: 1px solid var(--ds-accent-line); border-radius: var(--ds-r-tile); background: linear-gradient(100deg, var(--ds-accent-soft), var(--ds-surface) 75%); overflow: hidden; }
 .wm-about-h { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--ds-border); flex-wrap: wrap; }
 .wm-about-h b { font-size: var(--ds-fs); font-weight: 700; }

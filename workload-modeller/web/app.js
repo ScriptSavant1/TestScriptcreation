@@ -593,7 +593,7 @@ let poolSeq = 1;
 $("#btn-pool").addEventListener("click", () => { const t = LG_TYPES[1]; state.pools.push({ id: "p" + (++poolSeq), name: t.where, kind: t.id, cores: t.cores, ramGb: t.ramGb, webPerLg: t.webPerLg, apiPerLg: t.apiPerLg, extra: 0, capacity: {} }); renderPools(); renderScripts(); calc(); });
 function renderProtoTable() {
   $("#proto-table").innerHTML = `<thead><tr><th>Protocol</th><th class="ds-num">Memory per Vuser (MB)</th><th class="ds-num">Vusers per CPU core</th></tr></thead><tbody>` +
-    Object.entries(PROTOS).map(([k, p]) => `<tr><td>${esc(p.label)}</td><td class="ds-num"><input class="ds-field" style="width:90px;height:32px" type="number" data-proto="${k}.memMb" value="${p.memMb}"></td><td class="ds-num"><input class="ds-field" style="width:90px;height:32px" type="number" data-proto="${k}.perCore" value="${p.perCore}"></td></tr>`).join("") + "</tbody>";
+    Object.entries(PROTOS).map(([k, p]) => `<tr><td>${esc(p.label)}</td><td class="ds-num"><input class="ds-field" style="width:90px;height:32px" type="number" data-proto="${k}.memMb" value="${p.memMb}" aria-label="${esc(p.label)} — memory per Vuser (MB)"></td><td class="ds-num"><input class="ds-field" style="width:90px;height:32px" type="number" data-proto="${k}.perCore" value="${p.perCore}" aria-label="${esc(p.label)} — Vusers per CPU core"></td></tr>`).join("") + "</tbody>";
 }
 $("#proto-table").addEventListener("input", (e) => { const [k, f] = e.target.dataset.proto.split("."); const v = parseFloat(e.target.value); if (v > 0) { PROTOS[k][f] = v; calc(); } });
 function cal() {

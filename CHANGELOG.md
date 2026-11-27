@@ -6,6 +6,12 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### The scripts table shows its scripts again; nothing empty under Result
+
+- Table view showed the headings but no script — also after Plan the load from Script Studio or a converter (BUG-181). The test-type cards had been given the table's class name.
+- Before the plan is complete, Result no longer shows an empty "Details" line and an empty bar (BUG-182); a field that still needs a value shows the keyboard focus (BUG-183); the sizing boxes per protocol have names (BUG-184).
+- Checks: the design review now checks that every table is laid out as a table, and has screens for Table view and for scripts sent from Script Studio and Postman / Bruno; the Workload walk-through checks the table after Plan the load.
+
 #### Spike levels of your own; script cards say what a field means once
 
 - Spike: **Normal load** and **Burst to** (% of the target; team settings `testTypes.spike`, 50% → 200% as before). A burst that is not above normal load is said and not used. The notes and the drawing follow the levels.

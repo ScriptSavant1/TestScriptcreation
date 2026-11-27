@@ -16,6 +16,12 @@ async function page(b, w, h, team) {
   p.errs = errs; return p;
 }
 const vis = (p, s) => p.locator(s).first().isVisible();
+// the scripts table as people see it: laid out as a table, one row per script, each row under the headings and in sight
+// (the test-type cards once shared its class name and turned it into a grid: the row lay under the headings)
+const tableInfo = (p) => p.evaluate(() => { const tb = document.querySelector('#tv table'); if (!tb) return { table: false };
+  const head = tb.tHead.rows[0].getBoundingClientRect(), rows = [...tb.querySelectorAll('tbody tr[data-id]')].filter((r) => !r.hidden).map((r) => r.getBoundingClientRect());
+  return { display: getComputedStyle(tb).display, rows: rows.length, groups: state.groups.length, under: rows.every((r, i) => r.top >= head.bottom - 1 && r.height > 20 && (!i || r.top >= rows[i - 1].bottom - 1)) }; });
+const tableOk = async (p) => { const x = await tableInfo(p); return x.display === 'table' && x.rows === x.groups && x.rows > 0 && x.under; };
 const plan = (p) => p.evaluate(() => ({ peak: last.peakVusers, vusers: last.totals.vusers, holds: (last.actions || []).filter((a) => a.type === 'hold').map((a) => a.dur), sc: state.scenario }));
 
 (async () => {
@@ -84,6 +90,7 @@ const plan = (p) => p.evaluate(() => ({ peak: last.peakVusers, vusers: last.tota
   await p.evaluate(() => { document.activeElement.blur(); foldCard(state.groups[0], true); }); await p.waitForTimeout(100); hs = await helps();
   ok('the first card folded: the next open card explains', hs[1].help && hs[1].shown > 3 && hs[2].shown === 0, hs);
   await p.click('#sview [data-v=table]'); await p.waitForTimeout(150);
+  ok('Table: a real table, every script a row of its own under the headings', await tableOk(p), await tableInfo(p));
   await p.evaluate(() => { const b = document.querySelector('#tv [data-open], #tv .wm-tv-open, #tv button'); if (b) b.click(); }); await p.waitForTimeout(150);
   await p.click('#sview [data-v=cards]'); await p.click('#btn-reset-all'); await p.waitForTimeout(150); await p.click('[data-tt=stress]');
   // ── hide / show the notes, remembered ──
@@ -128,6 +135,22 @@ const plan = (p) => p.evaluate(() => ({ peak: last.peakVusers, vusers: last.tota
     const m = await p.evaluate(() => ({ side: document.documentElement.scrollWidth - innerWidth, rows: new Set([...document.querySelectorAll('#test-types .wm-choice')].map((x) => Math.round(x.getBoundingClientRect().top))).size, cut: [...document.querySelectorAll('#test-types b, .wm-about-facts dd, #f-shape button')].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.textContent) }));
     ok(w + ' px: no sideways scroll, the cards on ' + (w < 521 ? 'two rows' : 'one row') + ', no text cut', m.side <= 0 && m.rows === (w < 521 ? 2 : 1) && !m.cut.length, m);
     await p.close();
+  }
+  {
+    // Plan the load from another tool (WorkloadModeller.addScripts) while Table view is the remembered choice
+    const q = await page(b, 1912, 900);
+    await q.evaluate(() => localStorage.setItem('wm-sview', 'table')); await q.reload(); await q.waitForTimeout(500);
+    const har = require('fs').readFileSync(path.resolve(__dirname, '../../../collection-examples/petstore.octoperf.com.har'), 'utf8');
+    await q.evaluate((t) => WorkloadModeller.addScripts([new File([t], 'petstore.octoperf.com.har')]), har); await q.waitForTimeout(1500);
+    ok('Plan the load into Table view: the script is a row people can see', await tableOk(q), await tableInfo(q));
+    await q.click('#sview [data-v=cards]'); await q.waitForTimeout(150); await q.click('#sview [data-v=table]'); await q.waitForTimeout(150);
+    ok('… and after switching to cards and back', await tableOk(q), await tableInfo(q));
+    const empty = await q.evaluate(() => ['#res-notes', '#phbar', '#phases'].filter((s) => { const e = document.querySelector(s); return e && e.offsetParent && !e.children.length; }));
+    ok('no plan yet: no empty notes, phase bar or phase table under Result', !empty.length, empty);
+    const tgt = q.locator('#tv [data-k=targetTps]').first(); await tgt.focus();
+    ok('the Target that still needs a value shows the keyboard focus', await tgt.evaluate((e) => getComputedStyle(e).boxShadow.includes('3px')));
+    ok('no page errors (hand-off)', !q.errs.length, q.errs);
+    await q.close();
   }
   await b.close();
   console.log(`${pass} of ${pass + fail} checks passed`); process.exit(fail ? 1 : 0);

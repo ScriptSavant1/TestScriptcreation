@@ -815,7 +815,9 @@ class WebServer {
     for (const pfx of ["/admin", "/converter/admin"]) {
       // Chart.js vendor — no auth (just a static file)
       this.app.get(`${pfx}/vendor/chart.js`, (req, res) => {
-        const p = path.join(process.cwd(), "node_modules", "chart.js", "dist", "chart.umd.min.js");
+        // next to the application, not the folder the server was started from (started elsewhere it answered 404 and
+        // the admin page's chart stayed empty)
+        const p = path.join(__dirname, "..", "..", "node_modules", "chart.js", "dist", "chart.umd.min.js");
         res.setHeader("Content-Type", "application/javascript");
         res.setHeader("Cache-Control", "public, max-age=86400");
         res.sendFile(p, (err) => { if (err) res.status(404).json({ error: "not_found" }); });
