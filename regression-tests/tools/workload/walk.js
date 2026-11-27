@@ -104,11 +104,16 @@ const plan = (p) => p.evaluate(() => ({ peak: last.peakVusers, vusers: last.tota
   ok('Reset: Load, 60 min, nothing held', r.sc.testType === 'load' && r.sc.steadyMin === 60 && r.sc.levels === null && r.sc.stepHoldMin === null, r.sc);
   // ── working on a plan: the band and the notes ──
   ok('at first: the band, and the notes open', await vis(p, '.wm-band') && await p.evaluate(() => document.getElementById('script-notes').open));
-  await p.click('#btn-example'); await p.waitForTimeout(150);
-  ok('with an example: the band gives its room, the notes fold', !(await vis(p, '.wm-band')) && !(await p.evaluate(() => document.getElementById('script-notes').open)));
-  await p.click('#script-notes summary'); await p.click('#btn-reset-all'); await p.waitForTimeout(150);
+  await p.click('#btn-example');
+  await p.waitForFunction(() => !document.getElementById('script-notes').open && !document.querySelector('.wm-band').offsetParent, null, { timeout: 2000 }).catch(() => {});   // folds after the recalculation
+  ok('with an example: the band gives its room, the notes fold', !(await vis(p, '.wm-band')) && !(await p.evaluate(() => document.getElementById('script-notes').open)), await p.evaluate(() => ({ band: !!document.querySelector('.wm-band').offsetParent, notes: document.getElementById('script-notes').open, working: document.body.className, groups: state.groups.length, pref: localStorage.getItem('wm-notes') })));
+  await p.click('#script-notes summary'); await p.click('#btn-reset-all');
+  await p.waitForFunction(() => !!document.querySelector('.wm-band').offsetParent, null, { timeout: 2000 }).catch(() => {});
   ok('Start over: the band is back', await vis(p, '.wm-band'));
   ok('the notes stay as the user left them (opened)', await p.evaluate(() => document.getElementById('script-notes').open));
+  await p.focus('#script-notes summary'); await p.keyboard.press('Enter'); await p.waitForTimeout(100);
+  ok('folded with the keyboard: remembered as the user’s choice', await p.evaluate(() => !document.getElementById('script-notes').open && localStorage.getItem('wm-notes') === 'closed'));
+  await p.keyboard.press('Enter'); await p.waitForTimeout(100);
   // ── the results stay in view ──
   await p.click('#btn-example'); await p.waitForTimeout(150);
   await p.evaluate(() => window.scrollTo(0, 2500)); await p.waitForTimeout(150);
@@ -151,6 +156,38 @@ const plan = (p) => p.evaluate(() => ({ peak: last.peakVusers, vusers: last.tota
     ok('the Target that still needs a value shows the keyboard focus', await tgt.evaluate((e) => getComputedStyle(e).boxShadow.includes('3px')));
     ok('no page errors (hand-off)', !q.errs.length, q.errs);
     await q.close();
+  }
+  {
+    // Table view wider than its column: the results fold to their strip by themselves (not remembered); opened again by
+    // the user they stay open; back to Cards they open again
+    const q = await page(b, 1920, 1000);
+    await q.click('#btn-example'); await q.waitForTimeout(200);
+    const har = require('fs').readFileSync(path.resolve(__dirname, '../../../collection-examples/petstore.octoperf.com.har'), 'utf8');
+    await q.evaluate((t) => WorkloadModeller.addScripts([new File([t], 'petstore.octoperf.com.har')]), har); await q.waitForTimeout(1200);
+    const st = () => q.evaluate(() => ({ folded: document.querySelector('.wm-page').classList.contains('res-hidden'), side: (() => { const tv = document.getElementById('tv'); return tv.hidden ? 0 : tv.scrollWidth - tv.clientWidth; })(), saved: localStorage.getItem('wm-layout') }));
+    let s = await st(); ok('1920 px, Cards: the results beside the inputs', !s.folded, s);
+    await q.click('#sview [data-v=table]'); await q.waitForTimeout(300); s = await st();
+    ok('Table: the results fold to the strip by themselves and the whole table fits', s.folded && s.side <= 2, s);
+    ok('… with a message saying why', /folded to the strip/.test(await q.evaluate(() => document.body.innerText)));
+    ok('… not remembered', s.saved !== 'res-hidden', s);
+    ok('… the table rows still under the headings', await tableOk(q), await tableInfo(q));
+    await q.click('#rail'); await q.waitForTimeout(300); s = await st();
+    ok('the strip opens the results again and the table does not fold them again', !s.folded, s);
+    await q.evaluate(() => window.dispatchEvent(new Event('resize'))); await q.waitForTimeout(200); s = await st();
+    ok('… not even after a resize (the user chose; the hint line offers it)', !s.folded && await q.isVisible('#tv-more'), s);
+    await q.click('#sview [data-v=cards]'); await q.waitForTimeout(200); await q.click('#sview [data-v=table]'); await q.waitForTimeout(300); s = await st();
+    ok('Table chosen again: folded again', s.folded, s);
+    await q.click('#sview [data-v=cards]'); await q.waitForTimeout(300); s = await st();
+    ok('back to Cards: the results open again', !s.folded, s);
+    await q.click('#btn-hide-res'); await q.waitForTimeout(200); await q.click('#sview [data-v=table]'); await q.waitForTimeout(200); await q.click('#sview [data-v=cards]'); await q.waitForTimeout(200); s = await st();
+    ok('results hidden by the user stay hidden in Cards (their choice, remembered)', s.folded && s.saved === 'res-hidden', s);
+    await q.click('#rail'); await q.waitForTimeout(200);
+    ok('no page errors (fold)', !q.errs.length, q.errs);
+    await q.close();
+    const n = await page(b, 3840, 1900);   // a table that fits beside the results: nothing folds
+    await n.click('#btn-example'); await n.click('#sview [data-v=table]'); await n.waitForTimeout(300);
+    ok('3840 px: the table fits beside the results — they stay', !(await n.evaluate(() => document.querySelector('.wm-page').classList.contains('res-hidden'))));
+    await n.close();
   }
   await b.close();
   console.log(`${pass} of ${pass + fail} checks passed`); process.exit(fail ? 1 : 0);

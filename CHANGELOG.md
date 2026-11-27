@@ -9,6 +9,8 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 #### The scripts table shows its scripts again; nothing empty under Result
 
 - Table view showed the headings but no script — also after Plan the load from Script Studio or a converter (BUG-181). The test-type cards had been given the table's class name.
+- Table view wider than its column (results beside it, about 1920–2560 px): the results fold to their strip on the right by themselves, with a message, so the whole table fits — not remembered; opened again they stay open; back to Cards they open again (owner's choice).
+- The notes "Before you fill in a script" remember only the user's own fold (a click or Enter on their title): a fold made by the page was sometimes saved as the user's choice, and the notes then never folded by themselves again (BUG-187).
 - Before the plan is complete, Result no longer shows an empty "Details" line and an empty bar (BUG-182); a field that still needs a value shows the keyboard focus (BUG-183); the sizing boxes per protocol have names (BUG-184).
 - Checks: the design review now checks that every table is laid out as a table, and has screens for Table view and for scripts sent from Script Studio and Postman / Bruno; the Workload walk-through checks the table after Plan the load.
 

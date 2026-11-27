@@ -32,16 +32,16 @@ $("#btn-example").addEventListener("click", () => {
   renderScripts(); renderTest(); renderPools(); calc();
 });
 /* ---------- columns: hide the inputs or the results to a strip (one at a time), remembered ---------- */
-function setLayout(mode, focusEl) {
+function setLayout(mode, focusEl, remember = true) {
   $(".wm-page").classList.toggle("res-hidden", mode === "res-hidden");
   $(".wm-page").classList.toggle("in-hidden", mode === "in-hidden");
-  try { localStorage.setItem("wm-layout", mode); } catch (e) { /* private window */ }
+  if (remember) try { localStorage.setItem("wm-layout", mode); } catch (e) { /* private window */ }
   if (focusEl) $(focusEl).focus({ preventScroll: true });
   if (typeof tvWidth === "function") tvWidth();
   if (typeof setupWidth === "function") setupWidth();
 }
-$("#btn-hide-res").addEventListener("click", () => setLayout("res-hidden", "#rail"));
-$("#rail").addEventListener("click", () => setLayout("", "#btn-hide-res"));
+$("#btn-hide-res").addEventListener("click", () => { resAuto.folded = false; setLayout("res-hidden", "#rail"); });   // folded by the user: theirs, remembered
+$("#rail").addEventListener("click", () => { if (resAuto.folded) { resAuto.folded = false; resAuto.declined = true; } setLayout("", "#btn-hide-res"); });   // opened by the user: the table does not fold them again
 $("#btn-hide-in").addEventListener("click", () => setLayout("in-hidden", "#rail-in"));
 $("#rail-in").addEventListener("click", () => setLayout("", "#btn-hide-in"));
 try {
@@ -513,13 +513,17 @@ function workingNow() {
   if (on === working && document.body.classList.contains("wm-working") === on) return;
   working = on; document.body.classList.toggle("wm-working", on);
   const d = $("#script-notes"); let pref = null; try { pref = localStorage.getItem("wm-notes"); } catch (e) { /* private window */ }
-  if (d && pref !== "open" && pref !== "closed") { d._auto = true; d.open = !on; }
+  if (d && pref !== "open" && pref !== "closed") d.open = !on;
 }
 // the notes at the top of Scripts: open until the user folds them; remembered
 (() => {
   const d = $("#script-notes"); if (!d) return;
   try { if (localStorage.getItem("wm-notes") === "closed") d.open = false; } catch (e) { /* private window */ }
-  d.addEventListener("toggle", () => { if (d._auto) { d._auto = false; return; } try { localStorage.setItem("wm-notes", d.open ? "open" : "closed"); } catch (e) { /* private window */ } });
+  // only the user's own fold is remembered: a click on the summary (Enter / Space there click it too). The toggle event
+  // came late and merged with the page's own folds, so a fold made by the page was sometimes saved as the user's choice
+  // — after that the notes never folded by themselves again.
+  const sum = d.querySelector("summary");
+  if (sum) sum.addEventListener("click", () => { const willOpen = !d.open; try { localStorage.setItem("wm-notes", willOpen ? "open" : "closed"); } catch (e) { /* private window */ } });
 })();
 renderTest(); renderScripts(); renderPools(); renderProtoTable(); cal(); calc();
 

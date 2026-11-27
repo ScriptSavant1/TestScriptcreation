@@ -432,10 +432,23 @@ function tvTable() {
     <th title="All think times of one iteration added up — not per transaction">Think time (total)</th><th title="Average response time of one transaction">Response time (per tx)</th><th>Pacing</th><th>Think time at replay</th>
     <th class="num" title="Worked out">Vusers</th><th class="num" title="Worked out">TPS</th><th><span class="wm-vh">Remove</span></th></tr></thead><tbody>${state.groups.map(tvRow).join("")}</tbody></table>`;
 }
+/* Table view wider than its column with the results beside it: the results fold to their strip by themselves, so no
+   box of the table is only reachable by scrolling sideways. Not remembered (Cards and the next visit are as before);
+   opened again by the user, they stay open until the view changes; back to Cards, what was folded here opens again. */
+const resAuto = { folded: false, declined: false };
 const tvWidth = () => {
   const tv = $("#tv"); if (!tv) return;
   if (!tv.hidden) tv.style.setProperty("--tvw", (tv.clientWidth - 2) + "px");
-  $("#tv-more").hidden = tv.hidden || tv.scrollWidth <= tv.clientWidth + 2 || $(".wm-page").classList.contains("res-hidden");
+  const page = $(".wm-page"), over = !tv.hidden && tv.scrollWidth > tv.clientWidth + 2;
+  if (over && !resAuto.declined && !page.classList.contains("res-hidden") && !page.classList.contains("in-hidden")) {
+    const rc = $("#results-col").getBoundingClientRect(), tr = tv.getBoundingClientRect();
+    if (rc.width > 0 && rc.left >= tr.right - 1) {   // the results beside the table (not under it, as on narrow screens)
+      resAuto.folded = true; setLayout("res-hidden", null, false);
+      if (typeof toast === "function") toast("Results folded to the strip on the right, so the whole table fits — click the strip to see them.");
+      return;
+    }
+  }
+  $("#tv-more").hidden = !over || page.classList.contains("res-hidden");
 };
 $("#tv-wide").addEventListener("click", () => { setLayout("res-hidden"); tvWidth(); const f = $("#tv [data-k]"); if (f) f.focus({ preventScroll: true }); });
 window.addEventListener("resize", tvWidth);
@@ -451,7 +464,13 @@ function tvRedraw(g, k) {
   const scope = $(inCard ? `#tv tr[data-card-of="${g.id}"]` : `#tv tr[data-id="${g.id}"]`);
   const f = scope && scope.querySelector(`[data-k="${k}"]`); if (f) f.focus();
 }
-function setSView(v) { sview = v; try { localStorage.setItem("wm-sview", v); } catch (e) { /* private window */ } renderScripts(); calc(); }
+function setSView(v) {
+  sview = v; try { localStorage.setItem("wm-sview", v); } catch (e) { /* private window */ }
+  // back to Cards: the results the table folded by itself open again; a new choice of Table may fold them again
+  if (v !== "table" && resAuto.folded && $(".wm-page").classList.contains("res-hidden")) setLayout("", null, false);
+  resAuto.folded = false; resAuto.declined = false;
+  renderScripts(); calc();
+}
 $("#sview").addEventListener("click", (e) => { const b = e.target.closest("[data-v]"); if (b) setSView(b.dataset.v); });
 $("#tv").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-id]"); if (!tr) return;
