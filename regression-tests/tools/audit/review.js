@@ -9,6 +9,9 @@
 //   - fill: on a wide window, the content ends short of 3/4 of the width (a view shrunk into one column or capped)
 //   - table: a table not laid out as a table, or its rows on top of each other (a style sheet meant for something else —
 //     two parts sharing a class name turned the Workload Modeller's script table into a grid: its row lay under the headings)
+//   - primary: more than one main (filled) button in one view; codefont: a heading of words in the code font;
+//     idle: a bar of greyed-out buttons (an empty state should say what to do); heavy: Studio's group rows outweigh the
+//     requests (weight checks, added 2026-11-27 after the owner found pages heavy that passed every other check)
 //   - expect: a screen's own promise did not hold (for example the correlation editor shows the value of a long response)
 // At 1366, 1536 (a 1920 screen at 125 %, the browser's bars taken off), 1920, 2560 and 3840 px wide, dark and light; a JPEG of each screen and report.json for the gallery.
 //   node review.js [outDir] [--sizes=1366,1536,1920,2560,3840] [--themes=dark,light] [--only=substr]
@@ -47,7 +50,7 @@ function inspect() {
   const modal = [...document.querySelectorAll('dialog[open]')].find((d) => d.matches(':modal')) || [...document.querySelectorAll('.ss-pp:not([hidden])')].find(vis);
   const label = (e) => { const t = (e.getAttribute('aria-label') || e.getAttribute('title') || e.innerText || e.value || e.placeholder || '').trim().replace(/\s+/g, ' '); return (e.id ? '#' + e.id + ' ' : '') + e.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : ''); };
   const where = (e) => { const s = []; let n = e; while (n && n !== document.body && s.length < 4) { s.unshift(n.id ? '#' + n.id : n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : '')); if (n.id) break; n = n.parentElement; } return s.join(' > '); };
-  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [], table: [] };
+  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [], table: [], primary: [], codefont: [], idle: [] };
   // fills the width: on a wide window with no pop-up open, the rightmost card or panel must reach 3/4 of the width (a
   // view shrunk into one column of a grid, or capped at a fixed width, leaves the rest of a large screen empty)
   if (innerWidth >= 1200 && !document.querySelector('dialog[open]:modal, [role=dialog][aria-modal=true]:not([hidden])')) {
@@ -128,6 +131,35 @@ function inspect() {
     const rows = [...tb.rows].filter(vis);
     for (let i = 1; i < rows.length; i++) { const a = rows[i - 1].getBoundingClientRect(), b = rows[i].getBoundingClientRect(); if (b.top < a.bottom - 2) { out.table.push(where(tb) + ' rows ' + i + ' and ' + (i + 1) + ' lie on top of each other'); break; } }
   });
+  // ── weight: rules a person sees and the checks above do not (owner and a friend, 2026-11-27: "heavy, confusing") ──
+  // primary: more than one main button (filled with a strong colour, light words) in one view. A split button (parts
+  // touching) is one; a current step, a pressed choice or a tab is a state, not an action.
+  const hsl = (c) => { const m = /rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)/.exec(c); if (!m || (m[4] !== undefined && +m[4] < 0.5)) return null; const [r, g, b] = [m[1], m[2], m[3]].map((x) => x / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; return { s: mx === mn ? 0 : (mx - mn) / (1 - Math.abs(2 * l - 1)), l }; };
+  const win = modal || [...document.querySelectorAll('[role=dialog][aria-modal=true], .adv-modal-overlay')].find(vis);
+  const mains = (win && !modal ? ctrls.filter((e) => win.contains(e)) : ctrls).filter((e) => (e.tagName === 'BUTTON' || e.getAttribute('role') === 'button') && !e.disabled && e.getAttribute('aria-disabled') !== 'true' && /[\p{L}]/u.test((e.innerText || '').trim()) &&
+    !e.matches('[aria-current]:not([aria-current=false]),[aria-pressed=true],[aria-selected=true],[role=tab],[role=radio],[role=menuitem]') && !e.closest('[role=tablist],[role=radiogroup],[role=menu]')).filter((e) => {
+    const cs = getComputedStyle(e), bg = hsl(cs.backgroundColor), fg = hsl(cs.color);
+    return bg && bg.s > 0.35 && bg.l > 0.2 && bg.l < 0.62 && fg && fg.l > 0.8;
+  });
+  const groups = [];
+  mains.forEach((e) => { const r = e.getBoundingClientRect(); const g = groups.find((x) => x.some((o) => { const q = o.getBoundingClientRect(); return Math.abs(q.top - r.top) < 6 && (Math.abs(q.right - r.left) <= 4 || Math.abs(r.right - q.left) <= 4); })); g ? g.push(e) : groups.push([e]); });
+  if (groups.length > 1) out.primary.push(groups.length + ' main buttons in one view: ' + groups.map((g) => label(g[0])).join(', '));
+  // codefont: a heading in the code font that is words, not code (a name with a space — "New correlation")
+  const MONO = /mono|cascadia|consolas|courier|menlo/i;
+  (modal || document).querySelectorAll('h1, h2, h3, h4, [role=heading], legend, b, strong').forEach((e) => {
+    if (!vis(e) || e.closest('pre, code, .ds-code, textarea')) return;
+    const own = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
+    const cs = getComputedStyle(e);
+    if (/\s/.test(own) && /^[\p{L}]/u.test(own) && MONO.test(cs.fontFamily.split(',')[0]) && parseFloat(cs.fontSize) >= 13) out.codefont.push(where(e) + ' "' + own.slice(0, 40) + '"');
+  });
+  // idle: a bar of greyed-out buttons (3 or more, at least half of the bar) — an empty state should say what to do, not
+  // show what cannot be done yet
+  const bars = new Map();
+  ctrls.filter((e) => e.tagName === 'BUTTON' && e.disabled).forEach((e) => {
+    let n = e.parentElement; while (n && n !== document.body && [...n.querySelectorAll('button')].filter(vis).length < 3) n = n.parentElement;
+    if (n && n !== document.body) bars.set(n, (bars.get(n) || 0) + 1);
+  });
+  bars.forEach((k, n) => { const all = [...n.querySelectorAll('button')].filter(vis).length; if (k >= 3 && k * 2 >= all) out.idle.push(where(n) + ': ' + k + ' of ' + all + ' buttons greyed out'); });
   return out;
 }
 
@@ -208,6 +240,9 @@ const PLANTED = `<!doctype html><html><head><style>
   <button id="flat" style="border:0;background:none;font:inherit">Take out</button>
   <dialog id="stay"><p>A pop-up</p><button>Close</button></dialog>
   <table id="grid" style="display:grid;grid-template-columns:repeat(3,1fr)"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>
+  <p><button id="main1" style="background:#6d28d9;color:#fff;border:0">Next step</button> <button id="main2" style="background:#6d28d9;color:#fff;border:0;margin-left:40px">Download</button></p>
+  <h2 id="monohead" style="font-family:Consolas,monospace">New correlation</h2>
+  <div id="greyed"><button disabled>Test</button><button disabled>Clear selection</button><button disabled>Add to the script</button></div>
 </body></html>`;
 async function selftest(b) {
   const p = await b.newPage({ viewport: { width: 1200, height: 800 } });
@@ -216,7 +251,7 @@ async function selftest(b) {
   r.focus = await focusCheck(p, 20);
   await p.evaluate(() => document.getElementById('stay').showModal());
   r.dismiss = await dismissCheck(p, null);
-  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/, fill: /content ends at/, table: /#grid/ };
+  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/, fill: /content ends at/, table: /#grid/, primary: /2 main buttons/, codefont: /#monohead/, idle: /#greyed: 3 of 3/ };
   let fail = 0;
   // and the opposite: a panel across the width is not flagged
   const q = await b.newPage({ viewport: { width: 1600, height: 800 } });
@@ -371,6 +406,24 @@ if (require.main === module) (async () => {
       if (fails.length) report[report.length - 1].expect = fails;
       await f.evaluate(() => SSE.close());
     }
+    // a recording with transactions (one or two requests each): the request list as most people see it
+    await f.setInputFiles('#dz1 input[type=file]', COL + 'petstore.octoperf.com.har');
+    await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 });
+    if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1000); }
+    await f.click('#ss-steps [data-step="1"]'); await run('Studio transactions', 'studio');
+    // heavy: the group rows (transaction headers, "n left out" lines) must not outweigh the requests — at most half of the
+    // list's height (a transaction of one request has a header about the size of its row: half is the floor, not a third), and a header with a filled band counts as heavy (owner's friend: "it feels so heavy", 2026-11-27)
+    {
+      const h = await f.evaluate(() => {
+        const sum = (s) => [...document.querySelectorAll(s)].filter((e) => e.offsetParent).reduce((a, e) => a + e.getBoundingClientRect().height, 0);
+        const chrome = sum('#ss-reqs .ss-txn') + sum('#ss-reqs .ss-outrow'), reqs = sum('#ss-reqs .ss-rq');
+        const t = document.querySelector('#ss-reqs .ss-txn'), list = document.getElementById('ss-reqs');
+        const band = t && getComputedStyle(t).backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(t).backgroundColor !== getComputedStyle(list).backgroundColor;
+        return { share: chrome / Math.max(1, chrome + reqs), band };
+      });
+      const l = [h.share > 0.5 ? 'group rows take ' + Math.round(h.share * 100) + '% of the request list (at most 50%)' : '', h.band ? 'transaction headers are filled bands' : ''].filter(Boolean);
+      if (l.length) report[report.length - 1].heavy = l;
+    }
     await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
     await run('Workload start', 'workload');
     f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail').catch(() => {}); await run('Workload model', 'workload');
@@ -424,7 +477,7 @@ if (require.main === module) (async () => {
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 1));
   // summary: each finding once (by screen), with the sizes / themes it was seen at
   const by = new Map();
-  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill', 'table', 'expect'].forEach((k) => (r[k] || []).forEach((x) => {
+  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill', 'table', 'primary', 'codefont', 'idle', 'heavy', 'expect'].forEach((k) => (r[k] || []).forEach((x) => {
     const key = r.name + '|' + k + '|' + x; if (!by.has(key)) by.set(key, []); by.get(key).push(r.theme + ' ' + r.w);
   })));
   console.log('\npop-ups checked for a click outside: ' + ([...POPUPS].join(' · ') || 'none'));
