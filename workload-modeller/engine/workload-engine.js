@@ -954,13 +954,14 @@
   function summary(res, sc) {
     const t = res.totals, s = [];
     const start = res.workload === "basic-group" ? null : (res.actions || []).find((a) => a.type === "start");
-    s.push(`Run ${t.vusers.toLocaleString("en-GB")} virtual users${res.peakVusers > t.vusers ? ` (up to ${res.peakVusers.toLocaleString("en-GB")} at the highest step)` : ""}${res.lgTotal != null ? ` on ${res.lgTotal} load generator${res.lgTotal === 1 ? "" : "s"}` : ""}.`);
+    const holds = (res.actions || []).filter((a) => a.type === "hold").length, oneLevel = res.peakVusers > t.vusers && holds === 1;
+    s.push(`Run ${t.vusers.toLocaleString("en-GB")} virtual users${res.peakVusers > t.vusers ? (oneLevel ? ` (${res.peakVusers.toLocaleString("en-GB")} at the held level, ${Math.round(100 * res.peakVusers / t.vusers)}% of the target)` : ` (up to ${res.peakVusers.toLocaleString("en-GB")} at the highest step)`) : ""}${res.lgTotal != null ? ` on ${res.lgTotal} load generator${res.lgTotal === 1 ? "" : "s"}` : ""}.`);
     const starts = (res.actions || []).filter((a) => a.type === "start").length;
     if (res.workload !== "basic-group" && starts > 1) s.push(`Users are added in ${starts} steps, a few at a time, with a hold after each step (see the LRE settings).`);
     else if (start && !start.all) s.push(`Start ${start.perStep} user${start.perStep === 1 ? "" : "s"} every ${words(start.every)}; all are running after ${words((Math.ceil(start.count / start.perStep) - 1) * start.every)}.`);
     else if (res.workload === "basic-group") s.push(`Each script starts its users a few at a time; all reach full load after ${words(res.firstFull)}.`);
     const over = t.reachTps != null, tps = over ? t.reachTps : t.tps, ips = over ? t.reachIps : t.ips;
-    s.push(`At full load: ${round(tps, 2)} transactions per second (TPS) = ${Math.round(tps * 3600).toLocaleString("en-GB")} transactions per hour (TPH), from ${Math.round(ips * 3600).toLocaleString("en-GB")} iterations per hour (${round(ips, 3)} per second)${over ? ` — not the ${round(t.tps, 2)} TPS the pacing asks for: an iteration takes longer than the pacing` : ""}${Math.abs(t.tpsMax - t.tpsMin) > 1e-6 ? `, between ${round(t.tpsMin, 2)} and ${round(t.tpsMax, 2)} because the pacing is random` : ""}${res.peakVusers > t.vusers ? ` at 100% of the target, and about ${round(t.tps * res.peakVusers / t.vusers, 2)} at the highest step` : ""}.`);
+    s.push(`At full load: ${round(tps, 2)} transactions per second (TPS) = ${Math.round(tps * 3600).toLocaleString("en-GB")} transactions per hour (TPH), from ${Math.round(ips * 3600).toLocaleString("en-GB")} iterations per hour (${round(ips, 3)} per second)${over ? ` — not the ${round(t.tps, 2)} TPS the pacing asks for: an iteration takes longer than the pacing` : ""}${Math.abs(t.tpsMax - t.tpsMin) > 1e-6 ? `, between ${round(t.tpsMin, 2)} and ${round(t.tpsMax, 2)} because the pacing is random` : ""}${res.peakVusers > t.vusers ? ` at 100% of the target, and about ${round(t.tps * res.peakVusers / t.vusers, 2)} ${oneLevel ? "at the held level" : "at the highest step"}` : ""}.`);
     s.push(`The whole test takes about ${words(res.duration)} and runs ${t.iters.total.toLocaleString("en-GB")} iterations in total, ramp-up and ramp-down included — the number of test-data rows used if each iteration takes a new one.`);
     return s.join(" ");
   }

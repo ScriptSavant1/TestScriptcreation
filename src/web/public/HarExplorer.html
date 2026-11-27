@@ -133,6 +133,14 @@
         </div>
       </section>
     </main>
+    <!-- a question with two answers (har-explorer.js ask): Continue in Script Studio when Studio has another recording open -->
+    <dialog class="hx-dlg" id="hx-ask" aria-labelledby="hx-ask-h">
+      <form method="dialog" class="hx-dlg-in">
+        <div class="hx-dlg-h"><h2 id="hx-ask-h"></h2></div>
+        <div class="hx-dlg-b"><p id="hx-ask-t"></p></div>
+        <div class="hx-dlg-f"><button class="ds-btn" value="no" id="hx-ask-no">Cancel</button><button class="ds-btn ds-btn-primary" value="yes" id="hx-ask-yes">Continue</button></div>
+      </form>
+    </dialog>
     <div id="hx-toast" class="hx-toast" role="status" aria-live="polite"></div>
 
     <!-- The Recorder's engine, unchanged and in its order: the same reading of a HAR, the same transactions and

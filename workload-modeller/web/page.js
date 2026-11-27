@@ -23,24 +23,25 @@ window.lreSetTheme = setTheme;
 $("#btn-theme").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 $("#btn-example").addEventListener("click", () => {
   seq = 0;
+  // the first script open, the others folded to their summary line (a click opens one)
   state.groups = [
     newScript({ name: "Login", method: "tps", targetTps: 2, txPerIter: 1, thinkPerIter: 5, rtAvg: 1, requestsPerIter: 6 }),
-    newScript({ name: "Search", method: "volume", volumePerHour: 21600, txPerIter: 2, thinkPerIter: 10, rtAvg: 0.5, requestsPerIter: 8, pacing: { mode: "random", min: 12, max: 16 } }),
-    newScript({ name: "Payment", method: "vusers", vusers: 12, txPerIter: 4, thinkPerIter: 15, pacing: { mode: "fixed", fixed: 24 }, protocol: "devweb", requestsPerIter: 14 }),
+    newScript({ name: "Search", method: "volume", volumePerHour: 21600, txPerIter: 2, thinkPerIter: 10, rtAvg: 0.5, requestsPerIter: 8, pacing: { mode: "random", min: 12, max: 16 }, folded: true }),
+    newScript({ name: "Payment", method: "vusers", vusers: 12, txPerIter: 4, thinkPerIter: 15, pacing: { mode: "fixed", fixed: 24 }, protocol: "devweb", requestsPerIter: 14, folded: true }),
   ];
   renderScripts(); renderTest(); renderPools(); calc();
 });
 /* ---------- columns: hide the inputs or the results to a strip (one at a time), remembered ---------- */
-function setLayout(mode, focusEl) {
+function setLayout(mode, focusEl, remember = true) {
   $(".wm-page").classList.toggle("res-hidden", mode === "res-hidden");
   $(".wm-page").classList.toggle("in-hidden", mode === "in-hidden");
-  try { localStorage.setItem("wm-layout", mode); } catch (e) { /* private window */ }
+  if (remember) try { localStorage.setItem("wm-layout", mode); } catch (e) { /* private window */ }
   if (focusEl) $(focusEl).focus({ preventScroll: true });
   if (typeof tvWidth === "function") tvWidth();
   if (typeof setupWidth === "function") setupWidth();
 }
-$("#btn-hide-res").addEventListener("click", () => setLayout("res-hidden", "#rail"));
-$("#rail").addEventListener("click", () => setLayout("", "#btn-hide-res"));
+$("#btn-hide-res").addEventListener("click", () => { resAuto.folded = false; setLayout("res-hidden", "#rail"); });   // folded by the user: theirs, remembered
+$("#rail").addEventListener("click", () => { if (resAuto.folded) { resAuto.folded = false; resAuto.declined = true; } setLayout("", "#btn-hide-res"); });   // opened by the user: the table does not fold them again
 $("#btn-hide-in").addEventListener("click", () => setLayout("in-hidden", "#rail-in"));
 $("#rail-in").addEventListener("click", () => setLayout("", "#btn-hide-in"));
 try {
@@ -402,7 +403,8 @@ async function fill(files) {
     const existed = !!g && !seen.has(key);
     const fields = { protocol: s.protocol, txPerIter: s.txPerIter || 1, thinkPerIter: s.thinkPerIter, requestsPerIter: s.requestsPerIter || null,
       waitPerIter: s.waitPerIter || null, thinkPauses: s.thinkPauses != null ? s.thinkPauses : null, thinkList: s.thinkList || null,
-      pages: s.pages, pageShare: s.pageShare, txNames: s.txNames, source: s.file };
+      pages: s.pages, pageShare: s.pageShare, txNames: s.txNames, txList: s.txList || null,
+      txOut: { init: s.initTx || [], end: s.endTx || [], nested: s.nestedTx || [] }, source: s.file };
     if (s.thinkMode) fields.thinkMode = s.thinkMode;
     if (s.thinkFactor) fields.thinkFactor = s.thinkFactor;
     if (s.thinkLimit !== undefined) fields.thinkLimit = s.thinkLimit;   // read from rts.yml / default.cfg (null = no limit)
@@ -429,6 +431,8 @@ async function fill(files) {
   if (scripts.length || xlRes.length) used("fill", scripts.length + xlRes.reduce((a, x) => a + x.rows.length, 0));
 }
 $("#in-fill").addEventListener("change", (e) => { fill(e.target.files); e.target.value = ""; });
+// the portal hands scripts over (the converters' Plan the load): the same as choosing the files here
+window.WorkloadModeller = Object.assign(window.WorkloadModeller || {}, { addScripts: (files) => fill(files) });
 const pick = () => $("#in-fill").click();
 $("#dropzone").addEventListener("click", pick);
 [$("#dropzone"), $("#btn-fill")].forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }));
@@ -464,7 +468,7 @@ function toast(msg, canUndo) {
 function clearWith(msg, fn) { undoSnap = snapshot(); fn(); renderAll(); toast(msg, true); }
 $("#toast-undo").addEventListener("click", () => { if (undoSnap) { restore(undoSnap); undoSnap = null; renderAll(); } $("#toast").hidden = true; });
 $("#toast-x").addEventListener("click", () => { $("#toast").hidden = true; });
-const TEST_KEYS = ["testType", "steadyMin", "workload", "totalTps", "growth", "levels", "stepHoldMin", "licenceVusers"];
+const TEST_KEYS = ["testType", "steadyMin", "workload", "totalTps", "growth", "levels", "stepHoldMin", "licenceVusers", "spikeBase", "spikePeak"];
 const TUNE_KEYS = ["headroomPct", "pacingStyle", "randomPct", "maxStartRate"];
 const CLEAR = {
   test: () => TEST_KEYS.forEach((k) => { state.scenario[k] = DEFAULT_SCENARIO[k]; }),
@@ -492,11 +496,34 @@ $("#btn-reset-all").addEventListener("click", () => clearWith("Everything cleare
 }));
 
 try { view(localStorage.getItem("wm-view") !== "detail"); } catch (e) { view(true); }
+/* ---------- the script cards' general help (app.js gh): in the first open card only — the others show it while one of
+   their fields has the focus ---------- */
+function markHelps() {
+  const cards = [...document.querySelectorAll("#scripts .wm-script")], first = cards.find((c) => !c.classList.contains("is-folded") && !c.hidden && c.offsetParent);
+  cards.forEach((c) => { if (c.classList.contains("wm-help-card") !== (c === first)) c.classList.toggle("wm-help-card", c === first); });
+}
+new MutationObserver(markHelps).observe($("#scripts"), { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
+markHelps();
+/* ---------- working on a plan: the top band (what the tool does) gives its room to the work, as on the other tools;
+   the notes at the top of Scripts fold unless the user opened them. Starts with two scripts or one read from a file
+   (never while typing in the starting example), and stays until the scripts are cleared. ---------- */
+let working = false;
+function workingNow() {
+  const on = state.groups.length > 0 && (working || state.groups.length >= 2 || state.groups.some((g) => g.txList || g.txNames));
+  if (on === working && document.body.classList.contains("wm-working") === on) return;
+  working = on; document.body.classList.toggle("wm-working", on);
+  const d = $("#script-notes"); let pref = null; try { pref = localStorage.getItem("wm-notes"); } catch (e) { /* private window */ }
+  if (d && pref !== "open" && pref !== "closed") d.open = !on;
+}
 // the notes at the top of Scripts: open until the user folds them; remembered
 (() => {
   const d = $("#script-notes"); if (!d) return;
   try { if (localStorage.getItem("wm-notes") === "closed") d.open = false; } catch (e) { /* private window */ }
-  d.addEventListener("toggle", () => { try { localStorage.setItem("wm-notes", d.open ? "open" : "closed"); } catch (e) { /* private window */ } });
+  // only the user's own fold is remembered: a click on the summary (Enter / Space there click it too). The toggle event
+  // came late and merged with the page's own folds, so a fold made by the page was sometimes saved as the user's choice
+  // — after that the notes never folded by themselves again.
+  const sum = d.querySelector("summary");
+  if (sum) sum.addEventListener("click", () => { const willOpen = !d.open; try { localStorage.setItem("wm-notes", willOpen ? "open" : "closed"); } catch (e) { /* private window */ } });
 })();
 renderTest(); renderScripts(); renderPools(); renderProtoTable(); cal(); calc();
 
@@ -506,6 +533,10 @@ renderTest(); renderScripts(); renderPools(); renderProtoTable(); cal(); calc();
    assumptions; the plan on the page (if the user already started) keeps what it has. */
 function applyTeam(s) {
   TEAM.extra = s.loadGenerators.extraMachines; TEAM.limitPct = s.loadGenerators.busyLimitPct; TEAM.updated = s.updated;
+  // the test types' starting figures: a load test starts with the team's full-load time (unless the user changed it)
+  TEAM.types = JSON.parse(JSON.stringify(s.testTypes));
+  if (state.scenario.testType === "load" && state.scenario.steadyMin === DEFAULT_SCENARIO.steadyMin) state.scenario.steadyMin = s.testTypes.load.fullLoadMin;
+  DEFAULT_SCENARIO.steadyMin = s.testTypes.load.fullLoadMin;
   LG_TYPES.splice(0, LG_TYPES.length - 1, ...s.machineTypes.map(toLgType));
   const sc = { headroomPct: s.schedule.headroomPct, maxStartRate: s.schedule.maxStartRatePerSecond, minGroup: s.loadGenerators.smallestGroup, fastLoopRps: s.loadGenerators.fastLoopRequestsPerSecond };
   const untouched = (k) => state.scenario[k] === DEFAULT_SCENARIO[k] || state.scenario[k] == null;

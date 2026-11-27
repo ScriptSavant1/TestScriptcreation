@@ -372,7 +372,7 @@ async function runSteps(browser) {
       return { i, list, fields, g, trace };
     }));
     await step('rand-select-toggle', () => ev(page, () => {
-      const idx = S.correlations.findIndex(c => (c.extractorType === 'jsonpath' && c.extractorConfig && c.extractorConfig.selectAll) || c.extractorType === 'random_select');
+      const idx = S.correlations.findIndex(c => c.extractorType === 'jsonpath' && c.extractorConfig && c.extractorConfig.selectAll);
       if (idx >= 0) toggleCorrRandSelect(idx);
       return idx;
     }), { zip: true });

@@ -30,6 +30,28 @@ function sanitizeVarName(name) {
   return String(name).replace(/[^a-zA-Z0-9_$]/g, '_');
 }
 
+// ─── Request bodies ───────────────────────────────────────────────────────────
+/** True when a raw body is JSON by its look ({ or [ first) — also one with unquoted {{variables}} that JSON.parse refuses. */
+function looksLikeJson(raw) {
+  return /^\s*(\{(?!\{)|\[)/.test(String(raw == null ? '' : raw));
+}
+
+/**
+ * The Content-Type Postman / Bruno add by themselves to a body sent with no such header (null: none).
+ * Both generators use it when the request and the common headers have none.
+ */
+function impliedContentType(body) {
+  if (!body) return null;
+  if (body.mode === 'urlencoded') return 'application/x-www-form-urlencoded';
+  if (body.mode !== 'raw' || !String(body.raw || '').trim()) return null;
+  if (looksLikeJson(body.raw)) return 'application/json';
+  const language = String((body.options && body.options.raw && body.options.raw.language) || '').toLowerCase();
+  if (language === 'html') return 'text/html';
+  if (language === 'javascript') return 'application/javascript';
+  if (language === 'xml' || /^\s*</.test(body.raw)) return 'application/xml';
+  return 'text/plain';
+}
+
 // ─── C-string escaping ────────────────────────────────────────────────────────
 /**
  * Escape a value for use inside a VuGen C-string literal (double-quoted).
@@ -96,4 +118,30 @@ function buildBaseUrl(domain, port, protocol) {
   return `${proto}://${domain}${portStr}`;
 }
 
-module.exports = { sanitizeVarName, escapeCString, decodeHtmlEntities, buildBaseUrl };
+/**
+ * Fill the path variables of an address: /orders/:id with { key: 'id', value: '42' } → /orders/42.
+ * As Postman sends it: only a whole path segment, never the host or the query; a value is written into the path, with the
+ * characters that would end the path (space, ? # …) percent-encoded and {{variables}} kept.
+ * A path variable without a value becomes {{id}}: it is then listed on the page as a value to give, instead of being sent as ":id".
+ * A segment that is not in the list is left as it is. Never new URL(): it would encode {{variables}}.
+ * @param {string} url
+ * @param {Array<{key?, id?, name?, value?, disabled?}>} list  Postman url.variable, or Bruno's params of type path
+ */
+function fillPathVariables(url, list) {
+  if (!Array.isArray(list) || !list.length || typeof url !== 'string') return url;
+  const values = new Map(); // the last one with a name counts, as in Postman
+  list.forEach((v) => { const k = v && (v.key || v.name || v.id); if (k && !v.disabled) values.set(String(k).trim(), v.value === undefined || v.value === null ? '' : String(v.value).trim()); });
+  const end = url.search(/[?#]/), path = end < 0 ? url : url.slice(0, end);
+  return path.split('/').map((seg) => {
+    const name = seg.charAt(0) === ':' ? seg.slice(1) : '';
+    if (!name || !values.has(name)) return seg;
+    const value = values.get(name);
+    if (value === '') return /^[\w.-]+$/.test(name) ? '{{' + name + '}}' : seg;
+    return value.split(/(\{\{[^{}]*\}\})/).map((part, i) => i % 2 ? part : part.replace(/[\u0000-\u0020"<>`#?]/g, (c) => encodeURIComponent(c))).join('');
+  }).join('/') + (end < 0 ? '' : url.slice(end));
+}
+
+module.exports = {
+  fillPathVariables,
+  looksLikeJson,
+  impliedContentType, sanitizeVarName, escapeCString, decodeHtmlEntities, buildBaseUrl };

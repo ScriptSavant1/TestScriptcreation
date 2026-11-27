@@ -57,7 +57,7 @@
         try { har = JSON.parse(rd.result); } catch (e) { drop.classList.remove("busy"); toast(file.name + " is not a valid HAR file (it is not JSON)."); track(file, t0, "failed", { errorCode: "parse_error" }); return; }
         if (!har || !har.log || !Array.isArray(har.log.entries)) { drop.classList.remove("busy"); toast(file.name + " is not a HAR file — it has no list of requests (log.entries)."); track(file, t0, "failed", { errorCode: "not_a_har" }); return; }
         try {
-          open(file.name, file.size, har, rd.result); M.file = file;
+          open(file.name, file.size, har, rd.result); M.file = file; M.from = nextFrom; nextFrom = null;
           track(file, t0, "success", { requestCount: M.model.items.length, mode: M.model.source });
         } catch (e) { toast("The file could not be opened: " + e.message); track(file, t0, "failed", { errorCode: "unreadable_recording" }); }
         drop.classList.remove("busy");
@@ -102,13 +102,21 @@
     renderTypes(); build(); renderDetails();
     $("#hx-list").scrollTop = 0; $("#hx-list").focus({ preventScroll: true });
   }
-  $("#hx-another").addEventListener("click", function () {
+  $("#hx-another").addEventListener("click", function () { reset(); });
+  function reset() {
     if (worker) { worker.terminate(); worker = null; }
     if (studioWorker) { studioWorker.terminate(); studioWorker = null; }
     selBtn.hidden = true;
     M = null; $("#hx-ws").hidden = true; $("#hx-start").hidden = false; $(".hx-band").hidden = false; html.classList.remove("hx-has-file");
     $("#hx-rows").innerHTML = ""; $("#hx-det").innerHTML = "";
-  });
+  }
+  // another tool hands a recording over (Script Studio's Open in HAR Explorer): as if the file were chosen here.
+  // opts.studio = the number of Studio's opening, so Continue in Script Studio knows it is the same work
+  var nextFrom = null;
+  window.HarExplorer = {
+    open: function (file, opts) { if (M) reset(); nextFrom = opts || null; take(file); },
+    state: function () { return M ? { file: M.file && M.file.name, from: M.from || null, added: M.added.length } : null; }
+  };
 
   // ── filters ──
   function visible(it) {
@@ -390,7 +398,9 @@
     var d = $("#hx-det");
     syncFindSheet();
     if (M && M.view !== "find" && M.sel && !d.querySelector("#hx-maskbtn")) {
-      d.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ds-btn-sm hx-maskbtn" id="hx-maskbtn" aria-pressed="' + !!M.mask + '" title="Mask passwords, tokens and cookies (for screenshots)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Hide secrets</button>');
+      // beside Copy URL and Copy as cURL (the address keeps the whole first line)
+      var row = d.querySelector(".hx-dsum .r") || d;
+      row.insertAdjacentHTML("beforeend", '<button type="button" class="ds-btn ds-btn-sm hx-maskbtn" id="hx-maskbtn" aria-pressed="' + !!M.mask + '" title="Mask passwords, tokens and cookies (for screenshots)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Hide secrets</button>');
     }
     if (d.querySelector("#hx-det-hide")) return;
     var b = document.createElement("button");
@@ -539,34 +549,31 @@
   });
 
   // Continue in Script Studio: the same file, the format chosen here, and the correlations added here — accepted
-  // (Studio's own advisorAddManual + advisorApplyAndRegen), marked "From HAR Explorer"
+  // (Studio's own advisorAddManual + advisorApplyAndRegen), marked "From HAR Explorer".
+  //   the recording came from this Studio and Studio still has it open: the values are added to the work there (no reload)
+  //   Studio has another recording open: asked first — replacing clears its work (BUG-185)
+  //   Studio has nothing open: opened there, as before
   $("#hx-studio").addEventListener("click", function () {
     var shell = null;
     try { shell = window.parent !== window && window.parent.PerfxShell ? window.parent : null; } catch (e) { shell = null; }
     if (!shell || !M.file) { toast("Open the HAR Explorer from the portal to continue in Script Studio."); return; }
-    var file = M.file, list = M.added.slice(), fmt = M.fmt;
-    shell.PerfxShell.go("studio");
-    var w = null;
+    var file = M.file, list = M.added.slice(), fmt = M.fmt, from = M.from;
     function frame() { var f = shell.document.getElementById("iframe-studio"); return f && f.contentWindow; }
-    function st() { return w.PerfxStudio.state(); }   // Studio's S (a const there — published by studio-page.js)
-    function later(test, then, max) {
-      var t = 0; (function poll() { var ok = false; try { ok = test(); } catch (e) { ok = false; } if (ok) then(); else if (++t < (max || 150)) setTimeout(poll, 100); })();
+    var w = frame(), open = null;
+    try { open = w && w.PerfxStudio && w.PerfxStudio.state().har1 ? { name: w.PerfxStudio.state().har1Name, id: w.SS && w.SS.fileId } : null; } catch (e) { open = null; }
+    var same = !!(open && from && from.studio && open.id === from.studio);
+    if (open && !same) {
+      ask("Replace the recording in Script Studio?", "Script Studio has " + open.name + " open. Continuing opens " + file.name + " there instead: the correlations, transactions and test data of " + open.name + " are cleared.", "Replace it", go);
+      return;
     }
-    later(function () { w = frame(); return w && w.document.readyState === "complete" && typeof w.loadFile === "function" && w.PerfxStudio && w.document.getElementById("dz1"); }, function () {
-      try { if (typeof w.clearAll === "function") w.clearAll(); if (typeof w.goBack === "function") w.goBack(); } catch (e) { /* a fresh Studio */ }
-      try { if (typeof w.setFmt === "function") w.setFmt(fmt); } catch (e) { /* Studio keeps its own format */ }
-      w.loadFile(file, 1);
-      if (!list.length) {
-        if (typeof w.showToast === "function") w.showToast(file.name + " opened from the HAR Explorer.", "info");
-        return;
+    go();
+    function go() {
+      shell.PerfxShell.go("studio");
+      function st() { return w.PerfxStudio.state(); }   // Studio's S (a const there — published by studio-page.js)
+      function later(test, then, max) {
+        var t = 0; (function poll() { var ok = false; try { ok = test(); } catch (e) { ok = false; } if (ok) then(); else if (++t < (max || 150)) setTimeout(poll, 100); })();
       }
-      later(function () { return st().har1; }, function () {
-        Promise.resolve(w.analyze()).then(function () {
-          // a recording with background traffic stops at Studio's review first — add the correlations after it
-          later(function () {
-            var bg = w.document.getElementById("bgReviewPanel");
-            return w.document.getElementById("ph-res").classList.contains("active") && !(bg && bg.style.display !== "none" && bg.offsetParent !== null) && st().entries1 && st().entries1.length;
-          }, function () {
+      function addAll() {
             // Studio's list has transaction markers in it (CDP pages, a repaired START): find each request by its id
             var at = function (id) { var es = st().entries1; for (var i = 0; i < es.length; i++) if (!es[i].isMarker && es[i].id === id) return i; return -1; };
             list.forEach(function (a) {
@@ -583,11 +590,42 @@
             if (typeof w.renderAdvisorPanel === "function") w.renderAdvisorPanel();
             w.advisorApplyAndRegen();
             if (typeof w.showToast === "function") w.showToast(list.length + " correlation" + (list.length === 1 ? "" : "s") + " from the HAR Explorer added and applied.", "success");
-          }, 6000);
-        });
+      }
+      // after a reading: a recording with background traffic stops at Studio's review first — add the correlations after it
+      function whenRead(then) {
+        later(function () {
+          var bg = w.document.getElementById("bgReviewPanel");
+          return w.document.getElementById("ph-res").classList.contains("active") && !(bg && bg.style.display !== "none" && bg.offsetParent !== null) && st().entries1 && st().entries1.length;
+        }, then, 6000);
+      }
+      later(function () { w = frame(); return w && w.document.readyState === "complete" && typeof w.loadFile === "function" && w.PerfxStudio && w.document.getElementById("dz1"); }, function () {
+        if (same) {   // the work open in Studio stays: only the values found here are added to it
+          if (!list.length) { if (typeof w.showToast === "function") w.showToast("Back to " + file.name + " — nothing added in the HAR Explorer.", "info"); return; }
+          Promise.resolve(w.analyze && w.SS && w.SS.busy && w.SS.busy() ? w.analyze() : null).then(function () { whenRead(addAll); });
+          return;
+        }
+        try { if (typeof w.clearAll === "function") w.clearAll(); if (typeof w.goBack === "function") w.goBack(); } catch (e) { /* a fresh Studio */ }
+        try { if (typeof w.setFmt === "function") w.setFmt(fmt); } catch (e) { /* Studio keeps its own format */ }
+        w.loadFile(file, 1);
+        if (!list.length) {
+          if (typeof w.showToast === "function") w.showToast(file.name + " opened from the HAR Explorer.", "info");
+          return;
+        }
+        later(function () { return st().har1; }, function () {
+          Promise.resolve(w.analyze()).then(function () { whenRead(addAll); });
+        }, 300);
       }, 300);
-    }, 300);
+    }
   });
+
+  // a question with two answers (dialog #hx-ask in HarExplorer.html); Esc, Cancel or a click outside it is "no"
+  function ask(title, text, okLabel, then) {
+    var d = $("#hx-ask"); $("#hx-ask-h").textContent = title; $("#hx-ask-t").textContent = text; $("#hx-ask-yes").textContent = okLabel;
+    d.returnValue = "";
+    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); };
+    d.showModal(); $("#hx-ask-no").focus();
+  }
+  $("#hx-ask").addEventListener("click", function (e) { if (e.target === this) this.close("no"); });   // a click on the backdrop
 
   function find(value) {
     M.find = (value || "").trim(); M.view = "find"; M.corrName = "";
@@ -635,7 +673,11 @@
       : '<p class="hx-sugg-wait">No value in this recording comes back from the server and is sent again.</p>';
     if (M.sugg !== null && !M.studioDone) sugg += '<p class="hx-sugg-wait">Script Studio\'s own analysis is still running — its findings will be added here.</p>';
     var body = "";
-    if (!v) body = '<p class="ds-note hx-hint">Type or paste a value above, pick one the server sends (Studio marks the ones Script Studio finds by itself), or select any value in a request\'s Headers, Payload or Response.</p>';
+    if (!v) body = '<div class="hx-fstart"><p class="hx-fstart-h">Three ways to begin</p><ol>' +
+      '<li><b>Type or paste a value</b> above — a session id, a token, an order number.</li>' +
+      '<li><b>Pick one the server sends</b> from the list above — <span class="by">Studio</span> marks the ones Script Studio finds by itself.</li>' +
+      '<li><b>Select any value</b> in a request\'s Headers, Payload or Response.</li></ol>' +
+      '<p class="hx-fstart-f">You get where it first came from, every request that sends it back, and the extractor for VuGen or DevWeb — then <b>Add to Script Studio</b>.</p></div>';
     else if (busy || !inv || inv.value !== v) body = '<p class="hx-none">Looking for ' + esc(short(v, 60)) + " …</p>";
     else {
       body = FV.html(inv, {

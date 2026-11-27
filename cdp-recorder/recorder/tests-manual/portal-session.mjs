@@ -48,10 +48,10 @@ const out = mkdtempSync(join(tmpdir(), "cdp-portal-test-"));
 
 const start = (link) => spawn(process.execPath, ["--import", "tsx", "src/main.ts", "--ui-port", String(UI), "--out", out, "--portal", link],
   { stdio: ["ignore", "pipe", "pipe"] });
-const app = start(`perfx-recorder://start?portal=${encodeURIComponent(PORTAL + "/converter/")}`);
+const LINK = `perfx-recorder://start?portal=${encodeURIComponent(PORTAL + "/converter/")}`;
 let log = "";
-app.stdout.on("data", (d) => (log += d));
-app.stderr.on("data", (d) => (log += d));
+const begin = () => { const a = start(LINK); a.stdout.on("data", (d) => (log += d)); a.stderr.on("data", (d) => (log += d)); return a; };
+let app = begin();
 
 try {
   for (let i = 0; i < 40; i++) { await wait(250); try { await fetch(API + "/api/status"); break; } catch { /* starting */ } }
@@ -127,7 +127,12 @@ try {
   check(code === 0, "a second start exits by itself");
   check((await call("GET", "/api/status", "https://second.example.com")).json.allowed === true, "…and the second page may use the running recorder");
 
-  // 6. Quit while recording: the recording is saved first, never lost
+  // 6. Quit while recording: the recording is saved first, never lost. Started by the link, the recorder closes itself
+  // once a saved recording's windows have closed (0.3.2), so it is started again first, as the page would.
+  const closedItself = await Promise.race([new Promise((r) => (app.exitCode !== null ? r(true) : app.on("exit", () => r(true)))), wait(20000).then(() => false)]);
+  check(closedItself, "started by the link, it closed itself after the saved recording's windows closed");
+  app = begin();
+  for (let i = 0; i < 40; i++) { await wait(250); try { await fetch(API + "/api/status"); break; } catch { /* starting */ } }
   const s2 = await call("POST", "/api/session", PORTAL, { url: site + "/page-a", browser, private: priv, name: "SC02 Quit" });
   check(s2.status === 200, "second recording started");
   await wait(3000);

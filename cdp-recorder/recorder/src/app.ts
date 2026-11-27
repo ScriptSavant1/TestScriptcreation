@@ -28,11 +28,12 @@ import {
   launchAppWindow,
   portalLandingUrl,
   teardown,
+  cleanOldProfiles,
   type ProfileMode,
   type ResolvedProfile,
   type BrowserChoice,
 } from "./browser-launcher.js";
-import { parsePortalLink } from "./portal-mode.js";
+import { parsePortalLink, olderThan } from "./portal-mode.js";
 import { isPackagedExe, registerLink, downloadsFolder, loadAllowedPages, saveAllowedPages } from "./portal-link.js";
 import { VERSION } from "./version.js";
 
@@ -119,7 +120,14 @@ export async function run(pageHtml: string): Promise<void> {
   console.log(`PerfX CDP Recorder ${VERSION}\n`);
 
   // A recorder is already running: a link only hands it the page that asked; a double-click says so.
-  const running = await runningRecorder(uiPort);
+  let running = await runningRecorder(uiPort);
+  if (running && link?.portal && olderThan(running.version, VERSION) && !(running as { recording?: boolean }).recording) {
+    // an older copy still runs (it waits up to an hour after a recording): ask it to close, then start this one —
+    // else the page keeps using the old version after an update
+    console.log(`An older CDP Recorder (${running.version ?? "?"}) is running — closing it, starting ${VERSION}.`);
+    await fetch(`http://127.0.0.1:${uiPort}/api/quit`, { method: "POST" }).catch(() => undefined);
+    for (let i = 0; i < 40 && running; i++) { await new Promise((r) => setTimeout(r, 250)); running = await runningRecorder(uiPort); }
+  }
   if (running) {
     if (link?.portal) {
       await fetch(`http://127.0.0.1:${uiPort}/api/allow`, {
@@ -134,6 +142,9 @@ export async function run(pageHtml: string): Promise<void> {
     }
     process.exit(0);
   }
+
+  // temporary profiles earlier recordings left behind (the only recorder running now is this one)
+  void cleanOldProfiles().then((n) => { if (n) console.log(`Removed ${n} temporary browser profile${n === 1 ? "" : "s"} left by earlier recordings.`); });
 
   if (isPackagedExe()) {
     const reg = await registerLink();
@@ -209,11 +220,16 @@ export async function run(pageHtml: string): Promise<void> {
     const dl = await downloadsFolder();
     return { outDir: dl ?? (portalMode ? dirname(process.execPath) : outDir) };
   };
+  const doneIfLink = () => {
+    if (!portalMode || recorder.isRecording()) return;
+    console.log("Saved and its windows closed — the CDP Recorder closes. Start recording starts it again.");
+    setTimeout(() => process.emit("SIGTERM"), 800);
+  };
   const sessionSaved = () => {
-    console.log("Saved. Waiting for the next recording from PerfX Studio.\n");
+    console.log(portalMode ? "Saved." : "Saved. Waiting for the next recording from PerfX Studio.\n");
     // the page and the toolbar show "saved" first
     closeAt = Date.now() + CLOSE_AFTER_SAVE_MS;
-    closeTimer = setTimeout(() => void closeWindows(), CLOSE_AFTER_SAVE_MS);
+    closeTimer = setTimeout(() => void closeWindows().then(doneIfLink), CLOSE_AFTER_SAVE_MS);
   };
 
   const browsers = (["edge", "chrome"] as const).filter((b) => findBrowsers(b).length > 0);
@@ -225,7 +241,7 @@ export async function run(pageHtml: string): Promise<void> {
       closeTimer = undefined;
       closeAt = null;
     },
-    closeNow: () => void closeWindows(),
+    closeNow: () => void closeWindows().then(doneIfLink),
   };
 
   // pages allowed on the toolbar before (Allow) — remembered for this Windows user

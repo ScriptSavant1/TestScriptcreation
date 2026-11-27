@@ -40,11 +40,13 @@
     { icon: 'fileCode', c: '--c-convert', t: 'VuGen script' },
     { icon: 'insights', c: '--c-results', t: 'Performance insights' },
     { icon: 'report',   c: '--ds-bad',    t: 'Reports (Excel / PDF)' },
+    { icon: 'insights', c: '--c-work',    t: 'LRE scenario (Vusers, pacing)' },
   ];
   /* "Your workflow": a typical performance test, from recording to report */
   const steps = [
     { go: 'studio',  tab: 'studio',   c: '--c-record',  icon: 'record', t: 'Record a user journey',    s: 'Script Studio — in your browser', act: 'Open' },
     { go: 'studio',  tab: 'studio',   c: '--c-studio',  icon: 'link',   t: 'Correlate dynamic values', s: 'Script Studio — automatic',      act: 'Open' },
+    { go: 'workload', tab: 'workload', c: '--c-work',   icon: 'workload', t: 'Plan the load',          s: 'Workload Modeller — Vusers, pacing, LRE settings', act: 'Plan' },
     { go: null,      tab: null,       c: '--ds-text-3', icon: 'play',   t: 'Run the load test',        s: 'In LoadRunner Enterprise, as usual', act: null },
     { go: 'results', tab: 'analyser', c: '--c-results', icon: 'chart',  t: 'Analyse the results',      s: 'Results Analyser — reports to share', act: 'Analyse' },
   ];
@@ -64,7 +66,7 @@
     </div>
 
     <figure class="hm-map-wrap">
-      <div class="hm-map" role="img" aria-label="Browser recording, Postman or Bruno, JMeter test plan and LRE results go in; VuGen scripts, performance insights and reports come out">
+      <div class="hm-map" role="img" aria-label="Browser recording, Postman or Bruno, JMeter test plan and LRE results go in; VuGen scripts, performance insights, reports and the LRE scenario come out">
         <ul class="hm-map-in">
           <% ins.forEach(x => { %><li style="--c:var(<%= x.c %>)"><span class="hm-chip-ico"><%- ico(x.icon) %></span><%= x.t %></li><% }) %>
         </ul>
@@ -130,7 +132,7 @@
       </div>
       <div class="hm-help-tiles">
         <button type="button" data-help="hacc-quickstart" style="--c:var(--c-studio)"><span class="hm-tile-ico"><%- ico('rocket') %></span><span><b>Quick Start</b><small>Get up and running in minutes.</small><%- ico('arrowRight') %></span></button>
-        <button type="button" data-go="help" style="--c:var(--c-convert)"><span class="hm-tile-ico"><%- ico('book') %></span><span><b>Documentation</b><small>Step-by-step guides and examples.</small><%- ico('arrowRight') %></span></button>
+        <button type="button" data-help="hacc-overview" style="--c:var(--c-convert)"><span class="hm-tile-ico"><%- ico('book') %></span><span><b>Documentation</b><small>Step-by-step guides and examples.</small><%- ico('arrowRight') %></span></button>
         <button type="button" data-help="hacc-faq" style="--c:var(--c-results)"><span class="hm-tile-ico"><%- ico('faq') %></span><span><b>FAQ</b><small>Answers to common questions.</small><%- ico('arrowRight') %></span></button>
       </div>
       <div class="hm-private">

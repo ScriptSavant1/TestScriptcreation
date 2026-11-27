@@ -132,7 +132,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <h3>Type the address, choose the browser, click Start recording</h3>
 <p><b>Open an InPrivate window</b> (Incognito in Chrome) is optional — untick it if your application does not work in a private window. Either way the recording window starts signed out, in a fresh browser profile, so the login is recorded too. Under <b>More options</b>, a recording name becomes the file name, an optional <b>script ID</b> (for example <code>SC01</code> — just the ID; the numbers 01, 02 … are added per transaction) starts the file name and the transaction names in the script (<code>SC01_01_…</code>), a first transaction starts as soon as the page opens, and — optional — your planned steps, one per line. The file name in Downloads is shown at the bottom.</p>
 <div class="shots"><figure><img src="{{img:21-start-window.png}}" alt="Start recording window: application address, Microsoft Edge or Google Chrome, Open an InPrivate window, recording name SC01_Booking, first transaction Login, planned steps Home, Search, Checkout"><figcaption>The Start recording window.</figcaption></figure></div>
-<div class="callout info"><strong>"Open cdp-recorder?"</strong>When the CDP Recorder is not running yet, your browser asks whether this site may open it. Click <b>Open</b>. It then waits in the background, so the next recording starts straight away; it closes itself after an hour without use. If nothing answers, the window shows the set-up steps — see <a href="#get">section 2</a>.</div>
+<div class="callout info"><strong>"Open cdp-recorder?"</strong>When the CDP Recorder is not running yet, your browser asks whether this site may open it. Click <b>Open</b>. It then waits in the background, so the next recording starts straight away, with no window of its own; it closes itself once your saved recording&#8217;s windows have closed. If nothing answers, the window shows the set-up steps — see <a href="#get">section 2</a>.</div>
 <div class="callout info"><strong>Started it yourself? Click Allow on the toolbar</strong>Some computers do not let the browser start programs. Then start <code>cdp-recorder.exe</code> yourself first and click <b>Start recording</b> on the page: the small toolbar asks <b>Allow this page to start recordings?</b> and names the PerfX Studio address — click <b>Allow</b>, and the recording starts by itself. It asks once per address and remembers it on this computer. <b>Don't allow</b> if you did not just click Start recording.</div>
 <div class="shots"><figure><img src="{{img:27-toolbar-allow.png}}" alt="The CDP Recorder toolbar asks: Allow this page to start recordings? It names the PerfX Studio address and has the buttons Allow and Don't allow"><figcaption>The toolbar asks once per PerfX Studio address.</figcaption></figure></div>
 </div></div>
@@ -143,13 +143,13 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 </div></div>
 <div class="step"><div class="num">4</div><div>
 <h3>Name transactions — on the toolbar or on the page</h3>
-<p>Type a name and press <b>Enter</b> (or click <b>Start Transaction</b>), do the step, then type the next name and press <b>Enter</b> — the same as in <a href="#record">section 5</a>. The number is added for you (<i>add to cart</i> becomes <code>T04_Add_to_cart</code>); type your own, for example <code>T07_Pay</code>, to use another number. The title of the page on screen is offered as grey text in the box — <b>Tab</b> takes it (never filled in by itself). A transaction's name can be changed with the pencil in the list, and <b>Undo last mark</b> takes back the last mark — the transaction before runs again. With planned steps (More options on the page), press <b>Enter</b> on an empty box to start the next one. The next name ends the running transaction; Stop ends the last one.</p>
+<p>Type a name and press <b>Enter</b> (or click <b>Start transaction</b>), do the step, then type the next name and press <b>Enter</b> — the same as in <a href="#record">section 5</a>. The number is added for you (<i>add to cart</i> becomes <code>T04_Add_to_cart</code>); type your own, for example <code>T07_Pay</code>, to use another number. The title of the page on screen is offered as grey text in the box — <b>Tab</b> takes it (never filled in by itself). A transaction's name can be changed with the pencil in the list, and <b>Undo last mark</b> takes back the last mark — the transaction before runs again. With planned steps (More options on the page), press <b>Enter</b> on an empty box to start the next one. The next name ends the running transaction; Stop ends the last one.</p>
 </div></div>
 <div class="step"><div class="num">5</div><div>
 <h3>Or name them on the floating bar, without leaving your application</h3>
 <p>From version 0.3.0 the recording window opens maximised and shows a small dark <b>floating bar</b> at the top: REC, the time, the running transaction and the same box. Type a name and press <b>Enter</b> (or click <b>Mark</b>): the running transaction ends and the next starts. <b>&#9662;</b> opens the details: every transaction with its requests, the pencil to rename, <b>Undo last mark</b> and the planned steps. <b>Stop and save</b> is on the bar too.</p>
 <ul>
-  <li>Drag it by its grip to the top or bottom, left, middle or right &#8212; it stays there for the next recordings. The window button moves it to the bottom and back; <b>&#8211;</b> minimises it to a small REC dot; <b>Alt+Shift+H</b> hides it completely and brings it back.</li>
+  <li>Drag it anywhere in the window, by its grip or any part that is not a button &#8212; it stays where you let it go, also for the next recordings; a double-click on the grip puts it back at the top. The window button moves it to the bottom and back; <b>&#8211;</b> minimises it to a small REC dot; <b>Alt+Shift+H</b> hides it completely and brings it back.</li>
   <li>One bar on screen: a new tab, window or pop-up takes the bar as it opens; after that it shows in the recorded window you last clicked or typed in, and goes back to the main window when a pop-up closes.</li>
   <li>It stays above the application's own pop-ups and dialogs, and gets slimmer in small windows such as a sign-in pop-up.</li>
   <li>It is never part of the recording: it makes no requests, and it is hidden while the transaction screenshots are taken.</li>
@@ -160,7 +160,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 </div></div>
 <div class="step"><div class="num">6</div><div>
 <h3>Stop and save</h3>
-<p>Click <b>Stop and save</b> on the page or on the floating bar (or <b>Stop Recording</b> on the toolbar when the bar is off). With the floating bar no toolbar window opens: the countdown, <b>Keep open</b> and <b>Close now</b> after saving are on the PerfX Studio page. The HAR is saved to your <b>Downloads</b> folder as <code>&lt;name&gt;_&lt;date&gt;_&lt;time&gt;.har</code>, and Script Studio opens the file with the script ready, in the format you chose. The toolbar says the recording is saved, and the two recorder windows close after <b>10 seconds</b> — click <b>Keep open</b> to look at the recording window first, or <b>Close windows</b> to close them now.</p>
+<p>Click <b>Stop and save</b> on the page or on the floating bar (or <b>Stop recording</b> on the toolbar when the bar is off). With the floating bar no toolbar window opens: the countdown, <b>Keep open</b> and <b>Close now</b> after saving are on the PerfX Studio page. The HAR is saved to your <b>Downloads</b> folder as <code>&lt;name&gt;_&lt;date&gt;_&lt;time&gt;.har</code>, and Script Studio opens the file with the script ready, in the format you chose. The toolbar says the recording is saved, and the two recorder windows close after <b>10 seconds</b> — click <b>Keep open</b> to look at the recording window first, or <b>Close windows</b> to close them now.</p>
 <div class="shots"><figure class="toolbar"><img src="{{img:26-toolbar-saved.png}}" alt="Toolbar: Saved to your Downloads folder, it is open in PerfX Studio now, these windows close in 9 s, Close windows and Keep open buttons"><figcaption>The toolbar after Stop and save.</figcaption></figure></div>
 <div class="shots"><figure><img src="{{img:23-saved-studio.png}}" alt="Script Studio after Stop: saved to your Downloads folder, the recording open with its requests, transactions and script"><figcaption>Saved to Downloads and opened in Script Studio.</figcaption></figure></div>
 </div></div>
@@ -174,7 +174,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <h2 id="launch">4. Or start it yourself</h2>
 <p>Not using PerfX Studio's Start recording? Double-click <code>cdp-recorder.exe</code>. After a few seconds two windows open:</p>
 <div class="shots">
-  <figure class="toolbar"><img src="{{img:01-toolbar-idle.png}}" alt="CDP Recorder toolbar showing a Start Recording button, status Idle, and a note pointing to the recording window"><figcaption><b>The toolbar</b> (top-right of your screen). You control the recording from here. It is not recorded.</figcaption></figure>
+  <figure class="toolbar"><img src="{{img:01-toolbar-idle.png}}" alt="CDP Recorder toolbar showing a Start recording button, status Idle, and a note pointing to the recording window"><figcaption><b>The toolbar</b> (top-right of your screen). You control the recording from here. It is not recorded.</figcaption></figure>
 </div>
 <div class="shots">
   <figure><img src="{{img:02-recording-window.png}}" alt="Browser window with an orange-bordered box reading: This is the RECORDING window"><figcaption><b>The recording window</b>: a separate Edge (or Chrome) window. Everything you do in this window, and in any tabs or pop-ups it opens, is recorded.</figcaption></figure>
@@ -184,14 +184,14 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <h2 id="record">5. Record your journey</h2>
 
 <div class="step"><div class="num">1</div><div>
-<h3>Click Start Recording, then wait for "Settled"</h3>
-<p>The toolbar shows two counters and, once it's ready, a green <b>"Settled — safe to start a transaction"</b> line. This usually takes a second or two, but can take up to about 20 seconds on a slow or heavily managed PC. <b>Start Transaction</b> stays greyed out until then.</p>
+<h3>Click Start recording, then wait for "Settled"</h3>
+<p>The toolbar shows two counters and, once it's ready, a green <b>"Settled — safe to start a transaction"</b> line. This usually takes a second or two, but can take up to about 20 seconds on a slow or heavily managed PC. <b>Start transaction</b> stays greyed out until then.</p>
 </div></div>
 
 <div class="step"><div class="num">2</div><div>
 <h3>Name your transaction and press Enter</h3>
 <p>Type a short name for the business step, such as <i>Login</i>, <i>Search</i> or <i>Checkout</i>. Each transaction becomes a timed transaction in your script. You can also press <kbd>Enter</kbd> instead of clicking.</p>
-<div class="shots"><figure class="toolbar"><img src="{{img:03-toolbar-ready.png}}" alt="Toolbar showing Settled, a transaction name field containing Login, and a Start Transaction button"><figcaption>Ready to start a transaction named "Login".</figcaption></figure></div>
+<div class="shots"><figure class="toolbar"><img src="{{img:03-toolbar-ready.png}}" alt="Toolbar showing Settled, a transaction name field containing Login, and a Start transaction button"><figcaption>Ready to start a transaction named "Login".</figcaption></figure></div>
 </div></div>
 
 <div class="step"><div class="num">3</div><div>
@@ -206,7 +206,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 
 <div class="step"><div class="num">4</div><div>
 <h3>Name the next step — the running one ends</h3>
-<p>Wait until the page has finished loading (Active back to <b>0</b>), then name the next step and start it — that ends the running transaction (there is no End Transaction since 0.3.0; <b>Stop Recording</b> ends the last one). Finished transactions are listed under <b>Completed transactions</b>.</p>
+<p>Wait until the page has finished loading (Active back to <b>0</b>), then name the next step and start it — that ends the running transaction (there is no End Transaction since 0.3.0; <b>Stop recording</b> ends the last one). Finished transactions are listed under <b>Completed transactions</b>.</p>
 <div class="shots"><figure class="toolbar"><img src="{{img:06-toolbar-trail.png}}" alt="Toolbar listing completed transactions Login and Search"><figcaption>Two transactions done: Login and Search.</figcaption></figure></div>
 <div class="callout ok"><strong>New tabs and pop-ups are recorded too</strong>If a link opens a new tab or a sign-in pop-up, keep going in that tab. It belongs to the recording window and its traffic is captured in the current transaction.</div>
 </div></div>
@@ -225,7 +225,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <p>An empty transaction is left out when Script Studio builds your script, so it does no harm. It just won't be there.</p>
 
 <h2 id="stop">7. Stop and save</h2>
-<p>Click <b>Stop Recording</b>. The toolbar asks for a file name (the default is <code>recording.har</code>) — type one and click <b>Save</b>. The toolbar then shows <b>Recording complete</b> with the number of requests captured. (A recording started from PerfX Studio is not asked: it is saved to Downloads under the name chosen there.)</p>
+<p>Click <b>Stop recording</b>. The toolbar asks for a file name (the default is <code>recording.har</code>) — type one and click <b>Save</b>. The toolbar then shows <b>Recording complete</b> with the number of requests captured. (A recording started from PerfX Studio is not asked: it is saved to Downloads under the name chosen there.)</p>
 <div class="shots"><figure class="toolbar"><img src="{{img:07b-toolbar-save-as.png}}" alt="Toolbar asking for the file name, with Save and Cancel buttons"><figcaption>The file-name question on Stop.</figcaption></figure></div>
 <div class="shots"><figure class="toolbar"><img src="{{img:08-toolbar-complete.png}}" alt="Toolbar showing Recording complete, 8 entries, my-recording.har, with Download HAR and New Recording buttons"><figcaption>The recording is saved.</figcaption></figure></div>
 <p>Where your file is:</p>
@@ -233,7 +233,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
   <li><b>Saved automatically</b> in the same folder as <code>cdp-recorder.exe</code>.</li>
   <li><b>Download HAR</b> saves another copy through your browser, usually to your <i>Downloads</i> folder.</li>
 </ul>
-<p>To record again, click <b>New Recording</b> or <b>Start Recording</b>. If the toolbar gets long, scroll it.</p>
+<p>To record again, click <b>New Recording</b> or <b>Start recording</b>. If the toolbar gets long, scroll it.</p>
 
 <h2 id="studio">8. Open it in Script Studio</h2>
 <p>In PerfX Studio, open <b>Script Studio</b> and drop your HAR on <b>Open a recording you already have</b> (or anywhere on the page). It is read at once and the script is ready: choose <b>DevWeb</b> or <b>Web HTTP/HTML</b> in the file bar and click <b>Download ZIP</b>. A recording made with <b>Start recording</b> opens there by itself.</p>
@@ -243,7 +243,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 
 <h2 id="quit">9. Finish up</h2>
 <p>Click <b>Quit</b> on the toolbar. This closes both windows and deletes the temporary browser profile, including anything you logged in to during the session. Your HAR files are kept. A recording that is still running is <b>saved first</b> — to Downloads when it was started from PerfX Studio, otherwise next to the <code>.exe</code> — so Quit never loses a recording.</p>
-<p>When you record from PerfX Studio you don't need to Quit: after <b>Stop and save</b> the recorder closes its windows by itself after a 10-second countdown, shown on the PerfX Studio page — or on the toolbar when the floating bar is off (<b>Keep open</b> keeps them), waits in the background for the next recording, and closes itself after an hour without use.</p>
+<p>When you record from PerfX Studio you don't need to Quit: after <b>Stop and save</b> the recorder closes its windows by itself after a 10-second countdown, shown on the PerfX Studio page — or on the toolbar when the floating bar is off (<b>Keep open</b> keeps them), and then closes itself &#8212; the next <b>Start recording</b> starts it again. Started by hand (double-click), it waits for the next recording and closes itself after an hour without use.</p>
 
 <h2 id="chrome">10. Use Chrome instead of Edge</h2>
 <p>Recording from PerfX Studio? Just choose <b>Google Chrome</b> in the Start recording window. When you start the recorder yourself, it uses Microsoft Edge by default and falls back to Chrome only if Edge can't be used. To use Chrome that way, make a shortcut once:</p>
@@ -288,7 +288,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
 <tr><td>The browser asks "Open cdp-recorder?" every time</td><td>Normal when the recorder is not running yet; once it runs, it waits in the background and the next recordings start without asking. Your IT team can allow PerfX Studio to open it without asking.</td></tr>
 <tr><td>"A newer CDP Recorder is available"</td><td>Download <code>cdp-recorder.zip</code> again, extract it over the old folder, and double-click the <code>.exe</code> once.</td></tr>
 <tr><td>"A recording is already running"</td><td>Stop it on the toolbar (or close the recorder) first, then start again.</td></tr>
-<tr><td>Start Transaction stays greyed out</td><td>Wait for the green "Settled" line. It can take up to about 20 seconds on a slow PC. If it still hasn't appeared after about 20 seconds, the button is enabled anyway, but capture may be incomplete. Record a short test transaction and make sure the orange "no requests" warning doesn't appear.</td></tr>
+<tr><td>Start transaction stays greyed out</td><td>Wait for the green "Settled" line. It can take up to about 20 seconds on a slow PC. If it still hasn't appeared after about 20 seconds, the button is enabled anyway, but capture may be incomplete. Record a short test transaction and make sure the orange "no requests" warning doesn't appear.</td></tr>
 <tr><td>Orange "No network requests were captured" warning</td><td>You were clicking in the wrong window. See <a href="#warning">section 6</a>.</td></tr>
 <tr><td>Transactions are empty in Script Studio</td><td>Same cause as the orange warning. Record again using only the recording window.</td></tr>
 <tr><td>Have to log in again every time</td><td>Expected: the recording window starts fresh each time. To stay logged in between runs, start it with <code>--profile C:\PerfX\profile</code> (see <a href="#options">options</a>).</td></tr>

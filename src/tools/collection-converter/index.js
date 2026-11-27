@@ -3,7 +3,18 @@
  * Entry point for programmatic usage
  */
 
+const { applyScriptName, noteGenerated, applyValues, applyVarNames } = require("../../core/scriptSettings");
+const { runtimeNames } = require("../../web/convertPreview");
+
+// the options for the reports in the ZIP (README.md, ANALYSIS.md): no folders of the server, no values of the environment
+const PRIVATE_OPTIONS = ["inputFile", "outputDir", "environmentFile", "examplesPath", "csvFilePaths", "environmentVars", "values"];
+function reportOptions(options) {
+  return Object.fromEntries(Object.entries(options || {}).filter(([k]) => !PRIVATE_OPTIONS.includes(k)));
+}
+const { keepSelected, readLeaveOut } = require("../../core/requestSelection");
 const BrunoParser = require("../../parsers/brunoParser");
+const { bruEnvironment } = require("../../parsers/brunoFormat");
+const { applyQueryKeys } = require("../../core/requestAuth");
 const AdvancedScriptGenerator = require("../../generators/devweb/scriptGenerator");
 const WebHttpScriptGenerator = require("../../generators/vugen/scriptGenerator");
 const fs = require("fs").promises;
@@ -56,15 +67,26 @@ class BrunoDevWebConverter {
       // Step 1: Parse collection
       console.log(`📖 Parsing collection: ${this.options.inputFile}`);
       const parser = new BrunoParser(this.options.inputFile);
-      const requests = await parser.parse();
+      const parsed = await parser.parse();
+      // the requests the user left out on the page (by number) are dropped here, before anything reads the list
+      const requests = keepSelected(parsed, this.options.leaveOut);
       const metadata = parser.getMetadata();
+      // the script name chosen on the page (none → the collection's own name)
+      applyScriptName(parser.collection, this.options.scriptName);
 
       console.log(
         `✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`,
       );
 
       // Step 1b: Load environment file if provided
-      const environmentVars = await this.loadEnvironmentFile();
+      // values given on the page go where the script reads them (src/core/scriptSettings.js applyValues; none → as before)
+      const environmentVars = applyValues(parser.collection, await this.loadEnvironmentFile(), this.options.values);
+      // the domains' variables under the names chosen on the page (none → as before)
+      const renamed = applyVarNames({ requests: parsed, collection: parser.collection, environmentVars, taken: runtimeNames(parsed) }, this.options.varNames);
+      // an API key sent in the address (src/core/requestAuth.js)
+      applyQueryKeys(parsed, parser.collection);
+      // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
+      this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars, renamed, given: Object.keys(this.options.values || {}) };
 
       // Step 2: Select generator based on protocol
       const isWebHttp = this.options.protocol === "web-http";
@@ -83,6 +105,7 @@ class BrunoDevWebConverter {
       const { script, analysis } = await generator.generate(
         this.options.outputDir,
       );
+      noteGenerated(this.previewSource, generator, analysis);
 
       let scriptPath;
       if (isWebHttp) {
@@ -160,14 +183,25 @@ class BrunoDevWebConverter {
       // Step 1: Parse collection
       console.log(`📖 Parsing collection: ${this.options.inputFile}`);
       const parser = new BrunoParser(this.options.inputFile);
-      const requests = await parser.parse();
+      const parsed = await parser.parse();
+      // the requests the user left out on the page (by number) are dropped here, before anything reads the list
+      const requests = keepSelected(parsed, this.options.leaveOut);
       const metadata = parser.getMetadata();
+      // the script name chosen on the page (none → the collection's own name)
+      applyScriptName(parser.collection, this.options.scriptName);
       console.log(
         `✓ Parsed ${requests.length} requests from ${metadata.type} collection\n`,
       );
 
       // Step 2: Load environment file if provided
-      const environmentVars = await this.loadEnvironmentFile();
+      // values given on the page go where the script reads them (src/core/scriptSettings.js applyValues; none → as before)
+      const environmentVars = applyValues(parser.collection, await this.loadEnvironmentFile(), this.options.values);
+      // the domains' variables under the names chosen on the page (none → as before)
+      const renamed = applyVarNames({ requests: parsed, collection: parser.collection, environmentVars, taken: runtimeNames(parsed) }, this.options.varNames);
+      // an API key sent in the address (src/core/requestAuth.js)
+      applyQueryKeys(parsed, parser.collection);
+      // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
+      this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection: parser.collection, environmentVars, renamed, given: Object.keys(this.options.values || {}) };
 
       // Step 3: Group requests by top-level folder
       const folderGroups = this.groupByTopLevelFolder(requests);
@@ -196,6 +230,7 @@ class BrunoDevWebConverter {
       await fs.mkdir(this.options.outputDir, { recursive: true });
       const scriptSummaries = [];
 
+      const total = { uses: 0, values: new Set(), params: new Set() };   // every script
       for (const folderName of folderNames) {
         const folderRequests = folderGroups[folderName];
         const safeFolderName = folderName.replace(/[<>:"/\\|?*]/g, "_");
@@ -225,6 +260,7 @@ class BrunoDevWebConverter {
 
         // Generate script and mandatory files
         const { script, analysis } = await generator.generate(scriptOutputDir);
+        noteGenerated(this.previewSource, generator, analysis);
 
         let mainScriptPath;
         if (isWebHttp) {
@@ -248,6 +284,9 @@ class BrunoDevWebConverter {
           }
         }
 
+        for (const c of generator.correlations || []) total.values.add(c.name);
+        for (const name of (generator.parameters && generator.parameters.keys()) || []) total.params.add(name);
+        total.uses += (analysis.correlations && analysis.correlations.totalCorrelations) || 0;
         scriptSummaries.push({
           folder: folderName,
           outputDir: scriptOutputDir,
@@ -297,6 +336,11 @@ class BrunoDevWebConverter {
         outputDir: this.options.outputDir,
         scripts: scriptSummaries,
         totalRequests: requests.length,
+        analysis: {
+          requests: { total: requests.length },
+          correlations: { totalCorrelations: total.uses, totalValues: total.values.size },
+          parameters: { totalParameters: total.params.size },
+        },
         crossFolderWarnings: uniqueWarningStrings,
         metadata,
       };
@@ -326,27 +370,9 @@ class BrunoDevWebConverter {
     const environmentVars = {};
 
     // Detect format: Bruno .bru or JSON (Postman/Bruno JSON export)
-    if (envContent.trim().startsWith("vars {")) {
+    if (/^\s*(vars|vars:secret)\s*[{[]/m.test(envContent) && !/^\s*\{/.test(envContent)) {
       // Bruno .bru format
-      const varsMatch = envContent.match(/vars\s*\{([^}]*)\}/s);
-      if (varsMatch) {
-        const varsBlock = varsMatch[1];
-        const lines = varsBlock.split("\n");
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith("//")) continue;
-          const colonIdx = trimmed.indexOf(":");
-          if (colonIdx > 0) {
-            const key = trimmed.substring(0, colonIdx).trim();
-            let value = trimmed.substring(colonIdx + 1).trim();
-            // Remove trailing comma if present
-            if (value.endsWith(",")) {
-              value = value.slice(0, -1).trim();
-            }
-            environmentVars[key] = value;
-          }
-        }
-      }
+      Object.assign(environmentVars, bruEnvironment(envContent));
     } else {
       // JSON format (Postman or Bruno JSON export)
       const envData = JSON.parse(envContent);
@@ -650,7 +676,7 @@ See \`ANALYSIS.md\` for detailed analysis including:
 
 **Bruno to DevWeb Converter v2.0**
 - Conversion date: ${new Date().toISOString()}
-- Options used: ${JSON.stringify(this.options, null, 2)}
+- Options used: ${JSON.stringify(reportOptions(this.options), null, 2)}
 
 ## 📄 License
 
@@ -797,7 +823,7 @@ ${analysis.customScripts.warnings.length > 10 ? `\n... and ${analysis.customScri
 ## Conversion Options
 
 \`\`\`json
-${JSON.stringify(analysis.options, null, 2)}
+${JSON.stringify(reportOptions(analysis.options), null, 2)}
 \`\`\`
 
 ## Next Steps

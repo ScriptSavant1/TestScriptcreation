@@ -87,7 +87,7 @@ button.sb-item, button.sb-brand { border: 0; background: transparent; font: inhe
 .sb-item[aria-current="page"] { background: var(--sb-active); color: var(--ds-text); }
 .sb-item[aria-current="page"]::before { content: ""; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c); }
 .sb-item[aria-current="page"] .sb-ico { background: var(--c); color: #fff; }
-.sb-badge { margin-left: auto; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--ds-ok-soft); color: var(--ds-ok); white-space: nowrap; }
+.sb-badge { margin-left: auto; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--ds-ok-soft); color: color-mix(in srgb, var(--ds-ok) 62%, var(--ds-text)); white-space: nowrap; }   /* mixed with the text colour: 4.5:1 on its pale ground in both themes */
 
 /* footer: privacy / status note, collapse */
 .sb-foot { flex: none; border-top: 1px solid var(--sb-line); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
@@ -146,7 +146,7 @@ html.sb-collapsed .sb-note { justify-content: center; padding: 7px 0; }
 /* ── small screens: the sidebar becomes a drawer ── */
 .sb-scrim { display: none; }
 @media (max-width: 900px) {
-  :root, html.sb-collapsed { --sb-w: 0px; --ds-page-x: 18px; }
+  :root, html.sb-collapsed { --sb-w: 0px; --ds-page-x: 16px; }   /* = the page padding below: bands run edge to edge exactly (BUG-133) */
   .sb { width: var(--sb-w-open); transform: translateX(-100%); box-shadow: var(--ds-shadow-2); }
   html.sb-open .sb { transform: none; }
   html.sb-open .sb-scrim { display: block; position: fixed !important; inset: 0; z-index: 390; background: var(--ds-overlay); }
@@ -252,4 +252,4 @@ html.sb-collapsed .sb-top .sb-brand { display: none; }
 .sb-nav > .sb-help-line { display: block !important; margin: auto 8px 8px; padding: 0; }
 html.sb-collapsed .sb-item .sb-sub { display: none; }
 @media (max-width: 900px) { html.sb-collapsed .sb-top .sb-brand { display: flex; } html.sb-collapsed .sb-top { justify-content: flex-start; } }
-.sb-badge.is-rec { background: color-mix(in srgb, var(--ds-bad) 14%, transparent); color: var(--ds-bad); font-weight: 700; letter-spacing: .04em; }
+.sb-badge.is-rec { background: color-mix(in srgb, var(--ds-bad) 14%, transparent); color: color-mix(in srgb, var(--ds-bad) 70%, var(--ds-text)); font-weight: 700; letter-spacing: .04em; }

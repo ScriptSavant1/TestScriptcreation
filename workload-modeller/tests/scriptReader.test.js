@@ -196,3 +196,69 @@ describe('pages and API calls (for the Vusers-per-machine rule)', () => {
     expect(R.readVugen('V', { 'Action.c': 'Action() { lr_think_time(5); return 0; }' }).pageShare).toBeNull();
   });
 });
+
+describe('every transaction of an iteration, in order (the "see them all" window)', () => {
+  test('VuGen: txList keeps repeats in order; txNames once each; the not-counted ones apart', () => {
+    const v = R.readVugen('Loop', {
+      'vuser_init.c': 'vuser_init(){ lr_start_transaction("T00_Login"); lr_end_transaction("T00_Login", LR_AUTO); return 0; }',
+      'Action.c': 'Action(){ lr_start_transaction("T01_Search"); lr_end_transaction("T01_Search", LR_AUTO); lr_start_transaction("T02_Open"); lr_end_transaction("T02_Open", LR_AUTO); lr_start_transaction("T01_Search"); lr_end_transaction("T01_Search", LR_AUTO); return 0; }',
+    });
+    expect(v.txList.map((x) => x.name)).toEqual(['T01_Search', 'T02_Open', 'T01_Search']);
+    expect(v.txList.length).toBe(v.txPerIter);
+    expect(v.txNames).toEqual(['T01_Search', 'T02_Open']);
+    expect(v.initTx).toEqual(['T00_Login']);
+  });
+
+  test('a HAR with 14 steps: all 14 names (no cut at 12), each with its requests and time', () => {
+    const t0 = Date.parse('2026-01-01T10:00:00Z');
+    const at = (ms) => new Date(t0 + ms).toISOString();
+    const pages = Array.from({ length: 14 }, (_, i) => ({ id: 'p' + i, title: 'https://shop.example.com/actions/Step' + i + '.action' }));
+    const entries = [];
+    pages.forEach((p, i) => [0, 100].forEach((d) => entries.push({ pageref: p.id, startedDateTime: at(i * 5000 + d), time: 400, request: { method: 'GET', url: 'https://shop.example.com/' + i + '/' + d }, response: { status: 200 } })));
+    const s = R.readHar('Shop', { log: { pages, entries } });
+    expect(s.txPerIter).toBe(14);
+    expect(s.txNames.length).toBe(14);
+    expect(s.txList.length).toBe(14);
+    expect(s.txList[13]).toEqual({ name: 'https://shop.example.com/actions/Step13.action', requests: 2, time: 0.5 });
+  });
+});
+
+describe('HAR: transactions from the bookmarks, response time = the time requests ran', () => {
+  const t0 = Date.parse('2026-01-01T10:00:00Z');
+  const at = (ms) => new Date(t0 + ms).toISOString();
+  const req = (ms, time, url, extra) => Object.assign({ startedDateTime: at(ms), time, request: { method: 'GET', url }, response: { status: 200 } }, extra || {});
+  const mark = (ms, kind, name) => req(ms, 5, 'https://' + kind + '-' + name + '.invalid/');
+
+  test('START / END bookmarks are the transactions; the bookmarks are not requests; a slow END click is think time', () => {
+    const har = { log: { entries: [
+      mark(0, 'START', 'T01_Home'), req(100, 300, 'https://shop.example.com/'), req(450, 100, 'https://shop.example.com/a.css'),
+      mark(12000, 'END', 'T01_Home'),                                                   // the user pressed END 11.5 s later
+      mark(20000, 'START', 'T02_Search'), req(20100, 400, 'https://shop.example.com/search'), mark(30000, 'END', 'T02_Search'),
+    ] } };
+    const s = R.readHar('Shop', har);
+    expect(s.txPerIter).toBe(2);
+    expect(s.txList).toEqual([{ name: 'T01_Home', requests: 2, time: 0.45 }, { name: 'T02_Search', requests: 1, time: 0.4 }]);
+    expect(s.requestsPerIter).toBe(3);
+    expect(s.rtAvg).toBe(0.425);
+    expect(s.thinkPerIter).toBe(19.6);                                                // 20.1 s − 0.55 s: the user's whole pause
+    expect(s.warnings[0]).toMatch(/bookmarks \(START \/ END\) — 4 bookmark requests are not counted/);
+  });
+
+  test('an END without its START starts at the beginning; a transaction around another is listed as holding it', () => {
+    const har = { log: { entries: [
+      req(0, 200, 'https://shop.example.com/'), mark(5000, 'END', 'T01_Launch'),
+      mark(6000, 'START', 'T02_Buy'), mark(6100, 'START', 'T02a_Pay'), req(6200, 300, 'https://shop.example.com/pay'), mark(9000, 'END', 'T02a_Pay'), mark(9500, 'END', 'T02_Buy'),
+    ] } };
+    const s = R.readHar('Shop', har);
+    expect(s.txList.map((t) => [t.name, t.requests])).toEqual([['T01_Launch', 1], ['T02_Buy', 1], ['T02a_Pay', 1]]);
+    expect(s.nestedTx).toEqual(['T02_Buy']);
+  });
+
+  test('a page whose later call comes after a quiet gap: the gap is think time, not response time', () => {
+    const har = { log: { pages: [{ id: 'p1', title: 'Home' }], entries: [
+      req(0, 300, 'https://shop.example.com/', { pageref: 'p1' }), req(20000, 200, 'https://shop.example.com/poll', { pageref: 'p1' })] } };
+    const s = R.readHar('Shop', har);
+    expect(s.txList).toEqual([{ name: 'Home', requests: 2, time: 0.5 }]);
+    expect(s.thinkPerIter).toBe(19.7);
+  });
+});

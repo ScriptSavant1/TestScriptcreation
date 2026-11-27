@@ -95,6 +95,8 @@
     T.orig = (S.params || []).map(function (p) { return Object.assign({}, p); });
     S.params = TestData.apply(T.orig, T.ed, S.entries1);
   };
+  // Undo / Redo (portal/studio-history.js): the user's choices, and the same put back
+  SS.testData = function (ed) { if (ed) { T.ed = ed; S.params = TestData.apply(T.orig, T.ed, S.entries1); } return T.ed; };
   SS.testDataNewFile = function () { T.orig = []; T.ed = { by: {}, added: [] }; };
 
   // a change: the parameters again from the detected ones, and the script again (no new reading)
@@ -123,8 +125,18 @@
     var u = p.usages || [];
     if (!u.length) return '<span class="ss-muted">' + (/^<enter_/.test(String(p.value)) ? "used for sign-in (web_set_user)" : "not replaced in any request") + "</span>";
     var e = (S.entries1 || [])[u[0].reqIdx];
+    // every place it is sent is filled by a correlation (a list read from the page): that one wins, this is not used
+    var by = null;
+    var covered = u.every(function (x) {
+      return (S.correlations || []).some(function (c) {
+        var hit = (c.usages || []).some(function (cu) { return cu.reqIdx === x.reqIdx && String(cu.tokenValue) === String(p.value); });
+        if (hit && !by) by = c.name;
+        return hit;
+      });
+    });
     return '<button type="button" class="adv-req-link" data-open="' + (e ? e.id : "") + '">#' + (e ? e.id : "?") + " " + esc(e ? e.method : "") + "</button> " +
-      '<span class="adv-where">' + esc(LOC[u[0].location] || u[0].location) + " " + esc(u[0].key || "") + "</span>" + (u.length > 1 ? ' <span class="ss-muted">+' + (u.length - 1) + " more</span>" : "");
+      '<span class="adv-where">' + esc(LOC[u[0].location] || u[0].location) + " " + esc(u[0].key || "") + "</span>" + (u.length > 1 ? ' <span class="ss-muted">+' + (u.length - 1) + " more</span>" : "") +
+      (covered && by ? '<small class="ss-td-corr"><svg class="i"><use href="#i-info"/></svg>The script reads it from the page instead (correlation <code>' + esc(by) + "</code>): this parameter is not used. Remove it, or take the correlation out.</small>" : "");
   }
   function sel(field, val, opts, label) {
     return '<select class="ss-field ss-sel" data-set="' + field + '" aria-label="' + label + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === val ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select>";
@@ -152,7 +164,6 @@
     $("#ss-td-files").innerHTML = files.length
       ? "Files in the ZIP: " + files.map(function (f) { return "<code>" + esc(f + ext) + "</code>"; }).join(", ") + (S.format === "devweb" ? " and <code>parameters.yml</code>" : " and <code>ParameterFile.prm</code>")
       : "";
-    var n = $("#ss-data-n"); if (n) { n.hidden = !ps.length; n.textContent = ps.length; }
   }
   SS.renderTestData = render;
 

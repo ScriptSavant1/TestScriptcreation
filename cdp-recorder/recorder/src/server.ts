@@ -165,11 +165,13 @@ export function startServer(
       if (startedTx().includes(name)) return { error: `${name} was used already — type another name.` };
     }
     const ended = state.activeTransaction;
+    // the old warning goes first: ending the running one may warn that it captured nothing, and that warning must
+    // stay in sight now that the next transaction is how a transaction ends (0.3.3 — it was cleared at once)
+    state.warning = null;
     if (state.activeTransaction) endActive();
     // Synchronous — screenshot capture happens in the background (recorder.ts startTransaction)
     recorder.startTransaction(name);
     state.activeTransaction = name;
-    state.warning = null;
     return { name, ended };
   };
 

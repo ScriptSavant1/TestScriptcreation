@@ -139,7 +139,7 @@ export function forceSettledCheck(): boolean {
  * Escape hatch for recorder.ts's polling ceiling: fires Settled
  * unconditionally, even if capture is still unconfirmed. Used only after
  * forceSettledCheck() has genuinely failed to confirm for ~20s straight —
- * the alternative is "Start Transaction" stays disabled forever, which is
+ * the alternative is "Start transaction" stays disabled forever, which is
  * worse than letting the user proceed with a visible warning that capture
  * may still be incomplete.
  */

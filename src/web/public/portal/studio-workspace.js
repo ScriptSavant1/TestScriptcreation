@@ -29,7 +29,8 @@
 
   // ── read the recording again after a change. Correlations applied in the Advisor do not survive a new reading
   //    (the Advisor scans again), so the user is asked first. ──
-  function applied() { return (S.advisorCandidates || []).filter(function (c) { return c._applied; }).length; }
+  //    The engines' own correlations come back by themselves unless the user changed one (advisorEngineUntouched).
+  function applied() { return (S.advisorCandidates || []).filter(function (c) { return c._applied && !(typeof advisorEngineUntouched === "function" && advisorEngineUntouched(c)); }).length; }
   function change(fn) {
     var n = applied();
     var go = function () { fn(); again(); };
@@ -39,6 +40,7 @@
   }
   var tAgain = null;
   function again() { clearTimeout(tAgain); tAgain = setTimeout(function () { tAgain = null; if (S.har1) window.analyze(); }, 120); }
+  SS.queuedRead = function () { return tAgain != null; };
   SS.cancelAgain = function () { clearTimeout(tAgain); tAgain = null; };
 
   // ── filter bar: types ──
@@ -69,6 +71,9 @@
     var outs = [];
     if (!(S.leaveOut && S.leaveOut.ads === false)) outs.push("analytics / ads");
     if (!(S.leaveOut && S.leaveOut.options === false)) outs.push("OPTIONS");
+    var out = reqs().filter(isOut).length, fn = $("#ss-f-n");
+    fn.hidden = !out; fn.textContent = out; $("#ss-filters-btn").title = "What goes into the script" + (out ? ": " + plural(out, "request") + " left out" : "");
+    $("#ss-f-all").textContent = (reqs().length - out) + " of " + reqs().length + " requests are in the script.";
     $("#ss-f-sum").textContent = "In the script: " + (on.length === STUDIO_RT_TYPES.length ? "every type" : on.join(", ")) + (outs.length ? " · leaving out " + outs.join(" and ") : "");
   }
   $("#ss-types").addEventListener("click", function (e) {
@@ -93,12 +98,6 @@
     });
   });
   $("#ss-bg-btn").addEventListener("click", function () { SS.openBg(false); });
-  // filters fold to one line (remembered)
-  var fbar = $("#ss-fbar"), ffold = $("#ss-fbar-fold");
-  function fbarFold(f) { fbar.classList.toggle("folded", f); ffold.setAttribute("aria-expanded", String(!f)); }
-  ffold.addEventListener("click", function () { prefs.fbarFolded = !fbar.classList.contains("folded"); SS.save(); fbarFold(prefs.fbarFolded); });
-  fbar.querySelector(".ss-fbar-row").addEventListener("click", function (e) { if (e.target === e.currentTarget) ffold.click(); });
-  fbarFold(!!prefs.fbarFolded);
   // "Should I put JS, CSS … in the script?"
   var help = $("#ss-res-help"), pop = $("#ss-res-pop");
   help.addEventListener("click", function (e) { e.stopPropagation(); pop.hidden = !pop.hidden; help.setAttribute("aria-expanded", String(!pop.hidden)); });
@@ -135,8 +134,8 @@
   }
   function renderDomains() {
     var stats = S.domainStats || {}, hosts = Object.keys(stats);
-    var inS = {}, all = {};
-    reqs().forEach(function (e) { var h = hostOf(e.url); if (!h) return; all[h] = (all[h] || 0) + 1; if (!e.filtered) inS[h] = (inS[h] || 0) + 1; });
+    var inS = {}, all = {}, nIn = {};
+    reqs().forEach(function (e) { var h = hostOf(e.url); if (!h) return; all[h] = (all[h] || 0) + 1; if (!e.filtered) inS[h] = (inS[h] || 0) + 1; if (!isOut(e)) nIn[h] = (nIn[h] || 0) + 1; });
     var q = ($("#ss-dq").value || "").trim().toLowerCase();
     var adsOn = !(S.leaveOut && S.leaveOut.ads === false);
     var isAds = function (h) { return NOISY.test(h); };
@@ -153,10 +152,9 @@
       return '<div class="ss-dom' + (off || ads ? " off" : "") + '" data-host="' + esc(h) + '">' +
         '<input type="checkbox" class="ss-cb" ' + (off || ads ? "" : "checked ") + (ads ? "disabled " : "") + 'aria-label="' + esc(h) + (ads ? " — analytics / ads, left out (Leave out: Analytics / ads)" : off ? " — left out; tick to put it in the script" : " — in the script; untick to leave it out") + '">' +
         '<span class="ss-host" title="' + esc(h) + '">' + esc(h) + "</span>" +
-        '<span class="ss-meta">' + (inS[h] || 0) + " of " + (all[h] || stats[h].count) + " in the script" + (ads ? ' · <span class="ss-tag">analytics / ads</span>' : "") + "</span>" +
+        '<span class="ss-meta">' + (nIn[h] || 0) + " of " + (all[h] || stats[h].count) + " in the script" + (ads ? ' · <span class="ss-tag">analytics / ads</span>' : "") + "</span>" +
         (srv.length ? '<span class="ss-srv">' + srv.map(function (s) {
-          return '<code title="The server parameter of ' + esc(s.key) + ' in the script">' + esc(s.name) + "</code>" + (s.main ? '<span class="ss-tag">main</span>' : "") +
-            '<button class="ds-btn ds-btn-xs ds-btn-ghost" type="button" data-rename="' + esc(s.key) + '" aria-label="Rename the server parameter of ' + esc(s.key) + '"><svg class="i"><use href="#i-edit"/></svg>Rename</button>';
+          return '<button class="ss-par" type="button" data-rename="' + esc(s.key) + '" title="The server parameter of ' + esc(s.key) + ' in the script: click to change its name" aria-label="' + esc(s.name) + ", the server parameter of " + esc(s.key) + ': change its name"><code>' + esc(s.name) + '</code><svg class="i"><use href="#i-edit"/></svg></button>' + (s.main ? '<span class="ss-tag">main</span>' : "");
         }).join("") + "</span>" : "") +
         "</div>";
     }
@@ -204,6 +202,8 @@
   // ── Requests: one list, grouped by transaction; left-out requests behind one line per group ──
   var H = { h: 40, r: 44, o: 32 };
   var REASON = { report: "browser report", websocket: "WebSocket", nonhttp: "not HTTP", prefetch: "prefetched page opened later", domain: "domain switched off", options: "OPTIONS pre-flight", ads: "analytics / ads", type: "type left out", user: "left out by you" };
+  function isOut(e) { return !SS.inScript(e); }
+  function why(e) { return e.filtered ? REASON[e.leftOut] || "left out" : "repeats in the background"; }
   function groups() {
     var out = [], cur = null;
     (S.entries1 || []).forEach(function (e) {
@@ -227,20 +227,21 @@
     gs.forEach(function (g, gi) {
       var items = q ? g.items.filter(function (e) { return e.url.toLowerCase().indexOf(q) !== -1; }) : g.items;
       if (q && !items.length) return;
-      var ins = items.filter(function (e) { return !e.filtered; }), outs = items.filter(function (e) { return e.filtered; });
+      var ins = items.filter(function (e) { return !isOut(e); }), outs = items.filter(function (e) { return e.filtered; });
       var key = g.txn || "";
       var folded = !!W.folded[key];
-      if (anyTxn || g.txn) { rows.push({ k: "h", g: g, gi: gi, key: key, n: ins.length, nOut: outs.length, folded: folded, y: y }); y += H.h; }
-      if (folded) return;
       var openOut = showOut || W.openOut[gi] || !!q;
+      var by = {};
+      outs.forEach(function (e) { var w = why(e); by[w] = (by[w] || 0) + 1; });
+      var whyAll = Object.keys(by).map(function (w) { return by[w] + " " + w; }).join(", ");
+      var head = anyTxn || g.txn;
+      // a group with a header: its "n left out" is the header's own button (shows / hides them) — no extra line (2026-11-27)
+      if (head) { rows.push({ k: "h", g: g, gi: gi, key: key, n: ins.length, nOut: items.length - ins.length, outs: outs.length, open: !!W.openOut[gi], fixed: showOut || !!q, why: whyAll, folded: folded, y: y }); y += H.h; }
+      if (folded) return;
       items.forEach(function (e) {
         if (!e.filtered || openOut) { rows.push({ k: "r", e: e, y: y }); y += H.r; }
       });
-      if (outs.length && !openOut) {
-        var why = {};
-        outs.forEach(function (e) { var w = REASON[e.leftOut] || "left out"; why[w] = (why[w] || 0) + 1; });
-        rows.push({ k: "o", gi: gi, n: outs.length, why: Object.keys(why).map(function (w) { return why[w] + " " + w; }).join(", "), y: y }); y += H.o;
-      }
+      if (outs.length && !openOut && !head) { rows.push({ k: "o", gi: gi, n: outs.length, why: whyAll, y: y }); y += H.o; }
     });
     W.rows = rows; W.height = y;
   }
@@ -252,9 +253,12 @@
   function rowHtml(r) {
     if (r.k === "h") {
       var none = !r.g.txn;
-      return '<div class="ss-txn' + (none ? " none" : "") + (r.folded ? " folded" : "") + '" style="top:' + r.y + 'px" data-key="' + esc(r.key) + '" role="listitem">' +
+      return '<div class="ss-txn' + (none ? " none" : "") + (r.folded ? " folded" : "") + '" style="top:' + r.y + 'px" data-key="' + esc(r.key) + '" data-gi="' + r.gi + '" role="listitem">' +
         '<button class="ss-fold" type="button" aria-expanded="' + !r.folded + '" aria-label="' + (r.folded ? "Unfold " : "Fold ") + esc(r.g.txn || "requests outside transactions") + '"><svg class="i ss-chev"><use href="#i-chev"/></svg></button>' +
-        '<span class="ss-bar2"></span><b>' + esc(r.g.txn || "Not in a transaction") + "</b><small>" + plural(r.n, "request") + (r.nOut ? " · " + r.nOut + " left out" : "") + "</small><span class=\"ss-grow\"></span>" +
+        '<span class="ss-bar2"></span><b title="' + esc(r.g.txn || "Not in a transaction") + '">' + esc(r.g.txn || "Not in a transaction") + "</b><small>" + plural(r.n, "request") +
+        (!r.nOut ? "" : r.outs && !r.fixed && !r.folded
+          ? ' · <button type="button" class="ss-outlink" data-act="out" aria-expanded="' + r.open + '" title="' + esc(r.why) + (r.open ? " — hide them" : " — show them") + '">' + r.nOut + " left out</button>"
+          : " · " + r.nOut + " left out") + "</small><span class=\"ss-grow\"></span>" +
         (none ? "" : '<button class="ds-btn ds-btn-xs ds-btn-ghost" type="button" data-act="rename" title="Rename this transaction"><svg class="i"><use href="#i-edit"/></svg><span class="ss-opt">Rename</span></button>' +
           '<button class="ds-btn ds-btn-xs ds-btn-ghost" type="button" data-act="ungroup" title="Remove this transaction; its requests stay in the script"><svg class="i"><use href="#i-ungroup"/></svg><span class="ss-opt">Ungroup</span></button>') +
         "</div>";
@@ -262,7 +266,7 @@
     if (r.k === "o") {
       return '<button type="button" class="ss-outrow" style="top:' + r.y + 'px" data-gi="' + r.gi + '"><svg class="i"><use href="#i-eye"/></svg>' + plural(r.n, "request") + " left out — " + esc(r.why) + '<span class="ss-link">Show</span></button>';
     }
-    var e = r.e, u = split(e.url), sel = W.sel.has(e.id);
+    var e = r.e, u = split(e.url), sel = W.sel.has(e.id), o = isOut(e), once = SS.setup(e);
     var tl = "";
     if (e.startMs && W.span) {
       var l = (e.startMs - W.span.t0) / W.span.len * 100, w = Math.max(0.6, (e.dur || 0) / W.span.len * 100);
@@ -273,7 +277,7 @@
       '<span class="ss-rn">' + e.id + "</span>" +
       '<span class="ss-m ' + esc(e.method) + '">' + esc(e.method) + "</span>" +
       '<span class="ss-path"><b title="' + esc(e.url) + '">' + esc(u.path) + "</b><small>" + esc(u.host) +
-        (e.filtered ? ' <span class="ss-why">' + esc(REASON[e.leftOut] || "left out") + "</span>" : "") + "</small></span>" +
+        (o ? ' <span class="ss-why">' + esc(why(e)) + "</span>" : once ? ' <span class="ss-why">runs once at the start</span>' : "") + "</small></span>" +
       '<span class="ss-st ' + statusCls(e.status) + '">' + (e.status || "—") + "</span>" +
       '<span class="ss-num">' + (e.dur ? e.dur + " ms" : "") + "</span>" +
       '<span class="ss-tl">' + tl + "</span></div>";
@@ -296,12 +300,12 @@
   box.addEventListener("scroll", function () { if (!raf) raf = requestAnimationFrame(function () { raf = 0; draw(); }); });
   function renderReqs() {
     build(); draw();
-    var all = reqs(), ins = all.filter(function (e) { return !e.filtered; }).length;
+    var all = reqs(), ins = all.filter(function (e) { return !isOut(e); }).length;
     $("#ss-req-n").textContent = ins + " in the script · " + (all.length - ins) + " left out";
     var so = $("#ss-showout"); so.setAttribute("aria-pressed", String(!!prefs.showOut));
-    so.querySelector("span").textContent = prefs.showOut ? "Hide left-out" : "Show left-out";
+    so.title = prefs.showOut ? "Hide left-out" : "Show left-out"; so.setAttribute("aria-label", so.title);
     var anyFold = Object.keys(W.folded).some(function (k) { return W.folded[k]; });
-    $("#ss-fold-all span").textContent = anyFold ? "Expand all" : "Collapse all";
+    var fa = $("#ss-fold-all"); fa.title = anyFold ? "Expand all" : "Collapse all"; fa.setAttribute("aria-label", fa.title);
     selbar();
   }
   $("#ss-q").addEventListener("input", function () { W.q = this.value.trim(); box.scrollTop = 0; renderReqs(); });
@@ -337,6 +341,11 @@
     var h = e.target.closest(".ss-txn");
     if (h) {
       var key = h.getAttribute("data-key"), act = e.target.closest("[data-act]");
+      if (act && act.getAttribute("data-act") === "out") {
+        var gi = +h.getAttribute("data-gi"); W.openOut[gi] = !W.openOut[gi]; renderReqs();
+        var ob = inner.querySelector('.ss-txn[data-gi="' + gi + '"] [data-act=out]'); if (ob) ob.focus();
+        return;
+      }
       if (act && act.getAttribute("data-act") === "rename") { openTxn("rename", key); return; }
       if (act && act.getAttribute("data-act") === "ungroup") { ungroup(key); return; }
       W.folded[key] = !W.folded[key]; renderReqs();
@@ -353,6 +362,8 @@
   function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
   // keyboard: arrows move, Space ticks, Enter folds a transaction
   box.addEventListener("keydown", function (e) {
+    // a button in the list (fold, n left out, Rename, Ungroup) takes its own Enter / Space
+    if ((e.key === "Enter" || e.key === " ") && e.target.closest && e.target.closest("button") && box.contains(e.target)) return;
     var list = W.rows.filter(function (r) { return r.k === "r"; });
     if (!list.length) return;
     var i = list.findIndex(function (r) { return r.e.id === W.cur; });
@@ -461,18 +472,65 @@
     var lv = $("#ss-det-leave"), mine = e.leftOut === "user";
     lv.textContent = mine ? "Put back" : "Leave out";
     lv.disabled = e.filtered && !mine;
-    lv.title = mine ? "Put this request back into the script" : e.filtered ? "Already left out (" + (REASON[e.leftOut] || "left out") + ") — change that in the filters or Domains" : "Leave this request out of the script";
+    lv.title = mine ? "Put this request back into the script" : e.filtered ? "Already left out (" + why(e) + ") — change that in the filters or Domains" : "Leave this request out of the script";
     var top = (D.fromFind != null ? '<p class="hx-back"><mark class="hx-hl">' + esc(RequestDetails.short(D.fromFind, 48)) + '</mark> is marked in this request<button type="button" class="ds-btn ds-btn-sm" data-back-find>Back to Find a value</button></p>' : "") +
       '<p class="ss-det-ctx">' + (e.txn ? "Transaction <b>" + esc(e.txn) + "</b>" : "Not in a transaction") + " · " +
-      (e.filtered ? "left out of the script" : '<span class="ss-in">in the script</span>') + "</p>";
+      (isOut(e) ? "left out of the script (" + esc(why(e)) + ")" : '<span class="ss-in">in the script</span>' + (SS.setup(e) ? ", once at the start" : "")) + "</p>";
     detB.innerHTML = RequestDetails.html({
       n: e.id, e: { method: e.method, url: e.url, status: e.status, size: c.size >= 0 ? c.size : rs.bodySize >= 0 ? rs.bodySize : null }, raw: raw,
       type: esc(typeLabel(e)), dur: e.dur || 0, start: e.startMs && W.span ? e.startMs - W.span.t0 : 0,
-      out: !!e.filtered, why: REASON[e.leftOut] || "left out", tab: D.tab, mask: D.mask, full: D.full, top: top,
+      out: isOut(e), why: why(e), tab: D.tab, mask: D.mask, full: D.full, top: top,
       hl: markFound, extra: [dynTab(e)],
     });
   }
+  // ── the code of the request, marked in the script (a background behind its lines: the code itself is not touched) ──
+  var blocks = { text: null, map: null };
+  function decodeURIComponentSafe(s) { try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch (e) { return s; } }
+  function codeMap(text) {
+    if (blocks.text === text) return blocks.map;
+    var L = text.split("\n"), list = [], map = {}, dev = S.tab === "mj";
+    var head = dev ? /new load\.WebRequest\(\{\s*$/ : /^\s*web_(url|custom_request|submit_data|submit_form|link|rest)\(/;
+    for (var i = 0; i < L.length; i++) {
+      if (!head.test(L[i])) continue;
+      var b = i; while (b < L.length - 1 && !(dev ? /^\s*\}\)\.send(Sync)?\(\)|^\s*\}\)[,;]?\s*$/ : /LAST\);/).test(L[b])) b++;
+      var url = "", j; for (j = i; j <= b && !url; j++) { var m = dev ? /^\s*"?url"?:\s*(.*)$/.exec(L[j]) : /"(?:URL|Action)=([^"]*)/.exec(L[j]); if (m) url = m[1]; }
+      var a = i; while (a > 0 && L[a - 1].trim() && !/lr_(start|end)_transaction|\.(start|stop)\(|lr_think_time|load\.thinkTime|LAST\);\s*$|\}\)\.send/.test(L[a - 1])) a--;
+      list.push({ a: a, b: b, url: url.replace(/^[`'"]/, "") });
+      i = b;
+    }
+    // the requests in the script and their blocks, both in order: the pairs with the same path (a part of it may be a
+    // parameter by now) that together match the most; a query that is in the block says which of two equal paths it is
+    var qs = reqs().filter(function (e) { return !isOut(e) && !SS.setup(e); });
+    var pat = qs.map(function (e) {
+      var p = split(e.url).path.split("?")[0].split("#")[0];
+      return new RegExp("(^|[^/])/" + p.replace(/^\//, "").split("/").map(function (s) { return s ? "(?:" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|[^/?`'\"]*\\{[^}]+\\}[^/?`'\"]*)" : ""; }).join("/") + "/?([?`'\"#]|$)");
+    });
+    var urls = list.map(function (b) { return b.url.replace(/^https?:\/\//, ""); }), texts = list.map(function (b) { return L.slice(b.a, b.b + 1).join("\n"); });
+    var vals = qs.map(function (e) { return (split(e.url).path.split("?")[1] || "").split("#")[0].split("&").map(function (x) { return decodeURIComponentSafe(x.split("=").slice(1).join("=")); }).filter(function (v) { return v.length > 1; }); });
+    var n = qs.length, m = list.length, score = function (a, b) { return !pat[a].test(urls[b]) ? 0 : 10 + (vals[a].length && vals[a].every(function (v) { return texts[b].indexOf(v) >= 0; }) ? 2 : 0); };
+    if (n * m <= 1000000) {
+      var T = [], x, y; for (x = 0; x <= n; x++) T.push(new Int32Array(m + 1));
+      for (x = n - 1; x >= 0; x--) for (y = m - 1; y >= 0; y--) { var s = score(x, y); T[x][y] = Math.max(T[x + 1][y], T[x][y + 1], s ? s + T[x + 1][y + 1] : 0); }
+      for (x = 0, y = 0; x < n && y < m;) { var s2 = score(x, y); if (s2 && T[x][y] === s2 + T[x + 1][y + 1]) { map[qs[x].id] = list[y]; x++; y++; } else if (T[x][y] === T[x + 1][y]) x++; else y++; }
+    } else { var at = 0; qs.forEach(function (e, a) { for (var k = at; k < m && k < at + 40; k++) if (score(a, k)) { map[e.id] = list[k]; at = k + 1; return; } }); }
+    // no block of its own: a redirect that is followed, a file listed on its page — the request before it
+    var prev = null; qs.forEach(function (e) { if (map[e.id]) prev = map[e.id]; else if (prev) map[e.id] = prev; });
+    // what runs once at the start (DevWeb initialize): its own line
+    reqs().forEach(function (e) { if (!SS.setup(e)) return; for (var i = 0; i < L.length; i++) if (L[i].indexOf(e.url) >= 0) { map[e.id] = { a: i, b: i }; return; } });
+    blocks = { text: text, map: map };
+    return map;
+  }
+  function mark(go) {
+    var pre = $("#code-body"), main = S.tab === "mj" || S.tab === "ac";
+    var r = main && W.cur != null && SS.curStep() === 1 && byId(W.cur) ? codeMap(pre.textContent)[W.cur] : null;
+    pre.classList.toggle("ss-hl", !!r);
+    if (!r) return;
+    var cs = getComputedStyle(pre), lh = parseFloat(cs.lineHeight) || 20, top = parseFloat(cs.paddingTop) || 0;
+    pre.style.setProperty("--hl-y", (top + r.a * lh) + "px"); pre.style.setProperty("--hl-h", ((r.b - r.a + 1) * lh) + "px");
+    if (go) { var y = top + r.a * lh; if (y < pre.scrollTop + 4 || top + (r.b + 1) * lh > pre.scrollTop + pre.clientHeight) pre.scrollTop = Math.max(0, y - 24); pre.scrollLeft = 0; }
+  }
   // keepFind: opened from a Find a value answer (the value stays marked, with a way back)
+  function homeTop(fb) { return window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : ""; }
   function openDet(id, keepFind) {
     if (!keepFind) D.fromFind = null;
     if (D.view !== "req") { D.view = "req"; $("#ss-det-h").textContent = "Request details"; }
@@ -482,10 +540,10 @@
     D.id = id; W.cur = id;
     // over the workspace, below the file bar (Download ZIP and the format stay in reach)
     var fb = $("#ss-filebar").getBoundingClientRect();
-    det.style.top = window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : "";
+    if (!det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
     det.hidden = false;
     document.body.classList.add("ss-det-open");
-    renderDet(); draw();
+    renderDet(); draw(); mark(true);
     if (first && !document.body.classList.contains("ss-dock")) detB.scrollTop = 0;
   }
   function detOpen() { return D.id != null || D.view === "find"; }
@@ -588,12 +646,58 @@
   var scrim = document.createElement("div");
   scrim.className = "ss-det-scrim"; scrim.id = "ss-det-scrim"; scrim.hidden = true;
   det.parentNode.insertBefore(scrim, det);
+  // Escape closes the window wherever the focus is (opened from the table, say)
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !e.defaultPrevented && detOpen() && !document.body.classList.contains("ss-dock") && !document.querySelector("dialog[open]")) { e.preventDefault(); closeDet(); } });
   scrim.addEventListener("pointerdown", function (e) { e.preventDefault(); closeDet(); });
   new MutationObserver(function () { scrim.hidden = det.hidden || document.body.classList.contains("ss-dock"); }).observe(det, { attributes: true, attributeFilter: ["hidden"] });
   try {
     if (window.parent !== window) window.parent.document.addEventListener("pointerdown", function () { if (detOpen() && !document.body.classList.contains("ss-dock")) closeDet(); });
   } catch (err) { /* the portal is on another address: the backdrop still closes it */ }
-  function dock() { document.body.classList.toggle("ss-dock", window.innerWidth >= 2400); }
+  // A pop-up at every width; on screens 2400 px and wider the user may dock it as a fourth panel instead (pref dock,
+  // the button in its bar) — before, it docked by itself there, which read as a missing pop-up on a large monitor
+  var dockBtn = $("#ss-det-dock");
+  function dock() {
+    var wide = window.innerWidth >= 2400;
+    document.body.classList.toggle("ss-dock", wide && !!prefs.dock);
+    if (dockBtn) {
+      dockBtn.hidden = !wide;
+      dockBtn.setAttribute("aria-pressed", String(!!prefs.dock));
+      dockBtn.title = prefs.dock ? "Open the details as a pop-up over the workspace" : "Show the details as a panel beside the requests (wide screens)";
+      dockBtn.lastChild.textContent = prefs.dock ? "Pop-up" : "Dock";
+    }
+    scrim.hidden = det.hidden || document.body.classList.contains("ss-dock");
+  }
+  if (dockBtn) dockBtn.addEventListener("click", function () { prefs.dock = !prefs.dock; SS.save(); unmove(); dock(); });
+
+  // The pop-up moves by its bar, like every Script Studio window: kept inside the window, it stays where it was put for
+  // the next request; a double-click on the bar puts it back on the right. Not while docked.
+  var bar = det.querySelector(".ss-det-bar");
+  function unmove() { ["left", "right", "bottom", "height"].forEach(function (k) { det.style[k] = ""; }); det.classList.remove("ss-det-moved"); det.style.top = homeTop($("#ss-filebar").getBoundingClientRect()); }
+  function clampDet() {
+    if (!det.classList.contains("ss-det-moved")) return;
+    var r = det.getBoundingClientRect();
+    det.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, r.left)) + "px";
+    det.style.top = Math.max(8, Math.min(window.innerHeight - 60, r.top)) + "px";
+    det.style.height = Math.min(r.height, window.innerHeight - 16) + "px";
+  }
+  if (bar) {
+    bar.title = "Drag to move; double-click puts it back";
+    bar.addEventListener("pointerdown", function (e) {
+      if (e.button !== 0 || document.body.classList.contains("ss-dock") || e.target.closest("button, input, label, select, a")) return;
+      var r = det.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      det.style.height = r.height + "px"; det.style.right = "auto"; det.style.bottom = "auto";
+      det.classList.add("ss-det-moved"); det.style.left = r.left + "px"; det.style.top = r.top + "px";
+      bar.setPointerCapture(e.pointerId); e.preventDefault();
+      function move(ev) {
+        det.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, ev.clientX - dx)) + "px";
+        det.style.top = Math.max(8, Math.min(window.innerHeight - 60, ev.clientY - dy)) + "px";
+      }
+      function up() { bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); bar.removeEventListener("pointercancel", up); }
+      bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up); bar.addEventListener("pointercancel", up);
+    });
+    bar.addEventListener("dblclick", function (e) { if (!e.target.closest("button, input, label, select, a")) unmove(); });
+  }
+  window.addEventListener("resize", clampDet);
   window.addEventListener("resize", dock); dock();
 
   // ── Find a value: where a value comes from and every request that sends it back, in the details sheet. The search runs
@@ -645,7 +749,7 @@
     D.view = "find"; D.id = null;
     det.classList.add("is-find");
     var fb = $("#ss-filebar").getBoundingClientRect();
-    det.style.top = window.innerWidth > 600 ? Math.max(12, Math.round(fb.bottom + 8)) + "px" : "";
+    if (!det.classList.contains("ss-det-moved")) det.style.top = homeTop(fb);   // a pop-up the user moved stays where it was put
     det.hidden = false; document.body.classList.add("ss-det-open");
     $("#ss-det-h").textContent = "Find a value";
     worker();
@@ -788,7 +892,9 @@
   prefs.hide = prefs.hide || {};
   var cols = $("#ss-cols");
   function panes() {
-    ["dom", "req", "right"].forEach(function (p) { cols.classList.toggle("no-" + p, !!prefs.hide[p]); });
+    // steps 2 and 3 show only the right panel, at full width: never as a rail there (the step 1 choice is kept)
+    var wide = document.body.classList.contains("ss-step-wide");
+    ["dom", "req", "right"].forEach(function (p) { cols.classList.toggle("no-" + p, !!prefs.hide[p] && !(wide && p === "right")); });
     if (prefs.wDom) cols.style.setProperty("--ss-dw", prefs.wDom + "px");
     if (prefs.wRight) cols.style.setProperty("--ss-rw", prefs.wRight + "px");
   }
@@ -828,6 +934,19 @@
       if (which === "dom") delete prefs.wDom; else delete prefs.wRight;
       SS.save();
     });
+    // the keyboard: the arrow keys move the bar (Shift: further), Enter puts the width back — as the drag
+    rs.addEventListener("keydown", function (e) {
+      var which = rs.getAttribute("data-rs"), pane = which === "dom" ? $("#ss-p-dom") : $("#ss-p-right");
+      if (e.key === "Enter") { rs.dispatchEvent(new MouseEvent("dblclick")); e.preventDefault(); return; }
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      var step = (e.shiftKey ? 96 : 24) * (e.key === "ArrowRight" ? 1 : -1) * (which === "dom" ? 1 : -1);
+      var w = Math.round(pane.getBoundingClientRect().width + step);
+      w = Math.max(which === "dom" ? 200 : 320, Math.min(which === "dom" ? 520 : 1400, w));
+      cols.style.setProperty(which === "dom" ? "--ss-dw" : "--ss-rw", w + "px");
+      if (which === "dom") prefs.wDom = w; else prefs.wRight = w;
+      SS.save(); draw();
+    });
   });
   panes();
   if (window.ResizeObserver) new ResizeObserver(function () { if (W.rows.length) draw(); }).observe(box);
@@ -854,7 +973,7 @@
     },
     openFind: function (v) { openFind(v); },
     openDetails: function (id) { openDet(id); },
-    // "Show an example" in the Correlation Advisor tab (as in the mockup): a request that sends back a value the
+    // "Show an example" in step 2, Correlate (as in the mockup): a request that sends back a value the
     // Advisor found, opened on its Dynamic values tab
     showExample: function () {
       var c = (S.advisorCandidates || []).filter(function (x) { return x.status !== "skipped" && x.usages && x.usages.length; })[0];
@@ -863,8 +982,10 @@
       D.tab = "dynamic"; D.full = {}; openDet(e.id); scrollTo(e.id);
     },
     undoToast: function (msg, undo) { undoToast(msg, undo); },
+    mark: mark,
     closeDetails: function () { closeDet(); },
     showPane: showPane,
+    panes: panes,
     state: W,
   };
 })();

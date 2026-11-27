@@ -43,7 +43,7 @@ class JmxDependencyResolver {
 
     // ── CSV Data Set Dependencies ─────────────────────────────────────────
     for (const ds of this.csvDataSets) {
-      const filename = (ds.filename || '').trim();
+      const filename = (ds.uploadedName || ds.filename || '').trim();
       if (!filename) {
         warnings.push('CSVDataSet element found with no filename configured.');
         continue;

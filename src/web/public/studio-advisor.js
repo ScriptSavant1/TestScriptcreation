@@ -542,12 +542,103 @@ function _advHiddenFieldScan(entries, knownValues) {
 }
 
 // ---------------------------------------------------------------------------
+// PHASE 2.7: lists a page offers in a <select> (flights, slots, accounts) whose options look generated and that a
+// later request sends one of back. One High candidate per <select>: a regular expression for the value of every
+// <option …> (any attributes before it; VuGen Ordinal=ALL, DevWeb occurrence All), the range of this select's options
+// among every match on the page (_range),
+// each use with the value it sends and its place (tokenValue, listIdx — as BUG-150's lists). Used every value as
+// recorded unless the user chooses otherwise (_pick). Options without value="…" (single quotes, no value) are left to
+// Add manual correlation. Single candidates for one of its values from that page are dropped.
+// ---------------------------------------------------------------------------
+function _advSelectScan(entries, existingCorrelations) {
+  const out = [];
+  // the value of every <option …> on the page, whatever comes before it in the tag (selected="selected" …)
+  const PATTERN = '<option\\b[^>]*?\\svalue="([^"]*)"';
+  const generated = (v) => !/\s/.test(v) && v.length >= 4 && !/^\d{1,6}$/.test(v) && (/\d/.test(v) || v.length >= 20);
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.filtered || e.isMarker) continue;
+    const body = e.respBody || '';
+    if (body.indexOf('<select') < 0 || body.indexOf('<option') < 0) continue;
+    // every match on the page, in order (the places the extractor gives)
+    const all = [], ore = new RegExp(PATTERN, 'g');
+    let om;
+    while ((om = ore.exec(body))) all.push({ at: om.index, v: om[1] });
+    const re = /<select\b([^>]*)>([\s\S]*?)<\/select\s*>/gi;
+    let m;
+    while ((m = re.exec(body))) {
+      const start = m.index, end = m.index + m[0].length;
+      const tags = m[2].match(/<option\b[^>]*>/gi) || [];
+      if (tags.length < 2 || tags.some(t => !/\svalue="/.test(t))) continue;
+      const mine = all.map((x, n) => ({ v: x.v, pos: n + 1, at: x.at })).filter(x => x.at > start && x.at < end);
+      if (mine.length !== tags.length) continue;
+      const values = mine.map(x => x.v);
+      if (values.some(v => _advAlreadyCorrelated(v, existingCorrelations))) continue;
+      const usages = [], seen = new Set();
+      for (const x of mine) {
+        if (!x.v || seen.has(x.v) || !generated(x.v)) continue;
+        seen.add(x.v);
+        _advFindUsages(entries, i, x.v).forEach(u => usages.push(Object.assign(u, { tokenValue: x.v, listIdx: x.pos })));
+      }
+      if (!usages.length || values.filter(generated).length * 2 < values.length) continue;
+      const nm = (/\bname\s*=\s*["']([^"']+)["']/i.exec(m[1]) || /\bid\s*=\s*["']([^"']+)["']/i.exec(m[1]) || [])[1];
+      const from = mine[0].pos, to = mine[mine.length - 1].pos;
+      const c = {
+        value: '(list — ' + values.length + ' values)',
+        preview: values.slice(0, 3).join(', ') + (values.length > 3 ? ', …' : ''),
+        valueType: 'list',
+        confidence: 'high',
+        varName: (_advSafeVarName(nm || 'select') || 'select') + 'Options',
+        source: { entryIdx: i, url: _advShortUrl(e), jsonPath: null },
+        usages,
+        status: 'pending',
+        _selectAll: true,
+        _select: nm || '',
+        _extract: { extractorType: 'regexp', extractorConfig: { pattern: PATTERN, all: true } },
+      };
+      if (from > 1 || to < all.length) c._range = { from, to };
+      out.push(c);
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // PHASE 3: pattern scan — catch dynamic values in request bodies that weren't
 // found in any response (e.g. truncated HAR, first-ever recording).
 // Returns array of medium-confidence candidate objects.
 // NOTE: same e.body structure as Phase 2 — use e.body.text not e.body directly.
 // entries = S.entries1; i is the correct S.entries1 index.
 // ---------------------------------------------------------------------------
+// Phase 3b: a UUID that is a whole request header value or a whole query value, not already a candidate. Not: cookies
+// (the engines keep them), the request's own addresses (referer, origin, host), sign-in headers, DPoP proofs.
+const _ADV_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const _ADV_UUID_SKIP_HDR = /^(:|cookie$|referer$|origin$|host$|authorization$|proxy-authorization$|dpop(-pf)?$|user-agent$|if-none-match$|etag$)/i;
+function _advUuidScan(entries, alreadyFoundValues) {
+  const found = new Map();
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.filtered || e.isMarker) continue;
+    (e.reqHdrs || []).forEach(h => {
+      const v = String(h.value || '').trim();
+      if (!_ADV_UUID_RE.test(v) || _ADV_UUID_SKIP_HDR.test(h.name || '') || alreadyFoundValues.has(v)) return;
+      const before = found.has(v);
+      _advAddUsage(found, v, null, { entryIdx: i, url: _advShortUrl(e), location: 'header', jsonPath: h.name }, 'medium');
+      if (!before) found.get(v).varName = _advSuggestName(null, h.name, v);
+    });
+    const q = String(e.url || '').split('#')[0].split('?')[1];   // never new URL(): {{variables}} (CLAUDE.md rule 3)
+    if (q) q.split('&').forEach(pair => {
+      const k = pair.split('=')[0], raw = pair.slice(k.length + 1);
+      const v = _advQsDecode(raw);
+      if (!k || !_ADV_UUID_RE.test(v) || alreadyFoundValues.has(v)) return;
+      const before = found.has(v);
+      _advAddUsage(found, v, null, { entryIdx: i, url: _advShortUrl(e), location: 'query', jsonPath: _advQsDecode(k) }, 'medium');
+      if (!before) found.get(v).varName = _advSuggestName(null, _advQsDecode(k), v);
+    });
+  }
+  return Array.from(found.values());
+}
+
 function _advPatternScan(entries, alreadyFoundValues) {
   const found = new Map();
 
@@ -558,6 +649,9 @@ function _advPatternScan(entries, alreadyFoundValues) {
     if (!bodyText) continue;
     const obj = _advParseJson(bodyText);
     if (!obj) {
+      // A form (name=value&…) has fields, not one value: the whole body is not a token (BUG-144 — `csrf_token=<hex>`
+      // became a card whose value no page has, read with a weak boundary)
+      if ((e.body.params && e.body.params.length) || /x-www-form-urlencoded|multipart\/form-data/i.test(e.body.mimeType || '')) continue;
       // Check plain string body directly
       const trimmed = bodyText.trim().replace(/^"|"$/g, '');
       if (trimmed.length >= ADV_MIN_LEN && !alreadyFoundValues.has(trimmed) && _advMatchesPattern(trimmed)) {
@@ -609,6 +703,33 @@ function _advAddUsage(foundMap, value, source, usage, confidence) {
 // This generates web_reg_save_param_json with SelectAll=Yes (VuGen) or
 // {all: true} (DevWeb) so a loop-skeleton can iterate the captured array.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// The position (1-based) of the value at <prefix>[idx]<sub> among the matches of <prefix>[*]<sub> in a response —
+// the order VuGen (SelectAll: name_1 … name_N) and DevWeb (an array) give: the items before it that have the field,
+// plus one. null when the response cannot be read. (BUG-150)
+// ---------------------------------------------------------------------------
+function _advAt(obj, path) {
+  const re = /\.([^.[\]]+)|\[(\d+)\]/g;
+  let cur = obj, m;
+  const p = String(path || '').replace(/^\$/, '');
+  while ((m = re.exec(p))) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = m[1] != null ? cur[m[1]] : cur[+m[2]];
+  }
+  return cur;
+}
+function _advListPos(entry, prefix, idx, sub) {
+  const obj = entry && _advParseJson(entry.respBody || '');
+  const arr = obj ? _advAt(obj, prefix) : undefined;
+  if (!Array.isArray(arr) || idx >= arr.length) return null;
+  let n = 0;
+  for (let j = 0; j < idx; j++) {
+    const v = _advAt(arr[j], sub);
+    if (v !== undefined && v !== null && typeof v !== 'object') n++;
+  }
+  return n + 1;
+}
+
 function _advMergeArrayCandidates(candidates) {
   // Map: basePath → array of candidates
   const arrayGroups = new Map();
@@ -637,7 +758,15 @@ function _advMergeArrayCandidates(candidates) {
     // and array usages ($.nextAlerts[0].systemID) from the same entry are preserved.
     const first = group[0];
     const seenUsageKeys = new Set();
-    const allUsages = group.flatMap(c => c.usages).filter(u => {
+    // Each use sends ONE value of the list: keep that value (tokenValue) and its place in the list (listIdx), so the
+    // script sends the value at the same place (BUG-150 — before, every use had the list's label and nothing was
+    // replaced). Values from another response are not in the list read here: they stay as before (not replaced), as a SelectAll list has no plain {name}.
+    const _srcEntry = (S.entries1 || [])[first.source.entryIdx];
+    const allUsages = group.flatMap(c => {
+      const m2 = c.source.jsonPath.match(/^(.*)\[(\d+)\](.*)$/);
+      const pos = c.source.entryIdx === first.source.entryIdx ? _advListPos(_srcEntry, m2[1], +m2[2], m2[3]) : null;
+      return c.usages.map(u => pos ? Object.assign({}, u, { tokenValue: u.tokenValue || c.value, listIdx: pos }) : u);
+    }).filter(u => {
       const _uk = u.entryIdx + '\x01' + (u.jsonPath || '') + '\x01' + (u.location || '');
       if (seenUsageKeys.has(_uk)) return false;
       seenUsageKeys.add(_uk);
@@ -1027,8 +1156,12 @@ function advisorScan(entries, existingCorrelations) {
   const allHighValues = new Set([...highConfValues, ...csrfCandidates.map(c => c.value), ...hiddenCandidates.map(c => c.value)]);
   const medConf = _advPatternScan(entries, allHighValues);
 
-  // Merge: Phase 2 (high) → Phase 2.5 CSRF (high) → Phase 2.6 hidden fields (high) → Phase 3 (medium)
-  let all = [...highConf, ...csrfCandidates, ...hiddenCandidates, ...medConf];
+  // Phase 3b — UUIDs a request sends in a header or the query string that the scans above do not cover (a page script
+  // made them: X-Request-Id, a correlation id); marked browser-made below when no earlier response has them
+  const uuidCands = _advUuidScan(entries, new Set([...allHighValues, ...medConf.map(c => c.value)]));
+
+  // Merge: Phase 2 (high) → Phase 2.5 CSRF (high) → Phase 2.6 hidden fields (high) → Phase 3 (medium) → Phase 3b
+  let all = [...highConf, ...csrfCandidates, ...hiddenCandidates, ...medConf, ...uuidCands];
 
   // Phase 4 — filter
   all = all.filter(c => {
@@ -1069,6 +1202,39 @@ function advisorScan(entries, existingCorrelations) {
   // and promote them to _arrayReconstruct meta-candidates
   all = _advDetectArrayGroups(all);
 
+  // Phase 2.7 — lists in a <select>: placed with the High candidates; a single candidate for one of a list's values from
+  // the same page is covered by the list
+  const selects = _advSelectScan(entries, existingCorrelations);
+  if (selects.length) {
+    const covered = new Set();
+    selects.forEach(s => s.usages.forEach(u => covered.add(s.source.entryIdx + '\x01' + u.tokenValue)));
+    all = all.filter(c => c._selectAll || !c.source || !covered.has(c.source.entryIdx + '\x01' + c.value));
+    const firstMed = all.findIndex(c => c.confidence !== 'high');
+    all.splice(firstMed === -1 ? all.length : firstMed, 0, ...selects);
+  }
+
+  // Made in the browser (BUG-151): no source, and no response before the value is first sent has it (a page's own
+  // script made it: a hash, a UUID) — there is nothing to read it from, so it is never added to the script as a read value
+  all.forEach(c => { if (_advMadeInBrowser(c, entries)) c._browser = true; });
+  // a UUID made in the browser can be generated by the script: it needs every place it is sent, not only the place the
+  // scan that found it looks at (a body value also sent in a query string) — the use scan of advisorAddManual
+  all.forEach(c => {
+    if (!c._browser || !_ADV_UUID_RE.test(c.value)) return;
+    const have = new Set(c.usages.map(u => u.entryIdx + '|' + u.location + '|' + (u.jsonPath || '')));
+    _advFindUsages(entries, -1, c.value).forEach(u => {
+      const k = u.entryIdx + '|' + u.location + '|' + (u.jsonPath || '');
+      if (!have.has(k)) { have.add(k); c.usages.push(u); }
+    });
+    c.usages.sort((a, b) => a.entryIdx - b.entryIdx);
+    // named after the field it is sent in (traceId, xRequestId), not after its shape (correlationId)
+    const u0 = c.usages[0];
+    if (u0 && c.varName === _advSuggestName(null, null, c.value)) {
+      c.varName = u0.location === 'header' || u0.location === 'query' || u0.location === 'body_form'
+        ? _advSuggestName(null, u0.jsonPath, c.value)
+        : _advSuggestName(u0.jsonPath, null, c.value);
+    }
+  });
+
   // Re-index IDs after filtering
   all.forEach((c, i) => { c.id = 'adv-' + i; });
 
@@ -1086,14 +1252,15 @@ function advisorScan(entries, existingCorrelations) {
 // Called by applyAndRegen() in studio-app.js for each accepted candidate.
 // ---------------------------------------------------------------------------
 function advisorToCorrelation(candidate) {
-  const usages = candidate.usages.map(u => ({
+  const usages = candidate.usages.map(u => Object.assign({
     reqIdx: u.entryIdx,                         // correct S.entries1 index
     location: u.location,                        // 'body_json' | 'body_form' | 'header'
     key: u.jsonPath ? u.jsonPath.split('.').pop().replace(/[\[\]]/g, '') : 'value',
-    tokenValue: candidate.value,
-    originalValue: candidate.value,
+    // a list's use sends one of its values (BUG-150); every other candidate: its own value, as before
+    tokenValue: candidate._selectAll && u.tokenValue ? u.tokenValue : candidate.value,
+    originalValue: candidate._selectAll && u.tokenValue ? u.tokenValue : candidate.value,
     prefix: '',
-  }));
+  }, candidate._selectAll && u.listIdx ? { listIdx: u.listIdx } : {}));
 
   // Array reconstruction: short-circuit — all config is already in _arrayConfig.
   // Maps body_array usages (sentinel placement) AND body_json_standalone usages
@@ -1141,10 +1308,25 @@ function advisorToCorrelation(candidate) {
     };
   }
 
+  // Made by the script (BUG-151 part 2): a new UUID, set right before the first request that sends this recorded
+  // value — so a value the recording renewed is renewed at the same places, and one it kept is kept for the iteration.
+  // No extractor, no source. extractorConfig.value = the recorded value (it also keeps same-named ones apart).
+  if (candidate._gen && candidate._gen.kind === 'uuid') {
+    return { name: candidate.varName, sourceIdx: -1, extractorType: 'uuid', extractorConfig: { value: candidate.value }, usages, _fromAdvisor: true };
+  }
+
   // Determine extractor type and config
-  let extractorType, extractorConfig;
+  let extractorType, extractorConfig, _fb = null;
   const exact = candidate._explorer || candidate._paste;
-  if (candidate._manual && exact && exact.extractorType) {
+  if (candidate._edit && candidate._edit.extractorType) {
+    // Chosen in Script Studio's correlation editor (how to read it, and from which response): the user's choice wins
+    extractorType = candidate._edit.extractorType;
+    extractorConfig = candidate._edit.extractorConfig;
+  } else if (candidate._engineCorr) {
+    // Found by Studio's own correlation engines (advisorMirrorEngine): their extractor, exactly
+    extractorType = candidate._engineCorr.extractorType;
+    extractorConfig = candidate._engineCorr.extractorConfig;
+  } else if (candidate._manual && exact && exact.extractorType) {
     // Handed over by the HAR Explorer, or built by Paste & Detect: the exact extractor (same types and config as Studio's own)
     extractorType = exact.extractorType;
     extractorConfig = exact.extractorConfig;
@@ -1168,25 +1350,101 @@ function advisorToCorrelation(candidate) {
     extractorType = candidate._extract.extractorType;
     extractorConfig = candidate._extract.extractorConfig;
   } else if (candidate.source && candidate.source.jsonPath) {
-    // Auto-detected via HAR response scan: use the JSON path we traced
+    // Auto-detected via HAR response scan: use the JSON path we traced (a list: every match; how it is used is _pick,
+    // below — one random picker for every list, the editor's and the Rnd switch)
     extractorType = 'jsonpath';
     extractorConfig = candidate._selectAll
       ? { path: candidate.source.jsonPath, selectAll: true }
       : { path: candidate.source.jsonPath };
+  } else if ((_fb = _advBoundaryFromResponses(candidate, usages))) {
+    // No known source path: boundaries read from the response that has the value, widened until their first
+    // match is the value (BUG-144 — before, the value's own first 8 characters with no right boundary)
+    extractorType = _fb.extractorType;
+    extractorConfig = _fb.extractorConfig;
   } else {
-    // Medium-confidence, no known source path: boundary fallback
+    // Medium-confidence, no response has the value: boundary fallback (to be reviewed in the editor)
     extractorType = 'boundary';
     extractorConfig = { lb: candidate.value.slice(0, 8), rb: '' };
   }
 
-  return {
+  // A list (_selectAll) and how each place uses it (Script Studio's editor, the Rnd switch): _pick "random" (one value
+  // at random each iteration), "rotate" (the next value each iteration), "nth" (always value _nth); _range = the matches
+  // that belong to it (the options of one <select>). None of these: every value as recorded, as before.
+  const out = {
     name: candidate.varName,
-    sourceIdx: candidate.source ? candidate.source.entryIdx : (usages[0] ? Math.max(0, usages[0].reqIdx - 1) : 0),
+    sourceIdx: candidate._edit && candidate._edit.extractorType && candidate._edit.sourceIdx != null ? candidate._edit.sourceIdx
+      : _fb ? _fb.sourceIdx
+      : candidate.source ? candidate.source.entryIdx : (usages[0] ? Math.max(0, usages[0].reqIdx - 1) : 0),
     extractorType,
     extractorConfig,
     usages,
     _fromAdvisor: true,
   };
+  const pick = candidate._selectAll ? candidate._pick : null;
+  if (pick === 'rotate' || pick === 'nth' || pick === 'random') {
+    out.list = { pick };
+    if (pick === 'nth') out.list.nth = Math.max(1, parseInt(candidate._nth, 10) || 1);
+    if (candidate._range && candidate._range.from) { out.list.from = candidate._range.from; out.list.to = candidate._range.to; }
+  }
+  // Found by Studio's own engines: their own uses (a Bearer prefix, the header and body forms they found) and their
+  // other settings — only the extractor, its response and the name can be changed in the editor. Uses before the
+  // response it is read from are dropped (the value does not exist yet there).
+  const eng = candidate._engineCorr;
+  if (eng) {
+    out.usages = (eng.usages || []).filter(u => !(out.sourceIdx >= 0) || u.reqIdx > out.sourceIdx).map(u => Object.assign({}, u));
+    Object.keys(eng).forEach(k => { if (!(k in out) && k !== '_suppressed' && k !== '_suppressedBy') out[k] = eng[k]; });
+    if (!eng._fromAdvisor) delete out._fromAdvisor;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC: the correlations Studio's own engines found (pattern, second recording, value-based, PKCE) listed as
+// candidates already in the script — so the Correlate table, the editor, Take out and Undo work for them as for the
+// Advisor's own. The script does not change: each candidate points at the engine's correlation (_engineCorr), which
+// stays in S.correlations until the user takes it out or saves a change (the editor). Values made while the script
+// runs (PKCE) or rebuilt arrays cannot be read from a response: _fixed (Take out only).
+// outKeys — advisorEngineKey()s the user took out before this reading: taken out again (listed under Skipped).
+// ---------------------------------------------------------------------------
+function advisorEngineKey(corr, entries) {
+  const e = (entries || S.entries1 || [])[corr.sourceIdx];
+  return corr.name + '|' + (e ? (e.method || '') + ' ' + String(e.url || '').split('?')[0] : corr.extractorType);
+}
+function advisorMirrorEngine(outKeys) {
+  const out = new Set(outKeys || []);
+  const ents = S.entries1 || [];
+  (S.correlations || []).slice().forEach(corr => {
+    if (!corr || corr._suppressed || corr._fromAdvisor) return;
+    if ((S.advisorCandidates || []).some(c => c._engineCorr === corr)) return;
+    const u0 = (corr.usages || [])[0] || {};
+    const value = String(u0.tokenValue || u0.originalValue || '');
+    const src = corr.sourceIdx >= 0 ? ents[corr.sourceIdx] : null;
+    const cand = {
+      id: 'adv-' + S.advisorCandidates.length,
+      value: value || '(made while the script runs)',
+      preview: value.length > 40 ? value.slice(0, 40) + '…' : value,
+      valueType: 'token',
+      confidence: 'high',
+      varName: corr.name,
+      source: { entryIdx: corr.sourceIdx, url: src ? _advShortUrl(src) : '', jsonPath: corr.extractorType === 'jsonpath' && corr.extractorConfig ? corr.extractorConfig.path || null : null },
+      usages: (corr.usages || []).map(u => ({ entryIdx: u.reqIdx, url: ents[u.reqIdx] ? _advShortUrl(ents[u.reqIdx]) : '', location: u.location, jsonPath: u.key, tokenValue: u.tokenValue })),
+      status: 'accepted',
+      _applied: true,
+      _engineCorr: corr,
+      _engineKey: advisorEngineKey(corr, ents),
+      _fixed: !src || corr.extractorType === 'pkce' || corr.extractorType === 'array_reconstruct',
+    };
+    S.advisorCandidates.push(cand);
+    if (out.has(cand._engineKey)) {
+      const i = S.correlations.indexOf(corr);
+      if (i >= 0) S.correlations.splice(i, 1);
+      cand._outAt = i; cand._applied = false; cand.status = 'skipped';
+    }
+  });
+}
+// A candidate found by Studio's engines and not changed by the user: its own correlation is still in the script
+function advisorEngineUntouched(c) {
+  return !!(c && c._engineCorr && (S.correlations || []).indexOf(c._engineCorr) >= 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1209,15 +1467,14 @@ function _advSafeVarName(name) {
 // actualValue    — (optional) the already-resolved field value from the field browser;
 //                  used to scan all subsequent requests for usages to substitute
 // ---------------------------------------------------------------------------
-function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, actualValue) {
-  const entry = (S.entries1 || [])[sourceEntryIdx];
-  const id = 'adv-' + (S.advisorCandidates.length);
-
-  // Auto-scan all SUBSEQUENT requests for the extracted value so the codegen
-  // can substitute it everywhere (queryString, body, headers).
+// ---------------------------------------------------------------------------
+// Every later request that sends `actualValue` back (after entries[sourceEntryIdx]): JSON body leaves, form fields,
+// query values, request headers (with or without "Bearer "), address path segments. Values under 4 characters: none.
+// Used by advisorAddManual and advisorSuggestMore.
+// ---------------------------------------------------------------------------
+function _advFindUsages(entries, sourceEntryIdx, actualValue) {
   const autoUsages = [];
   if (actualValue && actualValue.length >= 4) {
-    const entries = S.entries1 || [];
     for (let i = sourceEntryIdx + 1; i < entries.length; i++) {
       const e = entries[i];
       if (e.filtered || e.isMarker) continue;
@@ -1279,6 +1536,95 @@ function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, ac
       }
     }
   }
+
+  return autoUsages;
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC: "Also suggest other repeated values" (Script Studio, step 2). The scan above keeps values of 10 characters
+// or more, leaves short numbers out and shows 20 at most; this adds the other values a JSON response sends that a
+// later request sends back — 4 characters or more, numbers too — as Medium suggestions, not ticked (_more). Values
+// already suggested or in the script, the values in skipValues (the page passes the test data values) and common
+// words are left out.
+// Returns the number added.
+// ---------------------------------------------------------------------------
+function advisorSuggestMore(skipValues) {
+  const entries = S.entries1 || [];
+  const known = new Set((S.advisorCandidates || []).map(c => c.value));
+  (skipValues || []).forEach(v => { if (v != null) known.add(String(v)); });
+  const seen = new Set();
+  const added = [];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.filtered || e.isMarker || !e.respBody) continue;
+    const obj = _advParseJson(e.respBody);
+    if (!obj) continue;
+    _advWalkLeaves(obj, '$', (val, path) => {
+      if (val.length < 4 || val.length > 2000 || seen.has(val) || known.has(val)) return;
+      seen.add(val);
+      if (ADV_SKIP_VALUES.has(val.toLowerCase()) || /\s/.test(val) || /^\d{1,3}$/.test(val)) return;
+      if (_advAlreadyCorrelated(val, S.correlations)) return;
+      const usages = _advFindUsages(entries, i, val);
+      if (!usages.length) return;
+      added.push({
+        id: 'adv-' + ((S.advisorCandidates || []).length + added.length),
+        value: val,
+        preview: val.length > 40 ? val.slice(0, 40) + '…' : val,
+        valueType: _advValueType(val),
+        confidence: 'medium',
+        varName: _advSuggestName(path, null, val),
+        source: { entryIdx: i, url: _advShortUrl(e), jsonPath: path },
+        usages,
+        status: 'pending',
+        _more: true,
+      });
+    }, 0);
+  }
+  S.advisorCandidates = (S.advisorCandidates || []).concat(added);
+  return added.length;
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC: a list made in Script Studio's editor — a JSON path or boundaries that read every match.
+// values = what the extractor reads from the response, in order (every match); opts.from / opts.to = the matches that
+// belong to the list (1-based, e.g. the options of one <select> among others; default all); opts.pick = "random" |
+// "rotate" | "nth" (opts.nth), default every value as recorded. Each later request that sends one of the values back
+// is a use with that value and its place (tokenValue, listIdx — as for a list the Correlation Advisor merges, BUG-150).
+// The candidate is ticked (as advisorAddManual's); the caller puts it in the script (advisorApplyOne).
+// ---------------------------------------------------------------------------
+function advisorAddList(sourceEntryIdx, ext, varName, values, opts) {
+  opts = opts || {};
+  const all = (values || []).map(String);
+  const from = Math.max(1, opts.from || 1), to = Math.min(all.length, opts.to || all.length);
+  const usages = [], seen = new Set();
+  for (let pos = from; pos <= to; pos++) {
+    const v = all[pos - 1];
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    _advFindUsages(S.entries1 || [], sourceEntryIdx, v).forEach(u => usages.push(Object.assign(u, { tokenValue: v, listIdx: pos })));
+  }
+  const cfg = ext.extractorConfig || {};
+  const c = advisorAddManual(sourceEntryIdx, ext.extractorType === 'jsonpath' ? 'jsonpath' : 'boundary', cfg.path || cfg.lb || '', varName, all[from - 1] || '');
+  const n = Math.max(0, to - from + 1);
+  c.usages = usages;
+  c.value = '(list — ' + n + ' values)';
+  c.preview = all.slice(from - 1, Math.min(to, from + 2)).join(', ') + (n > 3 ? ', …' : '');
+  c.valueType = 'list';
+  c._selectAll = true;
+  c._edit = { extractorType: ext.extractorType, extractorConfig: cfg, sourceIdx: sourceEntryIdx };
+  if (opts.pick === 'random' || opts.pick === 'rotate' || opts.pick === 'nth') c._pick = opts.pick;
+  if (opts.pick === 'nth') c._nth = Math.max(1, parseInt(opts.nth, 10) || 1);
+  if (from > 1 || to < all.length) c._range = { from, to };
+  return c;
+}
+
+function advisorAddManual(sourceEntryIdx, extractType, extractValue, varName, actualValue) {
+  const entry = (S.entries1 || [])[sourceEntryIdx];
+  const id = 'adv-' + (S.advisorCandidates.length);
+
+  // Auto-scan all SUBSEQUENT requests for the extracted value so the codegen
+  // can substitute it everywhere (queryString, body, headers).
+  const autoUsages = _advFindUsages(S.entries1 || [], sourceEntryIdx, actualValue);
 
   const candidate = {
     id,
@@ -1658,6 +2004,51 @@ function _advFirstMatch(text, lb, rb) {
 }
 // Boundaries around the value at `at` that capture exactly it as the FIRST match: start from `lb0`, or the text just
 // before the value, and widen to the left (same line) until the first match is the value itself
+// A value no response has before it is first sent (BUG-151): no source, and neither the body nor a header of an earlier
+// response holds it, as written or URL-encoded. A left-out response counts (the server sent it: putting that request
+// back makes it readable), markers do not. Lists and rebuilt arrays are never browser-made (they are read from a response).
+function _advMadeInBrowser(c, entries) {
+  if (!c || c.source || c._selectAll || c._arrayReconstruct || c._manual || typeof c.value !== 'string' || !c.value) return false;
+  const first = (c.usages || []).reduce((m, u) => (u.entryIdx != null && u.entryIdx < m ? u.entryIdx : m), (entries || []).length);
+  const forms = [c.value];
+  try { const enc = encodeURIComponent(c.value); if (enc !== c.value) forms.push(enc); } catch (e) { /* as written only */ }
+  for (let i = 0; i < first && i < entries.length; i++) {
+    const e = entries[i];
+    if (!e || e.isMarker) continue;
+    const hdrs = e.respHdrsMap ? Object.keys(e.respHdrsMap).map(k => e.respHdrsMap[k]).join('\n') : '';
+    const text = (e.respBody || '') + '\n' + hdrs;
+    if (forms.some(f => text.indexOf(f) >= 0)) return false;
+  }
+  return true;
+}
+
+// A value with no known source path (BUG-144): the response that has it — the card's own source first, else the nearest
+// response before its first use (filtered and marker entries skipped) — and boundaries read from that page, widened
+// until their first match is the value. → { extractorType, extractorConfig, sourceIdx } or null (no response has it)
+function _advBoundaryFromResponses(candidate, usages) {
+  const all = (typeof S !== 'undefined' && S.entries1) || [];
+  const value = candidate && candidate.value;
+  if (!value || typeof value !== 'string' || !all.length) return null;
+  const text = (e) => (e && (e.respBody || (e.response && e.response.body && e.response.body.text) || e.resBody)) || '';
+  const tryAt = (i) => {
+    const e = all[i];
+    if (!e || e.isMarker) return null;
+    const x = _advHtmlValueExtractor(text(e), value);
+    return x ? { extractorType: x.extractorType, extractorConfig: x.extractorConfig, sourceIdx: i } : null;
+  };
+  if (candidate.source && candidate.source.entryIdx != null) {
+    const own = tryAt(candidate.source.entryIdx);
+    if (own) return own;
+  }
+  const firstUse = (usages || []).reduce((m, u) => (u.reqIdx != null && u.reqIdx < m ? u.reqIdx : m), all.length);
+  for (let i = Math.min(firstUse, all.length) - 1; i >= 0; i--) {
+    if (all[i] && all[i].filtered) continue;
+    const r = tryAt(i);
+    if (r) return r;
+  }
+  return null;
+}
+
 function _advSafeBoundaries(text, at, s, lb0, rb0) {
   var after = text.slice(at + s.length, at + s.length + 12);
   var rb = rb0 || ((/^["'&;,<\s}\])]/.exec(after) || [after.charAt(0)])[0] || "");

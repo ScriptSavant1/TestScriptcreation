@@ -35,6 +35,12 @@ const call = async (method, path, body) => {
   try { json = await r.json(); } catch { /* no body */ }
   return { status: r.status, json };
 };
+// a drag as a person makes it: about two seconds, so the bar's state arrives (every 0.7 s) during it
+const slowDrag = async (p, x0, y0, x1, y1) => {
+  await p.mouse.move(x0, y0); await p.mouse.down();
+  for (let i = 1; i <= 30; i++) { await p.mouse.move(x0 + (x1 - x0) * i / 30, y0 + (y1 - y0) * i / 30); await new Promise((r) => setTimeout(r, 70)); }
+  await p.mouse.up();
+};
 const status = async () => (await call("GET", "/api/status")).json;
 
 // ── the test site ──
@@ -61,18 +67,24 @@ const barFile = join(out, "floating-bar.json");
 const env = { ...process.env, CDP_RECORDER_BAR_TEST: "1", CDP_RECORDER_BAR_FILE: barFile, CDP_RECORDER_ALLOWED_FILE: join(out, "allowed.json") };
 // CDP_RECORDER_EXE=dist/cdp-recorder.exe: the packaged program instead of the sources
 const EXE = process.env.CDP_RECORDER_EXE;
-const app = spawn(EXE || process.execPath, [...(EXE ? [] : ["--import", "tsx", "src/main.ts"]), "--ui-port", String(UI), "--cdp-port", String(CDP_PORT), "--out", out, "--portal", `perfx-recorder://start?portal=${encodeURIComponent(PORTAL + "/converter/")}`],
-  { stdio: ["ignore", "pipe", "pipe"], env });
+// started as the PerfX Studio page starts it (a perfx-recorder: link) — such a recorder closes itself once a saved
+// recording's windows have closed (0.3.1), so the test starts it again for the part after
 let log = "";
-app.stdout.on("data", (d) => (log += d));
-app.stderr.on("data", (d) => (log += d));
+const startApp = () => {
+  const a = spawn(EXE || process.execPath, [...(EXE ? [] : ["--import", "tsx", "src/main.ts"]), "--ui-port", String(UI), "--cdp-port", String(CDP_PORT), "--out", out, "--portal", `perfx-recorder://start?portal=${encodeURIComponent(PORTAL + "/converter/")}`],
+    { stdio: ["ignore", "pipe", "pipe"], env });
+  a.stdout.on("data", (d) => (log += d));
+  a.stderr.on("data", (d) => (log += d));
+  return a;
+};
+let app = startApp();
 
 const BAR = "perfx-recorder-bar";
 const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: join(SHOTS, name + ".png") }); };
 let pw;
 try {
   for (let i = 0; i < 40; i++) { await wait(250); try { await fetch(API + "/api/status"); break; } catch { /* starting */ } }
-  check((await status()).version === "0.3.0", "version 0.3.0");
+  check((await status()).version === "0.3.3", "version 0.3.3");
   const s = await call("POST", "/api/session", { url: site + "/select", browser: browserName, private: true, name: "Booking", firstTx: "T01_Launch", plan: "Launch\nAdd to basket\nCheckout" });
   check(s.status === 200, "Start recording — " + s.status + " " + JSON.stringify(s.json));
 
@@ -150,6 +162,11 @@ try {
   check(/T03_Checkout/.test(await pb(".narrow").textContent().catch(() => "")) || /T03_Checkout/.test(await pb(".txn b").textContent().catch(() => "")), "with the same recording (T03_Checkout)");
   const fits = await pop.evaluate((tag) => { const r = document.querySelector(tag).shadowRoot; const pill = r.querySelector(".pill").getBoundingClientRect(); return [...r.querySelectorAll(".pill button")].filter((b) => b.offsetParent).every((b) => b.getBoundingClientRect().right <= Math.min(pill.right, innerWidth) + 1); }, BAR);
   check(fits, "every button of the bar fits a 500 px pop-up");
+  // the bar keeps its look in a pop-up (0.3.3): a pop-up starts as an empty page and the bar made for it is moved
+  // into the real page — the browser drops a style sheet made for another page
+  const styled = async (pg) => pg.evaluate((tag) => { const r = document.querySelector(tag).shadowRoot, pill = r.querySelector(".pill"); return (r.adoptedStyleSheets.length > 0 || !!r.querySelector("style")) && getComputedStyle(pill).backgroundColor !== "rgba(0, 0, 0, 0)" && getComputedStyle(pill).display === "flex"; }, BAR);
+  check(await styled(pop), "the bar in the pop-up has its look (style sheet, dark pill)");
+  check(await styled(p), "the bar in the main window has its look");
   await shot(pop, "05-popup-500");
   await pop.close();
   await p.bringToFront(); await wait(1500);
@@ -162,6 +179,29 @@ try {
   check(/bottom/.test(await bar(".fb").getAttribute("class")), "the bar moved to the bottom");
   await shot(p, "06-bottom");
   await bar(".dockb").click(); await wait(300);
+
+  // drag anywhere (0.3.1): it stays where it is let go — no snapping — and the place is remembered; a double-click on
+  // the grip puts it back at the top, in the middle
+  {
+    await wait(600);
+    await bar(".grip").waitFor({ state: "visible", timeout: 10000 }).catch(() => {});   // after the dock change the bar is drawn again
+    const g = await bar(".grip").boundingBox(), f0 = await bar(".fb").boundingBox(), off = g.y + g.height / 2 - f0.y, vw = await p.evaluate(() => innerWidth), vh = await p.evaluate(() => innerHeight);
+    const tx = Math.round(vw * 0.3), ty = Math.round(vh * 0.55);
+    await slowDrag(p, g.x + g.width / 2, g.y + g.height / 2, tx, ty); await wait(900);
+    const fb = await bar(".fb").boundingBox(), saved = existsSync(barFile) ? JSON.parse(readFileSync(barFile, "utf8")) : {};
+    check(Math.abs(fb.y - (ty - off)) < 12 && fb.y > vh * 0.35, "a dropped bar stays where it is let go (" + Math.round(fb.x) + ", " + Math.round(fb.y) + ")");
+    check(typeof saved.x === "number" && typeof saved.y === "number" && saved.y > 0.3, "the dropped place is remembered (x " + saved.x + ", y " + saved.y + ")");
+    await shot(p, "06b-dropped");
+    await bar(".grip").dblclick(); await wait(900);
+    const back = await bar(".fb").boundingBox(), reset = JSON.parse(readFileSync(barFile, "utf8"));
+    check(back.y < 40 && reset.x === undefined, "a double-click on the grip puts it back at the top");
+    // not only by the grip: by the bar itself (REC, the time) — anything that is not a button or the name box
+    const rec = await bar(".pill .rec").boundingBox();
+    await slowDrag(p, rec.x + rec.width / 2, rec.y + rec.height / 2, Math.round(vw * 0.5), Math.round(vh * 0.7)); await wait(900);
+    const byRec = await bar(".fb").boundingBox();
+    check(byRec.y > vh * 0.5, "the bar also moves when dragged by REC, not only by its grip (" + Math.round(byRec.x) + ", " + Math.round(byRec.y) + ")");
+    await bar(".grip").dblclick(); await wait(600);
+  }
 
   // Alt+Shift+H
   await p.keyboard.press("Alt+Shift+H"); await wait(300);
@@ -181,8 +221,18 @@ try {
   check(await p.locator(BAR).count() === 0, "after saving, the bar goes from the page");
   await pw.close().catch(() => {}); pw = null;
 
+  // started by the link: once the saved recording's windows close (after 10 s), the recorder closes itself — its
+  // console window too; Start recording starts it again
+  {
+    let gone = app.exitCode !== null;
+    const exited = new Promise((r) => app.once("exit", () => { gone = true; r(); }));
+    await Promise.race([exited, wait(25000)]);
+    check(gone, "started by the link, the recorder closes itself after the saved recording's windows close");
+    app = startApp();
+    for (let i = 0; i < 60; i++) { if (await status().catch(() => null)) break; await wait(250); }
+  }
+
   // the bar off
-  await wait(11000); // the saved recording's windows close after 10 s
   const s2 = await call("POST", "/api/session", { url: site + "/select", browser: browserName, private: true, name: "NoBar", bar: false });
   check(s2.status === 200, "Start recording without the bar");
   pw = await chromium.connectOverCDP(`http://127.0.0.1:${CDP_PORT}`);

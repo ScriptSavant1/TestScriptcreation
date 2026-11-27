@@ -45,7 +45,8 @@ const status = async () => (await call("GET", "/api/status")).json;
 try {
   for (let i = 0; i < 40; i++) { await wait(250); try { await fetch(API + "/api/status"); break; } catch { /* starting */ } }
   const v = await status();
-  check(v.version === "0.3.0", "version 0.3.0: " + v.version);
+  const VERSION = /VERSION = "([^"]+)"/.exec(readFileSync("src/version.ts", "utf8"))[1];   // the sources' own version
+  check(v.version === VERSION, "version " + VERSION + ": " + v.version);
   check((await call("POST", "/api/session", { url: site + "/select", scriptId: "bad id" })).status === 400, "a script ID that is not letters and digits is refused");
 
   const s = await call("POST", "/api/session", { url: site + "/select", browser, private: true, name: "Booking", firstTx: "T01_Launch", scriptId: "sc07" });

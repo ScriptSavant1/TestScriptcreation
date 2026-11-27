@@ -1,0 +1,507 @@
+// Every screen of every tool, checked control by control (the design audit, audit.js, checks fonts and contrast):
+//   - overlap: a visible control covered by something else (its centre and corners)
+//   - clipped: text cut off with no ellipsis and no title (the whole text cannot be read)
+//   - unnamed: a button or field with no accessible name (text, aria-label, title, a label)
+//   - focus: a control that shows nothing when it has the keyboard focus
+//   - sideways: the page (or a panel) scrolls sideways
+//   - plain: a button with words but no border, no background and no underline — it cannot be told from text
+//   - dismiss: an open pop-up (dialog) that a click outside it does not close
+//   - fill: on a wide window, the content ends short of 3/4 of the width (a view shrunk into one column or capped)
+//   - table: a table not laid out as a table, or its rows on top of each other (a style sheet meant for something else —
+//     two parts sharing a class name turned the Workload Modeller's script table into a grid: its row lay under the headings)
+//   - cutoff: a control cut by a panel that hides its overflow and does not scroll
+//   - primary: more than one main (filled) button in one view; codefont: a heading of words in the code font;
+//     idle: a bar of greyed-out buttons (an empty state should say what to do); heavy: Studio's group rows outweigh the
+//     requests (weight checks, added 2026-11-27 after the owner found pages heavy that passed every other check)
+//   - expect: a screen's own promise did not hold (for example the correlation editor shows the value of a long response)
+// At 1366, 1536 (a 1920 screen at 125 %, the browser's bars taken off), 1920, 2560 and 3840 px wide, dark and light; a JPEG of each screen and report.json for the gallery.
+//   node review.js [outDir] [--sizes=1366,1536,1920,2560,3840] [--themes=dark,light] [--only=substr]
+'use strict';
+const { chromium } = require(require('path').resolve(__dirname, '../../../cdp-recorder/recorder/node_modules/playwright-core'));
+const path = require('path'), fs = require('fs');
+const args = process.argv.slice(2);
+const OUT = args.find((a) => !a.startsWith('--')) || path.join(__dirname, 'review');
+const opt = (k, d) => ((args.find((a) => a.startsWith('--' + k + '=')) || '').split('=')[1] || d);
+const SIZES = opt('sizes', '1366,1536,1920,2560,3840').split(',').map(Number);
+const THEMES = opt('themes', 'dark,light').split(',');
+const ONLY = opt('only', '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);   // one or more name parts: --only=Explorer,Studio
+let ranScreens = 0;
+const BASE = 'http://localhost:3999/converter/';
+const FX = path.resolve(__dirname, '../').replace(/\\/g, '/') + '/';
+const COL = path.resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/';
+const HEIGHT = { 1100: 800, 1280: 720, 1366: 768, 1536: 700, 1920: 1000, 2560: 1300, 3840: 1900 };   // 3840: a large monitor at 100 % (the tool beside the sidebar is over 2400 px)
+
+// runs in a document: the checks
+function inspect() {
+  // the part of an element that can be seen: its box cut by every ancestor that clips (a scrolling panel) and the window
+  const seen = (e) => {
+    let r = e.getBoundingClientRect(), x1 = r.left, y1 = r.top, x2 = r.right, y2 = r.bottom;
+    for (let n = e.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') { const a = n.getBoundingClientRect(); x1 = Math.max(x1, a.left); y1 = Math.max(y1, a.top); x2 = Math.min(x2, a.right); y2 = Math.min(y2, a.bottom); }
+    }
+    x1 = Math.max(x1, 0); y1 = Math.max(y1, 0); x2 = Math.min(x2, innerWidth); y2 = Math.min(y2, innerHeight);
+    return x2 - x1 >= 2 && y2 - y1 >= 2 ? { left: x1, top: y1, right: x2, bottom: y2, width: x2 - x1, height: y2 - y1 } : null;
+  };
+  // inside a closed <details> (not its summary) nothing can be seen — Edge keeps those boxes their size (content-visibility)
+  const shut = (e) => { const d = e.closest('details:not([open])'); return !!d && !e.closest('summary'); };
+  const vis = (e) => { if (!e.isConnected || shut(e)) return false; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false; const cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0.05 && !!seen(e); };
+  // a modal dialog open: only what is in it can be used
+  // (a pop-up of a tool bar, .ss-pp, lies over what is under it: only what is in it is looked at)
+  const modal = [...document.querySelectorAll('dialog[open]')].find((d) => d.matches(':modal')) || [...document.querySelectorAll('.ss-pp:not([hidden])')].find(vis);
+  const label = (e) => { const t = (e.getAttribute('aria-label') || e.getAttribute('title') || e.innerText || e.value || e.placeholder || '').trim().replace(/\s+/g, ' '); return (e.id ? '#' + e.id + ' ' : '') + e.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : ''); };
+  const where = (e) => { const s = []; let n = e; while (n && n !== document.body && s.length < 4) { s.unshift(n.id ? '#' + n.id : n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : '')); if (n.id) break; n = n.parentElement; } return s.join(' > '); };
+  const out = { overlap: [], clipped: [], unnamed: [], focus: [], sideways: [], plain: [], dismiss: [], fill: [], table: [], primary: [], codefont: [], idle: [], cutoff: [] };
+  // fills the width: on a wide window with no pop-up open, the rightmost card or panel must reach 3/4 of the width (a
+  // view shrunk into one column of a grid, or capped at a fixed width, leaves the rest of a large screen empty)
+  if (innerWidth >= 1200 && !document.querySelector('dialog[open]:modal, [role=dialog][aria-modal=true]:not([hidden])')) {
+    const CLR = /rgba\(0, 0, 0, 0\)|transparent/;
+    let right = 0, who = null;
+    document.querySelectorAll('body *').forEach((e) => {
+      if (!e.offsetParent && getComputedStyle(e).position !== 'fixed') return;
+      if (e.closest('dialog, [role=dialog], [role=tooltip], .toast')) return;
+      const r = e.getBoundingClientRect(); if (r.width < 40 || r.height < 40 || r.width > innerWidth * 0.98 || r.bottom < 0 || r.top > innerHeight) return;
+      const cs = getComputedStyle(e);
+      const framed = parseFloat(cs.borderRightWidth) > 0 && !CLR.test(cs.borderRightColor) || !CLR.test(cs.backgroundColor);
+      if (framed && r.right > right) { right = r.right; who = e; }
+    });
+    if (who && right < innerWidth * 0.75) out.fill.push('content ends at ' + Math.round(right) + ' of ' + innerWidth + ' px (' + Math.round(right / innerWidth * 100) + '%), e.g. ' + where(who));
+  }
+  const ctrls = [...(modal || document).querySelectorAll('button, a[href], input:not([type=hidden]), select, textarea, [role=tab], [role=button], [role=separator][tabindex], summary')].filter(vis);
+  // overlap: centre and corners (inset 3 px) belong to the control
+  ctrls.forEach((e) => {
+    const r = seen(e), pts = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 3, r.top + 3], [r.right - 3, r.bottom - 3]];
+    // (content scrolled under a sticky or fixed bar — the top bar, a group heading — is not covered)
+    const stuck = (h) => { for (let n = h; n && n !== document.body; n = n.parentElement) { const pz = getComputedStyle(n).position; if (pz === 'sticky' || pz === 'fixed') return !n.contains(e); } return false; };
+    const bad = pts.filter(([x, y]) => { if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false; const h = document.elementFromPoint(x, y); return h && h !== e && !e.contains(h) && !h.contains(e) && !(e.labels && [...e.labels].some((l) => l.contains(h))) && !stuck(h); });
+    if (bad.length >= 2) { const h = document.elementFromPoint(bad[0][0], bad[0][1]); out.overlap.push(label(e) + ' — under ' + (h ? where(h) : '?')); }
+  });
+  // cutoff: a control cut by a panel that hides its overflow and does not scroll (only part of it can be seen or
+  // clicked — Script Studio's Requests header on a laptop pushed its hide button past the panel's edge, 2026-11-27)
+  ctrls.forEach((e) => {
+    const r = e.getBoundingClientRect();
+    if (r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight) return;   // the window: scrolling shows it
+    for (let n = e.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (/auto|scroll/.test(cs.overflowX + cs.overflowY)) break;   // a scrolling list or panel: scrolling shows it
+      if (!/hidden|clip/.test(cs.overflowX + cs.overflowY)) continue;
+      const a = n.getBoundingClientRect();
+      const w = /hidden|clip/.test(cs.overflowX) ? Math.max(0, Math.min(r.right, a.right) - Math.max(r.left, a.left)) : r.width;
+      const h = /hidden|clip/.test(cs.overflowY) ? Math.max(0, Math.min(r.bottom, a.bottom) - Math.max(r.top, a.top)) : r.height;
+      if (w < r.width - 2 || h < r.height - 2) { out.cutoff.push(label(e) + ' — cut by ' + where(n) + ' (' + Math.round(w) + ' x ' + Math.round(h) + ' of ' + Math.round(r.width) + ' x ' + Math.round(r.height) + ' shown)'); break; }
+    }
+  });
+  // clipped text: overflows its box, the overflow hidden, no ellipsis, no title (inputs and code panes scroll on purpose)
+  document.querySelectorAll('body *').forEach((e) => {
+    if (!vis(e) || /^(INPUT|TEXTAREA|SELECT|PRE|CODE|svg|path|OPTION|IMG|CANVAS)$/i.test(e.tagName)) return;
+    const own = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()); if (!own) return;
+    const cs = getComputedStyle(e);
+    const hidX = /hidden|clip/.test(cs.overflowX) && e.scrollWidth > e.clientWidth + 1;
+    const hidY = /hidden|clip/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 2 && cs.webkitLineClamp === 'none';
+    if ((hidX && cs.textOverflow !== 'ellipsis') || hidY) {
+      if (e.title || (e.closest('[title]') && e.closest('[title]') !== document.body)) return;
+      out.clipped.push(where(e) + ' "' + e.textContent.trim().slice(0, 40) + '"');
+    }
+  });
+  // unnamed controls
+  ctrls.forEach((e) => {
+    const name = (e.getAttribute('aria-label') || e.getAttribute('aria-labelledby') || e.getAttribute('title') || (e.innerText || '').trim() || (e.labels && e.labels.length) || e.getAttribute('placeholder') || (e.tagName === 'INPUT' && /^(submit|button)$/.test(e.type) && e.value));
+    if (!name) out.unnamed.push(where(e));
+  });
+  // looks like text: words, but no border, no background (other than what is behind it) and no underline. Not judged:
+  // tabs, choices in a group (radio, segmented, pressed / selected / current), menu items, fold toggles, navigation
+  const CLEAR = /rgba\(0, 0, 0, 0\)|transparent/;
+  const behind = (n) => { for (; n; n = n.parentElement) { const b = getComputedStyle(n).backgroundColor; if (!CLEAR.test(b)) return b; } return 'rgb(255, 255, 255)'; };
+  ctrls.filter((e) => e.tagName === 'BUTTON' || e.getAttribute('role') === 'button').forEach((e) => {
+    if (e.matches('[role=tab],[role=radio],[role=menuitem],[role=menuitemradio],[role=switch],[aria-pressed],[aria-selected],[aria-current],[aria-expanded]')) return;
+    // the sidebar logo (goes Home), file tabs (the current one underlined), rows of a list (the row is the control)
+    if (e.matches('.sb-brand, .code-tab, .ss-ed-hrow')) return;
+    if (e.closest('nav, [role=navigation], [role=tablist], [role=radiogroup], [role=menu], [role=listbox], [role=group]')) return;
+    const txt = (e.innerText || '').trim(); if (!/[\p{L}\p{N}]/u.test(txt)) return;   // no words: an icon (✕ included)
+    const cs = getComputedStyle(e);
+    const border = ['Top', 'Right', 'Bottom', 'Left'].some((s) => parseFloat(cs['border' + s + 'Width']) > 0 && !CLEAR.test(cs['border' + s + 'Color']));
+    const fill = !CLEAR.test(cs.backgroundColor) && cs.backgroundColor !== behind(e.parentElement);
+    const under = [e, ...e.querySelectorAll('*')].some((x) => /underline/.test(getComputedStyle(x).textDecorationLine));
+    if (!border && !fill && !under) out.plain.push(where(e) + ' "' + txt.slice(0, 30) + '"');
+  });
+  // sideways scroll: the page, or a panel whose content is wider than it (not code and tables, which scroll on purpose)
+  const de = document.documentElement;
+  if (de.scrollWidth > de.clientWidth + 2) out.sideways.push('page +' + (de.scrollWidth - de.clientWidth) + 'px');
+  // a panel that scrolls sideways may hold wide content, but never a control that can only be reached by scrolling it
+  [...document.querySelectorAll('*')].forEach((n) => {
+    if (n.scrollWidth <= n.clientWidth + 2 || !/auto|scroll/.test(getComputedStyle(n).overflowX) || !n.offsetParent) return;
+    const r = n.getBoundingClientRect(); if (r.width < 40 || r.bottom < 0 || r.top > innerHeight) return;
+    const cut = [...n.querySelectorAll('button, a[href], input:not([type=hidden]), select, [role=button]')].filter((c) => {
+      const q = c.getBoundingClientRect(); if (!q.width || q.bottom < r.top || q.top > r.bottom) return false;
+      return q.right > r.left + n.clientWidth + 1 || q.left < r.left - 1;
+    });
+    if (cut.length) out.sideways.push(where(n) + ' hides ' + cut.length + ' control(s) sideways, e.g. ' + where(cut[0]));
+  });
+  // table: laid out as a table, its rows one under the other
+  document.querySelectorAll('table').forEach((tb) => {
+    if (!vis(tb)) return;
+    const d = getComputedStyle(tb).display;
+    if (!/table/.test(d)) { out.table.push(where(tb) + ' is laid out as "' + d + '", not as a table'); return; }
+    const odd = [...tb.querySelectorAll('thead, tbody, tfoot, tr, th, td')].find((x) => x.closest('table') === tb && vis(x) && !/table/.test(getComputedStyle(x).display));
+    if (odd) { out.table.push(where(odd) + ' in a table is laid out as "' + getComputedStyle(odd).display + '"'); return; }
+    const rows = [...tb.rows].filter(vis);
+    for (let i = 1; i < rows.length; i++) { const a = rows[i - 1].getBoundingClientRect(), b = rows[i].getBoundingClientRect(); if (b.top < a.bottom - 2) { out.table.push(where(tb) + ' rows ' + i + ' and ' + (i + 1) + ' lie on top of each other'); break; } }
+  });
+  // ── weight: rules a person sees and the checks above do not (owner and a friend, 2026-11-27: "heavy, confusing") ──
+  // primary: more than one main button (filled with a strong colour, light words) in one view. A split button (parts
+  // touching) is one; a current step, a pressed choice or a tab is a state, not an action.
+  const hsl = (c) => { const m = /rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)/.exec(c); if (!m || (m[4] !== undefined && +m[4] < 0.5)) return null; const [r, g, b] = [m[1], m[2], m[3]].map((x) => x / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; return { s: mx === mn ? 0 : (mx - mn) / (1 - Math.abs(2 * l - 1)), l }; };
+  const win = modal || [...document.querySelectorAll('[role=dialog][aria-modal=true], .adv-modal-overlay')].find(vis);
+  const mains = (win && !modal ? ctrls.filter((e) => win.contains(e)) : ctrls).filter((e) => (e.tagName === 'BUTTON' || e.getAttribute('role') === 'button') && !e.disabled && e.getAttribute('aria-disabled') !== 'true' && /[\p{L}]/u.test((e.innerText || '').trim()) &&
+    !e.matches('[aria-current]:not([aria-current=false]),[aria-pressed=true],[aria-selected=true],[role=tab],[role=radio],[role=menuitem]') && !e.closest('[role=tablist],[role=radiogroup],[role=menu]')).filter((e) => {
+    const cs = getComputedStyle(e), bg = hsl(cs.backgroundColor), fg = hsl(cs.color);
+    return bg && bg.s > 0.35 && bg.l > 0.2 && bg.l < 0.62 && fg && fg.l > 0.8;
+  });
+  const groups = [];
+  mains.forEach((e) => { const r = e.getBoundingClientRect(); const g = groups.find((x) => x.some((o) => { const q = o.getBoundingClientRect(); return Math.abs(q.top - r.top) < 6 && (Math.abs(q.right - r.left) <= 4 || Math.abs(r.right - q.left) <= 4); })); g ? g.push(e) : groups.push([e]); });
+  if (groups.length > 1) out.primary.push(groups.length + ' main buttons in one view: ' + groups.map((g) => label(g[0])).join(', '));
+  // codefont: a heading in the code font that is words, not code (a name with a space — "New correlation")
+  const MONO = /mono|cascadia|consolas|courier|menlo/i;
+  (modal || document).querySelectorAll('h1, h2, h3, h4, [role=heading], legend, b, strong').forEach((e) => {
+    if (!vis(e) || e.closest('pre, code, .ds-code, textarea')) return;
+    const own = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
+    const cs = getComputedStyle(e);
+    if (/\s/.test(own) && /^[\p{L}]/u.test(own) && MONO.test(cs.fontFamily.split(',')[0]) && parseFloat(cs.fontSize) >= 13) out.codefont.push(where(e) + ' "' + own.slice(0, 40) + '"');
+  });
+  // idle: a bar of greyed-out buttons (3 or more, at least half of the bar) — an empty state should say what to do, not
+  // show what cannot be done yet
+  const bars = new Map();
+  ctrls.filter((e) => e.tagName === 'BUTTON' && e.disabled).forEach((e) => {
+    let n = e.parentElement; while (n && n !== document.body && [...n.querySelectorAll('button')].filter(vis).length < 3) n = n.parentElement;
+    if (n && n !== document.body) bars.set(n, (bars.get(n) || 0) + 1);
+  });
+  bars.forEach((k, n) => { const all = [...n.querySelectorAll('button')].filter(vis).length; if (k >= 3 && k * 2 >= all) out.idle.push(where(n) + ': ' + k + ' of ' + all + ' buttons greyed out'); });
+  return out;
+}
+
+// the open pop-up of a document (a modal <dialog>, or an engine overlay with role=dialog aria-modal): where to click
+// outside it → { x, y, id } in that document's coordinates, or null
+function popupOf() {
+  const d = [...document.querySelectorAll('dialog[open]')].find((x) => x.matches(':modal'));
+  const o = d || [...document.querySelectorAll('[role=dialog][aria-modal=true]')].find((x) => x.offsetParent && x.getBoundingClientRect().width > 0);
+  if (!o) return null;
+  const r = o.getBoundingClientRect();
+  const x = r.left > 40 ? 12 : r.right < innerWidth - 40 ? innerWidth - 12 : r.left + r.width / 2;
+  const y = r.top > 40 ? 12 : r.bottom < innerHeight - 40 ? innerHeight - 12 : r.top + r.height / 2;
+  return { x, y, id: o.id || o.getAttribute('aria-label') || o.className };
+}
+function popupOpen(id) {
+  const o = document.getElementById(id) || [...document.querySelectorAll('[role=dialog][aria-modal=true]')].find((x) => (x.getAttribute('aria-label') || x.className) === id);
+  if (!o) return false;
+  return o.tagName === 'DIALOG' ? o.open : !!o.offsetParent;
+}
+const POPUPS = new Set();   // the pop-ups the dismiss check clicked outside of (printed, so a skipped one shows)
+async function dismissCheck(p, frameId) {
+  const fr = frameId ? await (await p.$('#iframe-' + frameId)).contentFrame() : p.mainFrame();
+  const at = await fr.evaluate(popupOf);
+  if (!at) return [];
+  POPUPS.add(String(at.id).slice(0, 40));
+  let ox = 0, oy = 0;
+  if (frameId) { const b = await (await p.$('#iframe-' + frameId)).boundingBox(); ox = b.x; oy = b.y; }
+  await p.mouse.click(ox + at.x, oy + at.y);
+  await p.waitForTimeout(250);
+  return (await fr.evaluate(popupOpen, at.id)) ? ['"' + String(at.id).slice(0, 40) + '" stays open after a click outside it'] : [];
+}
+
+async function focusCheck(p, max) {
+  const found = [];
+  for (let i = 0; i < max; i++) {
+    await p.keyboard.press('Tab');
+    const r = await p.evaluate(() => {
+      let d = document, a = d.activeElement;
+      // a sandboxed frame (a response preview) cannot be read: it stays the control
+      while (a && a.tagName === 'IFRAME') { try { const cd = a.contentDocument; if (!cd) break; d = cd; a = d.activeElement; } catch (e) { break; } }
+      if (!a || a === d.body || a === d.documentElement) return null;
+      if (a.dataset.rvFocus) return { again: true };
+      a.dataset.rvFocus = '1';
+      // the control or the box around it (a search field shows its focus on its frame, :focus-within)
+      const one = (x) => { const c = getComputedStyle(x); return [c.outlineStyle !== 'none' && parseFloat(c.outlineWidth) > 0 ? c.outlineWidth + ' ' + c.outlineColor : '', c.boxShadow, c.borderColor, c.backgroundColor, c.textDecorationLine].join('|'); };
+      const sig = () => [a, a.parentElement, a.parentElement && a.parentElement.parentElement].filter(Boolean).map(one).join('#');
+      // without the focus: blur(); a date field keeps its own calendar button focused after it — then the focus goes to
+      // a spare element beside it for the measure
+      const on = sig(); a.blur(); let tmp = null;
+      if (a.matches(':focus-within')) { tmp = d.createElement('button'); tmp.style.cssText = 'position:fixed;left:-200px;top:0'; a.parentElement.appendChild(tmp); tmp.focus({ preventScroll: true }); }
+      const off = sig(); if (tmp) tmp.remove(); a.focus({ preventScroll: true });
+      const t = (a.getAttribute('aria-label') || a.getAttribute('title') || a.innerText || a.value || a.placeholder || '').trim().replace(/\s+/g, ' ');
+      return on === off ? { bad: (a.id ? '#' + a.id + ' ' : '') + a.tagName.toLowerCase() + (t ? ' "' + t.slice(0, 40) + '"' : '') } : {};
+    });
+    if (!r) continue;
+    if (r.again) break;   // round the page once
+    if (r.bad) found.push(r.bad);
+  }
+  // clean the markers (the next screen starts afresh)
+  await p.evaluate(() => { const clean = (d) => { d.querySelectorAll('[data-rv-focus]').forEach((x) => delete x.dataset.rvFocus); d.querySelectorAll('iframe').forEach((fr) => { try { clean(fr.contentDocument); } catch (e) { /* other origin */ } }); }; clean(document); });
+  return found;
+}
+
+// --selftest: one planted problem of each kind; every check must find its own (proves the checks see what they claim)
+const PLANTED = `<!doctype html><html><head><style>
+  body { font: 14px sans-serif; margin: 20px; } button { font: inherit; }
+  .cover { position: absolute; left: 20px; top: 20px; width: 160px; height: 40px; background: #eee; }
+  .clip { width: 80px; overflow: hidden; white-space: nowrap; }
+  .nofocus:focus { outline: none; }
+  .wide { width: 3000px; height: 4px; }
+</style></head><body>
+  <button id="under" style="width:150px;height:30px">Covered button</button><div class="cover"></div>
+  <div style="margin-top:60px" class="clip" id="clipped">This sentence is far too long for its box</div>
+  <button id="noname"><svg width="10" height="10"></svg></button>
+  <button id="nofocus" class="nofocus" style="border:1px solid #888;background:#fff">No focus ring</button>
+  <div class="wide"></div>
+  <div id="strip" style="width:120px;overflow-x:auto;white-space:nowrap"><span style="display:inline-block;width:300px">Wide</span><button>Past the edge</button></div>
+  <button id="flat" style="border:0;background:none;font:inherit">Take out</button>
+  <dialog id="stay"><p>A pop-up</p><button>Close</button></dialog>
+  <table id="grid" style="display:grid;grid-template-columns:repeat(3,1fr)"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>
+  <p><button id="main1" style="background:#6d28d9;color:#fff;border:0">Next step</button> <button id="main2" style="background:#6d28d9;color:#fff;border:0;margin-left:40px">Download</button></p>
+  <h2 id="monohead" style="font-family:Consolas,monospace">New correlation</h2>
+  <div style="width:120px;overflow:hidden;white-space:nowrap"><button style="width:90px">Fits</button><button id="cut" style="width:90px">Cut off</button></div>
+  <div id="greyed"><button disabled>Test</button><button disabled>Clear selection</button><button disabled>Add to the script</button></div>
+</body></html>`;
+async function selftest(b) {
+  const p = await b.newPage({ viewport: { width: 1200, height: 800 } });
+  await p.setContent(PLANTED);
+  const r = await p.evaluate(inspect);
+  r.focus = await focusCheck(p, 20);
+  await p.evaluate(() => document.getElementById('stay').showModal());
+  r.dismiss = await dismissCheck(p, null);
+  const want = { overlap: /#under/, clipped: /#clipped/, unnamed: /#noname/, focus: /#nofocus/, sideways: /page \+/, panel: /#strip hides/, plain: /#flat/, dismiss: /stay/, fill: /content ends at/, table: /#grid/, primary: /2 main buttons/, codefont: /#monohead/, idle: /#greyed: 3 of 3/, cutoff: /#cut/ };
+  let fail = 0;
+  // and the opposite: a panel across the width is not flagged
+  const q = await b.newPage({ viewport: { width: 1600, height: 800 } });
+  await q.setContent('<!doctype html><body style="margin:0;padding:16px"><div style="height:200px;border:1px solid #888;background:#fafafa">A panel across the window</div></body>');
+  const full = (await q.evaluate(inspect)).fill; await q.close();
+  console.log((full.length ? 'FAIL ' : 'PASS ') + 'fill leaves a full-width panel alone' + (full.length ? ' — got ' + JSON.stringify(full) : ''));
+  if (full.length) fail++;
+  for (const k of Object.keys(want)) {
+    const hit = (r[k === 'panel' ? 'sideways' : k] || []).some((x) => want[k].test(x));
+    console.log((hit ? 'PASS ' : 'FAIL ') + k + ' finds its planted problem' + (hit ? '' : ' — got ' + JSON.stringify(r[k])));
+    if (!hit) fail++;
+  }
+  await p.close();
+  return fail;
+}
+
+module.exports = { chromium, inspect, focusCheck, dismissCheck, HEIGHT };   // the checks, reused on mockups (mock.js)
+if (require.main === module) (async () => {
+  const b = await chromium.launch({ channel: 'msedge' });
+  if (args.includes('--selftest')) { const n = await selftest(b); await b.close(); process.exitCode = n ? 1 : 0; return; }
+  fs.mkdirSync(OUT, { recursive: true });
+  const report = [];
+  for (const theme of THEMES) for (const w of SIZES) {
+    const p = await b.newPage({ viewport: { width: w, height: HEIGHT[w] || 1000 }, extraHTTPHeaders: { 'X-Forwarded-For': '192.0.2.' + (40 + SIZES.indexOf(w) + THEMES.indexOf(theme) * 5) } });
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(BASE); await p.waitForLoadState('networkidle');
+    await p.evaluate((t) => { if (document.documentElement.getAttribute('data-theme') !== t) document.getElementById('tb-theme').click(); }, theme);
+    await p.waitForTimeout(250);
+    const go = (pg) => p.evaluate((x) => PerfxShell.go(x, { instant: true }), pg);
+    const frameOf = async (id) => (await p.$('#iframe-' + id)).contentFrame();
+    const run = async (name, frameId) => {
+      if (ONLY.length && !ONLY.some((o) => name.toLowerCase().includes(o))) return;
+      ranScreens++;
+      await p.waitForTimeout(400);
+      const shell = await p.evaluate(inspect);
+      const inner = frameId ? await (await frameOf(frameId)).evaluate(inspect) : null;
+      const file = `${theme}-${w}-${name.replace(/\W+/g, '-')}.jpg`;
+      await p.screenshot({ path: path.join(OUT, file), type: 'jpeg', quality: 55 });
+      const merge = {}; Object.keys(shell).forEach((k) => { merge[k] = shell[k].concat(inner ? inner[k] : []); });
+      merge.focus = await focusCheck(p, 80);
+      merge.dismiss = await dismissCheck(p, frameId);
+      report.push({ theme, w, name, file, ...merge });
+      process.stdout.write('.');
+    };
+    let f;
+    await go('home'); await run('Home');
+    // the converters: start, each tab, each window, a change that failed, panels hidden
+    {
+      const PM = '#panel-bruno ', JX = '#panel-jmx ', ws = (s) => p.waitForFunction((k) => ConverterApp.state(k).status === 'ok', s, { timeout: 60000 });
+      const expect = (list) => { const l = list.filter(Boolean); if (l.length) report[report.length - 1].expect = l; };
+      // what must be in view without scrolling, and nothing cut off or lying over something else
+      const seenAll = (...sel) => p.evaluate((l) => l.map((s) => { const e = document.querySelector(s); if (!e || !e.offsetParent) return s + ' is not shown'; const r = e.getBoundingClientRect(); return r.bottom > innerHeight + 1 || r.right > innerWidth + 1 || r.top < 0 ? s + ' ends at ' + Math.round(r.right) + ' x ' + Math.round(r.bottom) : ''; }).concat(document.documentElement.scrollHeight > innerHeight + 1 ? ['the page scrolls'] : [], [...document.querySelectorAll('.cx-ph, .cx-pt, .cx-bar, .cx-tools, .cx-note, .cx-tile')].filter((e) => e.offsetParent && e.scrollHeight > e.clientHeight + 2).map((e) => '.' + e.classList[0] + ' is cut off by ' + (e.scrollHeight - e.clientHeight) + ' px')), sel);
+      const win = async (name, sel, kind) => { await p.click(sel + '[data-dlg=' + kind + ']'); await run(name); await p.evaluate(() => { const d = document.getElementById('cx-dlg'); if (d.open) d.close(); }); };
+      await go('postman'); await run('Postman start'); expect(await seenAll(PM + '.cx-go'));
+      await win('Postman how it works', PM, 'how');
+      await p.setInputFiles('#fi-col', COL + 'advanced_enterprise_postman_collection.json'); await p.setInputFiles('#fi-env', COL + 'advanced_enterprise_environment.json'); await p.setInputFiles('#fi-bru-cert', FX + 'converter/inputs/client.pem');
+      await run('Postman files added'); expect(await seenAll(PM + '.cx-go'));
+      await p.click('#cx-go-pm'); await ws('pm'); await run('Postman script'); expect(await seenAll(PM + '[data-act=dl]', PM + '[data-dlg=sett]', PM + '.cx-dom', PM + '.cx-left', PM + '.cx-right'));
+      await p.click(PM + '[data-req="9"]'); await run('Postman request chosen'); expect([(await p.$$(PM + '.hl')).length ? '' : 'its code is not marked']);
+      await p.click(PM + '[data-rtab=req]'); await run('Postman request details'); await p.click(PM + '.cx-ph [data-rtab=code]');
+      await p.click(PM + '[data-tab=val]'); await run('Postman values'); await p.click(PM + '[data-tab=req]');
+      await p.click(PM + '[data-ren]'); await run('Postman domain renamed'); await p.click(PM + '[data-act=noren]'); await p.click(PM + '[data-act=name]'); await run('Postman script name'); await p.click(PM + '[data-act=noname]');
+      await p.click(PM + '.cx-row .cx-cb'); await p.waitForTimeout(700); await ws('pm'); await run('Postman left out'); await p.click(PM + '[data-act=putback]'); await p.waitForTimeout(400); await ws('pm');
+      for (const k of ['files', 'sett', 'check']) await win('Postman ' + k, PM, k);
+      await p.route('**/convert', (r) => r.abort()); await p.click(PM + '[data-set=tt][data-v="3"]'); await p.waitForFunction(() => ConverterApp.state('pm').status === 'bad'); await run('Postman not updated'); await p.unroute('**/convert'); await p.click(PM + '[data-act=retry]'); await ws('pm');
+      for (const k of ['d', 'l', 'r']) { await p.click(PM + '[data-hide=' + k + ']'); await run('Postman hidden ' + k); await p.click(PM + '[data-show=' + k + ']'); }
+      await go('jmeter'); await run('JMeter start'); expect(await seenAll(JX + '.cx-go')); await win('JMeter how it works', JX, 'how');
+      await p.setInputFiles('#fi-jmx', FX + 'converter/inputs/rich.jmx'); await p.click('#cx-go-jmx'); await ws('jmx'); await run('JMeter script'); expect(await seenAll(JX + '[data-act=dl]', JX + '.cx-left', JX + '.cx-right'));
+      await p.click(JX + '[data-tab=val]'); await run('JMeter values'); await p.click(JX + '[data-tab=req]'); await win('JMeter settings', JX, 'sett'); await win('JMeter ready', JX, 'check');
+      await p.click(JX + '[data-set=mode][data-v=multi]'); await p.waitForTimeout(300); await ws('jmx'); await run('JMeter several scripts');
+    }
+    await go('explore'); await p.waitForFunction(() => { const d = document.getElementById('iframe-explorer').contentDocument; return d && d.getElementById('hx-file'); }, null, { timeout: 20000 });
+    await run('Explorer start', 'explorer');
+    f = await frameOf('explorer'); await f.setInputFiles('#hx-file', COL + 'WebTours.har'); await f.waitForSelector('#hx-ws:not([hidden])');
+    await f.click('.hx-req >> nth=4'); await run('Explorer workspace', 'explorer');
+    for (const tab of ['Payload', 'Response', 'Preview', 'Cookies', 'Timing', 'Dynamic values']) { const b = f.locator('#hx-det .hx-tab', { hasText: tab }).first(); if (await b.count()) { await b.click(); await p.waitForTimeout(300); await run('Explorer ' + tab.toLowerCase(), 'explorer'); } }
+    await f.click('#hx-findbtn'); await p.waitForTimeout(2500); const sg = f.locator('[data-sugg]').first(); if (await sg.count()) { await sg.click(); await p.waitForTimeout(1500); } await run('Explorer find a value', 'explorer'); await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+    await f.evaluate(() => { for (const id of ['hx-hide', 'hx-det-hide', 'hx-dom-hide']) { const b = document.getElementById(id); if (b && b.offsetParent) b.click(); } }); await p.waitForTimeout(300); await run('Explorer panels folded', 'explorer');
+    await f.evaluate(() => { for (const id of ['hx-rail', 'hx-det-rail', 'hx-dom-rail']) { const b = document.getElementById(id); if (b && b.offsetParent) b.click(); } }); await p.waitForTimeout(300);
+    await go('studio'); await p.waitForFunction(() => { const x = document.getElementById('iframe-studio').contentWindow; return x && x.document.readyState === 'complete' && typeof x.loadFile === 'function'; }, null, { timeout: 20000 });
+    await run('Studio start', 'studio');
+    // the live recording view, as Start recording shows it (its layout only: the CDP Recorder is never asked)
+    await (await frameOf('studio')).evaluate(() => {
+      window.__cards = ['.ss-choices', '.ss-links', '#ss-resume', '#ss-band'].map((s) => document.querySelector(s)).filter(Boolean).map((c) => [c, c.hidden]);
+      window.__cards.forEach(([c]) => { c.hidden = true; }); document.getElementById('rl-live').hidden = false;
+    });
+    await run('Studio recording', 'studio');
+    await (await frameOf('studio')).evaluate(() => { document.getElementById('rl-live').hidden = true; (window.__cards || []).forEach(([c, h]) => { c.hidden = h; }); });
+    f = await frameOf('studio');
+    await f.click('#ss-how-btn'); await run('Studio how it works', 'studio'); await f.evaluate(() => document.querySelectorAll('dialog[open]').forEach((d) => d.close()));
+    await f.click('#ss-guide-btn'); await run('Studio how to record', 'studio'); await f.evaluate(() => document.querySelectorAll('dialog[open]').forEach((d) => d.close()));
+    await f.setInputFiles('#dz1 input[type=file]', FX + 'studio/fixtures/oauth-pkce-sso.har');
+    await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 });
+    if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1000); }
+    await run('Studio 1 requests', 'studio');
+    // a request's details: a pop-up at every width; closed, its code is marked
+    await f.click('#ss-reqs .ss-rq:not(.out) .ss-path >> nth=1'); await run('Studio request details', 'studio');
+    await f.evaluate(() => { if (window.SSW && SSW.closeDetails) SSW.closeDetails(); }); await p.waitForTimeout(200);
+    { const bad = await f.evaluate(() => { const q = (s) => { const e = document.querySelector(s); if (!e || !e.offsetParent) return s + ' is not shown'; const r = e.getBoundingClientRect(); return r.bottom > innerHeight + 1 || r.right > innerWidth + 1 ? s + ' ends at ' + Math.round(r.right) + ' x ' + Math.round(r.bottom) : ''; }; return ['#ss-name-btn', '#ss-undo', '#ss-redo', '#ss-dl', '#ss-steps [data-step="4"]', '#ss-fmt', '#ss-think-btn', '#ss-filters-btn', '#ss-step-next', '#ss-p-dom', '#ss-p-req', '#ss-p-right', '#code-body'].map(q).concat(document.getElementById('ss-cols').getBoundingClientRect().top > 130 ? ['the panels begin at ' + Math.round(document.getElementById('ss-cols').getBoundingClientRect().top)] : [], document.querySelector('#code-body.ss-hl') ? [] : ['the code of the request is not marked'], [...document.querySelectorAll('.ss-filebar, .ss-tools, .ss-pane-h, .ss-pane-tools, .code-area-header, .ss-tabs')].filter((e) => e.offsetParent && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 2)).map((e) => '.' + e.classList[0] + ' is cut off')).filter(Boolean); }); if (bad.length) report[report.length - 1].expect = bad; }
+    for (const [name, btn] of [['Studio filters', '#ss-filters-btn'], ['Studio think time', '#ss-think-btn'], ['Studio note', '.ss-note-b']]) { await f.click(btn); await run(name, 'studio'); await f.evaluate(() => SS.popClose()); }
+    await f.click('#ss-name-btn'); await run('Studio script name', 'studio'); await f.click('#ss-name-x');
+    await f.click('#ss-reqs .ss-rq:not(.out) input >> nth=1'); await run('Studio choosing requests', 'studio'); await f.click('#ss-sel-clear');
+    // every Studio pop-up once, so the dismiss check clicks outside each of them (closed again if it stayed open)
+    const shut = () => f.evaluate(() => {
+      document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+      ['closeHostRename', 'closeAdvisorModal', 'closePasteCorrelate'].forEach((k) => { try { if (document.querySelector('.adv-modal-overlay[style*="flex"], .adv-modal-overlay[style*="block"]')) window[k](); } catch (e) { /* closed */ } });
+    });
+    const pops = [
+      ['Studio new transaction', () => { const b = document.getElementById('ss-sel-group'); b.disabled = false; b.click(); }],
+      ['Studio question', () => SS.ask('Leave this step?', 'A question the page asks.', 'Leave', () => {})],
+      ['Studio server rename', () => openHostRename(Object.keys(PerfxStudio.state().hostParams.map)[0])],
+      ['Studio every place', () => advisorShowUses(PerfxStudio.state().advisorCandidates[0].id)],
+      ['Studio add custom correlation', () => openAdvisorModal()],
+    ];
+    for (const [name, open] of pops) { await f.evaluate(open); await run(name, 'studio'); await shut(); }
+    await f.click('#ss-steps [data-step="2"]'); await f.evaluate(() => SSC.section('values')); await run('Studio 2 correlate', 'studio');
+    await f.click('#ss-cr-show [data-show="script"]'); await run('Studio 2 in the script', 'studio'); await f.click('#ss-cr-show [data-show="review"]');
+    await f.evaluate(() => { const c = PerfxStudio.state().advisorCandidates.find((x) => x.varName === 'State') || PerfxStudio.state().advisorCandidates[0]; if (c) SSE.open(c.id); });
+    await run('Studio editor', 'studio');
+    await f.click('#ss-ed-run').catch(() => {}); await run('Studio editor test', 'studio'); await f.evaluate(() => { const d = document.getElementById('ss-test-dlg'); if (d.open) d.close(); });
+    await f.evaluate(() => SSE.close()); await f.evaluate(() => SSE.add()); await run('Studio add manual', 'studio'); await f.evaluate(() => SSE.close());
+    await f.evaluate(() => openPasteCorrelate()); await run('Studio paste and detect', 'studio'); await f.evaluate(() => { try { closePasteCorrelate(); } catch (e) { /* closed */ } });
+    await f.click('#ss-cr-test'); await run('Studio test dialog', 'studio'); await f.evaluate(() => { const d = document.getElementById('ss-test-dlg'); if (d.open) d.close(); });
+    await f.click('#ss-cr-view [data-view=cards]'); await run('Studio correlate cards', 'studio'); await f.click('#ss-cr-view [data-view=table]');
+    await f.click('[data-sec-b=script]'); await run('Studio correlate: in the script', 'studio');
+    await f.click('[data-sec-b=second]'); await run('Studio correlate: second recording', 'studio'); await f.click('[data-sec-b=values]');
+    await f.click('#ss-steps [data-step="3"]'); await p.waitForTimeout(200);
+    if (await f.isVisible('#ss-ask')) await f.click('#ss-ask-no');
+    await run('Studio 3 test data', 'studio');
+    await f.click('#ss-steps [data-step="4"]'); await run('Studio 4 download', 'studio');
+    await f.click('#ss-steps [data-step="1"]');
+    // a long JSON response with the value at its very end (a sign-in answer): the editor shows the value — never cut
+    // above it — marked and scrolled into view, formatted (one value per line) and as sent
+    {
+      const TOK = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZXZpZXcifQ.c2lnbmF0dXJlX3Jldmlldw';
+      const cols = Array.from({ length: 2600 }, (_, i) => ({ headerName: 'Column ' + i, field: 'field' + i, sortable: true, filter: 'STRING' }));
+      const body = JSON.stringify({ config: { columns: cols }, jwtResponse: { token: TOK } });
+      const at = (i) => new Date(Date.parse('2026-01-01T10:00:00Z') + i * 2000).toISOString();
+      const en = (i, url, hdrs, text) => ({ startedDateTime: at(i), time: 100, _resourceType: 'fetch', request: { method: 'POST', url, httpVersion: 'HTTP/1.1', headers: hdrs, queryString: [], cookies: [], postData: { mimeType: 'application/json', text: '{}' } }, response: { status: 200, statusText: 'OK', httpVersion: 'HTTP/1.1', headers: [{ name: 'Content-Type', value: 'application/json' }], cookies: [], content: { size: text.length, mimeType: 'application/json', text } }, cache: {}, timings: { send: 1, wait: 90, receive: 9 } });
+      const file = path.join(require('os').tmpdir(), 'review-long-response.har');
+      fs.writeFileSync(file, JSON.stringify({ log: { version: '1.2', creator: { name: 'review', version: '1' }, entries: [en(0, 'https://app.example.com/authenticate', [], body), en(1, 'https://app.example.com/home', [{ name: 'Authorization', value: TOK }], '{"ok":true}')] } }));
+      await f.setInputFiles('#dz1 input[type=file]', file);
+      await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 });
+      await f.click('#ss-steps [data-step="2"]');
+      await f.evaluate((tok) => { const c = PerfxStudio.state().advisorCandidates.find((x) => x.value === tok); if (c) SSE.open(c.id); }, TOK);
+      await p.waitForTimeout(800);
+      const seen = () => f.evaluate((tok) => { const pre = document.getElementById('ss-ed-body'), m = document.getElementById('ss-ed-first'); if (!m) return 'the value is not marked (cut above it?)'; if (m.textContent !== tok) return 'the mark is not the value'; const r = m.getBoundingClientRect(), b = pre.getBoundingClientRect(); return r.top >= b.top - 2 && r.bottom <= b.bottom + 2 ? '' : 'the value is not scrolled into view'; }, TOK);
+      const e1 = await seen(); await run('Studio editor long response', 'studio');
+      await f.click('#ss-ed-fmt').catch(() => {}); await p.waitForTimeout(500); const e2 = await seen(); await f.click('#ss-ed-fmt').catch(() => {});
+      const fails = [e1 && 'Formatted: ' + e1, e2 && 'As sent: ' + e2].filter(Boolean);
+      if (fails.length) report[report.length - 1].expect = fails;
+      await f.evaluate(() => SSE.close());
+    }
+    // a recording with transactions (one or two requests each): the request list as most people see it
+    await f.setInputFiles('#dz1 input[type=file]', COL + 'petstore.octoperf.com.har');
+    await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 });
+    if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1000); }
+    await f.click('#ss-steps [data-step="1"]'); await run('Studio transactions', 'studio');
+    // heavy: the group rows (transaction headers, "n left out" lines) must not outweigh the requests — at most half of the
+    // list's height (a transaction of one request has a header about the size of its row: half is the floor, not a third), and a header with a filled band counts as heavy (owner's friend: "it feels so heavy", 2026-11-27)
+    {
+      const h = await f.evaluate(() => {
+        const sum = (s) => [...document.querySelectorAll(s)].filter((e) => e.offsetParent).reduce((a, e) => a + e.getBoundingClientRect().height, 0);
+        const chrome = sum('#ss-reqs .ss-txn') + sum('#ss-reqs .ss-outrow'), reqs = sum('#ss-reqs .ss-rq');
+        const t = document.querySelector('#ss-reqs .ss-txn'), list = document.getElementById('ss-reqs');
+        // a band = a header coloured unlike what is behind the list (the first background up from the list)
+        let under = 'rgb(255, 255, 255)'; for (let n = list; n; n = n.parentElement) { const c = getComputedStyle(n).backgroundColor; if (c !== 'rgba(0, 0, 0, 0)') { under = c; break; } }
+        const band = t && getComputedStyle(t).backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(t).backgroundColor !== under;
+        return { share: chrome / Math.max(1, chrome + reqs), band };
+      });
+      const l = [h.share > 0.5 ? 'group rows take ' + Math.round(h.share * 100) + '% of the request list (at most 50%)' : '', h.band ? 'transaction headers are filled bands' : ''].filter(Boolean);
+      if (l.length) report[report.length - 1].heavy = l;
+    }
+    await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
+    await run('Workload start', 'workload');
+    f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail').catch(() => {}); await run('Workload model', 'workload');
+    await f.click('[data-tt=stress]'); await run('Workload stress', 'workload'); await f.click('[data-shape=steps]'); await run('Workload stress in steps', 'workload'); await f.click('[data-tt=spike]'); await run('Workload spike', 'workload');
+    await f.click('#tt-about [data-about="0"]'); await run('Workload notes hidden', 'workload'); await f.click('#tt-about [data-about="1"]'); await f.click('[data-tt=load]');
+    // a recording filled in: every transaction of one iteration in a window
+    await f.setInputFiles('#in-fill', COL + 'petstore.octoperf.com.har');
+    await f.waitForFunction(() => document.querySelector('[data-txlist]'), null, { timeout: 30000 });
+    await f.evaluate(() => openTxList(document.querySelector('[data-txlist]').dataset.txlist)); await run('Workload transactions', 'workload');
+    await f.evaluate(() => { const d = document.getElementById('wm-tx-dlg'); if (d && d.open) d.close(); });
+    // the scripts as a table (chosen, or by itself from 8 scripts), then back to cards
+    await f.click('#sview [data-v=table]'); await p.waitForTimeout(300); await run('Workload table', 'workload');
+    await f.click('#sview [data-v=cards]'); await p.waitForTimeout(300);
+    // a script sent from Script Studio (Plan the load), shown as cards and as a table — the way most people arrive
+    await go('studio'); await p.waitForFunction(() => { const x = document.getElementById('iframe-studio').contentWindow; return x && x.document.readyState === 'complete' && typeof x.loadFile === 'function'; }, null, { timeout: 20000 });
+    { const sf = await frameOf('studio'); await sf.setInputFiles('#dz1 input[type=file]', COL + 'WebTours.har');
+      await sf.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 }); await p.waitForTimeout(1500);
+      const bg = sf.locator('#ss-bg-dlg .bg-review-apply'); if (await bg.isVisible().catch(() => false)) await bg.click();
+      await sf.click('#ss-wm'); await p.waitForTimeout(3500); }
+    f = await frameOf('workload');
+    await run('Workload from Studio, cards', 'workload');
+    await f.click('#sview [data-v=table]'); await p.waitForTimeout(300); await run('Workload from Studio, table', 'workload');
+    await f.click('#sview [data-v=cards]'); await p.waitForTimeout(300);
+    // the HAR Explorer's own recording while Studio has another open: Continue in Script Studio asks first (BUG-185)
+    await go('explore'); await p.waitForTimeout(600);
+    { const hf = await frameOf('explorer');
+      if (await hf.isVisible('#hx-studio').catch(() => false)) { await hf.click('#hx-studio'); await p.waitForTimeout(300); await run('Explorer replace question', 'explorer');
+        await hf.evaluate(() => { const d = document.getElementById('hx-ask'); if (d.open) d.close('no'); }); } }
+    // and from the Postman / Bruno converter (its Plan the load), when the converter screens ran
+    await go('postman'); await p.waitForTimeout(400);
+    if (await p.isVisible('#panel-bruno [data-act=plan]').catch(() => false)) {
+      await p.click('#panel-bruno [data-act=plan]'); await p.waitForTimeout(3500);
+      f = await frameOf('workload'); await run('Workload from Postman, cards', 'workload');
+      await f.click('#sview [data-v=table]'); await p.waitForTimeout(300); await run('Workload from Postman, table', 'workload');
+      await f.click('#sview [data-v=cards]'); await p.waitForTimeout(300);
+    }
+    await go('results'); await p.waitForFunction(() => { const d = document.getElementById('iframe-analyser').contentDocument; return d && d.getElementById('in-zip'); }, null, { timeout: 20000 });
+    await run('Analyser start', 'analyser');
+    if (fs.existsSync(FX + 'qa/demo-run.zip')) { f = await frameOf('analyser'); await f.setInputFiles('#in-zip', FX + 'qa/demo-run.zip'); await p.waitForTimeout(9000); await run('Analyser report', 'analyser');
+      for (const tab of ['transactions', 'charts', 'errors', 'workload', 'insights']) { await f.evaluate((t) => { const b = [...document.querySelectorAll('#tabs [role=tab], #tabs button')].find((x) => x.textContent.toLowerCase().includes(t)); if (b) b.click(); }, tab); await p.waitForTimeout(700); await run('Analyser ' + tab, 'analyser'); }
+      await f.evaluate(() => { const b = [...document.querySelectorAll('#tabs [role=tab], #tabs button')].find((x) => /transactions/i.test(x.textContent)); b && b.click(); }); await p.waitForTimeout(300);
+      await f.evaluate(() => { const r = document.querySelector('#tab-transactions tbody tr'); r && r.click(); }); await p.waitForTimeout(1200); await run('Analyser transaction drawer', 'analyser'); await f.evaluate(() => { const c = document.getElementById('drawer-close'); c && c.click(); }); await p.waitForTimeout(300);
+      await f.click('#btn-settings').catch(() => {}); await p.waitForTimeout(300); await run('Analyser settings', 'analyser'); await f.click('#btn-settings').catch(() => {}); }
+    await go('help'); await run('Help');
+    await p.evaluate(() => { haccJump('hacc-studio'); }); await p.waitForTimeout(400); await p.evaluate(() => window.scrollTo(0, 1500)); await p.waitForTimeout(300); await run('Help in this section');
+    await p.evaluate(() => { window.scrollTo(0, 0); haccJump('hacc-faq'); }); await p.waitForTimeout(300); await p.click('.help-faq-topics [data-topic=recording]').catch(() => {}); await run('Help FAQ topics');
+    report.push({ theme, w, name: '_errors', errs });
+    await p.close();
+  }
+  await b.close();
+  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 1));
+  // summary: each finding once (by screen), with the sizes / themes it was seen at
+  const by = new Map();
+  report.filter((r) => r.name !== '_errors').forEach((r) => ['overlap', 'clipped', 'unnamed', 'focus', 'sideways', 'plain', 'dismiss', 'fill', 'table', 'primary', 'codefont', 'idle', 'heavy', 'cutoff', 'expect'].forEach((k) => (r[k] || []).forEach((x) => {
+    const key = r.name + '|' + k + '|' + x; if (!by.has(key)) by.set(key, []); by.get(key).push(r.theme + ' ' + r.w);
+  })));
+  console.log('\npop-ups checked for a click outside: ' + ([...POPUPS].join(' · ') || 'none'));
+  if (ONLY.length && !ranScreens) { console.log('NO SCREEN matched --only=' + ONLY.join(',') + ' — nothing was checked'); process.exitCode = 1; }
+  console.log(ranScreens + ' screens checked; ' + by.size + ' distinct findings');
+  [...by.entries()].sort().forEach(([k, at]) => { const [n, kind, x] = k.split('|'); console.log(`${n.padEnd(26)} ${kind.padEnd(8)} ${x}  [${at.length === SIZES.length * THEMES.length ? 'all' : at.join(', ')}]`); });
+  report.filter((r) => r.name === '_errors' && r.errs.length).forEach((r) => console.log(`page errors ${r.theme} ${r.w}: ${r.errs.join(' | ')}`));
+})();

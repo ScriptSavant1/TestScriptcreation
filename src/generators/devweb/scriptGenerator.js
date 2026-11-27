@@ -3,6 +3,8 @@
  * Integrates correlation, parameterization, authentication, and transactions
  */
 
+const { looksLikeJson, impliedContentType } = require("../../core/utils");
+const { requestAuth, signInHost } = require("../../core/requestAuth");
 const crypto = require("crypto");
 const CorrelationDetector = require("../../analyzers/correlationDetector");
 const ParameterizationEngine = require("../../analyzers/parameterizationEngine");
@@ -12,6 +14,7 @@ const MandatoryFilesGenerator = require("./filesGenerator");
 const _u = require("../../core/utils");
 const _vc = require("../../core/variableClassifier");
 const HostParams = require("../../web/public/shared/host-params");
+const ScriptSettings = require("../../core/scriptSettings");
 
 class AdvancedScriptGenerator {
   constructor(requests, collection, options = {}) {
@@ -1576,8 +1579,11 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
 
     // Add authentication initialization
     if (this.options.useAuthentication && this.authConfigs.size > 0) {
-      code += `\n    // Authentication Setup\n`;
-      code += this.indent(this.authHandler.generateInitializationCode(), 1);
+      const setup = this.authHandler.generateInitializationCode();
+      if (setup) {
+        code += `\n    // Authentication Setup\n`;
+        code += this.indent(setup, 1);
+      }
     }
 
     // Add collection-level OAuth2 / auth config from Bruno YAML request.auth
@@ -2057,17 +2063,12 @@ ${jwtBlock}${dpopBlock}${ntlmBlock}
         const seqNum = String(counter).padStart(2, "0");
         const txName = this.formatTransactionName(req.name, counter);
         const txVar = `TS${seqNum}`;
-        this.requestTxMap.set(req.name, { txVar, txName });
+        this.requestTxMap.set(req, { txVar, txName });   // by request: two with one name are two transactions
         counter++;
       });
     };
 
-    if (this.options.groupByFolder && this.options.useTransactions) {
-      const grouped = this.groupRequestsByFolder();
-      Object.values(grouped).forEach((requests) => assign(requests));
-    } else {
-      assign(this.requests);
-    }
+    assign(this.requests);
   }
 
   /**
@@ -2160,7 +2161,7 @@ ${audLine}        load.global.${jwtOutVar} = ${tokenCall};
         : "";
 
     let code = `load.action('Action', async function() {
-${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
+${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}${this._digestUsers()}
 `;
 
     if (this.options.groupByFolder && this.options.useTransactions) {
@@ -2175,14 +2176,12 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
   }
 
   /**
-   * Generate grouped actions by folder (as transactions)
-   */
-  /**
-   * Generate per-request transactions.
+   * Generate per-request transactions, in the order of the collection / test plan (a request in a sub-folder or
+   * controller stays where it is: one folder after the other ran it after everything outside its folder).
    *
    * Each API request = one transaction: T{nn}_{RequestName}
    * Counter is global across ALL folders (T01, T02 ... Tn).
-   * Folders remain as code comments for readability but have no outer transaction.
+   * Folders have no outer transaction.
    *
    * Examples across folders:
    *   Folder Auth:      T01_Get_Access_Token, T02_Refresh_Token
@@ -2190,31 +2189,24 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
    *   Sub-folder A/B:   T05_Get_Items
    */
   generateGroupedActions() {
-    const grouped = this.groupRequestsByFolder();
     let code = "";
 
     // Transactions are already declared at module level (in generateHeader via requestTxMap).
     // Here we only emit .start() and .stop() — no inline "let T01 = new load.Transaction()" declarations.
-    const groupEntries = Object.entries(grouped);
-    const total = groupEntries.reduce((n, [, reqs]) => n + reqs.length, 0);
-    let done = 0;
-    groupEntries.forEach(([folder, requests], groupIndex) => {
-      requests.forEach((request, reqIndex) => {
-        done++;
-        const tx = this.requestTxMap.get(request.name);
-        const txVar = tx ? tx.txVar : null;
+    this.requests.forEach((request, index) => {
+      const tx = this.requestTxMap.get(request);
+      const txVar = tx ? tx.txVar : null;
 
-        if (txVar) code += `\n    ${txVar}.start();\n`;
-        code += this.generateRequestCode(request, 1);
-        if (txVar)
-          code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
+      if (txVar) code += `\n    ${txVar}.start();\n`;
+      code += this.generateRequestCode(request, 1);
+      if (txVar)
+        code += `\n    ${txVar}.stop(load.TransactionStatus.Passed);`;
 
-        // Think time between steps — none after the last one; load.thinkTime follows the Runtime Settings
-        if (this.options.thinkTime > 0 && done < total) {
-          code += `\n    load.thinkTime(${this.options.thinkTime});`;
-        }
-        code += "\n\n";
-      });
+      // Think time between steps — none after the last one; load.thinkTime follows the Runtime Settings
+      if (this.options.thinkTime > 0 && index < this.requests.length - 1) {
+        code += `\n    load.thinkTime(${this.options.thinkTime});`;
+      }
+      code += "\n\n";
     });
 
     return code;
@@ -2362,7 +2354,7 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
     // Transactions already declared at module level via requestTxMap — only start/stop here
     this.requests.forEach((request, index) => {
-      const tx = this.requestTxMap.get(request.name);
+      const tx = this.requestTxMap.get(request);
       const txVar = tx ? tx.txVar : null;
 
       if (txVar) code += `\n    ${txVar}.start();\n`;
@@ -2728,8 +2720,9 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
     // Add headers only if there are any
     const headers = this.generateHeaders(request);
-    if (headers && Object.keys(headers).length > 0) {
-      options.headers = headers;
+    const contentType = this._impliedContentType(request);
+    if ((headers && Object.keys(headers).length > 0) || contentType) {
+      options.headers = contentType ? { ...headers, "Content-Type": contentType } : headers;
     }
 
     // Add queryString if URL has query parameters
@@ -2742,7 +2735,7 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     if (["POST", "PUT", "PATCH"].includes(request.method) && request.body) {
       const body = this.generateBody(request.body, request.name);
       if (body) {
-        options.body = body;
+        options.body = this._bodyAsJsonText(request, body) ? this._jsonTextBody(body) : body;
       }
     }
 
@@ -2765,6 +2758,45 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     return this.formatOptionsObject(options);
   }
 
+  /** The Content-Type a request has of its own: its headers, else the common headers; null when neither has one. */
+  _ownContentType(request) {
+    const isCt = (k) => String(k).toLowerCase() === "content-type";
+    const own = (request.headers || []).find((h) => h && !h.disabled && h.key && h.value && isCt(h.key));
+    if (own) return String(own.value);
+    for (const map of [this._staticGlobalHeaders, this._authGlobalHeaders]) {
+      for (const [k, v] of map || []) if (isCt(k)) return String(v).replace(/^["'`]|["'`]$/g, "");
+    }
+    return null;
+  }
+
+  /**
+   * The Content-Type Postman / Bruno add by themselves, for a body sent with none of its own (request or common
+   * headers): DevWeb sends none, and writes a body object as form fields — a JSON sign-in went out as "user=…&pass=…".
+   */
+  _impliedContentType(request) {
+    if (!request.body || !["POST", "PUT", "PATCH"].includes(request.method)) return null;
+    return this._ownContentType(request) ? null : impliedContentType(request.body);
+  }
+
+  /**
+   * A JSON body object sent under another content type (application/vnd.api+json, text/json …) is written as JSON text:
+   * the DevWeb engine writes an object as JSON under application/json only — elsewhere as form fields, and an object
+   * with a list in it stops the script (checked on the engine).
+   */
+  _bodyAsJsonText(request, body) {
+    if (typeof body !== "object" || !request.body || request.body.mode !== "raw") return false;
+    const ct = this._ownContentType(request);
+    return !!ct && !/^\s*application\/json\s*(;|$)/i.test(ct) && !ct.includes("{{");
+  }
+
+  /** JSON.stringify(<the body object>) — put in by formatOptionsObject. */
+  _jsonTextBody(body) {
+    const code = this.formatOptionsObject({ b: body });
+    if (!this._jsonTexts) this._jsonTexts = [];
+    this._jsonTexts.push("JSON.stringify(" + code.slice(code.indexOf('"b": ') + 5, code.lastIndexOf("\n}")) + ")");
+    return `{{JSONTEXT:${this._jsonTexts.length - 1}}}`;
+  }
+
   /**
    * Get base URL without query string
    * Uses manual string splitting to preserve {{variables}} and special characters
@@ -2783,22 +2815,21 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     const queryStart = url.indexOf("?");
     if (queryStart === -1) return null;
 
-    const queryString = url.substring(queryStart + 1);
+    const queryString = url.substring(queryStart + 1).split("#")[0];
     const params = {};
+    // the engine encodes keys and values itself: what is encoded in the address is decoded here (else %20 went out as
+    // %2520); a key given more than once is a list
+    const plain = (s) => s.split(/(\{\{[^{}]*\}\})/).map((p, i) => {
+      if (i % 2) return p;
+      const x = p.replace(/\+/g, " ");
+      try { return decodeURIComponent(x); } catch (e) { return x; }
+    }).join("");
     queryString.split("&").forEach((pair) => {
       const eqIndex = pair.indexOf("=");
-      if (eqIndex === -1) {
-        // Key with no value
-        if (pair) {
-          params[pair] = this.replaceParameters("");
-        }
-      } else {
-        const key = pair.substring(0, eqIndex);
-        const value = pair.substring(eqIndex + 1);
-        if (key) {
-          params[key] = this.replaceParameters(value);
-        }
-      }
+      const key = plain(eqIndex === -1 ? pair : pair.substring(0, eqIndex));
+      if (!key) return;
+      const value = this.replaceParameters(eqIndex === -1 ? "" : plain(pair.substring(eqIndex + 1)));
+      params[key] = Object.prototype.hasOwnProperty.call(params, key) ? [].concat(params[key], value) : value;
     });
     return Object.keys(params).length > 0 ? params : null;
   }
@@ -2878,11 +2909,22 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
 
     // Inject auth header from auth section ONLY if Authorization is NOT already explicit.
     // This prevents duplication when auth section and headers both define Authorization.
-    const hasExplicitAuthHeader = Object.keys(headers).some(
+    // (one of its own may be written with the common headers: it counts too)
+    const ownKeys = (request.headers || []).filter((h) => h && !h.disabled && h.key && h.value).map((h) => h.key.toLowerCase());
+    const hasExplicitAuthHeader = ownKeys.includes("authorization") || Object.keys(headers).some(
       (k) => k.toLowerCase() === "authorization",
     );
 
-    if (!hasExplicitAuthHeader) {
+    const sign = requestAuth(request, this.collection);
+    const has = (k) => ownKeys.includes(k.toLowerCase()) || Object.keys(headers).some((x) => x.toLowerCase() === k.toLowerCase());
+    if (this.options.useAuthentication === false) {
+      // switched off in the settings: nothing is written
+    } else if (sign && sign.kind === "apikey") {
+      if (sign.in === "header" && !has(sign.key)) headers[sign.key] = this.applyHostVars(this.replaceParameters(sign.value));
+    } else if (sign && sign.kind === "basic") {
+      // made when the request is sent: the user and the password may change every iteration
+      if (!hasExplicitAuthHeader) headers.Authorization = this._code("`Basic ${load.utils.base64Encode(" + this._expr(sign.username + ":" + sign.password) + ")}`");
+    } else if (!hasExplicitAuthHeader) {
       const authConfig = this.findAuthConfig(request);
       if (authConfig) {
         const authHeader =
@@ -2903,6 +2945,34 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     }
 
     return Object.keys(headers).length > 0 ? headers : null;
+  }
+
+  /** A piece of code as a value: formatOptionsObject puts it in without quotes. */
+  _code(code) {
+    if (!this._codes) this._codes = [];
+    this._codes.push(code);
+    return `{{CODE:${this._codes.length - 1}}}`;
+  }
+
+  /** A text with {{variables}} as one JavaScript expression: "a" + load.params.user + "b". */
+  _expr(text) {
+    const parts = String(this.replaceParameters(String(text))).split(/(\$\{[^{}]*\})/).filter((p) => p !== "");
+    return parts.map((p) => (/^\$\{[^{}]*\}$/.test(p) ? p.slice(2, -1) : JSON.stringify(p))).join(" + ") || '""';
+  }
+
+  /** Digest: the engine answers the server's question with these users — one per server, set in every iteration. */
+  _digestUsers() {
+    const seen = new Map();
+    if (this.options.useAuthentication === false) return "";
+    for (const r of this.requests) {
+      const a = requestAuth(r, this.collection);
+      if (!a || a.kind !== "digest") continue;
+      const host = signInHost(r, this.variableMap);
+      if (host && !seen.has(host)) seen.set(host, a);
+    }
+    if (!seen.size) return "";
+    const q = (h) => { const x = this.applyHostVars(h); return x.includes("${") ? "`" + x + "`" : JSON.stringify(x); };
+    return "\n    // Digest sign-in: the engine answers the server's question\n" + [...seen].map(([h, a]) => `    load.setUserCredentials({ username: ${this._expr(a.username)}, password: ${this._expr(a.password)}, domain: "", host: ${q(h)} });\n`).join("");
   }
 
   /**
@@ -2930,7 +3000,11 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
             const fileInfo = this.extractedDataFiles.get(hash);
             return `{{load.global.${fileInfo.varName}}}`;
           }
-          return this.replaceParameters(body.raw);
+          const text = this.replaceParameters(body.raw);
+          if (looksLikeJson(body.raw) || typeof text !== "string") return text;
+          // text, XML …: line breaks stay escapes (formatOptionsObject) — as real ones the code's indentation became
+          // part of the body
+          return text.replace(/\r/g, "\uE00D").replace(/\n/g, "\uE00A");
         }
 
       case "urlencoded":
@@ -3372,6 +3446,11 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     const names = HostParams.defaultNames(sorted.map(([h]) => h));
     this.hostVarMap = new Map();
     for (const [host] of sorted) this.hostVarMap.set(host, names[host]);
+    // names chosen on the page after a conversion (src/core/scriptSettings.js); none → the defaults above
+    ScriptSettings.applyServerNames(this.hostVarMap, this.options.serverNames, [
+      ...(this.variableMap ? [...this.variableMap.keys()] : []),
+      ...Object.keys(this.options.environmentVars || {}),
+    ]);
   }
 
   /**
@@ -3440,6 +3519,14 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
     // Replace "{{MULTIPART}}" with actual multipart code
     str = str.replace(/"\{\{MULTIPART:(\d+)\}\}"/g, (m, i) => (this._multipartBodies || [])[+i] || m);
 
+    // the line breaks of a text body
+    str = str.replace(/\uE00D/g, "\\r").replace(/\uE00A/g, "\\n");
+
+    str = str.replace(/"\{\{CODE:(\d+)\}\}"/g, (m, i) => (this._codes || [])[+i] || m);
+
+    // a JSON body written as text
+    str = str.replace(/"\{\{JSONTEXT:(\d+)\}\}"/g, (m, i) => (this._jsonTexts || [])[+i] || m);
+
     // Strip quotes from extractor code (new load.XXXExtractor(...))
     // JSON.stringify double-escapes inner backslashes (\" → \\\" in JSON text).
     // Use JSON.parse to fully unescape the captured content rather than a
@@ -3506,18 +3593,15 @@ ${jwtRefreshBlock}${dpopProofBlock}${paramsHeaderBlock}
    * Find auth config for request
    */
   findAuthConfig(request) {
+    if (this.options.useAuthentication === false) return null;   // switched off in the settings
     if (request.auth && request.auth.type) {
       const authType = request.auth.type.toLowerCase();
 
       // 'noauth' explicitly overrides collection-level auth — return null, apply nothing
       if (authType === "noauth") return null;
 
-      // Any other request-level auth — look up by request name (registered by extractAuthentication)
-      const reqAuth = this.authConfigs.get(request.name);
-      if (reqAuth) return reqAuth;
-      // Edge case: extractAuthentication may have missed it — register now
-      this.authHandler.processAuth(request.name, request.auth);
-      return this.authConfigs.get(request.name) || null;
+      // the request's own (two requests may have one name and different sign-ins)
+      if (authType !== "inherit") return { name: request.name, folder: request.folder || "", type: authType, config: this.authHandler.extractAuthConfig(request.auth) };
     }
 
     // No request-level auth — inherit collection-level auth only (never spill a per-request auth)

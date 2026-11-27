@@ -1,5 +1,5 @@
 // The packaged .exe started by hand (double-click — no link): the classic way must work as it always did.
-// Toolbar Start Recording → transaction → Stop asks for a file name inside the toolbar → saved in the output folder
+// Toolbar Start recording → transaction → Stop asks for a file name inside the toolbar → saved in the output folder
 // → the classic "Recording complete — Download HAR / New Recording" card (not the PerfX Studio one) → Quit closes.
 // The recording window shows its landing page, so a test page is opened in it through its DevTools port.
 //
@@ -54,7 +54,7 @@ try {
   await tb.waitForSelector("#harReadyCard:not(.hidden)", { timeout: 20000 });
   check(await tb.isVisible("#btnDownload") && await tb.isVisible("#btnNewRecording") && await tb.isHidden("#savedCard"),
     "classic card: Recording complete — Download HAR / New Recording (not the PerfX Studio card)");
-  check(await tb.isVisible("#btnStart"), "Start Recording offered again for the next recording");
+  check(await tb.isVisible("#btnStart"), "Start recording offered again for the next recording");
   const har = JSON.parse(readFileSync(join(out, "classic-test.har"), "utf8"));
   check(har.log.entries.some((e) => e.request.url === base + "/api/hello") && (har.log.pages || []).some((p) => p.title === "T01_Open"),
     `saved next to the program / --out folder with the request and transaction T01_Open (${har.log.entries.length} entries)`);

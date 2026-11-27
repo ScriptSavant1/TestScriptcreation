@@ -17,7 +17,7 @@ const path = require('path');
 
 const SRC = path.resolve(__dirname, '../../cdp-recorder/recorder/src/portal-mode.js');
 const P = new Function(fs.readFileSync(SRC, 'utf-8').replace(/^export /gm, '') +
-  '\nreturn { LINK_SCHEME, originOf, parsePortalLink, linkCommand, originAccess, harFileName, expandEnv, readSession, liveRow, createAskQueue, readAllowedPages, planSteps, nextTxNumber, txName, scriptIdOf, renamedTx, nextPlanned };')();
+  '\nreturn { LINK_SCHEME, originOf, parsePortalLink, linkCommand, originAccess, harFileName, expandEnv, readSession, liveRow, createAskQueue, readAllowedPages, planSteps, nextTxNumber, txName, scriptIdOf, renamedTx, nextPlanned, olderThan };')();
 
 describe('parsePortalLink — only the portal origin travels in the link', () => {
   test('a start link gives the portal origin, path dropped', () => {
@@ -205,5 +205,21 @@ describe('script ID and rename (CDP Recorder 0.2.3)', () => {
     expect(P.renamedTx('T02_Login', 'Launch', used)).toEqual({ name: 'T02_Launch' });
     expect(P.renamedTx('T02_Login', 'T01_Launch', used).error).toMatch(/used already/);
     expect(P.renamedTx('T02_Login', '  ', used).error).toMatch(/Type a name/);
+  });
+});
+
+
+describe('the link runs headless; a newer copy takes over (0.3.1)', () => {
+  test('linkCommand: with conhost, --headless (no console window behind the recording); without, as before', () => {
+    expect(P.linkCommand('C:\\PerfX\\cdp-recorder.exe', 'C:\\Windows\\System32\\conhost.exe')).toBe('"C:\\Windows\\System32\\conhost.exe" --headless "C:\\PerfX\\cdp-recorder.exe" --portal "%1"');
+    expect(P.linkCommand('C:\\PerfX\\cdp-recorder.exe')).toBe('"C:\\PerfX\\cdp-recorder.exe" --portal "%1"');
+  });
+  test('olderThan: by number, part by part; no version counts as older', () => {
+    expect(P.olderThan('0.3.0', '0.3.1')).toBe(true);
+    expect(P.olderThan('0.2.9', '0.3.1')).toBe(true);
+    expect(P.olderThan('0.10.0', '0.3.1')).toBe(false);
+    expect(P.olderThan('0.3.1', '0.3.1')).toBe(false);
+    expect(P.olderThan('1.0.0', '0.3.1')).toBe(false);
+    expect(P.olderThan(undefined, '0.3.1')).toBe(true);
   });
 });

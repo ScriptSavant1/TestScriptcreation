@@ -55,6 +55,9 @@ const { resolveCdpRecorderDownload } = require("./cdpRecorderDownload");
 const BrunoDevWebConverter      = require("../tools/collection-converter");
 const JmxConverter              = require("../tools/jmx-converter");
 const JmxDependencyResolver     = require("../lib/jmxDependencyResolver");
+const { safePreview, publicAnalysis, publicScripts }           = require("./convertPreview");
+const { leaveOutOption }        = require("../core/requestSelection");
+const { settingsOptions, safeZipName } = require("../core/scriptSettings");
 
 // Analytics — lazy-loaded so a missing DB never crashes the server
 let analytics, adminReports, csvExporter, xlsxExporter, docxExporter;
@@ -254,11 +257,11 @@ class WebServer {
 
   setupRoutes() {
     // ── Rate limiter (conversion endpoints only) ──────────────────────────────
-    // 60 requests per 5-minute window per IP — generous for an internal team.
-    // Adjust max/windowMs if needed for your team size.
+    // 600 requests per 5-minute window per IP: the converter page converts again after every choice (a conversion takes
+    // 20 to 200 ms), and people behind one company address share it. Adjust max/windowMs if needed for your team size.
     const convertLimiter = rateLimit({
       windowMs: 5 * 60 * 1000,
-      max: 60,
+      max: 600,
       standardHeaders: true,
       legacyHeaders: false,
       message: { error: "rate_limit_exceeded" },
@@ -398,7 +401,8 @@ class WebServer {
         this.activeConversions++;
 
         // Analytics — capture request data before async work begins
-        const _evt = analytics ? analytics.startEvent(req, "converter") : null;
+        // an update of the same script (a choice made on the page) is not another use
+        const _evt = analytics && req.body.update !== "1" ? analytics.startEvent(req, "converter") : null;
         if (_evt && analytics) analytics.enrichWithFile(_evt, collectionFile, req.body.protocol, req.body.mode);
         let _evtResult = "failed", _evtErrCode = null, _evtReqCount = null;
 
@@ -444,6 +448,8 @@ class WebServer {
             addComments:          req.body.addComments !== "false",
             logLevel,
             csvFilePaths,
+            ...leaveOutOption(req.body.leaveOut),   // the requests left out on the page (none → no option: the answer as before)
+            ...settingsOptions(req.body),           // script name, server names chosen on the page (none → no option)
           };
 
           const converter = new BrunoDevWebConverter(options);
@@ -460,7 +466,8 @@ class WebServer {
 
           // Issue a cryptographically strong single-use download token (F-05)
           const token = crypto.randomBytes(32).toString("hex");
-          this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
+          if (/^[0-9a-f]{64}$/.test(req.body.replaces || "")) this.pendingDownloads.delete(req.body.replaces);   // the ZIP this one replaces
+          this.pendingDownloads.set(token, { files, outputDir, zipName: safeZipName(options.scriptName), expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
           _evtResult   = "success";
@@ -471,13 +478,16 @@ class WebServer {
           res.json({
             success:     true,
             downloadUrl: `/converter/download/${token}`,
-            analysis:    results.analysis,
+            analysis:    publicAnalysis(results.analysis),
             protocol:    options.protocol,
             mode:        options.mode,
+            // what the ZIP holds — requests, servers, files — shown before the download (read-only)
+            preview:     safePreview({ kind: "pm", ...(converter.previewSource || {}), files, outputDir }),
           });
 
         } catch (err) {
           // Log full error server-side; send generic code to client (F-07)
+          if (err.code === "nothing_selected") { _evtResult = "failed"; _evtErrCode = "nothing_selected"; return res.status(400).json({ error: "nothing_selected" }); }
           console.error("[convert-error]", err.message, err.isTimeout ? "(timeout)" : "");
           const status    = err.isTimeout ? 408 : 500;
           const code      = err.isTimeout ? "conversion_timeout" : "conversion_failed";
@@ -508,12 +518,12 @@ class WebServer {
       }
 
       this.pendingDownloads.delete(req.params.token); // single-use
-      const { files, outputDir } = entry;
+      const { files, outputDir, zipName } = entry;
 
       // application/octet-stream — generic binary avoids stricter scanning on
       // some corporate networks that inspect application/zip differently.
       res.setHeader("Content-Type", "application/octet-stream");
-      res.setHeader("Content-Disposition", 'attachment; filename="loadrunner_script.zip"');
+      res.setHeader("Content-Disposition", 'attachment; filename="' + (zipName || "loadrunner_script.zip") + '"');
       // No Content-Length — chunked transfer encoding bypasses proxy size limits.
 
       const archive = archiver("zip", { zlib: { level: 9 } });
@@ -565,7 +575,8 @@ class WebServer {
         this.activeConversions++;
 
         // Analytics
-        const _evtJ = analytics ? analytics.startEvent(req, "jmx") : null;
+        // an update of the same script (a choice made on the page) is not another use
+        const _evtJ = analytics && req.body.update !== "1" ? analytics.startEvent(req, "jmx") : null;
         if (_evtJ && analytics) analytics.enrichWithFile(_evtJ, jmxFile, req.body.protocol, req.body.mode);
         let _evtJResult = "failed", _evtJErrCode = null, _evtJReqCount = null;
 
@@ -609,6 +620,8 @@ class WebServer {
             logLevel,
             generateWlmExcel:     req.body.generateWlmExcel !== "false",
             csvFilePaths,
+            ...leaveOutOption(req.body.leaveOut),   // the requests left out on the page (none → no option: the answer as before)
+            ...settingsOptions(req.body),           // script name, server names chosen on the page (none → no option)
           };
 
           const converter = new JmxConverter(options);
@@ -626,7 +639,8 @@ class WebServer {
           }
 
           const token = crypto.randomBytes(32).toString("hex");
-          this.pendingDownloads.set(token, { files, outputDir, expires: Date.now() + 5 * 60 * 1000 });
+          if (/^[0-9a-f]{64}$/.test(req.body.replaces || "")) this.pendingDownloads.delete(req.body.replaces);   // the ZIP this one replaces
+          this.pendingDownloads.set(token, { files, outputDir, zipName: safeZipName(options.scriptName), expires: Date.now() + 5 * 60 * 1000 });
           setTimeout(() => this.pendingDownloads.delete(token), 5 * 60 * 1000);
 
           _evtJResult   = "success";
@@ -637,17 +651,19 @@ class WebServer {
           res.json({
             success:     true,
             downloadUrl: `/converter/download/${token}`,
-            analysis:    results.analysis,
+            analysis:    publicAnalysis(results.analysis),
             threadGroups: results.threadGroups,
-            scripts:     results.scripts || null,
+            scripts:     publicScripts(results.scripts),
             multiScript: results.multiScript || false,
             metadata:    results.metadata,
             dependency,
             protocol:    options.protocol,
             mode:        options.mode,
+            preview:     safePreview({ kind: "jmx", ...(converter.previewSource || {}), files, outputDir }),
           });
 
         } catch (err) {
+          if (err.code === "nothing_selected") { _evtJResult = "failed"; _evtJErrCode = "nothing_selected"; return res.status(400).json({ error: "nothing_selected" }); }
           console.error("[convert-jmx-error]", err.message, err.isTimeout ? "(timeout)" : "");
           const status     = err.isTimeout ? 408 : 500;
           const code       = err.isTimeout ? "conversion_timeout" : "conversion_failed";
@@ -799,7 +815,9 @@ class WebServer {
     for (const pfx of ["/admin", "/converter/admin"]) {
       // Chart.js vendor — no auth (just a static file)
       this.app.get(`${pfx}/vendor/chart.js`, (req, res) => {
-        const p = path.join(process.cwd(), "node_modules", "chart.js", "dist", "chart.umd.min.js");
+        // next to the application, not the folder the server was started from (started elsewhere it answered 404 and
+        // the admin page's chart stayed empty)
+        const p = path.join(__dirname, "..", "..", "node_modules", "chart.js", "dist", "chart.umd.min.js");
         res.setHeader("Content-Type", "application/javascript");
         res.setHeader("Cache-Control", "public, max-age=86400");
         res.sendFile(p, (err) => { if (err) res.status(404).json({ error: "not_found" }); });
@@ -929,8 +947,8 @@ function adminLoginHtml(showError) {
 <script>(function(){try{var t=localStorage.getItem('lr-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{color-scheme:dark;--bg:#0c111b;--surface:#121926;--inset:#0e1420;--border:#233047;--border-2:#31405a;--text:#e8edf5;--text-2:#aab5c7;--text-3:#8693a8;--accent:#2563eb;--accent-hover:#1d4ed8;--focus:#75a7ff;--bad:#f27a7a;--bad-soft:rgba(242,122,122,.13)}
-[data-theme="light"]{color-scheme:light;--bg:#f3f5f9;--surface:#fff;--inset:#f5f7fa;--border:#e1e6ee;--border-2:#cbd3df;--text:#0f172a;--text-2:#3a495f;--text-3:#58687f;--focus:#2563eb;--bad:#c42727;--bad-soft:rgba(220,38,38,.08)}
+:root{color-scheme:dark;--bg:#0c111b;--surface:#121926;--inset:#0e1420;--border:#233047;--border-2:#31405a;--text:#e8edf5;--text-2:#aab5c7;--text-3:#8693a8;--accent:#7c3aed;--accent-hover:#6d28d9;--focus:#b9a3ff;--bad:#f27a7a;--bad-soft:rgba(242,122,122,.13)}
+[data-theme="light"]{color-scheme:light;--bg:#f3f5f9;--surface:#fff;--inset:#f5f7fa;--border:#e1e6ee;--border-2:#cbd3df;--text:#0f172a;--text-2:#3a495f;--text-3:#58687f;--accent:#6d28d9;--accent-hover:#5b21b6;--focus:#6d28d9;--bad:#c42727;--bad-soft:rgba(220,38,38,.08)}
 body{background:var(--bg);color:var(--text);font-family:"Segoe UI",-apple-system,system-ui,sans-serif;font-size:14px;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
 .box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}

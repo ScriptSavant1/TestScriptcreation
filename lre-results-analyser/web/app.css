@@ -32,7 +32,7 @@ body.embedded .ra-header { display: none; }
 @media (max-width: 700px) { .privacy, .badge { display: none; } }
 
 main { max-width: var(--ds-page-max, 100%); margin: 0; padding: 24px var(--ds-page-x) 48px; }
-@media (max-width: 700px) { main { padding: 16px 16px 40px; } }
+@media (max-width: 700px) { main { --ds-page-x: 16px; padding: 16px var(--ds-page-x) 40px; } }   /* the band runs edge to edge with the same 16 px (BUG-133) */
 .view { display: none; } .view.active { display: block; }
 
 /* buttons drawn by script use .btn (+ sm / ghost / primary): same look as ds-btn */
@@ -385,7 +385,7 @@ input.in-sla { height: 28px; }
 /* phone: exports on one row of five, the other two actions on the next — the report starts on the first screen */
 @media (max-width: 600px) {
   .toolbar-actions { width: 100%; gap: 6px; }
-  .toolbar-actions .export-group { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; width: 100%; }
+  .toolbar-actions .export-group { display: flex; gap: 6px; }
   .toolbar-actions .export-group .btn, .toolbar-actions .export-group .menu, .toolbar-actions .export-group .menu .btn { width: 100%; min-width: 0; }
   .toolbar-actions .export-group .btn { height: 34px; padding: 0 4px; justify-content: center; gap: 4px; font-size: var(--ds-fs-xs); }
   .toolbar-actions .export-group .btn > svg:not(.caret) { display: none; }
@@ -397,3 +397,44 @@ input.in-sla { height: 28px; }
 .bar-fill.working { background-image: linear-gradient(90deg, transparent 0, rgba(255, 255, 255, .35) 50%, transparent 100%); background-size: 200px 100%; background-repeat: no-repeat; animation: bar-shimmer 1.4s linear infinite; }
 @keyframes bar-shimmer { from { background-position: -200px 0; } to { background-position: calc(100% + 200px) 0; } }
 @media (prefers-reduced-motion: reduce) { .bar-fill.working { animation: none; } }
+
+/* ── review fixes and lighter layout (design review: every tab) ── */
+/* buttons with words that had no outline (Collapse all, None, Detected, Transactions …) */
+.btn.ghost { border-color: var(--ds-border-2); }
+.btn.ghost:hover { border-color: var(--ds-accent-line); }
+/* "Show chart" reads as a link */
+.finding .go { margin: 8px 0 0 -12px; text-decoration: underline; text-underline-offset: 3px; border-color: transparent; }
+.finding .go:hover { border-color: transparent; background: var(--ds-accent-soft); }
+/* the keyboard focus shows on every field (the date pickers too) */
+:where(input:not([type="checkbox"]), select):focus-visible { box-shadow: 0 0 0 2px var(--ds-focus); }
+/* the explanations: the text and "How to read it" kept, without the coloured box — the data stands out */
+.explain { background: none; padding: 2px 0 2px 12px; border-left: 3px solid var(--ds-accent-line); border-radius: 0; margin-bottom: 14px; }
+/* one Export button with every format in its menu */
+.menu-export { min-width: 320px; }
+.menu-export button { display: flex; align-items: flex-start; gap: 10px; }
+.menu-export button > svg { flex: none; width: 16px; height: 16px; margin-top: 2px; color: var(--ds-accent-text); }
+.menu-export button span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.menu-export button b { font-weight: 600; }
+.menu-export button small { font-size: var(--ds-fs-xs); color: var(--ds-text-3); white-space: normal; }
+.menu-sep { height: 1px; margin: 6px 4px; background: var(--ds-border); }
+#btn-more { gap: 8px; }
+/* Transactions: Set SLAs beside the view switch */
+#tx-sla-edit[aria-pressed="true"] { border-color: var(--ds-accent-line); background: var(--ds-accent-soft); color: var(--ds-accent-text); }
+/* Insights: the severity counts filter the list */
+.vb-counts button.pill { font: inherit; font-size: var(--ds-fs-xs); font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+.vb-counts button.pill:hover { border-color: currentColor; }
+.vb-counts button.pill[aria-pressed="true"] { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
+.vb-counts button.pill:focus-visible, .link-btn:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+.ins-only { margin: 0 0 12px; font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+.link-btn { border: 0; padding: 0; background: none; color: var(--ds-accent-text); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+/* Charts: the chart names jump to each one; on wide screens two charts side by side (the first and the tall ones full width) */
+.chart-jump { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.chart-jump .btn { height: 30px; padding: 0 11px; }
+@media (min-width: 1600px) {
+  #chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-gap); align-items: start; }
+  #chart-grid > .card { margin: 0; min-width: 0; }
+  #chart-grid > .card:first-child, #chart-grid > .card:has(> .card-body > .chart.tall), #chart-grid > .card:has(> .chart.tall) { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) { .toolbar-actions .export-group #btn-more { width: auto; padding: 0 12px; gap: 6px; } .toolbar-actions .export-group #btn-more > svg:not(.caret) { display: inline-block; } }
+/* a date field shows its focus on its calendar button too (that button sits inside the field) */
+.in-dt:focus-within { outline: none; border-color: var(--ds-focus); box-shadow: 0 0 0 2px var(--ds-focus); }

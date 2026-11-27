@@ -20,7 +20,7 @@
   'use strict';
 
   var REC = 'http://localhost:8787';
-  var LATEST = '0.3.0';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
+  var LATEST = '0.3.3';            // the CDP Recorder version these pages are made for (cdp-recorder/recorder/src/version.ts)
   var PREF = 'perfx-rec-live';     // remembered choices: recent addresses, browser, private window, name, last transaction
   var STATIC_TYPES = { Image: 1, Stylesheet: 1, Script: 1, Font: 1, Media: 1 };
   var ROWS_PER_GROUP = 400;        // rows drawn per open transaction (the newest)
@@ -147,7 +147,7 @@
           '<label class="rl-field" for="lv-tx-name">Next transaction</label>' +
           '<div class="rl-txbox"><span class="rl-prefix" id="lv-prefix" title="Added for you — type your own (for example T07_Pay) to use another number">T01_</span><input class="ds-field" id="lv-tx-name" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. Login — press Enter" aria-describedby="lv-tx-err"></div>' +
           '<span class="rl-ferr" id="lv-tx-err" role="alert" hidden></span>' +
-          '<div class="rl-txbtns"><button class="ds-btn ds-btn-primary" type="button" id="lv-tx-start">Start</button><button class="ds-btn ds-btn-ghost" type="button" id="lv-tx-undo" disabled title="Take back the last mark: the transaction it started goes, the one before runs again">Undo last mark</button></div>' +
+          '<div class="rl-txbtns"><button class="ds-btn ss-btn-accent" type="button" id="lv-tx-start">Start</button><button class="ds-btn ds-btn-ghost" type="button" id="lv-tx-undo" disabled title="Take back the last mark: the transaction it started goes, the one before runs again">Undo last mark</button></div>' +
           '<ol class="rl-plan" id="lv-planlist" hidden aria-label="Planned steps"></ol>' +
           '<ol class="rl-txlist" id="lv-txlist"></ol>' +
           '<div class="rl-call ds-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>The same buttons are on the small toolbar next to the recording window — use whichever is closer.</span></div>' +

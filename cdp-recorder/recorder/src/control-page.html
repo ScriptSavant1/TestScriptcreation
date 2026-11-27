@@ -9,7 +9,7 @@
   --bg: #ffffff; --bg-subtle: #f5f7fa; --bg-card: #ffffff; --border: #dde1e8;
   --text: #1a1d24; --text-muted: #6b7280; --accent: #0070f3; --accent-hover: #005cc5;
   --success: #16a34a; --warning: #d97706; --danger: #dc2626;
-  --tx-color: #7c3aed; --tx-hover: #6d28d9; --radius-sm: 4px; --radius-md: 8px;
+  --tx-color: #7c3aed; --tx-hover: #6d28d9; --tx-text: #6227c9; --radius-sm: 4px; --radius-md: 8px;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
 }
 @media (prefers-color-scheme: dark) {
@@ -17,7 +17,7 @@
     --bg: #0f1117; --bg-subtle: #1a1d24; --bg-card: #1e2230; --border: #2e3347;
     --text: #e8eaf0; --text-muted: #8892a4; --accent: #3b9eff; --accent-hover: #66b3ff;
     --success: #34d26a; --warning: #f5a623; --danger: #f05252;
-    --tx-color: #a78bfa; --tx-hover: #c4b5fd;
+    --tx-color: #7c3aed; --tx-hover: #6d28d9; --tx-text: #b9a3ff;   /* buttons: white on a deep purple; text: a light one */
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -53,7 +53,7 @@ body {
 .header-title { font-weight: 600; font-size: 13px; flex: 1; }
 .status-badge { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--bg-subtle); color: var(--text-muted); }
 .status-badge.recording { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
-.status-badge.tx { background: color-mix(in srgb, var(--tx-color) 18%, transparent); color: var(--tx-color); }
+.status-badge.tx { background: color-mix(in srgb, var(--tx-color) 18%, transparent); color: var(--tx-text); }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .status-badge.recording .status-dot { animation: pulse 1.4s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
@@ -72,7 +72,7 @@ body {
 /* one box: the number is added for you (shown before it), Enter ends the running transaction and starts this one */
 .naming-row { display: flex; align-items: stretch; }
 .tx-prefix { display: flex; align-items: center; padding: 0 6px; border: 1px solid var(--border); border-right: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  background: color-mix(in srgb, var(--tx-color) 16%, var(--bg-subtle)); color: var(--tx-color); font: 700 12px 'Cascadia Code', Consolas, monospace; }
+  background: color-mix(in srgb, var(--tx-color) 16%, var(--bg-subtle)); color: var(--tx-text); font: 700 12px 'Cascadia Code', Consolas, monospace; }
 .naming-row .naming-input { flex: 1; min-width: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .naming-hint { font-size: 10.5px; color: var(--text-muted); }
 .naming-err { font-size: 11px; font-weight: 600; color: var(--danger); }
@@ -91,11 +91,12 @@ body.asking > :not(#askCard):not(.header) { opacity: .35; pointer-events: none; 
 .ask-row { margin-top: 10px; }
 #askText { font-size: 12.5px; font-weight: 600; color: var(--text); }
 .saved-countdown { margin-top: 8px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+button, input, select, textarea { font-family: inherit; }   /* one font: the page's */
 .btn { flex: 1; min-width: 90px; padding: 8px 10px; border: none; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--accent); color: white; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
-.btn-danger { background: var(--danger); color: white; }
+.btn-danger { background: #dc2626; color: white; }   /* the deep red in both themes: white text stays readable */
 .btn-tx { background: var(--tx-color); color: white; }
 .btn-tx:hover:not(:disabled) { background: var(--tx-hover); }
 .btn-secondary { background: var(--bg-subtle); color: var(--text); border: 1px solid var(--border); }
@@ -182,9 +183,9 @@ body.asking > :not(#askCard):not(.header) { opacity: .35; pointer-events: none; 
   </div>
 
   <div id="actionArea" class="btn-row">
-    <button id="btnStart" class="btn btn-primary">Start Recording</button>
-    <button id="btnStop" class="btn btn-danger hidden">Stop Recording</button>
-    <button id="btnStartTx" class="btn btn-tx hidden">Start Transaction</button>
+    <button id="btnStart" class="btn btn-primary">Start recording</button>
+    <button id="btnStop" class="btn btn-danger hidden">Stop recording</button>
+    <button id="btnStartTx" class="btn btn-tx hidden">Start transaction</button>
   </div>
 
   <div id="notice" class="notice">
@@ -228,7 +229,7 @@ function render(s) {
   $("countCard").classList.toggle("hidden", !s.recording);
   $("countActive").textContent = s.active;
   $("countBackground").textContent = s.background;
-  // Only relevant when Start Transaction is actually an option — showing
+  // Only relevant when Start transaction is actually an option — showing
   // "safe to start a transaction" while one is already running is confusing
   // (the next name ends it and starts the next one; Stop ends the last).
   $("settledPill").classList.toggle("hidden", !(s.recording && s.settled && !s.activeTransaction));
@@ -241,7 +242,7 @@ function render(s) {
   // the box stays while a transaction runs: Enter (or Start) ends it and starts the next
   $("namingCard").classList.toggle("hidden", !s.recording);
   $("btnStartTx").classList.toggle("hidden", !s.recording);
-  $("btnStartTx").textContent = s.activeTransaction ? "Start next" : "Start Transaction";
+  $("btnStartTx").textContent = s.activeTransaction ? "Start next" : "Start transaction";
   if (s.nextTx) {
     $("txPrefix").textContent = s.nextTx.number;
     $("txNameInput").placeholder = s.nextTx.planned ? `Next planned: ${s.nextTx.planned} — press Enter` : "e.g. Login — press Enter";

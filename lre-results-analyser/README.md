@@ -39,9 +39,14 @@ default (with the percentile: P90, P95, P99 or P50) or per transaction in the Tr
 are remembered per test in this browser. Every figure, chart and insight updates when either changes.
 Every panel can be collapsed ("Collapse all / Expand all", remembered). **New analysis** starts again.
 
-Exports: **Excel** (10 sheets from the page, including Charts; 9 from the CLI), **Word** (editable,
-landscape, with charts), **PDF** (print-ready landscape report: choose "Save as PDF"), **HTML**, and
-under **More**: **JSON** (full or redacted).
+Exports, all under the one **Export** button: **Excel** (10 sheets from the page, including Charts; 9
+from the CLI), **Word** (editable, landscape, with charts), **PDF** (print-ready landscape report: choose
+"Save as PDF"), **HTML**, and **JSON** (full or redacted).
+
+Transactions: the SLA columns show once an SLA is set (**Set SLAs** opens a box beside each name; the
+default SLA is in **Change**). Insights: the tab says how many high findings there are, and the
+severity counts filter the list. Charts: a row of the chart names jumps to each one; on wide screens two
+charts stand side by side.
 
 There is no Validation tab: the technical self-checks are in the JSON export (and the CLI console).
 
@@ -49,7 +54,8 @@ There is no Validation tab: the technical self-checks are in the JSON export (an
 
 Each chart and table has a one-line explanation and an expandable "How to read it", written for non-technical readers.
 The text lives in `web/notes.js` (edit the wording there). Column titles and overview tiles show help on hover.
-The "? Explanations" button turns them off (remembered per browser).
+The "Hide explanations" button turns them off (remembered per browser). They sit beside a thin line, not
+in a coloured box, so the data stands out.
 
 ## Command line
 

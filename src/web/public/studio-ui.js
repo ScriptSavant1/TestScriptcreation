@@ -205,7 +205,7 @@ function clearAll() {
   btn.disabled = true;
   btn.textContent = "Load a HAR file to begin";
   document.getElementById("mode-badge").innerHTML =
-    'Mode: <b style="color:var(--warning)">Pattern</b> (1 HAR)';
+    'One recording';
   document.getElementById("btn-clear-hdr").style.display = "none";
   showPhase("ph-upload");
 }
@@ -218,12 +218,12 @@ function updateUploadState() {
     if (S.har2) {
       btn.textContent = "Analyse & generate (diff mode — 2 HARs)";
       badge.innerHTML =
-        'Mode: <b style="color:var(--success)">Diff</b> (2 HARs — deterministic)';
+        'Two recordings compared';
       S.mode = "two";
     } else {
       btn.textContent = "Analyse & generate (pattern mode — 1 HAR)";
       badge.innerHTML =
-        'Mode: <b style="color:var(--warn)">Pattern</b> (1 HAR — heuristic)';
+        'One recording';
       S.mode = "single";
     }
   } else {
@@ -406,17 +406,19 @@ function switchTab(el, tab) {
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDER RESULTS
 // ═══════════════════════════════════════════════════════════════════════════
+// The Rnd switch of Correlation details: a list (every match) used one value at random each iteration, or every value
+// as recorded again — corr.list, the same picker as the editor's choice (one pick per iteration in both formats).
+function _corrIsRnd(c) { return !!(c.list && c.list.pick === "random"); }
 function toggleCorrRandSelect(idx) {
   const c = S.correlations[idx];
   if (!c) return;
-  if (c.extractorType === "random_select") {
-    c.extractorType = "jsonpath";
-    if (c.extractorConfig) c.extractorConfig.selectAll = true;
-  } else if (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) {
-    c.extractorType = "random_select";
-  } else {
-    return;
-  }
+  if (!(c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll)) return;
+  if (c.list && c.list.pick === "random") delete c.list; else c.list = { pick: "random" };
+  (S.advisorCandidates || []).forEach(function (x) {
+    if (!(x._applied && x._selectAll && x.varName === c.name)) return;
+    if (_corrIsRnd(c)) x._pick = "random"; else delete x._pick;
+    delete x._nth;
+  });
   regenerateFromAdvisor();
 }
 
@@ -436,17 +438,23 @@ function renderCorrelations() {
     html += S.correlations
       .map((c) => {
         const typeClass =
-          c.extractorType === "jsonpath" || c.extractorType === "random_select"
+          c.extractorType === "jsonpath" || _corrIsRnd(c)
             ? "jsonpath"
             : c.extractorType === "cookie"
               ? "cookie"
               : c.extractorType === "html"
                 ? "html"
                 : "boundary";
+        // a list (every match) says how it is used: List (as recorded), Random, Next (each iteration), No. N
+        const _lst = !!c.extractorConfig && c.extractorType !== "array_reconstruct" && c.extractorConfig && (c.extractorConfig.selectAll || c.extractorConfig.all);
         const typeLabel =
-          c.extractorType === "jsonpath"
+          _lst
+            ? (c.list && c.list.pick === "random" ? "Random" : c.list && c.list.pick === "rotate" ? "Next" : c.list && c.list.pick === "nth" ? "No. " + c.list.nth : "List")
+            : c.extractorType === "pkce"
+            ? "PKCE"
+            : c.extractorType === "jsonpath"
             ? "JSON"
-            : c.extractorType === "random_select"
+            : _corrIsRnd(c)
               ? "RandSel"
               : c.extractorType === "cookie"
                 ? "Cookie"
@@ -454,7 +462,11 @@ function renderCorrelations() {
                   ? "HTML"
                   : c.extractorType === "boundary_header"
                     ? "Header"
-                    : "Boundary";
+                    : c.extractorType === "regexp"
+                      ? "RegExp"
+                      : c.extractorType === "xpath"
+                        ? "XPath"
+                        : "Boundary";
         const srcEntry = S.entries1[c.sourceIdx];
         const srcUrl = srcEntry
           ? srcEntry.url.split("?")[0].substring(0, 60)
@@ -463,16 +475,16 @@ function renderCorrelations() {
         const advisorBadge = c._fromAdvisor
           ? `<span class="corr-advisor-badge">Advisor</span>`
           : "";
-        const _siIsSelectAll = (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll) || c.extractorType === "random_select";
+        const _siIsSelectAll = (c.extractorType === "jsonpath" && c.extractorConfig && c.extractorConfig.selectAll && (!c.list || c.list.pick === "random"));
         const _siIdx = S.correlations.indexOf(c);
         const randBtn = _siIsSelectAll
-          ? `<button class="corr-rnd-btn${c.extractorType === "random_select" ? " active" : ""}" onclick="toggleCorrRandSelect(${_siIdx})" title="${c.extractorType === "random_select" ? "Switch back to SelectAll" : "Switch to Random Select (pick one per iteration)"}">&#x1F3B2; Rnd</button>`
+          ? `<button class="corr-rnd-btn${_corrIsRnd(c) ? " active" : ""}" onclick="toggleCorrRandSelect(${_siIdx})" title="${_corrIsRnd(c) ? "Switch back to SelectAll" : "Switch to Random Select (pick one per iteration)"}">&#x1F3B2; Rnd</button>`
           : "";
         return `<div class="corr-item">
   <span class="corr-badge ${typeClass}">${typeLabel}</span>
   <div class="corr-detail">
     <div class="corr-name">${esc(c.name)}${advisorBadge}${randBtn}</div>
-    <div class="corr-src">Extracted from: …${esc(srcUrl.slice(-50))}</div>
+    <div class="corr-src">${c.extractorType === "pkce" ? "Made while the script runs (PKCE)" : "Extracted from: …" + esc(srcUrl.slice(-50))}</div>
     <div class="corr-usage">Used in ${usageCount} request${usageCount !== 1 ? "s" : ""}</div>
   </div>
 </div>`;
@@ -839,6 +851,10 @@ function _advCardHtml(c) {
       (c.source.jsonPath
         ? " &middot; <b>" + _esc(c.source.jsonPath) + "</b>"
         : "")
+    : c._gen
+    ? '<span class="adv-browser" title="The script makes a new UUID before the first request that sends it">A new UUID, made by the script</span>'
+    : c._browser
+    ? '<span class="adv-browser" title="No response sends it before it is first sent: a script in the page made it, so there is nothing to read it from">Made in the browser &middot; not read from a response</span>'
     : '<span style="color:var(--text-3)">Source not found in HAR</span>';
 
   var usageCount = (c.usages || []).length;
@@ -999,12 +1015,17 @@ function _advCardHtml(c) {
     acceptActive +
     '" onclick="advisorAccept(\'' +
     c.id +
-    '\')" title="Add this correlation to the script">&#x2713; Accept</button>' +
+    '\')" ' + (advisorCanAccept(c) ? 'title="Add this correlation to the script"' : 'disabled title="Made in the browser: the script cannot read it from a response"') + '>&#x2713; Accept</button>' +
     '<button class="adv-btn-skip' +
     skipActive +
     '" onclick="advisorSkip(\'' +
     c.id +
     '\')" title="Dismiss this suggestion">&#x2715; Skip</button>' +
+    (advisorCanGenerate(c)
+      ? '<button class="adv-btn-skip" onclick="advisorSetGenerate(\'' + c.id + "', " + !c._gen + ')" title="' +
+        (c._gen ? "Back as it was: not in the script" : "The script makes a new UUID before the first request that sends it") + '">' +
+        (c._gen ? "Don't generate" : "Generate a UUID") + "</button>"
+      : "") +
     // the request whose response sends the value (as in the mockup)
     (c.source && S.entries1 && S.entries1[c.source.entryIdx] && S.entries1[c.source.entryIdx].id
       ? '<button type="button" class="adv-btn-show" onclick="advisorOpenRequest(' + S.entries1[c.source.entryIdx].id + ')" title="Open the request that sends this value">Show request</button>'
@@ -1081,9 +1102,35 @@ function advisorAcceptAllHigh() {
 // ---------------------------------------------------------------------------
 // User actions on individual cards
 // ---------------------------------------------------------------------------
+// Made in the browser (BUG-151): nothing to read it from — such a card is never added to the script as a read value,
+// unless the user chose a response and how to read it in the editor (_edit), or chose to generate it (_gen)
+function advisorCanAccept(c) {
+  return !!c && !(c._browser && !c._gen && !(c._edit && c._edit.extractorType));
+}
+
+// A UUID made in the browser can be made by the script instead (BUG-151): a new one before the first request that sends
+// each recorded value — advisorToCorrelation turns _gen into a "uuid" correlation
+function advisorCanGenerate(c) {
+  return !!c && !!c._browser && !c._applied && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(c.value || ""));
+}
+// on = true: generate it (and tick it); false: back as it was (not ticked)
+function advisorSetGenerate(id, on) {
+  var c = _advFindById(id);
+  if (!c || !advisorCanGenerate(c)) return;
+  if (on) { c._gen = { kind: "uuid" }; c.status = "accepted"; }
+  else { delete c._gen; if (c.status === "accepted") c.status = "pending"; }
+  _advRefreshCard(c);
+  _advUpdateBadge();
+  _advUpdateFooter();
+}
+
 function advisorAccept(id) {
   var c = _advFindById(id);
   if (!c) return;
+  if (!advisorCanAccept(c) && c.status !== "accepted") {
+    showToast("Made in the browser: no response has this value before it is sent, so the script cannot read it.", "warning");
+    return;
+  }
   c.status = c.status === "accepted" ? "pending" : "accepted"; // toggle
   _advRefreshCard(c);
   _advUpdateBadge();
@@ -1437,9 +1484,94 @@ function advisorModalTypeChange(type) {
 // Apply accepted candidates and regenerate (called from footer button)
 // Delegates heavy lifting to regenerateFromAdvisor() in studio-app.js
 // ---------------------------------------------------------------------------
+// Take an applied correlation out of the script again (Script Studio, step 2): the correlation advisorApplyAndRegen
+// added for this candidate is removed (same name, type and settings), correlations it had suppressed (a list being
+// rebuilt) come back, and the candidate is a ticked suggestion again. Returns the removed correlation (for Undo).
+function advisorRemoveFromScript(id) {
+  var c = _advFindById(id);
+  if (!c || !c._applied) return null;
+  var want = advisorToCorrelation(c);
+  var i = (S.correlations || []).findIndex(function (x) {
+    return x.name === want.name && x.extractorType === want.extractorType && JSON.stringify(x.extractorConfig) === JSON.stringify(want.extractorConfig);
+  });
+  var gone = i >= 0 ? S.correlations.splice(i, 1)[0] : null;
+  c._outAt = i;   // its place, so Undo (advisorRestoreToScript) puts it back where it was: the extractors keep their order
+  if (gone && gone.extractorType === "array_reconstruct") {
+    S.correlations.forEach(function (x) { if (x._suppressedBy === gone.name) { delete x._suppressed; delete x._suppressedBy; } });
+  }
+  c._applied = false;
+  c.status = "accepted";
+  regenerateFromAdvisor({ quiet: true });
+  return gone;
+}
+
+// Undo of advisorRemoveFromScript: the same correlation back in the script, the candidate applied again (lists it had
+// suppressed are suppressed again).
+function advisorRestoreToScript(id, corr) {
+  var c = _advFindById(id);
+  if (!c || c._applied || !corr) return;
+  var at = c._outAt;
+  delete c._outAt;
+  if (at >= 0 && at <= (S.correlations || []).length) S.correlations.splice(at, 0, corr);
+  else S.correlations = (S.correlations || []).concat([corr]);
+  if (corr.extractorType === "array_reconstruct" && corr.extractorConfig && corr.extractorConfig.targetArrayKey) {
+    var pat = corr.extractorConfig.targetArrayKey + "[";
+    S.correlations.forEach(function (x) {
+      if (x === corr || x._suppressed || !x._autoGenerated) return;
+      if ((x.usages || []).some(function (u) { return u.location === "body_json" && u.key && u.key.indexOf(pat) >= 0; })) { x._suppressed = true; x._suppressedBy = corr.name; }
+    });
+  }
+  c._applied = true;
+  c.status = "accepted";
+  regenerateFromAdvisor({ quiet: true });
+}
+
+// Put ONE candidate in the script at once (Paste & Detect, Script Studio's Add manual correlation): its correlation is
+// added unless the same one (name, type, settings) is there already, and the card is marked applied. Other ticked
+// cards still wait for Apply & Regenerate. The caller regenerates.
+// A list read with every match (Script Studio's editor): how each place uses it, kept on the candidate (_pick); when it
+// is in the script its correlation changes too (as the Rnd switch of Correlation details does) and the script is made again.
+// pick: "all" (every value as recorded), "random", "rotate" (the next value each iteration), "nth" (always value nth)
+function advisorSetListPick(id, pick, nth) {
+  var c = _advFindById(id);
+  if (!c || !c._selectAll || c._arrayReconstruct) return;
+  if (pick === "random" || pick === "rotate" || pick === "nth") c._pick = pick; else delete c._pick;
+  if (pick === "nth") c._nth = Math.max(1, parseInt(nth, 10) || 1); else delete c._nth;
+  if (!c._applied) return;
+  // in the script: its correlation becomes what the candidate now gives (as the Rnd switch did for random)
+  var want = advisorToCorrelation(c);
+  (S.correlations || []).forEach(function (x) {
+    if (x.name !== c.varName) return;
+    x.extractorType = want.extractorType;
+    if (want.list) x.list = want.list; else delete x.list;
+  });
+  regenerateFromAdvisor({ quiet: true });
+}
+
+function advisorApplyOne(cand) {
+  var nc = advisorToCorrelation(cand);
+  var dup = (S.correlations || []).some(function (ex) {
+    return (
+      ex.name === nc.name &&
+      ex.extractorType === nc.extractorType &&
+      JSON.stringify(ex.extractorConfig) === JSON.stringify(nc.extractorConfig)
+    );
+  });
+  // a correlation changed in the editor (taken out by advisorRemoveFromScript, which noted its place) goes back to its
+  // place, so the extractors keep their order; any other is added at the end
+  var at = cand._outAt;
+  delete cand._outAt;
+  if (!dup) {
+    if (at >= 0 && at <= (S.correlations || []).length) S.correlations.splice(at, 0, nc);
+    else S.correlations = (S.correlations || []).concat([nc]);
+  }
+  cand._applied = true;
+  return nc;
+}
+
 function advisorApplyAndRegen() {
   var accepted = (S.advisorCandidates || []).filter(function (c) {
-    return c.status === "accepted";
+    return c.status === "accepted" && !(c._engineCorr && c._applied) && advisorCanAccept(c);
   });
   if (!accepted.length) {
     showToast("Accept at least one correlation first.", "warning");
@@ -1542,8 +1674,9 @@ function _advUpdateFooter() {
   if (!footer || !summary || !regen) return;
 
   var candidates = S.advisorCandidates || [];
+  // (a correlation the engines found and still in the script — listed by the Script Studio page — is not waiting)
   var accepted = candidates.filter(function (c) {
-    return c.status === "accepted";
+    return c.status === "accepted" && !(c._engineCorr && c._applied) && advisorCanAccept(c);
   }).length;
   var skipped = candidates.filter(function (c) {
     return c.status === "skipped";
@@ -2246,16 +2379,7 @@ function submitPasteCorrelate() {
   }
 
   // Applied at once (only this card — other accepted cards still wait for Apply & Regenerate)
-  var nc = advisorToCorrelation(cand);
-  var dup = (S.correlations || []).some(function (ex) {
-    return (
-      ex.name === nc.name &&
-      ex.extractorType === nc.extractorType &&
-      JSON.stringify(ex.extractorConfig) === JSON.stringify(nc.extractorConfig)
-    );
-  });
-  if (!dup) S.correlations = (S.correlations || []).concat([nc]);
-  cand._applied = true;
+  advisorApplyOne(cand);
 
   closePasteCorrelate();
   if (typeof regenerateFromAdvisor !== "undefined") regenerateFromAdvisor({ quiet: true });

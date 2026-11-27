@@ -320,3 +320,42 @@ html.hx-has-file .hx-fb-name b { font-size: var(--ds-fs); }
 .hx-dyn-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
 .hx-dyn-dot.g { background: var(--ds-ok); } .hx-dyn-dot.y { background: var(--ds-warn); }
 .hx-dyn-sec { margin-top: 12px; }
+
+/* ── review fixes and easier reading ── */
+/* a folded panel reads as a button: the header colour of the panels */
+.hx-rail { background: var(--br-head); border-radius: calc(var(--ds-r-card) - 1px); }
+.hx-rail:hover { background: color-mix(in srgb, var(--ds-accent) 9%, var(--br-head)); }
+/* the details: Hide secrets beside Copy URL and Copy as cURL; the address has the first line (only the panel's
+   hide button stays at the top right) */
+#hx-det .hx-dsum .r .hx-maskbtn { position: static; height: auto; }
+/* the tabs get the whole width; the address and the buttons row keep clear of the panel's hide button (docked only) */
+.hx-panes.dock-dom #hx-det:not(.hx-find-sheet) > .hx-dh { padding-right: 16px; }
+.hx-panes.dock-dom #hx-det:not(.hx-find-sheet) .hx-dh > :not(.hx-tabs) { margin-right: 36px; }
+/* Domains: a long name wraps (the full name on hover) instead of being cut */
+.hx-dom-pop.docked .hx-dom-row .h { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.35; }
+/* a narrow request list: the address first — the timeline goes (it is in Timing), then the size */
+#hx-reqpane { container: hxlist / inline-size; }
+@container hxlist (max-width: 700px) {
+  .hx-cols, .hx-req { grid-template-columns: 34px 58px minmax(0, 1fr) 44px 60px 62px; }
+  .hx-cols span:nth-child(7), .hx-req > .wf { display: none; }
+}
+@container hxlist (max-width: 560px) {
+  .hx-cols, .hx-req { grid-template-columns: 30px 56px minmax(0, 1fr) 42px 58px; }
+  .hx-cols span:nth-child(5), .hx-req > .sz { display: none; }
+}
+/* Find a value, before a value is chosen: the three ways to begin */
+.hx-fstart { margin: 14px 0 0; padding: 16px 18px; border-radius: var(--ds-r-tile); border: 1px solid var(--ds-border); background: var(--ds-surface-2); max-width: 760px; }
+.hx-fstart-h { margin: 0 0 8px; font-weight: 700; color: var(--ds-text); }
+.hx-fstart ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; color: var(--ds-text-2); line-height: 1.55; }
+.hx-fstart b { color: var(--ds-text); font-weight: 600; }
+.hx-fstart .by { display: inline-block; padding: 0 6px; border-radius: var(--ds-r-pill); background: var(--ds-accent); color: #fff; font-size: 11px; font-weight: 700; }
+.hx-fstart-f { margin: 12px 0 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
+/* a question with two answers (har-explorer.js ask) — the look of Script Studio's (.ss-dlg in portal/studio.css) */
+.hx-dlg { margin: auto; padding: 0; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-card); background: var(--ds-surface); color: var(--ds-text); width: min(480px, calc(100vw - 32px)); box-shadow: var(--ds-shadow-2); }
+.hx-dlg::backdrop { background: var(--ds-overlay); }
+.hx-dlg-in { display: flex; flex-direction: column; margin: 0; }
+.hx-dlg-h { padding: 14px 20px; border-bottom: 1px solid var(--ds-border); }
+.hx-dlg-h h2 { margin: 0; font-size: var(--ds-fs-lg); font-weight: 700; }
+.hx-dlg-b { padding: 18px 20px; }
+.hx-dlg-b p { margin: 0; line-height: 1.5; }
+.hx-dlg-f { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--ds-border); background: var(--ds-surface-2); border-radius: 0 0 var(--ds-r-card) var(--ds-r-card); }

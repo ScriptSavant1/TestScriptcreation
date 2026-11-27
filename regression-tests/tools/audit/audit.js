@@ -4,7 +4,7 @@
 const { chromium } = require(require('path').resolve(__dirname, '../../../cdp-recorder/recorder/node_modules/playwright-core'));
 const path = require('path'), fs = require('fs');
 const OUT = process.argv[2] || path.join(__dirname, 'run');
-fs.mkdirSync(OUT, { recursive: true });
+if (require.main === module) fs.mkdirSync(OUT, { recursive: true });
 const BASE = 'http://localhost:3999/converter/';
 const FX = require('path').resolve(__dirname, '../').replace(/\\/g, '/') + '/';
 const COL = require('path').resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/';
@@ -56,7 +56,8 @@ function measure() {
   return { fams, weights, sizes, fails, cards, buttons, bodyBg: bodyCs.backgroundColor, bodyFont: bodyCs.fontFamily.split(',')[0], textCount: els.length };
 }
 
-(async () => {
+module.exports = { measure };   // the checks, reused on mockups (mock.js)
+if (require.main === module) (async () => {
   const b = await chromium.launch({ channel: 'msedge' });
   const report = {};
   for (const theme of ['dark', 'light']) {
@@ -78,10 +79,15 @@ function measure() {
     const go = (pg) => p.evaluate((x) => PerfxShell.go(x, { instant: true }), pg);
     let f;
     await go('home'); await run('Home');
-    await go('postman'); await run('Postman');
-    await p.setInputFiles('#fi-col', COL + 'postman_collection.json'); await p.click('#btn-cvt');
-    await p.waitForSelector('#res-ok', { state: 'visible', timeout: 60000 }); await run('Postman result');
-    await go('jmeter'); await run('JMeter');
+    {
+      const PM = '#panel-bruno ', JX = '#panel-jmx ', ok = (k) => p.waitForFunction((x) => ConverterApp.state(x).status === 'ok', k, { timeout: 60000 });
+      await go('postman'); await run('Postman start');
+      await p.setInputFiles('#fi-col', COL + 'postman_collection.json'); await run('Postman file added'); await p.click('#cx-go-pm'); await ok('pm'); await run('Postman script');
+      await p.click(PM + '[data-req="2"]'); await run('Postman request code'); await p.click(PM + '[data-rtab=req]'); await run('Postman request details');
+      await p.click(PM + '[data-tab=val]'); await run('Postman values'); await p.click(PM + '[data-tab=req]'); await p.click(PM + '.cx-row .cx-cb'); await p.waitForTimeout(700); await ok('pm'); await run('Postman left out'); await p.click(PM + '[data-act=undo]'); await p.waitForTimeout(300); await ok('pm');
+      for (const k of ['files', 'sett', 'check']) { await p.click(PM + '[data-dlg=' + k + ']'); await run('Postman ' + k); await p.evaluate(() => document.getElementById('cx-dlg').close()); }
+      await go('jmeter'); await run('JMeter start'); await p.setInputFiles('#fi-jmx', FX + 'converter/inputs/rich.jmx'); await p.click('#cx-go-jmx'); await ok('jmx'); await run('JMeter script'); await p.click(JX + '[data-tab=val]'); await run('JMeter values');
+    }
     await go('explore'); await p.waitForFunction(() => { const d = document.getElementById('iframe-explorer').contentDocument; return d && d.getElementById('hx-file'); }, null, { timeout: 20000 });
     await run('Explorer start', 'explorer');
     f = await frameOf('explorer'); await f.setInputFiles('#hx-file', require('path').resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/' + 'WebTours.har'); await f.waitForSelector('#hx-ws:not([hidden])');
@@ -93,17 +99,26 @@ function measure() {
     await run('Studio start', 'studio');
     f = await frameOf('studio');
     // How to record (moved from the Recorder): both ways
-    await f.click('#ss-guide [data-fold]'); await run('Studio how to record', 'studio');
+    await f.click('#ss-guide-btn'); await run('Studio how to record', 'studio');
     await f.click('#tab-classic'); await run('Studio how to record bookmarks', 'studio');
-    await f.click('#tab-cdp'); await f.click('#ss-guide [data-fold]');
+    await f.click('#tab-cdp'); await f.click('#ss-guide [data-close]');
+    await f.click('#ss-how-btn'); await run('Studio how it works', 'studio'); await f.click('#ss-how [data-close]');
     // the file is read as soon as it is opened (no Analyse button)
     await f.setInputFiles('#dz1 input[type=file]', FX + 'studio/fixtures/api-tokens.har');
     await f.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 60000 }); await p.waitForTimeout(800);
     if (await f.isVisible('.bg-review-apply')) { await f.click('.bg-review-apply'); await p.waitForTimeout(1200); }
     await run('Studio results', 'studio');
-    await f.click('#ss-tab-corr'); await p.waitForTimeout(300); await run('Studio advisor', 'studio');
-    await f.click('#ss-tab-data'); await p.waitForTimeout(300); await run('Studio test data', 'studio');
-    await f.click('#ss-tab-script');
+    await f.click('#ss-reqs .ss-rq:not(.out) .ss-path >> nth=1'); await run('Studio request details', 'studio'); await f.evaluate(() => SSW.closeDetails());
+    for (const b of ['#ss-filters-btn', '#ss-think-btn']) { await f.click(b); await run('Studio ' + b.slice(4, -4), 'studio'); await f.evaluate(() => SS.popClose()); }
+    await f.click('#ss-steps [data-step="2"]'); await p.waitForTimeout(300); await run('Studio advisor', 'studio');
+    // the correlation editor (one value at a time)
+    await f.evaluate(() => { const l = SSC.list(); if (l[0]) SSE.open(l[0]); }); await p.waitForTimeout(300); await run('Studio editor', 'studio');
+    await f.evaluate(() => SSE.close());
+    await f.click('#ss-steps [data-step="3"]'); await p.waitForTimeout(300);
+    // leaving Correlate with the High values ticked asks first: Not now keeps them ticked
+    if (await f.isVisible('#ss-ask')) { await f.click('#ss-ask-no'); await p.waitForTimeout(200); } await run('Studio test data', 'studio');
+    await f.click('#ss-steps [data-step="4"]'); await p.waitForTimeout(300); await run('Studio download', 'studio');
+    await f.click('#ss-steps [data-step="1"]');
     await go('workload'); await p.waitForFunction(() => { const d = document.getElementById('iframe-workload').contentDocument; return d && d.getElementById('dropzone'); }, null, { timeout: 20000 });
     await run('Workload start', 'workload');
     f = await frameOf('workload'); await f.click('#btn-example'); await f.click('#v-detail'); await f.click('#sview [data-v="table"]').catch(() => {});

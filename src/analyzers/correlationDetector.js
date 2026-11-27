@@ -1142,7 +1142,8 @@ class CorrelationDetector {
    */
   getCorrelationReport() {
     return {
-      totalCorrelations: this.correlationRules.length,
+      totalCorrelations: this.correlationRules.length,   // every use
+      totalValues: new Set(this.correlationRules.map((c) => c.name)).size,   // each value once (the page's count)
       correlations: this.correlationRules,
       summary: this.generateSummary()
     };

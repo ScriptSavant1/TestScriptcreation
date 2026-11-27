@@ -3,8 +3,9 @@
  * decides when they run and shows the result:
  *  - a recording is read as soon as it is opened (no Analyse button); analyze() runs one at a time
  *  - the start screen ⇄ the workspace (#ph-upload / #ph-res; #ph-proc is an overlay while the file is read)
- *  - the file bar (counts, sign-in found, format switch, Open another, Download ZIP + "Ready to download?")
- *  - the notices, the right-panel tabs (Script · Correlation Advisor · Test data), the background-requests dialog
+ *  - the title row (script name, counts, sign-in found, Open another, notes, Download ZIP + "Ready to download?") and
+ *    the tool row (the four steps Requests · Correlate · Test data · Download, format, think time, filters; pop-ups)
+ *  - the right panel's Script and Request tabs, the background-requests dialog
  *  - Escape / focus for the engine's dialogs, keyboard for the controls the engine draws as divs, script colouring
  *  - the format remembered (localStorage "perfx-studio-fmt"), page layout remembered ("perfx-studio-ui")
  *  - "Start recording" (portal/record-live.js), drop anywhere, window.PerfxStudio for the HAR Explorer hand-off
@@ -30,8 +31,10 @@
   //    caller gets a promise that settles when the page is idle again, with the latest inputs read. ──
   var engineAnalyze = window.analyze;
   var running = false, again = false, waiters = [];
+  // "Up to date" / "Updating…" beside the title
+  function state() { var s = $("#ss-state"); if (!s) return; s.classList.toggle("up", running); s.lastElementChild.textContent = running ? "Updating…" : "Up to date"; }
   function start() {
-    running = true;
+    running = true; state();
     if (SS.cancelAgain) SS.cancelAgain();   // a reading the page had queued is this one
     Promise.resolve().then(function () { return engineAnalyze(); }).then(finish, finish);
   }
@@ -39,7 +42,7 @@
   // burst — a second recording opened during the first reading is counted as the diff reading it leads to
   var owed = false;
   function finish() {
-    running = false;
+    running = false; state();
     if (again) { again = false; if (owed) { owed = false; S._usageSent = false; } start(); return; }
     owed = false;
     afterAnalysis();
@@ -53,7 +56,8 @@
     } else start();
     return new Promise(function (r) { waiters.push(r); });
   };
-  SS.busy = function () { return running; };
+  SS.busy = function () { return running || applying > 0; };
+  var applying = 0;   // a background-requests answer being applied
 
   // ── start screen ⇄ workspace: follow the engine's phases; the reading overlay keeps the view under it ──
   var upload = $("#ph-upload"), proc = $("#ph-proc"), res = $("#ph-res");
@@ -74,11 +78,21 @@
   [upload, proc, res].forEach(function (el) { phases.observe(el, { attributes: true, attributeFilter: ["class"] }); });
   view("home");
 
+  // the opened recording itself and the number of its opening (Open in HAR Explorer hands the file over; the Explorer's
+  // Continue in Script Studio adds its values to this work when the number is still the same)
+  var fileNo = 0; SS.file1 = null; SS.fileId = 0;
+  var engineLoadFile = window.loadFile;
+  window.loadFile = function (file, slot) {
+    if (slot === 1) { SS.file1 = file; SS.fileId = ++fileNo; }
+    return engineLoadFile.apply(this, arguments);
+  };
   // a file is read as soon as it is opened (recording 1 or the second recording)
   var engineMarkLoaded = window.markLoaded;
   window.markLoaded = function (slot) {
     var r = engineMarkLoaded.apply(this, arguments);
     if (slot === 1 && window.SSW) SSW.newFile();
+    if (slot === 1) hxButton();
+    if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); if (window.SSH) SSH.reset(); }   // a new recording starts at step 1, with the default name
     setTimeout(function () { if (S.har1) window.analyze(); }, 0);
     return r;
   };
@@ -114,9 +128,13 @@
   function refresh() {
     if (!S.har1) return;
     fileBar();
+    SS.settings();
     notices();
     badges();
     if (window.SSW) SSW.render();
+    if (window.SSC) SSC.render();
+    if (window.SSE && SSE.isOpen()) SSE.redraw();
+    if (window.SSH) SSH.look();
   }
   // the engine draws several parts one after another — the page follows once
   var queued = false;
@@ -127,6 +145,11 @@
     if (typeof orig !== "function") return;
     window[fn] = function () { var r = orig.apply(this, arguments); later(); return r; };
   });
+
+  // in the script: not left out by a rule, a type, a domain or the user, and not a background endpoint that is left out
+  // (the generators' own answer: shouldIncludeEntry for the journey, getSetupEntries for what runs once at the start)
+  SS.setup = function (e) { return !e.filtered && typeof getSetupEntries === "function" && getSetupEntries([e], S.bgDecisions).length > 0; };
+  SS.inScript = function (e) { return !e.filtered && (typeof shouldIncludeEntry !== "function" || shouldIncludeEntry(e, S.bgDecisions) || SS.setup(e)); };
 
   // ── file bar ──
   var AUTH = { kerberos: "Kerberos", ntlm: "NTLM", negotiate: "Negotiate", basic: "Basic", digest: "Digest", bearer: "Bearer", saml: "SAML" };
@@ -145,10 +168,10 @@
     $("#ss-file-name").title = S.har1Name || "";
     var src = S.isNetLog1 ? "NetLog file" : sourceLabel(es, S.har1, S.harPages);
     if (S.har2) src += " · second recording: " + (S.har2Name || "") + " (diff mode)";
-    $("#ss-file-src").textContent = src;
-    $("#ss-k-in").textContent = reqs.filter(function (e) { return !e.filtered; }).length;
+    $("#ss-file-src").textContent = " · " + src; $("#ss-from").title = (S.har1Name || "") + " · " + src;
+    $("#ss-k-in").textContent = reqs.filter(SS.inScript).length;
     $("#ss-k-all").textContent = reqs.length;
-    $("#ss-k-tx").textContent = (S.txns || []).length;
+    var tx = (S.txns || []).length; $("#ss-k-tx").textContent = tx; $("#ss-k-txw").textContent = tx === 1 ? "transaction" : "transactions";
     var a = $("#ss-auth");
     a.hidden = !S.auth;
     if (S.auth) { a.lastElementChild.textContent = AUTH[S.auth.type] || S.auth.type; a.title = "Sign-in found in the recording: " + (AUTH[S.auth.type] || S.auth.type) + ". The script signs in the same way (web_set_user / user credentials)."; }
@@ -181,6 +204,75 @@
   });
   fmtButtons();
 
+  // ── the script's settings (step 1): its name and the think time between transactions ──
+  // the name: letters, digits and underscores, starting with a letter (VuGen's rule); the ZIP and the .usr take it
+  // (dlZip reads S.scriptName); empty = the recording's own name (studio-app.js studioScriptName). It belongs to the
+  // recording: a new file starts empty.
+  var nameIn = $("#ss-sc-name"), nameErr = $("#ss-sc-err");
+  function defaultName() { return studioScriptName(S.format); }
+  SS.scriptName = function () { return S.scriptName || defaultName(); };
+  var nameBtn = $("#ss-name-btn"), nameForm = $("#ss-name-f");
+  function nameShow() { nameIn.placeholder = defaultName(); $("#ss-name-now").textContent = SS.scriptName(); if (document.activeElement !== nameIn) nameIn.value = S.scriptName || ""; nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); }
+  function nameOpen(on) { nameForm.hidden = !on; nameBtn.hidden = on; $("#ss-from").hidden = on; if (on) { nameIn.value = SS.scriptName(); nameIn.focus(); nameIn.select(); } else { nameIn.blur(); nameShow(); } }
+  function nameSet() {
+    var v = nameIn.value.trim().replace(/[\s-]+/g, "_");
+    if (v === defaultName()) v = "";   // the default name follows the recording
+    if (v && !/^[A-Za-z][A-Za-z0-9_]{0,59}$/.test(v)) {
+      nameErr.textContent = "Letters, numbers and underscores only, starting with a letter.";
+      nameErr.hidden = false; nameIn.setAttribute("aria-invalid", "true"); nameIn.focus();
+      return;
+    }
+    S.scriptName = v || ""; nameOpen(false); badges(); nameBtn.focus(); if (window.SSH) SSH.look();
+  }
+  nameBtn.addEventListener("click", function () { nameOpen(true); });
+  nameForm.addEventListener("submit", function (e) { e.preventDefault(); nameSet(); });
+  $("#ss-name-x").addEventListener("click", function () { nameOpen(false); nameBtn.focus(); });
+  nameIn.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.stopPropagation(); nameOpen(false); nameBtn.focus(); } });
+  nameIn.addEventListener("input", function () { if (!nameErr.hidden) { nameErr.hidden = true; nameIn.removeAttribute("aria-invalid"); } });
+  // think time: Fixed N s (default 3 — what Studio has always written) / As recorded / None; remembered per browser
+  var thinkSec = $("#ss-think-sec");
+  function thinkNow() { var t = prefs.think || {}; return { mode: ["fixed", "recorded", "none"].indexOf(t.mode) !== -1 ? t.mode : "fixed", sec: t.sec >= 1 && t.sec <= 3600 ? Math.round(t.sec) : 3 }; }
+  function thinkShow() {
+    var t = thinkNow();
+    S.thinkTime = { mode: t.mode, sec: t.sec };
+    $$("#ss-think [data-think]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-think") === t.mode)); });
+    $("#ss-think-secw").hidden = t.mode !== "fixed";
+    if (document.activeElement !== thinkSec) thinkSec.value = t.sec;
+    var note = "";
+    if (t.mode === "fixed") note = t.sec + " s after each transaction but the last. Run-time settings decide how it is replayed.";
+    else if (t.mode === "none") note = "No think time in the script.";
+    else {
+      var gaps = (S.entries1 || []).map(function (e, i) { return e.isMarker && e.markerType === "end" && typeof _thinkAfter === "function" ? _thinkAfter(S.entries1, i) : undefined; }).filter(function (v) { return v !== undefined; });
+      gaps.pop();   // never after the last transaction
+      var n = gaps.filter(function (g) { return g != null; });
+      note = !gaps.length ? "The pauses of the recording between transactions — none here (one transaction or none)." :
+        !n.length ? "No pause of a second or more between the transactions of this recording: no think time is written." :
+        "The pauses of the recording: " + n.slice(0, 8).map(function (g) { return g + " s"; }).join(", ") + (n.length > 8 ? " …" : "") +
+        (n.length < gaps.length ? (n.length ? "; " : "") + plural(gaps.length - n.length, "pause") + " under a second, left out" : "") + ".";
+    }
+    $("#ss-think-note").textContent = note;
+    $("#ss-think-now").textContent = t.mode === "fixed" ? t.sec + " s" : t.mode === "none" ? "No think time" : "As recorded";
+  }
+  function thinkSet(t) {
+    prefs.think = t; save(); thinkShow();
+    if (S.entries1 && S.entries1.length && !running) regenerateFromAdvisor({ quiet: true });
+  }
+  SS.thinkNow = thinkNow;
+  SS.thinkSet = function (t) { prefs.think = t; save(); thinkShow(); };
+  $("#ss-think").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-think]"); if (!b) return;
+    var t = thinkNow(); if (t.mode === b.getAttribute("data-think")) return;
+    t.mode = b.getAttribute("data-think"); thinkSet(t);
+    if (t.mode === "fixed") thinkSec.focus();
+  });
+  thinkSec.addEventListener("change", function () {
+    var v = Math.round(+thinkSec.value);
+    if (!(v >= 1 && v <= 3600)) { thinkSec.value = thinkNow().sec; return; }
+    var t = thinkNow(); t.sec = v; thinkSet(t);
+  });
+  thinkShow();
+  SS.settings = function () { nameShow(); thinkShow(); };
+
   // ── open another / download ──
   $("#ss-open-another").addEventListener("click", function () { view("home"); var i = $("#dz1 input[type=file]"); if (i) i.focus(); });
   $("#ss-resume-go").addEventListener("click", function () { if (S.har1 && S.entries1 && S.entries1.length) view("ws"); });
@@ -198,6 +290,8 @@
     var out = [];
     var pend = (S.advisorCandidates || []).filter(function (c) { return c.status === "pending"; }).length;
     if (pend) out.push({ warn: true, text: plural(pend, "correlation suggestion") + " not reviewed yet", go: "corr" });
+    var tk = SS.corrTicked ? SS.corrTicked() : 0;
+    if (tk) out.push({ warn: true, text: plural(tk, "value") + " ticked in Correlate but not added to the script yet", go: "corr" });
     if (S.harWarning) out.push({ warn: true, text: "The recording has a warning — read it before you run the script", go: "notice" });
     var bg = (SS.bgSummary || []).length;
     if (bg) out.push({ text: plural(bg, "background endpoint") + " (repeated by the page) — left out unless you choose otherwise", go: "bg" });
@@ -208,12 +302,11 @@
     return out;
   }
   function badges() {
-    var pend = (S.advisorCandidates || []).filter(function (c) { return c.status === "pending"; }).length;
-    var n = $("#ss-adv-n"); n.hidden = !pend; n.textContent = pend; n.title = plural(pend, "suggestion") + " to review";
-    var d = $("#ss-data-n"), p = (S.params || []).length; d.hidden = !p; d.textContent = p;
-    $("#ss-data-empty").hidden = !!p;
+    $("#ss-data-empty").hidden = !!(S.params || []).length;
     var warn = readyItems().filter(function (i) { return i.warn; }).length;
     var r = $("#ss-ready-n"); r.hidden = !warn; r.textContent = warn;
+    stepNotes();
+    if (cur === 4) done();
   }
   SS.badges = badges;
   var menu = $("#ss-ready"), more = $("#ss-dl-more");
@@ -233,14 +326,17 @@
   });
   menu.addEventListener("click", function (e) {
     var b = e.target.closest("[data-go]"); if (!b) return;
-    var go = b.getAttribute("data-go");
     closeReady();
-    if (go === "dl") $("#ss-dl").click();
-    else if (go === "corr" || go === "data") tab(go);
-    else if (go === "bg") openBg(false);
-    else if (go === "notice") { var n = $("#ss-notices .ss-notice"); if (n) { n.classList.add("open"); n.scrollIntoView({ block: "nearest" }); } }
-    else if (go === "dom" && window.SSW) SSW.showPane("dom", true);
+    go(b.getAttribute("data-go"));
   });
+  // where a Ready item leads (the menu and step 4)
+  function go(to) {
+    if (to === "dl") $("#ss-dl").click();
+    else if (to === "corr" || to === "data") tab(to);
+    else if (to === "bg") openBg(false);
+    else if (to === "notice") { hiddenWarn = null; notices(); popOpen("ss-note-pop"); }
+    else if (to === "dom") { tab("script"); if (window.SSW) SSW.showPane("dom", true); }
+  }
   document.addEventListener("click", function (e) { if (!menu.hidden && !menu.contains(e.target)) closeReady(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !menu.hidden) { closeReady(); more.focus(); } });
 
@@ -249,32 +345,213 @@
   function notices() {
     var box = $("#ss-notices");
     var w = S.harWarning || "";
-    if (!w || w === hiddenWarn) { box.innerHTML = ""; return; }
+    $("#ss-note").hidden = !w || w === hiddenWarn;
+    if (!w || w === hiddenWarn) { box.innerHTML = ""; if (!$("#ss-note-pop").hidden) popClose(); return; }
     box.innerHTML = '<div class="ss-notice"><svg class="i"><use href="#i-warn"/></svg><span class="ss-nt">' + esc(w) + '</span>' +
-      '<button class="ds-btn ds-btn-xs ds-btn-ghost" type="button" data-more aria-expanded="false">Details</button>' +
-      '<button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" data-x aria-label="Hide this message"><svg class="i"><use href="#i-x"/></svg></button></div>';
+      '</div><div class="ss-row ss-note-f"><button class="ds-btn ds-btn-sm" type="button" data-x>Got it, hide the note</button></div>';
   }
   $("#ss-notices").addEventListener("click", function (e) {
-    var n = e.target.closest(".ss-notice"); if (!n) return;
-    if (e.target.closest("[data-x]")) { hiddenWarn = S.harWarning; n.remove(); badges(); return; }
-    if (e.target.closest("[data-more]")) { var o = n.classList.toggle("open"); e.target.closest("[data-more]").setAttribute("aria-expanded", String(o)); e.target.closest("[data-more]").textContent = o ? "Less" : "Details"; }
+    if (e.target.closest("[data-x]")) { hiddenWarn = S.harWarning; notices(); badges(); }
   });
 
-  // ── right panel tabs ──
-  function tab(name) {
-    $$(".ss-tabs [role=tab]").forEach(function (b) { b.setAttribute("aria-selected", String(b.getAttribute("data-tab") === name)); });
+  // ── the right panel's parts (Script · Correlate · Test data): each one is shown by its step ──
+  function showTab(name) {
     ["script", "corr", "data"].forEach(function (t) { $("#ss-t-" + t).hidden = t !== name; });
-    prefs.tab = name; save();
-    if (window.SSW) SSW.showPane("right", true);
   }
+  // every caller that opened a tab (the engine's links, the Ready list, request details) now opens its step
+  var TAB_STEP = { script: 1, corr: 2, data: 3 }, STEP_TAB = { 1: "script", 2: "corr", 3: "data" };
+  function tab(name) { step(TAB_STEP[name] || 1); }
   SS.tab = tab;
-  $(".ss-tabs").addEventListener("click", function (e) { var b = e.target.closest("[role=tab]"); if (b) tab(b.getAttribute("data-tab")); });
-  $(".ss-tabs").addEventListener("keydown", function (e) {
+
+  // ── the four steps: 1 Requests · 2 Correlate · 3 Test data · 4 Download. One workspace, four views of it: step 1
+  //    is the workspace as it was; steps 2 and 3 give the whole width to the Correlation Advisor / the Test data
+  //    table; step 4 lists what is worth a look and downloads. Nothing is applied or lost by moving between steps. ──
+  var NEXT = { 1: "Next: Correlate", 2: "Next: Test data", 3: "Next: Download" };
+  var cur = 0;
+  function step(n, sure) {
+    n = n >= 1 && n <= 4 ? n : 1;
+    if (cur === 2 && n !== 2 && !sure && SS.leaveCorr && SS.leaveCorr(function () { step(n, true); })) return;
+    var was = cur; cur = n;
+    for (var i = 1; i <= 4; i++) document.body.classList.toggle("ss-step-" + i, i === n);
+    document.body.classList.toggle("ss-step-wide", n === 2 || n === 3);
+    $$("#ss-steps [data-step]").forEach(function (b) { b.setAttribute("aria-current", +b.getAttribute("data-step") === n ? "step" : "false"); });
+    marks();
+    if (STEP_TAB[n]) showTab(STEP_TAB[n]);
+    $("#ss-done").hidden = n !== 4;
+    $("#ss-step-back").hidden = n === 1;
+    var nx = $("#ss-step-next"); nx.hidden = n === 4; if (NEXT[n]) nx.firstElementChild.textContent = NEXT[n];
+    popClose();
+    if (window.SSW && SSW.panes) SSW.panes();
+    if (n === 4) done();
+    if (n === 2 && window.SSC) SSC.render();   // High values come ticked when the step opens
+    if (was && was !== n) {
+      // Correlate and Test data start at the top, whatever was scrolled before (another recording, an earlier look)
+      [$("#ph-res")].concat(n === 2 || n === 3 ? [$("#ss-t-" + STEP_TAB[n])].concat($$("#ss-cr-wrap, #adv-panel, #corr-list, #ss-diff-b, .ss-td-wrap")) : []).forEach(function (x) { if (x.scrollTop) x.scrollTop = 0; });
+    }
+  }
+  SS.step = step;
+  SS.curStep = function () { return cur; };
+  $("#ss-steps").addEventListener("click", function (e) { var b = e.target.closest("[data-step]"); if (b) step(+b.getAttribute("data-step")); });
+  $("#ss-step-next").addEventListener("click", function () { step(cur + 1); });
+  $("#ss-step-back").addEventListener("click", function () { step(cur - 1); });
+  $("#ss-steps").addEventListener("keydown", function (e) {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-    var t = $$(".ss-tabs [role=tab]"), i = t.indexOf(document.activeElement); if (i < 0) return;
+    var t = $$("#ss-steps [data-step]"), i = t.indexOf(document.activeElement); if (i < 0) return;
     var n = t[(i + (e.key === "ArrowRight" ? 1 : t.length - 1)) % t.length]; n.focus(); n.click();
   });
-  tab(["script", "corr", "data"].indexOf(prefs.tab) !== -1 ? prefs.tab : "script");
+  // the steps: the ones before the current one show a tick (or ! when something there is worth a look); each has its
+  // count, and its state in words for the screen reader and the tooltip (stepNotes sets ST)
+  var ST = {};
+  function marks() {
+    $$("#ss-steps [data-step]").forEach(function (b) {
+      var n = +b.getAttribute("data-step"), i = b.querySelector("i"), st = ST[n] || "";
+      var icon = n < cur ? (st === "warn" ? "warn" : "ok") : "";
+      if (i.getAttribute("data-ic") !== icon) { i.setAttribute("data-ic", icon); i.innerHTML = icon ? '<svg class="i"><use href="#i-' + icon + '"/></svg>' : String(n); }
+      b.classList.toggle("is-past", n < cur);
+      b.parentNode.classList.toggle("is-reached", n <= cur);
+      b.querySelector("em").className = st ? "st-" + st : "";
+      b.title = b.querySelector("small").textContent;
+    });
+  }
+  function stepNotes() {
+    var es = S.entries1 || [], reqs = es.filter(function (e) { return !e.isMarker; });
+    var inn = reqs.filter(SS.inScript).length;
+    $("#ss-st-1").textContent = reqs.length ? inn + " of " + reqs.length + " requests in the script" : "Domains, requests, the script";
+    var cs = S.advisorCandidates || [];
+    var pend = cs.filter(function (c) { return c.status === "pending"; }).length;
+    var inScript = (S.correlations || []).length;
+    var tk = SS.corrTicked ? SS.corrTicked() : 0;
+    $("#ss-st-2").textContent = tk ? tk + " ticked, not added yet" : pend ? plural(pend, "value") + " to review" : inScript ? plural(inScript, "correlation") + " in the script" : "Nothing to review";
+    $("#ss-steps [data-step='2']").classList.toggle("ss-todo", !!(pend || tk));
+    var p = (S.params || []).length;
+    $("#ss-st-3").textContent = p ? plural(p, "parameter") : "No typed values found";
+    var warn = readyItems().filter(function (i) { return i.warn; }).length;
+    $("#ss-st-4").textContent = warn ? plural(warn, "thing") + " worth a look" : "Ready";
+    [inn, tk || pend, p, warn].forEach(function (v, i) { var em = $("#ss-steps [data-step='" + (i + 1) + "'] em"); em.hidden = !v; em.textContent = v || ""; });
+    ST = { 1: reqs.length ? "ok" : "", 2: tk || pend ? "warn" : inScript ? "ok" : "", 3: p ? "info" : "", 4: warn ? "warn" : "ok" };
+    marks();
+  }
+  // step 4: the Ready list in full, the script files, the download
+  function done() {
+    var items = readyItems();
+    $("#ss-done-list").innerHTML = items.map(function (i) {
+      return '<button type="button" class="ss-done-i' + (i.warn ? " warn" : "") + '" data-go="' + i.go + '"><svg class="i"><use href="#i-' + (i.warn ? "warn" : "ok") + '"/></svg><span>' + esc(i.text) + '</span><svg class="i ss-done-go"><use href="#i-left"/></svg></button>';
+    }).join("");
+    var files = $$("#code-tabs .code-tab").map(function (t) { return t.textContent.trim(); }).filter(Boolean);
+    $("#ss-done-fh").textContent = "Files in " + SS.scriptName() + ".zip";
+    $("#ss-done-files").textContent = (files.length ? files.join(", ") + ", " : "") + "and the project files VuGen and LoadRunner Enterprise need (.usr, run-time settings" + ((S.params || []).length ? ", the test data files" : "") + ").";
+    doneFiles();
+  }
+  // step 4, right column: the script files with their code — the Script tab's own files (#code-tabs: each calls
+  // switchTab(this, key)) read from the engine's S.scripts[key]; nothing is written to the engine
+  var doneKey = "";
+  function doneTabs() {
+    return $$("#code-tabs .code-tab").map(function (t) {
+      var m = /switchTab\(\s*this\s*,\s*'([^']+)'\s*\)/.exec(t.getAttribute("onclick") || "");
+      return m ? { key: m[1], name: t.textContent.trim() } : null;
+    }).filter(function (x) { return x && x.name; });
+  }
+  function doneFiles() {
+    var tabs = doneTabs();
+    if (!tabs.some(function (x) { return x.key === doneKey; })) doneKey = tabs.length ? tabs[0].key : "";
+    $("#ss-done-ftabs").innerHTML = tabs.map(function (x) {
+      var on = x.key === doneKey;
+      return '<button type="button" role="tab" id="ss-done-ft-' + esc(x.key) + '" aria-selected="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-file="' + esc(x.key) + '">' + esc(x.name) + "</button>";
+    }).join("");
+    var pre = $("#ss-done-pre"), text = doneKey && S.scripts ? S.scripts[doneKey] || "" : "";
+    pre.setAttribute("aria-labelledby", "ss-done-ft-" + doneKey);
+    pre.textContent = "";
+    var frag = text && text.length < 400000 ? colour(text) : null;
+    if (frag) pre.appendChild(frag); else pre.textContent = text || "Nothing generated yet.";
+    pre.scrollTop = 0;
+    $("#ss-done-copy").disabled = !text;
+  }
+  $("#ss-done-ftabs").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-file]"); if (!b) return;
+    doneKey = b.getAttribute("data-file"); doneFiles();
+    var nb = $("#ss-done-ft-" + doneKey); if (nb) nb.focus();
+  });
+  $("#ss-done-ftabs").addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    var tabs = doneTabs(), i = tabs.findIndex(function (x) { return x.key === doneKey; });
+    if (i < 0 || !tabs.length) return;
+    e.preventDefault();
+    doneKey = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length].key; doneFiles();
+    var nb = $("#ss-done-ft-" + doneKey); if (nb) nb.focus();
+  });
+  $("#ss-done-copy").addEventListener("click", function () {
+    var text = doneKey && S.scripts ? S.scripts[doneKey] : "", b = this;
+    if (!text || !navigator.clipboard) return;
+    navigator.clipboard.writeText(text).then(function () { var l = b.lastChild; l.textContent = "Copied"; setTimeout(function () { l.textContent = "Copy"; }, 1500); });
+  });
+  $("#ss-done-dl").addEventListener("click", function () { $("#ss-dl").click(); });
+
+  // every dialog of the page (.ss-dlg) moves by its title bar — kept on screen; it opens centred again next time
+  document.addEventListener("pointerdown", function (e) {
+    var h = e.target.closest && e.target.closest("dialog.ss-dlg[open] .ss-dlg-h");
+    if (!h || e.button !== 0 || e.target.closest("button, input, select, textarea, a")) return;
+    var d = h.closest("dialog"), r = d.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+    e.preventDefault(); h.setPointerCapture(e.pointerId); d.classList.add("ss-moving");
+    function move(ev) {
+      var x = Math.max(120 - r.width, Math.min(innerWidth - 120, ev.clientX - dx)), y = Math.max(0, Math.min(innerHeight - 48, ev.clientY - dy));
+      d.style.margin = "0"; d.style.inset = "auto"; d.style.left = Math.round(x) + "px"; d.style.top = Math.round(y) + "px";
+    }
+    function up() { h.removeEventListener("pointermove", move); h.removeEventListener("pointerup", up); d.classList.remove("ss-moving"); }
+    h.addEventListener("pointermove", move); h.addEventListener("pointerup", up);
+    if (!d._ssMove) { d._ssMove = true; d.addEventListener("close", function () { ["margin", "inset", "left", "top"].forEach(function (k) { d.style[k] = ""; }); }); }
+  });
+  $$("dialog.ss-dlg .ss-dlg-h").forEach(function (h) { if (!h.title) h.title = "Drag to move"; });
+  // a click outside a dialog closes it, as Esc does (the same cancel step, so a dialog that asks first still asks) —
+  // only when the press and the release are both outside (a text selection dragged out of it does not close it)
+  var downOut = null;
+  function outside(d, e) { var r = d.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; }
+  document.addEventListener("pointerdown", function (e) { var d = e.target; downOut = d && d.matches && d.matches("dialog.ss-dlg[open]") && outside(d, e) ? d : null; }, true);
+  document.addEventListener("click", function (e) {
+    var d = downOut; downOut = null;
+    if (!d || e.target !== d || !d.open || !outside(d, e)) return;
+    var ev = new Event("cancel", { cancelable: true });
+    if (d.dispatchEvent(ev)) d.close();
+  });
+
+  // Plan the load in Workload Modeller (file bar and step 4): the same ZIP as Download ZIP — dlZip with a collector,
+  // nothing downloaded — handed to the Workload Modeller in the portal (portal/plan-load.js). Only inside the portal.
+  var canPlan = !!(window.PerfxPlanLoad && PerfxPlanLoad.available());
+  $("#ss-wm").hidden = $("#ss-done-wm").hidden = !canPlan;
+  function planLoad(btn) {
+    if (!canPlan || btn.disabled) return;
+    var files = [];
+    btn.disabled = true; btn.setAttribute("aria-busy", "true");
+    Promise.resolve(typeof dlZip === "function" ? dlZip(S.format, { collect: files }) : null).then(function () {
+      if (!files.length) return false;
+      return PerfxPlanLoad.send(files.map(function (f) { return new File([f.blob], f.name, { type: "application/zip" }); }));
+    }).then(function (ok) {
+      if (ok === false && typeof showToast === "function" && files.length) showToast("The Workload Modeller did not open: open it from the sidebar and add the ZIP there.", "warning", 6000);
+    }).catch(function (e) {
+      if (typeof showToast === "function") showToast("Could not make the ZIP: " + e.message, "error", 6000);
+    }).then(function () { btn.disabled = false; btn.removeAttribute("aria-busy"); });
+  }
+  $("#ss-wm").addEventListener("click", function () { planLoad(this); });
+  // Open in HAR Explorer (file bar): the same recording in the Explorer, in the portal; a NetLog file is not a HAR
+  function hxButton() { $("#ss-hx").hidden = !(canPlan && SS.file1 && S.har1 && !S.isNetLog1); }
+  function openInExplorer() {
+    var top = null;
+    try { top = window.parent !== window && window.parent.PerfxShell ? window.parent : null; } catch (e) { top = null; }
+    if (!top || !SS.file1) return;
+    var file = SS.file1, id = SS.fileId, t = 0;
+    top.PerfxShell.go("explore");
+    (function poll() {
+      var w = null;
+      try { var fr = top.document.getElementById("iframe-explorer"); w = fr && fr.contentWindow; } catch (e) { w = null; }
+      if (w && w.document.readyState === "complete" && w.HarExplorer) { w.HarExplorer.open(file, { studio: id }); return; }
+      if (++t < 200) setTimeout(poll, 100);
+      else if (typeof showToast === "function") showToast("The HAR Explorer did not open: open it from the sidebar and choose " + file.name + " there.", "warning", 6000);
+    })();
+  }
+  $("#ss-hx").addEventListener("click", openInExplorer);
+  hxButton();
+  $("#ss-done-wm").addEventListener("click", function () { planLoad(this); });
+  $("#ss-done-list").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (b) go(b.getAttribute("data-go")); });
+  step(1);
 
   // ── background requests: the engine stops for them after reading (as before); here they open in a dialog over
   //    the workspace. Closing it without a choice keeps the default (all left out) and makes the script. ──
@@ -298,7 +575,8 @@
   window.applyBgDecisions = function () {
     bgDlg.dataset.gate = "";
     if (bgDlg.open) bgDlg.close();
-    return Promise.resolve(engineApplyBg.apply(this, arguments)).then(function (r) {
+    applying++;
+    return Promise.resolve(engineApplyBg.apply(this, arguments)).then(function (r) { applying--; return r; }, function (e) { applying--; throw e; }).then(function (r) {
       // the answer for this file, kept for the next readings (afterAnalysis)
       if (S.bgDecisions && S.har1) { SS.bgChoice = new Map(S.bgDecisions); SS.bgFor = S.har1; }
       refresh(); return r;
@@ -311,18 +589,65 @@
   bgDlg.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) bgDlg.close(); });
 
   // a question before a change that throws away work (dialog #ss-ask)
-  SS.ask = function (title, text, okLabel, then) {
+  // opt (optional): { no: label of the other button, otherwise: what it does — without it, the other button cancels }
+  SS.ask = function (title, text, okLabel, then, opt) {
     var d = $("#ss-ask");
+    opt = opt || {};
     $("#ss-ask-h").textContent = title; $("#ss-ask-t").textContent = text; $("#ss-ask-yes").textContent = okLabel || "Continue";
+    $("#ss-ask-no").textContent = opt.no || "Cancel";
     d.returnValue = "";
-    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); };
+    d.onclose = function () { d.onclose = null; if (d.returnValue === "yes") then(); else if (d.returnValue === "no" && opt.otherwise) opt.otherwise(); };
     try { d.showModal(); } catch (e) { if (window.confirm(title + "\n\n" + text)) then(); }
   };
 
-  // ── start screen: hide the introduction, fold the cards ──
-  function heroPref() { $("#ss-hero").hidden = !!prefs.noHero; }
-  $("#ss-hero-hide").addEventListener("click", function () { prefs.noHero = true; save(); heroPref(); });
-  heroPref();
+  // ── pop-ups of the two top rows (think time, filters, notes): one open at a time; a click outside or Escape closes ──
+  function popBtn(id) { return $('[data-pop="' + id + '"]'); }
+  function popOpen(id) {
+    popClose();
+    var p = document.getElementById(id), b = popBtn(id); if (!p || !b) return;
+    p.hidden = false; b.setAttribute("aria-expanded", "true"); p.style.transform = "";
+    // a pop-up whose button sits in a panel (which clips): placed at page level, under its button, its right edge on the button's
+    placeFixed(p, b);
+    var r = p.getBoundingClientRect(), w = document.documentElement.clientWidth;
+    if (r.left < 8) p.style.transform = "translateX(" + Math.round(8 - r.left) + "px)";
+    else if (r.right > w - 8) p.style.transform = "translateX(" + Math.round(w - 8 - r.right) + "px)";
+    p.style.maxHeight = Math.max(160, window.innerHeight - r.top - 12) + "px";
+    var f = p.querySelector("button:not([disabled]), input"); if (f) f.focus({ preventScroll: true });
+  }
+  function placeFixed(p, b) {
+    if (!p.classList.contains("ss-pp-fixed")) return;
+    var br = b.getBoundingClientRect(); p.style.top = Math.round(br.bottom + 8) + "px"; p.style.left = Math.round(br.right - p.offsetWidth) + "px";
+  }
+  function popClose(back) {
+    $$(".ss-pp").forEach(function (p) { if (p.hidden) return; p.hidden = true; var b = popBtn(p.id); if (b) { b.setAttribute("aria-expanded", "false"); if (back) b.focus(); } });
+  }
+  SS.popOpen = popOpen; SS.popClose = popClose;
+  // a page-level pop-up would stay where its button was: the window resized, it is placed again under the button
+  window.addEventListener("resize", function () { $$(".ss-pp-fixed").forEach(function (p) { var b = popBtn(p.id); if (p.hidden || !b) return; p.style.transform = ""; placeFixed(p, b); var r = p.getBoundingClientRect(); if (r.left < 8) p.style.transform = "translateX(" + Math.round(8 - r.left) + "px)"; }); });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-pop]"); if (!b) return;
+    var id = b.getAttribute("data-pop"), was = document.getElementById(id).hidden; popClose(); if (was) popOpen(id);
+  });
+  // (the press, not the click: what is pressed may be drawn again before the click is through)
+  document.addEventListener("pointerdown", function (e) { if (!(e.target.closest && e.target.closest(".ss-pp, [data-pop], dialog, .ss-menu, .toast"))) popClose(); }, true);
+  try { if (window.parent !== window) window.parent.document.addEventListener("pointerdown", function () { popClose(); }); } catch (err) { /* the portal is on another address */ }
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !document.querySelector("dialog[open]") && $$(".ss-pp").some(function (p) { return !p.hidden; })) popClose(true); });
+
+  // "What is this?" in Correlate and Test data: the text behind the question mark (remembered)
+  prefs.about = prefs.about || {};
+  $$("[data-about]").forEach(function (b) {
+    var id = b.getAttribute("data-about"), box = document.getElementById(id);
+    function show(on) { box.hidden = !on; b.setAttribute("aria-expanded", String(on)); }
+    show(!!prefs.about[id]);
+    b.addEventListener("click", function () { prefs.about[id] = box.hidden; save(); show(box.hidden); });
+  });
+
+  // ── start screen: the two windows behind its links ──
+  function openDlg(id) { var d = document.getElementById(id); try { d.showModal(); } catch (e) { d.setAttribute("open", ""); } }
+  SS.openGuide = function () { openDlg("ss-guide"); };
+  $("#ss-how-btn").addEventListener("click", function () { openDlg("ss-how"); });
+  $("#ss-guide-btn").addEventListener("click", SS.openGuide);
+  ["ss-how", "ss-guide"].forEach(function (id) { document.getElementById(id).addEventListener("click", function (e) { if (e.target.closest("[data-close]")) this.close(); }); });
   prefs.fold = prefs.fold || {};
   $$("[data-fold]").forEach(function (h) {
     var k = h.getAttribute("data-fold"), card = h.parentNode;
@@ -392,7 +717,7 @@
   });
 
   // ── keyboard for controls the Studio scripts draw as plain divs (code tabs, panel headers) ──
-  var KB = ".code-tab, .adv-panel-hdr, .adv-inspector-hdr, .corr-panel-hdr";
+  var KB = ".code-tab, .adv-panel-hdr, .adv-inspector-hdr";
   function markKeyboard(root) {
     $$(KB, root).forEach(function (el) {
       if (!el.hasAttribute("tabindex")) { el.setAttribute("tabindex", "0"); el.setAttribute("role", "button"); }
@@ -406,6 +731,42 @@
     if (!el || e.target !== el) return;
     e.preventDefault();
     el.click();
+  });
+
+  // ── the Script tab: the file list (narrow panel) and Find in this file — nothing is written into the code
+  //    (the browser's highlights mark the hits, so textContent stays the exact script) ──
+  var sel = $("#ss-code-sel"), cq = $("#ss-code-q"), hits = [], hit = 0;
+  function codeFiles() {
+    var tabs = $$("#code-tabs .code-tab");
+    sel.innerHTML = tabs.map(function (t, i) { return '<option value="' + i + '"' + (t.classList.contains("act") ? " selected" : "") + ">" + esc(t.textContent.trim()) + "</option>"; }).join("");
+  }
+  sel.addEventListener("change", function () { var t = $$("#code-tabs .code-tab")[+sel.value]; if (t) t.click(); });
+  new MutationObserver(function () { codeFiles(); findCode(false); if (window.SSW && SSW.mark) SSW.mark(); }).observe($("#code-tabs"), { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  function findCode(go) {
+    var q = cq.value, pre = $("#code-body"), n = $("#ss-code-n"); hits = [];
+    var hl = window.CSS && CSS.highlights && window.Highlight;
+    if (hl) { CSS.highlights.delete("ss-find"); CSS.highlights.delete("ss-find-on"); }
+    if (!q) { n.textContent = ""; hit = 0; return; }
+    var w = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT), nodes = [], text = "", x;
+    while ((x = w.nextNode())) { nodes.push([text.length, x]); text += x.data; }
+    var low = text.toLowerCase(), k = q.toLowerCase(), at = low.indexOf(k);
+    function point(pos) { var a = 0, b = nodes.length - 1; while (a < b) { var m = (a + b + 1) >> 1; if (nodes[m][0] <= pos) a = m; else b = m - 1; } return [nodes[a][1], pos - nodes[a][0]]; }
+    while (at >= 0 && hits.length < 2000) { var r = document.createRange(), s = point(at), e = point(at + k.length - 1); r.setStart(s[0], s[1]); r.setEnd(e[0], e[1] + 1); hits.push(r); at = low.indexOf(k, at + k.length); }
+    if (go) hit = 0;
+    hit = hits.length ? Math.min(hit, hits.length - 1) : 0;
+    n.textContent = hits.length ? (hit + 1) + " of " + hits.length : "None";
+    if (hl && hits.length) { CSS.highlights.set("ss-find", new Highlight(...hits)); CSS.highlights.set("ss-find-on", new Highlight(hits[hit])); }
+    if (go && hits.length) showHit();
+  }
+  function showHit() {
+    var r = hits[hit].getBoundingClientRect(), b = $("#code-body"), q = b.getBoundingClientRect();
+    if (r.top < q.top + 8 || r.bottom > q.bottom - 24) b.scrollTop += r.top - q.top - b.clientHeight / 3;
+    if (r.left < q.left || r.right > q.right - 16) b.scrollLeft += r.left - q.left - 60;
+  }
+  cq.addEventListener("input", function () { findCode(true); });
+  cq.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && hits.length) { e.preventDefault(); hit = (hit + (e.shiftKey ? hits.length - 1 : 1)) % hits.length; findCode(false); showHit(); }
+    if (e.key === "Escape" && cq.value) { e.stopPropagation(); cq.value = ""; findCode(false); }
   });
 
   // ── light syntax colouring of the script preview: the Studio scripts write plain text into #code-body; this only
@@ -434,6 +795,7 @@
     painted = t;
     var frag = colour(t);
     if (frag) { code.textContent = ""; code.appendChild(frag); }
+    findCode(false); if (window.SSW && SSW.mark) SSW.mark();
   }
   new MutationObserver(paint).observe(code, { childList: true, characterData: true, subtree: true });
   paint();
@@ -448,7 +810,7 @@
 })();
 
 // Drop .har / NetLog .json files anywhere on the page: the start screen opens it as the recording; in the workspace a
-// dropped file is opened as a new recording too (the second recording has its own box in the Correlation Advisor tab).
+// dropped file is opened as a new recording too (the second recording has its own box in step 2, Correlate).
 (function () {
   "use strict";
   if (!window.PerfxDrop) return;
@@ -465,18 +827,16 @@
 
 // "Start recording" (portal/record-live.js draws the window and the live view): the live view takes the place of the
 // start screen's cards while recording; the saved recording opens as the recording, or as the second recording when
-// "Record it now" was used in the Correlation Advisor tab (diff mode) — through loadFile(), as a dropped file.
+// "Record it now" was used in step 2, Correlate (diff mode) — through loadFile(), as a dropped file.
 (function () {
   var btn = document.getElementById("ss-rec-btn");
   if (!btn || !window.PerfxRecordLive) return;
   var up = document.getElementById("ph-upload"), home = up && up.querySelector(".ss-home");
-  var cards = [document.querySelector(".ss-choices"), document.getElementById("ss-how"), document.getElementById("ss-guide"), document.getElementById("ss-resume"), document.getElementById("ss-hero")];
+  var cards = [document.querySelector(".ss-choices"), document.querySelector(".ss-links"), document.getElementById("ss-resume"), document.getElementById("ss-band")];
   var target = 1, was = [];
   function openGuide() {
-    var g = document.getElementById("ss-guide"); if (!g) return;
-    if (g.classList.contains("folded")) g.querySelector("[data-fold]").click();
     var t = document.getElementById("tab-cdp"); if (t) t.click();
-    g.scrollIntoView({ block: "start", behavior: "smooth" });
+    window.SS.openGuide();
   }
   window.PerfxRecordLive.mount({
     host: home,

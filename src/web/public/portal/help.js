@@ -136,11 +136,65 @@
     if (prev) btn(prev, "prev", "← Previous");
     if (next) btn(next, "next", "Next →");
     it.after(pager);
+    inSection(it);
     setActive(id);
     if (typeof origSetCur === "function") origSetCur(id);
     if (!keepScroll) scrollTo(0, 0);
   }
   const searching = () => !!(q && q.value.trim().split(/\s+/).some((w) => w.length > 1));
+  // "In this section": the section's own headings, beside its text on wide screens (help.css shows it from 1400 px of
+  // section width), the one being read marked; a click goes to that heading. Built for sections with 3+ headings.
+  const insec = document.createElement("nav"); insec.className = "help-insec"; insec.setAttribute("aria-label", "In this section");
+  let insecHeads = [];
+  function inSection(it) {
+    insec.remove(); insecHeads = [...it.querySelectorAll(".help-acc-inner > .help-h3")];
+    if (insecHeads.length < 3) return;
+    insec.innerHTML = '<b class="help-insec-h">In this section</b>';
+    insecHeads.forEach((h, i) => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = h.textContent.trim();
+      b.addEventListener("click", () => { lockUntil = 0; h.scrollIntoView({ behavior: "smooth", block: "start" }); markHead(i); });
+      insec.appendChild(b);
+    });
+    it.querySelector(".help-acc-inner").prepend(insec);
+    markHead(0); requestAnimationFrame(placeInsec);
+  }
+  function markHead(i) { [...insec.querySelectorAll("button")].forEach((b, k) => b.toggleAttribute("aria-current", k === i)); }
+  // the section clips its content (rounded corners), so the list is placed by hand: beside the text at the section's
+  // right edge, from the section's top, kept in view while it scrolls, never past its end
+  function placeInsec() {
+    if (!insec.isConnected || !insec.getClientRects().length) return;
+    const inner = insec.parentElement.getBoundingClientRect(), css = getComputedStyle(document.documentElement);
+    const under = (parseFloat(css.getPropertyValue("--tb-h")) || 60) + (parseFloat(css.getPropertyValue("--help-sticky-h")) || 60) + 16;
+    const h = insec.offsetHeight, top = Math.min(Math.max(under, inner.top + 18), inner.bottom - h - 18);
+    insec.style.left = Math.round(inner.right - insec.offsetWidth - 24) + "px";
+    insec.style.top = Math.round(top) + "px";
+    insec.style.visibility = inner.bottom - 18 < under + 40 || inner.top > innerHeight - 60 ? "hidden" : "";
+  }
+  addEventListener("resize", placeInsec);
+  addEventListener("scroll", () => {
+    if (!insecHeads.length || !insec.isConnected) return;
+    placeInsec();
+    const line = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--help-sticky-h")) || 60) + 120;
+    let k = 0; insecHeads.forEach((h, i) => { if (h.getBoundingClientRect().top <= line) k = i; });
+    markHead(k);
+  }, { passive: true });
+  // the FAQ: topics that show only their questions (every question stays, search finds them all)
+  const faq = document.getElementById("hacc-faq");
+  if (faq) {
+    const NAMES = { general: "General", studio: "Script Studio", converters: "Converters", recording: "Recording", security: "Sign-in and security", results: "Results" };
+    const its = [...faq.querySelectorAll(".help-faq-item[data-topic]")], count = (t) => its.filter((x) => x.dataset.topic === t).length;
+    const topicsBar = document.createElement("div"); topicsBar.className = "help-faq-topics"; topicsBar.setAttribute("role", "group"); topicsBar.setAttribute("aria-label", "Questions about");
+    topicsBar.innerHTML = [["", "All", its.length]].concat(Object.keys(NAMES).filter(count).map((t) => [t, NAMES[t], count(t)]))
+      .map(([t, n, c]) => '<button type="button" data-topic="' + t + '" aria-pressed="' + (t === "") + '">' + n + " <span>" + c + "</span></button>").join("");
+    const first = faq.querySelector(".help-faq-item");
+    if (first) first.before(topicsBar);
+    topicsBar.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-topic]"); if (!b) return;
+      const t = b.dataset.topic;
+      topicsBar.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      its.forEach((x) => x.toggleAttribute("data-off", !!t && x.dataset.topic !== t));
+    });
+  }
   // a header click on the open section does nothing (it is a page, not a fold); on another section it opens it
   const origToggle = window.haccToggle;
   if (typeof origToggle === "function") {

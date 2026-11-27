@@ -5,7 +5,28 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ZIP DOWNLOAD
 // ═══════════════════════════════════════════════════════════════════════════
-async function dlZip(fmt) {
+// opts.collect (an array): the ZIPs are added to it as { name, blob } instead of being downloaded — the Script Studio
+// page hands them to the Workload Modeller (Plan the load). Without it: downloaded, as always.
+// The script's name when none is typed on the page: the recording's file name, made safe for VuGen (letters, digits, _;
+// starts with a letter; up to 60). Nothing usable in it, or both formats in one go (two files): the name per format.
+function scriptNameFromFile(file) {
+  let n = String(file || "").replace(/^.*[\\/]/, "").replace(/(\.(har|json|zip|log|txt))+$/i, "");
+  n = n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_]+/g, "_").replace(/_{2,}/g, "_").replace(/^_+/, "");
+  if (/^[0-9]/.test(n)) n = "Script_" + n;
+  return n.slice(0, 60).replace(/_+$/, "");
+}
+function studioScriptName(fmt) {
+  return (fmt !== "both" && scriptNameFromFile(S.har1Name)) || (fmt === "webhttp" ? "WebHttpScript_Correlated" : "DevWebScript_Correlated");
+}
+
+async function dlZip(fmt, opts) {
+  const deliver = (blob, name) => {
+    if (opts && Array.isArray(opts.collect)) { opts.collect.push({ name, blob }); return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+  };
   if (!S.scripts.ac && !S.scripts.mj) {
     showToast("No scripts generated yet.", "warning");
     return;
@@ -18,7 +39,7 @@ async function dlZip(fmt) {
   const isDev = fmt === "devweb" || fmt === "both";
 
   async function makeWebHttpZip() {
-    const nm = "WebHttpScript_Correlated";
+    const nm = S.scriptName || (fmt === "both" ? "WebHttpScript_Correlated" : studioScriptName("webhttp"));   // the name typed on the page (letters, digits, _), else the recording's
     const zip = new JSZip();
     zip.file("Action.c", S.scripts.ac || "");
     zip.file("vuser_init.c", S.scripts.vi || "");
@@ -56,14 +77,11 @@ async function dlZip(fmt) {
       type: "blob",
       mimeType: "application/zip",
     });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = nm + ".zip";
-    a.click();
+    deliver(blob, nm + ".zip");
   }
 
   async function makeDevWebZip() {
-    const nm = "DevWebScript_Correlated";
+    const nm = S.scriptName || (fmt === "both" ? "DevWebScript_Correlated" : studioScriptName("devweb"));
     const zip = new JSZip();
     zip.file("main.js", S.scripts.mj || "");
     if (S.scripts.corrjs) zip.file("correlations.js", S.scripts.corrjs);
@@ -116,10 +134,7 @@ async function dlZip(fmt) {
       type: "blob",
       mimeType: "application/zip",
     });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = nm + ".zip";
-    a.click();
+    deliver(blob, nm + ".zip");
   }
 
   if (isWeb) await makeWebHttpZip();
@@ -161,6 +176,8 @@ async function analyze() {
 
     // Quality / source warnings
     S.candidates = [];
+    // the Script Studio page notes what the user took out of the previous reading (kept over this one)
+    if (typeof studioBeforeRead === "function") studioBeforeRead();
     S.advisorCandidates = [];
     S.harWarning = "";
 
@@ -582,6 +599,8 @@ async function analyze() {
       console.warn("[Advisor] Non-fatal scan error:", advErr);
       S.advisorCandidates = [];
     }
+    // the Script Studio page lists the engines' own correlations with the Advisor's (advisorMirrorEngine)
+    if (typeof studioAfterAdvisor === "function") studioAfterAdvisor();
 
     // ── Phase 4: Background review gate ─────────────────────────────────────
     // If this HAR was recorded by the extension and has periodic entries,
@@ -734,8 +753,9 @@ async function _generateAndRenderScripts() {
     const _corrs = (S.correlations || []).filter(function (c) {
       return !c._suppressed;
     });
+    // (the engines' own correlations listed as candidates — _engineCorr — are counted once, in _corrs)
     const _found =
-      (S.advisorCandidates || S.candidates || []).length + _corrs.length ||
+      (S.advisorCandidates || S.candidates || []).filter((c) => !c._engineCorr).length + _corrs.length ||
       null;
     const _trackBase = window.location.pathname.replace(
       /\/studio$|\/[^/]*\.html$/,

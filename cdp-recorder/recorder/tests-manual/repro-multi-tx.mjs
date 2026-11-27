@@ -1,6 +1,6 @@
 // End-to-end Playwright test of the REAL recorder (Recorder + cdp-capture +
 // har-builder + server.ts + control-page.html), driven exactly the way a
-// user would: toolbar buttons for Start Recording / Start Transaction /
+// user would: toolbar buttons for Start recording / Start transaction /
 // End Transaction / Stop, and browsing inside the CDP-attached recording
 // window (including a link that opens a NEW TAB).
 //
@@ -79,15 +79,15 @@ async function main() {
   await toolbar.waitForSelector("#btnStartTx:not([disabled]):not(.hidden)", { timeout: 25000 });
 
   // the toolbar numbers each name for you (0.2.2): Launch → T01_Launch, Click Next → T03_Click_Next
+  // there is no End any more (0.3.x): starting the next transaction ends the running one, Stop ends the last
   async function startTx(name) {
+    const before = await toolbar.textContent("#statusText");
     await toolbar.fill("#txNameInput", name);
     await toolbar.click("#btnStartTx");
-    await toolbar.waitForSelector("#btnEndTx:not(.hidden)");
+    await toolbar.waitForFunction((b) => document.getElementById("statusText").textContent !== b, before, { timeout: 10000 });
   }
   async function endTx() {
-    await toolbar.click("#btnEndTx");
-    await toolbar.waitForSelector("#btnStartTx:not(.hidden)");
-    await toolbar.waitForTimeout(1200); // one status poll cycle
+    await toolbar.waitForTimeout(1200); // one status poll cycle: the requests of the running one are counted
   }
 
   // ── A. Correct usage ───────────────────────────────────────────────────
@@ -110,6 +110,7 @@ async function main() {
   // ── B. Wrong-window usage: nothing happens in the recording window ─────
   await startTx("Wrong Window");
   await toolbar.waitForTimeout(1500); // user is busy clicking in some OTHER browser
+  await startTx("After");             // the next one ends it — the warning must stay in sight (0.3.3)
   await endTx();
   const warning = (await toolbar.textContent("#warningBanner")) || "";
   check(await toolbar.isVisible("#warningBanner"), "warning banner visible after a transaction with zero captured requests");
@@ -142,7 +143,7 @@ async function main() {
     const p = har.log.pages.find((x) => x.title === title);
     return p ? har.log.entries.filter((e) => e.pageref === p.id).length : -1;
   };
-  check(har.log.pages.length === 4, "HAR has all 4 transactions as pages");
+  check(har.log.pages.length === 5, "HAR has all 5 transactions as pages");
   check(countFor("T01_Launch") >= 3, "Launch captured page-a + its sub-requests");
   check(countFor("T02_Role_group") >= 1, "role_group captured the new-tab page load");
   check(countFor("T03_Click_Next") >= 1, "Click Next captured the button's fetch in the new tab");

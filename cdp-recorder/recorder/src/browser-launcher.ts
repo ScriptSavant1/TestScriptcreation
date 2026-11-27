@@ -16,7 +16,7 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import CDP from "chrome-remote-interface";
@@ -123,6 +123,26 @@ export async function killProcessTree(pid: number): Promise<void> {
  * Ends every Edge / Chrome process still running on this (temporary) profile folder — only processes whose
  * command line names it, so the user's own browser windows are never touched. Windows only; best effort.
  */
+/**
+ * Temporary profiles left behind by earlier recordings (the browser still held a file when the recorder deleted it, or
+ * the recorder was ended abruptly): every "cdp-recorder-*" folder in the temporary folder not changed for 10 minutes
+ * — a profile in use keeps changing, and a locked file just stays. Returns how many were removed.
+ */
+export async function cleanOldProfiles(dir = tmpdir(), olderThanMs = 10 * 60 * 1000): Promise<number> {
+  let names: string[] = [];
+  try { names = (await readdir(dir)).filter((n) => /^cdp-recorder-[A-Za-z0-9]+$/.test(n)); } catch { return 0; }
+  let removed = 0;
+  for (const n of names) {
+    const p = join(dir, n);
+    try {
+      if (Date.now() - (await stat(p)).mtimeMs < olderThanMs) continue;
+      await rm(p, { recursive: true, force: true, maxRetries: 1, retryDelay: 100 });
+      removed++;
+    } catch { /* in use or locked: next time */ }
+  }
+  return removed;
+}
+
 export async function killProfileProcesses(userDataDir: string): Promise<void> {
   if (process.platform !== "win32" || !userDataDir) return;
   const dir = userDataDir.replace(/'/g, "''");
@@ -184,7 +204,7 @@ const RECORDING_WINDOW_LANDING_HTML = `<!doctype html><html><head><meta charset=
 h1{color:#c2410c;margin:0 0 12px;font-size:24px}li{margin:6px 0}</style></head><body><div class="box">
 <h1>&#9679; This is the RECORDING window</h1>
 <p>Only activity in <b>this</b> browser window (and tabs/popups it opens) is recorded.</p>
-<ol><li>Click <b>Start Recording</b> on the floating toolbar.</li>
+<ol><li>Click <b>Start recording</b> on the floating toolbar.</li>
 <li>Type your application URL in <b>this window's address bar</b> and log in here.</li>
 <li>Do NOT use your usual browser window &mdash; it is not being recorded.</li></ol>
 <p style="color:#6b7280;font-size:13px">This window uses its own temporary profile, separate from your usual browser. You may need to log in again here.</p>

@@ -60,6 +60,24 @@ function handle(scheme) {
       const body = Buffer.concat(chunks).toString('utf8');
       const url = scheme + '://' + host + p;
       const rec = { seq: ++seq, method: req.method, url, headers: req.rawHeaders.reduce((a, v, i, arr) => (i % 2 ? a : a.concat([[v, arr[i + 1]]])), []), body };
+      // sign-in that is really checked (user "u ser", password 'p:"ä\\1'): /auth/basic — the header must come by itself, no 401 is
+      // answered; /auth/ask-basic and /auth/digest ask first. rec.auth says what came.
+      const at = /^\/auth\/(basic|ask-basic|digest)(\/|\?|$)/.exec(p);
+      if (at) {
+        const U = 'u ser', P = 'p:"ä\\1', h = req.headers.authorization || '', md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
+        const basic = h === 'Basic ' + Buffer.from(U + ':' + P).toString('base64');
+        if (at[1] !== 'digest') rec.auth = basic ? 'ok' : h ? 'wrong ' + Buffer.from(h.slice(6), 'base64').toString() : 'none';
+        else {
+          const d = {}; h.replace(/(\w+)=(?:"((?:[^"\\]|\\.)*)"|([^\s,]+))/g, (m, k, a, b) => { d[k] = a !== undefined ? a.replace(/\\(.)/g, '$1') : b; });
+          const want = d.username === 'digest' && md5([md5('digest:mock:secret'), d.nonce, d.nc, d.cnonce, d.qop, md5(req.method + ':' + d.uri)].join(':'));
+          rec.auth = !/^Digest /.test(h) ? 'none' : want && want === d.response ? 'ok' : 'wrong';
+        }
+        log.write(JSON.stringify(rec) + '\n');
+        const ask = rec.auth !== 'ok' && at[1] !== 'basic';
+        res.writeHead(ask ? 401 : 200, ask ? { 'www-authenticate': at[1] === 'digest' ? 'Digest realm="mock", qop="auth", nonce="' + crypto.randomBytes(8).toString('hex') + '", algorithm=MD5' : 'Basic realm="mock"', 'content-type': 'text/plain' } : { 'content-type': 'application/json' });
+        res.end(ask ? 'sign in' : '{"mock":true}');
+        return;
+      }
       const dp = req.headers.dpop;
       if (dp) rec.dpop = checkDpop(dp, req.method, url, req.headers.authorization);
       log.write(JSON.stringify(rec) + '\n');

@@ -9,11 +9,74 @@ const fmt = (x, d) => (Number.isFinite(x) ? x.toLocaleString("en-GB", { minimumF
 const fmtS = (x) => (Number.isFinite(x) ? (Math.abs(x - Math.round(x)) < 0.05 ? fmt(x) : fmt(x, 1)) + " s" : "—");
 const PROTOS = JSON.parse(JSON.stringify(E.PROTOCOLS));
 
+// The test types: a line on each card, a drawing of its load over time, and "About this test" — what it is, why teams
+// run it, how much load and how long (common practice; the team's own figures come from the team settings, testTypes)
 const TEST_HELP = {
-  load: "Normal busy-hour load, held steady.", soak: "Normal load for many hours — finds leaks and slow drift.",
-  stress: "Steps above the target until something gives.", capacity: "Bigger steps to find the most the system can take.",
-  spike: "Normal load, then a sudden burst, then back.",
+  load: "The expected peak load, held steady.", soak: "Normal load for hours — finds leaks and slow drift.",
+  stress: "Above the expected peak — how it copes.", capacity: "Steps up until the SLA breaks.",
+  spike: "A sudden burst, then back to normal.",
 };
+function testInfo(k) {
+  const st = TEAM.types.stress, lvl = st.levelPct, hrs = (m) => (m % 60 ? fmt(m) + " min" : fmt(m / 60) + (m === 60 ? " hour" : " hours"));
+  const team = (s) => `<b>Your team:</b> ${s}`;
+  const spk = spikeLevels();
+  return ({
+    load: { name: "Load test", why: "Proves the system meets its response-time targets at the busiest hour you expect: the baseline every other test is compared with.",
+      load: "100% of the expected peak. For next year's peak, raise it with the Growth factor (1.2 = 20% more).", len: `1 – 2 hours at full load is common. ${team(hrs(TEAM.types.load.fullLoadMin) + " at full load")}`,
+      look: "Response times within the SLA · errors under 1% · CPU and memory steady, not climbing", when: "Before every release, and after a change to the system or its data" },
+    soak: { name: "Soak test (endurance)", why: "Finds what only time shows: memory leaks, connection pools that run dry, logs and disks that fill, response times that drift.",
+      load: "70 – 100% of the expected peak, held steady", len: `8 hours is common; 4 – 24 hours (overnight or over a weekend). ${team(hrs(TEAM.types.soak.fullLoadMin) + " at full load")}`,
+      look: "Response times and memory as flat in the last hour as in the first · no errors creeping in · no restarts", when: "Before a major release, after a memory or platform change" },
+    stress: { name: "Stress test", why: "Shows how the system behaves above the expected peak: whether it still meets the SLA, where it slows down, how it fails, and whether it recovers.",
+      load: `Above the expected peak: 125 – 200%. Today's peak plus growth and a margin, held — or in steps to see where it gives. Growth factor raises the target itself; the stress level goes above that target.`,
+      len: `1 – 2 hours (steps: 10 – 15 min each). ${team(st.shape === "hold" ? `${fmt(lvl)}% of the peak for ${hrs(st.holdMin)}` : "in steps up to 150%")}`,
+      look: "The SLA at the stress level · errors are clear, not hangs or time-outs · the system recovers when the load drops", when: "Before a busy season or a launch; after an architecture change" },
+    capacity: { name: "Capacity test (breakpoint)", why: "Finds the most the system can take within its SLA: how much headroom you have, and which part gives first.",
+      load: "Steps of 20% from 100% until the SLA breaks — often 200% or more", len: "10 – 15 min per step, until the limit is found",
+      look: "The last step that still meets the SLA = the capacity · the first resource at its limit (CPU, memory, pools, database)", when: "Sizing hardware or cloud machines; planning for growth" },
+    spike: { name: "Spike test", why: "Checks a sudden burst — a sale, a mail-out, a market opening: does the system cope, scale out in time, and come back to normal?",
+      load: `Normal load (${fmt(spk.base)}%), a jump to ${fmt(spk.peak)}% within a minute, then back. Common practice: 50% → 200 – 300%.`, len: "The burst 5 – 15 min; 30 – 60 min in all",
+      look: "Errors during the jump · how long it takes to recover · auto-scaling reacts in time", when: "Before campaigns and events; when auto-scaling is set up or changed" },
+  })[k];
+}
+// the spike's levels: the ones on the page when the spike is chosen, else the team's
+function spikeLevels() {
+  const sc = state.scenario, t = TEAM.types.spike;
+  return sc.testType === "spike" ? { base: sc.spikeBase || t.basePct, peak: sc.spikePeak || t.peakPct } : { base: t.basePct, peak: t.peakPct };
+}
+// the load over time as points (x 0 – 100, y = % of the target); stress follows the team's shape
+function testShape(k) {
+  const st = TEAM.types.stress;
+  return ({
+    load: [[0, 0], [12, 100], [88, 100], [100, 0]], soak: [[0, 0], [5, 90], [95, 90], [100, 0]],
+    stress: st.shape === "hold" ? [[0, 0], [14, Math.min(200, st.levelPct)], [90, Math.min(200, st.levelPct)], [100, 0]]
+      : [[0, 0], [8, 50], [22, 50], [26, 75], [40, 75], [44, 100], [58, 100], [62, 125], [76, 125], [80, 150], [94, 150], [100, 0]],
+    capacity: [[0, 0], [6, 100], [18, 100], [22, 120], [34, 120], [38, 140], [50, 140], [54, 160], [66, 160], [70, 180], [82, 180], [86, 200], [96, 200], [100, 0]],
+    spike: ((b, p) => [[0, 0], [10, b], [38, b], [40, p], [58, p], [60, b], [88, b], [100, 0]])(Math.min(200, spikeLevels().base), Math.min(200, spikeLevels().peak)),
+  })[k];
+}
+const shapePath = (pts, W, H) => pts.map(([x, y], i) => (i ? "L" : "M") + (x * W / 100).toFixed(1) + " " + (H - 2 - y * (H - 4) / 200).toFixed(1)).join(" ");
+function shapeSvg(k, cls) {
+  return `<svg class="${cls}" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><line class="wm-tt-100" x1="0" x2="100" y1="${(30 - 100 * 28 / 200).toFixed(1)}" y2="${(30 - 100 * 28 / 200).toFixed(1)}" vector-effect="non-scaling-stroke"/><path d="${shapePath(testShape(k), 100, 32)}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+let aboutOpen = true; try { aboutOpen = localStorage.getItem("wm-about") !== "hidden"; } catch (e) { /* private window */ }
+function renderAbout() {
+  const k = state.scenario.testType, n = testInfo(k), el = $("#tt-about"); if (!el || !n) return;
+  if (!aboutOpen) { el.innerHTML = `<button type="button" class="wm-about-show" data-about="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>What is a ${esc(n.name.replace(/ \(.*/, "").toLowerCase())}, and why run it?</button>`; return; }
+  const W = 300, H = 96, y100 = (H - 14 - 100 * (H - 18) / 200).toFixed(1), pts = shapePath(testShape(k), W, H - 12);
+  el.innerHTML = `<div class="wm-about" role="region" aria-labelledby="tt-about-h">
+    <div class="wm-about-h"><svg class="wm-about-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><b id="tt-about-h">${esc(n.name)}</b><span>what it is, and why teams run it</span><button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" data-about="0" title="Hide these notes (remembered)">Hide</button></div>
+    <div class="wm-about-b">
+      <figure class="wm-about-fig"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="The load over time"><line x1="0" x2="${W}" y1="${y100}" y2="${y100}" class="wm-about-100"/><path d="${pts} L${W} ${H - 12} L0 ${H - 12} Z" class="wm-about-fill"/><path d="${pts}" class="wm-about-line"/></svg>
+        <figcaption><span>start</span><span>time →</span><span>end</span></figcaption><p class="wm-about-key"><i></i>100% = the expected peak</p></figure>
+      <dl class="wm-about-facts"><div><dt>Why</dt><dd>${n.why}</dd></div><div><dt>Load</dt><dd>${n.load}</dd></div><div><dt>How long</dt><dd>${n.len}</dd></div><div><dt>What to look at</dt><dd>${n.look}</dd></div><div><dt>When</dt><dd>${n.when}</dd></div></dl>
+    </div></div>`;
+}
+$("#tt-about").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-about]"); if (!b) return;
+  aboutOpen = b.dataset.about === "1"; try { localStorage.setItem("wm-about", aboutOpen ? "open" : "hidden"); } catch (e2) { /* private window */ }
+  renderAbout(); const f = $("#tt-about [data-about]"); if (f) f.focus();
+});
 const WL_HELP = {
   "basic-scenario": "One schedule for all scripts.", "basic-group": "Each script its own ramp; all reach full load together.",
   "real-world": "A list of steps — start, hold, start more, stop.", goal: "LRE adds Vusers until it reaches the TPS.",
@@ -32,7 +95,7 @@ const RTSRC = [["sla", "SLA from the requirement"], ["baseline", "Measured in a 
 // (AWS c6a.4xlarge: twice the on-premise figures — twice the CPUs, the same memory, which the tool keeps checking).
 // The list comes from the team settings (config/workload-settings.json, read by engine/settings.js when the page opens);
 // until then, and for anything the file gets wrong, the built-in values. "Another machine" is always last.
-const TEAM = { extra: 1, limitPct: 70, updated: null, problems: [], read: false };
+const TEAM = { extra: 1, limitPct: 70, updated: null, problems: [], read: false, types: JSON.parse(JSON.stringify(WorkloadSettings.DEFAULTS.testTypes)) };
 const toLgType = (t) => ({ id: t.id, label: t.label, where: t.location, cores: t.cores, ramGb: t.memoryGb, webPerLg: t.webVusersPerLg, apiPerLg: t.apiVusersPerLg, note: WorkloadSettings.note(t) });
 const LG_TYPES = WorkloadSettings.DEFAULTS.machineTypes.map(toLgType).concat([{ id: "custom", label: "Another machine (enter its size)", where: "Own machines" }]);
 const lgType = (p) => LG_TYPES.find((t) => t.id === p.kind) || LG_TYPES[LG_TYPES.length - 1];
@@ -65,10 +128,15 @@ function kindHelp(g) {
 }
 
 /* ---------- inputs: the test ---------- */
-function renderTest() {
+function renderTestCards() {
   const sc = state.scenario;
   $("#test-types").innerHTML = Object.entries(E.TEST_TYPES).map(([k, t]) =>
-    `<button class="wm-choice" data-tt="${k}" aria-pressed="${sc.testType === k}"><b>${esc(t.label.replace(/ \(.*/, ""))}</b><span>${TEST_HELP[k]}</span></button>`).join("");
+    `<button class="wm-choice" data-tt="${k}" aria-pressed="${sc.testType === k}"><b>${esc(t.label.replace(/ \(.*/, ""))}</b>${shapeSvg(k, "wm-tt-shape")}<span>${TEST_HELP[k]}</span></button>`).join("");
+}
+function renderTest() {
+  const sc = state.scenario;
+  renderTestCards();
+  renderAbout();
   const rec = E.TEST_TYPES[sc.testType].workload;
   $("#sc-workload").innerHTML = Object.entries(E.WORKLOADS).map(([k, l]) => `<option value="${k}"${k === sc.workload ? " selected" : ""}>${l}${k === rec ? " (recommended)" : ""}</option>`).join("");
   $("#wl-help").textContent = WL_HELP[sc.workload];
@@ -76,11 +144,27 @@ function renderTest() {
   $("#sc-licence").value = sc.licenceVusers ?? ""; $("#sc-headroom").value = sc.headroomPct; $("#sc-style").value = sc.pacingStyle;
   $("#sc-random").value = sc.randomPct; $("#sc-rate").value = sc.maxStartRate;
   const tt = E.TEST_TYPES[sc.testType];
+  // the fields of the chosen test: full load (load, soak — or any test on a basic schedule); stress: one level held, or
+  // steps; capacity: steps; spike: how long normal load is held
+  const stepped = !!(tt.levels || tt.base), held = sc.testType === "stress" && sc.levels && sc.levels.length === 1;
   $("#sc-levels").value = (sc.levels || tt.levels || []).join(", ");
-  $("#f-levels").style.display = tt.levels ? "" : "none";
-  $("#f-hold").style.display = tt.levels || tt.base ? "" : "none";
+  $("#f-steady").style.display = !stepped || sc.workload !== "real-world" ? "" : "none";
+  $("#f-shape").style.display = sc.testType === "stress" ? "" : "none";
+  document.querySelectorAll("#sc-shape [data-shape]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.shape === "hold") === !!held)));
+  $("#f-level").style.display = held ? "" : "none";
+  if (held && document.activeElement !== $("#sc-level")) $("#sc-level").value = sc.levels[0];
+  $("#f-levels").style.display = tt.levels && !held ? "" : "none";
+  $("#f-hold").style.display = stepped ? "" : "none";
+  $("#f-spike").style.display = tt.base ? "" : "none";
+  if (tt.base) {
+    const s = spikeLevels();
+    if (document.activeElement !== $("#sc-spike-base")) $("#sc-spike-base").value = s.base;
+    if (document.activeElement !== $("#sc-spike-peak")) $("#sc-spike-peak").value = s.peak;
+  }
+  $("#hold-label").textContent = held ? `Hold at ${fmt(sc.levels[0])}%` : tt.base ? "Hold normal load" : "Hold at each step";
+  $("#hold-help").textContent = held ? "how long the level is held, after the ramp-up" : "empty: the tool chooses (10 min, or 5 pacings when longer)";
   $("#sc-hold").value = sc.stepHoldMin ?? "";
-  $("#steady-help").textContent = tt.levels || tt.base ? "used by a basic schedule; steps use “Hold at each step”" : "how long full load is held, after the ramp-up";
+  $("#steady-help").textContent = stepped ? "a basic schedule only ramps to 100% and holds it — choose “Real-world schedule” for this test" : "how long full load is held, after the ramp-up";
   $("#f-total").style.display = state.groups.some((g) => g.method === "share") ? "" : "none";
   const own = sc.rampMode === "own";
   $("#sc-ramp").value = own ? "own" : "auto";
@@ -93,7 +177,12 @@ function renderTest() {
 $("#test-types").addEventListener("click", (e) => {
   const b = e.target.closest("[data-tt]"); if (!b) return;
   const sc = state.scenario; sc.testType = b.dataset.tt;
-  const tt = E.TEST_TYPES[sc.testType]; sc.workload = tt.workload; sc.steadyMin = tt.steadyMin; sc.levels = null;
+  const tt = E.TEST_TYPES[sc.testType]; sc.workload = tt.workload; sc.levels = null; sc.stepHoldMin = null;
+  // the team's starting figures (team settings, testTypes): full load for load / soak; the stress level and its hold
+  sc.steadyMin = (TEAM.types[sc.testType] && TEAM.types[sc.testType].fullLoadMin) || tt.steadyMin;
+  if (sc.testType === "stress") stressShape(TEAM.types.stress.shape);
+  sc.spikeBase = sc.testType === "spike" ? TEAM.types.spike.basePct : null; sc.spikePeak = sc.testType === "spike" ? TEAM.types.spike.peakPct : null;
+  $("#spike-err").hidden = true;
   renderTest(); calc();
 });
 const bindNum = (id, key, nullable) => $(id).addEventListener("input", (e) => { const v = parseFloat(e.target.value); state.scenario[key] = Number.isFinite(v) ? v : (nullable ? null : 0); calc(); });
@@ -111,13 +200,78 @@ $("#sc-ramp").addEventListener("change", (e) => {
 bindNum("#sc-headroom", "headroomPct"); bindNum("#sc-random", "randomPct"); bindNum("#sc-rate", "maxStartRate"); bindNum("#sc-hold", "stepHoldMin", true);
 $("#sc-workload").addEventListener("change", (e) => { state.scenario.workload = e.target.value; $("#wl-help").textContent = WL_HELP[e.target.value]; renderTest(); calc(); });
 $("#sc-style").addEventListener("change", (e) => { state.scenario.pacingStyle = e.target.value; calc(); });
+// stress: one level held (the team's level and hold) or the tool's steps (50 … 150%, each held 10 min or 5 pacings)
+function stressShape(shape) {
+  const sc = state.scenario, st = TEAM.types.stress;
+  if (shape === "hold") { sc.levels = [st.levelPct]; sc.stepHoldMin = st.holdMin; } else { sc.levels = null; sc.stepHoldMin = null; }
+}
+// spike: normal load 1 – 100% of the target, the burst above it (up to 1000%); a pair that cannot be used is said and not used
+function spikeInput() {
+  const b = parseFloat($("#sc-spike-base").value), p = parseFloat($("#sc-spike-peak").value), err = $("#spike-err");
+  const bad = !(b >= 1 && b <= 100) ? "Normal load: 1 to 100% of the target." : !(p > b && p <= 1000) ? "The burst must be above normal load (up to 1000%)." : "";
+  err.hidden = !bad; err.textContent = bad;
+  [$("#sc-spike-base"), $("#sc-spike-peak")].forEach((x) => x.toggleAttribute("aria-invalid", !!bad));
+  if (bad) return;
+  state.scenario.spikeBase = b; state.scenario.spikePeak = p; renderAbout(); renderTestCards(); calc();
+}
+$("#sc-spike-base").addEventListener("input", spikeInput); $("#sc-spike-peak").addEventListener("input", spikeInput);
+$("#sc-shape").addEventListener("click", (e) => { const b = e.target.closest("[data-shape]"); if (!b) return; stressShape(b.dataset.shape); renderTest(); calc(); });
+$("#sc-level").addEventListener("input", (e) => { const v = parseFloat(e.target.value); if (v > 0) { state.scenario.levels = [v]; $("#hold-label").textContent = `Hold at ${fmt(v)}%`; calc(); } });
 $("#sc-levels").addEventListener("input", (e) => { const l = e.target.value.split(/[,; ]+/).map(Number).filter((x) => x > 0); state.scenario.levels = l.length ? l : null; calc(); });
 
 /* ---------- inputs: scripts ---------- */
 const opt = (list, v) => list.map(([k, l]) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(l)}</option>`).join("");
+// help: text about this script (shown in every card), or gh("…") — what the field means, the same in every card: shown
+// in the first open card only, and in any other card while its field has the focus (page.js markHelps)
+const gh = (t) => ({ gh: t });
 function num(label, key, val, unit, help, cls, extra) {
-  return `<label class="wm-f ${cls || ""}">${label}<div class="${unit ? "wm-unit" : ""}"><input class="ds-field" type="number" data-k="${key}" value="${val ?? ""}" min="0" step="any" ${extra || ""}>${unit ? `<span>${unit}</span>` : ""}</div>${help ? `<small>${help}</small>` : ""}</label>`;
+  return `<label class="wm-f ${cls || ""}">${label}<div class="${unit ? "wm-unit" : ""}"><input class="ds-field" type="number" data-k="${key}" value="${val ?? ""}" min="0" step="any" ${extra || ""}>${unit ? `<span>${unit}</span>` : ""}</div>${help ? (help.gh ? `<small class="wm-gh">${help.gh}</small>` : `<small>${help}</small>`) : ""}</label>`;
 }
+// Transactions per iteration: the script's own names in a window (long names — addresses — never fill the card)
+const txOf = (g) => (g.txList && g.txList.length ? g.txList : (g.txNames || []).map((n) => ({ name: n })));
+function txHelp(g) {
+  const n = txOf(g).length;
+  if (!n) return gh("that count for the TPS");
+  return `${n} in the script <button type="button" class="wm-goto" data-txlist="${esc(g.id)}" title="Every transaction of one iteration, in order">see them all</button>`;
+}
+function openTxList(id) {
+  const g = state.groups.find((x) => String(x.id) === String(id)); if (!g) return;
+  const list = txOf(g), har = list.some((x) => x.requests != null), times = {};
+  list.forEach((x) => { times[x.name] = (times[x.name] || 0) + 1; });
+  const out = g.txOut || {}, outRows = [["In vuser_init (once per Vuser)", out.init], ["In vuser_end (once per Vuser)", out.end], ["Holding other transactions (nested)", out.nested]]
+    .filter((r) => r[1] && r[1].length);
+  const same = Number(g.txPerIter) === list.length;
+  let d = document.getElementById("wm-tx-dlg");
+  if (!d) {
+    d = document.createElement("dialog"); d.id = "wm-tx-dlg"; d.className = "wm-dlg"; d.setAttribute("aria-labelledby", "wm-tx-h");
+    document.body.appendChild(d);
+    let downOut = false;
+    const outside = (e) => { const r = d.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
+    d.addEventListener("pointerdown", (e) => { downOut = e.target === d && outside(e); });
+    d.addEventListener("click", (e) => {
+      if (e.target.closest("[data-close]") || (downOut && e.target === d && outside(e))) { d.close(); return; }
+      if (e.target.closest("[data-copy]")) {
+        const names = (d._names || []).join("\n");
+        Promise.resolve(navigator.clipboard && navigator.clipboard.writeText(names)).then(() => { if (typeof toast === "function") toast("The transaction names are copied — one per line, ready to paste into Excel."); })
+          .catch(() => { if (typeof toast === "function") toast("Could not copy: select the names in the list instead."); });
+      }
+    });
+  }
+  d._names = list.map((x) => x.name);
+  d.innerHTML = `<div class="wm-dlg-h"><h2 id="wm-tx-h">Transactions — ${esc(g.name)}</h2></div>
+    <div class="wm-dlg-b"><p class="wm-dlg-lead">${list.length} per iteration, in order${same ? " — the count the TPS uses." : ` — the Transactions per iteration box says ${esc(g.txPerIter)}: the TPS uses the box.`}${har ? " From the recording: its bookmarks (START / END), else its pages, else a pause over 1.5 s. Response time = the time the requests ran; a quiet gap over 1.5 s is the user (think time)." : ""}</p>
+    <div class="wm-tw"><table class="ds-table wm-tx-t"><thead><tr><th class="ds-num">#</th><th>Transaction</th>${har ? '<th class="ds-num">Requests</th><th class="ds-num">Response time</th>' : ""}</tr></thead><tbody>${
+      list.map((x, i) => `<tr><td class="ds-num">${i + 1}</td><td class="wm-txn">${esc(x.name)}${times[x.name] > 1 ? ` <span class="wm-muted">· ${times[x.name]} times per iteration</span>` : ""}</td>${
+        har ? `<td class="ds-num">${fmt(x.requests)}</td><td class="ds-num">${x.time < 10 ? fmt(x.time, 2) + " s" : fmtS(x.time)}</td>` : ""}</tr>`).join("")}</tbody></table></div>
+    ${outRows.length ? `<p class="wm-sub">Not counted <span class="wm-subh">— not part of an iteration's TPS</span></p><ul class="wm-tx-out">${outRows.map((r) => `<li><b>${r[0]}:</b> ${r[1].map(esc).join(", ")}</li>`).join("")}</ul>` : ""}</div>
+    <div class="wm-dlg-f"><button type="button" class="ds-btn ds-btn-sm" data-copy>Copy names</button><button type="button" class="ds-btn ds-btn-sm ds-btn-primary" data-close>Close</button></div>`;
+  d.showModal();
+  d.querySelector("[data-close]").focus();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-txlist]");
+  if (b) { e.preventDefault(); openTxList(b.dataset.txlist); }   // (inside a label: never focus its box instead)
+});
 // the replay settings act on the think time above: greyed out while there is none
 const noThink = (g) => !(g.thinkPerIter > 0);
 // Multiply / Random: the think time LRE will really wait, so a factor is never read as seconds (27 s × 3 = 81 s)
@@ -132,12 +286,12 @@ const thinkHelp = (g) => (noThink(g) ? "no think time above — nothing to repla
 function scriptCard(g) {
   const m = g.method, p = g.pacing || {};
   const target = {
-    tps: num("Target TPS", "targetTps", g.targetTps, "TPS", "transactions per second this script must reach", "", `placeholder="${commonTps(g) != null ? fmt(commonTps(g), 2) + " — common" : ""}"`),
-    volume: num("Volume per hour", "volumePerHour", g.volumePerHour, "/ hour", "business transactions in the peak hour"),
-    share: num("Share of the scenario TPS", "sharePct", g.sharePct, "%", "of the total in step 1"),
-    vusers: num("Vusers", "vusers", g.vusers, "", "the number of users you will run"),
-    vusers_tps: num("Vusers", "vusers", g.vusers, "", "given to you") + num("Target TPS", "targetTps", g.targetTps, "TPS", "given to you"),
-    iterations: num("Iterations in full load", "iterations", g.iterations, "", "e.g. one per data row"),
+    tps: num("Target TPS", "targetTps", g.targetTps, "TPS", gh("transactions per second this script must reach"), "", `placeholder="${commonTps(g) != null ? fmt(commonTps(g), 2) + " — common" : ""}"`),
+    volume: num("Volume per hour", "volumePerHour", g.volumePerHour, "/ hour", gh("business transactions in the peak hour")),
+    share: num("Share of the scenario TPS", "sharePct", g.sharePct, "%", gh("of the total in step 1")),
+    vusers: num("Vusers", "vusers", g.vusers, "", gh("the number of users you will run")),
+    vusers_tps: num("Vusers", "vusers", g.vusers, "", gh("given to you")) + num("Target TPS", "targetTps", g.targetTps, "TPS", gh("given to you")),
+    iterations: num("Iterations in full load", "iterations", g.iterations, "", gh("e.g. one per data row")),
   }[m];
   const pacing = m === "vusers_tps" ? `<p class="wm-muted wm-f wide" style="margin:0">Pacing follows from the Vusers and the TPS — the checks say whether it is possible.</p>` :
     `<label class="wm-f">Pacing<select class="ds-field" data-k="pacing.mode">${opt(PACING, p.mode || "auto")}</select></label>` +
@@ -148,7 +302,7 @@ function scriptCard(g) {
   return `<div class="wm-script${g.folded ? " is-folded" : ""}" data-id="${g.id}">
     <div class="wm-script-head" data-head>
       <button class="wm-chev" data-fold-card aria-expanded="${!g.folded}" aria-controls="body-${g.id}" aria-label="Show or hide ${esc(g.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-      <input class="ds-field wm-name-in" type="text" data-k="name" value="${esc(g.name)}" aria-label="Script name">
+      <input class="ds-field wm-name-in" type="text" data-k="name" value="${esc(g.name)}" aria-label="Script name" title="${esc(g.name)}">
       <b class="wm-name" title="${esc(g.name)} · ${esc(PROTOS[g.protocol].label)}${g.source ? " · from " + esc(g.source) : ""}">${esc(g.name)}</b>
       <span class="ds-chip" title="${esc(PROTOS[g.protocol].label)}">${esc(({ web: "Web HTTP", other: "Other" })[g.protocol] || PROTOS[g.protocol].label)}</span>
       ${g.source ? `<span class="wm-src" title="Filled from ${esc(g.source)}">from ${esc(g.source)}</span>` : ""}
@@ -163,24 +317,24 @@ function scriptCard(g) {
         <label class="wm-f">Protocol<select class="ds-field" data-k="protocol">${opt(Object.entries(PROTOS).map(([k, v]) => [k, v.label]), g.protocol)}</select></label>
         ${pools.length > 1 ? `<label class="wm-f">Runs on<select class="ds-field" data-k="pool">${opt(pools, g.pool)}</select></label>` : ""}
         ${g.protocol === "truclient" ? "" : `<label class="wm-f">Kind of script<select class="ds-field" data-k="kind">${opt(KINDS, g.kind || "auto")}</select><small>${esc(kindHelp(g))} — for the load generators</small></label>`}
-        ${num("Vusers per machine", "perLg", g.perLg, "", "your figure for this script, e.g. from a past run — replaces the rule", "adv")}
+        ${num("Vusers per machine", "perLg", g.perLg, "", gh("your figure for this script, e.g. from a past run — replaces the rule"), "adv")}
       </div></div>
       <div><p class="wm-sub">One iteration <span class="wm-subh">— one run through the script</span></p><div class="wm-grid">
-        ${num("Transactions per iteration", "txPerIter", g.txPerIter, "", g.txNames && g.txNames.length ? "in the script: " + esc(g.txNames.length > 4 ? g.txNames.slice(0, 3).join(", ") + " and " + (g.txNames.length - 3) + " more" : g.txNames.join(", ")) : "that count for the TPS")}
-        ${num("Think time — total per iteration", "thinkPerIter", g.thinkPerIter, "s", "all think times of one iteration added up, not per transaction — e.g. 9 × lr_think_time(3) = 27 s")}
-        ${num("Fixed waits — total per iteration", "waitPerIter", g.waitPerIter, "s", "all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full", g.waitPerIter > 0 ? "" : "adv")}
+        ${num("Transactions per iteration", "txPerIter", g.txPerIter, "", txHelp(g))}
+        ${num("Think time — total per iteration", "thinkPerIter", g.thinkPerIter, "s", gh("all think times of one iteration added up, not per transaction — e.g. 9 × lr_think_time(3) = 27 s"))}
+        ${num("Fixed waits — total per iteration", "waitPerIter", g.waitPerIter, "s", gh("all sleep / load.sleep of one iteration added up — not think time: LRE always waits them in full"), g.waitPerIter > 0 ? "" : "adv")}
         ${num("Response time — per transaction", "rtAvg", g.rtAvg, "s", `<span id="rth-${g.id}">average per transaction</span>`, "", `placeholder="${state.common.rtAvg > 0 ? fmt(state.common.rtAvg, 2) + " — common" : "unknown"}"`)}
         <label class="wm-f adv">Response time from<select class="ds-field" data-k="rtSource">${opt(RTSRC, g.rtSource)}</select></label>
-        ${num("90th percentile", "rt90", g.rt90, "s", "optional — for the worst case", "adv")}
-        ${num("Requests", "requestsPerIter", g.requestsPerIter, "", "per iteration — for hits per second", "adv")}
-        ${num("Data rows available", "dataRows", g.dataRows, "", "warns when the test needs more", "adv")}
+        ${num("90th percentile", "rt90", g.rt90, "s", gh("optional — for the worst case"), "adv")}
+        ${num("Requests", "requestsPerIter", g.requestsPerIter, "", gh("per iteration — for hits per second"), "adv")}
+        ${num("Data rows available", "dataRows", g.dataRows, "", gh("warns when the test needs more"), "adv")}
       </div></div>
       <div><p class="wm-sub">Replay in LRE <span class="wm-subh">— runtime settings</span></p><div class="wm-grid">${pacing}
-        <label class="wm-f">Think time in LRE<select class="ds-field" data-k="thinkMode" data-thinkdep${noThink(g) ? " disabled" : ""}>${opt(THINK, g.thinkMode)}</select><small data-thinkhelp>${thinkHelp(g)}</small></label>
+        <label class="wm-f">Think time in LRE<select class="ds-field" data-k="thinkMode" data-thinkdep${noThink(g) ? " disabled" : ""}>${opt(THINK, g.thinkMode)}</select><small data-thinkhelp${noThink(g) ? "" : ' class="wm-gh"'}>${thinkHelp(g)}</small></label>
         ${g.thinkMode === "multiply" ? num("By", "thinkFactor", g.thinkFactor ?? 1, "×", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
-        ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%", "of the recorded think time") + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
-        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", "only if you tick LRE's “Limit think time to” — else leave empty", g.thinkLimit > 0 ? "" : "adv", `data-thinkdep${noThink(g) ? " disabled" : ""}`)}
-        ${g.thinkMode === "ignore" ? "" : num("How many think times", "thinkPauses", g.thinkPauses, "", "in one iteration, so the limit can cut each one — read from the script").replace('<label class="wm-f ', `<label data-pauses${g.thinkLimit > 0 ? "" : " hidden"} class="wm-f `)}
+        ${g.thinkMode === "random" ? num("From", "thinkMinPct", g.thinkMinPct ?? 50, "%", gh("of the recorded think time")) + num("To", "thinkMaxPct", g.thinkMaxPct ?? 150, "%", `<span data-thinkres>${thinkResult(g)}</span>`) : ""}
+        ${g.thinkMode === "ignore" ? "" : num("Limit each think time to", "thinkLimit", g.thinkLimit, "s", gh("only if you tick LRE's “Limit think time to” — else leave empty"), g.thinkLimit > 0 ? "" : "adv", `data-thinkdep${noThink(g) ? " disabled" : ""}`)}
+        ${g.thinkMode === "ignore" ? "" : num("How many think times", "thinkPauses", g.thinkPauses, "", gh("in one iteration, so the limit can cut each one — read from the script")).replace('<label class="wm-f ', `<label data-pauses${g.thinkLimit > 0 ? "" : " hidden"} class="wm-f `)}
       </div></div>
     </div></div>`;
 }
@@ -203,9 +357,9 @@ $("#scripts-list").addEventListener("input", (e) => {
   let v = el.value;
   if (el.type === "number") { v = parseFloat(v); if (!Number.isFinite(v)) v = null; }
   setKey(g, k, v); g.sample = false;
-  if (k === "name") { const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }
+  if (k === "name") { el.title = v; const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }   // a long name: in full on hover
   // the number of think times matters only with a limit: shown while one is set (no redraw, the focus stays)
-  if (k === "thinkPerIter") { const c = el.closest("[data-id]"); c.querySelectorAll("[data-thinkdep]").forEach((x) => { x.disabled = noThink(g); }); const h = c.querySelector("[data-thinkhelp]"); if (h) h.textContent = thinkHelp(g); }
+  if (k === "thinkPerIter") { const c = el.closest("[data-id]"); c.querySelectorAll("[data-thinkdep]").forEach((x) => { x.disabled = noThink(g); }); const h = c.querySelector("[data-thinkhelp]"); if (h) { h.textContent = thinkHelp(g); h.classList.toggle("wm-gh", !noThink(g)); } }
   if (["thinkPerIter", "thinkFactor", "thinkMinPct", "thinkMaxPct", "thinkLimit"].includes(k)) { const r = el.closest("[data-id]").querySelector("[data-thinkres]"); if (r) r.textContent = thinkResult(g); }
   if (k === "thinkLimit") { const f = el.closest("[data-id]").querySelector("[data-pauses]"); if (f) f.hidden = !(v > 0); }
   if (STRUCT.has(k)) { if (tableView()) tvRedraw(g, k); else renderScripts(); renderTest(); renderPools(); calc(); } else calcSoon();
@@ -278,13 +432,30 @@ function tvTable() {
     <th title="All think times of one iteration added up — not per transaction">Think time (total)</th><th title="Average response time of one transaction">Response time (per tx)</th><th>Pacing</th><th>Think time at replay</th>
     <th class="num" title="Worked out">Vusers</th><th class="num" title="Worked out">TPS</th><th><span class="wm-vh">Remove</span></th></tr></thead><tbody>${state.groups.map(tvRow).join("")}</tbody></table>`;
 }
+/* Table view wider than its column with the results beside it: the results fold to their strip by themselves, so no
+   box of the table is only reachable by scrolling sideways. Not remembered (Cards and the next visit are as before);
+   opened again by the user, they stay open until the view changes; back to Cards, what was folded here opens again. */
+const resAuto = { folded: false, declined: false };
 const tvWidth = () => {
   const tv = $("#tv"); if (!tv) return;
   if (!tv.hidden) tv.style.setProperty("--tvw", (tv.clientWidth - 2) + "px");
-  $("#tv-more").hidden = tv.hidden || tv.scrollWidth <= tv.clientWidth + 2 || $(".wm-page").classList.contains("res-hidden");
+  const page = $(".wm-page"), over = !tv.hidden && tv.scrollWidth > tv.clientWidth + 2;
+  if (over && !resAuto.declined && !page.classList.contains("res-hidden") && !page.classList.contains("in-hidden")) {
+    const rc = $("#results-col").getBoundingClientRect(), tr = tv.getBoundingClientRect();
+    if (rc.width > 0 && rc.left >= tr.right - 1) {   // the results beside the table (not under it, as on narrow screens)
+      resAuto.folded = true; setLayout("res-hidden", null, false);
+      if (typeof toast === "function") toast("Results folded to the strip on the right, so the whole table fits — click the strip to see them.");
+      return;
+    }
+  }
+  $("#tv-more").hidden = !over;   // still wider than the window with the results folded (small screens): the hint stays, without its link
+  $("#tv-wide-or").hidden = page.classList.contains("res-hidden");
 };
 $("#tv-wide").addEventListener("click", () => { setLayout("res-hidden"); tvWidth(); const f = $("#tv [data-k]"); if (f) f.focus({ preventScroll: true }); });
 window.addEventListener("resize", tvWidth);
+// the results fold and open with an animation: the table's box grows over a few frames — measured whenever its size changes
+// (measured only at the start, the hint "More columns to the right" stayed although the table fitted)
+if (typeof ResizeObserver === "function") new ResizeObserver(() => tvWidth()).observe($("#tv"));
 const tvRows = () => [...document.querySelectorAll("#tv tr[data-id]")].filter((r) => !r.hidden);
 // a choice that changes the row's boxes: redraw that row only (and its open card), the focus stays on the same field
 function tvRedraw(g, k) {
@@ -297,7 +468,13 @@ function tvRedraw(g, k) {
   const scope = $(inCard ? `#tv tr[data-card-of="${g.id}"]` : `#tv tr[data-id="${g.id}"]`);
   const f = scope && scope.querySelector(`[data-k="${k}"]`); if (f) f.focus();
 }
-function setSView(v) { sview = v; try { localStorage.setItem("wm-sview", v); } catch (e) { /* private window */ } renderScripts(); calc(); }
+function setSView(v) {
+  sview = v; try { localStorage.setItem("wm-sview", v); } catch (e) { /* private window */ }
+  // back to Cards: the results the table folded by itself open again; a new choice of Table may fold them again
+  if (v !== "table" && resAuto.folded && $(".wm-page").classList.contains("res-hidden")) setLayout("", null, false);
+  resAuto.folded = false; resAuto.declined = false;
+  renderScripts(); calc();
+}
 $("#sview").addEventListener("click", (e) => { const b = e.target.closest("[data-v]"); if (b) setSView(b.dataset.v); });
 $("#tv").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-id]"); if (!tr) return;
@@ -439,7 +616,7 @@ let poolSeq = 1;
 $("#btn-pool").addEventListener("click", () => { const t = LG_TYPES[1]; state.pools.push({ id: "p" + (++poolSeq), name: t.where, kind: t.id, cores: t.cores, ramGb: t.ramGb, webPerLg: t.webPerLg, apiPerLg: t.apiPerLg, extra: 0, capacity: {} }); renderPools(); renderScripts(); calc(); });
 function renderProtoTable() {
   $("#proto-table").innerHTML = `<thead><tr><th>Protocol</th><th class="ds-num">Memory per Vuser (MB)</th><th class="ds-num">Vusers per CPU core</th></tr></thead><tbody>` +
-    Object.entries(PROTOS).map(([k, p]) => `<tr><td>${esc(p.label)}</td><td class="ds-num"><input class="ds-field" style="width:90px;height:32px" type="number" data-proto="${k}.memMb" value="${p.memMb}"></td><td class="ds-num"><input class="ds-field" style="width:90px;height:32px" type="number" data-proto="${k}.perCore" value="${p.perCore}"></td></tr>`).join("") + "</tbody>";
+    Object.entries(PROTOS).map(([k, p]) => `<tr><td>${esc(p.label)}</td><td class="ds-num"><input class="ds-field" style="width:90px;height:32px" type="number" data-proto="${k}.memMb" value="${p.memMb}" aria-label="${esc(p.label)} — memory per Vuser (MB)"></td><td class="ds-num"><input class="ds-field" style="width:90px;height:32px" type="number" data-proto="${k}.perCore" value="${p.perCore}" aria-label="${esc(p.label)} — Vusers per CPU core"></td></tr>`).join("") + "</tbody>";
 }
 $("#proto-table").addEventListener("input", (e) => { const [k, f] = e.target.dataset.proto.split("."); const v = parseFloat(e.target.value); if (v > 0) { PROTOS[k][f] = v; calc(); } });
 function cal() {
@@ -472,6 +649,7 @@ function calc() {
   const res = resolved();
   const r = E.model({ scenario: state.scenario, groups: res.groups, pools: state.pools, protocols: PROTOS });
   lastResolved = res.groups;
+  if (typeof workingNow === "function") workingNow();
   if (res.check) r.checks.unshift(res.check);
   commonUi(res);
   last = r;
@@ -570,10 +748,12 @@ function calc() {
   const tps = over ? t.reachTps : t.tps, ips = over ? t.reachIps : t.ips;
   const perVu = (x) => (t.vusers ? x / t.vusers : 0);
   const n1 = (x) => String(+x.toFixed(x < 10 ? 2 : 1));    // 0.2, 72, 74.5 — no padding zeros
+  // one level held above the target (a stress test): what it reaches there too
+  const heldAbove = r.peakVusers > t.vusers && (r.actions || []).filter((a) => a.type === "hold").length === 1;
   const overNote = over ? ` — not ${fmt(t.tps, 2)}: an iteration takes longer than the pacing (see Checks)` : "";
   const tiles = [
     ["Virtual users (Vusers)", fmt(r.peakVusers), r.peakVusers > t.vusers ? `${fmt(t.vusers)} at 100%` : `${r.groups.length} script${r.groups.length > 1 ? "s" : ""}`],
-    ["Transactions per second (TPS)", fmt(tps, 2), (range && !over ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)} (random pacing) · ` : "") + "at full load" + overNote, over],
+    ["Transactions per second (TPS)", fmt(tps, 2), (range && !over ? `${fmt(t.tpsMin, 2)} – ${fmt(t.tpsMax, 2)} (random pacing) · ` : "") + "at full load" + overNote + (heldAbove ? ` · about ${fmt(tps * r.peakVusers / t.vusers, 2)} at the held ${fmt(100 * r.peakVusers / t.vusers)}%` : ""), over],
     ["Transactions per hour (TPH)", fmt(tps * 3600), "at full load · TPS × 3,600", over],
     ["Iterations per hour", ips ? fmt(ips * 3600) : "—", ips ? `at full load, all Vusers · ${n1(perVu(ips * 3600))} per Vuser` : "depends on the response time", over],
   ];
@@ -748,7 +928,8 @@ function formulas(sc) {
       "“Start X Vusers every N s”: the fewest Vusers per step whose interval is 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 45, 60, 90, 120, 180 or 300 s and gives a ramp within 10% of the wanted one, never faster than the start rate; one Vuser starts at once",
       `Ramp-down: half the ramp-up worked out as above with twice the start rate, but never shorter than Vusers ÷ ${fmt(rate * 2)} (the stop rate), so no step stops many Vusers at once; each Vuser finishes its current iteration`,
       `Basic schedule by group: each script its own ramp; a shorter ramp starts later by (longest ramp − its ramp), so all reach full load together. The scripts ramp at the same time, so they share the start rate: each gets ${fmt(rate)} × its share of the Vusers (at least 1 Vuser every 300 s) — together never more than ${fmt(rate)} new Vusers per second; the stop rate likewise`,
-      "Stress / capacity: steps at a % of the Vusers (default 50, 75, 100, 125, 150% / 100 to 200%), each held 10 min or 5 × the longest pacing, whichever is longer (or the hold you set)",
+      "Stress held at one level (the team standard): Vusers × the level (150% → 1.5 ×), started at the start rate, held for the hold (120 min), then stopped",
+      "Stress in steps / capacity: steps at a % of the Vusers (default 50, 75, 100, 125, 150% / 100 to 200%), each held 10 min or 5 × the longest pacing, whichever is longer (or the hold you set)",
       "Spike: normal load (50%) held, the burst to 200% started within one pacing (10 to 60 s) and held up to 10 min, the burst stopped at once, recovery held, then the stop",
       "Goal-oriented: goal = the total TPS; Vusers from ⌈50%⌉ to ⌈150%⌉ of the plan; run for the full-load time after the goal is reached",
     ])}

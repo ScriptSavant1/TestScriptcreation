@@ -185,11 +185,18 @@ describe('HAR Explorer — agrees with Script Studio', () => {
     const S = studio(har);
     const fromStudio = [];
     S.correlations.filter((c) => !c._suppressed).forEach((c) => { const u = c.usages[0]; fromStudio.push({ value: u.tokenValue || String(u.originalValue).slice((u.prefix || '').length), n: c.sourceIdx + 1 }); });
-    S.advisorCandidates.forEach((c) => fromStudio.push({ value: c.value, n: c.source.entryIdx + 1 }));
+    // a value made in the browser (BUG-151) has no source to agree on: listed, and Find names no source for it
+    const made = S.advisorCandidates.filter((c) => c._browser);
+    S.advisorCandidates.filter((c) => c.source).forEach((c) => fromStudio.push({ value: c.value, n: c.source.entryIdx + 1 }));
     expect(fromStudio.length).toBeGreaterThan(0);
 
     const w = loadWorker();
     const s = w.load(har);
+    made.forEach((c) => {
+      expect(s.suggestions.find((x) => x.value === c.value && x.by === 'studio')).toBeTruthy();
+      const r = w.find(c.value);
+      expect(r.src == null || r.src.n == null).toBe(true);
+    });
     fromStudio.forEach((st) => {
       expect(s.suggestions.find((x) => x.value === st.value && x.by === 'studio')).toBeTruthy();
       const r = w.find(st.value);

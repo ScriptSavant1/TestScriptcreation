@@ -6,6 +6,37 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Workload Modeller
 
+#### The scripts table shows its scripts again; nothing empty under Result
+
+- Table view showed the headings but no script — also after Plan the load from Script Studio or a converter (BUG-181). The test-type cards had been given the table's class name.
+- Table view wider than its column (results beside it, about 1920–2560 px): the results fold to their strip on the right by themselves, with a message, so the whole table fits — not remembered; opened again they stay open; back to Cards they open again (owner's choice).
+- On a laptop (1366–1536 px) the table is compact: headings on two lines, narrower name and lists, a pacing's own boxes under its list, and "Think time at replay" in each row's full card — nothing behind a sideways scroll, every choice readable (owner's choice). Wide screens unchanged.
+- The notes "Before you fill in a script" remember only the user's own fold (a click or Enter on their title): a fold made by the page was sometimes saved as the user's choice, and the notes then never folded by themselves again (BUG-187).
+- Before the plan is complete, Result no longer shows an empty "Details" line and an empty bar (BUG-182); a field that still needs a value shows the keyboard focus (BUG-183); the sizing boxes per protocol have names (BUG-184).
+- Checks: the design review now checks that every table is laid out as a table, and has screens for Table view and for scripts sent from Script Studio and Postman / Bruno; the Workload walk-through checks the table after Plan the load.
+
+#### Spike levels of your own; script cards say what a field means once
+
+- Spike: **Normal load** and **Burst to** (% of the target; team settings `testTypes.spike`, 50% → 200% as before). A burst that is not above normal load is said and not used. The notes and the drawing follow the levels.
+- Script cards: what a field means (Think time — total per iteration, Target TPS …) is said in the first open card only, and in another card while its field has the focus; what is about the script itself (its transactions, its kind, a value it needs) shows in every card.
+
+#### The test types explained; a stress test held at 150% for 2 hours; a calmer page
+
+- Each test type is a card with a drawing of its load over time. **About this test** under the cards says what the chosen test is, why teams run it, how much load, how long, what to look at and when (common practice, with the team's own figures); **Hide** folds it to one line, remembered.
+- Stress starts at the team standard: **150% of the target held for 2 hours** (one start, one hold, one stop). **How the load rises** switches to the steps 50% → 150% as before. The level and the hold can be typed; the tiles and the summary give the TPS at 100% and at the held level. The team settings file has the figures (`testTypes`: load and soak full-load minutes, the stress level, hold or steps), checked like the others.
+- The fields of the chosen test show in Simple view: the stress level and hold, the capacity steps, the spike's normal-load hold. Full-load duration shows only where it is used. A hold typed for one test type is no longer carried over to the next.
+- While you work on a plan the band at the top makes room and the notes at the top of Scripts fold (unless you opened them); Start over brings them back. On a wide screen the results stay in view while the inputs scroll. Load an example opens its first script only.
+- Regression tools: `regression-tests/tools/workload/` — `serve.js` (the page from any version), `behave.js` (old page against new, 394 behaviours: plan, summary, tiles, checks, phases, LRE settings, every Excel sheet, filled scripts, table, undo), `walk.js` (53 checks of the test types, the spike levels, the card help and the layout).
+
+#### A HAR recording: transactions from its bookmarks, response time from its requests
+
+- A HAR recording's transactions are its START / END bookmarks, as Script Studio and the HAR Explorer read them (before: its pages, named by their address, and the bookmark requests counted as API calls). Response time per transaction = the time its requests ran; a quiet gap over 1.5 s — the user reading, or pressing END — is think time. A sample recording: 13 transactions instead of 14 pages, 0.18 s response instead of 25 s, 419 s of pauses instead of 81 s, 161 requests instead of 187 (BUG-153).
+
+#### Every transaction of a script in one window
+
+- Transactions per iteration shows how many the script has and **see them all**: a window with every transaction of one iteration in order (repeats counted; a HAR recording's steps with their requests and their time in the recording), the ones not counted (vuser_init, vuser_end, transactions holding others) and **Copy names** (one per line, for Excel). It closes with Esc, Close or a click outside.
+- A HAR recording kept only its first 12 step names; now all of them. Long names (addresses) no longer run out of their box into the next field.
+
 #### Clearer results and inputs
 
 - Result tiles in words first, abbreviation after: **Transactions per second (TPS)**, **Transactions per hour (TPH)**, **Iterations per hour** (all Vusers and per Vuser) — at full load — **One iteration takes** (response + think time, and whether it fits in the pacing), **Total test duration**, **Full load (steady state)**, **Total iterations (whole test)** (about how many per Vuser), **Total transactions (whole test)**, **Requests per second (hits)**; "How to read these numbers" under the tiles, worked out with the plan's own figures. The summary uses the same names.
@@ -55,6 +86,23 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### CDP Recorder
 
+#### 0.3.3: the floating bar keeps its look in pop-ups; the empty-transaction warning is shown again; a clearer toolbar
+
+- A pop-up window (a sign-in window, for example) showed the floating bar without its look: a grey square and plain buttons (BUG-179). The bar now makes its style sheet again for the page it is in.
+- "No network requests were captured during …" appeared no more: starting the next transaction, now the usual way to end one, cleared it at once (BUG-180). It stays in sight again, in the toolbar, the floating bar and the page's live view.
+- Toolbar: the buttons use the toolbar's own font and say Start recording, Stop recording and Start transaction; the purple chip and the transaction number are easier to read; in the dark theme Start next and Stop recording have white text on a deep colour (contrast 4.5 or more).
+- Manual tests brought up to date: portal-session (the recorder closes itself after a saved recording, 0.3.2), portal-extras (reads the version from the sources), repro-multi-tx (no End button), capture-guide-screenshots (the floating bar covers the top of its test page); floating-bar checks that the bar in a pop-up has its look and waits for the grip before dragging.
+
+#### 0.3.2: the floating bar really moves; the recorder closes after saving
+
+- The floating bar could not be moved at a person's pace: its state arrives every 0.7 s and redrew the bar during the drag, which dropped it. No redraw while dragging now; and it moves by any part that is not a button, not only its grip. (The 0.3.1 test dragged faster than a redraw; it now drags over two seconds — and fails on 0.3.1.)
+- Started by Start recording, the recorder closes itself — its console window too — once the saved recording's windows have closed (before: it waited an hour). The link runs it without a console window (Windows 10 1809 and later). A newer recorder started by the link replaces an older one still running, so an update is used at once.
+- Temporary browser profiles earlier recordings left behind (a folder per recording, when the browser still held a file) are removed at the next start — one test computer had 107 of them, 173 MB.
+
+#### 0.3.1: the floating bar goes anywhere
+
+- The floating bar stays exactly where you drop it (before: it snapped to the top or bottom, left, middle or right), remembered for the next recordings as a share of the window; a double-click on its grip puts it back at the top, and the dock button still moves it to the top or bottom. A click on the grip without moving no longer moves it.
+
 #### Version 0.3.0: the floating bar inside the recorded pages
 
 - Every page in the recording window — new tabs and pop-ups too — shows a small bar at the top: REC, the time, the running transaction, one box to name the next transaction (Enter or Mark: the running one ends and the next starts — no End on the bar), the counts and Settled, Stop and save. The arrow opens the details: every transaction with its requests, rename (pencil), Undo last mark, the planned steps. The same rules as the page and the toolbar (one `startTx` in `server.ts`).
@@ -88,6 +136,198 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 - Its messages, the README in the ZIP and the user guide name Script Studio, where recordings are started and opened now (the Recorder page is part of it); the guide's pictures are new.
 
 ### Recorder and Script Studio
+
+#### A calmer Script Studio: one main button, controls where they act, no rows of greyed buttons
+
+- Requests: a transaction's header has no coloured band; **Rename** and **Ungroup** show when the pointer or the keyboard is on it; its "n left out" is the link that shows the left-out requests and hides them again (no separate line per transaction — kept only in a recording without transactions). The name gives way first on a narrow panel, with the full name on hover. On a recording with one request per transaction, 7 transactions are in view at 1920 px instead of 5.
+- **Filters** are in the Requests panel, beside New transaction (they filter that list); on a laptop the tool row no longer wraps onto a second line for them. Domains: **All on** / **All off** under the search, so the title keeps its room.
+- One main button per screen: **Download ZIP** at the top is outlined (step 4 has its own); **Next** is soft while the step's own action is ready (values ticked, the editor open, requests being ticked, the name being edited); Back to the recording, Add parameter and a recording's Start (transaction) are outlined.
+- Correlate with nothing found: one message with the three ways on (Add manual correlation, Can't find a value?, Also suggest other repeated values) instead of empty filters, zero counts and a footer of greyed buttons. "Warning" on In the script says "1 note" (its text on hover); the mode reads "One recording" / "Two recordings compared".
+- The correlation editor: headings in the text font; no row of six greyed choices before a request is chosen (a value in the script shows only its own way of reading); the empty right side says "Choose a request on the left".
+- Start page: the two cards look alike — the open card's dashed frame shows only while a file is dragged over it (the keyboard focus it gets after Open another is a focus ring).
+- Fixed on the way: Enter on a button inside the request list (fold, Rename, Ungroup) opened the request's details instead of pressing it; the selection bar's Create transaction was cut off on a laptop.
+- The editor shows only the ways of reading that work for the chosen response (no greyed JSON path / XPath / Header for an HTML page); the chosen way always shows.
+- A recording with many dynamic values for the tests: `make-fixtures.js` makes `travel-booking.har` (7 transactions, 28 values found, 18 High — tokens, CSRF, a redirect ticket, ids, lists, a page state, a payment) and its second recording; `regression-tests/tools/studio/journey.js` takes it through every step as a user in both formats (18 correlations added, the ZIP read back), old and new giving the same script and ZIP files.
+- Checks: the design review (`audit/review.js`) also finds a control cut by its panel (`cutoff`), besides the weight checks; Script Studio: 128 screens at 1366 / 1920 px, light and dark, no finding. Old page against new: 274 actions, 7 differences, all the wording above.
+
+#### Open in HAR Explorer from Script Studio; back to the same work
+
+- Script Studio's file bar has **Open in HAR Explorer** (in the portal, with a recording open): the same recording opens in the HAR Explorer.
+- The Explorer's **Continue in Script Studio** goes back to that work: the correlations, transactions, test data and name stay, and the values added in the Explorer are added and applied — nothing is read again.
+- When Studio has another recording open, Continue in Script Studio asks first ("Replace the recording in Script Studio?"); before, it replaced the work without asking (BUG-185). Cancel, Esc or a click outside keep it. An empty Studio opens the recording as before.
+- Regression tool: `regression-tests/tools/explorer/roundtrip.js` (18 checks through the portal).
+
+#### HAR Explorer: easier to read details, folded panels you can see, three ways to begin Find a value
+
+- Request details (HAR Explorer and Script Studio's request window): the address breaks only after / ? & = (it no longer splits a word in the middle; copying it gives the same address); the tabs sit closer, so on a wide panel all seven fit on one row (a narrow panel still wraps them, never hiding one); the page preview shows a focus ring when the keyboard is inside it.
+- HAR Explorer: **Hide secrets** sits with Copy URL and Copy as cURL (the address has the whole first line); a folded panel (Domains, Requests, details) is a filled bar that changes on hover, so it reads as a button; long domain names wrap instead of being cut; a narrow request list drops the timeline, then the size column, so the address stays readable (both are in the request's Timing and summary line); Find a value, before a value is chosen, lists three ways to begin.
+- Nothing else changed: every request's details on every tab, Find a value's answers, Copy as cURL, the filters and the panels compared old against new on two recordings (only the intended differences), Script Studio's request window unchanged in behaviour.
+- Regression tools: `regression-tests/tools/explorer/` — `behave.js` (old page against new: every request × every tab, the controls, Find a value for each suggestion, folding, the look) and `walk.js` (198 checks of the new parts, four widths, both themes).
+
+#### Script Studio: Correlate in three sections, the recording's name, aligned start page
+
+- Step 2, Correlate, has three named sections — **Values found**, **In the script** (was Correlation details), **Second recording** (was Advanced: second recording). Their bars are always in sight with what is in them (how many to review, how many correlations, values with no source); one is open and fills the height, so the step has no second scroll bar. Cards is inside Values found. On small laptops the table's buttons are in sight without scrolling sideways.
+- Correlate and Test data start at the top, also after another recording was opened (the place scrolled to before was kept).
+- The script's name is the recording's file name when none is typed (`My shop.har` → `My_shop`), in both formats: title, ZIP, .usr. Before: DevWebScript_Correlated / WebHttpScript_Correlated (still used when the file name has no usable letters).
+- Start page: the two cards line up (icon, title, text, button); the link "How it works" is now "The four steps" (the top bar's How it works opens Help). Step 1: the single Script tab is a plain title.
+- Regression tools: `studio/behave.js` reports a part that stopped or compared nothing as a fault (its domain step had emptied the script, so the Correlate and Test data parts compared empty lists); it now also compares In the script, Cards, the second recording, the names and the script panel (274 comparisons). `studio/walk.js` has 169 checks.
+
+#### Script Studio: more room, every choice at once, Undo and Redo
+
+- The start page has the same top band as every tool and two cards of the same size: Record in a browser, Open a recording (a click anywhere on the card opens the file window). How it works and How to record your journey are links that open windows with the same texts. The format is chosen in the workspace (remembered, as before); the old introduction with its Hide button is gone.
+- Two rows above the panels instead of six: on a 1366 × 768 laptop the panels begin at about 165 px instead of 386.
+- The script's name is the title (click it to rename). Under it: the recording, requests in the script, transactions, sign-in. "Up to date" / "Updating…" beside it.
+- Undo and Redo (Ctrl+Z, Ctrl+Y) for every change: name, format, think time, filters, domains, left-out requests, transactions, server names, correlations, test data. After Undo the script is, character for character, the one before. Correlations taken off by a change that reads the recording again come back with Undo.
+- Steps with their counts, Next / Back, format, think time and Filters on one line. The recording's message is a note button.
+- A click on a request opens its window, as before; the code of the request opened last is marked in the script. Find in this file. The domain parameter itself is clicked to rename it.
+- Requests the page repeats in the background and that are left out are no longer counted as in the script; they say so in the list ("repeats in the background"), and those that run once too.
+- Escape closes the request window wherever the focus is. Correlate and Test data: one line for the heading, the text behind a question mark; a Correlate row takes two lines, never a sideways scroll.
+- Scripts and ZIPs do not change (golden harness). Every other behaviour is the one before: `regression-tests/tools/studio/behave.js` does the same user actions on the old and the new page and lists each difference.
+
+#### Script Studio: Generate (UUID) in the correlation editor
+
+- The editor's "How to read it" has a choice **Generate (UUID)**: any value, not only one the browser made, can be made by the script instead of read from a response. Step 1 (the response) is not needed and says so; the code shows the line the script gets; a recorded value that is not a UUID gets a warning. Another choice, or Undo my changes, puts it back.
+
+#### Script generation: VuGen random values without 0000 and seeded per Vuser
+
+- VuGen scripts from the converters and from Script Studio made their UUIDs and random tokens from bare `rand()`, which gives 15 bits: every UUID began with `0000`, and nothing seeded it per Vuser, so two Vusers could send the same values. Now each 16-bit group mixes two `rand()` calls, seeded once per Vuser from the time and the Vuser id; a JMeter `UUID.randomUUID()` gives a real version 4 UUID. Proved on the real VuGen engine (BUG-152).
+
+#### Script Studio: generate a UUID the browser made
+
+- A UUID the page made (an `X-Request-Id` or correlation id in a header, the query string or a JSON body) can be generated by the script: **Generate a UUID** on its row (**Generate UUIDs** on a row of renewals), then Add to the script. The script makes a new UUID before the first request that sends each recorded value — renewed where the recording renewed it, kept for the iteration where it kept it — in every place it is sent. VuGen: one helper, `perfx_uuid()`, at the top of Action.c (each 16-bit group from two `rand()` calls, seeded once per Vuser from the time and the Vuser id); DevWeb: `load.utils.uuid()`, never inside `Promise.all`. Checked on both real engines: valid version 4 UUIDs, renewed and kept as recorded, new each iteration, no recorded value sent.
+- The Correlation Advisor now finds UUIDs sent in a request header or the query string that no response sends (before, only request bodies were looked at), named after their field (`xRequestId`, `traceId`).
+
+#### Script Studio: values made in the browser are said so, and left out
+
+- A value that no response sends before the page sends it (a hash or an id made by the page's own scripts) is marked "Made in the browser" in the Correlate table, on its card and in the editor, and cannot be ticked into the script: there is nothing to read it from — before, ticking it gave a boundary that read the wrong text (BUG-151). A value a left-out request's response has is not one of them. Choosing a response yourself in the editor still works.
+
+#### Script Studio: a value with no JSON path is read from its page
+
+- A Correlation Advisor value without a JSON path (Medium) is read from the response that has it, with boundaries whose first match is the value — before, ticking it gave the value's own first 8 characters and no right boundary (BUG-144).
+- A form post (`csrf_token=…`) is no longer suggested as one value; its token is suggested on its own, as before.
+
+#### Script Studio, correlation editor: Test in a window, a calmer column
+
+- Test opens its result in a window: what it reads (every value of a list), every place the value is sent back with the value that request sent (Same / Another value), the second recording. The editor's column keeps one status line.
+- A list that is part of the matches (the options of one `<select>` on a page with several) is tested with its own values — before, Test counted every option of the page (14) while the editor said 7; the window says which matches the list is.
+- Up / Down, Page Up / Down, Home and End scroll the editor's column even when the focus is not in it (on Cancel, after a click on its edge): the column the pointer was over, else the left one.
+- "Which value is sent back" (a list's use) is compact: one line per choice, the chosen one explains itself.
+- Test shows what a list sends, iteration by iteration, for the choice made: one at random (a sample, Pick again), the next one each iteration, or always value N (a position past the end of the list fails the test).
+- Script Studio's dialogs open centred (the classic stylesheet's reset had put them in the top-left corner) and move by their title bar.
+- The sidebar's CDP Recorder badge (Running / REC) reads at 4.5:1 in the light theme.
+
+#### Script Studio: Plan the load in Workload Modeller
+
+- Script Studio has **Plan the load** in the file bar and in step 4, as the converters do: the same ZIP as Download ZIP (built in the browser, nothing downloaded) opens in the Workload Modeller with the script filled in. The hand-over is one shared helper for Studio and both converters (`portal/plan-load.js`).
+
+#### Script Studio, Correlate: every correlation editable, Test, panels that resize
+
+- The correlations Studio's own engines find (pattern, second recording, value-based, PKCE) are listed in the Correlate table with the Advisor's values, "Found by Studio", already in the script. Correlation details has **Edit** and **Remove** on every correlation (Edit opens the editor with the response, as for the Advisor's values; Remove with Undo); a removed one stays out when the recording is read again. Before, a click on one only said to use the Cards view. PKCE values are labelled made while the script runs and open read-only.
+- **Test** in the editor and in the table's footer (the ticked values, else the ones in the script): what each extractor reads from the recorded response, whether every place it is sent back sent that value, several different matches, and with a second recording whether the value changes. Checked against the recording only.
+- The editor's two panels can be resized (drag the bar between them, or its arrow keys; double-click puts it back) and each hidden to a rail; remembered. Values read from a response header open on the Headers tab; the live check reads header query values and HTML elements too.
+- Fixed: content showed in a 14 px strip under the editor's sticky buttons when the left column scrolled.
+- The script is unchanged by all this (Studio golden harness, one browser at a time: every script and ZIP identical; the usage statistics count the engines' correlations once).
+
+#### Script Studio: every step fits the window
+
+- Correlate, Test data and Download use the whole width beside the sidebar, lined up with the step bar (they were capped at 1500 px, Download at 920 px, and centred). The Value column of Correlate widens with the window.
+- Correlate fills the height: its table scrolls inside the card and the bar with Add to the script stays in view; the correlation editor and Add manual correlation fill the height too, each column scrolling on its own and the response growing with the window.
+- Test data scrolls once (no box inside a box); its column headings stay at the top.
+- Download: the Ready list beside the script files with their code (file tabs, Copy).
+- Below 900 px the step bar keeps the same side margin as the panels.
+- Layout only: the Studio golden harness (one browser at a time) gives byte-identical scripts and ZIPs.
+
+#### Select options written any way, editing a correlation in the script, manual correlations in the table
+
+- A <select> whose options are written with other attributes first (`<option selected="selected" value="Denver">`) is a list too: options are read by a regular expression with every match (`<option\b[^>]*?\svalue="([^"]*)"`; VuGen `Ordinal=ALL`, DevWeb `occurrence: load.ExtractorOccurrenceType.All`) — in the editor (click an option and List, or select the whole <select>) and in the Correlation Advisor's own select lists. Proved on both engines with the first option selected and plain city names (`studioextract.js` select-city-random).
+- Edit a correlation in the script: the editor's button is Edit; the correlation is out of the script while it changes, Save to the script puts the changed one in, Cancel (or Discard when leaving) puts the one before back exactly — in the same place among the extractors (Take out and Undo keep the place too). A click on an item of Correlation details opens it in the editor.
+- Manual correlations are in the table: To review / In the script / Skipped / All show how many each holds, and after Add the table shows In the script with the new rows marked.
+- Test data: a parameter whose every use is read from the page by a correlation (a list of a select's options) says so.
+- Correlation details names a list by how it is used: List, Random, Next, No. N.
+
+#### The old random list code removed (REFACTOR-002)
+
+- Nothing made the old random list type any more (every list uses one picker); its code in the generators is gone. The scripts are unchanged: golden harness identical, every engine case passes.
+
+#### The Correlation Advisor finds lists in a select by itself
+
+- A page that offers generated-looking options in a `<select>` (flights, slots, accounts) of which a later request sends one back gets one High suggestion: the list of that select's options (only its own, when the page has others), each place using the value at the position recorded — or One at random / The next one each iteration / Always the same one in the editor. Plain choices (economy, blue) are not suggested. In the table: List of values, Options of a select, n values. Proved on both engines (`studioextract.js` advisor-select, advisor-select-rotate).
+- A list's value in the table shows how many values it has (it showed a character count).
+
+#### One random picker for every list
+
+- One at random — chosen in the editor or with the Rnd switch of Correlation details, for the Correlation Advisor's lists too — now uses the same picker as the lists made in the editor: one value picked once per iteration, sent to every place in both formats (DevWeb used to pick again for each place). Proved on both engines (`studioextract.js` list-random: both fields send the same new value).
+
+#### Lists in Add manual correlation: a select's options, a JSON list, and how each is used
+
+- How to read it adds List: every value like the one chosen — the options of a `<select>` (only its own, when the page has others), the same field in every item of a JSON list (`$.seats[*].id`), the text of repeated tags. Selecting a whole section (options, part of a JSON array) makes the list of what is inside it. A single value that is one of a list says so, with a link to read them all.
+- Which value is sent back, for any list (also the Correlation Advisor's): Every value, as recorded; One at random each iteration; The next one each iteration (round again); Always the same one (a position).
+- The script: VuGen `Ord=ALL` / `SelectAll=Yes`, `{name_K}`, a picker (`web_js_run`, JavaScript engine switched on) before the first use; DevWeb `occurrence: load.ExtractorOccurrenceType.All` / every match, `load.global.name[K-1]`, the pick after the list is read (`load.config.runtime.iteration` for the next one). Proved on both engines with two iterations against a recording whose values changed (`studioextract.js` select-recorded, select-rotate, json-nth, json-random).
+- Values a page uses to shape itself (a form field's name, an HTML id, type, class …) are no longer marked as values sent back.
+
+#### Several values at once in Add manual correlation
+
+- Keep, pick another puts the value shown in Values to add (top of the editor) and starts the next one — from the same response or another request; kept values are marked green in the response, their names count as taken. Add all n to the script puts them all in, with one regeneration; Cancel with kept values asks first. The editor's buttons stay in view while it scrolls.
+
+#### Clearer selections in the correlation editor, a calmer Correlate page
+
+- A value selected in a response gets boundaries a person can read: the left one widened by whole tokens (`name="csrf-token" content="`, `"nonce":"`) while it still reads exactly that value first; a regular expression built from a selection uses them too.
+- Regex chosen on a JSON response gives a regular expression (it gave a JSON path).
+- Add manual correlation no longer marks addresses and file names a page links to (`/login`, `nav.pl?in=home`, `home.html`) as values sent back.
+- Correlation details and Advanced: second recording have the same header as Correlate (icon, one-line lead); steps 2 and 3 sit on the page instead of inside a white frame.
+
+#### A list sent back by a later request now sends the values read from the response (BUG-150)
+
+- A list the Correlation Advisor reads with every match (for example the image keys of a product list) was read but never used: the later request still sent the recorded values. Now each place sends the value at the same position in the list (VuGen `{name_K}`, DevWeb `load.global.name[K-1]`), or one picked at random when One at random is chosen. Proved with both engines against a recording whose values changed.
+
+#### A list's options in the correlation editor (Script Studio in steps, part 7)
+
+- A list (the response sends several values) shows "How the list is used" in the editor: Every value, as recorded, or One at random each iteration — now also before it is in the script (the Rnd switch of Correlation details was only after). A list sent back rebuilt shows its fields, One item for each value of (the loop), and Fill the missing paths. Options on a list row opens the editor; the values of the list are marked in the response.
+- The scripts are the same as with the cards and the Rnd switch (checked in both formats).
+
+#### Regex and XPath in the correlation editor (Script Studio in steps, part 6)
+
+- How to read it adds Regex (the first ( ) group of a regular expression is the value) and XPath (XML responses; element names without a prefix match in any namespace, /@name reads an attribute), tested as you type. Selecting a value fills them in; names come from the field (sessionToken, nonce, buildId).
+- The script gets web_reg_save_param_regexp / web_reg_save_param_xpath (VuGen, with local-name() steps so a SOAP namespace matches) and RegexpExtractor / XpathExtractor (DevWeb). Proved with both engines against a copy of the recording whose values all changed.
+- Add manual correlation also marks values inside a page's script ("name":"value") and the text and attributes of XML.
+
+#### A richer look (Script Studio in steps, part 5)
+
+- The step line: a card per step, the current one raised in the brand colour, the steps before it ticked (or ! when something there is worth a look), the line filled up to the current step, each note a coloured pill (amber worth a look, green done). On narrow screens the four steps keep their own row.
+- Add manual correlation and Can't find a value? sit in the Correlate header, Add manual correlation highlighted; the filters have their own row.
+- Correlate, Test data and Download open with an icon tile and a short lead; ticked rows are marked on their edge, the row under the pointer is highlighted, the footer is tinted; on Download the things worth a look are amber.
+- Buttons read as buttons: a light lift and a brand-coloured icon; the plain-text buttons of the panels (Find a value, Show left-out, Collapse all …) get a surface.
+
+#### Add manual correlation in the editor (Script Studio in steps, part 4)
+
+- Add manual correlation opens the correlation editor instead of the old dialog: the request on the left (by default only those whose response has a value a later request sends back, with a filter), its response on the right (Body / Headers). The values a later request sends back are marked: click one, or select any text. How it is read (JSON path, Boundaries, Header), its name, the code and where it is sent back fill in; Add to the script puts in this value only.
+- When the Correlation Advisor already lists the value, the editor says so and opens it instead.
+- The editor's response has a Headers tab for every value (click a header to read the value from it).
+
+#### Take out, renewals, names, more suggestions (Script Studio in steps, part 3b)
+
+- Take out: a value in the script can be taken out again from the table or the editor (Undo puts the same correlation back); then it can be changed in the editor.
+- A token the server renews (the same name and field, a new value each time) is one row, Renewed, that opens to each renewal; tick, name and Skip apply to all. The script is as before (each renewal is read again under the same name).
+- Step 3 has a Test data heading and the same width as step 2.
+- Names: the field's own name or with a p in front (pSessionId), remembered; names typed by the user, manual ones and values in the script are not changed.
+- Also suggest other repeated values: values a JSON response sends and a later request sends back that the Advisor leaves out (under 10 characters, numbers, past the first 20), as Medium, not ticked; test data values and common words are left out.
+
+#### The correlation editor (Script Studio in steps, part 3)
+
+- Review on a row of the Correlate table (or a click on it) opens one value at a time, with previous / next: why it was found, the response it is read from (requests that have the value are marked), how it is read (Auto = the Correlation Advisor's choice, JSON path, Boundaries, Header), tested as you type, the name and the code the script gets; on the right the response with the value marked (select or double-click a value to read it from there) and every place it is sent back. Accept & next ticks it. A value no later request sends back cannot be accepted; one already in the script is shown, not changed; Undo my changes returns to the Advisor's choice. A Medium value with no known source now asks for the response that has it instead of an 8-character boundary (BUG-144, in the editor). Regular expressions and XPath are not offered: the script generators have no extractor for them. Without a change in the editor, the scripts are the same.
+- A new recording starts the Correlate table's filters again (To review).
+
+#### The Correlate table (Script Studio in steps, part 2)
+
+- Step 2 shows the Correlation Advisor's findings as one table: tick, name (editable), what it is, the value and its length, comes from, sent back in, confidence with the reason. High values come ticked when the step opens. Search, type and confidence filters; To review / In the script / Skipped / All; Select all high, Clear selection, Skip / Put back, Add manual correlation, and Can't find a value? (Find a value, Paste & Detect, the second recording). Nothing reaches the script before Add n to the script; leaving the step with ticked values asks (Not now keeps them). The engine's cards stay one click away (Cards), with the list options. The same engine calls as the cards: the scripts are the same.
+
+#### Script name and think time (Script Studio in steps, part 1b)
+
+- Step 1 has a settings bar above the filters. **Script name**: the ZIP and the .usr file take it (letters, numbers and underscores; empty keeps the default name, WebHttpScript_Correlated / DevWebScript_Correlated). **Think time between transactions**: Fixed (3 s by default, as before, or any number of seconds), As recorded (the pause in the recording, in whole seconds) or None; remembered per browser. Nothing changes in the script until you choose something else.
+
+#### Script Studio in four steps (Script Studio in steps, part 1)
+
+- The workspace now has a step line under the file bar: **1 Requests** (filters, Domains, Requests and the script, as before), **2 Correlate** (the Correlation Advisor, the whole width), **3 Test data** (the table, the whole width) and **4 Download** (what is worth a look, the files in the ZIP and Download ZIP). Each step says what is waiting (for example "4 values to review"); Next / Back move between them and no step blocks another. Download ZIP and Ready to download? stay in the file bar on every step. Every link that opened a tab before (Ready to download?, request details, Show an example) opens its step; a new recording starts at step 1. The scripts and ZIP files are unchanged.
 
 #### Open another: an empty box for the next file
 
@@ -199,6 +439,117 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Portal
 
+#### Clear is now Start over
+
+- The top-bar button that resets the tool you are on (Script Studio, Postman / Bruno, JMeter) is called **Start over**, as in the Workload Modeller: it said Clear, beside Studio's own Open another. What it does is unchanged.
+- Postman / Bruno and JMeter: while the script or a domain is being renamed, its **Save** is the one main button; Download ZIP waits, outlined (the design review's one-main-button check).
+
+#### No sideways scroll on narrow screens; old styles removed; route tests
+
+- At 900 px and below the Home welcome band and the converters' top band were 2 px wider than the window, and the Results Analyser's band 12 px when its frame was 700 px wide or less (BUG-133). No portal page or tool frame scrolls sideways now, from 360 to 1300 px.
+- The portal page's own style block lost 204 rules (676 lines) that could no longer match anything — the old navigation bar, the old converter form and the old Home. Every element's computed style on every page state was compared before and after: identical.
+- `tests/unit/serverRoutes.test.js`: every server route at both addresses (the bare root and /converter), each with its own answer; the admin data never answers signed out.
+
+#### Admin pages: purple sign-in, every period in sight on a phone
+
+- The admin sign-in page uses the purple of every other page (it was still blue).
+- On a phone the period buttons (7 days … All time) wrap instead of running off the side, so All time can be reached.
+
+#### Home and Help: every tool in the picture, Plan the load, "In this section", FAQ topics
+
+- Home: the six tools in two rows of three, every card the same size (before: four, then two wide ones with a gap); the picture lists the LRE scenario (Vusers, pacing) among what comes out; "Your workflow" has **Plan the load** (Workload Modeller) before "Run the load test"; **Documentation** opens the tool guides (Overview) — it opened Quick Start, as the card beside it does.
+- Help: Quick Start has **Path F — Plan the load** (six paths, three to a row); a long section lists its own headings beside the text (**In this section**, on wide screens: it stays in view while you read and marks where you are; a click goes there); the FAQ has topics (General, Script Studio, Converters, Recording, Sign-in and security, Results) that show only their questions — every question stays, search finds them all.
+- No Help text was removed (word-by-word check against the Help before); every Home link and Help section works as before.
+- Regression tools: `regression-tests/tools/portal/` — `behave.js` (old portal against new: every Home link's destination, every Help section's words, the sidebar list, Previous / Next, search, the FAQ, the look) and `walk.js` (69 checks of the new parts, four widths).
+
+#### Script Studio: a large request-details window; the editor shows the whole response
+
+- A request's details open as a large window over the workspace, centred (as wide as 1440 px), moved by its bar.
+- The correlation editor never hides the value: a long response was cut at 200 000 characters even when the value (a token at the end of a sign-in answer) came after; now the whole body shows when the value is past the cut, and **Show all** shows the rest otherwise. A JSON response is **Formatted** (one value per line, as in the HAR Explorer) — **As sent** shows it as recorded; selecting a value works in both.
+
+#### Script Studio: the request details move
+
+- The request details pop-up moves by its bar, as every Script Studio window does; it stays where you put it for the next request, and a double-click on the bar puts it back below the file bar.
+
+#### Large screens: the recording view fills the width; request details a pop-up
+
+- Script Studio's live recording view (Start recording) filled the window on a laptop but shrank to one column of three on a screen 2200 px wide or more (916 px of 2560); it now spans the width (BUG-154).
+- A request's details open as a pop-up at every width. On screens 2400 px and wider they used to dock by themselves as a fourth panel, which looked like the pop-up was missing; **Dock** in their bar now chooses that (remembered).
+- Paste & Detect, Add Custom Correlation and Server rename opened underneath the request details (Paste & Detect opens from their Dynamic values tab); they now open on top (BUG-155).
+- The recording view's Fold all and Newest look like buttons.
+- The screen review now checks a fourth width (3840 px), that a screen fills a wide window (the content reaching at least 3/4 of the width), the live recording view and a request's details.
+
+#### Help and the guides brought up to date
+
+- Help: correlation in step 2 is a table — tick, then Add n to the script (Apply & Regenerate is the Cards view); Paste & Detect and the second recording are under Can't find a value?; two FAQ answers no longer mention an Analyse button. The Script Studio, converter, getting-started, troubleshooting, Workload Modeller and technical guides describe the four steps, the correlation editor, values made in the browser and generated UUIDs, What the script contains, Plan the load, the seeded VuGen random values and the HAR bookmarks. Development rules: a page change passes the design audit and the screen review.
+
+#### Buttons that look like buttons, pop-ups that close from outside
+
+- Buttons with words always show a button's outline: the design system's ghost buttons (Collapse all, Copy URL, Rename, All / None, Reset, Clear all …) had no border and read as plain text; link-style buttons (a request's #2 GET link, View all tools, Not set up yet?) are underlined. In Script Studio's Correlate table the row actions are buttons (Open, Take out, Put back, Skip, Options) and In the script is a state, not a button.
+- Every Script Studio pop-up closes with a click outside it (Test, a question, New transaction, every place a value is used), as the engine's pop-ups already did.
+- Nothing is hidden behind a panel's sideways scroll: Correlate's row actions stack in narrower windows (Take out was out of sight at 1366 px), the step bar keeps step 4 in view, and the request details' tabs wrap to a second row (Dynamic values was out of sight).
+- The screen review checks these on every screen from now on: a button that looks like text, a pop-up a click outside does not close (each pop-up it tested is listed), a control only reachable by scrolling a panel sideways — each check proved on a planted problem (`review.js --selftest`).
+
+#### Every screen reviewed, control by control
+
+- A review of every screen of every tool in a real browser — at 1100, 1280, 1366, 1920 and 2560 px, dark and light (210 screen checks): no control covered by another, no clipped text, every control named, keyboard focus visible on every control, no sideways scroll; the tool proves each check on planted problems first (`regression-tests/tools/audit/review.js --selftest`).
+- Fixed on the way: Script Studio scrolled sideways by 28 px in narrow windows when a long notice was shown; past steps in Script Studio's narrow step bar had no name for screen readers; Script Studio's step 1 resize bars now take the keyboard (arrow keys, Enter puts the width back), as the editor, the converters and the HAR Explorer do.
+
+#### The converters: every common sign-in is written (BUG-175), query strings right in DevWeb (BUG-177)
+
+- Basic, API key (in a header or in the address) and Digest are written in both formats, for Postman, Bruno and JMeter: the request's own sign-in or the collection's. Basic is made when the request is sent, so the user and the password can come from a data file.
+- An OAuth 2.0 token kept in the collection is sent by VuGen too. A kind the converter does not write for VuGen is said at the top of Action.
+- DevWeb: encoded values in an address (`%20`, `+`) are no longer encoded twice; a query key given more than once is kept.
+
+#### The converters: Bruno collections in every form (BUG-172 to BUG-174)
+
+- Bruno `.bru` files, the Bruno JSON export and a zipped Bruno folder (`.bru` or YAML files) are read completely: headers, bodies of every kind, sign-in, scripts, values read after a response, variables, path variables. The scripts are the same as from the same collection in Postman.
+- Sign-in, headers and scripts of the collection and of its folders are handed down to the requests.
+- One environment in the folder or export is used; with several, choose the environment file.
+- GraphQL requests (Postman and Bruno) are sent with their query and variables.
+
+#### The converters: a top band on the start page; a click anywhere on a file box
+
+- The start pages of Postman / Bruno and JMeter have the same top band as the other tools (name, one line, what goes in and what comes out).
+- A click anywhere on a file box opens the file window, in the start page and in **Files**; the buttons stay for the keyboard.
+
+#### The converters: path variables (BUG-171)
+
+- `/orders/:id` is sent with the value of the path variable (Postman, Bruno YAML, Bruno JSON): a fixed value, or the variable it holds — so a value read from an earlier response reaches the address. Before, `:id` itself was sent, in both formats.
+- A path variable without a value is listed under **Values** as needing one; type it there.
+- Characters that would end the path (a space, `?`, `#`) are encoded, as Postman does. A collection without path variables gives the same script as before.
+
+#### The converters: panels that hide and resize, a calmer top
+
+- Postman / Bruno and JMeter, What the script contains: Servers, Requests and Files · Values can be hidden to a rail and resized (drag the bar between two, or its arrow keys; double-click puts it back) — remembered in the browser, the last panel shown always stays; the panels fill the window's height. Narrow windows stack them as before.
+- One warning instead of two: the values nothing gives a value, with the servers among them named. The summary bar appears only when it has something to say (a change not applied, requests left out).
+
+#### The converters: environment, values, thread groups and Plan the load
+
+- Postman / Bruno: the settings strip shows the environment file with Choose / Change and Remove (the panel's own file box, kept in step); a new or removed environment is applied with Update the script.
+- Values tab: Give a value / Change the value for a value with no value, an empty one, or one from the environment, collection or test plan — it goes where the script reads it (the collection's or test plan's own variable when it has one, else the environment); "Given here" marks it; Use the file's value takes it back.
+- JMeter: each thread group's users, ramp-up, hold time and loops (setUp / tearDown named) under its name in the request list; the workload workbook (Include / Leave out) in the settings strip.
+- Plan the load in Workload Modeller: hands the generated ZIP to the Workload Modeller in the portal (every script filled in, as if chosen there); the ZIP is then kept in the browser so Download goes on working; a used or expired link converts again first.
+- Opening the same converter panel again (back from another tool) keeps its result; switching between Postman / Bruno and JMeter still clears it, as before.
+- Nothing changes without a choice (converter golden harness: every ZIP and every request identical).
+
+#### The converters: script settings and the values the requests send
+
+- Postman / Bruno and JMeter, What the script contains: a settings strip — Script name (the .usr of every script, the upload metadata, the JMeter workload workbook and the ZIP's file name) and Think time (the form's own choice, kept in step both ways) — and Rename on a server whose parameter the script writes (checked as in Script Studio: not a name the script or a value already uses). Applied with Update the script; Undo changes puts them back; the choice is kept over later updates.
+- Values tab beside Files: every variable the requests send or set, where its value comes from (set while it runs — by which request and extractor; environment, collection or test plan; a data file column; made by the tool; empty; no value), its value (hidden when the name looks secret) and the requests that send it (a click shows only them). Values nothing gives a value are named at the top.
+- Nothing changes without a choice: converter golden harness — every ZIP and every request identical; the answers only gain preview fields.
+
+#### The converters: choose what goes into the script
+
+- Postman / Bruno and JMeter: in What the script contains, every server, folder / thread group and request has a tick. Untick what the script should leave out, then Update the script: the same files and options are converted again without those requests (the panel's own Convert, with the numbers of the requests left out — dropped right after reading the collection or test plan). The view (filter, folds, file shown) stays; left-out requests stay listed, struck through, so they can be put back. A JMeter thread group with every request left out gets no script.
+- While a change is not applied, Download waits (a click points to Update the script); Undo changes and Put all back. When a kept request sends a value that only left-out requests set (a token, an id), a note names it and the requests — the script would send it empty.
+- A conversion without a choice is exactly as before (converter golden harness: every ZIP and request identical; the answers only gain each request's `out`, `sets`, `uses`). The transactions after a left-out request are numbered on, with no gap.
+
+#### The converters show what the script contains before the download
+
+- Postman / Bruno and JMeter: after a conversion, What the script contains shows the servers the requests call (addresses resolved with the collection and environment variables; one that is still a variable with no value is flagged, one a script or an extractor sets while it runs is marked so), every request grouped by folder or thread group (filter by name or address, a click on a server shows only its requests) and the generated files with their code — the panel layout of Script Studio. Read-only: the ZIP is exactly as before (converter golden harness: every ZIP and request identical; the answers only gain `preview`).
+- The download link works once and for 5 minutes: once used or expired, its button reads Convert again and converts the same files again.
+
 #### Changed
 
 - Documentation checked against the tools as they are now: README (sidebar groups, the tools' current features, CDP Recorder 0.3.0) and the local guides — the Recorder is part of Script Studio everywhere (feature catalogue, executive summary, architecture, code structure, developer, protocol and auth guides, deployment guide, diagrams), files read at once (no "Analyse & generate"), the collapse button at the top, the Workload Modeller in the catalogue and the index; the documentation site's coverage check gained the floating bar, Undo last mark, script ID, Leave out, the Workload Modeller and where the CDP Recorder keeps its setup.
@@ -206,7 +557,46 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 - Home: seven tool cards (four then three on wide screens). Sidebar: new group "Plan". Help: Workload Modeller section, contents entry, tools table row and What's New line. Usage statistics and the admin reports know the tool `workload` (counted in scripts).
 
+### Regression tools
+
+- `converter/walk.js`: the converter page clicked through as a user would (both tools, every control). `converter/harness.js` now records the form fields the page sends; before, the list was always empty, so "the same request" was not checked.
+- `audit/mock.js`: a mockup goes through the same checks as the real screens (the screen review and the design audit), plus: the main button on the screen without scrolling, cards and buttons that do not touch, no card cut off or covered by a floating bar (also at 1536 × 700, a 1920 screen at 125 %), and every item of an inventory on some screen.
+
+### Results Analyser
+
+#### One Export button, a lighter page, every control checked
+
+- One **Export** button with every format (Excel, Word, PDF, HTML, the result data and the redacted result data): the header is one row again on a 1366 laptop (230 → 177 px high).
+- Transactions: the SLA columns show once an SLA is set; **Set SLAs** opens a box beside each name (before: twelve empty boxes at the end of the table, off-screen on a laptop). Result and Apdex are added once an SLA is set. The boxes have names for screen readers.
+- Insights: the tab says "5 high" (before "5", while the Overview said "All findings (18)"); the severity counts filter the list (click again for all).
+- Charts: a row of the chart names jumps to each one; from 1600 px wide two charts stand side by side (the first and the tall ones full width).
+- The explanations keep their text and "How to read it" beside a thin line instead of a coloured box. Buttons with words have an outline (Collapse all, None, Detected, Transactions …); "Show chart" is a link; the switches (Steady state / Full run, the metric) are announced as pressed buttons. A date field shows its focus on its calendar button too.
+- The figures, tables, charts, findings and every export file are unchanged.
+- Regression tools: `regression-tests/tools/analyser/` — `serve.js` (the page from any version) and `behave.js` (old page against new: every tab, the drawer, settings, SLA, window, charts, every export file, and the look of every kind of element); the design review now covers every Analyser tab, the drawer and the settings, and its focus check moves the focus to a spare element (blur() left a date field's calendar button focused).
+
+### Converters
+
+#### A new page for Postman / Bruno and JMeter
+
+- The start page has three boxes for the files and one Convert button. Then one screen shows the script: domains, requests, values and code.
+- Every choice — format, one script or several, think time, a request left out, a name, a value — changes the script at once (a conversion takes 20 to 200 ms). Undo and Redo; a failed update keeps the last script and every choice; Download always gives what is shown.
+- Domains have their own panel. The parameter of every domain can be renamed, also a variable of the environment or collection, and its address changed.
+- Values are in groups that fold; those that need one are typed in the list. A click on a request shows its code; the Request tab shows its headers, body, scripts and values.
+- The script's name is the page's title: click it to rename. Each converter keeps its own files and script; Clear clears the open one, with Undo.
+- The conversion limit is 600 per 5 minutes per address (60 before), as each choice is a conversion; updates are not counted as uses.
+- README.md and ANALYSIS.md in the ZIP no longer hold folders of the server or values of the environment.
+
 ### Script generation
+
+#### Converters: order, data files, content type
+
+- The script keeps the order of the collection or test plan. Requests in a sub-folder (Postman / Bruno) or inside an If / Loop controller (JMeter, single script) ran after everything outside it.
+- JMeter: an uploaded CSV file is found by every script that reads it, also when the test plan names it with a folder; per thread group it lies in each script folder.
+- DevWeb: a JSON body without its own Content-Type is sent as JSON (it went out as form fields); form bodies get their Content-Type too.
+- VuGen: multipart (form-data) bodies are written (they were left out); text and XML bodies, SOAP among them, keep their spaces and get their own content type.
+- DevWeb: a JSON body under another JSON content type (application/vnd.api+json …) is sent as JSON; a multi-line text or XML body is sent exactly as it is.
+- DevWeb: two requests with one name are two transactions.
+- Counts: each value once, every thread group, also for Postman multi-script. A value the script makes itself is no longer listed as having no value. The answers hold no server folders.
 
 #### Sign-in (NTLM, Kerberos, Basic)
 

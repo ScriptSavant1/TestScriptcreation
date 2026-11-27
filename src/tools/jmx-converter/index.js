@@ -11,6 +11,9 @@
 
 'use strict';
 
+const { applyScriptName, noteGenerated, applyValues, applyVarNames } = require('../../core/scriptSettings');
+const { runtimeNames } = require('../../web/convertPreview');
+const { keepSelected, readLeaveOut } = require('../../core/requestSelection');
 const path                  = require('path');
 const fs                    = require('fs').promises;
 const JmxParser             = require('../../parsers/jmxParser');
@@ -42,13 +45,16 @@ class JmxConverter {
   async convert() {
     // 1. Parse JMX
     const parser       = new JmxParser(this.options.inputFile, this.options);
-    const requests     = await parser.parse();
+    const parsed       = await parser.parse();
     const metadata     = parser.getMetadata();
     const collection   = parser.getCollection();
+    // the script name chosen on the page (none → the test plan's own name)
+    applyScriptName(collection, this.options.scriptName);
+    if (this.options.scriptName) metadata.name = this.options.scriptName;   // the workload workbook too
     const threadGroups = parser.getThreadGroups();
     const csvDataSets  = parser.getCsvDataSets();
 
-    if (!requests.length) {
+    if (!parsed.length) {
       const tags = parser.getDiagnosticTags();
       const tgTags   = tags.filter(t => /ThreadGroup/i.test(t));
       const samplers = tags.filter(t => /Sampler/i.test(t) && t !== 'JSR223Sampler' && t !== 'BeanShellSampler');
@@ -66,6 +72,9 @@ class JmxConverter {
       throw new Error(`No HTTP requests found in this JMX file.${hint}`);
     }
 
+    // the requests the user left out on the page (by number) are dropped here, before anything reads the list
+    const requests = keepSelected(parsed, this.options.leaveOut);
+
     // 2. Resolve CSVDataSet filenames that reference JMX variables
     //    e.g. filename="{{csvFile1}}" where csvFile1="users.csv" in UDVs
     //    Must run BEFORE filterJmxCollectionVars removes the path variables.
@@ -75,6 +84,9 @@ class JmxConverter {
     //     the uploaded CSV file (JMeter's own behaviour: first row = headers
     //     when variableNames is blank).
     await this.enrichCsvVariableNames(csvDataSets);
+
+    // 2c. The scripts name an uploaded data file as the ZIP holds it (test plans write "data/users.csv", "C:/…/users.csv").
+    this.nameUploadedCsvFiles(csvDataSets);
 
     // 3. Remove JMX-internal variables from the collection so they never reach
     //    the generator's classifyVariables().  Without this, vars like
@@ -87,6 +99,13 @@ class JmxConverter {
     this.injectCsvVariables(csvDataSets, environmentVars);
     this.injectRequestVariables(requests, environmentVars);
     this.injectProxyVariables(collection, environmentVars);
+    // values given on the page go where the script reads them (src/core/scriptSettings.js applyValues; none → as before)
+    Object.assign(environmentVars, applyValues(collection, environmentVars, this.options.values));
+    // the domains' variables under the names chosen on the page (none → as before)
+    const csvNames = csvDataSets.flatMap((ds) => String(ds.variableNames || '').split(',').map((x) => x.trim()).filter(Boolean));
+    const renamed = applyVarNames({ requests: parsed, collection, environmentVars, threadGroupVars: parser.threadGroupVars, taken: [...runtimeNames(parsed), ...csvNames] }, this.options.varNames);
+    // what the web page's preview shows (src/web/convertPreview.js) — nothing below reads it
+    this.previewSource = { requests: parsed, leftOut: readLeaveOut(this.options.leaveOut), collection, environmentVars, renamed, given: Object.keys(this.options.values || {}) };
 
     // 3. Prepare root output dir
     await fs.mkdir(this.options.outputDir, { recursive: true });
@@ -140,6 +159,7 @@ class JmxConverter {
       throw new Error(`Generator class ${GeneratorClass.name} does not expose a generate() method. Check that the module exported correctly.`);
     }
     const { script, analysis } = await generator.generate(this.options.outputDir);
+    noteGenerated(this.previewSource, generator, analysis);
 
     if (!isWebHttp) {
       const scriptPath = path.join(this.options.outputDir, 'main.js');
@@ -171,10 +191,13 @@ class JmxConverter {
     const GeneratorClass = isWebHttp ? WebHttpScriptGenerator : AdvancedScriptGenerator;
 
     const tgRequestsMap = parser.getThreadGroupRequests();
+    const kept          = new Set(requests);   // the requests left in (all, unless some were left out on the page)
     const scripts       = [];
     let   firstAnalysis = null;
+    const total = { requests: 0, uses: 0, values: new Set(), params: new Set() };   // every thread group
 
-    for (const [tgName, tgReqs] of tgRequestsMap) {
+    for (const [tgName, tgAll] of tgRequestsMap) {
+      const tgReqs = tgAll.filter(r => kept.has(r));
       if (!tgReqs.length) continue;
 
       // Resolve which thread group index these requests belong to
@@ -260,7 +283,12 @@ class JmxConverter {
         throw new Error(`Generator class ${GeneratorClass.name} does not expose a generate() method. Check that the module exported correctly.`);
       }
       const { script, analysis } = await generator.generate(tgOutputDir);
+      noteGenerated(this.previewSource, generator, analysis);
       if (!firstAnalysis) firstAnalysis = analysis;
+      total.requests += tgReqs.length;
+      total.uses     += (analysis.correlations && analysis.correlations.totalCorrelations) || 0;
+      for (const c of generator.correlations || []) total.values.add(c.name);
+      for (const name of (generator.parameters && generator.parameters.keys()) || []) total.params.add(name);
 
       if (!isWebHttp) {
         await fs.writeFile(path.join(tgOutputDir, 'main.js'), script, 'utf8');
@@ -270,6 +298,9 @@ class JmxConverter {
       if (tgCsvDataSets.length && this.options.useParameterization && !isWebHttp) {
         await this.generateCsvParameterFiles(tgCsvDataSets, false, tgOutputDir);
       }
+
+      // the data files this thread group reads, next to its script (uploaded ones; the copy at the top of the ZIP stays)
+      await this.copyUploadedCsvFiles(tgCsvDataSets, tgOutputDir);
 
       // Per-thread-group WLM Excel (only when we have metadata for this group)
       if (this.options.generateWlmExcel && tgMeta) {
@@ -303,7 +334,12 @@ class JmxConverter {
       outputDir:   this.options.outputDir,
       multiScript: true,
       scripts,
-      analysis:    firstAnalysis,
+      analysis:    firstAnalysis && {
+        ...firstAnalysis,
+        requests:     { ...firstAnalysis.requests, total: total.requests },
+        correlations: { ...firstAnalysis.correlations, totalCorrelations: total.uses, totalValues: total.values.size },
+        parameters:   { ...firstAnalysis.parameters, totalParameters: total.params.size },
+      },
       metadata,
       threadGroups,
       csvDataSets,
@@ -544,6 +580,34 @@ class JmxConverter {
         });
       }
       await fs.writeFile(ymlPath, ymlContent, 'utf8');
+    }
+  }
+
+  /**
+   * An uploaded data file (found by its name, upper / lower case alike) is named in the scripts as the ZIP holds it:
+   * the name alone, no folder. ds.uploadedName keeps the uploaded name for the dependency report. A file that was not
+   * uploaded keeps the test plan's own path.
+   */
+  nameUploadedCsvFiles(csvDataSets) {
+    const paths = this.options.csvFilePaths || {};
+    const byName = new Map(Object.keys(paths).map((k) => [path.basename(k).toLowerCase(), k]));
+    for (const ds of csvDataSets) {
+      const name = String(ds.filename || '').replace(/\\/g, '/').split('/').pop().trim().toLowerCase();
+      const uploaded = name && byName.get(name);
+      if (!uploaded) continue;
+      ds.uploadedName = uploaded;
+      ds.filename     = path.basename(paths[uploaded]);
+    }
+  }
+
+  /** The uploaded data files of these data sets, written into a script's folder. */
+  async copyUploadedCsvFiles(csvDataSets, outputDir) {
+    const paths = this.options.csvFilePaths || {};
+    const done = new Set();
+    for (const ds of csvDataSets) {
+      if (!ds.uploadedName || done.has(ds.filename)) continue;
+      done.add(ds.filename);
+      await fs.writeFile(path.join(outputDir, ds.filename), await fs.readFile(paths[ds.uploadedName]));
     }
   }
 }

@@ -6,6 +6,8 @@
  * Config files delegated to: WebHttpMandatoryFilesGenerator
  */
 
+const { looksLikeJson, impliedContentType, escapeCString } = require("../../core/utils");
+const { requestAuth, authOf, signInHost } = require("../../core/requestAuth");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -18,6 +20,7 @@ const _u = require("../../core/utils");
 const _vc = require("../../core/variableClassifier");
 const _vugen = require("../../core/vugenCodegen");
 const HostParams = require("../../web/public/shared/host-params");
+const ScriptSettings = require("../../core/scriptSettings");
 
 class WebHttpScriptGenerator {
   constructor(requests, collection, options = {}) {
@@ -67,7 +70,7 @@ class WebHttpScriptGenerator {
     this.largeValueIndex = new Map(); // "requestName::__raw__|__json__" → hash
     this.BASE64_THRESHOLD = 500;
 
-    // Transaction names collected during generateGroupedRequests() — passed to .usr file
+    // Transaction names collected during generateSequentialRequests() — passed to .usr file
     this.transactionNames = [];
 
     // Snapshot counter — increments for every web_url/web_custom_request in Action.c.
@@ -686,7 +689,10 @@ class WebHttpScriptGenerator {
       script: actionC,
       analysis: {
         requests: { total: this.requests.length },
-        correlations: { totalCorrelations: this.correlations.length },
+        correlations: {
+          totalCorrelations: this.correlations.length,   // every use
+          totalValues: new Set(this.correlations.map((c) => c.name)).size,   // each value once (the page's count)
+        },
         parameters: { totalParameters: this.parameters.size },
         authentication: { totalConfigs: 0 },
       },
@@ -1111,30 +1117,74 @@ class WebHttpScriptGenerator {
 #include "web_api.h"
 #include "lrw_custom_body.h"
 
-${jsr223Decls}static void gen_uuid(const char *param_name) {
-    lr_param_sprintf(param_name,
-        "%08x-%04x-4%03x-%04x-%04x%08x",
-        rand(),
-        rand() & 0xffff,
-        rand() & 0x0fff,
-        (rand() & 0x3fff) | 0x8000,
-        rand() & 0xffff,
-        rand());
+${jsr223Decls}/* Random values the script makes: rand() gives 15 bits, so each 16-bit group mixes two calls; seeded once per
+   Vuser (its time and Vuser id), so two Vusers do not make the same values. */
+static int perfx_r16(void) {
+    static int seeded = 0;
+    int id, scid;
+    char *group;
+    if (!seeded) {
+        lr_whoami(&id, &group, &scid);
+        srand((unsigned int)time(0) ^ (unsigned int)(id * 7919));
+        seeded = 1;
+    }
+    return ((rand() << 8) ^ rand()) & 0xffff;
 }
 
-static void gen_csrf_token(const char *param_name) {
+static unsigned int perfx_r32(void) {
+    return ((unsigned int)perfx_r16() << 16) | (unsigned int)perfx_r16();
+}
+
+static void gen_uuid(const char *param_name) {
+    lr_param_sprintf(param_name,
+        "%04x%04x-%04x-4%03x-%04x-%04x%04x%04x",
+        perfx_r16(), perfx_r16(),
+        perfx_r16(),
+        perfx_r16() & 0x0fff,
+        (perfx_r16() & 0x3fff) | 0x8000,
+        perfx_r16(), perfx_r16(), perfx_r16());
+}
+
+${this._basicHelper()}static void gen_csrf_token(const char *param_name) {
     lr_param_sprintf(param_name,
         "%08x%08x%08x%08x",
-        rand(), rand(), rand(), rand());
+        perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32());
 }
 
 static void gen_hex64(const char *param_name) {
     lr_param_sprintf(param_name,
         "%08x%08x%08x%08x%08x%08x%08x%08x",
-        rand(), rand(), rand(), rand(), rand(), rand(), rand(), rand());
+        perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32(), perfx_r32());
 }
 
 #endif
+`;
+  }
+
+  /** globals.h: "user:password" as Base64, for a Basic header — only when a request signs in so. */
+  _basicHelper() {
+    if (this.options.useAuthentication === false || !this.requests.some((r) => (requestAuth(r, this.collection) || {}).kind === "basic")) return "";
+    return `/* Basic sign-in: the credentials (their {parameters} filled in) as Base64, saved as a parameter. */
+static void perfx_basic(const char *param_name, const char *credentials) {
+    static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static char out[4100];
+    char *in = lr_eval_string((char *)credentials);
+    int n = (int)strlen(in), i, o = 0;
+    unsigned int v;
+    if (n > 3000) n = 3000;
+    for (i = 0; i < n; i += 3) {
+        v = ((unsigned int)(in[i] & 0xff)) << 16;
+        if (i + 1 < n) v |= ((unsigned int)(in[i + 1] & 0xff)) << 8;
+        if (i + 2 < n) v |= (unsigned int)(in[i + 2] & 0xff);
+        out[o++] = b64[(v >> 18) & 63];
+        out[o++] = b64[(v >> 12) & 63];
+        out[o++] = i + 1 < n ? b64[(v >> 6) & 63] : '=';
+        out[o++] = i + 2 < n ? b64[v & 63] : '=';
+    }
+    out[o] = 0;
+    lr_save_string(out, param_name);
+}
+
 `;
   }
 
@@ -1673,18 +1723,33 @@ ${sources}    LAST);
       ? `    // Windows (NTLM / Kerberos) sign-in for this server\n` +
         `    web_set_user("{username}", "{password}", "${this.applyHostVars(this.ntlmHost)}");\n\n`
       : "";
+    // Digest: the engine answers the server's question with these users — one per server
+    const digest = new Map();
+    if (this.options.useAuthentication !== false) for (const r of this.requests) {
+      const a = requestAuth(r, this.collection);
+      const host = a && a.kind === "digest" ? signInHost(r, this.variableMap) : "";
+      if (host && !digest.has(host)) digest.set(host, a);
+    }
+    // a sign-in the converter does not write is said once, not left out in silence
+    const missing = {};
+    if (this.options.useAuthentication !== false) for (const r of this.requests) {
+      const a = requestAuth(r, this.collection);
+      if (!a || a.kind !== "other" || /^(bearer|ntlm|kerberos)$/.test(a.type) || this.getAuthHeader(r)) continue;
+      if ((r.headers || []).some((h) => h && !h.disabled && /^authorization$/i.test(h.key || ""))) continue;
+      missing[a.type] = (missing[a.type] || 0) + 1;
+    }
+    const missingNote = Object.keys(missing).map((k) => `    // ${missing[k]} request${missing[k] === 1 ? " signs" : "s sign"} in with ${k.replace(/[^a-z0-9_-]/g, "")}: the converter does not write this kind for VuGen — add the header or the token request\n`).join("");
+    const digestSetup = digest.size
+      ? `    // Digest sign-in: the engine answers the server's question\n` + [...digest].map(([h, a]) => `    web_set_user("${escapeCString(this.replaceParameters(a.username))}", "${escapeCString(this.replaceParameters(a.password))}", "${this.applyHostVars(h)}");\n`).join("") + "\n"
+      : "";
 
     let code = `Action()
 {
 ${declBlock}    // Set in vuser_init: ${this._actionServerNote()}
 
-${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
+${missingNote ? missingNote + "\n" : ""}${ntlmSetup}${digestSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
 
-    if (this.options.useTransactions && this.options.groupByFolder) {
-      code += this.generateGroupedRequests();
-    } else {
-      code += this.generateSequentialRequests();
-    }
+    code += this.generateSequentialRequests();
 
     code += `
     return 0;
@@ -1724,62 +1789,15 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     return String(block || "").replace(/^( +)(?=\S)/gm, (m) => m + m);
   }
 
-  // ─── Request Grouping ────────────────────────────────────────────────────────
-
-  groupRequestsByFolder() {
-    const groups = new Map();
-    this.requests.forEach((req) => {
-      const folder = req.folder || "Default";
-      if (!groups.has(folder)) groups.set(folder, []);
-      groups.get(folder).push(req);
-    });
-    return groups;
-  }
+  // ─── Requests ────────────────────────────────────────────────────────────────
 
   /**
-   * Generate per-request transactions.
+   * Generate per-request transactions, in the order of the collection / test plan (a request in a sub-folder or
+   * controller stays where it is: one folder after the other ran it after everything outside its folder).
    *
-   * Each API request = one LR transaction: T{nn}_{RequestName}
-   * Counter is global across ALL folder groups (T01, T02 ... Tn).
-   * Folders remain as C comments for code readability — no outer transactions.
-   *
-   * Examples:
-   *   Folder Auth:      T01_Get_Access_Token,  T02_Refresh_Token
-   *   Folder Products:  T03_Get_Products,       T04_Create_Product
-   *   Sub-folder A/B:   T05_Get_Items  (uses sanitized request name)
-   *
-   *  * All transaction names collected in this.transactionNames for .usr file.
+   * Each API request = one LR transaction: T{nn}_{RequestName}; folders have no outer transaction.
+   * All transaction names are collected in this.transactionNames for the .usr file.
    */
-  generateGroupedRequests() {
-    const groups = this.groupRequestsByFolder();
-    let code = "";
-    let txCounter = 1;
-    this.transactionNames = []; // Reset — will hold ALL per-request tx names
-
-    const groupEntries = Array.from(groups.entries());
-    const total = groupEntries.reduce((n, [, reqs]) => n + reqs.length, 0);
-    groupEntries.forEach(([folder, requests], groupIndex) => {
-      requests.forEach((request, idx) => {
-        const txName = this.formatTransactionName(request.name, txCounter);
-        this.transactionNames.push(txName);
-        txCounter++;
-
-        // Per-request transaction wrapper
-        code += `    lr_start_transaction("${txName}");\n\n`;
-        code += this.generateRequestBlock(request, 1);
-        code += `\n    lr_end_transaction("${txName}", LR_AUTO);\n`;
-
-        // Think time between steps — none after the last one (the iteration pacing follows)
-        if (this.options.thinkTime > 0 && txCounter <= total) {
-          code += `\n    lr_think_time(${this.options.thinkTime});\n`;
-        }
-        code += "\n";
-      });
-    });
-
-    return code;
-  }
-
   generateSequentialRequests() {
     let code = "";
     let txCounter = 1;
@@ -2186,9 +2204,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
    * matches with or without a namespace — as JMeter's XPath extractor does by default. Checked with VuGen.
    */
   _vugenXpath(q) {
-    const s = String(q || "");
-    if (!/^(\/\/?[A-Za-z_][\w.-]*(\[\d+\])?)+$/.test(s)) return s;
-    return s.replace(/(\/\/?)([A-Za-z_][\w.-]*)/g, (m, sl, name) => `${sl}*[local-name()='${name}']`);
+    return _vugen.vugenXpath(q);   // the shared rule (Script Studio uses the same)
   }
 
   generateCorrelationRegistrations(request, indent) {
@@ -2342,9 +2358,11 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     }
 
     // Request-level headers (skip global ones — they're already persistent via auto-header)
+    const multipart = this._multipartParts(request).length > 0;   // its Content-Type holds the boundary: written with the body
     if (request.headers && Array.isArray(request.headers)) {
       request.headers.forEach((h) => {
         if (
+          !(multipart && h.key && h.key.toLowerCase() === "content-type") &&
           h.key &&
           h.value &&
           !h.disabled &&
@@ -2359,14 +2377,30 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
       (h) => h.key?.toLowerCase() === "authorization",
     );
     const authInGlobal = globalKeys.has("authorization");
-    if (!hasExplicitAuth && !authInGlobal) {
-      const authHeader = this.getAuthHeader(request);
-      if (authHeader) headers.push(authHeader);
+    let before = "";
+    {
+      // (switched off in the settings: Basic is not written; Bearer and API key headers are, as before)
+      const sign = requestAuth(request, this.collection);
+      if (sign && sign.kind === "apikey") {
+        // (in the address: applyQueryKeys)
+        if (sign.in === "header" && !headers.some((h) => h.key.toLowerCase() === sign.key.toLowerCase()) && !globalKeys.has(sign.key.toLowerCase())) headers.push({ key: sign.key, value: sign.value });
+      } else if (!hasExplicitAuth && !authInGlobal) {
+        if (sign && sign.kind === "basic") {
+          if (this.options.useAuthentication !== false) {
+          // made when the request is sent (globals.h): the user and the password may change every iteration
+          before = `${indent}perfx_basic("_basic_auth", "${escapeCString(this.replaceParameters(sign.username + ":" + sign.password))}");\n`;
+          headers.push({ key: "Authorization", value: "Basic {_basic_auth}" });
+          }
+        } else {
+          const authHeader = this.getAuthHeader(request);
+          if (authHeader) headers.push(authHeader);
+        }
+      }
     }
 
-    if (headers.length === 0) return "";
+    if (headers.length === 0) return before;
 
-    return headers
+    return before + headers
       .map((h) => {
         const hdrKey = h.key
           .split("-")
@@ -2395,8 +2429,8 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
   }
 
   getAuthHeader(request) {
-    const auth = request.auth || this.collection.auth;
-    if (!auth || !auth.type || auth.type === "noauth") return null;
+    const auth = authOf(request, this.collection);
+    if (!auth) return null;
 
     switch (auth.type) {
       case "bearer": {
@@ -2404,13 +2438,10 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
         if (token) return { key: "Authorization", value: `Bearer ${token}` };
         break;
       }
-      case "apikey": {
-        const keyName = this.getAuthValue(auth.apikey, "key");
-        const keyVal = this.getAuthValue(auth.apikey, "value");
-        const placement = this.getAuthValue(auth.apikey, "in");
-        if (keyName && keyVal && placement !== "query") {
-          return { key: keyName, value: keyVal };
-        }
+      case "oauth2": {
+        // a token kept in the collection is sent as it is; fetching one is a request of its own
+        const token = this.getAuthValue(auth.oauth2, "accessToken");
+        if (token) return { key: "Authorization", value: `${this.getAuthValue(auth.oauth2, "headerPrefix") || "Bearer"} ${token}` };
         break;
       }
     }
@@ -2430,6 +2461,8 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
 
     if (method === "GET" || method === "HEAD") {
       return this.generateWebUrl(request, url, snapshot, indent);
+    } else if (this._multipartParts(request).length) {
+      return this.generateWebSubmitData(request, url, method, snapshot, indent);
     } else {
       return this.generateWebCustomRequest(
         request,
@@ -2452,6 +2485,50 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     code += `${indent}    "Mode=HTTP",\n`;
     code += `${indent}    LAST);\n`;
     return code;
+  }
+
+  /** The parts of a multipart (form-data) body: [{ name, value, file, contentType }]; none for other bodies. */
+  _multipartParts(request) {
+    const body = request.body;
+    if (!body || body.mode !== "formdata") return [];
+    const parts = [];
+    for (const p of body.formdata || []) {
+      if (!p || !p.key || p.disabled) continue;
+      if (p.type !== "file") { parts.push({ name: p.key, value: p.value == null ? "" : String(p.value), contentType: p.contentType }); continue; }
+      const files = [].concat(p.src == null || p.src === "" ? p.value || p.key : p.src);
+      // the file lies next to the script (its name, no folder)
+      files.forEach((src) => parts.push({ name: p.key, value: String(src).split(/[\\/]/).pop(), file: true, contentType: p.contentType }));
+    }
+    return parts;
+  }
+
+  /**
+   * A multipart (form-data) body. POST: web_submit_data, which builds the parts and their boundary; a file part is read
+   * from the script folder. Other methods (web_submit_data sends POST only): the parts written into
+   * web_custom_request — text parts only, a file part is left to a comment.
+   */
+  generateWebSubmitData(request, url, method, snapshot, indent) {
+    const parts = this._multipartParts(request);
+    const text = (v) => this.escapeCBodyString(this.applyHostVars(this.replaceParameters(v)));
+    const files = [...new Set(parts.filter((p) => p.file).map((p) => p.value))];
+    let code = "";
+    if (method === "POST") {
+      if (files.length) code += `${indent}// Put ${files.join(", ").replace(/\*\//g, "")} into the script folder\n`;
+      code += `${indent}web_submit_data("${this.sanitizeCName(request.name)}",\n`;
+      code += `${indent}    "Action=${this.applyHostVars(url)}",\n`;
+      for (const a of ["Method=POST", "EncType=multipart/form-data", "RecContentType=application/json", "Referer=", `Snapshot=${snapshot}`, "Mode=HTTP"]) code += `${indent}    "${a}",\n`;
+      code += `${indent}    ITEMDATA,\n`;
+      for (const p of parts) code += `${indent}    "Name=${text(p.name)}", "Value=${text(p.value)}", ${p.file ? '"File=Yes", ' : ""}${p.contentType ? `"ContentType=${text(p.contentType)}", ` : ""}ENDITEM,\n`;
+      return code + `${indent}    LAST);\n`;
+    }
+    const boundary = "----PerfXFormBoundary";
+    if (files.length) code += `${indent}// ${method} with a file part (${files.join(", ").replace(/\*\//g, "")}): add the file by hand\n`;
+    code += `${indent}web_custom_request("${this.sanitizeCName(request.name)}",\n`;
+    code += `${indent}    "URL=${this.applyHostVars(url)}",\n`;
+    for (const a of [`Method=${method}`, "Resource=0", "RecContentType=application/json", "Referer=", `Snapshot=${snapshot}`, "Mode=HTTP", `EncType=multipart/form-data; boundary=${boundary}`]) code += `${indent}    "${a}",\n`;
+    const lines = parts.filter((p) => !p.file).map((p) => `--${boundary}\\r\\nContent-Disposition: form-data; name=\\"${text(p.name)}\\"${p.contentType ? `\\r\\nContent-Type: ${text(p.contentType)}` : ""}\\r\\n\\r\\n${text(p.value)}\\r\\n`);
+    code += `${indent}    "Body="\n` + lines.concat(`--${boundary}--\\r\\n`).map((l) => `${indent}        "${l}"`).join("\n") + ",\n";
+    return code + `${indent}    LAST);\n`;
   }
 
   generateWebCustomRequest(
@@ -2529,7 +2606,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
    * Returns:
    *   { body: string }     — inline "Body=..." attribute value
    *   { bodyFile: string } — "BodyFilePath=..." for large base64 or large JSON bodies
-   *   null                 — no body (formdata / empty)
+   *   null                 — no body (a multipart body is written by generateWebSubmitData)
    *
    * VuGen's BodyFilePath= reads the file at runtime and performs {param} substitution
    * within it, so {varName} LR parameter references work inside body files.
@@ -2537,7 +2614,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
   generateBodyForC(request) {
     if (!request.body) return null;
 
-    const { mode, raw, urlencoded, formdata } = request.body;
+    const { mode, raw, urlencoded } = request.body;
 
     if (mode === "raw" && raw) {
       // Case 1: Entire raw body was detected as large base64 — use BodyFilePath
@@ -2567,7 +2644,8 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
       } catch {
         // JSON.parse failed (unquoted {{variables}} or non-standard body).
         // Compact first to strip pretty-printing whitespace.
-        withParams = this.replaceParameters(this._compactJsonBody(raw));
+        // Only JSON: in a text or XML body the spaces are part of what is sent.
+        withParams = this.replaceParameters(looksLikeJson(raw) ? this._compactJsonBody(raw) : raw);
       }
       const lines = this._splitBodyFields(withParams);
       if (lines && lines.length > 1) {
@@ -2584,16 +2662,6 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
             `${encodeURIComponent(p.key)}=${this.vuGenEncodeValue(p.value || "")}`,
         );
       return { body: parts.join("&") };
-    }
-
-    if (mode === "formdata" && formdata) {
-      // Multipart/form-data cannot be represented in web_custom_request Body=.
-      // VuGen Web HTTP/HTML does not support multipart uploads via the C API body string.
-      // The request is generated without a body — adapt manually in Action.c if needed.
-      console.warn(
-        `  ⚠  "${request.name}": multipart/form-data body cannot be represented in web_custom_request Body= — request generated without body. Convert to raw JSON or urlencoded manually in Action.c.`,
-      );
-      return null;
     }
 
     return null;
@@ -2810,7 +2878,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
         }
         if (valExpr.includes("__VUGEN_UUID__")) {
           statements.push(
-            `${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`,
+            `${indent}gen_uuid("_uuid");`,   // globals.h: a version 4 UUID, seeded once per Vuser
           );
           statements.push(
             `${indent}lr_save_string(lr_eval_string("{_uuid}"), "${varName}");`,
@@ -2848,7 +2916,7 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
         }
         if (valExpr.includes("__VUGEN_UUID__")) {
           statements.push(
-            `${indent}lr_param_sprintf("_uuid", "%08x-%04x-%04x-%04x-%012x", rand(), rand()&0xFFFF, rand()&0xFFFF, rand()&0xFFFF, rand());`,
+            `${indent}gen_uuid("_uuid");`,   // globals.h: a version 4 UUID, seeded once per Vuser
           );
           statements.push(`${indent}${localVar} = lr_eval_string("{_uuid}");`);
           declaredLocalVars.add(localVar);
@@ -2927,6 +2995,11 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     const names = HostParams.defaultNames(sorted.map(([h]) => h));
     this.hostVarMap = new Map();
     for (const [host] of sorted) this.hostVarMap.set(host, names[host]);
+    // names chosen on the page after a conversion (src/core/scriptSettings.js); none → the defaults above
+    ScriptSettings.applyServerNames(this.hostVarMap, this.options.serverNames, [
+      ...(this.variableMap ? [...this.variableMap.keys()] : []),
+      ...Object.keys(this.options.environmentVars || {}),
+    ]);
   }
 
   /**
@@ -3039,11 +3112,10 @@ ${ntlmSetup}${this._indent4(dpopSetup)}${this._indent4(jwtSetup)}`;
     );
     if (ct) return ct.value;
 
-    // Infer from body mode
-    if (request.body?.mode === "raw") return "application/json";
-    if (request.body?.mode === "urlencoded")
-      return "application/x-www-form-urlencoded";
-    return null;
+    // a raw body left empty: as before (with no EncType the engine sends a form type)
+    if (request.body?.mode === "raw" && !String(request.body.raw || "").trim()) return "application/json";
+    // what Postman / Bruno add by themselves
+    return impliedContentType(request.body);
   }
 
   // ─── Undeclared Parameter Scanner ───────────────────────────────────────────

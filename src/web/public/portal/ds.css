@@ -136,8 +136,9 @@ button, input, select, textarea { font-family: inherit; }
 .ds-btn svg { width: 16px; height: 16px; flex: none; }
 .ds-btn-primary { background: var(--ds-accent); border-color: var(--ds-accent); color: #fff; }
 .ds-btn-primary:hover { background: var(--ds-accent-hover); border-color: var(--ds-accent-hover); color: #fff; }
-.ds-btn-ghost { background: transparent; border-color: transparent; color: var(--ds-text-2); }
-.ds-btn-ghost:hover { background: var(--ds-surface-2); border-color: transparent; color: var(--ds-text); }
+.ds-btn-ghost { background: transparent; border-color: var(--ds-border-2); color: var(--ds-text-2); }   /* words: an outline, so it reads as a button */
+.ds-btn-ghost:hover { background: var(--ds-surface-2); border-color: var(--ds-text-3); color: var(--ds-text); }
+.ds-btn-ghost:is(.ss-icon, .icon-btn, .icon, .hx-hide) { border-color: transparent; }   /* an icon alone needs no outline */
 .ds-btn-sm { height: 32px; padding: 0 12px; border-radius: var(--ds-r-sm); font-size: var(--ds-fs-xs); }
 .ds-btn-lg { height: 46px; padding: 0 22px; border-radius: var(--ds-r-tile); font-size: var(--ds-fs-md); }
 .ds-btn:disabled, .ds-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }

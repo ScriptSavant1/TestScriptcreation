@@ -136,13 +136,16 @@
       h += '<p class="ds-note hx-hint">Under load, <b>Waiting for the server (TTFB)</b> is the part that grows — it is the server\'s own time. DNS, connection and TLS happen once per new connection.</p>';
     }
     return '<div class="hx-dh">' + (o.top || "") +
-      '<div class="hx-durl"><span class="hx-meth ' + methodClass(e.method) + '">' + esc(e.method) + "</span><code>" + hl(esc(e.url)) + "</code></div>" +
+      '<div class="hx-durl"><span class="hx-meth ' + methodClass(e.method) + '">' + esc(e.method) + "</span><code>" + breaks(hl(esc(e.url))) + "</code></div>" +
       '<div class="hx-dsum"><span>#<b>' + o.n + '</b></span><span>Status <b class="st s' + String(e.status).charAt(0) + '">' + (rs.status || "—") + " " + esc(rs.statusText || "") + "</b></span><span>Type <b>" + o.type + "</b></span><span>Size <b>" + size(e.size) + "</b></span><span>Time <b>" + ms(o.dur) + "</b></span>" +
       '<span class="r"><button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" data-copy="url">' + ICON_COPY + 'Copy URL</button><button type="button" class="ds-btn ds-btn-sm ds-btn-ghost" data-copy="curl">' + ICON_COPY + "Copy as cURL</button></span></div>" +
       (o.out ? '<p class="hx-left"><b>Left out of the script:</b> ' + esc(o.why) + "</p>" : "") +
       '<div class="hx-tabs" role="tablist">' + tabs.map(function (x) { return '<button type="button" role="tab" class="hx-tab" data-tab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + (x[2] ? "<i>" + x[2] + "</i>" : "") + "</button>"; }).join("") + "</div></div>" +
       '<div class="hx-db">' + h + "</div>";
   }
+
+  // an address breaks after / ? & = only (never in the middle of a word): a <wbr> hint there, outside tags and entities
+  function breaks(h) { return h.replace(/(<[^>]*>|&[a-z#0-9]+;)|([\/?&=])(?!\/)/gi, function (m, tag, ch) { return tag || ch + "<wbr>"; }); }
 
   function copy(raw, kind, mask, url) {
     var rq = (raw && raw.request) || {};
@@ -152,6 +155,18 @@
     return "curl -X " + (rq.method || "GET") + " " + q(rq.url) + (rq.headers || []).filter(function (h) { return h.name.charAt(0) !== ":"; }).map(function (h) { return " \\\n  -H " + q(h.name + ": " + shown(h.name, h.value)); }).join("") +
       (rq.postData && rq.postData.text ? " \\\n  --data-raw " + q(mask ? maskBody(rq.postData.text) : rq.postData.text) : "");
   }
+
+  // the page preview shows its focus: the browser does not match :focus on a sandboxed frame once the keyboard is
+  // inside it, so the page marks the frame when it loses the focus to it (class is-focus, request-details.css)
+  function watchFrameFocus(win) {
+    if (!win || !win.addEventListener || win.__rdFrameFocus) return;
+    win.__rdFrameFocus = true;
+    var doc = win.document, clear = function () { var x = doc.querySelectorAll(".hx-frame.is-focus"); for (var i = 0; i < x.length; i++) x[i].classList.remove("is-focus"); };
+    var mark = function () { var a = doc.activeElement; clear(); if (a && a.classList && a.classList.contains("hx-frame")) a.classList.add("is-focus"); };
+    win.addEventListener("blur", function () { mark(); setTimeout(mark, 0); });   // at once, and again once the browser has moved the focus
+    win.addEventListener("focus", clear);
+  }
+  if (typeof window !== "undefined") watchFrameFocus(window);
 
   return { html: html, copy: copy, TABS: TABS, SECRET: SECRET, bodyText: bodyText, pretty: pretty, size: size, ms: ms, esc: esc, short: short, methodClass: methodClass, maskBody: maskBody, ICON_COPY: ICON_COPY };
 });

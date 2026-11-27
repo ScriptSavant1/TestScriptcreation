@@ -30,10 +30,15 @@ export function planChips(plan, started) {
   });
 }
 
-/** The place of the bar: dock top / bottom, pos left / center / right — anything else falls back to top, center. */
+/** The place of the bar: dock top / bottom, pos left / center / right — anything else falls back to top, center. Where
+ *  the user dropped it: x, y = its top-left corner as a share of the window (0 … 1), kept as it is; dock / pos then say
+ *  which half and third it is in (the details open towards the middle). No x / y: the fixed place, as before. */
 export function barPrefsOf(value) {
   const v = value && typeof value === "object" ? value : {};
-  return { dock: v.dock === "bottom" ? "bottom" : "top", pos: v.pos === "left" || v.pos === "right" ? v.pos : "center" };
+  const out = { dock: v.dock === "bottom" ? "bottom" : "top", pos: v.pos === "left" || v.pos === "right" ? v.pos : "center" };
+  const share = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
+  if (share(v.x) && share(v.y)) { out.x = Math.round(v.x * 10000) / 10000; out.y = Math.round(v.y * 10000) / 10000; }
+  return out;
 }
 
 /** Where Stop saves — shown in the bar's details. */
@@ -109,6 +114,7 @@ function barClient(cfg) {
 .fb.left { left: 12px; transform: none; } .fb.right { left: auto; right: 12px; transform: none; }
 .fb.bottom { top: auto; bottom: 12px; }
 .pill { display: flex; align-items: center; gap: 10px; background: #17142a; border: 1px solid #3a3460; border-radius: 99px; padding: 6px 8px 6px 12px; box-shadow: 0 10px 30px rgba(10,6,40,.35); }
+.pill { cursor: grab; touch-action: none; } .pill input { cursor: text; }
 .grip { width: 10px; height: 18px; flex: none; background-image: radial-gradient(#b8b2d9 1.2px, transparent 1.3px); background-size: 5px 5px; opacity: .7; cursor: grab; touch-action: none; }
 .rec { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #fca5a5; letter-spacing: .03em; flex: none; }
 .rec i { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; animation: pulse 1.4s infinite; }
@@ -174,8 +180,15 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
 @container (max-width: 480px) { .pill { gap: 6px; padding-left: 10px; } .pill .time { display: none; } .box { min-width: 96px; } .narrow .tiny-only { display: inline; } }
 .hide { visibility: hidden !important; }
 `;
-  try { const sheet = new CSSStyleSheet(); sheet.replaceSync(CSS); root.adoptedStyleSheets = [sheet]; }
-  catch (e) { const st = document.createElement("style"); st.textContent = CSS; root.append(st); }
+  // the bar's look. A pop-up starts as an empty page and keeps its window when the real page comes, so the bar made
+  // for the empty page is moved into the real one (raise) — and a constructed sheet only works in the page it was made
+  // for: the browser drops it. The bar then makes it again for the page it is in (0.3.3).
+  function styleRoot() {
+    if (root.adoptedStyleSheets.length || root.querySelector("style")) return;
+    try { const sheet = new CSSStyleSheet(); sheet.replaceSync(CSS); root.adoptedStyleSheets = [sheet]; }
+    catch (e) { const st = document.createElement("style"); st.textContent = CSS; root.prepend(st); }
+  }
+  styleRoot();
   const wrap = h("div", { class: "wrap" });
   root.append(wrap);
   // keys typed in the bar never reach the application's own shortcuts; its clicks never close the application's menus
@@ -197,6 +210,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
     try { const m = document.querySelectorAll("dialog:modal"); modal = m.length ? m[m.length - 1] : null; } catch (e) { /* :modal not supported */ }
     const parent = modal || document.documentElement;
     if (parent && host.parentNode !== parent) { parent.append(host); topSig = ""; }
+    styleRoot();   // moved into another page (a pop-up's real page): its look again
     if (!canPop || !host.isConnected) return;
     try {
       const others = document.querySelectorAll(":modal, :popover-open, :fullscreen").length - (host.matches(":popover-open") ? 1 : 0);
@@ -244,7 +258,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
     input.value = typed;
     input.dataset.box = "1";
     return h("div", { class: "pill", role: "toolbar", "aria-label": "CDP Recorder" }, [
-      h("span", { class: "grip", title: "Drag to move the bar — top or bottom, left, middle or right" }),
+      h("span", { class: "grip", title: "Drag the bar anywhere (here, or by any part that is not a button); double-click puts it back at the top" }),
       h("span", { class: "rec" }, [h("i"), "REC"]), h("span", { class: "time" }, clock()), h("span", { class: "sep" }),
       h("span", { class: "txn" }, [h("small", null, "Running"), h("b", { title: live ? live.name : "no transaction" }, live ? live.name : "—")]),
       h("label", { class: "box", title: "Type a name and press Enter: the running transaction ends, this one starts." + (src === "planned" ? " Enter on an empty box starts the next planned step." : src ? " Tab takes the name from the page title." : "") },
@@ -256,7 +270,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
         h("span", { class: "settle" + (S.settled ? "" : " busy"), title: S.settled ? "Settled — safe to start the next transaction" : "Still loading — wait a moment before the next mark" }, [h("i"), S.settled ? "Settled" : "Loading"])]),
       h("button", { class: "b stop", title: "Stop and save the recording", onclick: stop }, [icon("stop"), h("span", { class: "lbl" }, "Stop and save")]),
       h("button", { class: "b icon" + (S.warning ? " warn" : ""), "aria-expanded": String(V.open), title: V.open ? "Hide the details" : "Transactions, rename, Undo, planned steps", onclick: () => { V.open = !V.open; V.scrollLive = V.open; draw(); } }, icon(V.open ? "up" : (S.warning ? "warn" : "chev"))),
-      h("button", { class: "b icon dockb", title: S.prefs.dock === "bottom" ? "Move the bar to the top" : "Move the bar to the bottom", onclick: () => prefs({ dock: S.prefs.dock === "bottom" ? "top" : "bottom" }) }, icon(S.prefs.dock === "bottom" ? "dockTop" : "dockBottom")),
+      h("button", { class: "b icon dockb", title: S.prefs.dock === "bottom" ? "Move the bar to the top" : "Move the bar to the bottom", onclick: () => prefs({ dock: S.prefs.dock === "bottom" ? "top" : "bottom", x: undefined, y: undefined }) }, icon(S.prefs.dock === "bottom" ? "dockTop" : "dockBottom")),
       h("button", { class: "b icon minb", title: "Minimise to a small REC dot (Alt+Shift+H hides the bar completely)", onclick: () => { V.min = true; V.open = false; draw(); } }, icon("min")),
     ]);
   }
@@ -281,7 +295,7 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
       h("span", { class: "tiny-only" }, [h("b", null, clock()), " · "]),
       "Running ", h("b", null, S.active ? S.active.name : "—"), " · ", h("b", null, String(S.activeCount)), " active · ", h("b", null, String(S.background)), " background",
       h("span", { class: "small-only" }, [
-        h("button", { class: "b", onclick: () => prefs({ dock: S.prefs.dock === "bottom" ? "top" : "bottom" }) }, S.prefs.dock === "bottom" ? "Move to the top" : "Move to the bottom"),
+        h("button", { class: "b", onclick: () => prefs({ dock: S.prefs.dock === "bottom" ? "top" : "bottom", x: undefined, y: undefined }) }, S.prefs.dock === "bottom" ? "Move to the top" : "Move to the bottom"),
         h("button", { class: "b", onclick: () => { V.min = true; V.open = false; draw(); } }, "Minimise")])]));
     kids.push(h("h4", null, "Transactions"));
     kids.push(all.length ? list : h("div", { class: "note" }, "None yet — type a name in the box and press Enter."));
@@ -296,6 +310,8 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
   }
   function draw() {
     if (V.gone || !S) return;
+    if (V.dragging) { V.redraw = true; return; }   // the state comes every 0.7 s: redrawing during a drag replaced the element
+                                                   // being dragged, and the bar fell back — drawn when the drag ends
     const old = wrap.querySelector(".tl"), keep = old ? old.scrollTop : 0;
     const focused = root.activeElement, wasBox = focused && focused.dataset && focused.dataset.box, caret = wasBox ? focused.selectionStart : 0;
     const renFocus = focused && focused.closest && focused.closest(".tl") && focused.tagName === "INPUT" ? focused.value : null;
@@ -304,12 +320,17 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
     if (!S.recording) {
       fb.append(h("div", { class: "pill" }, [h("span", { class: "rec" }, [h("i"), "REC"]), h("span", null, S.savedText || "Saving the recording…")]));
     } else if (V.min) {
-      fb.append(h("span", { class: "dot", role: "button", tabindex: "0", title: "Open the bar", onclick: () => { V.min = false; draw(); } }, [h("span", { class: "rec" }, [h("i"), "REC"]), h("span", { class: "time" }, clock())]));
+      fb.append(h("span", { class: "dot", role: "button", tabindex: "0", title: "Open the bar", onclick: () => { if (V.dragged) return; V.min = false; draw(); } }, [h("span", { class: "rec" }, [h("i"), "REC"]), h("span", { class: "time" }, clock())]));
     } else {
       fb.append(pill());
       if (V.open) fb.append(details());
     }
     wrap.append(fb);
+    if (typeof S.prefs.x === "number" && typeof S.prefs.y === "number") {
+      const r = fb.getBoundingClientRect();
+      const x = Math.max(8, Math.min(innerWidth - r.width - 8, S.prefs.x * innerWidth)), y = Math.max(8, Math.min(innerHeight - r.height - 8, S.prefs.y * innerHeight));
+      fb.style.setProperty("left", x + "px"); fb.style.setProperty("top", y + "px"); fb.style.setProperty("bottom", "auto"); fb.style.setProperty("right", "auto"); fb.style.setProperty("transform", "none");
+    }
     if (msg && Date.now() < msgUntil && !(V.open && S.recording && !V.min) && !V.hidden) wrap.append(h("div", { class: "toast" + (msgBad ? " bad" : "") }, msg));
     else if (msg && Date.now() < msgUntil && V.hidden) wrap.append(h("div", { class: "toast" }, msg));
     const tl = wrap.querySelector(".tl"), lv = tl && tl.querySelector("li.live");
@@ -371,21 +392,33 @@ h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06e
     }
   }, true);
 
-  // drag by the grip: follows the pointer; let go, it snaps to the nearer edge and to the left, middle or right third
+  // drag by the grip: follows the pointer and stays where it is let go (remembered as a share of the window); the
+  // half and third it is in decide which way its details open. A double-click on the grip: back to the top, in the middle
   root.addEventListener("pointerdown", (e) => {
-    const g = e.target.closest && e.target.closest(".grip"); if (!g) return;
-    const fb = g.closest(".fb"), r = fb.getBoundingClientRect(), dx = e.clientX - r.left;
-    e.preventDefault(); g.setPointerCapture(e.pointerId);
+    const at = e.target && e.target.closest ? e.target : null; if (!at || e.button !== 0) return;
+    const g = at.closest(".grip") || (!at.closest("button, input, select, textarea, a, .box, .drop, .tl") ? at.closest(".pill, .dot") : null);
+    if (!g) return;
+    const fb = g.closest(".fb"), r = fb.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+    e.preventDefault(); g.setPointerCapture(e.pointerId); V.dragging = true;
     const move = (ev) => {
-      const x = Math.max(8, Math.min(innerWidth - r.width - 8, ev.clientX - dx)), y = Math.max(8, Math.min(innerHeight - 50, ev.clientY - 20));
+      const x = Math.max(8, Math.min(innerWidth - r.width - 8, ev.clientX - dx)), y = Math.max(8, Math.min(innerHeight - r.height - 8, ev.clientY - dy));
       fb.style.setProperty("left", x + "px"); fb.style.setProperty("top", y + "px"); fb.style.setProperty("bottom", "auto"); fb.style.setProperty("right", "auto"); fb.style.setProperty("transform", "none");
     };
     const up = (ev) => {
       g.removeEventListener("pointermove", move); g.removeEventListener("pointerup", up); g.removeEventListener("pointercancel", up);
-      const cx = ev.clientX;
-      prefs({ dock: ev.clientY > innerHeight / 2 ? "bottom" : "top", pos: cx < innerWidth / 3 ? "left" : cx > innerWidth * 2 / 3 ? "right" : "center" });
+      V.dragging = false;
+      if (V.redraw && Math.abs(ev.clientX - e.clientX) < 4 && Math.abs(ev.clientY - e.clientY) < 4) setTimeout(draw, 450);   // a click: drawn a little later, so a double-click still reaches the grip
+      V.redraw = false;
+      if (Math.abs(ev.clientX - e.clientX) < 4 && Math.abs(ev.clientY - e.clientY) < 4) return;   // a click, not a drag: nothing moved (a double-click must reach the grip)
+      V.dragged = true; setTimeout(() => { V.dragged = false; }, 0);
+      const b = fb.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      prefs({ dock: cy > innerHeight / 2 ? "bottom" : "top", pos: cx < innerWidth / 3 ? "left" : cx > innerWidth * 2 / 3 ? "right" : "center",
+        x: Math.max(0, Math.min(1, b.left / innerWidth)), y: Math.max(0, Math.min(1, b.top / innerHeight)) });
     };
     g.addEventListener("pointermove", move); g.addEventListener("pointerup", up); g.addEventListener("pointercancel", up);
+  });
+  root.addEventListener("dblclick", (e) => {
+    if (e.target.closest && e.target.closest(".grip")) prefs({ dock: "top", pos: "center", x: undefined, y: undefined });
   });
 
   // ask the recorder for its state: at once, then every 700 ms; without an answer for 8 s the bar goes (recorder closed)

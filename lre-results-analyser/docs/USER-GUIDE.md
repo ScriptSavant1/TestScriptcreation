@@ -80,9 +80,9 @@ shows the worst single case.
 
 - **Run name and verdict** — the test name and an overall result: *No significant issues*,
   *Review findings* or *SLA not met*.
-- **Export buttons** — **Excel**, **Word**, **PDF**, **HTML** and **More** (result data as JSON, and
-  a redacted JSON that is safe to share).
-- **? Explanations** — shows or hides the plain-English explanations on every panel (remembered in
+- **Export** — one button with every format: **Excel workbook**, **Word report**, **PDF**, **HTML page**,
+  and the result data as JSON (and a redacted JSON that is safe to share).
+- **Hide explanations** — shows or hides the plain-English explanations on every panel (remembered in
   this browser).
 - **New analysis** — open another run.
 - **Settings summary** — a line under the header shows the current steady state (or analysis
@@ -91,8 +91,8 @@ shows the worst single case.
     and press **Apply** to analyse another period; **Detected** goes back to the steady state. Every
     tab and export follows this window.
   - **SLA** — choose the percentile (P90 by default, or P95, P99, P50) and a default threshold in
-    seconds, then **Apply**. You can also type an SLA per transaction in the Transactions tab. SLAs
-    are remembered for this test in your browser.
+    seconds, then **Apply**. You can also type an SLA per transaction in the Transactions tab
+    (**Set SLAs**). SLAs are remembered for this test in your browser.
 
 Every panel can be folded away; **Collapse all / Expand all** works on the whole tab, and the page
 remembers what you folded.
@@ -129,8 +129,10 @@ scripts (Login, Logout…) has one row per script, with that script's own figure
   changed it) uses only the analysis window — best for judging performance; *Full run* includes
   ramp-up and ramp-down. **Every column follows the chosen view**, including Pass and Fail.
 - **Columns:** Transaction, Count, Pass, Fail, Fail %, Min, Avg, Max, Std dev, P50, P90, P95, P98,
-  P99, TPS, and in the steady-state view SLA (s), Result (PASS/FAIL) and Apdex, plus a small
-  **P90 trend** line. Hover over a column title for its meaning.
+  P99, TPS and a small **P90 trend** line. Hover over a column title for its meaning.
+- **SLA:** in the steady-state view, **Set SLAs** shows a box beside each transaction name — type its
+  target in seconds (Enter). Once an SLA is set (here or as the default in **Change**), the boxes stay,
+  and **Result** (Pass / Fail) and **Apdex** are added at the end.
 - **Sort** by clicking a column header; **filter** by typing part of a name.
 - **Click a row** to open its details in a side drawer: count, failed, Avg, P90, P95 and Max;
   behaviour over time (average, P90, P95, max); the distribution of response times; a latency

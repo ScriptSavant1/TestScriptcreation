@@ -213,12 +213,27 @@
            ti + 'LAST);\n';
   }
 
+  /**
+   * An XPath for web_reg_save_param_xpath that also matches elements in a namespace (SOAP, Atom …): a plain path
+   * of element names (/a/b, //token, /a/b[2], optionally ending in /@attribute) becomes local-name() steps
+   * (//*[local-name()='token']); anything else is kept as written. DevWeb takes the plain names as they are.
+   *
+   * @param {string} q  XPath as written
+   * @returns {string}  XPath for VuGen
+   */
+  function vugenXpath(q) {
+    var s = String(q || '');
+    if (!/^(\/\/?[A-Za-z_][\w.-]*(\[\d+\])?)+(\/@[A-Za-z_][\w.-]*)?$/.test(s)) return s;
+    return s.replace(/(\/\/?)([A-Za-z_][\w.-]*)/g, function (m, sl, name) { return sl + "*[local-name()='" + name + "']"; });
+  }
+
   // ── Exports ─────────────────────────────────────────────────────────────────
   exports.emitBoundary      = emitBoundary;
   exports.emitJson          = emitJson;
   exports.emitJsonAll       = emitJsonAll;
   exports.emitRegexp        = emitRegexp;
   exports.emitXpath         = emitXpath;
+  exports.vugenXpath        = vugenXpath;
   exports.vugenSearchFilter = vugenSearchFilter;
   exports.vugenRegexpScope  = vugenRegexpScope;
   exports.escapeCString     = esc; // exposed so callers don't need core/utils too
