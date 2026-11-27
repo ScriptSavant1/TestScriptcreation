@@ -421,3 +421,21 @@ body.wm-working .wm-wrap { padding-top: 16px; }
 .wm-err[hidden] { display: none; }
 .ds-field[aria-invalid] { border-color: var(--ds-bad); }
 @media (max-width: 600px) { .wm-spike-to { display: none; } .wm-spike-row > .wm-f { flex: 1 1 100%; } }
+/* the scripts table on a laptop (its box narrower than its columns): headings on two lines, narrower name and lists,
+   a pacing's or think time's own boxes under its list, and "Think time at replay" in each row's full card (the chevron) —
+   every field stays one click away and nothing is behind a sideways scroll. Wide screens unchanged. */
+#tv { container: wmtv / inline-size; }
+@container wmtv (max-width: 1460px) {   /* the full table needs about 1440 px */
+  .wm-tt th { white-space: normal; vertical-align: bottom; line-height: 1.25; }
+  .wm-tt th:not(.c-name) { max-width: 96px; }
+  .wm-tt th.c-name { padding-left: 50px; }
+  .wm-tt tr[data-id] .wm-tn .ds-field { width: 112px; }
+  .wm-tt tr[data-id] > td, .wm-tt th { padding-left: 4px; padding-right: 4px; }
+  .wm-tt tr[data-id] .wm-tu .ds-field { width: 70px; padding-right: 26px; }
+  .wm-tt tr[data-id] .wm-tu.nu .ds-field { width: 58px; }
+  .wm-tt tr[data-id] > td:nth-child(3) .wm-tu .ds-field { width: 94px; padding-right: 32px; }   /* 21600 / h in full */
+  .wm-tt tr[data-id] select.ds-field { min-width: 0; width: 112px; }   /* the row's own lists only — not the full card under it */
+  .wm-tt tr[data-id] > td:nth-child(7) select.ds-field { width: 138px; }   /* Tool chooses / After + delay in full */
+  .wm-tt tr[data-id] > td:nth-child(7) .wm-tc { flex-wrap: wrap; width: 160px; row-gap: 4px; }
+  .wm-tt th:nth-child(8), .wm-tt tr[data-id] > td:nth-child(8) { display: none; }
+}

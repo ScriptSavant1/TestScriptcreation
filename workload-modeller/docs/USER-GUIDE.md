@@ -111,7 +111,9 @@ The page works out the plan as you type. A section you have not touched keeps se
 
 Many scripts:
 - **Cards / Table**: the table shows one line per script and is edited like a spreadsheet (arrow keys, Enter, paste a
-  block copied from Excel).
+  block copied from Excel). When the table does not fit beside the results, the results fold to their strip on the right
+  (click it to see them); on a laptop screen the table is compact — headings on two lines, and **Think time at replay**
+  is in each script's full card (the arrow at the start of its row). Nothing has to be scrolled sideways.
 - **Find** and the **filter** (Needs input, Not possible, Ready) narrow the list.
 - **Defaults for every script** stay in force: they fill only empty fields, also in scripts added later.
 - **Overwrite all scripts** writes one value into every script shown, once (you can undo it).

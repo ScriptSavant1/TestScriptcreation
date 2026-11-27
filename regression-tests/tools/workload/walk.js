@@ -184,6 +184,26 @@ const plan = (p) => p.evaluate(() => ({ peak: last.peakVusers, vusers: last.tota
     await q.click('#rail'); await q.waitForTimeout(200);
     ok('no page errors (fold)', !q.errs.length, q.errs);
     await q.close();
+    // a laptop: the compact table — nothing behind a sideways scroll, every choice readable, the rare field in the row's card
+    for (const [w, h] of [[1366, 768], [1536, 700]]) {
+      const c = await page(b, w, h);
+      await c.click('#btn-example'); await c.evaluate((t) => WorkloadModeller.addScripts([new File([t], 'petstore.octoperf.com.har')]), har); await c.waitForTimeout(1200);
+      await c.click('#sview [data-v=table]'); await c.waitForTimeout(400);
+      const m = await c.evaluate(() => { const tv = document.getElementById('tv'); const cut = []; const cx = document.createElement('canvas').getContext('2d');
+        document.querySelectorAll('#tv tr[data-id] select').forEach((s) => { if (!s.offsetParent) return; cx.font = getComputedStyle(s).font; const cs = getComputedStyle(s), room = s.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); [...s.options].forEach((o) => { if (cx.measureText(o.text).width > room + 1) cut.push(o.text); }); });
+        // a long script name may scroll in its box (as in the wide table), shown whole on hover; every number shows whole
+        document.querySelectorAll('#tv tr[data-id] input').forEach((i) => { if (!i.offsetParent || i.scrollWidth <= i.clientWidth + 1) return; if (i.dataset.k === 'name' && i.title.startsWith(i.value)) return; cut.push('box ' + i.dataset.k + ' ' + i.value); });
+        return { side: tv.scrollWidth - tv.clientWidth, cut: [...new Set(cut)] }; });
+      ok(w + ' px Table: nothing behind a sideways scroll', m.side <= 2, m);
+      await c.waitForTimeout(700);   // the results fold with an animation
+      ok(w + ' px: no "More columns to the right" hint once the table fits', !(await c.isVisible('#tv-more')));
+      ok(w + ' px Table: every list choice and number readable in full', !m.cut.length, m);
+      ok(w + ' px Table: still a real table, rows under the headings', await tableOk(c), await tableInfo(c));
+      await c.click('#tv tr[data-id] [data-open] >> nth=0'); await c.waitForTimeout(300);
+      ok(w + ' px: Think time at replay is in the row\'s full card', await c.evaluate(() => [...document.querySelectorAll('#tv .wm-tv-card [data-k=thinkMode]')].some((e) => e.offsetParent)));
+      ok(w + ' px: no page errors', !c.errs.length, c.errs);
+      await c.close();
+    }
     const n = await page(b, 3840, 1900);   // a table that fits beside the results: nothing folds
     await n.click('#btn-example'); await n.click('#sview [data-v=table]'); await n.waitForTimeout(300);
     ok('3840 px: the table fits beside the results — they stay', !(await n.evaluate(() => document.querySelector('.wm-page').classList.contains('res-hidden'))));

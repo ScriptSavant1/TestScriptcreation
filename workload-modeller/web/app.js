@@ -302,7 +302,7 @@ function scriptCard(g) {
   return `<div class="wm-script${g.folded ? " is-folded" : ""}" data-id="${g.id}">
     <div class="wm-script-head" data-head>
       <button class="wm-chev" data-fold-card aria-expanded="${!g.folded}" aria-controls="body-${g.id}" aria-label="Show or hide ${esc(g.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-      <input class="ds-field wm-name-in" type="text" data-k="name" value="${esc(g.name)}" aria-label="Script name">
+      <input class="ds-field wm-name-in" type="text" data-k="name" value="${esc(g.name)}" aria-label="Script name" title="${esc(g.name)}">
       <b class="wm-name" title="${esc(g.name)} · ${esc(PROTOS[g.protocol].label)}${g.source ? " · from " + esc(g.source) : ""}">${esc(g.name)}</b>
       <span class="ds-chip" title="${esc(PROTOS[g.protocol].label)}">${esc(({ web: "Web HTTP", other: "Other" })[g.protocol] || PROTOS[g.protocol].label)}</span>
       ${g.source ? `<span class="wm-src" title="Filled from ${esc(g.source)}">from ${esc(g.source)}</span>` : ""}
@@ -357,7 +357,7 @@ $("#scripts-list").addEventListener("input", (e) => {
   let v = el.value;
   if (el.type === "number") { v = parseFloat(v); if (!Number.isFinite(v)) v = null; }
   setKey(g, k, v); g.sample = false;
-  if (k === "name") { const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }
+  if (k === "name") { el.title = v; const b = el.closest("[data-id]").querySelector(".wm-name"); if (b) { b.textContent = v; b.title = v; } }   // a long name: in full on hover
   // the number of think times matters only with a limit: shown while one is set (no redraw, the focus stays)
   if (k === "thinkPerIter") { const c = el.closest("[data-id]"); c.querySelectorAll("[data-thinkdep]").forEach((x) => { x.disabled = noThink(g); }); const h = c.querySelector("[data-thinkhelp]"); if (h) { h.textContent = thinkHelp(g); h.classList.toggle("wm-gh", !noThink(g)); } }
   if (["thinkPerIter", "thinkFactor", "thinkMinPct", "thinkMaxPct", "thinkLimit"].includes(k)) { const r = el.closest("[data-id]").querySelector("[data-thinkres]"); if (r) r.textContent = thinkResult(g); }
@@ -453,6 +453,9 @@ const tvWidth = () => {
 };
 $("#tv-wide").addEventListener("click", () => { setLayout("res-hidden"); tvWidth(); const f = $("#tv [data-k]"); if (f) f.focus({ preventScroll: true }); });
 window.addEventListener("resize", tvWidth);
+// the results fold and open with an animation: the table's box grows over a few frames — measured whenever its size changes
+// (measured only at the start, the hint "More columns to the right" stayed although the table fitted)
+if (typeof ResizeObserver === "function") new ResizeObserver(() => tvWidth()).observe($("#tv"));
 const tvRows = () => [...document.querySelectorAll("#tv tr[data-id]")].filter((r) => !r.hidden);
 // a choice that changes the row's boxes: redraw that row only (and its open card), the focus stays on the same field
 function tvRedraw(g, k) {
