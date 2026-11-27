@@ -20,7 +20,8 @@ const OUT = args.find((a) => !a.startsWith('--')) || path.join(__dirname, 'revie
 const opt = (k, d) => ((args.find((a) => a.startsWith('--' + k + '=')) || '').split('=')[1] || d);
 const SIZES = opt('sizes', '1366,1536,1920,2560,3840').split(',').map(Number);
 const THEMES = opt('themes', 'dark,light').split(',');
-const ONLY = opt('only', '');
+const ONLY = opt('only', '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);   // one or more name parts: --only=Explorer,Studio
+let ranScreens = 0;
 const BASE = 'http://localhost:3999/converter/';
 const FX = path.resolve(__dirname, '../').replace(/\\/g, '/') + '/';
 const COL = path.resolve(__dirname, '../../../collection-examples').replace(/\\/g, '/') + '/';
@@ -248,7 +249,8 @@ if (require.main === module) (async () => {
     const go = (pg) => p.evaluate((x) => PerfxShell.go(x, { instant: true }), pg);
     const frameOf = async (id) => (await p.$('#iframe-' + id)).contentFrame();
     const run = async (name, frameId) => {
-      if (ONLY && !name.toLowerCase().includes(ONLY.toLowerCase())) return;
+      if (ONLY.length && !ONLY.some((o) => name.toLowerCase().includes(o))) return;
+      ranScreens++;
       await p.waitForTimeout(400);
       const shell = await p.evaluate(inspect);
       const inner = frameId ? await (await frameOf(frameId)).evaluate(inspect) : null;
@@ -392,6 +394,11 @@ if (require.main === module) (async () => {
     await run('Workload from Studio, cards', 'workload');
     await f.click('#sview [data-v=table]'); await p.waitForTimeout(300); await run('Workload from Studio, table', 'workload');
     await f.click('#sview [data-v=cards]'); await p.waitForTimeout(300);
+    // the HAR Explorer's own recording while Studio has another open: Continue in Script Studio asks first (BUG-185)
+    await go('explore'); await p.waitForTimeout(600);
+    { const hf = await frameOf('explorer');
+      if (await hf.isVisible('#hx-studio').catch(() => false)) { await hf.click('#hx-studio'); await p.waitForTimeout(300); await run('Explorer replace question', 'explorer');
+        await hf.evaluate(() => { const d = document.getElementById('hx-ask'); if (d.open) d.close('no'); }); } }
     // and from the Postman / Bruno converter (its Plan the load), when the converter screens ran
     await go('postman'); await p.waitForTimeout(400);
     if (await p.isVisible('#panel-bruno [data-act=plan]').catch(() => false)) {
@@ -421,7 +428,8 @@ if (require.main === module) (async () => {
     const key = r.name + '|' + k + '|' + x; if (!by.has(key)) by.set(key, []); by.get(key).push(r.theme + ' ' + r.w);
   })));
   console.log('\npop-ups checked for a click outside: ' + ([...POPUPS].join(' · ') || 'none'));
-  console.log(by.size + ' distinct findings');
+  if (ONLY.length && !ranScreens) { console.log('NO SCREEN matched --only=' + ONLY.join(',') + ' — nothing was checked'); process.exitCode = 1; }
+  console.log(ranScreens + ' screens checked; ' + by.size + ' distinct findings');
   [...by.entries()].sort().forEach(([k, at]) => { const [n, kind, x] = k.split('|'); console.log(`${n.padEnd(26)} ${kind.padEnd(8)} ${x}  [${at.length === SIZES.length * THEMES.length ? 'all' : at.join(', ')}]`); });
   report.filter((r) => r.name === '_errors' && r.errs.length).forEach((r) => console.log(`page errors ${r.theme} ${r.w}: ${r.errs.join(' | ')}`));
 })();

@@ -78,11 +78,20 @@
   [upload, proc, res].forEach(function (el) { phases.observe(el, { attributes: true, attributeFilter: ["class"] }); });
   view("home");
 
+  // the opened recording itself and the number of its opening (Open in HAR Explorer hands the file over; the Explorer's
+  // Continue in Script Studio adds its values to this work when the number is still the same)
+  var fileNo = 0; SS.file1 = null; SS.fileId = 0;
+  var engineLoadFile = window.loadFile;
+  window.loadFile = function (file, slot) {
+    if (slot === 1) { SS.file1 = file; SS.fileId = ++fileNo; }
+    return engineLoadFile.apply(this, arguments);
+  };
   // a file is read as soon as it is opened (recording 1 or the second recording)
   var engineMarkLoaded = window.markLoaded;
   window.markLoaded = function (slot) {
     var r = engineMarkLoaded.apply(this, arguments);
     if (slot === 1 && window.SSW) SSW.newFile();
+    if (slot === 1) hxButton();
     if (slot === 1) { step(1, true); S.scriptName = ""; nameShow(); if (window.SSE) SSE.close(); if (window.SSC) SSC.reset(); if (window.SSH) SSH.reset(); }   // a new recording starts at step 1, with the default name
     setTimeout(function () { if (S.har1) window.analyze(); }, 0);
     return r;
@@ -522,6 +531,24 @@
     }).then(function () { btn.disabled = false; btn.removeAttribute("aria-busy"); });
   }
   $("#ss-wm").addEventListener("click", function () { planLoad(this); });
+  // Open in HAR Explorer (file bar): the same recording in the Explorer, in the portal; a NetLog file is not a HAR
+  function hxButton() { $("#ss-hx").hidden = !(canPlan && SS.file1 && S.har1 && !S.isNetLog1); }
+  function openInExplorer() {
+    var top = null;
+    try { top = window.parent !== window && window.parent.PerfxShell ? window.parent : null; } catch (e) { top = null; }
+    if (!top || !SS.file1) return;
+    var file = SS.file1, id = SS.fileId, t = 0;
+    top.PerfxShell.go("explore");
+    (function poll() {
+      var w = null;
+      try { var fr = top.document.getElementById("iframe-explorer"); w = fr && fr.contentWindow; } catch (e) { w = null; }
+      if (w && w.document.readyState === "complete" && w.HarExplorer) { w.HarExplorer.open(file, { studio: id }); return; }
+      if (++t < 200) setTimeout(poll, 100);
+      else if (typeof showToast === "function") showToast("The HAR Explorer did not open: open it from the sidebar and choose " + file.name + " there.", "warning", 6000);
+    })();
+  }
+  $("#ss-hx").addEventListener("click", openInExplorer);
+  hxButton();
   $("#ss-done-wm").addEventListener("click", function () { planLoad(this); });
   $("#ss-done-list").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (b) go(b.getAttribute("data-go")); });
   step(1);

@@ -448,7 +448,8 @@ const tvWidth = () => {
       return;
     }
   }
-  $("#tv-more").hidden = !over || page.classList.contains("res-hidden");
+  $("#tv-more").hidden = !over;   // still wider than the window with the results folded (small screens): the hint stays, without its link
+  $("#tv-wide-or").hidden = page.classList.contains("res-hidden");
 };
 $("#tv-wide").addEventListener("click", () => { setLayout("res-hidden"); tvWidth(); const f = $("#tv [data-k]"); if (f) f.focus({ preventScroll: true }); });
 window.addEventListener("resize", tvWidth);

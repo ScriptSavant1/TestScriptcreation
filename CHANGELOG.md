@@ -136,6 +136,13 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Open in HAR Explorer from Script Studio; back to the same work
+
+- Script Studio's file bar has **Open in HAR Explorer** (in the portal, with a recording open): the same recording opens in the HAR Explorer.
+- The Explorer's **Continue in Script Studio** goes back to that work: the correlations, transactions, test data and name stay, and the values added in the Explorer are added and applied — nothing is read again.
+- When Studio has another recording open, Continue in Script Studio asks first ("Replace the recording in Script Studio?"); before, it replaced the work without asking (BUG-185). Cancel, Esc or a click outside keep it. An empty Studio opens the recording as before.
+- Regression tool: `regression-tests/tools/explorer/roundtrip.js` (18 checks through the portal).
+
 #### HAR Explorer: easier to read details, folded panels you can see, three ways to begin Find a value
 
 - Request details (HAR Explorer and Script Studio's request window): the address breaks only after / ? & = (it no longer splits a word in the middle; copying it gives the same address); the tabs sit closer, so on a wide panel all seven fit on one row (a narrow panel still wraps them, never hiding one); the page preview shows a focus ring when the keyboard is inside it.

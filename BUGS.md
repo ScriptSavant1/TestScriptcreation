@@ -6,7 +6,7 @@ Every bug found in PerfX Studio, newest first. Open bugs are at the top; fixed b
 
 | Bug | Severity | Description |
 |-----|----------|-------------|
-| BUG-185 | Medium | **HAR Explorer: "Continue in Script Studio" replaces the work open in Script Studio without asking** — accepted correlations, transactions and test data of the recording open there are cleared (`clearAll`) and the Explorer's file is read afresh. Found while reviewing a Studio → Explorer button. Fix proposed: ask first when Studio has a recording open; when it is the same file, add the Explorer's values to the work already there. |
+| — | — | No open bugs. |
 
 ## Known limitations
 
@@ -25,6 +25,7 @@ Behaviour that is deliberate or deferred, recorded so it is not reported again a
 | ID | Severity | Description |
 |----|----------|-------------|
 | BUG-133 | Low | **Pages 2 px (Results Analyser: 12 px) wider than the window at narrow widths** — the Home welcome band at 900 px and below, the converters' top band, and the Results Analyser's band when its frame is 700 px wide or less. Cause: bands that run edge to edge pull out by `--ds-page-x`, which was 18 px (Analyser 28 px) where the page's own side padding is 16 px. Fix: `--ds-page-x` is 16 px there too (portal/shell.css, lre-results-analyser/web/app.css). Checked: no sideways scroll on any portal page or tool frame from 360 to 1300 px. |
+| BUG-185 | Medium | **HAR Explorer: "Continue in Script Studio" replaced the work open in Script Studio without asking** — its correlations, transactions and test data were cleared (`clearAll`) and the Explorer's file read afresh. Fix: a recording opened from Studio (Open in HAR Explorer, `SS.fileId` passed as `opts.studio`) goes back to the same work — the values are added there, nothing read again; another recording open in Studio → the Explorer asks first (dialog `#hx-ask`). `regression-tests/tools/explorer/roundtrip.js`. |
 | BUG-187 | Low | **Workload Modeller: the notes "Before you fill in a script" could stop folding by themselves** — a fold made by the page was sometimes saved as the user's choice (`wm-notes`), which then always wins. Cause: the toggle event arrives later and merges with the page's own folds, so the `_auto` flag did not match the event. Found by walk.js failing one run in three. Fix: only a click on the summary (Enter / Space too) is remembered. |
 | BUG-186 | Low | **Admin page: the "Uses per day" chart stayed empty when the server was started from another folder** — `/admin/vendor/chart.js` was looked up from the starting folder (`process.cwd()`), not the application's. Found by the new route test (run from a sub-folder). Fix: the path is taken from the application's own folder. (The usage database's default path, `src/analytics/db.js`, also follows the starting folder; left as it is — `ANALYTICS_DB_PATH` sets it.) |
 | BUG-184 | Low | **Workload Modeller: two boxes with no name** — Sizing assumptions per protocol: memory per Vuser and Vusers per CPU core (a screen reader said only "edit"). Fix: an aria-label naming the protocol and the figure. |

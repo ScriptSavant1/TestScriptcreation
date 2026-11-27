@@ -350,3 +350,12 @@ html.hx-has-file .hx-fb-name b { font-size: var(--ds-fs); }
 .hx-fstart b { color: var(--ds-text); font-weight: 600; }
 .hx-fstart .by { display: inline-block; padding: 0 6px; border-radius: var(--ds-r-pill); background: var(--ds-accent); color: #fff; font-size: 11px; font-weight: 700; }
 .hx-fstart-f { margin: 12px 0 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
+/* a question with two answers (har-explorer.js ask) — the look of Script Studio's (.ss-dlg in portal/studio.css) */
+.hx-dlg { margin: auto; padding: 0; border: 1px solid var(--ds-border-2); border-radius: var(--ds-r-card); background: var(--ds-surface); color: var(--ds-text); width: min(480px, calc(100vw - 32px)); box-shadow: var(--ds-shadow-2); }
+.hx-dlg::backdrop { background: var(--ds-overlay); }
+.hx-dlg-in { display: flex; flex-direction: column; margin: 0; }
+.hx-dlg-h { padding: 14px 20px; border-bottom: 1px solid var(--ds-border); }
+.hx-dlg-h h2 { margin: 0; font-size: var(--ds-fs-lg); font-weight: 700; }
+.hx-dlg-b { padding: 18px 20px; }
+.hx-dlg-b p { margin: 0; line-height: 1.5; }
+.hx-dlg-f { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--ds-border); background: var(--ds-surface-2); border-radius: 0 0 var(--ds-r-card) var(--ds-r-card); }
