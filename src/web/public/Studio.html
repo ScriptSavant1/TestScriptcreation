@@ -165,12 +165,29 @@
             <form class="ss-name-f" id="ss-name-f" hidden><input class="ss-field ss-sc-name" id="ss-sc-name" type="text" maxlength="60" spellcheck="false" autocomplete="off" aria-describedby="ss-sc-err" title="Letters, numbers and underscores, starting with a letter. The ZIP and the .usr file take this name; empty: the default name." aria-label="Script name" /><button type="submit" class="ds-btn ds-btn-sm ds-btn-primary">Save</button><button type="button" class="ds-btn ds-btn-sm" id="ss-name-x">Cancel</button><span class="ss-err" id="ss-sc-err" role="alert" hidden></span></form>
             <small class="ss-from" id="ss-from">from <span id="ss-file-name"></span> · <span title="Requests in the script / requests in the recording"><b id="ss-k-in">0</b> of <b id="ss-k-all">0</b> requests</span> · <span><b id="ss-k-tx">0</b> <span id="ss-k-txw">transactions</span></span><span id="ss-auth" hidden title="Authentication found in the recording"> · <span></span></span><span class="ss-src" id="ss-file-src"></span></small>
           </div>
-          <button class="ds-btn" type="button" id="ss-open-another" title="Open another recording; this one stays until the new file is read"><svg class="i"><use href="#i-up"/></svg><span class="ss-wide">Open another</span></button>
           <span class="ss-state" id="ss-state" role="status" title="The script shown and the ZIP are the same"><i></i><span>Up to date</span></span>
           <span class="ss-grow"></span>
           <span class="ss-pb" id="ss-note" hidden><button type="button" class="ds-btn ss-note-b" data-pop="ss-note-pop" aria-expanded="false" aria-controls="ss-note-pop"><svg class="i"><use href="#i-warn"/></svg><span><span id="ss-note-n">1</span><span class="ss-wide"> note</span></span></button><div class="ss-pp" id="ss-note-pop" hidden><h3>About this recording</h3><div class="ss-notices" id="ss-notices"></div></div></span>
           <button type="button" class="ss-ic" id="ss-undo" aria-label="Undo" title="Undo the last change (Ctrl+Z)" disabled><svg class="i"><use href="#i-undo"/></svg></button>
           <button type="button" class="ss-ic" id="ss-redo" aria-label="Redo" title="Redo (Ctrl+Y)" disabled><svg class="i"><use href="#i-redo"/></svg></button>
+          <span class="ss-vline" aria-hidden="true"></span>
+          <span class="ss-pb" id="ss-set"><button type="button" class="ds-btn" id="ss-think-btn" data-pop="ss-think-pop" aria-expanded="false" aria-controls="ss-think-pop" title="Script settings: the format and the think time"><svg class="i"><use href="#i-code"/></svg><span id="ss-set-fmt">DevWeb</span><span aria-hidden="true">·</span><span id="ss-think-now">3 s</span><svg class="i ss-chev"><use href="#i-chev"/></svg></button>
+            <div class="ss-pp ss-set-pop" id="ss-think-pop" hidden>
+              <h3>Script settings</h3>
+              <span class="ss-lbl" id="ss-fmt-l">Format</span>
+              <div class="ss-seg" id="ss-fmt" role="group" aria-labelledby="ss-fmt-l">
+            <button type="button" data-fmt="webhttp" aria-pressed="false"><i>C</i><span class="ss-wide">Web </span>HTTP/HTML</button>
+            <button type="button" data-fmt="devweb" aria-pressed="true"><i>JS</i>DevWeb</button>
+          </div>
+              <span class="ss-lbl" id="ss-think-l">Think time between transactions</span>
+              <div class="ss-row"><span class="ss-seg" role="group" aria-labelledby="ss-think-l" id="ss-think">
+              <button type="button" data-think="fixed" aria-pressed="true">Fixed</button>
+              <button type="button" data-think="recorded" aria-pressed="false">As recorded</button>
+              <button type="button" data-think="none" aria-pressed="false">None</button>
+            </span><span class="ss-think-sec" id="ss-think-secw"><input class="ss-field" id="ss-think-sec" type="number" min="1" max="3600" step="1" value="3" aria-label="Think time in seconds" /><span class="ss-muted">seconds</span></span></div>
+              <p class="ss-muted ss-think-note" id="ss-think-note"></p>
+            </div></span>
+          <button class="ds-btn" type="button" id="ss-open-another" title="Open another recording; this one stays until the new file is read"><svg class="i"><use href="#i-up"/></svg><span class="ss-wide">Open another</span></button>
           <button class="ds-btn" type="button" id="ss-hx" hidden aria-label="Open in HAR Explorer" title="Open this recording in the HAR Explorer: every request in detail, and where each value comes from — Continue in Script Studio brings you back to this work"><svg class="i"><use href="#i-search"/></svg><span class="ss-wide">Open in HAR Explorer</span></button>
           <button class="ds-btn" type="button" id="ss-wm" hidden title="Open this script in the Workload Modeller: work out the Vusers, pacing and load generators"><svg class="i"><use href="#i-chart"/></svg><span class="ss-wide">Plan the load</span></button>
           <span class="ss-split">
@@ -191,21 +208,6 @@
           </nav>
           <button class="ds-btn" type="button" id="ss-step-back" aria-label="Back" title="Back" hidden><svg class="i"><use href="#i-left"/></svg><span>Back</span></button>
           <button class="ds-btn ds-btn-primary" type="button" id="ss-step-next"><span>Next: Correlate</span><svg class="i ss-next-ic"><use href="#i-left"/></svg></button>
-          <span class="ss-grow"></span>
-          <div class="ss-seg" id="ss-fmt" role="group" aria-label="Script format">
-            <button type="button" data-fmt="webhttp" aria-pressed="false"><i>C</i><span class="ss-wide">Web </span>HTTP/HTML</button>
-            <button type="button" data-fmt="devweb" aria-pressed="true"><i>JS</i>DevWeb</button>
-          </div>
-          <span class="ss-pb"><button type="button" class="ds-btn" id="ss-think-btn" data-pop="ss-think-pop" aria-expanded="false" aria-controls="ss-think-pop" title="Think time between transactions"><svg class="i"><use href="#i-clock"/></svg><span id="ss-think-now">3 s</span><svg class="i ss-chev"><use href="#i-chev"/></svg></button>
-            <div class="ss-pp" id="ss-think-pop" hidden>
-              <h3 id="ss-think-l">Think time between transactions</h3>
-              <div class="ss-row"><span class="ss-seg" role="group" aria-labelledby="ss-think-l" id="ss-think">
-              <button type="button" data-think="fixed" aria-pressed="true">Fixed</button>
-              <button type="button" data-think="recorded" aria-pressed="false">As recorded</button>
-              <button type="button" data-think="none" aria-pressed="false">None</button>
-            </span><span class="ss-think-sec" id="ss-think-secw"><input class="ss-field" id="ss-think-sec" type="number" min="1" max="3600" step="1" value="3" aria-label="Think time in seconds" /><span class="ss-muted">seconds</span></span></div>
-              <p class="ss-muted ss-think-note" id="ss-think-note"></p>
-            </div></span>
         </div>
         <!-- the Filters pop-up: at page level, placed under its button in the Requests header (studio-page.js popOpen) -->
         <div class="ss-pp ss-pp-wide ss-fbar ss-pp-fixed" id="ss-fbar" hidden>
@@ -272,9 +274,13 @@
           <aside class="ss-det" id="ss-det" role="dialog" aria-modal="false" aria-labelledby="ss-det-h" hidden>
             <div class="ss-det-bar">
               <h3 id="ss-det-h">Request details</h3><span class="ss-muted" id="ss-det-pos"></span><span class="ss-grow"></span>
+              
+              
+              <button class="ds-btn ds-btn-xs" type="button" id="ss-det-leave" title="Leave this request out of the script (Put back brings it back)">Leave out</button>
+              <button class="ds-btn ds-btn-xs" type="button" id="ss-det-copy-url" data-copy="url" title="Copy the address of this request"><svg class="i"><use href="#i-copy"/></svg>Copy URL</button>
+              <button class="ds-btn ds-btn-xs" type="button" id="ss-det-curl" data-copy="curl" title="Copy this request as a cURL command (Hide secrets applies)"><svg class="i"><use href="#i-copy"/></svg>Copy as cURL</button>
               <label class="ss-inl" title="Hide passwords, tokens, cookies and session values on screen and in Copy as cURL"><input type="checkbox" class="ss-cb" id="ss-det-mask" />Hide secrets</label>
               <button class="ds-btn ds-btn-xs" type="button" id="ss-det-dock" aria-pressed="false" hidden><svg class="i"><use href="#i-layers"/></svg><span>Dock</span></button>
-              <button class="ds-btn ds-btn-xs" type="button" id="ss-det-leave" title="Leave this request out of the script (Put back brings it back)">Leave out</button>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-prev" title="Previous request (Up arrow)" aria-label="Previous request"><svg class="i" style="transform:rotate(180deg)"><use href="#i-chev"/></svg></button>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-next" title="Next request (Down arrow)" aria-label="Next request"><svg class="i"><use href="#i-chev"/></svg></button>
               <button class="ds-btn ds-btn-xs ds-btn-ghost ss-icon" type="button" id="ss-det-x" title="Close (Esc)" aria-label="Close the request details"><svg class="i"><use href="#i-x"/></svg></button>
@@ -308,7 +314,7 @@
               <!-- 1: the Correlation Advisor's findings as one table (portal/studio-corr.js); the engine's cards are the Cards view -->
               <div class="ss-corr ss-sec is-open" id="ss-corr" data-sec="values">
                 <div class="ss-sec-h ss-corr-h">
-                  <h2 class="ss-sec-t"><button type="button" class="ss-sec-b" data-sec-b="values" aria-expanded="true" aria-controls="ss-cr-wrap"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-studio"/></svg></span><b>Values found</b><span class="ss-pill" id="ss-sec-n1"></span><small class="ss-muted">Tick the ones to put in the script</small></button></h2>
+                  <h2 class="ss-sec-t"><button type="button" class="ss-sec-b" data-sec-b="values" aria-expanded="true" aria-controls="ss-cr-wrap"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-studio"/></svg></span><b>Values found</b><span class="ss-pill" id="ss-sec-n1"></span><span class="ss-pill warn" id="ss-sec-w2" hidden></span><small class="ss-muted">Tick the ones to put in the script</small></button></h2>
                   <button type="button" class="ss-q" data-about="ss-corr-about" aria-expanded="false" aria-controls="ss-corr-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button>
                   <span class="ss-grow"></span>
                   <span class="ss-corr-hact">
@@ -402,9 +408,9 @@
               </div>
               </div>
               <!-- 2: the correlations in the script (the engine's list, renderCorrelations) -->
-              <div class="corr-panel ss-sec" id="corr-panel" data-sec="script">
+              <div class="corr-panel ss-sec ss-sec-gone" id="corr-panel" data-sec="script" aria-hidden="true">
                 <div class="ss-sec-h">
-                  <h2 class="ss-sec-t"><button type="button" class="ss-sec-b" data-sec-b="script" aria-expanded="false" aria-controls="corr-list"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-code"/></svg></span><b>In the script</b><span class="ss-pill" id="ss-sec-n2"></span><span class="ss-pill warn" id="ss-sec-w2" hidden></span><small class="ss-muted">What the script reads now, and every place it sends it back</small></button></h2>
+                  <h2 class="ss-sec-t"><button type="button" class="ss-sec-b" data-sec-b="script" aria-expanded="false" aria-controls="corr-list"><svg class="i ss-chev"><use href="#i-chev"/></svg><span class="ss-sec-ic sm" aria-hidden="true"><svg class="i"><use href="#i-code"/></svg></span><b>In the script</b><span class="ss-pill" id="ss-sec-n2"></span><small class="ss-muted">What the script reads now, and every place it sends it back</small></button></h2>
                   <span id="corr-toggle-icon" hidden></span>
                 </div>
                 <div class="corr-list" id="corr-list"></div>
@@ -437,8 +443,9 @@
 
             <div class="ss-tab" id="ss-t-data" role="region" aria-label="Test data" hidden>
               <!-- the Test data table (portal/studio-testdata.js) -->
-              <div class="ss-td-h"><h2>Test data</h2><button type="button" class="ss-q" data-about="ss-data-about" aria-expanded="false" aria-controls="ss-data-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button><button class="ds-btn ds-btn-sm ss-btn-accent" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
+              <div class="ss-td-h"><h2>Test data</h2><button type="button" class="ss-q" data-about="ss-data-about" aria-expanded="false" aria-controls="ss-data-about" aria-label="What is this?" title="What is this?"><svg class="i"><use href="#i-q"/></svg></button>
                 <span class="ss-grow"></span>
+                <button class="ds-btn ds-btn-sm ss-btn-accent" type="button" id="ss-td-add"><svg class="i"><use href="#i-plus"/></svg>Add parameter</button>
                 <button class="ds-btn ds-btn-sm" type="button" id="ss-td-xl-down" title="One column per parameter, one row per user: fill many rows in Excel"><svg class="i"><use href="#i-down"/></svg>Download as Excel</button>
                 <button class="ds-btn ds-btn-sm" type="button" id="ss-td-xl-up" title="Read the rows back: the data files in the ZIP get them"><svg class="i"><use href="#i-up"/></svg>Upload Excel</button>
                 <input type="file" id="ss-td-xl-file" accept=".xlsx" hidden /></div>

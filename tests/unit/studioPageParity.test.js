@@ -195,13 +195,15 @@ describe('Script Studio — steps fit the window', () => {
     expect(css).not.toMatch(/\.ss-done-card \{[^}]*max-width/);
     expect(css).toContain('body.ss-step-wide #ss-t-corr > .ss-sec.is-open { flex: 1 1 0;');
   });
-  test('Correlate: three named sections, one open; everything of before is in them', () => {
+  test('Correlate: the named sections (In the script kept hidden), one open; everything of before is in them', () => {
     const corr = html.slice(html.indexOf('id="ss-t-corr"'), html.indexOf('id="ss-t-data"'));
     const at = ['data-sec="values"', 'data-sec="script"', 'data-sec="second"'].map((x) => corr.indexOf(x));
     expect(at.every((x) => x > 0) && at[0] < at[1] && at[1] < at[2]).toBe(true);
     const inside = (from, to, ids) => ids.forEach((id) => { const i = corr.indexOf('id="' + id + '"'); expect([id, i > from && i < to]).toEqual([id, true]); });
-    inside(at[0], at[1], ['ss-sec-n1', 'ss-cr-manual', 'ss-cr-cant', 'ss-cr-view', 'ss-cr-tools', 'ss-cr-table', 'ss-cr-foot', 'ss-cr-apply', 'adv-panel', 'adv-cards', 'adv-btn-regen']);
-    inside(at[1], at[2], ['ss-sec-n2', 'ss-sec-w2', 'corr-list', 'corr-toggle-icon']);
+    inside(at[0], at[1], ['ss-sec-n1', 'ss-sec-w2', 'ss-cr-manual', 'ss-cr-cant', 'ss-cr-view', 'ss-cr-tools', 'ss-cr-table', 'ss-cr-foot', 'ss-cr-apply', 'adv-panel', 'adv-cards', 'adv-btn-regen']);
+    inside(at[1], at[2], ['ss-sec-n2', 'corr-list', 'corr-toggle-icon']);
+    // round 3: the values in the script are the table's filter — that section stays in the page (the engine draws its list) but hidden
+    expect(corr).toContain('class="corr-panel ss-sec ss-sec-gone" id="corr-panel" data-sec="script"');
     inside(at[2], corr.length, ['ss-sec-n3', 'mode-badge', 'dz2', 'dz2-clear']);
     expect((corr.match(/class="ss-sec-b"/g) || []).length).toBe(3);
     expect((corr.match(/aria-expanded="true" aria-controls="ss-cr-wrap"/g) || []).length).toBe(1);
@@ -302,5 +304,37 @@ describe('Script Studio — calmer look', () => {
     const ui = read('studio-ui.js');
     expect(ui).toContain("'Two recordings compared'");
     expect(ui).not.toContain('HAR — heuristic');
+  });
+});
+
+// Round 3 (owner, 2026-11-27): today's design kept — the two top rows aligned, small tidy-ups; every function as before.
+describe('Script Studio — round 3: aligned', () => {
+  const html = read('Studio.html'), css = read('portal/studio.css'), ws = read('portal/studio-workspace.js'), corr = read('portal/studio-corr.js'), pg = read('portal/studio-page.js');
+  const between = (s, a, b) => s.slice(s.indexOf(a), s.indexOf(b, s.indexOf(a)));
+  test('row 1: the settings button (format + think time) beside Undo / Redo, then what comes next; row 2: the steps and Back / Next', () => {
+    const fb = between(html, 'id="ss-filebar"', 'id="ss-tools"');
+    ['id="ss-undo"', 'id="ss-redo"', 'id="ss-set"', 'id="ss-think-btn"', 'id="ss-think-pop"', 'id="ss-fmt"', 'id="ss-open-another"', 'id="ss-hx"', 'id="ss-wm"', 'id="ss-dl"'].reduce((at, x) => { const i = fb.indexOf(x); expect([x, i > at]).toEqual([x, true]); return i; }, -1);
+    const tools = between(html, 'id="ss-tools"', '</div>\n');
+    expect(tools).not.toContain('id="ss-fmt"');
+    expect(pg).toContain('var sf = $("#ss-set-fmt"); if (sf) sf.textContent');
+    expect(css).toContain('#ss-tools > #ss-step-back:not([hidden]), #ss-tools > #ss-step-back[hidden] + #ss-step-next { margin-left: auto; }');
+  });
+  test('Domains: a parameter renamed in place through the engine\'s own rename (checks, Undo, regeneration)', () => {
+    expect(ws).toContain('if (rn) { renameInPlace(rn); return; }');
+    expect(ws).toContain('openHostRename(key);');
+    expect(ws).toContain('confirmHostRename(useDefault);');
+  });
+  test('request pop-up: Copy URL / Copy as cURL in the title bar, through the same copy', () => {
+    const bar = between(html, '<div class="ss-det-bar">', '</div>');
+    ['id="ss-det-leave"', 'data-copy="url"', 'data-copy="curl"', 'id="ss-det-mask"', 'id="ss-det-dock"', 'id="ss-det-prev"', 'id="ss-det-x"'].reduce((at, x) => { const i = bar.indexOf(x); expect([x, i > at]).toEqual([x, true]); return i; }, -1);
+    expect(ws).toContain('function copyReq(kind)');
+  });
+  test('Correlate: every way to the In the script section shows the table\'s filter', () => {
+    expect(corr).toContain('if (name === "script") { showOnly("script");');
+  });
+  test('Test data: Add parameter beside the Excel buttons', () => {
+    const h = between(html, '<div class="ss-td-h">', '</div>');
+    expect(h.indexOf('id="ss-td-add"')).toBeGreaterThan(h.indexOf('ss-grow'));
+    expect(h.indexOf('id="ss-td-add"')).toBeLessThan(h.indexOf('id="ss-td-xl-down"'));
   });
 });

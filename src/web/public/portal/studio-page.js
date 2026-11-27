@@ -193,6 +193,8 @@
   };
   function fmtButtons() {
     $$("#ss-fmt [data-fmt]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-fmt") === S.format)); });
+    // the settings button in the title row says the format chosen (and the think time, #ss-think-now)
+    var sf = $("#ss-set-fmt"); if (sf) sf.textContent = S.format === "webhttp" ? "Web HTTP/HTML" : "DevWeb";
   }
   $("#ss-fmt").addEventListener("click", function (e) {
     var b = e.target.closest("[data-fmt]");

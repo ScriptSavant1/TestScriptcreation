@@ -1383,3 +1383,29 @@ body:has(#ss-selbar:not([hidden])) #ss-step-next, body:has(#ss-name-f:not([hidde
 .ss-nt-pts { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 .ss-notice + .ss-notice { margin-top: 8px; }
 @media (max-width: 1499px) { .ss-cols { --c1: var(--ss-dw, 210px); } }   /* a laptop: Domains narrower, the request list gets the room */
+
+/* ── Round 3 (owner, 2026-11-27): the two top rows aligned; small tidy-ups inside today's design ── */
+/* row 1: the script on the left; the note, Undo / Redo, the settings button and what comes next on the right */
+.ss-filebar > .ss-vline { width: 1px; height: 24px; background: var(--ds-border); flex: none; }
+#ss-set > #ss-think-btn { gap: 7px; }
+#ss-set > #ss-think-btn > span[aria-hidden] { color: var(--ds-text-3); }
+.ss-set-pop { width: 440px; }
+.ss-set-pop .ss-lbl { font-size: var(--ds-fs-sm); font-weight: 600; color: var(--ds-text); }
+.ss-set-pop #ss-fmt { justify-self: start; }
+/* row 2: the steps; Back / Next at its right end */
+#ss-tools > #ss-step-back:not([hidden]), #ss-tools > #ss-step-back[hidden] + #ss-step-next { margin-left: auto; }
+/* the request pop-up: Copy URL / Copy as cURL are in its title bar (the shared view's own pair, beside the summary, is hidden here) */
+#ss-det-b .hx-dsum .r [data-copy] { display: none; }
+.ss-det-bar #ss-det-copy-url, .ss-det-bar #ss-det-curl { gap: 6px; }
+/* Correlate: the values in the script are the table's "In the script" filter — the section that listed them again is hidden */
+.ss-sec.ss-sec-gone { display: none !important; }
+/* Domains: a server parameter renamed in place */
+.ss-ren { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.ss-ren input { height: 30px; flex: 1 1 120px; min-width: 0; }
+.ss-ren-err { flex-basis: 100%; font-size: var(--ds-fs-xs); color: var(--ds-bad); }
+/* start page: a shorter band — the name and its tagline (the picture and the longer text are in Help and How it works) */
+#ss-band.ds-band-panel { padding-top: 14px; padding-bottom: 14px; }
+#ss-band :is(.ds-flow, .ds-hand, .ds-band-lead) { display: none; }
+/* the title row holds the settings button since round 3: Open another, HAR Explorer and Plan the load show as icons
+   (their names on hover) a little sooner — no sideways scroll on a laptop */
+@container (max-width: 1400px) { .ss-filebar .ss-wide, .ss-filebar .ss-src { display: none; } }

@@ -37,7 +37,7 @@ async function run(URL, OUT, FMT) {
   await p.waitForFunction(() => document.body.classList.contains('ss-view-ws') && !document.body.classList.contains('ss-reading'), null, { timeout: 120000 });
   if (await p.isVisible('.bg-review-apply')) { await p.click('.bg-review-apply'); }
   await idle();
-  await p.click('#ss-fmt [data-fmt=' + FMT + ']'); await idle();
+  if (!(await p.isVisible('#ss-fmt'))) await p.click('#ss-think-btn'); await p.click('#ss-fmt [data-fmt=' + FMT + ']'); await p.keyboard.press('Escape'); await idle();
   const NEW = await isNew();
   const st = () => p.evaluate(() => { const S = PerfxStudio.state(); return { cands: (S.advisorCandidates || []).length, high: (S.advisorCandidates || []).filter((c) => c.confidence === 'high').length, corr: (S.correlations || []).length, params: (S.params || []).length, reqs: (S.entries1 || []).filter((e) => !e.isMarker && !e.filtered).length }; });
   const s1 = await st(); ok('the recording is read: ' + JSON.stringify(s1), s1.reqs > 0);
@@ -77,7 +77,7 @@ async function run(URL, OUT, FMT) {
   }
   await p.click('#ss-cr-apply'); await idle();
   const s2 = await st(); ok('Add to the script: ' + s2.corr + ' correlations in the script', s2.corr >= ticked, s2);
-  await p.click('[data-sec-b=script]'); await p.waitForTimeout(300);
+  await p.evaluate(() => SSC.section('script')); await p.waitForTimeout(300);
   if (NEW) await look('Correlate, in the script');
   await p.click('[data-sec-b=values]'); await p.waitForTimeout(200);
   // the editor on a value in the script, and its Test

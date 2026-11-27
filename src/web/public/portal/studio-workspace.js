@@ -174,12 +174,41 @@
     $("#ss-dom-on").disabled = on === hosts.filter(function (h) { return !(adsOn && isAds(h)); }).length;
     $("#ss-dom-off").disabled = on === 0;
   }
+  // A server parameter renamed in place (round 3): its name becomes a box with Save / Cancel. The engine's own rename
+  // does the work — openHostRename + confirmHostRename (studio-ui.js: the same checks, the Undo toast, the regeneration);
+  // its window is opened and closed within the same task, so it is never drawn. A refused name shows the engine's reason.
+  function renameInPlace(chip) {
+    var key = chip.getAttribute("data-rename"), hp = S.hostParams; if (!hp || !hp.map[key]) return;
+    var renamed = !!(S.hostNames || {})[key];
+    var box = document.createElement("span"); box.className = "ss-ren";
+    box.innerHTML = '<input class="ss-field ss-mono" value="' + esc(hp.map[key]) + '" aria-label="Server parameter of ' + esc(key) + '" spellcheck="false" autocomplete="off">' +
+      '<button type="button" class="ds-btn ds-btn-xs ds-btn-primary" data-ren="save">Save</button><button type="button" class="ds-btn ds-btn-xs" data-ren="cancel">Cancel</button>' +
+      (renamed ? '<button type="button" class="ss-linkbtn" data-ren="default">Use the default name</button>' : "") + '<span class="ss-ren-err" role="alert" hidden></span>';
+    chip.replaceWith(box);
+    var inp = box.querySelector("input"); inp.focus(); inp.select();
+    var back = function () { renderDomains(); var c = $('#ss-domains [data-rename="' + cssEsc(key) + '"]'); if (c) c.focus(); };
+    function run(useDefault) {
+      openHostRename(key);
+      if (!useDefault) document.getElementById("host-modal-inp").value = inp.value.trim();
+      confirmHostRename(useDefault);
+      var ov = document.getElementById("host-modal-overlay");
+      if (ov && ov.style.display !== "none") {
+        var why = document.getElementById("host-modal-err").textContent; closeHostRename();
+        var m = box.querySelector(".ss-ren-err"); m.textContent = why; m.hidden = false; inp.setAttribute("aria-invalid", "true"); inp.focus();
+        return;
+      }
+      back();
+    }
+    box.addEventListener("click", function (e) { var b = e.target.closest("[data-ren]"); if (!b) return; var k = b.getAttribute("data-ren"); if (k === "cancel") back(); else run(k === "default"); });
+    inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); run(false); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); back(); } });
+  }
   $("#ss-dq").addEventListener("input", renderDomains);
   $("#ss-domains").addEventListener("click", function (e) {
     var g = e.target.closest(".ss-dgrp");
     if (g) { prefs[g.getAttribute("data-grp")] = g.getAttribute("aria-expanded") !== "true"; SS.save(); renderDomains(); return; }
     var rn = e.target.closest("[data-rename]");
-    if (rn) { openHostRename(rn.getAttribute("data-rename")); return; }
+    if (rn) { renameInPlace(rn); return; }
+    if (e.target.closest(".ss-ren")) return;   // the rename box handles its own clicks
     var d = e.target.closest(".ss-dom"); if (!d) return;
     var cb = d.querySelector("input"); if (cb.disabled) return;
     if (e.target !== cb) cb.checked = !cb.checked;
@@ -625,12 +654,18 @@
     var t = e.target.closest(".hx-tab"); if (t) { D.tab = t.getAttribute("data-tab"); D.full = {}; renderDet(); var n = detB.querySelector('.hx-tab[data-tab="' + D.tab + '"]'); if (n) n.focus(); return; }
     var f = e.target.closest("[data-full]"); if (f) { D.full[f.getAttribute("data-full")] = true; renderDet(); return; }
     var c = e.target.closest("[data-copy]"); if (!c) return;
+    copyReq(c.getAttribute("data-copy"));
+  });
+  // Copy URL / Copy as cURL: the buttons in the title bar (round 3: the pop-up's buttons in one row) and, for the HAR
+  // Explorer's shared view, the ones beside the summary line (hidden on this page)
+  function copyReq(kind) {
     var en = byId(D.id); if (!en) return;
-    var kind = c.getAttribute("data-copy"), txt = RequestDetails.copy(rawOf(en), kind, D.mask, en.url);
+    var txt = RequestDetails.copy(rawOf(en), kind, D.mask, en.url);
     var ok = function () { showToast(kind === "url" ? "Address copied." : "cURL command copied.", "success", 2500); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, function () { showToast("Copying is not allowed here.", "warning"); });
     else showToast("Copying is not allowed here.", "warning");
-  });
+  }
+  $(".ss-det-bar").addEventListener("click", function (e) { var c = e.target.closest("[data-copy]"); if (c) copyReq(c.getAttribute("data-copy")); });
   det.addEventListener("keydown", function (e) {
     if (e.key === "Escape") { e.preventDefault(); closeDet(); return; }
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;

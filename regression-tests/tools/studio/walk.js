@@ -64,7 +64,7 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
     await click('#ss-undo'); await settle(); ok('Undo: the name is the recording\'s again', (await txt('#ss-name-now')) === 'rich_shop'); await click('#ss-redo'); await settle(); ok('Redo: the name', (await txt('#ss-name-now')) === 'My_shop_run'); await click('#ss-undo'); await settle();
 
     // format
-    let s0 = await script(); await click('#ss-fmt [data-fmt=webhttp]'); await settle(); ok('the other format at once', /web_url|web_custom_request/.test(await code())); await undo('format', s0);
+    let s0 = await script(); await click('#ss-think-btn'); await click('#ss-fmt [data-fmt=webhttp]'); await p.keyboard.press('Escape'); await settle(); ok('the other format at once', /web_url|web_custom_request/.test(await code())); await undo('format', s0);
     // think time
     await click('#ss-think-btn'); ok('think time opens', await vis('#ss-think-pop')); await click('#ss-think [data-think=none]'); await settle(); ok('… and stays open', await vis('#ss-think-pop')); ok('… said on its button', /No think time/.test(await txt('#ss-think-btn'))); await p.keyboard.press('Escape'); ok('Escape closes it', !(await vis('#ss-think-pop'))); await undo('think time', s0);
     await click('#ss-think-btn'); await p.fill('#ss-think-sec', '7'); await p.keyboard.press('Tab'); await settle(); ok('seconds', /think_time = 7/.test(await code())); await p.mouse.click(900, 26); ok("a click outside closes it", !(await vis('#ss-think-pop'))); await undo('seconds', s0);
@@ -75,7 +75,7 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
     // domains
     const dom = '.ss-dom[data-host="api.example-outdoor.com"]';
     await click(dom + ' input'); await p.waitForTimeout(250); if (await vis('#ss-ask')) await click('#ss-ask-yes'); await settle(); await undo('a domain left out', s0);
-    await click(dom + ' .ss-par'); await p.waitForTimeout(150); await p.fill('#host-modal-inp', 'Shop_Api'); await p.keyboard.press('Enter'); await settle(); ok('a domain parameter renamed everywhere', /Shop_Api/.test(await code()) && !/\bApi_Server\b/.test(await code())); await undo('a domain parameter', s0);
+    await click(dom + ' .ss-par'); await p.waitForTimeout(150); ok('a click on a parameter: a box in the list, no window', await vis(dom + ' .ss-ren input') && !(await vis('#host-modal-overlay .adv-modal'))); await p.fill(dom + ' .ss-ren input', 'Shop_Api'); await p.keyboard.press('Enter'); await settle(); ok('a domain parameter renamed everywhere', /Shop_Api/.test(await code()) && !/\bApi_Server\b/.test(await code())); await undo('a domain parameter', s0);
 
     // ── requests ──
     const row = (id) => `.ss-rq[data-id="${id}"]`;
@@ -89,7 +89,7 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
 
     // each request's code is marked, in both formats
     for (const fmt of ['devweb', 'webhttp']) {
-      if (fmt === 'webhttp') { await p.evaluate(() => SSW.closeDetails()); await click('#ss-fmt [data-fmt=webhttp]'); await settle(); }
+      if (fmt === 'webhttp') { await p.evaluate(() => SSW.closeDetails()); await click('#ss-think-btn'); await click('#ss-fmt [data-fmt=webhttp]'); await p.keyboard.press('Escape'); await settle(); }
       const bad = [];
       for (const id of await p.evaluate(() => S.entries1.filter((e) => !e.isMarker && SS.inScript(e) && (S.format === "devweb" || !SS.setup(e))).map((e) => e.id))) {
         await p.evaluate((i) => { SSW.openDetails(i); }, id); await p.waitForTimeout(40);
@@ -124,19 +124,19 @@ const ok = (name, c, more) => { n++; if (!c) fails++; if (!c || process.argv.inc
     ok('the whole table row is in sight', await p.evaluate(() => [...document.querySelectorAll('#ss-cr-body tr')].every((x) => x.scrollWidth <= x.clientWidth + 1) && document.getElementById('ss-cr-wrap').scrollWidth <= document.getElementById('ss-cr-wrap').clientWidth + 1));
     s0 = await script(); const c0 = await p.evaluate(() => S.correlations.length); await click('#ss-cr-apply'); await settle(); ok('values added', (await p.evaluate(() => S.correlations.length)) > c0); await undo('correlations added', s0); ok('… and they are to review again', (await p.evaluate(() => S.advisorCandidates.filter((c) => !c._applied).length)) >= 3);
     // ── the three sections: names, counts, one open, bars always in sight ──
-    { const bars = () => p.evaluate(() => [...document.querySelectorAll('#ss-t-corr > .ss-sec')].map((s) => { const h = s.querySelector('.ss-sec-h').getBoundingClientRect(); return { open: s.classList.contains('is-open'), exp: s.querySelector('.ss-sec-b').getAttribute('aria-expanded'), seen: h.top >= 0 && h.bottom <= innerHeight, h: s.getBoundingClientRect().height, n: s.querySelector('.ss-sec-b b').textContent }; }));
-      const one = async (i) => { const b = await bars(); return b.length === 3 && b.every((x, j) => x.seen && x.open === (j === i) && x.exp === String(j === i) && (j === i ? x.h > 300 : x.h < 70)); };
-      ok('three sections by name', (await bars()).map((x) => x.n).join('|') === 'Values found|In the script|Second recording', await bars());
+    { const bars = () => p.evaluate(() => [...document.querySelectorAll('#ss-t-corr > .ss-sec:not(.ss-sec-gone)')].map((s) => { const h = s.querySelector('.ss-sec-h').getBoundingClientRect(); return { open: s.classList.contains('is-open'), exp: s.querySelector('.ss-sec-b').getAttribute('aria-expanded'), seen: h.top >= 0 && h.bottom <= innerHeight, h: s.getBoundingClientRect().height, n: s.querySelector('.ss-sec-b b').textContent }; }));
+      const one = async (i) => { const b = await bars(); return b.length === 2 && b.every((x, j) => x.seen && x.open === (j === i) && x.exp === String(j === i) && (j === i ? x.h > 300 : x.h < 70)); };
+      ok('two sections by name (In the script is the table\'s filter)', (await bars()).map((x) => x.n).join('|') === 'Values found|Second recording', await bars());
       ok('Values found is open, the bars of all three in sight', await one(0), await bars());
       ok('the step itself does not scroll', await p.evaluate(() => { const t = document.getElementById('ss-t-corr'); return t.scrollHeight <= t.clientHeight + 1; }));
-      ok('the bar says what is to review', /^\d+ to review$|^Nothing to review$/.test(await txt('#ss-sec-n1')), await txt('#ss-sec-n1')); ok('… and what is in the script', (await txt('#ss-sec-n2')) === (await p.evaluate(() => { const n = S.correlations.length; return n ? n + (n > 1 ? ' correlations' : ' correlation') : 'None yet'; })));
-      await click('[data-sec-b=script]'); ok('a click opens In the script', await one(1), await bars()); ok('… with its list', (await p.locator('#corr-list .corr-item').count()) === (await p.evaluate(() => S.correlations.length + S.candidates.length)));
-      await click('[data-sec-b=second]'); ok('a click opens Second recording', await one(2) && await vis('#dz2') && await vis('#mode-badge'));
-      await click('[data-sec-b=second]'); ok('a click on the open one closes it: Values found', await one(0)); await click('[data-sec-b=values]'); ok('… and that one: In the script', await one(1));
-      await p.focus('[data-sec-b=values]'); await p.keyboard.press('Enter'); ok('Enter opens a section', await one(0)); await p.focus('[data-sec-b=second]'); await p.keyboard.press('Space'); ok('Space too', await one(2));
-      await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('#corr-panel .ss-sec-h').getBoundingClientRect(); return [r.right - 6, r.top + r.height / 2]; })); ok('anywhere on a bar opens it', await one(1));
-      await click('#ss-steps [data-step="3"]'); await p.waitForTimeout(250); if (await vis('#ss-ask')) { await click('#ss-ask-no'); await settle(); } await click('#ss-steps [data-step="2"]'); await p.waitForTimeout(250); ok('kept when the step is left', await one(1));
-      await click('[data-sec-b=values]'); await click('#ss-cr-cant'); await click('[data-cant=second]'); ok('Use a second recording opens its section', await one(2)); await click('[data-sec-b=values]');
+      ok('the bar says what is to review', /^\d+ to review$|^Nothing to review$/.test(await txt('#ss-sec-n1')), await txt('#ss-sec-n1')); ok('… and the filter says what is in the script', (await txt('#ss-cr-show [data-show="script"] .ss-cnt')) === String(await p.evaluate(() => PerfxStudio.state().advisorCandidates.filter((c) => c._applied).length)));
+      await click('#ss-cr-show [data-show="script"]'); ok('In the script: the table lists every value in the script', (await p.locator('#ss-cr-body tr[data-id]').count()) === (await p.evaluate(() => PerfxStudio.state().advisorCandidates.filter((c) => c._applied).length)) && await one(0)); await p.evaluate(() => SSC.section('script')); ok('… and every old way to the In the script section shows that filter', await one(0) && (await p.getAttribute('#ss-cr-show [data-show="script"]', 'aria-pressed')) === 'true'); await click('#ss-cr-show [data-show="review"]');
+      await click('[data-sec-b=second]'); ok('a click opens Second recording', await one(1) && await vis('#dz2') && await vis('#mode-badge'));
+      await click('[data-sec-b=second]'); ok('a click on the open one closes it: Values found', await one(0)); await click('[data-sec-b=values]'); ok('… and that one: Second recording', await one(1));
+      await p.focus('[data-sec-b=values]'); await p.keyboard.press('Enter'); ok('Enter opens a section', await one(0)); await p.focus('[data-sec-b=second]'); await p.keyboard.press('Space'); ok('Space too', await one(1));
+      await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('#ss-corr .ss-sec-h').getBoundingClientRect(); return [r.right - 6, r.top + r.height / 2]; })); ok('anywhere on a bar opens it', await one(0));
+      await click('#ss-steps [data-step="3"]'); await p.waitForTimeout(250); if (await vis('#ss-ask')) { await click('#ss-ask-no'); await settle(); } await click('#ss-steps [data-step="2"]'); await p.waitForTimeout(250); ok('kept when the step is left', await one(0));
+      await p.evaluate(() => SSC.section('values')); await click('#ss-cr-cant'); await click('[data-cant=second]'); ok('Use a second recording opens its section', await one(1)); await click('[data-sec-b=values]');
       ok('Cards view retired: no Table / Cards switch, the Table shown', !(await vis('#ss-cr-view')) && await one(0));
       // the scroll starts at the top after another step
       await p.evaluate(() => { document.getElementById('ss-cr-wrap').style.maxHeight = '60px'; document.getElementById('ss-cr-wrap').scrollTop = 40; }); await click('#ss-steps [data-step="3"]'); await p.waitForTimeout(200); if (await vis('#ss-ask')) { await click('#ss-ask-no'); await settle(); } await click('#ss-steps [data-step="2"]'); await p.waitForTimeout(200);

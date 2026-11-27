@@ -421,6 +421,9 @@
   //    new one starts at what there is to do: Values found, or In the script when nothing is left to review. ──
   var tabEl = $("#ss-t-corr"), sec = "";
   function section(name, focus) {
+    // the values in the script are the table's "In the script" filter (round 3: the section that listed them again is
+    // hidden — the engine still draws its list there); every old way to open that section shows the filter
+    if (name === "script") { showOnly("script"); if (focus) { var sb = $('#ss-cr-show [data-show="script"]'); if (sb) sb.focus(); } return; }
     sec = name;
     $$(".ss-sec", tabEl).forEach(function (s) {
       var on = s.getAttribute("data-sec") === name;
@@ -434,7 +437,7 @@
     var b = e.target.closest("button, a, input, select");
     if (b && !b.classList.contains("ss-sec-b")) return;   // the bar's own buttons
     var name = h.parentNode.getAttribute("data-sec");
-    section(sec === name ? (name === "values" ? "script" : "values") : name);
+    section(sec === name ? (name === "values" ? "second" : "values") : name);
   });
   // what each bar says: how many to review, how many in the script, what has no source (or a warning), the second recording
   function secs(cnt) {

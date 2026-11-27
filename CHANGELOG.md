@@ -137,6 +137,15 @@ All notable changes, newest first. "Not released yet" lists changes in the curre
 
 ### Recorder and Script Studio
 
+#### Script Studio, round 3: today's design kept, the top rows aligned
+
+- The title row: the script on the left; on the right the note, Undo / Redo, one **script settings** button (it shows the format and the think time, e.g. "DevWeb · 3 s", and opens both), Open another, Open in HAR Explorer, Plan the load and Download ZIP. The step row: the four steps, and Back / Next at its right end.
+- Domains: a server parameter is renamed in place — its name becomes a box with Save / Cancel (Enter / Esc) and "Use the default name"; the same checks, Undo and regeneration as the window had.
+- Request details: its buttons in one row of the title bar — Leave out, Copy URL, Copy as cURL, Hide secrets, previous / next, close. The pop-up itself is unchanged.
+- Correlate: the values in the script are the table's **In the script** filter (Open, Take out, Undo); the section below that listed them a second time is gone — every way that opened it shows the filter; its orange count of values with no source moved to the Values found bar.
+- Test data: Add parameter beside the Excel buttons. Start page: a shorter band.
+- The layout (Domains · Requests · Script), the request pop-up, the full-width correlation editor and Add manual correlation are unchanged. Proof: review of every Studio screen, old against new (266 behaviours, 6 intended differences), walk 170, journey old = new in both formats, golden harness, unit tests.
+
 #### Script Studio, round 2: every screen looked at; Cards view retired
 
 - On a laptop (under 1600 px) the portal menu folds to its icons while a recording is open in Script Studio, so the title row keeps its words (Open another, Open in HAR Explorer, Plan the load) and the requests their room; never when you opened or folded the menu yourself, and it opens again when you leave Studio. Domains is narrower on a laptop.
